@@ -728,6 +728,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     {
         mCrossingViews.attach(mCrossing);
     }
+    /** The crossing's per-frame driver (ADR 0018 D17); it reaches this activity through {@link CrossingControllerHost}. */
+    private final com.termux.app.place.CrossingController mCrossingController =
+        new com.termux.app.place.CrossingController(mCrossing, new CrossingControllerHost());
     /** The dock's events and state (ADR 0018 §1); it reaches this activity through {@link DockControllerHost}. */
     private final com.termux.app.dock.DockController mDock =
         new com.termux.app.dock.DockController(new DockControllerHost());
@@ -740,9 +743,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** {@link #frameStandsDown} as a crossing's begin asks it, bound once rather than per begin. */
     private final com.termux.app.place.SeamCrossing.FrameGlass mFrameStandsDown =
         this::frameStandsDown;
-    /** The chrome's clock through a slide with no finger on it, under a turning transition. */
-    private final com.termux.app.place.ChromeSettle mChromeSettle =
-        new com.termux.app.place.ChromeSettle();
     /** Something was moved or faded during this slide, so settle has transforms to put back. */
     private boolean mChromeTravelMoved;
     /** The accessory stack's share of its translationY that the wall's travel owns. */
@@ -5051,26 +5051,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float mDockGlassCover = -1f;
     private float mNavStripGlassCover = -1f;
-
-    /**
-     * One frame of a slide across the seam while one half's dock draws Lens beads and the
-     * other's does not (SeamCrossing.Answers#beadShare): the beads melt into the slab as the beaded
-     * half slides away, swelling under their icons until, cut to the slab's outline, they are the
-     * slab, and come back out of it as that half returns, as the Search field's and the Wall
-     * strip's bands follow their halves' shares ({@link #syncSeamBandShare}). Where the beaded
-     * half's rows leave the screen on the way out they melt over the wall's first stretch, while
-     * the chrome still rests (LensBeadGeometry.leavingMeltShare), so they sink as the slab rather
-     * than as beads cut flat by the stack's bottom edge; their shadows and glow fade as they
-     * swell. Each frame the share moves re-cuts the host's clip and rebuilds the dock's effect
-     * once; nothing where both halves draw the same (one layout, one design), and nothing at rest.
-     */
-    private void syncSeamBeadMelt(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
-        // The crossing answers the share (NaN while nothing melts); this draws it.
-        float share = seam.beadShare();
-        if (Float.isNaN(share) || Float.compare(share, mCrossing.beadShare()) == 0) return;
-        mCrossing.beadShare(share);
-        mDock.applyDockBeadMelt(false);
-    }
 
     /**
      * The row's icons moved off or back onto their places (a page swipe, a page switch): the
@@ -23005,594 +22985,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChrome.requestSync(scopes);
     }
 
-    // ---- The chrome travelling with the wall ------------------------------------------------
-
-    /**
-     * One frame of the chrome's travel between two places (PlaceChromeTravel). The dock rises or
-     * falls and the keyboard slides in or out as a function of the wall's live offset, between the
-     * state of the place being left and the place being arrived at — Home with the dock at the
-     * bottom and the keyboard down, the terminal with the dock riding on its keyboard. Only
-     * translationY and alpha change per frame; nothing is laid out.
-     *
-     * <p>What the frame needs that is not laid out yet is pre-rolled once, in the first frame
-     * that asks for it: the keyboard is brought up at its full height below the screen, and the
-     * content is held at the room it was committed with so it costs the terminal no resize. {@link #settlePlaceChrome} makes the
-     * outcome the layout, or undoes the pre-roll if the wall came back to where it started.
-     */
-    private void syncChromeTravel(float offsetPx) {
-        Trace.beginSection("Wall.chromeTravel");
-        try {
-            doSyncChromeTravel(offsetPx);
-        } finally {
-            Trace.endSection();
-        }
-    }
-
-    private void doSyncChromeTravel(float offsetPx) {
-        if (mPaneWallController == null) return;
-        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
-        // With no finger on the wall, under a page transition that turns the pages, the chrome
-        // keeps the slide's clock to its last frame (ChromeSettle). Fed every frame, rests and
-        // finger frames included, so a slide never carries on from a stale one.
-        mChromeSettle.frame(offsetPx, wall.slideFromPx(), wall.getWidth(),
-            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE
-                && !wall.slidesAcrossSeam(),
-            currentWallPlace() == mLastWallPage);
-        // A crossing between two Home pages is Home's pager's (syncHomePagesTravel): a wall at
-        // rest writes nothing over it. A gesture that carries on past the last Home page into the
-        // wall lands it here, on the page in front, before the wall's own crossing begins.
-        if (homePagesCrossing()) {
-            if (!wall.isMoving() && offsetPx == 0f) return;
-            landHomePagesCrossing();
-        }
-        // A keyboard swipe drives the same travel by its finger while the wall stands still; the
-        // layout passes it causes must not write the wall's resting frame over it.
-        if (mKeyboardSwipeTravel) return;
-        // At rest there is nothing to travel: the settle that follows the last frame owns the
-        // chrome, and a wall that never moved has no transforms to put back.
-        if (!wall.isMoving() && offsetPx == 0f && !mChromeTravelMoved) return;
-        // Reduced motion snaps the wall, so the chrome snaps with it, at settle. The app drawer
-        // and the editors own the stack while they are up and move it their own way.
-        if (isReducedMotionEnabled() || mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive()
-            || appliedContentReservationPx() < 0) return;
-        // The Workspace's page is the display's place while the display window is in front of it,
-        // so the chrome travels to and from the state that place rests in.
-        // The cells' kinds around the current cell, so a slide between two cells of a kind's
-        // pages and the one beside reads the arriving cell's dress (ADR 0016 section 3).
-        java.util.List<com.termux.app.wall.PaneWallPage> pages =
-            placesOf(mPaneWallController.cellKinds());
-        int cellAt = mPaneWallController.currentCellIndex();
-        // The committed place is named so its keyboard, going away, is put away over the first
-        // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
-        // A slide toward another window of the Workspace stays on its place: the wall's offset
-        // alone reads the previous window as Home, the place on the left.
-        com.termux.app.wall.PaneWallPage place = currentWallPlace();
-        com.termux.app.place.PlaceChromeTravel.InnerPages inner =
-            mPaneWallController::showsInnerPage;
-        // Each step of the frame is its own section (Travel.<step>), so a trace names what a slow
-        // drag frame spent its time in.
-        Trace.beginSection("Travel.frame");
-        float chromeOffsetPx = mChromeSettle.chromeOffsetPx();
-        com.termux.app.place.PlaceChromeTravel.Frame frame =
-            com.termux.app.place.PlaceChromeTravel.at(pages, cellAt, chromeOffsetPx,
-                mChromeSettle.keyboardOffsetPx(), wall.getWidth(), mChromeRestStates,
-                mLastWallPage, inner);
-        // The status bar rides with the Workspace's page, so it reads where the wall stands.
-        com.termux.app.place.PlaceChromeTravel.Frame wallFrame = chromeOffsetPx == offsetPx
-            ? frame : com.termux.app.place.PlaceChromeTravel.at(pages, cellAt, offsetPx,
-                wall.getWidth(), mChromeRestStates, mLastWallPage, inner);
-        Trace.endSection();
-        // Across the seam, how the stack crosses and which half's dress it wears are read before
-        // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
-        Trace.beginSection("Travel.readSeam");
-        readSeamTravel(frame);
-        Trace.endSection();
-        // Every answer the seam has for this frame, from what the crossing read as it began, and
-        // the dock's dress at the chrome's progress into the other half. A pictured dip moves on
-        // the wall's own way (SeamCrossing#pictured).
-        Trace.beginSection("Travel.answers");
-        com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame, wallFrame,
-            mPreferences != null && mChrome != null, mDock.dockBandEaseRunning(),
-            mPromptFieldUnderPalette);
-        Trace.endSection();
-        Trace.beginSection("Travel.blends");
-        // The strip under the pill crosses from the one dress to the other with the finger.
-        syncNavStripFade(wallFrame);
-        // A stack whose halves differ only in look blends its glass with the wall.
-        syncStackLookBlend(seam);
-        // And the band behind the system bar with the bar's glass, by the same share.
-        syncTopBandFade(wallFrame);
-        // A band only one half's dock carries follows its page across the seam.
-        syncSeamBandShare(seam);
-        // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
-        syncSeamBeadMelt(seam);
-        Trace.endSection();
-        Trace.beginSection("Travel.preRolls");
-        // The dock rows are always laid out by the layout on screen, the minimal one included
-        // (chromeRestOf), so only the keyboard is ever pre-rolled.
-        // A keyboard a pictured dip put away travels in the picture, never in the stack again.
-        if (!mCrossing.keyboardPreRolled() && !mKeyboardPicturedAway
-            && com.termux.app.place.PlaceChromeTravel.needsKeyboardPreRoll(frame,
-                isInAppKeyboardShown())
-            && canPreRollTravelKeyboard()) {
-            preRollTravelKeyboard(frame);
-        }
-        // Toward a place whose chrome takes less room from the content than this one's, the
-        // content gets that room now rather than at settle, so no band of wallpaper opens between
-        // the pane and the chrome sliding away from it (ADR 0003, amended).
-        com.termux.app.wall.PaneWallPage arriving =
-            com.termux.app.place.PlaceChromeTravel.arriving(frame, mLastWallPage);
-        if (!mCrossing.contentPreRolled() && arriving != null) {
-            int givenBack = travelRoomChangePx(arriving);
-            if (givenBack > 0) preRollTravelContent(givenBack);
-        }
-        // Toward the terminal, whose chrome takes more room than this place's (its keyboard), its
-        // page is laid out at the size it lands at in this frame, while it is still arriving, and
-        // its panes resize now rather than after the page has landed (Crossing#preSizeTerminal).
-        if (arriving == com.termux.app.wall.PaneWallPage.TERMINAL
-            && mCrossing.terminalPreSizePx() == 0) {
-            int taken = -travelRoomChangePx(arriving);
-            if (MotionLog.enabled) {
-                MotionLog.log("presize", "taken=" + taken + " reservationPx=" + appliedContentReservationPx());
-            }
-            if (taken > 0) mCrossing.preSizeTerminal(taken, appliedContentReservationPx());
-        }
-        Trace.endSection();
-        // Across the seam the dock's rows and the status bar are the halves' own: the stack is
-        // given the other half's rows where none of them shows, and their reveal is the seam's.
-        float dockReveal = syncSeamTravel(seam);
-        // The key rows the stack stands are drawn for the half it wears, from the frame it stands
-        // them: a toolbar brought up rises live, not dead until the settle. A comparison per frame;
-        // the rows are restated only on the frame the dress changes.
-        applyExtraKeysPlaceEligibility();
-        Trace.beginSection("Travel.stack");
-        int keyboardPx = travelKeyboardLaidOutPx();
-        int dockPx = travelDockLaidOutPx(keyboardPx);
-        // The stack as the crossing answers it (Crossing#stack): with a keyboard in the stack the
-        // rows sink into its top edge, since the stack's own translation carries the keyboard
-        // too; or only the extra keys fold, the rows on the canvas's side of them sinking by its
-        // hidden part (#94); and between halves that dress the stack differently the keyboard
-        // dips with the rows (SeamDress.wholeStack), both moved by the translation.
-        boolean wasMoved = mDockTravelTranslationPx != 0f;
-        float translation = mCrossing.stack(seam, dockReveal, keyboardPx, dockPx,
-            travelDockRowsPx(keyboardPx));
-        if (translation != 0f || wasMoved) mChromeTravelMoved = true;
-        Trace.endSection();
-        // A keyboard up on both places crosses from one material to the other with the wall.
-        Trace.beginSection("Travel.material");
-        syncKeyboardMaterialTravel(frame);
-        Trace.endSection();
-        // The terminal's rows are drawn where the settle's resize is going to put them, and the
-        // pane's own edge ends where the chrome's live edge begins rather than under it.
-        Trace.beginSection("Travel.content");
-        if (mCrossing.holdsContent()) {
-            syncTerminalTravelDisplacement(frame, arriving);
-            // The cover the pane controller holds for the window in front, under whichever edge
-            // stands higher: the stack's, or the picture of the committed half's stack.
-            mCrossing.coverAt(translation, stackPictureCoverPx());
-        }
-        Trace.endSection();
-        // The status bar travels with the Workspace's page wherever the frame reaches Home while
-        // the pages slide; it fades in place where it cannot ride (a bar on a side or the bottom
-        // edge, or pages that turn).
-        Trace.beginSection("Travel.status");
-        boolean barRides = mStatusBar.syncStatusTravel(wallFrame, seam);
-        // A bar that stands still eases from one page's Margin to the other's with the wall.
-        mStatusBar.syncStatusMarginEase(seam);
-        // Under a transition that turns the pages, a bar one end wears apart fades in place.
-        float statusFade = seam.statusFade();
-        float statusAlpha = barRides ? 1f : !Float.isNaN(statusFade) ? statusFade
-            : frame.statusReveal;
-        // The status strip's content and the side and top bars fade as the places' rests say;
-        // the minimal layout's bars fade like the normal one's.
-        if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
-        mCrossing.fade(statusAlpha, frame.dockReveal);
-        Trace.endSection();
-    }
-
-    // ---- The chrome between two Home pages (#173 slice E) -------------------------------------
-
-    /**
-     * The two Home pages a crossing on Home's own pager runs between, by id: the one in front as
-     * it began (its committed end) and the neighbour the shift opened; -1 while none runs.
-     */
-    private int mHomeCrossHereId = -1;
-    private int mHomeCrossThereId = -1;
-    /** Home's rest as that crossing began, which both of its ends stand in; null while none runs. */
-    @Nullable private com.termux.app.place.PlaceChromeTravel.Rest mHomeCrossRest;
-    /** The crossing's landing waits on Home's page settle (runWhenHomePageSettles), once. */
-    private boolean mHomeCrossLandingQueued;
-    private final Runnable mLandHomePagesCrossingAfterSettle = () -> {
-        mHomeCrossLandingQueued = false;
-        landHomePagesCrossing();
-    };
-    /**
-     * The pager's step as last read: the index of the Home page in front, the side its shift
-     * opens (-1 left, 1 right, 0 at rest), and the pages and store revision it was read against.
-     * A frame of the same step reads none of it again, so a slide between two Home pages that
-     * dress alike builds nothing per frame.
-     */
-    private int mHomeStepIndex = -1;
-    private int mHomeStepSide;
-    private int mHomeStepRevision;
-    @Nullable private com.termux.app.wall.WallPages mHomeStepPages;
-    /** That step's pages by id: the one in front and its neighbour on the side; -1 for none. */
-    private int mHomeStepFrontId = -1;
-    private int mHomeStepTowardId = -1;
-    /** Whether that step was already asked to begin a crossing, which it did or not, once. */
-    private boolean mHomeStepTried;
-
-    /** Whether the crossing that runs is one between two Home pages, on Home's own pager. */
-    private boolean homePagesCrossing() {
-        return mCrossing.crossing() && mCrossing.seam().oneKind();
-    }
-
-    /**
-     * One frame of Home's own pager (onHomePageShifted): where it slides between two Home pages
-     * whose chrome differs in the dock's rows or in a status bar only one of them wears, the
-     * chrome morphs with the slide, through the same crossing the wall's travel runs
-     * (doSyncChromeTravel) on a frame of the pager (PlaceChromeTravel#homePages). Begun on the
-     * finger's first frame toward a neighbour that crosses, begun again when the shift opens the
-     * other neighbour, landed where the pager's settle lands. Two Home pages that dress alike,
-     * reduced motion and Animation speed Off begin nothing: the layout switches at the settle, as
-     * before.
-     */
-    private void syncHomePagesTravel() {
-        if (mWidgetPaneController == null || mPaneWallController == null) return;
-        boolean running = homePagesCrossing();
-        float fraction = mWidgetPaneController.homePageShiftFraction();
-        // At rest with nothing running, or while the wall's own crossing owns the chrome, there is
-        // nothing to read. At rest the next gesture may ask to begin again, whatever refused the
-        // last one (the drawer, a keyboard swipe, reduced motion) having maybe let go.
-        if (!running && fraction == 0f) {
-            mHomeStepTried = false;
-            return;
-        }
-        if (!running && mCrossing.crossing()) return;
-        boolean settling = mWidgetPaneController.isHomePageSettling();
-        // The shift came back to rest with no settle to wait for: the crossing lands here.
-        if (running && fraction == 0f && !settling) {
-            landHomePagesCrossing();
-            return;
-        }
-        int side = fraction == 0f ? 0 : fraction > 0f ? -1 : 1;
-        int index = mWidgetPaneController.homePageIndex();
-        com.termux.app.wall.WallPages pages = wallPages();
-        int revision = arrangementRevision();
-        if (index != mHomeStepIndex || side != mHomeStepSide || pages != mHomeStepPages
-            || revision != mHomeStepRevision) {
-            readHomeStep(pages, index, side, revision);
-        }
-        int front = mHomeStepFrontId;
-        int toward = mHomeStepTowardId;
-        if (running) {
-            // At rest mid-settle the page in front's partner is the crossing's other end.
-            if (side == 0) toward = front == mHomeCrossHereId ? mHomeCrossThereId
-                : front == mHomeCrossThereId ? mHomeCrossHereId : -1;
-            // Either way round: after the pager's commit the arriving page is in front and the
-            // committed one is its neighbour.
-            boolean samePair = front >= 0 && toward >= 0
-                && ((front == mHomeCrossHereId && toward == mHomeCrossThereId)
-                    || (front == mHomeCrossThereId && toward == mHomeCrossHereId));
-            if (!samePair) {
-                // The shift opened another neighbour: this crossing lands on the page in front
-                // and a crossing toward the new one may begin below.
-                landHomePagesCrossing();
-                running = false;
-            }
-        }
-        if (!running) {
-            // Begun only under the finger: a page change from elsewhere switches at its settle.
-            if (side == 0 || front < 0 || toward < 0 || settling || mHomeStepTried) return;
-            mHomeStepTried = true;
-            if (!beginHomePagesCrossing(front, toward)) return;
-        }
-        com.termux.app.place.PlaceChromeTravel.Rest rest = mHomeCrossRest;
-        if (rest == null) return;
-        int widthPx = mPaneWallController.wall().getWidth();
-        com.termux.app.place.PlaceChromeTravel.Frame frame =
-            com.termux.app.place.PlaceChromeTravel.homePages(rest, front, toward,
-                fraction * widthPx, widthPx);
-        syncHomePagesFrame(frame);
-        // The landing waits for the settle under way, the page that comes in or the one coming back.
-        if (settling && !mHomeCrossLandingQueued) {
-            mHomeCrossLandingQueued = true;
-            mWidgetPaneController.runWhenHomePageSettles(mLandHomePagesCrossingAfterSettle);
-        }
-    }
-
-    /** The pager's step read once (mHomeStep*): which Home pages its frames name. */
-    private void readHomeStep(@NonNull com.termux.app.wall.WallPages pages, int index, int side,
-                              int revision) {
-        mHomeStepIndex = index;
-        mHomeStepSide = side;
-        mHomeStepPages = pages;
-        mHomeStepRevision = revision;
-        mHomeStepTried = false;
-        java.util.List<Integer> ids = pages.homePageIdsForRepository();
-        mHomeStepFrontId = index >= 0 && index < ids.size() ? ids.get(index) : -1;
-        int neighbour = index + side;
-        // A neighbour past the run Home's frame pages inside is never turned to (ADR 0015, A2a).
-        boolean inRun = mHomeRunLast < 0
-            || (neighbour >= mHomeRunFirst && neighbour <= mHomeRunLast);
-        mHomeStepTowardId = side != 0 && inRun && neighbour >= 0 && neighbour < ids.size()
-            ? ids.get(neighbour) : -1;
-    }
-
-    /**
-     * A crossing between Home pages {@code hereId}, in front, and {@code thereId}, its neighbour,
-     * modelled on the wall's (readSeamTravel): both ends with their dresses, arrangements resolved
-     * for their own ids, and rests from one snapshot holding the second Home half
-     * (DockGeometry.Snapshot#otherHome). Begun only where the two cross (SeamCrossing#crosses).
-     * Whether it began.
-     */
-    private boolean beginHomePagesCrossing(int hereId, int thereId) {
-        if (mPreferences == null || mChrome == null || mPaneWallController == null) return false;
-        // Reduced motion and Animation speed Off land the page at once: the layout switches with it.
-        if (isReducedMotionEnabled() || com.termux.app.AnimationSpeed.multiplier(this) <= 0f)
-            return false;
-        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
-        if (mLastWallPage != com.termux.app.wall.PaneWallPage.WIDGETS || wall.isMoving()
-            || mKeyboardSwipeTravel || mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive()
-            || appliedContentReservationPx() < 0 || mCrossing.crossing()) return false;
-        PlaceLayoutStore store = placeLayoutStore();
-        if (store == null) return false;
-        PlaceOrientation orientation = currentPlaceOrientation();
-        com.termux.app.wall.PageRef herePage =
-            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, hereId);
-        com.termux.app.wall.PageRef therePage =
-            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, thereId);
-        // The cheap refusals first (SeamCrossing#crosses): two Home pages on one layout arrange
-        // alike, and two that dress the dock or the search field apart flip; neither crosses.
-        if (mDresses.layoutOf(herePage) == mDresses.layoutOf(therePage)) return false;
-        com.termux.app.chrome.Dress hereDress = dressOf(herePage);
-        com.termux.app.chrome.Dress thereDress = dressOf(therePage);
-        if (hereDress.dockDesign() != thereDress.dockDesign()
-            || hereDress.searchField() != thereDress.searchField()) return false;
-        ResolvedArrangement hereArrangement = arrangementOf(herePage);
-        ResolvedArrangement thereArrangement = arrangementOf(therePage);
-        PlaceLayout hereLayout = hereArrangement.layout();
-        PlaceLayout thereLayout = thereArrangement.layout();
-        // One keyboard across Home's pages: up on both or on neither, as it is now.
-        boolean keyboardUp = committedKeyboardVisible() && !isKeyboardFloating();
-        // Both ends' docks at rest from one snapshot, the arriving page's as its second Home half.
-        com.termux.app.dock.DockGeometry.Snapshot rests =
-            mDock.dockSnapshot(hereLayout, com.termux.app.wall.PaneWallPage.WIDGETS).toBuilder()
-                .otherHome(mDock.dockHalf(therePage, orientation, thereLayout))
-                .build();
-        com.termux.app.dock.DockLayout hereRest =
-            com.termux.app.dock.DockGeometry.compute(rests.restOf(herePage));
-        com.termux.app.dock.DockLayout thereRest =
-            com.termux.app.dock.DockGeometry.compute(rests.restOf(therePage));
-        com.termux.app.place.SeamCrossing.Endpoint here =
-            com.termux.app.place.SeamCrossing.Endpoint.of(herePage, hereDress,
-                pageLookOf(herePage), hereArrangement, hereLayout,
-                stackDressOf(hereDress, herePage, orientation),
-                keyboardUp, com.termux.app.dock.DockMorph.rowsPx(hereRest));
-        com.termux.app.place.SeamCrossing.Endpoint there =
-            com.termux.app.place.SeamCrossing.Endpoint.of(therePage, thereDress,
-                pageLookOf(therePage), thereArrangement, thereLayout,
-                stackDressOf(thereDress, therePage, orientation),
-                keyboardUp, com.termux.app.dock.DockMorph.rowsPx(thereRest));
-        // Two Home pages that dress alike are a plain flip.
-        if (!com.termux.app.place.SeamCrossing.crosses(here, there)) return false;
-        mHomeCrossRest = chromeRestOf(com.termux.app.wall.PaneWallPage.WIDGETS);
-        mHomeCrossHereId = hereId;
-        mHomeCrossThereId = thereId;
-        // A bar only one of them wears rides with its page while Home's pages slide flat, and
-        // fades in place under a transition that turns them.
-        boolean pagesSlide = wall.pageTransition()
-            == com.termux.app.launcher.home.HomePageTransition.SLIDE;
-        mCrossing.begin(here, there,
-            com.termux.app.place.SeamCrossing.Stage.of(mDock.beads() != null, mFrameStandsDown,
-                isSplitPanesEnabled(), pagesSlide),
-            hereRest, thereRest, arrangementRevision());
-        return true;
-    }
-
-    /**
-     * One frame of a crossing between two Home pages, the wall's travel pass (doSyncChromeTravel)
-     * without what only the wall's slide has: no keyboard or content pre-roll, no terminal
-     * displacement, no material blend, no band ease or bead melt (both ends dress the dock alike).
-     * The dock's rows morph and rise or sink by the crossing's answers, and the bar rides with the
-     * page that wears it or fades by the way toward it (SeamCrossing.Answers#statusFade).
-     */
-    private void syncHomePagesFrame(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
-        Trace.beginSection("Home.pagesTravel");
-        try {
-            com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame,
-                mPreferences != null && mChrome != null, mDock.dockBandEaseRunning(),
-                mPromptFieldUnderPalette);
-            float dockReveal = syncSeamTravel(seam);
-            int keyboardPx = travelKeyboardLaidOutPx();
-            int dockPx = travelDockLaidOutPx(keyboardPx);
-            boolean wasMoved = mDockTravelTranslationPx != 0f;
-            float translation = mCrossing.stack(seam, dockReveal, keyboardPx, dockPx,
-                travelDockRowsPx(keyboardPx));
-            if (translation != 0f || wasMoved) mChromeTravelMoved = true;
-            if (mCrossing.holdsContent()) mCrossing.coverAt(translation, stackPictureCoverPx());
-            boolean barRides = mStatusBar.syncStatusTravel(frame, seam);
-            float fade = seam.statusFade();
-            float statusAlpha = barRides ? 1f : !Float.isNaN(fade) ? fade : frame.statusReveal;
-            if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
-            mCrossing.fade(statusAlpha, frame.dockReveal);
-        } finally {
-            Trace.endSection();
-        }
-    }
-
-    /**
-     * The crossing between two Home pages lands on the Home page in front (the one the pager
-     * settled on, or the committed one after a settle back) through the wall's own settle, the
-     * wall resting on Home: transforms put back, the hold let go, the landed page's layout
-     * applied. Nothing while none runs.
-     */
-    private void landHomePagesCrossing() {
-        mHomeCrossLandingQueued = false;
-        if (!homePagesCrossing()) return;
-        int committedId = mHomeCrossHereId;
-        int landedId = homePageInFront();
-        mHomeCrossHereId = -1;
-        mHomeCrossThereId = -1;
-        mHomeCrossRest = null;
-        settlePlaceChrome(com.termux.app.wall.PaneWallPage.WIDGETS,
-            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, landedId));
-        // Landed on the other page: its layout is applied now, even where a re-arrangement that
-        // waited for the settle (onWidgetPageRendered) already ran under the crossing's hold and
-        // noted the variant applied.
-        if (landedId != committedId) {
-            mAppliedChromeVariant = null;
-            syncChromeArrangement();
-        }
-    }
-
-    /**
-     * The seam as this frame reaches it. Once per gesture, on the first frame that reaches the
-     * other half, the crossing begins (SeamCrossing.begin): it is handed both halves' dresses, their
-     * layouts and which of them keeps a keyboard in the stack, and reads from them how the dock's
-     * rows cross, whether the halves dress the stack differently and how the bar crosses. The
-     * status bar wears the Workspace's dress from then on (SeamDress), so a bar about to be laid
-     * out over Home is dressed for it now. Every frame after is the crossing's to answer.
-     */
-    private void readSeamTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
-        com.termux.app.wall.PaneWallPage other =
-            com.termux.app.place.SeamTravel.otherHalfPage(frame, mLastWallPage);
-        PlaceLayoutStore store = placeLayoutStore();
-        if (store == null) return;
-        if (other == null || other == mCrossing.seam().other()) return;
-        // A landing's re-dress still waiting for its post is had before a new crossing reads
-        // the halves' dresses.
-        if (!mCrossing.crossing()) flushLandingRestyle();
-        PlaceOrientation orientation = currentPlaceOrientation();
-        PlaceLayout committed = committedArrangement().layout();
-        ResolvedArrangement otherArrangement = arrangementOf(other);
-        PlaceLayout otherLayout = otherArrangement.layout();
-        com.termux.app.chrome.Dress committedDress = dressOf(mLastWallPage);
-        com.termux.app.chrome.Dress otherDress = dressOf(other);
-        boolean begins = !mCrossing.crossing();
-        // The crossing's two ends: the committed page and the one this frame reaches.
-        com.termux.app.wall.PageRef herePage = endpointPageOf(mLastWallPage);
-        com.termux.app.wall.PageRef therePage = endpointPageOf(other);
-        // Both ends' docks at rest, worked out once as the crossing begins and held for its
-        // life (ADR 0012): an end's rest is its own (Stack layout), its rows in its dress, its
-        // Search field and Wall strip wholly in or out, nothing squeezed, whichever end is
-        // committed, so one snapshot answers both. A frame that reaches another page of the same
-        // half reads the ends' dresses again and the rests the crossing holds.
-        com.termux.app.dock.DockLayout hereRest;
-        com.termux.app.dock.DockLayout thereRest;
-        com.termux.app.dock.DockGeometry.Snapshot rests = null;
-        if (begins) {
-            rests = mDock.dockSnapshot(committed, mLastWallPage);
-            hereRest = com.termux.app.dock.DockGeometry.compute(rests.restOf(herePage));
-            thereRest = com.termux.app.dock.DockGeometry.compute(rests.restOf(therePage));
-        } else {
-            hereRest = mCrossing.heldRest(herePage);
-            thereRest = mCrossing.heldRest(therePage);
-            if (hereRest == null || thereRest == null) return;
-        }
-        boolean otherHome = therePage.isHome();
-        // A keyboard in the stack, not one floating in a frame of its own: the committed half's
-        // as it is up now, the other's as it wants one on arrival.
-        // And each half's dock rows at rest, less the extra keys, so a fold travels from one
-        // half's rest to the other's (SeamCrossing.foldRestGrowthPx); unknown before the
-        // preferences are read.
-        int committedRowsPx = mPreferences == null ? -1
-            : com.termux.app.dock.DockMorph.rowsPx(hereRest);
-        int otherRowsPx = mPreferences == null ? -1
-            : com.termux.app.dock.DockMorph.rowsPx(thereRest);
-        // Each end carries its page's arrangement, held for the crossing's life with the revision
-        // it was resolved at: from here every chrome reader reads them (arrangementOf).
-        com.termux.app.place.SeamCrossing.Endpoint here =
-            com.termux.app.place.SeamCrossing.Endpoint.of(herePage, committedDress,
-                pageLookOf(herePage), committedArrangement(), committed,
-                stackDressOf(committedDress, herePage, orientation),
-                committedKeyboardVisible() && !isKeyboardFloating(), committedRowsPx);
-        com.termux.app.place.SeamCrossing.Endpoint there =
-            com.termux.app.place.SeamCrossing.Endpoint.of(therePage, otherDress,
-                pageLookOf(therePage), otherArrangement, otherLayout,
-                stackDressOf(otherDress, therePage, orientation),
-                mInAppKeyboard != null && mInAppKeyboard.isEnabled() && wantsKeyboardOnEnter(other),
-                otherRowsPx);
-        // The pages turn across the seam by the page transition; a bar that cannot stand still
-        // then fades in place rather than riding a turned page (SeamCrossing.Stage#pagesSlide).
-        boolean pagesSlide = mPaneWallController == null
-            || mPaneWallController.wall().pageTransition()
-                == com.termux.app.launcher.home.HomePageTransition.SLIDE;
-        mCrossing.begin(here, there,
-            com.termux.app.place.SeamCrossing.Stage.of(mDock.beads() != null, mFrameStandsDown,
-                isSplitPanesEnabled(), pagesSlide),
-            hereRest, thereRest, arrangementRevision());
-        if (!begins) return;
-        // A look apart alone blends the dock's glass from here to there (syncStackLookBlend).
-        mLookBlendShare = Float.NaN;
-        mLookBlendHereOpacity = mPreferences == null ? 100
-            : mPreferences.getAppBarOpacity(lookIdOf(herePage));
-        mLookBlendThereOpacity = mPreferences == null ? 100
-            : mPreferences.getAppBarOpacity(lookIdOf(therePage));
-        beginStackLookBlend(therePage);
-        // The strip under the pill stands still through the crossing and crosses dresses by alpha.
-        beginNavStripFade(herePage, therePage);
-        beginTopBandFade(herePage, therePage);
-        // From here to the landing the chrome travels over the wallpaper: its bands keep the
-        // even-out they stand on, so the ground moving under them asks for no whole apply each
-        // frame. The landing lets it go after its own frame (runLandingSettle).
-        if (mChrome != null) mChrome.holdEvenOut();
-        // Toward Home, the grid is given the room Home's dock leaves it at rest now, so it is laid
-        // out at its final size for the slide rather than re-measured at the landing.
-        if (otherHome && rests != null)
-            applyArrivingHomeGridReserve(rests, therePage, thereRest, otherArrangement);
-        // From Home, the bar takes off Home's dress for the Workspace's while it is still hidden,
-        // before any pass lays it out over Home.
-        if (mCrossing.seam().barTakesWorkspaceDressFirst()) {
-            refreshTerminalWindowBar();
-            mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
-        }
-    }
-
-    /**
-     * The widget pane given the band Home's dock takes from it at rest, as a crossing toward Home
-     * begins: Home's own rows in its own dress, its status band and whether its keyboard comes up
-     * (Stack layout's rest), the figure Home's settle lays out. From here to the landing no pass
-     * hands it another (syncAccessoryStack).
-     */
-    private void applyArrivingHomeGridReserve(
-            @NonNull com.termux.app.dock.DockGeometry.Snapshot rests,
-            @NonNull com.termux.app.wall.PageRef homePage,
-            @NonNull com.termux.app.dock.DockLayout homeRest, @NonNull ResolvedArrangement home) {
-        View widgetPane = findViewById(R.id.widget_pane);
-        if (!(widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
-        com.termux.app.place.StackLayout.RestInput in =
-            new com.termux.app.place.StackLayout.RestInput(rests, homePage);
-        in.toolbarShown = home.dockShown();
-        in.extraKeysRowEnabled = home.extraKeysRowShown();
-        in.toolbarHeightPx = appliedToolbarHeightPx();
-        in.statusBand = mStatusBar::bottomStatusBandAtRestPx;
-        in.imeLiftPx = mImeLiftPx;
-        in.keyboardShown = mInAppKeyboard != null && mInAppKeyboard.isEnabled()
-            && wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS);
-        ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
-            com.termux.app.place.StackLayout.restGridDockReservePx(in, homeRest));
-    }
-
-    /**
-     * What the stack wears in {@code dress} on {@code page}: its Style, Corners, Margin, its
-     * layout's sizes and the dock's and keyboard's look on the page's half.
-     */
-    @NonNull
-    private com.termux.app.place.SeamDress.StackDress stackDressOf(
-            @NonNull com.termux.app.chrome.Dress dress,
-            @NonNull com.termux.app.wall.PageRef page, @NonNull PlaceOrientation orientation) {
-        PlaceLayoutStore store = placeLayoutStore();
-        com.termux.app.place.WallShape shape = dress.shape();
-        if (store == null)
-            return com.termux.app.place.SeamDress.StackDress.of(shape, Float.NaN, Float.NaN, -1);
-        PlaceLayoutStore sizes = store.forVariant(dress.layout());
-        return com.termux.app.place.SeamDress.StackDress.of(shape,
-            sizes.dockHeightScale(orientation), sizes.keyboardHeightScale(orientation),
-            sizes.keyboardChinDp(orientation), com.termux.app.place.HalfLook.read(mPreferences,
-                lookIdOf(page)));
-    }
-
     /**
      * The stack dressed again for the half it now stands in, mid-slide: the dock's rows and its
      * glass, the suggestion bar over the keyboard, and the chrome's crops and sheets. The status
@@ -23616,123 +23008,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } finally {
             Trace.endSection();
         }
-    }
-
-    /**
-     * One frame of the dock's rows across the seam between Home and the Workspace, as the crossing
-     * answers it: the stack stands the other half's rows, dressed for that half, from the frame
-     * the plan says — laid out there once, while none of them shows, under the content's hold —
-     * and from Home the Workspace's status bar is laid out as the slide starts, off screen with
-     * its page. Returns the dock's reveal for this frame.
-     */
-    private float syncSeamTravel(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
-        if (seam.relayout()) {
-            Trace.beginSection("Wall.seamLayout");
-            try {
-                // The content keeps the room it was committed with: a stack that grows or shrinks
-                // here, or a bar that comes, moves nothing it holds.
-                beginTravelHold();
-                mCrossing.seam().standLayout();
-                // A pictured dip toward a half without a keyboard: the keyboard leaves with the
-                // picture, so the stack is laid out in this pass as the other half rests — its
-                // rows, its glass and its foot measured without a keyboard under them, as the
-                // settle would lay them out — instead of over a keyboard pushed below the screen.
-                putKeyboardAwayWithPicture();
-                mChromeTravelMoved = true;
-                // The stack changes halves with its rows, so it is dressed for the half it now
-                // stands in this same pass, while none of it shows (SeamDress). The sizes follow
-                // through the pass below (applyPlaceSizes).
-                if (seam.restyle()) restyleStackForDress(seam.restyleShape());
-                syncPlaceLayout();
-                // The rows it now stands carry their own half's Drawer tile, laid in while none
-                // of them shows.
-                syncDrawerTile();
-                // The slab's Dock design goes with the stack's dress, on the frame it changes
-                // halves while none of it shows — a pictured dip's first, a dip's swap, either way
-                // round — so the dock rises as it rests and the settle has nothing to re-dress
-                // (SeamCrossing#stackDesign), whether a finger, a home press or a tap started it.
-                if (seam.restyle()) {
-                    com.termux.app.wall.PaneWallPage wears =
-                        mCrossing.seam().stackDesignApart() ? mCrossing.seam().other() : null;
-                    if (wears != mDockDesignTravelledTo) {
-                        mDockDesignTravelledTo = wears;
-                        mDock.restyleDockSurface();
-                    }
-                }
-                // In this frame, so the stack's height the translation below reads is the new one.
-                mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
-                    GeometryScheduler.ResizePolicy.AT_SETTLE);
-                // The Peek card is cut for the rows this pass stands in this frame's pre-draw,
-                // after the traversal lays them out and before any of them shows. The listeners
-                // are set here, once the pass above has applied the rows' design: until now only
-                // the render pass's re-cut set them, and on pong the card then landed with the
-                // dock already half risen.
-                syncPeekListeners();
-                if (mPeekWatchedHost != null) schedulePeekRefresh();
-            } finally {
-                Trace.endSection();
-            }
-        }
-        if (seam.moved()) mChromeTravelMoved = true;
-        return seam.dockReveal();
-    }
-
-    /** The dock's opacity at each end of a look blend, read as the crossing begins. */
-    private int mLookBlendHereOpacity = 100, mLookBlendThereOpacity = 100;
-    /** The blend's step last applied; NaN while none has been. */
-    private float mLookBlendShare = Float.NaN;
-
-    /**
-     * One frame of a crossing between halves that dress the stack apart only in look
-     * (SeamCrossing.Answers#lookShare): the dock's frost, which carries its opacity, is set at the
-     * blend's step between the two ends' opacities, over the even-out matrix last measured. Set
-     * only when the step changes (at most SeamCrossing.LOOK_STEPS times a crossing), never at
-     * rest, and nothing is laid out; the RenderEffect (blur and lens) is left as it is. The
-     * landing's re-dress then sets the arriving look, which the last step already showed.
-     */
-    private void syncStackLookBlend(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
-        float share = seam.lookShare();
-        if (Float.isNaN(share) || share == mLookBlendShare || mChrome == null) return;
-        mLookBlendShare = share;
-        // The dock's sheet, its opacity, tint and grain: a redraw at the step, nothing built.
-        if (mLookBlendDock != null) mLookBlendDock.setShare(share);
-        android.widget.ImageView backdrop = hotView(R.id.accessory_blur_backdrop);
-        if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) return;
-        int opacity = com.termux.app.place.SeamCrossing.lookBlendValue(mLookBlendHereOpacity,
-            mLookBlendThereOpacity, share);
-        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.withEvenOut(
-            mChrome.ink().lastBandEvenOutMatrix(com.termux.app.chrome.GlassBackdropCache.Band.DOCK),
-            com.termux.app.chrome.GlassFilters.frost(opacity)));
-    }
-
-    /**
-     * The dock's sheet across a look-only crossing: the glass it wears beside the arriving end's,
-     * built once as the crossing begins, crossed by the blend's step
-     * ({@link #syncStackLookBlend}). The sheet carries the dock's opacity, tint and grain (the
-     * frost filter alone carries only the Clear step), so this is the blend the eye sees. Null
-     * while none runs.
-     */
-    @Nullable private com.termux.app.chrome.CrossfadeDrawable mLookBlendDock;
-
-    private void beginStackLookBlend(@NonNull com.termux.app.wall.PageRef there) {
-        endStackLookBlend();
-        if (mChrome == null || !mCrossing.seam().lookBlends()) return;
-        View sheet = findViewById(R.id.extrakeys_background);
-        Drawable here = sheet == null ? null : sheet.getBackground();
-        // Standing down on a joined Docked frame, the sheet draws nothing to blend.
-        if (here == null) return;
-        mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(here,
-            mChrome.glass().dockSurfaceOf(lookIdOf(there), 0f, 1f, false), 0f);
-        sheet.setBackground(mLookBlendDock);
-    }
-
-    /** The blend is over: the sheet keeps the end it reached, nothing rebuilt. */
-    private void endStackLookBlend() {
-        com.termux.app.chrome.CrossfadeDrawable blend = mLookBlendDock;
-        mLookBlendDock = null;
-        if (blend == null) return;
-        View sheet = findViewById(R.id.extrakeys_background);
-        if (sheet != null && sheet.getBackground() == blend) sheet.setBackground(blend.endpoint());
     }
 
     /** The bar host's plain glass layers: what a Margin ease stretches, and nothing else. */
@@ -23900,66 +23175,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * How much more room the content has at {@code arriving} than at the place the chrome is
-     * committed to: positive is room given back on the way there, negative is room the arriving
-     * place's chrome takes. Both places are read off one model of a stack at rest
-     * ({@link KeyboardOverlayPolicy#restReservationPx}), so the difference is exact where the
-     * model is — the keyboard's room, the margin under the stack — and the settle's own pass finds
-     * nothing left to move. The terminal's dock padding is known only for the place on screen and
-     * is a fraction of a row; arriving on the terminal, the settle takes it as it always has.
-     */
-    private int travelRoomChangePx(@NonNull com.termux.app.wall.PaneWallPage arriving) {
-        if (mCrossing.knowsRoomToward(arriving)) return mCrossing.roomChangePx();
-        mCrossing.roomChange(arriving, travelRestReservationPx(mLastWallPage)
-            - travelRestReservationPx(arriving));
-        return mCrossing.roomChangePx();
-    }
-
-    /** The room a place's chrome leaves the content at rest, from the stack as it stands. */
-    private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place) {
-        com.termux.app.place.PlaceChromeTravel.Rest rest = chromeRestOf(place);
-        return travelRestReservationPx(place, rest.keyboardReveal() > 0f);
-    }
-
-    /**
-     * The same, for the place with its keyboard up or down as {@code keyboardShown} says. Stack
-     * layout answers it from the place's own rest: its own rows (its dock and extra-keys row, at
-     * the height the geometry pass gives that row), Search field and Wall strip, whichever half is
-     * committed. Read off the half on screen, the Terminal's rest from Home came out an extra-keys
-     * row short, and its landing resized the grid a second time.
-     */
-    private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
-                                        boolean keyboardShown) {
-        com.termux.app.wall.PageRef side = arrangedPageOf(place);
-        com.termux.app.dock.DockGeometry.Snapshot snapshot =
-            mDock.dockSnapshot(arrangement().layout(), stackDressPage());
-        com.termux.app.place.StackLayout.RestInput in =
-            new com.termux.app.place.StackLayout.RestInput(snapshot, side)
-                .ownRows(measuredExtraKeysRowPx());
-        in.statusBand = mStatusBar::bottomStatusBandAtRestPx;
-        in.imeLiftPx = mImeLiftPx;
-        in.keyboardShown = keyboardShown;
-        // The keyboard's height as the pass measures it while one shows (ChromeSpec), else the
-        // last one measured.
-        in.keyboardHeightPx = Math.max(0, isInAppKeyboardShown()
-            ? mKeyboardGeometry.measureHeightPx() : mKeyboardGeometry.desiredHeightPx());
-        // The place's own arrangement decides it, like its Style: the one on screen when it is the
-        // committed place, else its half's stored layout.
-        PlaceLayout placeLayout = place == mLastWallPage
-            ? arrangement().layout() : snapshot.half(side).layout;
-        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, placeLayout);
-        in.contentUnderStack = KeyboardOverlayPolicy.contentUnderStack(place, placeLayout);
-        // The Terminal's flush padding is part of its rest: the applied one while it is the place,
-        // else the one it last rested with, so Home's terminal page and the slide back are laid
-        // out at the height the landing settles at, not one padding taller.
-        in.flushPaddingPx = place != com.termux.app.wall.PaneWallPage.TERMINAL || keyboardShown ? 0
-            : place == mLastWallPage
-                ? (mAppliedStack != null ? mAppliedStack.flushPaddingPx : 0)
-                : mTerminalRestFlushPaddingPx;
-        return com.termux.app.place.StackLayout.restReservationPx(in);
-    }
-
-    /**
      * The extra-keys row's height for the device's key rows and scale, whether or not the place on
      * screen stands the row: the height the geometry pass gives it on a place that does
      * (StackLayout#extraKeysRowPx). Before the pager's XML height is read, the applied one.
@@ -24043,7 +23258,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // room given back that the page does not take (Crossing#giveRoomBack).
         int preSized = mCrossing.terminalPreSizePx();
         if (arriving != com.termux.app.wall.PaneWallPage.TERMINAL) preSized = -preSized;
-        view.setTravelDisplacement(travelRoomChangePx(arriving) + preSized,
+        view.setTravelDisplacement(mCrossingController.travelRoomChangePx(arriving) + preSized,
             com.termux.app.place.PlaceChromeTravel.progressToward(frame, arriving));
     }
 
@@ -24070,32 +23285,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int travelKeyboardLaidOutPx() {
         if (!isInAppKeyboardShown() || isKeyboardFloating()) return 0;
         return Math.max(0, mKeyboardGeometry.desiredHeightPx());
-    }
-
-    /**
-     * Everything else the stack lays out above the keyboard, and the margin under it: what has to
-     * slide down for the dock to leave the screen. A status bar standing along the bottom is a
-     * band of the same stack but not the dock's, so it is left out; it rides along with the
-     * container.
-     */
-    private int travelDockLaidOutPx(int keyboardPx) {
-        View stack = hotView(R.id.accessory_stack_container);
-        if (stack == null) return 0;
-        ViewGroup.LayoutParams params = stack.getLayoutParams();
-        int margin = params instanceof ViewGroup.MarginLayoutParams
-            ? Math.max(0, ((ViewGroup.MarginLayoutParams) params).bottomMargin) : 0;
-        return com.termux.app.place.PlaceChromeTravel.dockLaidOutPx(travelDockRowsPx(keyboardPx),
-            margin);
-    }
-
-    /** The dock's rows alone as the stack lays them out above the keyboard, without the margin. */
-    private int travelDockRowsPx(int keyboardPx) {
-        View stack = hotView(R.id.accessory_stack_container);
-        if (stack == null) return 0;
-        ViewGroup.LayoutParams params = stack.getLayoutParams();
-        int height = params != null && params.height > 0 ? params.height : 0;
-        return com.termux.app.place.PlaceChromeTravel.dockRowsLaidOutPx(height, keyboardPx,
-            mStatusBar.bottomStatusBandPx());
     }
 
     /** What only the activity gives the sheets' controller (chrome.sheets.SheetsController). */
@@ -24720,6 +23909,117 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** What only the activity gives the crossing's driver (place.CrossingController). */
+    private final class CrossingControllerHost
+            implements com.termux.app.place.CrossingController.Host {
+        // ---- window and views ------------------------------------------------------
+        @Override public @Nullable <T extends View> T findViewById(int id) { return TermuxActivity.this.findViewById(id); }
+        @Override public @Nullable @SuppressWarnings("unchecked") <T extends View> T hotView(int id) { return TermuxActivity.this.hotView(id); }
+        @Override public @NonNull android.content.Context context() { return TermuxActivity.this; }
+        @Override public boolean isReducedMotionEnabled() { return TermuxActivity.this.isReducedMotionEnabled(); }
+        @Override public boolean isSplitPanesEnabled() { return TermuxActivity.this.isSplitPanesEnabled(); }
+        @Override public @Nullable com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences() { return mPreferences; }
+        @Override public @Nullable com.termux.app.chrome.ChromeRenderer chrome() { return mChrome; }
+        @Override public void refreshTerminalWindowBar() { TermuxActivity.this.refreshTerminalWindowBar(); }
+        // ---- wall and pages --------------------------------------------------------
+        @Override public @NonNull com.termux.app.wall.PaneWallPage lastWallPage() { return mLastWallPage; }
+        @Override public @NonNull com.termux.app.wall.PaneWallPage currentWallPlace() { return TermuxActivity.this.currentWallPlace(); }
+        @Override public @Nullable com.termux.app.wall.PaneWallController paneWallController() { return mPaneWallController; }
+        @Override public @NonNull java.util.List<com.termux.app.wall.PaneWallPage> placesOf(@NonNull java.util.List<com.termux.app.wall.PaneWallPage> pages) { return TermuxActivity.this.placesOf(pages); }
+        @Override public com.termux.app.wall.WallPages wallPages() { return TermuxActivity.this.wallPages(); }
+        @Override public int homePageInFront() { return TermuxActivity.this.homePageInFront(); }
+        @Override public int homeRunFirst() { return mHomeRunFirst; }
+        @Override public int homeRunLast() { return mHomeRunLast; }
+        @Override public boolean hasWidgetPaneController() { return mWidgetPaneController != null; }
+        @Override public float homePageShiftFraction() { return mWidgetPaneController.homePageShiftFraction(); }
+        @Override public boolean isHomePageSettling() { return mWidgetPaneController.isHomePageSettling(); }
+        @Override public int homePageIndex() { return mWidgetPaneController.homePageIndex(); }
+        @Override public void runWhenHomePageSettles(@NonNull Runnable action) { mWidgetPaneController.runWhenHomePageSettles(action); }
+        @Override public boolean isAppDrawerEngaged() { return mSheets.isAppDrawerEngaged(); }
+        @Override public boolean surfaceEditorActive() { return mSurfaceEditor.isActive(); }
+        // ---- arrangement and dress -------------------------------------------------
+        @Override public @Nullable PlaceLayoutStore placeLayoutStore() { return TermuxActivity.this.placeLayoutStore(); }
+        @Override public PlaceOrientation currentPlaceOrientation() { return TermuxActivity.this.currentPlaceOrientation(); }
+        @Override public ResolvedArrangement arrangement() { return TermuxActivity.this.arrangement(); }
+        @Override public ResolvedArrangement committedArrangement() { return TermuxActivity.this.committedArrangement(); }
+        @Override public ResolvedArrangement arrangementOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.arrangementOf(page); }
+        @Override public ResolvedArrangement arrangementOf(@NonNull com.termux.app.wall.PaneWallPage page) { return TermuxActivity.this.arrangementOf(page); }
+        @Override public int arrangementRevision() { return TermuxActivity.this.arrangementRevision(); }
+        @Override public com.termux.app.wall.PageRef arrangedPageOf(@NonNull com.termux.app.wall.PaneWallPage page) { return TermuxActivity.arrangedPageOf(page); }
+        @Override public com.termux.app.wall.PageRef endpointPageOf(@NonNull com.termux.app.wall.PaneWallPage page) { return TermuxActivity.this.endpointPageOf(page); }
+        @Override public @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PaneWallPage page) { return TermuxActivity.this.dressOf(page); }
+        @Override public @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.dressOf(page); }
+        @Override public com.termux.app.place.LayoutVariant dressLayoutOf(@NonNull com.termux.app.wall.PageRef page) { return mDresses.layoutOf(page); }
+        @Override public int lookIdOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.lookIdOf(page); }
+        @Override public com.termux.app.look.PageLook.Snapshot pageLookOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.pageLookOf(page); }
+        @Override public com.termux.app.wall.PaneWallPage stackDressPage() { return TermuxActivity.this.stackDressPage(); }
+        @Override public @Nullable com.termux.app.place.StackLayout.Result appliedStack() { return mAppliedStack; }
+        @Override public void restyleStackForDress(boolean shapeDiffers) { TermuxActivity.this.restyleStackForDress(shapeDiffers); }
+        @Override public void applyExtraKeysPlaceEligibility() { TermuxActivity.this.applyExtraKeysPlaceEligibility(); }
+        @Override public void setAppliedChromeVariant(@Nullable com.termux.app.place.LayoutVariant variant) { mAppliedChromeVariant = variant; }
+        @Override public void syncChromeArrangement() { TermuxActivity.this.syncChromeArrangement(); }
+        // ---- keyboard --------------------------------------------------------------
+        @Override public @Nullable com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard inAppKeyboard() { return mInAppKeyboard; }
+        @Override public boolean isInAppKeyboardShown() { return TermuxActivity.this.isInAppKeyboardShown(); }
+        @Override public boolean isKeyboardFloating() { return TermuxActivity.this.isKeyboardFloating(); }
+        @Override public boolean committedKeyboardVisible() { return TermuxActivity.this.committedKeyboardVisible(); }
+        @Override public boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) { return TermuxActivity.this.wantsKeyboardOnEnter(place); }
+        @Override public int keyboardMeasureHeightPx() { return mKeyboardGeometry.measureHeightPx(); }
+        @Override public int keyboardDesiredHeightPx() { return mKeyboardGeometry.desiredHeightPx(); }
+        @Override public int travelKeyboardLaidOutPx() { return TermuxActivity.this.travelKeyboardLaidOutPx(); }
+        @Override public int imeLiftPx() { return mImeLiftPx; }
+        @Override public int appliedToolbarHeightPx() { return TermuxActivity.this.appliedToolbarHeightPx(); }
+        @Override public int measuredExtraKeysRowPx() { return TermuxActivity.this.measuredExtraKeysRowPx(); }
+        @Override public int appliedContentReservationPx() { return TermuxActivity.this.appliedContentReservationPx(); }
+        @Override public int terminalRestFlushPaddingPx() { return mTerminalRestFlushPaddingPx; }
+        @Override public boolean canPreRollTravelKeyboard() { return TermuxActivity.this.canPreRollTravelKeyboard(); }
+        @Override public void beginTravelHold() { TermuxActivity.this.beginTravelHold(); }
+        @Override public void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.preRollTravelKeyboard(frame); }
+        @Override public void preRollTravelContent(int roomGivenBackPx) { TermuxActivity.this.preRollTravelContent(roomGivenBackPx); }
+        @Override public void putKeyboardAwayWithPicture() { TermuxActivity.this.putKeyboardAwayWithPicture(); }
+        @Override public boolean keyboardPicturedAway() { return mKeyboardPicturedAway; }
+        @Override public boolean keyboardSwipeTravel() { return mKeyboardSwipeTravel; }
+        @Override public void syncKeyboardMaterialTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.syncKeyboardMaterialTravel(frame); }
+        @Override public void syncTerminalTravelDisplacement(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame, @Nullable com.termux.app.wall.PaneWallPage arriving) { TermuxActivity.this.syncTerminalTravelDisplacement(frame, arriving); }
+        @Override public int stackPictureCoverPx() { return TermuxActivity.this.stackPictureCoverPx(); }
+        // ---- dock ------------------------------------------------------------------
+        @Override public @NonNull com.termux.app.dock.DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout arrangement, @NonNull com.termux.app.wall.PaneWallPage rowsPage) { return mDock.dockSnapshot(arrangement, rowsPage); }
+        @Override public @NonNull com.termux.app.dock.DockGeometry.Half dockHalf(@NonNull com.termux.app.wall.PageRef page, @NonNull PlaceOrientation orientation, @NonNull PlaceLayout fallbackLayout) { return mDock.dockHalf(page, orientation, fallbackLayout); }
+        @Override public @Nullable com.termux.app.dock.LensBeadGeometry.Beads dockBeads() { return mDock.beads(); }
+        @Override public boolean dockBandEaseRunning() { return mDock.dockBandEaseRunning(); }
+        @Override public void applyDockBeadMelt(boolean settled) { mDock.applyDockBeadMelt(settled); }
+        @Override public void restyleDockSurface() { mDock.restyleDockSurface(); }
+        @Override public void syncDrawerTile() { TermuxActivity.this.syncDrawerTile(); }
+        @Override public float dockTravelTranslationPx() { return mDockTravelTranslationPx; }
+        @Override public @Nullable com.termux.app.wall.PaneWallPage dockDesignTravelledTo() { return mDockDesignTravelledTo; }
+        @Override public void setDockDesignTravelledTo(@Nullable com.termux.app.wall.PaneWallPage place) { mDockDesignTravelledTo = place; }
+        @Override public void syncPeekListeners() { TermuxActivity.this.syncPeekListeners(); }
+        @Override public boolean hasPeekWatchedHost() { return mPeekWatchedHost != null; }
+        @Override public void schedulePeekRefresh() { TermuxActivity.this.schedulePeekRefresh(); }
+        // ---- status bar ------------------------------------------------------------
+        @Override public int bottomStatusBandAtRestPx(boolean floating) { return mStatusBar.bottomStatusBandAtRestPx(floating); }
+        @Override public int bottomStatusBandPx() { return mStatusBar.bottomStatusBandPx(); }
+        @Override public boolean syncStatusTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame, @NonNull com.termux.app.place.SeamCrossing.Answers seam) { return mStatusBar.syncStatusTravel(frame, seam); }
+        @Override public void syncStatusMarginEase(@NonNull com.termux.app.place.SeamCrossing.Answers seam) { mStatusBar.syncStatusMarginEase(seam); }
+        @Override public void syncNavStripFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) { TermuxActivity.this.syncNavStripFade(wallFrame); }
+        @Override public void syncTopBandFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) { TermuxActivity.this.syncTopBandFade(wallFrame); }
+        @Override public void beginNavStripFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there) { TermuxActivity.this.beginNavStripFade(here, there); }
+        @Override public void beginTopBandFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there) { TermuxActivity.this.beginTopBandFade(here, there); }
+        @Override public void syncSeamBandShare(@NonNull com.termux.app.place.SeamCrossing.Answers seam) { TermuxActivity.this.syncSeamBandShare(seam); }
+        // ---- chrome travel state ---------------------------------------------------
+        @Override public com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(@NonNull com.termux.app.wall.PaneWallPage place) { return TermuxActivity.this.chromeRestOf(place); }
+        @Override public com.termux.app.place.PlaceChromeTravel.States chromeRestStates() { return mChromeRestStates; }
+        @Override public com.termux.app.place.SeamCrossing.FrameGlass frameStandsDown() { return mFrameStandsDown; }
+        @Override public boolean chromeTravelMoved() { return mChromeTravelMoved; }
+        @Override public void setChromeTravelMoved(boolean moved) { mChromeTravelMoved = moved; }
+        @Override public boolean promptFieldUnderPalette() { return mPromptFieldUnderPalette; }
+        @Override public void flushLandingRestyle() { TermuxActivity.this.flushLandingRestyle(); }
+        // ---- settle and layout passes ----------------------------------------------
+        @Override public void settlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page, @Nullable com.termux.app.wall.PageRef landed) { TermuxActivity.this.settlePlaceChrome(page, landed); }
+        @Override public void syncPlaceLayout() { TermuxActivity.this.syncPlaceLayout(); }
+        @Override public void geometryRequestNow(@NonNull GeometryScheduler.Reason reason, @NonNull GeometryScheduler.ResizePolicy policy) { mGeometry.requestNow(reason, policy); }
+    }
+
     /**
      * The view the committed half's stack is pictured in for a whole-stack dip, made the first
      * time one is asked for: a sibling of the stack standing just under it, so the stack the
@@ -24917,7 +24217,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.beginSection("Settle.fades");
             endNavStripFade();
             endTopBandFade();
-            endStackLookBlend();
+            mCrossingController.endStackLookBlend();
             Trace.endSection();
             // A stack dressed for the landed half on the way, or a look the crossing blended onto
             // it: the landed frame already shows what the half's re-dress would, which follows it.
@@ -25015,8 +24315,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCrossing.restTerminalAway(0);
         } else if (mCrossing.terminalAwayPx() == 0) {
             mCrossing.restTerminalAway(
-                travelRestReservationPx(com.termux.app.wall.PaneWallPage.TERMINAL)
-                    - travelRestReservationPx(com.termux.app.wall.PaneWallPage.WIDGETS));
+                mCrossingController.travelRestReservationPx(com.termux.app.wall.PaneWallPage.TERMINAL)
+                    - mCrossingController.travelRestReservationPx(com.termux.app.wall.PaneWallPage.WIDGETS));
         }
     }
 
@@ -25477,7 +24777,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The room a place's chrome leaves the content with the keyboard up or down, at rest. */
     private int keyboardSwipeReservationPx(boolean keyboardUp) {
-        return travelRestReservationPx(mLastWallPage, keyboardUp);
+        return mCrossingController.travelRestReservationPx(mLastWallPage, keyboardUp);
     }
 
     /**
@@ -25821,7 +25121,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     syncTerminalFrameLineTravel();
                     // The dock, the keyboard and the status bar's content travel with the wall
                     // between the two places' states, as transforms only.
-                    syncChromeTravel(offsetPx);
+                    mCrossingController.syncChromeTravel(offsetPx);
                     // The wallpaper pans with the wall, and every glass surface follows it; the
                     // terminal's slabs re-aim whether or not it panned, since the page they sit
                     // on moved over a wallpaper that did not go with it. Aimed once: the wall's
@@ -29827,7 +29127,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     syncWallpaperParallax();
                     // Between two Home pages that dress the chrome apart, it morphs with the
                     // slide (#173 slice E).
-                    syncHomePagesTravel();
+                    mCrossingController.syncHomePagesTravel();
                 }
                 // The user's swipe inside the Home run: the wall steps onto that page's cell.
                 @Override public void onHomePageTurnedByUser() {
@@ -29854,7 +29154,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 mChromeArrangementAfterSettle = false;
                                 // A crossing between the two Home pages lands first, so the
                                 // landed layout is what is applied (slice E).
-                                landHomePagesCrossing();
+                                mCrossingController.landHomePagesCrossing();
                                 syncChromeArrangement();
                             });
                         }
