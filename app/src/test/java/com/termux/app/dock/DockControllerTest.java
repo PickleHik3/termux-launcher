@@ -1,7 +1,11 @@
 package com.termux.app.dock;
 
 import android.app.Application;
+import android.content.Context;
 import android.os.Build;
+import android.util.DisplayMetrics;
+import android.util.SparseArray;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 
@@ -10,9 +14,26 @@ import androidx.annotation.Nullable;
 import org.robolectric.RuntimeEnvironment;
 
 import com.termux.R;
+import com.termux.app.AzScrubRowView;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.chrome.ChromeSpec;
+import com.termux.app.chrome.TestChromeRenderers;
 import com.termux.app.chrome.ChromeRenderer;
+import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.place.LayoutVariant;
+import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.RowPlacement;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.place.ResolvedArrangement;
+import com.termux.app.place.SeamCrossing;
+import com.termux.app.place.layout.IconSize;
+import com.termux.app.wall.PageRef;
+import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -50,7 +71,7 @@ public class DockControllerTest {
     @Test
     public void beadsAreWantedOnlyWithPreferencesAndAShareOfTheBeadedHalf() {
         mHost.prefs = false;
-        mHost.spec = DockSurfaceSpec.LENS_BEADS;
+        mHost.design = DockStyle.LENS_BEADS;
         assertFalse("no preferences, no beads", mDock.dockBeadsWanted());
 
         mHost.prefs = true;
@@ -61,7 +82,7 @@ public class DockControllerTest {
         mHost.share = 0f;
         assertFalse("Lens beads carried wholly off", mDock.dockBeadsWanted());
 
-        mHost.spec = DockSurfaceSpec.GLASS_TRAY;
+        mHost.design = DockStyle.GLASS_TRAY;
         mHost.share = Float.NaN;
         assertFalse("a slab at rest", mDock.dockBeadsWanted());
         mHost.share = 0.3f;
@@ -128,17 +149,250 @@ public class DockControllerTest {
         return beads;
     }
 
-    private static final class FakeHost implements DockController.Host {
+    // ------------------------------------------------------------------ Plank effects and touch light
+
+    /** A 400 x 100 dock stack at the window's origin, the plank the springs are wired to. */
+    private View plankAtOrigin() {
+        FrameLayout stack = new FrameLayout(RuntimeEnvironment.getApplication());
+        stack.layout(0, 0, 400, 100);
+        mHost.views.put(R.id.accessory_stack_container, stack);
+        return stack;
+    }
+
+    private static MotionEvent touch(int action, float x, float y) {
+        return MotionEvent.obtain(0L, 0L, action, x, y, 0);
+    }
+
+    private boolean plankTouchInside() {
+        return ReflectionHelpers.getField(mDock, "mDockPlankTouchInside");
+    }
+
+    @Test
+    public void aPressOnThePlankDrivesItsSpringsAndAPressOffItDoesNot() {
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 50f));
+        assertFalse("no springs before the dock's views are wired", plankTouchInside());
+
+        View plank = plankAtOrigin();
+        mDock.setupDockPlankFx();
+        assertNotNull(mDock.dockPlankController());
+        assertSame(plank, ReflectionHelpers.getField(mDock, "mDockPlankTarget"));
+
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 50f));
+        assertTrue("a press on the plank", plankTouchInside());
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_UP, 200f, 50f));
+        assertFalse("the lift lets go", plankTouchInside());
+
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 300f));
+        assertFalse("a press below the plank", plankTouchInside());
+    }
+
+    @Test
+    public void aPressOnAKeySurfaceRidingThePlankLeavesItsSpringsAlone() {
+        plankAtOrigin();
+        FrameLayout keys = new FrameLayout(RuntimeEnvironment.getApplication());
+        keys.layout(0, 0, 400, 60);
+        mHost.views.put(R.id.inapp_keyboard_container, keys);
+        mDock.setupDockPlankFx();
+
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 30f));
+        assertFalse("a key under the finger", plankTouchInside());
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 80f));
+        assertTrue("the dock below the keys", plankTouchInside());
+    }
+
+    @Test
+    public void theDrawerTakingTheGestureHandsThePlankBack() {
+        plankAtOrigin();
+        mDock.setupDockPlankFx();
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 50f));
+        assertTrue(plankTouchInside());
+        mHost.drawerEngaged = true;
+        mDock.feedDockPlank(touch(MotionEvent.ACTION_MOVE, 200f, 40f));
+        assertFalse("the drawer's drag owns the views now", plankTouchInside());
+    }
+
+    @Test
+    public void reducedMotionReachesTheSprings() {
+        plankAtOrigin();
+        mHost.reducedMotion = true;
+        mDock.setupDockPlankFx();
+        assertSpringsReduced(true);
+        mHost.reducedMotion = false;
+        mDock.setupDockPlankFx();
+        assertSpringsReduced(false);
+    }
+
+    private void assertSpringsReduced(boolean reduced) {
+        boolean held = ReflectionHelpers.getField(mDock.dockPlankController(), "mReducedMotion");
+        assertEquals(reduced, held);
+    }
+
+    @Test
+    public void belowApi33APressLightsNothingAndBuildsNoFade() {
+        plankAtOrigin();
+        mDock.feedDockTouchLight(touch(MotionEvent.ACTION_DOWN, 200f, 50f));
+        assertFalse(ReflectionHelpers.<Boolean>getField(mDock, "mDockTouchLightDown"));
+        assertNull(ReflectionHelpers.getField(mDock, "mDockTouchFade"));
+    }
+
+    // ------------------------------------------------------------------ Layout and dress
+
+    /** A Home layout: the pinned apps alone along the bottom. */
+    private static final PlaceLayout HOME = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
+        false, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+    /** A window with the pinned apps and the extra keys along the bottom. */
+    private static final PlaceLayout WINDOW = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
+        false, Edge.BOTTOM, RowPlacement.BOTTOM, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+
+    /** Thrown where the dock is worked out again rather than read from the applied one. */
+    private static final class Recomputed extends RuntimeException {}
+
+    @Test
+    public void theAppliedDockIsReadBackOnlyForItsArrangementAndStoreRevision() {
+        PlaceLayoutStore store = new PlaceLayoutStore(
+            TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true));
+        mHost.store = store;
+        DockLayout dock = TestDockLayouts.capsule(2.625f, 0);
+        mDock.applyDockLayout(dock, HOME);
+        mHost.recomputeTrips = true;
+
+        assertSame("the same arrangement at the same revision", dock, mDock.dockLayoutIn(HOME));
+        mHost.layout = HOME;
+        assertSame(dock, mDock.appliedDockLayout());
+        assertRecomputed("another arrangement", () -> mDock.dockLayoutIn(WINDOW));
+
+        ReflectionHelpers.<java.util.concurrent.atomic.AtomicInteger>getField(store, "mRevision")
+            .incrementAndGet();
+        assertRecomputed("the store moved under the same arrangement",
+            () -> mDock.dockLayoutIn(HOME));
+
+        mHost.recomputeTrips = false;
+        mDock.applyDockLayout(dock);
+        mHost.recomputeTrips = true;
+        assertRecomputed("a dock applied with no arrangement named",
+            () -> mDock.dockLayoutIn(HOME));
+    }
+
+    private static void assertRecomputed(String message, Runnable read) {
+        try {
+            read.run();
+        } catch (Recomputed expected) {
+            return;
+        }
+        throw new AssertionError(message + ": the applied dock was handed back");
+    }
+
+    @Test
+    public void aSettleBetweenPagesOfOneDressLeavesTheDockAlone() {
+        mHost.chrome = TestChromeRenderers.overFakeSurfaces(RuntimeEnvironment.getApplication());
+        mHost.design = DockStyle.GLASS_TRAY;
+        mHost.terminalDesign = DockStyle.GLASS_TRAY;
+        mDock.restyleDockSurfaceForPageIfChanged(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        assertEquals("no restyle", 0, mHost.barHeightPasses);
+        assertEquals(0, mHost.toolbarPasses);
+        assertFalse(mDock.slabWears(DockStyle.GLASS_TRAY, false));
+    }
+
+    @Test
+    public void aSettleBetweenPagesOfDifferentDesignsRestylesTheDockOnce() {
+        mHost.chrome = TestChromeRenderers.overFakeSurfaces(RuntimeEnvironment.getApplication());
+        mHost.design = DockStyle.GLASS_TRAY;
+        mHost.terminalDesign = DockStyle.LENS_BEADS;
+        mHost.lastPage = PaneWallPage.TERMINAL;
+        mDock.restyleDockSurfaceForPageIfChanged(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        assertEquals("one restyle", 1, mHost.barHeightPasses);
+        assertEquals(1, mHost.toolbarPasses);
+        assertTrue("dressed for the page landed on", mDock.slabWears(DockStyle.LENS_BEADS, false));
+    }
+
+    @Test
+    public void aSettleNeedsPreferencesAndTheChrome() {
+        mHost.design = DockStyle.GLASS_TRAY;
+        mHost.terminalDesign = DockStyle.LENS_BEADS;
+        mDock.restyleDockSurfaceForPageIfChanged(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        assertEquals("no chrome yet", 0, mHost.barHeightPasses);
+    }
+
+    /** The dock laid out and shown: the stack up, the apps row in the row stack. */
+    private void dockInView() {
+        FrameLayout stack = new FrameLayout(RuntimeEnvironment.getApplication());
+        stack.layout(0, 0, 400, 100);
+        FrameLayout rowStack = new FrameLayout(RuntimeEnvironment.getApplication());
+        FrameLayout rowHost = new FrameLayout(RuntimeEnvironment.getApplication());
+        rowStack.addView(rowHost);
+        mHost.views.put(R.id.accessory_stack_container, stack);
+        mHost.views.put(R.id.accessory_row_stack, rowStack);
+        mHost.views.put(R.id.apps_bar_row_host, rowHost);
+        mHost.rows.apply(new ChromeSpec(PlaceChromePolicy.dockShown(HOME), false, 0, true,
+            PlaceChromePolicy.appsRowShown(HOME), PlaceChromePolicy.azRowOnDock(HOME),
+            PlaceChromePolicy.extraKeysRowShown(HOME), 0.8f, 24), false, false);
+    }
+
+    @Test
+    public void aPickedDesignThatBringsTheFieldEasesTheSlabAndASettleCancelsIt() {
+        mHost.chrome = TestChromeRenderers.overFakeSurfaces(RuntimeEnvironment.getApplication());
+        mHost.fieldWanted = true;
+        dockInView();
+        assertTrue("an ease starts", mDock.beginDockBandEase());
+        assertTrue(mDock.dockBandEaseRunning());
+        assertEquals("from what the slab shows", 0f, mDock.promptFieldEaseValue(), 0f);
+
+        mHost.design = DockStyle.GLASS_TRAY;
+        mHost.terminalDesign = DockStyle.LENS_BEADS;
+        mDock.restyleDockSurfaceForPageIfChanged(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        assertFalse("the settle lands the geometry at once", mDock.dockBandEaseRunning());
+        assertEquals("and restyles once", 1, mHost.barHeightPasses);
+    }
+
+    @Test
+    public void noEaseUnderReducedMotionOrWithNothingToEase() {
+        mHost.chrome = TestChromeRenderers.overFakeSurfaces(RuntimeEnvironment.getApplication());
+        dockInView();
+        assertFalse("nothing comes or goes", mDock.beginDockBandEase());
+        mHost.fieldWanted = true;
+        mHost.reducedMotion = true;
+        assertFalse("reduced motion lands it at once", mDock.beginDockBandEase());
+        assertFalse(mDock.dockBandEaseRunning());
+    }
+
+    @Test
+    public void aDockNotInViewIsNotEased() {
+        mHost.chrome = TestChromeRenderers.overFakeSurfaces(RuntimeEnvironment.getApplication());
+        mHost.fieldWanted = true;
+        assertFalse(mDock.beginDockBandEase());
+        assertFalse(mDock.dockBandEaseRunning());
+    }
+
+    static class FakeHost implements DockController.Host {
         boolean prefs = true;
         float share = Float.NaN;
-        @NonNull DockSurfaceSpec spec = DockSurfaceSpec.LENS_BEADS;
+        @NonNull DockStyle design = DockStyle.LENS_BEADS;
+        @Nullable DockStyle terminalDesign;
+        @NonNull PaneWallPage lastPage = PaneWallPage.WIDGETS;
+        @NonNull PlaceLayout layout = HOME;
         @Nullable View surfaceHost;
+        final SparseArray<View> views = new SparseArray<>();
+        final DockRows rows = new DockRows(new DockRowViews(id -> null, band -> false));
+        final SeamCrossing seam = new SeamCrossing();
+        @Nullable PlaceLayoutStore store;
+        @Nullable ChromeRenderer chrome;
+        @Nullable PaneWallPage travelledTo;
+        boolean reducedMotion;
+        boolean drawerEngaged;
+        boolean keyboardShown;
+        boolean fieldWanted;
+        boolean recomputeTrips;
+        int barHeightPasses;
+        int toolbarPasses;
 
         @Nullable
         @Override
         @SuppressWarnings("unchecked")
         public <T extends View> T findViewById(int id) {
-            return id == R.id.accessory_surface_host ? (T) surfaceHost : null;
+            if (id == R.id.accessory_surface_host && surfaceHost != null) return (T) surfaceHost;
+            return (T) views.get(id);
         }
 
         @Nullable
@@ -147,21 +401,121 @@ public class DockControllerTest {
             return findViewById(id);
         }
 
+        @NonNull @Override public Context context() { return RuntimeEnvironment.getApplication(); }
+        @NonNull @Override public View decorView() { return new View(context()); }
+        @Override public float density() { return 2.625f; }
+        @Override public float dpToPx(float dp) { return dp * density(); }
+        @Override public int withAlphaComponent(int color, int alpha) {
+            return (Math.max(0, Math.min(255, alpha)) << 24) | (color & 0x00FFFFFF);
+        }
+        @Override public boolean viewContainsScreenPoint(@Nullable View view, float x, float y) {
+            if (view == null || !view.isShown()) return false;
+            int[] at = new int[2];
+            view.getLocationOnScreen(at);
+            return x >= at[0] && x < at[0] + view.getWidth()
+                && y >= at[1] && y < at[1] + view.getHeight();
+        }
+        @Nullable @Override public SuggestionBarView dockRow() { return null; }
+        @Nullable @Override public PromptLineFieldView promptFieldInRowBand() { return null; }
         @Override public boolean hasPreferences() { return prefs; }
-        @Override public float beadShare() { return share; }
-        @NonNull @Override public DockSurfaceSpec shownDockSurfaceSpec() { return spec; }
+        @Override public boolean isReducedMotionEnabled() { return reducedMotion; }
+        @Override public boolean isInAppKeyboardShown() { return keyboardShown; }
+        @Override public boolean keyboardSharesDockGlass() { return false; }
+        @Override public boolean isAppDrawerEngaged() { return drawerEngaged; }
+        @NonNull @Override public PlaceLayout placeLayout() { return layout; }
+        @NonNull @Override public DockRows dockRows() { return rows; }
         @Override public boolean dockFloats() { return false; }
         @Override public float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) { return 0f; }
-        @NonNull @Override public DockRows dockRows() { throw new AssertionError("not read"); }
-        @Nullable @Override public ChromeRenderer chrome() { return null; }
-        @Override public void rebuildBackdropGlassEffectForLens() { }
-        @Nullable @Override public SuggestionBarView dockRow() { return null; }
-        @NonNull @Override public PlaceLayout placeLayout() { throw new AssertionError("not read"); }
         @Override public boolean stackStandsDownOnFrame() { return false; }
-        @Override public boolean keyboardSharesDockGlass() { return false; }
-        @Nullable @Override public PromptLineFieldView promptFieldInRowBand() { return null; }
-        @Override public float density() { return 2.625f; }
+        @NonNull @Override public DisplayMetrics displayMetrics() {
+            return context().getResources().getDisplayMetrics();
+        }
+        @NonNull @Override public PlaceOrientation currentPlaceOrientation() {
+            return PlaceOrientation.PORTRAIT;
+        }
+        @Override public int cutoutInsetLeft() { return 0; }
+        @Override public int cutoutInsetRight() { return 0; }
+        @Override public float terminalToolbarDefaultHeight() { return 0f; }
+        @Override public int calculateSuggestionBarMaxButtons(@NonNull DisplayMetrics metrics) {
+            return 5;
+        }
+        @Override public int homeMarginDp() { return 16; }
+        @Nullable @Override public TermuxAppSharedPreferences preferences() { return null; }
+        @Nullable @Override public PlaceLayoutStore placeLayoutStore() { return store; }
+        @NonNull @Override public ResolvedArrangement arrangementOf(@NonNull PageRef page) {
+            return arranged(page.isHome() ? design : designOf(PaneWallPage.TERMINAL), page);
+        }
+        @NonNull @Override public ResolvedArrangement arrangementOf(@NonNull PaneWallPage page) {
+            return arranged(designOf(page), arrangedPageOf(page));
+        }
+        private DockStyle designOf(PaneWallPage page) {
+            return page == PaneWallPage.TERMINAL && terminalDesign != null ? terminalDesign : design;
+        }
+        private ResolvedArrangement arranged(DockStyle style, PageRef page) {
+            return ResolvedArrangement.of(HOME, LayoutStyle.DOCKED, style, false, false,
+                PlaceOrientation.PORTRAIT, LayoutVariant.HOME, page);
+        }
+        @NonNull @Override public PageRef arrangedPageOf(@NonNull PaneWallPage page) {
+            return page == PaneWallPage.TERMINAL ? PageRef.TERMINAL : PageRef.HOME;
+        }
+        @NonNull @Override public LayoutVariant layoutOf(@NonNull PaneWallPage page) {
+            return LayoutVariant.HOME;
+        }
+        @Override public int arrangementRevision() { return 0; }
+        @NonNull @Override public IconSize drawnIconSize(@NonNull PlaceLayoutStore store) {
+            return IconSize.XL;
+        }
+        @NonNull @Override public PaneWallPage lastWallPage() { return lastPage; }
+        @NonNull @Override public PaneWallPage stackDressPage() {
+            if (recomputeTrips) throw new Recomputed();
+            return lastPage;
+        }
+        @Override public boolean committedSearchField() { return false; }
+        @Override public boolean promptFieldWanted() { return fieldWanted; }
+        @Override public float promptFieldReveal() { return 0f; }
+        @Override public float wallStripReveal() { return 0f; }
+        @Override public float appliedPromptFieldReveal() { return 0f; }
+        @Override public float appliedWallStripReveal() { return 0f; }
+        @Nullable @Override public PaneWallPage drawerTileRowsPage() { return lastPage; }
+        @Override public boolean isStatusBarCompact() { return false; }
+        @NonNull @Override public PlaceLayout.Edge statusBarEdge() { return Edge.TOP; }
+        @Override public int halfRedressCount() { return 0; }
+        @Nullable @Override public AzScrubRowView azScrubRowView() { return null; }
+        @Nullable @Override public AzScrubRowView azTabRowView() { return null; }
+        @NonNull @Override public PlaceLayout.Edge azBarEdge() { return Edge.BOTTOM; }
+        @Override public boolean isInAppKeyboardVisible() { return false; }
+        @Nullable @Override public ChromeRenderer chrome() { return chrome; }
+        @Override public void rebuildBackdropGlassEffectForLens() { }
+        @Override public boolean glassParamsValid() { return true; }
+        @Nullable @Override public GlassRefraction.Program dockGlassProgram() { return null; }
+        @Override public boolean keyLensActive() { return false; }
+        @Override public float glassOriginLeft() { return 0f; }
+        @Override public float glassOriginTop() { return 0f; }
+        @Override public boolean isGlassTouchLightAllowed() { return true; }
+        @Override public int resolveDockAccentColor() { return 0xFF3366CC; }
+        @Override public float beadShare() { return share; }
+        @NonNull @Override public SeamCrossing seam() { return seam; }
+        @Nullable @Override public PaneWallPage dockDesignTravelledTo() { return travelledTo; }
+        @Override public void setDockDesignTravelledTo(@Nullable PaneWallPage page) {
+            travelledTo = page;
+        }
         @Override public void syncFrameBeadCut() { }
         @Override public void onDockBeadsReplaced(@Nullable View host, boolean modeChanged) { }
+        @Override public void syncDrawerTile() { }
+        @Override public boolean updateAppLauncherBarHeight() {
+            barHeightPasses++;
+            return false;
+        }
+        @Override public boolean setTerminalToolbarHeight(boolean requestTerminalResize) {
+            toolbarPasses++;
+            return false;
+        }
+        @Override public void syncWallStripFeed() { }
+        @Override public boolean updateViewBottomMargin(int viewId, int marginBottom) { return false; }
+        @Override public boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
+            return false;
+        }
+        @Override public boolean syncPromptLineField(@NonNull DockLayout layout) { return false; }
+        @Override public boolean syncWallStripRow(@NonNull DockLayout layout) { return false; }
     }
 }
