@@ -239,3 +239,12 @@ is a later wave).
   keyboard's look over a display, overlay and resize alike, is the Keyboard card with Where =
   Display pages. The blurred still of the display behind the keyboard (that spec's decision 5)
   stays a later wave.
+- D15 (2026-11-10, amends D6) the remaining waves run in the order D part two, B, H, R, S. The
+  stack wave goes last because `feat/space-places-dock` rewrites the same keyboard code and
+  merges on the developer's go before S is cut; until S, the keyboard joins the redress path
+  through today's route.
+- D16 (2026-11-10, amends D6) a wave is gated by the unit suite and an emulator check, not by
+  pong; pong sees the stacked waves once, at the end, with every owed check in one session.
+- Wave H is smaller than written above: ADR 0021 (2026-11-03) already deleted the live blur
+  views and put panels on a snapshot or a live recording. What is left for H is `SheetsSpec` and
+  the palette's colour from the Sheets cells.
