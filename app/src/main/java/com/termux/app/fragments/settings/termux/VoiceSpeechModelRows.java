@@ -139,7 +139,10 @@ final class VoiceSpeechModelRows {
         pill.setSegments(shownValues.toArray(new String[0]), shownLabels.toArray(new CharSequence[0]));
         pill.setEnabled(active != null);
         boolean gpu = shownValues.contains("gpu");
-        pill.setSummary(gpu ? fragment.getString(R.string.speech_model_accelerator_hint) : null);
+        // The GPU model is built for the GPU, so "may be slower" would be wrong for it.
+        int hint = active != null && TaiSpeechActions.isGpuModel(active.id)
+            ? R.string.speech_model_accelerator_hint_gpu_model : R.string.speech_model_accelerator_hint;
+        pill.setSummary(gpu ? fragment.getString(hint) : null);
     }
 
     // ---- idle unload ----
