@@ -89,9 +89,9 @@ public class AppearanceControlsReachTest {
         for (EditorCard card : EditorCard.values()) {
             List<EditorChips.AppliesTo> scopes = new ArrayList<>(EditorChips.appliesToOptions(card));
             if (scopes.isEmpty()) scopes.add(null);
-            // One editor per card. Each cell closes it, puts the install back to a fresh one and
-            // opens the card again, so every cell starts as a fresh install with the card just
-            // opened, as it did on an editor of its own.
+            // One editor per card. Each cell ends its session, puts the install back to a fresh
+            // one and opens the card again, so every cell starts as a fresh install with the
+            // card just opened, as it did on an editor of its own.
             TermuxAppSharedPreferences prefs = fresh();
             EditorTestHarness harness = null;
             for (EditorChips.AppliesTo scope : scopes)
@@ -99,8 +99,10 @@ public class AppearanceControlsReachTest {
                     if (harness == null) {
                         harness = new EditorTestHarness(prefs, null);
                     } else {
-                        harness.editor.done();
+                        harness.editor.endSession();
                         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+                        assertFalse("the editor is closed before the next cell",
+                            harness.editor.isOpen());
                         backToFresh(prefs);
                     }
                     Set<String> moved = move(harness, prefs, card, scope, row);
