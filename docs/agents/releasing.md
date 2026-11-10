@@ -57,6 +57,9 @@ name. `versionCode` stays **1020** for upstream parity — never change it. The 
 - **Nightlies** (`debug_build.yml`) build as `X.Y.Z+dev.<shortsha>`: semver build metadata, so a
   nightly sorts equal to the release it follows. That string is the in-app `versionName` and goes
   verbatim into the APK name. The TAI bench groups results by the `X.Y.Z` core only.
+  A manual run can ask for `build_type: release`: the same commit built as a published APK is
+  (not debuggable, test key, split per ABI), named `X.Y.Z+rel.<shortsha>`, for comparing speed
+  on a tester's phone: `gh workflow run debug_build.yml --ref <branch> -f build_type=release`.
   Pushes to `dev` prune artifacts to the newest two runs per live branch (`prune_artifacts.yml`), so
   a nightly APK must be fetched from one of the last two runs or built from the tag.
 - **APK names** follow one pattern, release and nightly alike:

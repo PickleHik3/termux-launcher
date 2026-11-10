@@ -2,6 +2,16 @@ name: Build nightly
 
 on:
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: >-
+          staging is the usual nightly (debuggable, for run-as). release is the same code built
+          as a published APK is: not debuggable, to compare speed on a tester's phone.
+        type: choice
+        options:
+          - staging
+          - release
+        default: staging
   push:
     branches:
       - dev
@@ -52,6 +62,8 @@ jobs:
         shell: bash {0}
         env:
           PACKAGE_VARIANT: ${{ matrix.package_variant }}
+          # Empty on a push: only a manual run can ask for a release build.
+          BUILD_TYPE: ${{ inputs.build_type || 'staging' }}
           GRADLE_OPTS: >-
             -Dorg.gradle.internal.http.connectionTimeout=120000
             -Dorg.gradle.internal.http.socketTimeout=120000
@@ -67,12 +79,28 @@ jobs:
               GITHUB_SHA="${{ github.event.pull_request.head.sha }}" # Do not use last merge commit set in GITHUB_SHA
           fi
 
+          # A release build is signed with the repository's test key, as published APKs are
+          # (attach_debug_apks_to_release.yml), so it installs over a nightly or a release, and
+          # is split per ABI like a nightly. Its version says "rel" where a nightly says "dev".
+          case "$BUILD_TYPE" in
+            release)
+              BUILD_TASK="assembleRelease"; VERSION_KIND="rel"
+              export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="1"
+              export TERMUX_RELEASE_STORE_FILE="$PWD/app/testkey_untrusted.jks"
+              export TERMUX_RELEASE_STORE_PASSWORD="xrj45yWGLbsO7W0v"
+              export TERMUX_RELEASE_KEY_ALIAS="alias"
+              export TERMUX_RELEASE_KEY_PASSWORD="xrj45yWGLbsO7W0v"
+              ;;
+            staging) BUILD_TASK="assembleStaging"; VERSION_KIND="dev" ;;
+            *) exit_on_error "Unknown build type '$BUILD_TYPE'." ;;
+          esac
+
           # Nightly version = versionName + "+dev.<shortsha>" (semver build metadata, so it sorts
           # equal to the release it follows). Used verbatim in the app and in the APK name.
           CURRENT_VERSION_NAME_REGEX='\s+versionName "([^"]+)"$'
           CURRENT_VERSION_NAME="$(grep -m 1 -E "$CURRENT_VERSION_NAME_REGEX" ./app/build.gradle | sed -r "s/$CURRENT_VERSION_NAME_REGEX/\1/")"
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          NIGHTLY_VERSION_NAME="${CURRENT_VERSION_NAME%%+*}+dev.${SHORT_SHA}"
+          NIGHTLY_VERSION_NAME="${CURRENT_VERSION_NAME%%+*}+${VERSION_KIND}.${SHORT_SHA}"
           if ! printf "%s" "$NIGHTLY_VERSION_NAME" | grep -qP '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'; then
            exit_on_error "The versionName '$NIGHTLY_VERSION_NAME' is not a valid version as per semantic version '2.0.0' spec in the format 'major.minor.patch(-prerelease)(+buildmetadata)'. https://semver.org/spec/v2.0.0.html."
           fi
@@ -85,7 +113,7 @@ jobs:
             *) EDITION="termux" ;;
           esac
 
-          APK_DIR_PATH="./app/build/outputs/apk/staging"
+          APK_DIR_PATH="./app/build/outputs/apk/$BUILD_TYPE"
           # termux-app_v<versionName>_<edition>_<variant>_<abi>.apk, versionName verbatim (with the +)
           APK_VERSION_TAG="v${NIGHTLY_VERSION_NAME}_${EDITION}_${{ env.PACKAGE_VARIANT }}"
           APK_BASENAME_PREFIX="termux-app_$APK_VERSION_TAG"
@@ -99,7 +127,7 @@ jobs:
           export TERMUX_APP_VERSION_NAME="$NIGHTLY_VERSION_NAME" # Used by app/build.gradle
           export TERMUX_APK_VERSION_TAG="$APK_VERSION_TAG" # Used by app/build.gradle
           export TERMUX_PACKAGE_VARIANT="${{ env.PACKAGE_VARIANT }}" # Used by app/build.gradle
-          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon -Pghostty=true assembleStaging || \
+          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon -Pghostty=true "$BUILD_TASK" || \
             exit_on_error "Build failed for '$APK_VERSION_TAG' build."
 
           echo "Validating APKs"
