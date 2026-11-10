@@ -18,6 +18,10 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Card looks survive a relaunch and a kill mid-edit (11-10, fix/card-looks-session).** Unit tests
+  only. Owed · emulator: in the Appearance editor take a card on Custom to a Look, change the theme
+  (the editor relaunches), then Undo: the card is back on its Custom with the values from before
+  the session. Same start, then `am force-stop` before Done and a cold start: same result.
 - **One resolver for what the stored wallpaper plays (11-10, refactor/scene-source).** A refactor
   with no intended change: `SceneSource` now feeds both the running scene and the still. Unit tests
   pin the file and key rules; nothing drawn was looked at. Owed · emulator or pong: with a video

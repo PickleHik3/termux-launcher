@@ -104,6 +104,27 @@ public class SurfaceEditorRelaunchTest {
     }
 
     @Test
+    public void undoPutsTheCardLooksBackEvenAfterARelaunch() {
+        SharedPreferences store = preferences.getSharedPreferences();
+        String atOpen = "{\"home\":[1,2,3]}";
+        CardCustoms.restore(store, atOpen);
+        SurfaceEditorController before = editorOnNewActivity();
+        present(before);
+        CardCustoms.put(store, "home", new int[] {4, 5, 6});
+
+        AppearanceSurfaceController.EditorSession carried = before.carrySession();
+        SurfaceEditorController after = editorOnNewActivity();
+        after.adoptSessionNext(carried);
+        present(after);
+
+        after.undo();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals("Undo goes back to the card looks at the first open", atOpen,
+            CardCustoms.raw(store));
+        assertFalse(isDirty(after));
+    }
+
+    @Test
     public void withoutTheSessionTheEditWouldBecomeTheNewStartingPoint() {
         SurfaceEditorController before = editorOnNewActivity();
         present(before);

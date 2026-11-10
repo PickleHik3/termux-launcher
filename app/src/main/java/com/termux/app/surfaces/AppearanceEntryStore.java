@@ -30,12 +30,15 @@ public final class AppearanceEntryStore {
     private static final String JSON_LOOK = "look";
     private static final String JSON_SETTINGS = "settings";
     private static final String JSON_CUSTOM = "custom";
+    /** Absent in a copy an older build wrote; JSON null when no card look was saved at open. */
+    private static final String JSON_CARD_CUSTOMS = "cardCustoms";
 
     private AppearanceEntryStore() {}
 
-    /** A session opened on {@code look}, {@code settings} and the saved Custom it found. */
+    /** A session opened on {@code look}, {@code settings}, the saved Custom and the card looks it found. */
     static void save(@Nullable TermuxAppSharedPreferences prefs, @NonNull AppearanceSnapshot look,
-                     @NonNull EditorSettingsSnapshot settings, @Nullable String custom) {
+                     @NonNull EditorSettingsSnapshot settings, @Nullable String custom,
+                     @Nullable String cardCustoms) {
         SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
         if (store == null)
             return;
@@ -43,7 +46,8 @@ public final class AppearanceEntryStore {
             JSONObject out = new JSONObject()
                 .put(JSON_LOOK, look.toJson())
                 .put(JSON_SETTINGS, settings.toJson())
-                .put(JSON_CUSTOM, custom == null ? JSONObject.NULL : custom);
+                .put(JSON_CUSTOM, custom == null ? JSONObject.NULL : custom)
+                .put(JSON_CARD_CUSTOMS, cardCustoms == null ? JSONObject.NULL : cardCustoms);
             store.edit().putString(PREFS_KEY, out.toString()).apply();
         } catch (JSONException e) {
             Logger.logWarn(LOG_TAG, "entry state not saved: " + e.getMessage());
@@ -93,6 +97,9 @@ public final class AppearanceEntryStore {
                 EditorSettingsSnapshot.fromJson(in.getJSONObject(JSON_SETTINGS));
             String custom = in.isNull(JSON_CUSTOM) ? null : in.getString(JSON_CUSTOM);
             look.restore(prefs);
+            if (in.has(JSON_CARD_CUSTOMS))
+                CardCustoms.restore(store, in.isNull(JSON_CARD_CUSTOMS) ? null
+                    : in.getString(JSON_CARD_CUSTOMS));
             if (custom != null)
                 prefs.setSurfaceCustomPreset(custom);
             settings.restore(settingsStore);

@@ -146,7 +146,7 @@ public class AppearanceEntryStoreTest {
         String signature = entry.signature();
 
         // Open, then Done: nothing is left behind.
-        AppearanceEntryStore.save(preferences, entry, EditorSettingsSnapshot.capture(settings), null);
+        AppearanceEntryStore.save(preferences, entry, EditorSettingsSnapshot.capture(settings), null, null);
         assertTrue(AppearanceEntryStore.hasLeftover(preferences));
         AppearanceEntryStore.clear(preferences);
         assertFalse(AppearanceEntryStore.hasLeftover(preferences));
@@ -154,7 +154,7 @@ public class AppearanceEntryStoreTest {
 
         // Open, change things live, and the process dies: the next start puts the entry back.
         AppearanceEntryStore.save(preferences, entry, EditorSettingsSnapshot.capture(settings),
-            "saved-custom");
+            "saved-custom", null);
         moveEverything(1);
         settings.putString("theme_mode", "light");
         // A relaunch carrying the session on leaves it alone.
@@ -167,6 +167,41 @@ public class AppearanceEntryStoreTest {
         assertEquals("dark", settings.getString("theme_mode"));
         assertEquals("saved-custom", preferences.getSurfaceCustomPreset());
         assertFalse(AppearanceEntryStore.hasLeftover(preferences));
+    }
+
+    @Test
+    public void aKilledSessionPutsTheCardLooksBackAndAnOlderCopyLeavesThemAlone() {
+        MapStore settings = new MapStore();
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String atOpen = "{\"home\":[1,2,3]}";
+        CardCustoms.restore(store, atOpen);
+        AppearanceEntryStore.save(preferences, entry, EditorSettingsSnapshot.capture(settings),
+            null, CardCustoms.raw(store));
+        CardCustoms.put(store, "home", new int[] {4, 5, 6});
+        assertTrue(AppearanceEntryStore.restoreLeftover(preferences, settings));
+        assertEquals(atOpen, CardCustoms.raw(store));
+
+        // None saved at open: back to none.
+        CardCustoms.restore(store, null);
+        AppearanceEntryStore.save(preferences, entry, EditorSettingsSnapshot.capture(settings),
+            null, null);
+        CardCustoms.put(store, "home", new int[] {4, 5, 6});
+        assertTrue(AppearanceEntryStore.restoreLeftover(preferences, settings));
+        assertNull(CardCustoms.raw(store));
+
+        // A copy an older build wrote has no card looks: whatever is saved stays.
+        AppearanceEntryStore.save(preferences, entry, EditorSettingsSnapshot.capture(settings),
+            null, null);
+        try {
+            JSONObject old = new JSONObject(store.getString(AppearanceEntryStore.PREFS_KEY, null));
+            old.remove("cardCustoms");
+            store.edit().putString(AppearanceEntryStore.PREFS_KEY, old.toString()).commit();
+        } catch (org.json.JSONException e) {
+            throw new AssertionError(e);
+        }
+        CardCustoms.restore(store, atOpen);
+        assertTrue(AppearanceEntryStore.restoreLeftover(preferences, settings));
+        assertEquals(atOpen, CardCustoms.raw(store));
     }
 
     @Test

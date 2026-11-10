@@ -16,7 +16,7 @@ places in `SurfaceEditorController`, and the wallpaper sits outside altogether.
 |---|---|---|---|---|---|
 | Look (`AppearanceSnapshot`) | yes | yes | yes | yes | yes |
 | Saved Custom | yes | no (not checked whether that is intended) | yes | yes | yes |
-| Card looks (`card_custom_looks_v1`) | yes | **no** | yes | **no** | **no** |
+| Card looks (`card_custom_looks_v1`) | yes | no, on purpose (it moves alone only on a Look-and-back, nothing to save) | yes | fixed 11-10 | fixed 11-10 |
 | App-wide choices (`EditorSettingsSnapshot`) | yes | yes | yes | yes | yes |
 | Minimal mode | yes | yes | yes | yes | no |
 | Theme preview | (pending value) | yes | yes | relaunch commits it | no |
@@ -25,7 +25,8 @@ places in `SurfaceEditorController`, and the wallpaper sits outside altogether.
 
 The lists are `open` (capture), `carrySession` / `CarriedSession`, `AppearanceEntryStore.save`,
 `isDirty` and `revertToEntry`. A part added to one and forgotten in another is a silent loss; the
-card-looks row is the example found.
+card-looks row is the example found (its carry and killed-session gaps were fixed on their own
+on 2026-11-10; the lists are still hand-kept).
 
 The wallpaper is wired through three closures in the activity (`hasPendingChanges`, `commit`,
 `release`), and `AppearanceSurfaceController.leave` asks it separately and picks one of two dialog
