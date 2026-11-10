@@ -181,6 +181,15 @@ public class SoundPolicyTest {
         assertFalse(argv.contains("--start"));
     }
 
+    /** A pid file left by a killed server blocks every later start once its pid is reused. */
+    @Test public void theServerWritesNoPidFile() {
+        List<String> argv = SoundFiles.serverArgv("/p/bin/pulseaudio", OURS);
+
+        assertTrue(argv.contains("--use-pid-file=no"));
+        assertFalse(argv.contains("--use-pid-file=yes"));
+        assertEquals(StepAside.Server.OURS, StepAside.classify(argv, OURS));
+    }
+
     // ---- The environments -------------------------------------------------------------------------
 
     @Test public void theServerReadsNoClientConfigurationAndHasItsOwnDirectories() {

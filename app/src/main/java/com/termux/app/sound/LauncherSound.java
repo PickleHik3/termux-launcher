@@ -336,6 +336,14 @@ public final class LauncherSound {
             Logger.logInfo(LOG_TAG, "Stopping a stock PulseAudio server, " + pid);
             android.os.Process.sendSignal(pid, SIGTERM);
         }
+        // A hung server ignores SIGTERM and would keep the loopback port.
+        for (int pid : stock) {
+            awaitGone(pid);
+            if (!new File("/proc/" + pid).exists()) continue;
+            Logger.logInfo(LOG_TAG, "Killing a stock PulseAudio server that did not stop, " + pid);
+            android.os.Process.sendSignal(pid, SIGKILL);
+            awaitGone(pid);
+        }
         for (int pid : orphans) {
             android.os.Process.sendSignal(pid, SIGKILL);
             awaitGone(pid);
@@ -344,8 +352,8 @@ public final class LauncherSound {
     }
 
     /**
-     * A killed process takes a moment to free its socket, port and pid file. Bounded, and only
-     * ever reached for a process of the launcher's own that outlived the process that started it.
+     * A stopped or killed process takes a moment to free its socket and port. Bounded, and only
+     * reached for a leftover server of this uid that is being cleared away before a start.
      */
     private static void awaitGone(int pid) {
         File proc = new File("/proc/" + pid);
@@ -512,6 +520,8 @@ public final class LauncherSound {
                 new File(SoundPaths.VOLUMES_DIR).mkdirs();
                 File runtime = new File(SoundPaths.RUNTIME_DIR);
                 runtime.mkdirs();
+                // Left by an earlier build that ran the server with a pid file.
+                new File(SoundPaths.PID_FILE).delete();
                 try {
                     android.system.Os.chmod(runtime.getPath(), 0700);
                 } catch (Exception ignored) {

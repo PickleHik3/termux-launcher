@@ -1031,3 +1031,4 @@ longer counted as an error. Owed:
   mid-swipe from Home; Home ⇄ Home and the abandon from the Workspace were not seen, and in the
   mid-swipe hold the dock plate stood about 150 px higher in two of three old-build runs and in
   none of the new build's (read as timing, not proven) · pong.
+- 2026-11-10 · fix/sound-stale-pidfile · Reproduce the user report first on the old build: with sound running, `echo $(pidof system_server) > $PREFIX/var/run/termux-launcher/sound/pid`, then `pkill -9 pulseaudio` and open a new pane: the old build gives up (logcat `Termux.LauncherSound` "Failed to validate PID file" … "kept stopping"); the new build starts the server and `pactl info` answers. Then kill the app from recents with kew playing, reopen, open a new pane: `pactl info` answers and a restarted kew plays · emulator, then pong.
