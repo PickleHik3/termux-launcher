@@ -8379,10 +8379,12 @@ public final class SuggestionBarView extends GridLayout
         getLocationOnScreen(carryLocation);
         float x = rawX - carryLocation[0];
         float y = rawY - carryLocation[1];
-        if (x < 0f || y < 0f || x >= getWidth() || y >= getHeight()) {
+        if (y < 0f || y >= getHeight() || getWidth() <= 0) {
             carryLeave();
             return false;
         }
+        // Beside the row is still the row: its end slot, and the end that turns the page.
+        x = Math.max(0f, Math.min(getWidth() - 1f, x));
         carryHovering = true;
         updateFolderDragInsertionPreview(dropSlotAt(x).hoveredSlot);
         watchCarryEdge(x);

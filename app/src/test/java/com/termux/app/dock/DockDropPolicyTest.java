@@ -135,8 +135,13 @@ public class DockDropPolicyTest {
     @Test
     public void aFingerWellAboveTheRowIsHomes() {
         assertTrue(DockDropPolicy.handsOverToHome(500f, 1952f, 0f, 2000f, 1000f, 2100f, 2f));
-        assertTrue("past a side too",
-            DockDropPolicy.handsOverToHome(1060f, 2050f, 0f, 2000f, 1000f, 2100f, 2f));
+        assertTrue(DockDropPolicy.handsOverToHome(500f, 2148f, 0f, 2000f, 1000f, 2100f, 2f));
+    }
+
+    @Test
+    public void aFingerBesideTheRowStaysTheRows() {
+        assertFalse(DockDropPolicy.handsOverToHome(1060f, 2050f, 0f, 2000f, 1000f, 2100f, 2f));
+        assertFalse(DockDropPolicy.handsOverToHome(-80f, 2050f, 0f, 2000f, 1000f, 2100f, 2f));
     }
 
     // ---- Undo

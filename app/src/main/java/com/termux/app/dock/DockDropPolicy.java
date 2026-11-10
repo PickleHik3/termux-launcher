@@ -123,12 +123,14 @@ public final class DockDropPolicy {
     /**
      * Whether an icon lifted out of the row, now at ({@code x}, {@code y}) on screen, has left the
      * row ({@code left}, {@code top}, {@code right}, {@code bottom}) far enough to be Home's: as an
-     * icon leaves the drawer, a finger {@link DrawerHandOverPolicy#CROSS_DP} past its edge. A
-     * finger that only wanders off the row while reordering it does not turn the wall to Home.
+     * icon leaves the drawer, a finger {@link DrawerHandOverPolicy#CROSS_DP} above or below it. A
+     * finger that only wanders off the row while reordering it does not turn the wall to Home,
+     * and neither does one beside the row: the row stops short of the screen's edge, and an icon
+     * carried to that edge is being put at the row's end, not taken off it.
      */
     public static boolean handsOverToHome(float x, float y, float left, float top, float right,
                                           float bottom, float density) {
-        float outside = Math.max(Math.max(left - x, x - right), Math.max(top - y, y - bottom));
+        float outside = Math.max(top - y, y - bottom);
         return outside >= DrawerHandOverPolicy.CROSS_DP * density;
     }
 
