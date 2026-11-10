@@ -84,7 +84,9 @@ jobs:
           # is split per ABI like a nightly. Its version says "rel" where a nightly says "dev".
           case "$BUILD_TYPE" in
             release)
-              BUILD_TASK="assembleRelease"; VERSION_KIND="rel"
+              # The app's task only, as the release workflow runs it: the root task also verifies
+              # each library's release resources, which terminal-view does not pass on its own.
+              BUILD_TASK=":app:assembleRelease"; VERSION_KIND="rel"
               export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS="1"
               export TERMUX_RELEASE_STORE_FILE="$PWD/app/testkey_untrusted.jks"
               export TERMUX_RELEASE_STORE_PASSWORD="xrj45yWGLbsO7W0v"
