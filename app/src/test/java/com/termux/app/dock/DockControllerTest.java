@@ -6,6 +6,8 @@ import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.SparseArray;
 import android.view.MotionEvent;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.FrameLayout;
 
@@ -20,6 +22,8 @@ import com.termux.app.chrome.ChromeSpec;
 import com.termux.app.chrome.TestChromeRenderers;
 import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.place.ChromeShape;
+import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
@@ -34,6 +38,9 @@ import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -365,6 +372,99 @@ public class DockControllerTest {
         assertFalse(mDock.dockBandEaseRunning());
     }
 
+    // ------------------------------------------------------------------ Surface
+
+    @Test
+    public void theDockFloatsUnderFloatingUnlessThePeekCardStands() {
+        mHost.floating = false;
+        mHost.peekWanted = true;
+        assertFalse("Docked never floats", mDock.dockFloats());
+        assertEquals("Docked never asks after the card", 0, mHost.peekAsks);
+
+        mHost.floating = true;
+        mHost.peekWanted = false;
+        assertTrue("Floating with no card is the capsule", mDock.dockFloats());
+        mHost.peekWanted = true;
+        assertFalse("the Peek card rises from the edge as Docked", mDock.dockFloats());
+
+        mHost.floating = false;
+        assertTrue("measured in Floating, the card still stands down",
+            !mDock.dockFloatsIn(true));
+        mHost.peekWanted = false;
+        assertTrue(mDock.dockFloatsIn(true));
+        assertFalse(mDock.dockFloatsIn(false));
+    }
+
+    @Test
+    public void theCapsuleRadiusIsCornersCappedAtHalfTheSurface() {
+        mHost.cornersPx = 60f;
+        assertEquals("Corners on a tall surface", 60f,
+            mDock.resolveDockCapsuleCornerRadiusPx(400), 0f);
+        assertEquals("half of a short one", 40f, mDock.resolveDockCapsuleCornerRadiusPx(80), 0f);
+        assertEquals("no surface, no radius", 0f, mDock.resolveDockCapsuleCornerRadiusPx(-10), 0f);
+        assertEquals("the unbounded ask is Corners", 60f,
+            mDock.resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE), 0f);
+    }
+
+    @Test
+    public void theGlassCoverIsTheStackPagesOpacityOrNoneBeforePreferences() {
+        assertEquals("no preferences", 0f, mDock.dockGlassCover(), 0f);
+        mHost.prefsStore = TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true);
+        float expected = mHost.prefsStore.getAppBarOpacity(mHost.stackLookPage()) / 100f;
+        assertEquals(expected, mDock.dockGlassCover(), 0f);
+    }
+
+    @Test
+    public void theProgramEdgeRecutsTheHostOnlyWhenItMovesAndOnlyOnceCut() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        host.setId(R.id.accessory_surface_host);
+        host.layout(0, 0, 400, 100);
+        mHost.surfaceHost = host;
+        mHost.peekStands = true;
+
+        mDock.setDockProgramEdge(true);
+        assertTrue(mDock.dockGlassDrawsEdge());
+        assertEquals("nothing cut yet, nothing re-cut", 0, mHost.peekDresses);
+
+        mDock.applyDockSurfaceShape(host, true, 100, true, true);
+        assertEquals(1, mHost.peekDresses);
+        assertTrue(mDock.dockShapeCut());
+        assertTrue(mDock.dockShapeCapsule());
+        assertEquals(100, mDock.dockShapeHeightPx());
+
+        mDock.setDockProgramEdge(true);
+        assertEquals("the same edge re-cuts nothing", 1, mHost.peekDresses);
+        mDock.setDockProgramEdge(false);
+        assertFalse(mDock.dockGlassDrawsEdge());
+        assertEquals("a moved edge re-cuts the host as last cut", 2, mHost.peekDresses);
+    }
+
+    @Test
+    public void theHostDropsItsPaddingAndLensBeadsLeaveItUnclipped() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        host.setId(R.id.accessory_surface_host);
+        host.setPadding(4, 4, 4, 4);
+        host.setBackground(new ColorDrawable(0xFF000000));
+        ReflectionHelpers.setField(mDock, "mDockBeads", sevenBeads());
+        mDock.applyDockSurfaceShape(host, false, 100, true, true);
+        assertEquals(0, host.getPaddingLeft());
+        assertEquals(0, host.getPaddingBottom());
+        assertNull("no slab under the beads", host.getBackground());
+        assertFalse(host.getClipToOutline());
+    }
+
+    @Test
+    public void theShelfShowsNothingWithoutAChromeState() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        mHost.surfaceHost = host;
+        com.termux.app.DockShelfView shelf =
+            new com.termux.app.DockShelfView(RuntimeEnvironment.getApplication());
+        mHost.views.put(R.id.accessory_shelf_fx, shelf);
+        mHost.rows.setShelfShown(true);
+        mDock.syncDockShelf(null);
+        assertFalse(mHost.rows.shelfShown());
+    }
+
     static class FakeHost implements DockController.Host {
         boolean prefs = true;
         float share = Float.NaN;
@@ -377,6 +477,7 @@ public class DockControllerTest {
         final DockRows rows = new DockRows(new DockRowViews(id -> null, band -> false));
         final SeamCrossing seam = new SeamCrossing();
         @Nullable PlaceLayoutStore store;
+        @Nullable TermuxAppSharedPreferences prefsStore;
         @Nullable ChromeRenderer chrome;
         @Nullable PaneWallPage travelledTo;
         boolean reducedMotion;
@@ -384,6 +485,12 @@ public class DockControllerTest {
         boolean keyboardShown;
         boolean fieldWanted;
         boolean recomputeTrips;
+        boolean floating;
+        boolean peekWanted;
+        boolean peekStands;
+        float cornersPx = 26f * 2.625f;
+        int peekAsks;
+        int peekDresses;
         int barHeightPasses;
         int toolbarPasses;
 
@@ -424,8 +531,14 @@ public class DockControllerTest {
         @Override public boolean isAppDrawerEngaged() { return drawerEngaged; }
         @NonNull @Override public PlaceLayout placeLayout() { return layout; }
         @NonNull @Override public DockRows dockRows() { return rows; }
-        @Override public boolean dockFloats() { return false; }
-        @Override public float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) { return 0f; }
+        @Override public boolean floatingStyle() { return floating; }
+        @Override public boolean peekCardWanted() {
+            peekAsks++;
+            return peekWanted;
+        }
+        @Nullable @Override public PeekGlassGeometry.Card peekCard() { return null; }
+        @Override public float layoutCornersPx() { return cornersPx; }
+        @Override public int stackLookPage() { return 7; }
         @Override public boolean stackStandsDownOnFrame() { return false; }
         @NonNull @Override public DisplayMetrics displayMetrics() {
             return context().getResources().getDisplayMetrics();
@@ -440,7 +553,7 @@ public class DockControllerTest {
             return 5;
         }
         @Override public int homeMarginDp() { return 16; }
-        @Nullable @Override public TermuxAppSharedPreferences preferences() { return null; }
+        @Nullable @Override public TermuxAppSharedPreferences preferences() { return prefsStore; }
         @Nullable @Override public PlaceLayoutStore placeLayoutStore() { return store; }
         @NonNull @Override public ResolvedArrangement arrangementOf(@NonNull PageRef page) {
             return arranged(page.isHome() ? design : designOf(PaneWallPage.TERMINAL), page);
@@ -484,6 +597,24 @@ public class DockControllerTest {
         @Nullable @Override public AzScrubRowView azTabRowView() { return null; }
         @NonNull @Override public PlaceLayout.Edge azBarEdge() { return Edge.BOTTOM; }
         @Override public boolean isInAppKeyboardVisible() { return false; }
+        @NonNull @Override public ChromeShape chromeShape() {
+            throw new UnsupportedOperationException();
+        }
+        @NonNull @Override public ChromeShape chromeShape(@NonNull PlaceLayout layout) {
+            throw new UnsupportedOperationException();
+        }
+        @NonNull @Override public List<ChromeShape.PieceId> dockPieceIds(boolean withKeyboard) {
+            return new ArrayList<>();
+        }
+        @NonNull @Override public List<ChromeShape.PieceId> chromePieceIds(
+            @NonNull List<Element> elements) {
+            List<ChromeShape.PieceId> ids = new ArrayList<>(elements.size());
+            for (Element element : elements) ids.add(ChromeShape.PieceId.of(element));
+            return ids;
+        }
+        @Override public int chromeRimEdges(@NonNull ChromeShape.PieceId... ids) { return 0; }
+        @Override public boolean unifiedKeyboardGlass() { return false; }
+        @Override public boolean frameStandsDown() { return false; }
         @Nullable @Override public ChromeRenderer chrome() { return chrome; }
         @Override public void rebuildBackdropGlassEffectForLens() { }
         @Override public boolean glassParamsValid() { return true; }
@@ -493,6 +624,7 @@ public class DockControllerTest {
         @Override public float glassOriginTop() { return 0f; }
         @Override public boolean isGlassTouchLightAllowed() { return true; }
         @Override public int resolveDockAccentColor() { return 0xFF3366CC; }
+        @Nullable @Override public Drawable deckSlabOr(@Nullable Drawable glass) { return glass; }
         @Override public float beadShare() { return share; }
         @NonNull @Override public SeamCrossing seam() { return seam; }
         @Nullable @Override public PaneWallPage dockDesignTravelledTo() { return travelledTo; }
@@ -517,5 +649,9 @@ public class DockControllerTest {
         }
         @Override public boolean syncPromptLineField(@NonNull DockLayout layout) { return false; }
         @Override public boolean syncWallStripRow(@NonNull DockLayout layout) { return false; }
+        @Override public boolean dressPeekCard(@NonNull View surface) {
+            peekDresses++;
+            return peekStands;
+        }
     }
 }

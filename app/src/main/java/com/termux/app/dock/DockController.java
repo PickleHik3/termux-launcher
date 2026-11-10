@@ -91,10 +91,16 @@ public final class DockController {
         @NonNull PlaceLayout placeLayout();
         /** The dock's rows, which say whether the shelf is shown. */
         @NonNull DockRows dockRows();
-        /** Whether the dock's own placement floats (a capsule over the wallpaper). */
-        boolean dockFloats();
-        /** The capsule's corner radius for a surface this tall. */
-        float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx);
+        /** Whether the arrangement's Style is Floating (the panes', the bar's and the keys' answer). */
+        boolean floatingStyle();
+        /** Whether the Peek glass card can stand now (read from none of what the placement moves). */
+        boolean peekCardWanted();
+        /** The Peek glass card as last cut, in the host's coordinates; null while none stands. */
+        @Nullable PeekGlassGeometry.Card peekCard();
+        /** Corners, the one Floating radius, px. */
+        float layoutCornersPx();
+        /** The page id whose look the stack's surfaces wear. */
+        int stackLookPage();
         /** Whether the stack's sheets stand down on the joined frame's glass. */
         boolean stackStandsDownOnFrame();
         /** The display's metrics. */
@@ -157,6 +163,27 @@ public final class DockController {
         /** Whether the in-app keyboard is made and visible. */
         boolean isInAppKeyboardVisible();
 
+        // -------------------------------------------------------------- the chrome's shape model
+
+        /** The shape model of the place on screen, and of {@code layout}. */
+        @NonNull com.termux.app.place.ChromeShape chromeShape();
+        @NonNull com.termux.app.place.ChromeShape chromeShape(@NonNull PlaceLayout layout);
+        /**
+         * The model's pieces of the dock's own rows, the keyboard's with them where the two share
+         * one glass ({@code withKeyboard}).
+         */
+        @NonNull java.util.List<com.termux.app.place.ChromeShape.PieceId> dockPieceIds(
+            boolean withKeyboard);
+        /** The model's pieces for these elements, in order. */
+        @NonNull java.util.List<com.termux.app.place.ChromeShape.PieceId> chromePieceIds(
+            @NonNull java.util.List<com.termux.app.place.Element> elements);
+        /** The edges of these pieces that wear the rim (ChromeEdgeRule). */
+        int chromeRimEdges(@NonNull com.termux.app.place.ChromeShape.PieceId... ids);
+        /** Whether the dock and the keyboard are one glass now (the chrome as it stands). */
+        boolean unifiedKeyboardGlass();
+        /** Whether the joined Docked frame's glass is the sheets' now. */
+        boolean frameStandsDown();
+
         // -------------------------------------------------------------- glass
 
         /** The chrome's renderer; null before it is made. */
@@ -176,6 +203,8 @@ public final class DockController {
         boolean isGlassTouchLightAllowed();
         /** The accent the dock's specular and rim glow are tinted with. */
         int resolveDockAccentColor();
+        /** {@code glass}, or the deck's slab where the deck stands in for it. */
+        @Nullable Drawable deckSlabOr(@Nullable Drawable glass);
 
         // -------------------------------------------------------------- crossing
 
@@ -211,15 +240,96 @@ public final class DockController {
         /** The Search field, and the Wall strip's row, laid out as {@code layout} has them. */
         boolean syncPromptLineField(@NonNull DockLayout layout);
         boolean syncWallStripRow(@NonNull DockLayout layout);
+        /**
+         * Peek glass on the dock's host: the card worked out again from the row and the host as
+         * laid out, the glass program re-aimed when it moved, the host dressed as the card where
+         * one stands, and the reflection; whether a card stands (the host is then dressed).
+         */
+        boolean dressPeekCard(@NonNull View surface);
     }
 
     @NonNull private final Host mHost;
     /** The dock's layout and dress (the third cluster), behind this. */
     @NonNull private final DockDress mDress;
+    /** The dock's surface: placement, shape, glass and shelf (the fourth cluster), behind this. */
+    @NonNull private final DockSurface mSurface;
 
     public DockController(@NonNull Host host) {
         mHost = host;
         mDress = new DockDress(host, this);
+        mSurface = new DockSurface(host, this);
+    }
+
+    // ------------------------------------------------------------------ Surface
+    //
+    // The activity's one entry to DockSurface: whether the dock floats, the capsule's radius, the
+    // shape its glass host is cut to, the style's glass on the dock's program, the shelf, and
+    // whether the program draws the dock's edge.
+
+    /** Whether the dock is placed as the Floating card (DockPlacement). */
+    public boolean dockFloats() {
+        return mSurface.dockFloats();
+    }
+
+    /** {@link #dockFloats} for the dock measured in {@code floatingStyle}. */
+    public boolean dockFloatsIn(boolean floatingStyle) {
+        return mSurface.dockFloatsIn(floatingStyle);
+    }
+
+    /** The Floating card's radius for a surface this tall, Corners capped at half of it. */
+    public float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) {
+        return mSurface.resolveDockCapsuleCornerRadiusPx(surfaceHeightPx);
+    }
+
+    /** What the dock material's tint covers of the frost under it, 0..1. */
+    public float dockGlassCover() {
+        return mSurface.dockGlassCover();
+    }
+
+    /** Whether the host's shape was cut once, and as what; see {@link #applyDockSurfaceShape}. */
+    public boolean dockShapeCut() {
+        return mSurface.dockShapeCut();
+    }
+
+    public boolean dockShapeCapsule() {
+        return mSurface.dockShapeCapsule();
+    }
+
+    public int dockShapeHeightPx() {
+        return mSurface.dockShapeHeightPx();
+    }
+
+    /** Cuts {@code surface} (the dock's host or the strip under the pill) to the dock's shape. */
+    public void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
+                                      boolean ownsInnerEdge, boolean innerRim) {
+        mSurface.applyDockSurfaceShape(surface, capsule, surfaceHeightPx, ownsInnerEdge, innerRim);
+    }
+
+    /** Whether the dock's program draws its edge now (its effect installed). */
+    public boolean dockGlassDrawsEdge() {
+        return mSurface.dockGlassDrawsEdge();
+    }
+
+    /** Records whether the dock's program draws its edge; a change re-cuts the host's shape. */
+    public void setDockProgramEdge(boolean drawsEdge) {
+        mSurface.setDockProgramEdge(drawsEdge);
+    }
+
+    /** The slab's own spec for the glass program and the shelf. */
+    @NonNull
+    public DockSurfaceSpec dockSlabSpec() {
+        return mSurface.dockSlabSpec();
+    }
+
+    /** The dock's style's own glass on its program (GlassEffects.Host). */
+    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    public void applyDockSurfaceGlass(@NonNull GlassRefraction.Program program) {
+        mSurface.applyDockSurfaceGlass(program);
+    }
+
+    /** The shelf under a floating slab, shown or put away for {@code state}. */
+    public void syncDockShelf(@Nullable com.termux.app.chrome.ChromeSpec state) {
+        mSurface.syncDockShelf(state);
     }
 
     // ------------------------------------------------------------------ Layout and dress
@@ -481,7 +591,7 @@ public final class DockController {
         if (mDockBeads == null || Float.isNaN(share) || share >= 1f) return Float.NaN;
         View host = mHost.hotView(R.id.accessory_surface_host);
         if (host == null) return Float.NaN;
-        return mHost.dockFloats() ? mHost.resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
+        return dockFloats() ? resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
     }
 
 
@@ -1169,8 +1279,8 @@ public final class DockController {
         if (glow instanceof DockEdgeGlowView) {
             View surfaceHost = mHost.findViewById(R.id.accessory_surface_host);
             int surfaceHeightPx = surfaceHost != null ? surfaceHost.getHeight() : 0;
-            float radius = mHost.dockFloats()
-                ? mHost.resolveDockCapsuleCornerRadiusPx(surfaceHeightPx)
+            float radius = dockFloats()
+                ? resolveDockCapsuleCornerRadiusPx(surfaceHeightPx)
                 : 0f;
             DockEdgeGlowView glowView = (DockEdgeGlowView) glow;
             glowView.setAlpha(materialAlpha);
@@ -1185,7 +1295,7 @@ public final class DockController {
         }
         // Both styles tilt now: the capsule free-floating with a press dip, the edge-to-edge bar
         // hinged at the screen edge and overscanned so its slide cannot open a strip at the sides.
-        boolean capsuleDock = mHost.dockFloats();
+        boolean capsuleDock = dockFloats();
         mDockPlankController.setMotionEnabled(true);
         mDockPlankController.setHingeMode(!capsuleDock);
         mDockPlankController.setReducedMotion(mHost.isReducedMotionEnabled());
