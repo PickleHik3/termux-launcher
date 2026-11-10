@@ -10,7 +10,15 @@ import com.termux.R;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.notice.TerminalDress;
+import com.termux.app.launcher.data.LauncherConfigRepository;
+import com.termux.app.launcher.folder.FolderRenameController;
+import com.termux.app.launcher.folder.FolderRenameModel;
+import com.termux.app.launcher.folder.FolderRenameTitleView;
 import com.termux.app.surfaces.SurfaceEditorController;
+import com.termux.app.terminal.ClipboardText;
+import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.shared.view.KeyboardUtils;
+import com.termux.view.TerminalView;
 
 /**
  * The sheets' own code (ADR 0018 §1, wave H step one, D17), moved out of the activity line for
@@ -37,12 +45,38 @@ public final class SheetsController {
         SurfaceEditorController surfaceEditor();
         /** Raises a transient notice on the pill (quiet while notices are suppressed). */
         void showToast(String text, boolean longDuration);
+
+        // -------------------------------------------------------------- folder rename
+
+        /** The launcher's config store a dock folder's rename commits into; null before it is made. */
+        @Nullable LauncherConfigRepository launcherConfigRepository();
+        /** Hands the in-app keyboard's interceptor slot back to whoever owns it now. */
+        void restoreInAppKeyboardTypingClaim();
+
+        // -------------------------------------------------------------- keyboards and focus
+
+        /** The in-app keyboard; null before it is built. */
+        @Nullable TermuxInAppKeyboard inAppKeyboard();
+        /** Shows the in-app keyboard for typing if it is the keyboard in use; true when it is. */
+        boolean ensureInAppTypingKeyboard();
+        /** Gives the focus and the keys to the active pane's terminal. */
+        boolean handKeysToActivePane();
+        /** The current terminal view; null before it is inflated. */
+        @Nullable TerminalView terminalView();
+        /** The system IME is about to be asked for. */
+        void onSystemImeRequested();
+        /** Whether a screen point is on a key of the in-app keyboard. */
+        boolean isPointOnInAppKeyboard(float rawX, float rawY);
+        /** Whether a shown {@code view} contains the screen point. */
+        boolean viewContainsScreenPoint(@Nullable View view, float x, float y);
     }
 
     @NonNull private final Host mHost;
+    @NonNull private final FolderRenameController mFolderRenameController;
 
     public SheetsController(@NonNull Host host) {
         mHost = host;
+        mFolderRenameController = new FolderRenameController(ClipboardText.forContext(host.activity()));
     }
 
     // ================================================================== notices
@@ -177,4 +211,110 @@ public final class SheetsController {
     public boolean areNoticesSuppressed() {
         return mNoticeSuppressionDepth > 0;
     }
+
+    // ================================================================== folder rename
+
+    /** The focusless folder rename; it holds the in-app keyboard's interceptor while active. */
+    @NonNull
+    public FolderRenameController folderRenameController() {
+        return mFolderRenameController;
+    }
+
+    /** Installs focusless rename ahead of drawer search while TerminalView retains InputConnection. */
+    public void beginFolderRename(long revision, @NonNull String folderId, @NonNull String title,
+                                  @NonNull FolderRenameTitleView titleView) {
+        mFolderRenameController.begin(revision, folderId, title,
+            new FolderRenameController.Host() {
+                @NonNull
+                @Override public LauncherConfigRepository.MutationResult commit(long expected,
+                    @NonNull String id, @NonNull String value) {
+                    LauncherConfigRepository repository = mHost.launcherConfigRepository();
+                    if (repository == null)
+                        return LauncherConfigRepository.MutationResult.MISSING;
+                    return repository.renameFolder(expected, id, value);
+                }
+
+                @Override public void onDraftChanged(@NonNull FolderRenameModel model) {
+                    titleView.bind(model, true);
+                }
+
+                @Override public void onRenameEnded(boolean committed) {
+                    LauncherConfigRepository repository = mHost.launcherConfigRepository();
+                    com.termux.app.launcher.model.PinnedFolderItem latest =
+                        repository == null ? null
+                            : repository.loadSnapshot().folder(folderId);
+                    titleView.bind(new FolderRenameModel(latest == null ? title : latest.title), false);
+                    mHost.restoreInAppKeyboardTypingClaim();
+                }
+            });
+        TermuxInAppKeyboard keyboard = mHost.inAppKeyboard();
+        if (keyboard != null)
+            keyboard.setKeyValueInterceptor(mFolderRenameController);
+        raiseFolderRenameKeyboard();
+    }
+
+    /**
+     * The same focusless rename for a folder on a Home page: the dock's intake and title view,
+     * committing into the Home store instead of the dock's.
+     */
+    public void beginHomeFolderRename(@NonNull String name, @NonNull FolderRenameTitleView titleView,
+            @NonNull com.termux.app.launcher.widget.WidgetPaneController.HomeFolderRenameTarget target) {
+        mFolderRenameController.begin(0L, "home", name, new FolderRenameController.Host() {
+            @NonNull
+            @Override public LauncherConfigRepository.MutationResult commit(long expected,
+                @NonNull String id, @NonNull String value) {
+                return target.rename(value) ? LauncherConfigRepository.MutationResult.APPLIED
+                    : LauncherConfigRepository.MutationResult.MISSING;
+            }
+
+            @Override public void onDraftChanged(@NonNull FolderRenameModel model) {
+                titleView.bind(model, true);
+            }
+
+            @Override public void onRenameEnded(boolean committed) {
+                titleView.bind(new FolderRenameModel(target.currentName()), false);
+                // Whoever owns the slot now: on Home that can be the palette or a sheet too.
+                mHost.restoreInAppKeyboardTypingClaim();
+            }
+        });
+        TermuxInAppKeyboard keyboard = mHost.inAppKeyboard();
+        if (keyboard != null)
+            keyboard.setKeyValueInterceptor(mFolderRenameController);
+        raiseFolderRenameKeyboard();
+    }
+
+    /**
+     * The keyboard a folder rename is typed with. The in-app keyboard when it is on, shown if it
+     * is down: the rename takes its keys through the interceptor slot, and on Home it may well
+     * be down (Home rests without it unless Keyboard on Home is on), where asking the system IME
+     * for itself raised nothing, since the in-app keyboard holds the system IME suppressed.
+     * Otherwise the system IME, through a terminal view that holds the focus: the rename has no
+     * text field, and the IME's text and keys reach the rename only by the terminal's overlay
+     * channel. On Home the focus may sit elsewhere, and the IME then typed into nothing.
+     */
+    private void raiseFolderRenameKeyboard() {
+        if (mHost.ensureInAppTypingKeyboard()) return;
+        Activity activity = mHost.activity();
+        if (!(activity.getCurrentFocus() instanceof TerminalView)) mHost.handKeysToActivePane();
+        View target = activity.getCurrentFocus() instanceof TerminalView
+            ? activity.getCurrentFocus() : mHost.terminalView();
+        mHost.onSystemImeRequested();
+        KeyboardUtils.showSoftKeyboard(activity, target);
+    }
+
+    /**
+     * Whether a touch at this screen point is a key of the keyboard a folder rename is typed with:
+     * the in-app keyboard's keys or the extra-keys row beside them. The folder popup stays open
+     * for those, where any other touch outside it closes it.
+     */
+    public boolean isFolderRenameTypingTouch(float rawX, float rawY) {
+        return isFolderRenameActive()
+            && (mHost.isPointOnInAppKeyboard(rawX, rawY)
+                || mHost.viewContainsScreenPoint(mHost.activity().findViewById(R.id.inapp_keyboard_container), rawX, rawY)
+                || mHost.viewContainsScreenPoint(mHost.activity().findViewById(R.id.terminal_toolbar_host), rawX, rawY));
+    }
+
+    public void cancelFolderRename() { mFolderRenameController.cancel(); }
+
+    public boolean isFolderRenameActive() { return mFolderRenameController.isActive(); }
 }

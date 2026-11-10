@@ -1121,8 +1121,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private LauncherAppDataProvider mLauncherAppDataProvider;
     private LauncherConfigRepository mLauncherConfigRepository;
-    private final FolderRenameController mFolderRenameController =
-        new FolderRenameController(ClipboardText.forContext(this));
     /** Every surface over the terminal, innermost first; Back, keys, text and teardown derive from it. */
     private final com.termux.app.chrome.OverlayRegistry mOverlays = createOverlayRegistry();
     /** Anchored glass editor for session/window/pane renames; built on first rename. */
@@ -2838,7 +2836,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Nothing is typed into a display nobody is looking at.
         hideDisplaySystemKeyboard();
         // Rename owns the in-app-keyboard interceptor only while this activity is visible.
-        mFolderRenameController.onActivityPaused();
+        mSheets.folderRenameController().onActivityPaused();
         if (mRenameCoordinator != null) mRenameCoordinator.onActivityPaused();
         // Same rule for the find strip: it holds the interceptor and paints over a pane, and both
         // must be handed back before this activity stops being the one on screen.
@@ -11533,15 +11531,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void beginFolderRename(long revision, @NonNull String folderId,
                                                    @NonNull String title,
                                                    @NonNull FolderRenameTitleView titleView) {
-                TermuxActivity.this.beginFolderRename(revision, folderId, title, titleView);
+                mSheets.beginFolderRename(revision, folderId, title, titleView);
             }
 
             @Override public void cancelFolderRename() {
-                TermuxActivity.this.cancelFolderRename();
+                mSheets.cancelFolderRename();
             }
 
             @Override public boolean isFolderRenameTypingTouch(float rawX, float rawY) {
-                return TermuxActivity.this.isFolderRenameTypingTouch(rawX, rawY);
+                return mSheets.isFolderRenameTypingTouch(rawX, rawY);
             }
         });
         mSuggestionBarView.setNotificationPopupInteractionListener(
@@ -19108,101 +19106,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyInAppKeyboardTypingClaim(isCommandPaletteOpen(), isTerminalSheetOpen(), active);
     }
 
-    /** Installs focusless rename ahead of drawer search while TerminalView retains InputConnection. */
-    public void beginFolderRename(long revision, @NonNull String folderId, @NonNull String title,
-                                  @NonNull FolderRenameTitleView titleView) {
-        mFolderRenameController.begin(revision, folderId, title,
-            new FolderRenameController.Host() {
-                @NonNull
-                @Override public LauncherConfigRepository.MutationResult commit(long expected,
-                    @NonNull String id, @NonNull String value) {
-                    if (mLauncherConfigRepository == null)
-                        return LauncherConfigRepository.MutationResult.MISSING;
-                    return mLauncherConfigRepository.renameFolder(expected, id, value);
-                }
-
-                @Override public void onDraftChanged(@NonNull FolderRenameModel model) {
-                    titleView.bind(model, true);
-                }
-
-                @Override public void onRenameEnded(boolean committed) {
-                    com.termux.app.launcher.model.PinnedFolderItem latest =
-                        mLauncherConfigRepository == null ? null
-                            : mLauncherConfigRepository.loadSnapshot().folder(folderId);
-                    titleView.bind(new FolderRenameModel(latest == null ? title : latest.title), false);
-                    restoreInAppKeyboardTypingClaim();
-                }
-            });
-        if (mInAppKeyboard != null)
-            mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
-        raiseFolderRenameKeyboard();
-    }
-
-    /**
-     * The same focusless rename for a folder on a Home page: the dock's intake and title view,
-     * committing into the Home store instead of the dock's.
-     */
-    private void beginHomeFolderRename(@NonNull String name, @NonNull FolderRenameTitleView titleView,
-            @NonNull com.termux.app.launcher.widget.WidgetPaneController.HomeFolderRenameTarget target) {
-        mFolderRenameController.begin(0L, "home", name, new FolderRenameController.Host() {
-            @NonNull
-            @Override public LauncherConfigRepository.MutationResult commit(long expected,
-                @NonNull String id, @NonNull String value) {
-                return target.rename(value) ? LauncherConfigRepository.MutationResult.APPLIED
-                    : LauncherConfigRepository.MutationResult.MISSING;
-            }
-
-            @Override public void onDraftChanged(@NonNull FolderRenameModel model) {
-                titleView.bind(model, true);
-            }
-
-            @Override public void onRenameEnded(boolean committed) {
-                titleView.bind(new FolderRenameModel(target.currentName()), false);
-                // Whoever owns the slot now: on Home that can be the palette or a sheet too.
-                restoreInAppKeyboardTypingClaim();
-            }
-        });
-        if (mInAppKeyboard != null)
-            mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
-        raiseFolderRenameKeyboard();
-    }
-
-    /**
-     * The keyboard a folder rename is typed with. The in-app keyboard when it is on, shown if it
-     * is down: the rename takes its keys through the interceptor slot, and on Home it may well
-     * be down (Home rests without it unless Keyboard on Home is on), where asking the system IME
-     * for itself raised nothing, since the in-app keyboard holds the system IME suppressed.
-     * Otherwise the system IME, through a terminal view that holds the focus: the rename has no
-     * text field, and the IME's text and keys reach the rename only by the terminal's overlay
-     * channel. On Home the focus may sit elsewhere, and the IME then typed into nothing.
-     */
-    private void raiseFolderRenameKeyboard() {
-        if (ensureInAppTypingKeyboard()) return;
-        if (!(getCurrentFocus() instanceof TerminalView)) handKeysToActivePane();
-        View target = getCurrentFocus() instanceof TerminalView ? getCurrentFocus() : mTerminalView;
-        onSystemImeRequested();
-        KeyboardUtils.showSoftKeyboard(this, target);
-    }
-
-    /**
-     * Whether a touch at this screen point is a key of the keyboard a folder rename is typed with:
-     * the in-app keyboard's keys or the extra-keys row beside them. The folder popup stays open
-     * for those, where any other touch outside it closes it.
-     */
-    private boolean isFolderRenameTypingTouch(float rawX, float rawY) {
-        return isFolderRenameActive()
-            && (isPointOnInAppKeyboard(rawX, rawY)
-                || viewContainsScreenPoint(findViewById(R.id.inapp_keyboard_container), rawX, rawY)
-                || viewContainsScreenPoint(findViewById(R.id.terminal_toolbar_host), rawX, rawY));
-    }
-
-    public void cancelFolderRename() { mFolderRenameController.cancel(); }
-
-    private boolean isFolderRenameActive() { return mFolderRenameController.isActive(); }
-
     /** Hardware and external-keyboard strokes claimed by the open app drawer's search. */
     public boolean handleAppDrawerKey(int keyCode, @NonNull KeyEvent event) {
-        if (mFolderRenameController.handleKeyDown(keyCode, event)) return true;
+        if (mSheets.folderRenameController().handleKeyDown(keyCode, event)) return true;
         return mAppDrawerController != null
             && mAppDrawerController.handleSearchKey(keyCode, event);
     }
@@ -19213,7 +19119,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * ordinary characters reach it rather than the shell behind the plane.
      */
     public boolean handleAppDrawerCodePoint(int codePoint, boolean ctrlDown) {
-        if (mFolderRenameController.handleCodePoint(codePoint, ctrlDown)) return true;
+        if (mSheets.folderRenameController().handleCodePoint(codePoint, ctrlDown)) return true;
         return mAppDrawerController != null
             && mAppDrawerController.handleSearchCodePoint(codePoint, ctrlDown);
     }
@@ -19423,7 +19329,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return handleAppDrawerCodePoint(codePoint, ctrlDown);
             }
             @Override public boolean swallowsKeyUp() {
-                return isFolderRenameActive() || isAppDrawerOpen();
+                return mSheets.isFolderRenameActive() || isAppDrawerOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 closeAppDrawerImmediate(reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
@@ -20855,7 +20761,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer) {
         if (mInAppKeyboard == null) return;
-        boolean folderRename = mFolderRenameController.isActive();
+        boolean folderRename = mSheets.isFolderRenameActive();
         mInAppKeyboard.setTextFieldHoldsFocus(isAssistantFieldTyping());
         switch (com.termux.app.terminal.inappkeyboard.TypingClaim.owner(palette, sheet,
             folderRename || isTerminalRenameActive(), drawer, isDisplayWindowTyping(),
@@ -20870,7 +20776,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // A folder rename is stronger than the drawer search under it, and a terminal
                 // rename chip installed its own interceptor, which the closing drawer's spring
                 // landing hundreds of ms later must not clear: its finish path restores the claim.
-                if (folderRename) mInAppKeyboard.setKeyValueInterceptor(mFolderRenameController);
+                if (folderRename) mInAppKeyboard.setKeyValueInterceptor(mSheets.folderRenameController());
                 break;
             case APP_DRAWER:
                 mInAppKeyboard.setKeyValueInterceptor(mAppDrawerController == null
@@ -24592,6 +24498,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @Nullable com.termux.app.statusbar.BackgroundProcessStackView backgroundProcessStack() { return mBackgroundProcessStack; }
         @Override public SurfaceEditorController surfaceEditor() { return mSurfaceEditor; }
         @Override public void showToast(String text, boolean longDuration) { TermuxActivity.this.showToast(text, longDuration); }
+        // -------------------------------------------------------------- folder rename
+        @Override public @Nullable LauncherConfigRepository launcherConfigRepository() { return mLauncherConfigRepository; }
+        @Override public void restoreInAppKeyboardTypingClaim() { TermuxActivity.this.restoreInAppKeyboardTypingClaim(); }
+        // -------------------------------------------------------------- keyboards and focus
+        @Override public @Nullable TermuxInAppKeyboard inAppKeyboard() { return mInAppKeyboard; }
+        @Override public boolean ensureInAppTypingKeyboard() { return TermuxActivity.this.ensureInAppTypingKeyboard(); }
+        @Override public boolean handKeysToActivePane() { return TermuxActivity.this.handKeysToActivePane(); }
+        @Override public @Nullable TerminalView terminalView() { return mTerminalView; }
+        @Override public void onSystemImeRequested() { TermuxActivity.this.onSystemImeRequested(); }
+        @Override public boolean isPointOnInAppKeyboard(float rawX, float rawY) { return TermuxActivity.this.isPointOnInAppKeyboard(rawX, rawY); }
+        @Override public boolean viewContainsScreenPoint(@Nullable View view, float x, float y) { return TermuxActivity.viewContainsScreenPoint(view, x, y); }
     }
 
     /** What only the activity gives the status bar's controller (statusbar.StatusBarController). */
@@ -30449,11 +30366,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void beginHomeFolderRename(@NonNull String name,
                         @NonNull FolderRenameTitleView title,
                         @NonNull com.termux.app.launcher.widget.WidgetPaneController.HomeFolderRenameTarget target) {
-                    TermuxActivity.this.beginHomeFolderRename(name, title, target);
+                    mSheets.beginHomeFolderRename(name, title, target);
                 }
-                @Override public void cancelHomeFolderRename() { cancelFolderRename(); }
+                @Override public void cancelHomeFolderRename() { mSheets.cancelFolderRename(); }
                 @Override public boolean isFolderRenameTypingTouch(float rawX, float rawY) {
-                    return TermuxActivity.this.isFolderRenameTypingTouch(rawX, rawY);
+                    return mSheets.isFolderRenameTypingTouch(rawX, rawY);
                 }
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
