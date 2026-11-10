@@ -10,6 +10,13 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Live dock reorder (2026-11-10, #155)
+- 2026-11-10 · feat/dock-live-reorder-155 · By hand on pong, Docked and Floating, keyboard down
+  and up: a dock icon held over another place parts the row after about two thirds of a second
+  and the slide (0.15 s) reads as calm, not jumpy; a quick drop still lands where it was let go;
+  resting on an icon's middle swells it within about a third of a second and a release makes a
+  folder; an app dragged up out of the drawer and down onto the row parts it the same way · pong.
+
 ## Swipe stalls (2026-11-08)
 - 2026-11-08 · 96f3c94ae, 30270fe41 · Bench `set.sh` x3, H2 ↔ WS and WS ↔ AI, against
   9dae2f26e: the landed frame (`Wall.landed`) under 16.7 ms; `Wall.pageSettled` now runs in the
