@@ -988,3 +988,15 @@ longer counted as an error. Owed:
   With a temporary display up, "Add display" still shows and its card is not listed. Home on the
   Terminal page, remove the last window: home falls back to a Home page. Use as Terminal only:
   "bring back" appears. Rename a Home page · emulator, then pong.
+- **The dock's code left the activity (11-10, refactor/dock-controller, ADR 0018 wave D part
+  two).** Moves with no intended change, so any difference is a defect. Each dock design (Tray,
+  Beads, Strip, Peek), Docked and Floating: the shape is whole, the strip under the gesture pill
+  continues the dock, beads sit one under each icon. Home ⇄ Workspace with different designs,
+  ten times: one restyle at the landing, nothing of the other design left. Change the design so
+  the Search field or the Wall strip comes and goes: the dock eases once and rests with nothing
+  overlapping. Press the dock: tilt, specular and rim glow, and the touch light under the
+  finger; while typing on the in-app keyboard the dock does not sway. Drag a pinned icon one
+  slot and back: beads follow. The A–Z bead lifts under the finger. Apps row moved to the top
+  edge: the plank's padding, radius and the status strip's lead. Keyboard up and down, rotated
+  once. The emulator passed rests, crossings, press, typing and the A–Z lift on c1db54f54; the
+  icon drag, the ease in motion and the last cluster (f17339e85) are unseen · emulator, then pong.

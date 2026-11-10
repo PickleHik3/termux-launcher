@@ -445,3 +445,40 @@ a Linux app.
 - RenderScript has no GPU driver here: `ScriptIntrinsicBlur` runs in `libRSCpuRef.so` on an
   8-thread pool whose threads inherit the submitter's name (`wallpaper-blur`), so nine
   `wallpaper-blur` threads are one worker plus the pool, not nine executors.
+
+## Routes learned in the 2026-11-10 refactor checks (emulator, 1080×2400 at 420 dpi)
+
+- **Page swipes need one shell call.** `input swipe` does not page the wall, and a
+  `motionevent` sequence split over several `ad` calls is slow enough to become a long-press
+  that selects terminal text (a tap on empty terminal space clears it; Esc does not). Whole
+  gesture in one call: `ad adb shell 'input motionevent DOWN 900 1500; for x in 800 700 600 500
+  400 300 200 150; do input motionevent MOVE $x 1500; done; input motionevent UP 150 1500'`
+  (towards the Terminal); reverse the x values to go back. With an Assistant page between Home
+  and the Terminal it takes two.
+- **Edit pages**: "Edit pages" in the home actions sheet (long-press empty space on a Home page,
+  e.g. 540,1200; `ad find "Edit pages"`). The long-press only works on a Home page. A card's
+  menu (Set as home, Rename, Remove) opens from a 1.2 s body long-press. Add page, Add display
+  and Add assistant are not in `ad ui`: tap them by coordinates (y about 2257). A Home, Display
+  or Assistant card reorders by a body drag (DOWN, `sleep 0.9`, MOVEs, hold, UP in one call).
+  The Terminal block moves by its grip, the "Move Terminal page" node above its first card
+  (about 234,181 once that card is centred), not by a card's body. Closing Edit pages lands on
+  the page that was in front.
+- **Dock designs**: values `glass_tray` (Tray), `lens_beads` (Beads), `wall_strip` (Strip),
+  `peek_glass` (Peek). Home's design is `layout.home.dock_design` and also `dock_design` inside
+  the `"home"` JSON in `shared_prefs/layouts.xml`, which wins: set both, then force-stop. In
+  that JSON `sed` wants plain `&quot;` between key and value. The Workspace's is
+  `layout.dock_design`. Beads are faint at rest: judge them from a zoomed crop. With the
+  keyboard up on Home under Beads the icons stand on bare wallpaper, no bead and no slab (the
+  same before and after the 11-10 dock moves).
+- **Pins**: a fresh emulator has only Terminal pinned and the `700 2165` hold recipe above does
+  nothing there. Seed `app_launcher_pinned_items_v2` with activities from
+  `cmd package query-activities --brief` (escape `&` in the sed replacement), then force-stop.
+  A hold on a pinned icon opens Change icon / Uninstall / Edit dock; a hold on bare dock opens
+  Apps row Edit / Hide, and Edit opens the Appearance editor's Dock card.
+- **Keyboard on Home**: the palette swipe (`ad swipe 540 1700 540 900 700`); a tap on free space
+  closes it. `ad ui` ids: `apps_bar_row_host`, `apps_bar_plank_layer`, `accessory_row_stack`
+  (dock rows and the A–Z row, which has no id of its own), `inapp_keyboard_container`.
+- **Sheets in the way**: the Setup cards sheet returns on every launcher start (Back dismisses
+  it). `set-home-activity com.termux/.app.TermuxActivity` makes it home for a check; set the
+  stock launcher back afterwards. After a lease wait the emulator may be stopped: `ad -s emu emu
+  start` under the lease.
