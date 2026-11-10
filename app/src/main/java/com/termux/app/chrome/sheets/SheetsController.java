@@ -69,6 +69,25 @@ public final class SheetsController {
         boolean isPointOnInAppKeyboard(float rawX, float rawY);
         /** Whether a shown {@code view} contains the screen point. */
         boolean viewContainsScreenPoint(@Nullable View view, float x, float y);
+
+        // -------------------------------------------------------------- the display's keyboard frame
+
+        /** Whether the display on screen is in its touchpad frame. */
+        boolean isDisplayTouchpadFrame();
+        /** The display frame's content policy (keyboard or pad). */
+        @NonNull com.termux.app.x11.DisplayFrameContentPolicy frameContent();
+        /** Applies a display frame decision. */
+        void applyDisplayFrameDecision(@NonNull com.termux.app.x11.DisplayFrameContentPolicy.Decision decision);
+        /** Raises and lowers the display frame's keyboard. */
+        void raiseDisplayFrameKeyboard();
+        void lowerDisplayFrameKeyboard();
+        /** Holds the keyboard's visibility listener off while a raise is nobody's pin. */
+        void setRaisingDisplayFrameKeyboard(boolean raising);
+
+        // -------------------------------------------------------------- the sheets still built in the activity
+
+        /** The app drawer's controller if it has been built; null otherwise (never builds one). */
+        @Nullable com.termux.app.launcher.drawer.AppDrawerController appDrawerControllerIfBuilt();
     }
 
     @NonNull private final Host mHost;
@@ -317,4 +336,98 @@ public final class SheetsController {
     public void cancelFolderRename() { mFolderRenameController.cancel(); }
 
     public boolean isFolderRenameActive() { return mFolderRenameController.isActive(); }
+
+    // ================================================================== the drawer's keyboard
+
+    /** The display keyboard the drawer's search raised, and whether the user has claimed it since. */
+    private boolean mDrawerRaisedKeyboard;
+    private boolean mDrawerRaisedKeyboardClaimed;
+
+    /** Whether the drawer's search raised the display keyboard now up. */
+    public boolean drawerRaisedKeyboard() {
+        return mDrawerRaisedKeyboard;
+    }
+
+    /** Whether the user has claimed the keyboard the drawer's search raised. */
+    public boolean drawerRaisedKeyboardClaimed() {
+        return mDrawerRaisedKeyboardClaimed;
+    }
+
+    /** The user asked for the keyboard themselves: the drawer's close leaves it up. */
+    public void claimDrawerRaisedKeyboard() {
+        mDrawerRaisedKeyboardClaimed = true;
+    }
+
+    /** The drawer closed: put back down what its search raised over the display, quietly. */
+    public void lowerDrawerSearchKeyboard() {
+        boolean raised = mDrawerRaisedKeyboard;
+        mDrawerRaisedKeyboard = false;
+        TermuxInAppKeyboard keyboard = mHost.inAppKeyboard();
+        if (!com.termux.app.x11.DisplayKeyboardRoute.drawerCloseLowers(raised,
+                mDrawerRaisedKeyboardClaimed, keyboard != null && keyboard.isVisible()))
+            return;
+        com.termux.app.x11.DisplayFrameContentPolicy frameContent = mHost.frameContent();
+        if (mHost.isDisplayTouchpadFrame() && frameContent.isKeyboardContent()) {
+            mHost.applyDisplayFrameDecision(frameContent.onTextFocus(false));
+        } else {
+            mHost.lowerDisplayFrameKeyboard();
+        }
+    }
+
+    /**
+     * Summons the system IME for the drawer's search, with <b>no focus change</b>.
+     *
+     * <p>The obvious call here would be {@code beginExternalTextInput()}, and it is exactly wrong:
+     * it runs {@code requestAccessoryGeometrySync()}, and the accessory stack's geometry is frozen
+     * for the life of the drawer transition. Thawing it mid-reveal relayouts the stack under an open
+     * plane and the dock visibly jumps on close. Focus stays on the terminal view, which keeps
+     * owning the input connection; the committed text reaches the drawer through
+     * {@code handleAppDrawerCodePoint}.
+     */
+    public void requestAppDrawerSearchKeyboard() {
+        TermuxInAppKeyboard keyboard = mHost.inAppKeyboard();
+        // With the built-in keyboard selected the search raises it, on every place: the drawer
+        // types through it and reveals it through the plane. Only the Android keyboard gets the
+        // system ask below (over a running display that ask would not even be served).
+        com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch route = keyboard == null
+            ? com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK
+            : com.termux.app.x11.DisplayKeyboardRoute.drawerSearch(keyboard.isEnabled(),
+                keyboard.isTurnedOff(), keyboard.yieldsToHardwareKeyboard());
+        // A keyboard that stands aside for a physical one raises nothing; the keys type into the
+        // search through the layer's own key route.
+        if (route == com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.NONE) return;
+        if (route != com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK) {
+            boolean wasUp = keyboard.isVisible();
+            if (route == com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.TURN_ON_AND_RAISE) {
+                // Switched off with the keyboard key, and tapping the search asks for it back.
+                // Nobody's pin either: held off from the visibility listener like the raise below.
+                mHost.setRaisingDisplayFrameKeyboard(true);
+                try {
+                    keyboard.setTurnedOff(false);
+                } finally {
+                    mHost.setRaisingDisplayFrameKeyboard(false);
+                }
+            }
+            // The drawer's raise is nobody's pin: it goes down again with the drawer
+            // (lowerDrawerSearchKeyboard) unless the keyboard was up first or the user claims it.
+            if (mHost.isDisplayTouchpadFrame()) {
+                com.termux.app.x11.DisplayFrameContentPolicy frameContent = mHost.frameContent();
+                if (frameContent.isKeyboardContent()) return;
+                mHost.applyDisplayFrameDecision(frameContent.onTextFocus(true));
+                mDrawerRaisedKeyboard = true;
+                mDrawerRaisedKeyboardClaimed = false;
+            } else if (!wasUp) {
+                mHost.raiseDisplayFrameKeyboard();
+                mDrawerRaisedKeyboard = true;
+                mDrawerRaisedKeyboardClaimed = false;
+            }
+            // Raised after the pull, the keyboard was not among the bands the drawer measured;
+            // it measures them again so the reveal can bring it up through the plane.
+            com.termux.app.launcher.drawer.AppDrawerController drawer = mHost.appDrawerControllerIfBuilt();
+            if (drawer != null) drawer.onBuiltInKeyboardRaised();
+            return;
+        }
+        mHost.onSystemImeRequested();
+        KeyboardUtils.showSoftKeyboard(mHost.activity(), mHost.terminalView());
+    }
 }
