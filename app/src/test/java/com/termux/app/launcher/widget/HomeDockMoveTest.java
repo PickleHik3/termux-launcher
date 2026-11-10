@@ -158,6 +158,99 @@ public class HomeDockMoveTest {
         assertTrue("Home can take the next one", fixture.controller.canTakeAppDrop());
     }
 
+    private static HomeAppDrop drawerDrop() {
+        return new HomeAppDrop(MAPS, "Maps", new ColorDrawable(0xFF00FF00), 48);
+    }
+
+    @Test public void aDrawerAppLetGoOverTheDockIsPinnedAndNotPutOnHome() {
+        FakeDock dock = new FakeDock(true);
+        Fixture fixture = new Fixture(dock);
+        HomeAppDrop drop = drawerDrop();
+        float[] at = fixture.screenCentreOf(cell(3, 3));
+        int records = fixture.repository.records().size();
+
+        dock.under = false;
+        fixture.homeTarget.onAppDropStarted(drop, at[0], at[1]);
+        assertFalse("over the grid the dock takes nothing", dock.hovering);
+        HomeAppDrop.Follower follower = drop.follower();
+        assertNotNull(follower);
+        dock.under = true;
+        follower.moveTo(at[0], 1500f);
+        assertTrue("the dock opened a gap", dock.hovering);
+        assertNull("the page offers no cell over the dock",
+            fixture.pane.widgetDragLayer().ghostBounds());
+        assertTrue(follower.releaseAt(at[0], 1500f));
+        idle();
+
+        assertEquals(Collections.singletonList(MAPS.stableId()), dock.dropped);
+        assertFalse("the gap closed", dock.hovering);
+        assertEquals(records, fixture.repository.records().size());
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
+        assertTrue("Home can take the next one", fixture.controller.canTakeAppDrop());
+    }
+
+    @Test public void aDrawerAppTheDockRefusesPutsNothingOnHome() {
+        FakeDock dock = new FakeDock(false);
+        Fixture fixture = new Fixture(dock);
+        HomeAppDrop drop = drawerDrop();
+        float[] at = fixture.screenCentreOf(cell(3, 3));
+        int records = fixture.repository.records().size();
+
+        fixture.homeTarget.onAppDropStarted(drop, at[0], at[1]);
+        drop.follower().moveTo(at[0], 1500f);
+        assertFalse(drop.follower().releaseAt(at[0], 1500f));
+        idle();
+
+        assertEquals(1, dock.dropped.size());
+        assertEquals(records, fixture.repository.records().size());
+        assertFalse(dock.hovering);
+    }
+
+    @Test public void aDrawerAppLeavingTheDockClosesItsGap() {
+        FakeDock dock = new FakeDock(true);
+        Fixture fixture = new Fixture(dock);
+        HomeAppDrop drop = drawerDrop();
+        float[] at = fixture.screenCentreOf(cell(3, 3));
+
+        fixture.homeTarget.onAppDropStarted(drop, at[0], at[1]);
+        drop.follower().moveTo(at[0], 1500f);
+        assertTrue(dock.hovering);
+        dock.under = false;
+        drop.follower().moveTo(at[0], at[1]);
+        assertFalse("the gap closed", dock.hovering);
+        drop.follower().moveTo(at[0], 1500f);
+        dock.under = true;
+        drop.follower().moveTo(at[0], 1500f);
+        assertTrue(dock.hovering);
+        drop.follower().cancel();
+        idle();
+
+        assertFalse("a cancel closes the gap", dock.hovering);
+        assertTrue(dock.dropped.isEmpty());
+    }
+
+    @Test public void aShortcutOrACarriedOutIconNeverAsksTheDock() {
+        FakeDock dock = new FakeDock(true);
+        Fixture fixture = new Fixture(dock);
+        float[] at = fixture.screenCentreOf(cell(3, 3));
+
+        HomeAppDrop shortcut = drawerDrop().asShortcut(
+            new HomeAppDrop.Shortcut(MAPS.packageName, "id", 0L));
+        fixture.homeTarget.onAppDropStarted(shortcut, at[0], at[1]);
+        shortcut.follower().moveTo(at[0], 1500f);
+        shortcut.follower().cancel();
+        assertFalse(dock.hovering);
+
+        HomeAppDrop carried = drawerDrop().carriedOutside();
+        fixture.homeTarget.onAppDropStarted(carried, at[0], at[1]);
+        carried.follower().moveTo(at[0], 1500f);
+        carried.follower().cancel();
+        idle();
+
+        assertFalse(dock.hovering);
+        assertTrue(dock.dropped.isEmpty());
+    }
+
     static void idle() {
         shadowOf(Looper.getMainLooper()).idle();
     }

@@ -2794,6 +2794,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         /** The free cell nearest the finger on the page under it; null off the grid or when full. */
         @Nullable WidgetCellRect cell;
         float lastRawX, lastRawY;
+        /** The dock's row took the finger last time (its gap is open): the page offers nothing. */
+        boolean overDock;
         /** The cell the finger was over when the target was last worked out, to skip repeats. */
         int lastColumn = -1, lastRow = -1, lastPage = -1;
         AppDropState(@NonNull HomeAppDrop drop, int page, float rawX, float rawY) {
@@ -2916,8 +2918,42 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         state.lastRawX = rawX;
         state.lastRawY = rawY;
         pane.widgetDragLayer().moveTo(appDropBounds(rawX, rawY));
+        if (appDropOverDock(state, rawX, rawY)) return;
         watchPageEdge(state.turn, rawX);
         updateAppDropTarget(state, false);
+    }
+
+    /**
+     * An app from the drawer is over the dock's row: the row opens a gap at the finger and the page
+     * offers nothing meanwhile. Only an app of its own takes the row; a shortcut, or an icon its
+     * carrier has already shown to the dock, does not.
+     */
+    private boolean appDropOverDock(@NonNull AppDropState state, float rawX, float rawY) {
+        com.termux.app.dock.DockDrop dock = dockTakesAppDrop(state.drop) ? host.dockDrop() : null;
+        boolean over = dock != null && dock.hoverApp(rawX, rawY);
+        if (over == state.overDock) return over;
+        state.overDock = over;
+        if (over) {
+            pane.removeCallbacks(edgeFlip);
+            state.turn.edgeDirection = 0;
+            clearAppDropTarget(state);
+        } else if (dock != null) {
+            dock.leave();
+        }
+        return over;
+    }
+
+    private static boolean dockTakesAppDrop(@NonNull HomeAppDrop drop) {
+        return !drop.isCarriedOutside() && drop.shortcut() == null
+            && LiftDropPolicy.accepts(LiftDropPolicy.Item.DRAWER_APP, LiftDropPolicy.Place.DOCK);
+    }
+
+    /** The drag ended with the row's gap open: it closes. */
+    private void leaveAppDropDock(@NonNull AppDropState state) {
+        if (!state.overDock) return;
+        state.overDock = false;
+        com.termux.app.dock.DockDrop dock = host.dockDrop();
+        if (dock != null) dock.leave();
     }
 
     /**
@@ -2983,7 +3019,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * goes there (the picture settles onto it); over a full page the page says it has no room;
      * anywhere else nothing is put down. A page the drag made and left empty goes again.
      *
-     * @return whether the icon was put down
+     * @return whether the icon was put down, on Home or in the dock's row
      */
     private boolean endAppDrop(float rawX, float rawY, boolean canceled) {
         AppDropState state = appDrop;
@@ -2992,11 +3028,26 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         state.drop.follow(null);
         pane.removeCallbacks(edgeFlip);
         state.turn.edgeDirection = 0;
-        if (!canceled) {
+        if (!canceled && !state.overDock) {
             state.lastRawX = rawX;
             state.lastRawY = rawY;
             updateAppDropTarget(state, true);
         }
+        com.termux.app.dock.DockDrop dock = !canceled && state.overDock ? host.dockDrop() : null;
+        if (dock != null) {
+            boolean taken = dock.dropApp(state.drop.app, rawX, rawY);
+            leaveAppDropDock(state);
+            if (taken) {
+                // The row shows the pin; the picture simply goes, with no cell to settle onto.
+                pane.widgetDragLayer().setGhost(null, true);
+                pane.widgetDragLayer().drop(null, appDropIconPx(), false);
+                trimDragPage(state.turn, true);
+                return true;
+            }
+            // Refused: the row has said why, and it goes as a cancel does.
+            canceled = true;
+        }
+        leaveAppDropDock(state);
         Rect picture = appDropBounds(rawX, rawY);
         HomeAppDropPolicy.Outcome outcome = HomeAppDropPolicy.resolve(canceled,
             host.isOverDock(rawX, rawY), overGrid(picture.centerX(), picture.centerY()),
@@ -3036,6 +3087,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (state == null) return;
         appDrop = null;
         state.drop.follow(null);
+        leaveAppDropDock(state);
         pane.removeCallbacks(edgeFlip);
         pane.widgetDragLayer().setGhost(null, true);
         pane.releaseWidgetDragLayer();

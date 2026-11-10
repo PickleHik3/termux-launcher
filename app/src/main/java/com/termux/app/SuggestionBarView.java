@@ -8954,8 +8954,34 @@ public final class SuggestionBarView extends GridLayout
         persistPinsAndReload();
     }
 
+    private final int[] homeDropAt = new int[2];
+
+    /**
+     * An app carried out of the drawer: the row hears the drag so Home's follower gets every
+     * point over it. Home drives the row through {@code dockDrop()}; nothing is reordered here.
+     */
+    private boolean handleHomeAppDropEvent(@NonNull View targetView,
+            @NonNull com.termux.app.launcher.widget.HomeAppDrop drop, @NonNull DragEvent event) {
+        int action = event.getAction();
+        if (action != DragEvent.ACTION_DRAG_LOCATION && action != DragEvent.ACTION_DROP) return true;
+        com.termux.app.launcher.widget.HomeAppDrop.Follower follower = drop.follower();
+        if (follower == null) return action != DragEvent.ACTION_DROP;
+        targetView.getLocationOnScreen(homeDropAt);
+        float rawX = homeDropAt[0] + event.getX();
+        float rawY = homeDropAt[1] + event.getY();
+        if (action == DragEvent.ACTION_DRAG_LOCATION) {
+            follower.moveTo(rawX, rawY);
+            return true;
+        }
+        return follower.releaseAt(rawX, rawY);
+    }
+
     private boolean handlePinnedBarDragEvent(@NonNull View targetView, @NonNull DragEvent event) {
         Object localState = event.getLocalState();
+        if (localState instanceof com.termux.app.launcher.widget.HomeAppDrop) {
+            return handleHomeAppDropEvent(targetView,
+                (com.termux.app.launcher.widget.HomeAppDrop) localState, event);
+        }
         boolean pinnedDrag = localState instanceof PinnedDragState;
         FolderEntryDragState folderEntry = resolveFolderEntryDrag(event);
         boolean folderEntryDrag = folderEntry != null;
