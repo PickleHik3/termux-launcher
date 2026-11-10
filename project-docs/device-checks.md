@@ -1000,3 +1000,25 @@ longer counted as an error. Owed:
   edge: the plank's padding, radius and the status strip's lead. Keyboard up and down, rotated
   once. The emulator passed rests, crossings, press, typing and the A–Z lift on c1db54f54; the
   icon drag, the ease in motion and the last cluster (f17339e85) are unseen · emulator, then pong.
+- **The status bar's code left the activity (11-10, refactor/statusbar-controller, ADR 0018 wave
+  B step one).** A move with no intended change. Bar on the top, the bottom and a side; Compact
+  and Expanded on each. Fold by dragging the bar and by the pane's top-border swipe, a drag held
+  half way and let go, the fold's landing. Home ⇄ Workspace ten times: the bar rides, its margin
+  eases, the strip behind the system bar follows. The editor holds the bar expanded and lets it
+  go. Minimal mode. The notifications mark, the widgets' ink after a wallpaper change, the stats
+  and weather cards. The emulator A/B (old against new) matched at rest, across crossings, in
+  the editor and at the fold's landing; the bar-body drag, the other edges and the stats card
+  are unseen. Seen on both builds, so not from this move: after a fold round trip the window
+  bar's chips and the weather widget rest 3 to 10 px left of where they started until the next
+  settle · pong.
+- **The sheets' code left the activity (11-10, refactor/sheets-controller, ADR 0018 wave H step
+  one).** Moves with no intended change. Command palette: open by key, from the dock's Search
+  field and by the swipe up on Home; type, pick a row, Back; a confirm-required action; a
+  contact search and its permission row; with the keyboard floating; over Home and over the
+  Workspace; its frost and corners Docked and Floating. App drawer: pull, tile tap, Back, the
+  Home key; search with the built-in keyboard (it goes down with the drawer unless it was up
+  first) and over a display. A dock folder and a Home folder renamed with each keyboard. The
+  terminal's More sheet and Home's long-press sheet. The dock's palette and float tiles turned
+  on and off in the Dock card: the dock restyles once. Cold start: the drawer warms up, the
+  "Windows restored" notice shows. Notices while a split or the terminal limit refuses · emulator,
+  then pong.
