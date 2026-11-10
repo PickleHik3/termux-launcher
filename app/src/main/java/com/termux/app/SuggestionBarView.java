@@ -9791,7 +9791,7 @@ public final class SuggestionBarView extends GridLayout
      * held letter while the A–Z index has the row, the pinned apps otherwise. That is the same
      * choice the dock's FX ticks made, kept in the one place the page model already lives.
      */
-    void publishPageIndicator() {
+    public void publishPageIndicator() {
         PageTickStripView indicator = pageIndicator;
         if (indicator == null) return;
         boolean azPages = hasAzOverflowPages();

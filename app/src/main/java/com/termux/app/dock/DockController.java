@@ -7,6 +7,7 @@ import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.util.DisplayMetrics;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,7 +25,16 @@ import com.termux.app.DockSurfaceHostLayout;
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.chrome.ChromeRenderer;
+import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
+import com.termux.app.place.ResolvedArrangement;
+import com.termux.app.place.SeamCrossing;
+import com.termux.app.place.layout.IconSize;
+import com.termux.app.wall.PageRef;
+import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
  * The dock's events and state (ADR 0018 §1): the Lens beads under the row's icons and the A–Z
@@ -81,14 +91,71 @@ public final class DockController {
         @NonNull PlaceLayout placeLayout();
         /** The dock's rows, which say whether the shelf is shown. */
         @NonNull DockRows dockRows();
-        /** The dock design the half in front shows now. */
-        @NonNull DockSurfaceSpec shownDockSurfaceSpec();
         /** Whether the dock's own placement floats (a capsule over the wallpaper). */
         boolean dockFloats();
         /** The capsule's corner radius for a surface this tall. */
         float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx);
         /** Whether the stack's sheets stand down on the joined frame's glass. */
         boolean stackStandsDownOnFrame();
+        /** The display's metrics. */
+        @NonNull DisplayMetrics displayMetrics();
+        /** The orientation the place is arranged for now. */
+        @NonNull PlaceOrientation currentPlaceOrientation();
+        /** The display cutouts the content root pads, px, as last applied. */
+        int cutoutInsetLeft();
+        int cutoutInsetRight();
+        /** The terminal toolbar's default height, px; 0 before it is measured. */
+        float terminalToolbarDefaultHeight();
+        /** The pinned slots the width rule fits where the preference is unset. */
+        int calculateSuggestionBarMaxButtons(@NonNull DisplayMetrics metrics);
+        /** The Home grid's margin, dp, the dock's side insets follow. */
+        int homeMarginDp();
+
+        // -------------------------------------------------------------- layout store and pages
+
+        /** The preferences; null before they are read. */
+        @Nullable TermuxAppSharedPreferences preferences();
+        /** The layout store; null before the preferences are read. */
+        @Nullable PlaceLayoutStore placeLayoutStore();
+        /** {@code page}'s resolved arrangement: its layout, Style, Dock design and toggles. */
+        @NonNull ResolvedArrangement arrangementOf(@NonNull PageRef page);
+        @NonNull ResolvedArrangement arrangementOf(@NonNull PaneWallPage page);
+        /** The page {@code page} stands for in the arrangement (Home's page now, or the Terminal). */
+        @NonNull PageRef arrangedPageOf(@NonNull PaneWallPage page);
+        /** The layout {@code page} wears. */
+        @NonNull LayoutVariant layoutOf(@NonNull PaneWallPage page);
+        /** The arrangement store's revision. */
+        int arrangementRevision();
+        /** The icon size as it draws, capped by what the pinned apps fit at. */
+        @NonNull IconSize drawnIconSize(@NonNull PlaceLayoutStore store);
+        /** The page the chrome is committed to. */
+        @NonNull PaneWallPage lastWallPage();
+        /** The half whose rows the stack stands now. */
+        @NonNull PaneWallPage stackDressPage();
+        /** Whether the committed page's dock carries the Search field. */
+        boolean committedSearchField();
+        /** Whether the slab carries the field at rest. */
+        boolean promptFieldWanted();
+        /** How much of the Search field, and of the Wall strip's row, the dock is laid out with. */
+        float promptFieldReveal();
+        float wallStripReveal();
+        /** The field's, and the Wall strip row's, share as last laid out. */
+        float appliedPromptFieldReveal();
+        float appliedWallStripReveal();
+        /** The page whose half's rows the Drawer tile was last laid out for; null before one. */
+        @Nullable PaneWallPage drawerTileRowsPage();
+        /** Whether the status bar is compact, and the edge it stands on. */
+        boolean isStatusBarCompact();
+        @NonNull PlaceLayout.Edge statusBarEdge();
+        /** The count of half re-dresses that ran. */
+        int halfRedressCount();
+        /** The A–Z row and the pull tab's letters; null before they are made. */
+        @Nullable AzScrubRowView azScrubRowView();
+        @Nullable AzScrubRowView azTabRowView();
+        /** The edge the A–Z bar stands on. */
+        @NonNull PlaceLayout.Edge azBarEdge();
+        /** Whether the in-app keyboard is made and visible. */
+        boolean isInAppKeyboardVisible();
 
         // -------------------------------------------------------------- glass
 
@@ -114,6 +181,11 @@ public final class DockController {
 
         /** The crossing's bead share: NaN while nothing melts across the seam. */
         float beadShare();
+        /** The crossing's seam, which answers the committed and travelling designs mid-slide. */
+        @NonNull SeamCrossing seam();
+        /** The page a pictured dip dressed the slab for on its first frame; null otherwise. */
+        @Nullable PaneWallPage dockDesignTravelledTo();
+        void setDockDesignTravelledTo(@Nullable PaneWallPage page);
 
         // -------------------------------------------------------------- callbacks into the activity
 
@@ -124,12 +196,189 @@ public final class DockController {
          * went ({@code modeChanged}), the Search field's well, then the frame's cut.
          */
         void onDockBeadsReplaced(@Nullable View host, boolean modeChanged);
+        /** The dock row's Drawer, palette and Float tiles laid out for the rows shown. */
+        void syncDrawerTile();
+        /** The apps bar's height pass; whether anything moved. */
+        boolean updateAppLauncherBarHeight();
+        /** The dock and geometry pass; whether the dock moved. */
+        boolean setTerminalToolbarHeight(boolean requestTerminalResize);
+        /** The Wall strip's row takes the Workspace's windows. */
+        void syncWallStripFeed();
+        /** {@code viewId}'s bottom margin set; whether it moved. */
+        boolean updateViewBottomMargin(int viewId, int marginBottom);
+        /** The dock rows' side insets for {@code layout}; whether they moved. */
+        boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout);
+        /** The Search field, and the Wall strip's row, laid out as {@code layout} has them. */
+        boolean syncPromptLineField(@NonNull DockLayout layout);
+        boolean syncWallStripRow(@NonNull DockLayout layout);
     }
 
     @NonNull private final Host mHost;
+    /** The dock's layout and dress (the third cluster), behind this. */
+    @NonNull private final DockDress mDress;
 
     public DockController(@NonNull Host host) {
         mHost = host;
+        mDress = new DockDress(host, this);
+    }
+
+    // ------------------------------------------------------------------ Layout and dress
+    //
+    // The activity's one entry to DockDress: Dock geometry's snapshot and halves, the applied
+    // layout and its cache, the Dock design each page wears and the dress a settle or a picked
+    // design puts on the slab, and the band ease.
+
+    /** Dock geometry, which the activity's stack layout measures the bottom stack with. */
+    @NonNull
+    public DockGeometry dockGeometry() {
+        return mDress.dockGeometry();
+    }
+
+    /** The squeeze the last geometry pass found: an input to every snapshot until the next. */
+    public void setDockSqueezePx(int squeezePx) {
+        mDress.setDockSqueezePx(squeezePx);
+    }
+
+    /** One snapshot of both halves for the dock's geometry, rows standing for {@code rowsPage}. */
+    @NonNull
+    public DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout arrangement,
+                                              @NonNull PaneWallPage rowsPage) {
+        return mDress.dockSnapshot(arrangement, rowsPage);
+    }
+
+    /** {@code page}'s half, memoised while its facts stand. */
+    @NonNull
+    public DockGeometry.Half dockHalf(@NonNull PaneWallPage page,
+                                      @NonNull PlaceOrientation orientation,
+                                      @NonNull PlaceLayout fallbackLayout) {
+        return mDress.dockHalf(page, orientation, fallbackLayout);
+    }
+
+    @NonNull
+    public DockGeometry.Half dockHalf(@NonNull PageRef page,
+                                      @NonNull PlaceOrientation orientation,
+                                      @NonNull PlaceLayout fallbackLayout) {
+        return mDress.dockHalf(page, orientation, fallbackLayout);
+    }
+
+    /** The pinned slots a page of the row holds: the preference, or the width rule when unset. */
+    public int dockSlotCount(@NonNull DisplayMetrics metrics) {
+        return mDress.dockSlotCount(metrics);
+    }
+
+    /** The design the dock's rows on screen wear (DockRows#wornSurface). */
+    @NonNull
+    public DockSurfaceSpec shownDockSurfaceSpec() {
+        return mDress.shownDockSurfaceSpec();
+    }
+
+    /** The Dock design {@code page}'s slab wears (WornDockDesign). */
+    @NonNull
+    public DockStyle wornDockDesign(@NonNull PaneWallPage page) {
+        return mDress.wornDockDesign(page);
+    }
+
+    /** The committed page's Dock design, or the travelling one mid-slide. */
+    @NonNull
+    public DockStyle committedDockDesign() {
+        return mDress.committedDockDesign();
+    }
+
+    /** Whether the slab is already dressed for {@code design} and {@code searchField}. */
+    public boolean slabWears(@NonNull DockStyle design, boolean searchField) {
+        return mDress.slabWears(design, searchField);
+    }
+
+    /** Lays the dock out and dresses its glass again for the spec it wears now. */
+    public void restyleDockSurface() {
+        mDress.restyleDockSurface();
+    }
+
+    /** A settle from {@code from} to {@code to} that changes the dock's dress re-dresses it. */
+    public void restyleDockSurfaceForPageIfChanged(@NonNull PaneWallPage from,
+                                                   @NonNull PaneWallPage to) {
+        mDress.restyleDockSurfaceForPageIfChanged(from, to);
+    }
+
+    /** The landing's commit notes (CommitDockDress), opened and closed around its dress. */
+    @NonNull
+    public CommitDockDress commitDockDress() {
+        return mDress.commitDockDress();
+    }
+
+    /** A Dock design was picked: the slab eases to its new height; whether an ease started. */
+    public boolean beginDockBandEase() {
+        return mDress.beginDockBandEase();
+    }
+
+    /** Whether an ease of the slab's bands runs now. */
+    public boolean dockBandEaseRunning() {
+        return mDress.dockBandEaseRunning();
+    }
+
+    /** Where the ease stands for the Search field, and for the Wall strip's row, 0..1. */
+    public float promptFieldEaseValue() {
+        return mDress.promptFieldEaseValue();
+    }
+
+    public float wallStripEaseValue() {
+        return mDress.wallStripEaseValue();
+    }
+
+    /** How much of a band only {@code design} carries the dock is laid out with. */
+    public float dockBandShare(@NonNull DockStyle design) {
+        return mDress.dockBandShare(design);
+    }
+
+    /** The store pinned to the layout the committed page's dock is dressed by. */
+    @Nullable
+    public PlaceLayoutStore committedDockStore() {
+        return mDress.committedDockStore();
+    }
+
+    /** The store pinned to the layout {@code page}'s dock is dressed by. */
+    @Nullable
+    public PlaceLayoutStore dockStoreOf(@NonNull PaneWallPage page) {
+        return mDress.dockStoreOf(page);
+    }
+
+    /** Dock geometry's answer for the arrangement on screen, worked out now. */
+    @NonNull
+    public DockLayout getDockLayout() {
+        return mDress.getDockLayout();
+    }
+
+    /** The dock the last geometry pass applied (ADR 0011), the one every writer reads. */
+    @NonNull
+    public DockLayout appliedDockLayout() {
+        return mDress.appliedDockLayout();
+    }
+
+    /** The applied dock when the last pass measured it in {@code arrangement}, else worked out. */
+    @NonNull
+    public DockLayout dockLayoutIn(@NonNull PlaceLayout arrangement) {
+        return mDress.dockLayoutIn(arrangement);
+    }
+
+    /** The dock's geometry for an arrangement the caller is applying. */
+    @NonNull
+    public DockLayout dockLayoutFor(@NonNull PlaceLayout layout) {
+        return mDress.dockLayoutFor(layout);
+    }
+
+    /** True when this layout moved the dock. */
+    public boolean applyDockLayout(@NonNull DockLayout layout) {
+        return mDress.applyDockLayout(layout);
+    }
+
+    /** True when this layout, measured in {@code arrangement}, moved the dock. */
+    public boolean applyDockLayout(@NonNull DockLayout layout, @Nullable PlaceLayout arrangement) {
+        return mDress.applyDockLayout(layout, arrangement);
+    }
+
+    /** What the dock shows changed (Dock rows' listener). */
+    public void onDockRowsChanged(@NonNull DockRows.Shown shown) {
+        mDress.onDockRowsChanged(shown);
     }
 
     /** The beads as last drawn, in the host's coordinates; null while the dock is a slab. */
@@ -193,7 +442,7 @@ public final class DockController {
     public boolean dockBeadsWanted() {
         if (!mHost.hasPreferences()) return false;
         float share = mHost.beadShare();
-        if (mHost.shownDockSurfaceSpec().beads) return Float.isNaN(share) || share > 0f;
+        if (shownDockSurfaceSpec().beads) return Float.isNaN(share) || share > 0f;
         return !Float.isNaN(share) && share > 0f;
     }
 
