@@ -1133,12 +1133,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mAzTabShown;
     /** Whether the touch stream in progress began on the pull tab, which is the letters' alone. */
     private boolean mAzTabTouch;
-    /** The plank's glass height as last sized, which its corner radius is clamped to. */
-    private int mOffDockPlankGlassHeightPx;
-    /** The edge the shared off-dock plank is standing on, as last applied from the place. */
-    @NonNull private PlaceLayout.Edge mOffDockPlankEdge = PlaceLayout.Edge.TOP;
-    private final com.termux.app.chrome.ChromeShapeOutlineProvider mOffDockPlankOutline =
-        new com.termux.app.chrome.ChromeShapeOutlineProvider();
     @Nullable private View mAzTerminalToolbarView;
     LauncherAzGestureFxView mLauncherAzGestureFxUnderlayView;
     LauncherAzGestureFxView mLauncherAzGestureFxOverlayView;
@@ -3334,7 +3328,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         int strokePx = Math.max(1, Math.round(dpToPx(1)));
         // The pane's shape is Corners, a card under Floating and the insert under Docked.
-        float cornerRadiusPx = resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
+        float cornerRadiusPx = mDock.resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
 
         // Clearance inside the frame line, so a glyph never touches the stroke. Only the terminal
         // border needs it: pane borders draw their own stroke on the frame line itself, and adding
@@ -5072,7 +5066,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void applyDockSurfaceGlass(
                 @NonNull com.termux.app.chrome.GlassRefraction.Program program) {
-                TermuxActivity.this.applyDockSurfaceGlass(program);
+                mDock.applyDockSurfaceGlass(program);
             }
             @Override public boolean keyLensActive() {
                 return mKeyLensActive;
@@ -5088,12 +5082,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 out[4] = mKeyLensRadius;
             }
         });
-
-    /**
-     * Whether the dock's backdrop is on screen with a refraction effect installed right now, so
-     * its program's gathered light is the dock's edge; see {@link #setDockProgramEdge}.
-     */
-    private boolean mDockProgramEdge;
 
     /** Where the dock host's origin sits in its backdrop's pixels, for mapping a pressed key into it. */
     private float mGlassOriginLeft, mGlassOriginTop;
@@ -5125,82 +5113,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float mDockGlassCover = -1f;
     private float mNavStripGlassCover = -1f;
-
-    /** What the dock material's tint covers of the frost under it, 0..1. */
-    private float dockGlassCover() {
-        if (mPreferences == null) return 0f;
-        return mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
-    }
-
-    /**
-     * The dock's style's own glass on its program ({@link com.termux.app.dock.DockSurfaceSpec}):
-     * the soft rim band, the lower shelf where the slab floats (Docked, its lower edge is a seam
-     * at the screen's edge and has no shelf). The plain dock writes all of it off, which is the
-     * program as it always was.
-     */
-    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
-    private void applyDockSurfaceGlass(@NonNull com.termux.app.chrome.GlassRefraction.Program program) {
-        com.termux.app.dock.DockSurfaceSpec spec = dockSlabSpec();
-        // Beads are drawn under Lens beads, and across the seam while they melt into the slab
-        // with the beaded half's share of the slide (dockBeadsWanted), whichever page is committed.
-        com.termux.app.dock.LensBeadGeometry.Beads beads = mDock.dockBeadsDrawn();
-        if (beads != null) {
-            // Lens beads: each bead floats, whatever the Style, so each wears the shelf's lip;
-            // the beads stand where the host's origin sits in the backdrop. The glass is the
-            // beads' own whichever page is committed, so a melt keeps it to the far side.
-            com.termux.app.dock.DockSurfaceSpec beadSpec = com.termux.app.dock.DockSurfaceSpec.LENS_BEADS;
-            program.setDockSurface(beadSpec.softRimDp, beadSpec.shelf);
-            com.termux.app.dock.LensBeadGeometry.Beads inGlass =
-                beads.offset(mGlassOriginLeft, mGlassOriginTop);
-            float[] centers = new float[inGlass.count()];
-            for (int i = 0; i < centers.length; i++) centers[i] = inGlass.centerX(i);
-            program.setBeads(centers, centers.length, inGlass.centerY, inGlass.radiusPx,
-                inGlass.iconHalfPx);
-            // The Search field's capsule under them (#84): one more shape of the same glass.
-            if (inGlass.hasCapsule()) {
-                program.setBeadCapsule(inGlass.capsuleLeft, inGlass.capsuleTop,
-                    inGlass.capsuleRight, inGlass.capsuleBottom);
-            } else {
-                program.clearBeadCapsule();
-            }
-            // The A–Z row's letter beads under them, risen by the finger's lift.
-            com.termux.app.dock.AzBeadRow az = mDock.azBeads();
-            if (az != null) {
-                program.setAzBeads(az.firstCenterX + mGlassOriginLeft, az.pitchPx, az.count,
-                    az.centerY + mGlassOriginTop, az.radiusPx,
-                    Float.isNaN(mDock.azLiftX()) ? Float.NaN : mDock.azLiftX() + mGlassOriginLeft,
-                    mDock.azLiftPeakPx());
-            } else {
-                program.clearAzBeads();
-            }
-        } else {
-            // A row the beads cannot draw keeps the slab, and the slab the tray's own band.
-            float softRim = spec.beads
-                ? com.termux.app.dock.DockSurfaceSpec.GLASS_TRAY.softRimDp : spec.softRimDp;
-            program.setDockSurface(softRim, dockFloats() ? spec.shelf : 0f);
-            program.clearBeads();
-        }
-    }
-
-    /**
-     * The shelf under a floating Glass tray, a contact shadow and a glow on the wallpaper below
-     * its slab: shown while the dock's glass refracts (so never below Android 13), the slab
-     * floats, and the keyboard is not standing under it. It follows the glass host by itself.
-     */
-    private void syncDockShelf(@Nullable ChromeSpec state) {
-        DockShelfView shelf = findViewById(R.id.accessory_shelf_fx);
-        if (shelf == null) return;
-        View host = findViewById(R.id.accessory_surface_host);
-        // Beads always float, so each keeps its shadow under Docked too.
-        boolean beads = mDock.beads() != null;
-        boolean show = state != null && mGlassEffects.paramsValid() && host != null
-            && mDockRows.surfaceShown() && !state.keyboardShown
-            && (dockFloats() || beads) && dockSlabSpec().contactShadow;
-        shelf.setBeads(show ? mDock.dockBeadsShadowed() : null);
-        shelf.setBeadShelfAlpha(mDock.dockBeadShelfAlpha());
-        shelf.follow(show ? host : null);
-        mDockRows.setShelfShown(show);
-    }
 
     /**
      * One frame of a slide across the seam while one half's dock draws Lens beads and the
@@ -5334,16 +5246,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
 
     /**
-     * The slab's own spec for the glass program and the shelf: the dock's design's, except that
-     * Peek glass with no card standing draws exactly the tray (its shelf and shadow included)
-     * ({@link com.termux.app.dock.DockSurfaceSpec#forCard}).
-     */
-    @NonNull
-    private com.termux.app.dock.DockSurfaceSpec dockSlabSpec() {
-        return mDock.shownDockSurfaceSpec().forCard(mPeekCard);
-    }
-
-    /**
      * Whether the dock can stand as the Peek glass card now, under either Style
      * ({@link com.termux.app.dock.DockPlacement#peekCardStands}): the design is Peek glass, the
      * dock shown with the apps row alone on its glass along the bottom, no keyboard up under it,
@@ -5371,24 +5273,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mDock.shownDockSurfaceSpec().peek, dockShown, arrangement().layout(), false,
                 keyboardShown, mImeLiftPx > 0, mAppliedPromptFieldBandPx > 0)
             && (arrangement().floating() || !stackStandsDownOnFrame());
-    }
-
-    /**
-     * The dock's one answer to "am I placed as the Floating card?" (DockPlacement): the Floating
-     * Style, unless the Peek glass card stands, which rises from the screen's edge as it does
-     * Docked. Every read of the dock's own placement and dressing asks this — its margin under
-     * the stack, its sides, its outline, the strip under the pill, its shelf, veil, edge glow,
-     * hinge and launch wave — while the panes, the status bar, the keyboard and the extra keys
-     * keep asking the Style itself.
-     */
-    private boolean dockFloats() {
-        return dockFloatsIn(arrangement().floating());
-    }
-
-    /** {@link #dockFloats} for the dock measured in {@code floatingStyle}. */
-    private boolean dockFloatsIn(boolean floatingStyle) {
-        return com.termux.app.dock.DockPlacement.floats(floatingStyle,
-            floatingStyle && peekCardWanted());
     }
 
     /**
@@ -5533,11 +5417,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // its own; the landing's pass dresses the rest (PeekGlassGeometry#travelRecutsOnly).
         boolean recutOnly = com.termux.app.dock.PeekGlassGeometry.travelRecutsOnly(mPeekCard,
             card, peekChromeTravelling());
-        if (host != null && mDockShapeCut) {
+        if (host != null && mDock.dockShapeCut()) {
             // Cuts the card afresh, re-aims the glass program and the reflection, or puts the
             // slab back, in the shape the dock is placed in now: a card that gave way under
             // Floating hands the host back its capsule (dockFloats).
-            applyDockSurfaceShape(host, dockFloats(), mDockShapeHeightPx, true, true);
+            mDock.applyDockSurfaceShape(host, mDock.dockFloats(), mDock.dockShapeHeightPx(), true, true);
             if (recutOnly) {
                 // The strip under the pill continues the card: its crop is cut again with the
                 // next pass that runs anyway.
@@ -5747,9 +5631,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             originY = ripple.getHeight() * 0.5f;
         }
 
-        boolean capsule = dockFloats();
+        boolean capsule = mDock.dockFloats();
         RectF bounds = new RectF(0f, 0f, ripple.getWidth(), ripple.getHeight());
-        float cornerRadius = capsule ? resolveDockCapsuleCornerRadiusPx(ripple.getHeight()) : 0f;
+        float cornerRadius = capsule ? mDock.resolveDockCapsuleCornerRadiusPx(ripple.getHeight()) : 0f;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // The glass shader is stateful and belongs to the backdrop. Reusing it here mutates the
             // same rounded-surface uniforms while a radial source is being drawn, which produced the
@@ -5762,7 +5646,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ripple.startRipple(color, originX, originY, capsule, bounds, cornerRadius,
             edgeGlow == null ? null : (collisionColor, level) ->
                 edgeGlow.setLaunchCollisionState(collisionColor, level),
-            () -> capsule == dockFloats()
+            () -> capsule == mDock.dockFloats()
                 && keyboardShownAtLaunch == isInAppKeyboardShown(),
             () -> {
                 if (mInAppKeyboard != null) mInAppKeyboard.fadeOutLaunchWave();
@@ -5882,7 +5766,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (accessoryContainer == null) {
             return;
         }
-        if (!state.toolbarShown || !dockFloats()) {
+        if (!state.toolbarShown || !mDock.dockFloats()) {
             accessoryContainer.setBackground(null);
             return;
         }
@@ -5929,7 +5813,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int targetHeight = ViewGroup.LayoutParams.MATCH_PARENT;
         int targetLeftMargin = 0;
         int targetRightMargin = 0;
-        boolean capsuleSurface = viewId == R.id.accessory_surface_host && dockFloats();
+        boolean capsuleSurface = viewId == R.id.accessory_surface_host && mDock.dockFloats();
         ViewParent parent = view.getParent();
         if (parent instanceof View) {
             View parentView = (View) parent;
@@ -5948,11 +5832,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // glass short by the rail's whole band, all of it on the right. A standing Peek card
             // spans the screen as it does Docked and cuts its own sides (dockFloatsIn).
             DockLayout dock = mDock.appliedDockLayout();
-            int horizontalMargin = dockFloatsIn(dock.capsule) ? dock.horizontalInsetPx : 0;
+            int horizontalMargin = mDock.dockFloatsIn(dock.capsule) ? dock.horizontalInsetPx : 0;
             targetLeftMargin = horizontalMargin;
             targetRightMargin = horizontalMargin;
         }
-        applyDockSurfaceShape(view, capsuleSurface, targetHeight,
+        mDock.applyDockSurfaceShape(view, capsuleSurface, targetHeight,
             viewId == R.id.accessory_surface_host, viewId == R.id.accessory_surface_host);
         if (params.leftMargin != targetLeftMargin || params.topMargin != targetTop ||
             params.rightMargin != targetRightMargin || params.bottomMargin != 0 ||
@@ -7130,12 +7014,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Docked no surface carries a radius of its own: the frame's outer corners are the model's.
      */
     public float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) {
-        return Math.min(layoutCornersPx(), Math.max(0, surfaceHeightPx) / 2f);
+        return mDock.resolveDockCapsuleCornerRadiusPx(surfaceHeightPx);
     }
-
-    /** The dock's clip: its slice of the Docked frame, or its own card under Floating. */
-    private final com.termux.app.chrome.ChromeShapeOutlineProvider mDockOutline =
-        new com.termux.app.chrome.ChromeShapeOutlineProvider();
 
     /**
      * The model's pieces of the dock's own rows, the ones standing over the keyboard. Where the
@@ -7151,99 +7031,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return ids;
     }
 
-    /**
-     * @param innerRim whether the surface's inner edge carries the containing stroke in docked:
-     *                 the dock does, the same line the window bar keeps along its bottom; the
-     *                 strip under the pill has no inner edge and draws none
-     */
+    /** The dock's shape on {@code surface} (DockController); kept for DockBeadsLeaveTest. */
     private void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
                                        boolean ownsInnerEdge, boolean innerRim) {
-        if (surface.getId() == R.id.accessory_surface_host) {
-            mDockShapeCut = true;
-            mDockShapeCapsule = capsule;
-            mDockShapeHeightPx = surfaceHeightPx;
-            // The host is never padded: its layers span it under every design, the Peek card
-            // being only its outline. A background that once handed it padding (the card's rim
-            // as a plain InsetDrawable did) leaves that padding behind when it is swapped out.
-            if (surface.getPaddingLeft() != 0 || surface.getPaddingTop() != 0
-                || surface.getPaddingRight() != 0 || surface.getPaddingBottom() != 0)
-                surface.setPadding(0, 0, 0, 0);
-            // Peek glass: the card is worked out from the row and the host as laid out now; a
-            // layout that moves either reads it again (onPeekLayoutSettled).
-            syncPeekListeners();
-            com.termux.app.dock.PeekGlassGeometry.Card wasPeek = mPeekCard;
-            mPeekCard = resolvePeekCard();
-            // The glass program's rect is the card's (or the slab's again): re-aimed once here,
-            // since the pass's backdrop may find nothing else changed and keep its effect.
-            if (!java.util.Objects.equals(wasPeek, mPeekCard)) rebuildBackdropGlassEffectForLens();
-            if (mPeekCard != null) {
-                // Its top edge through the icons' centres, its lower corners past the screen's
-                // edge: the host is clipped to it, and where the program does not draw the
-                // glass's edge the rim follows the card's outline.
-                surface.setBackground(dockGlassDrawsEdge() ? null : peekRimDrawable(mPeekCard,
-                    surface.getWidth(), surface.getHeight()));
-                if (surface.getOutlineProvider() != mPeekOutline)
-                    surface.setOutlineProvider(mPeekOutline);
-                else
-                    surface.invalidateOutline();
-                surface.setClipToOutline(true);
-                syncPeekReflection();
-                return;
-            }
-            syncPeekReflection();
-            if (mDock.beads() != null) {
-                // Lens beads: there is no slab, so no rim under it and no clip to its outline;
-                // the host clips its own drawing to the beads (DockSurfaceHostLayout).
-                surface.setBackground(null);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
-                    surface.setClipToOutline(false);
-                return;
-            }
-        }
-        if (!capsule) {
-            // Docked, the dock is a slice of the one frame. The model says which of its edges
-            // face the opening (the only ones that wear the rim) and what its clip is; its
-            // corners are square except a screen corner it stands on.
-            List<com.termux.app.place.ChromeShape.PieceId> ids = dockPieceIds(
-                ownsInnerEdge && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()));
-            // The program's gathered light is the dock's edge wherever it runs; the rim under the
-            // glass would be a second one.
-            int strokeEdges = innerRim && !dockGlassDrawsEdge() ? chromeRimEdges(
-                ids.toArray(new com.termux.app.place.ChromeShape.PieceId[0]))
-                : com.termux.app.chrome.ChromeEdgeRule.NONE;
-            surface.setBackground(mChrome.glass().rimUnderGlass(0f, strokeEdges));
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                // Clip the dock to its slice of the frame so the reactive edge-glow's outward blur
-                // can't spill past the dock edges and make it look wider.
-                if (!ownsInnerEdge) {
-                    surface.setOutlineProvider(ViewOutlineProvider.BOUNDS);
-                    surface.setClipToOutline(true);
-                    return;
-                }
-                boolean changed = mDockOutline.setClip(
-                    com.termux.app.chrome.LiveChromeShape.outlineOf(chromeShape(), ids));
-                if (surface.getOutlineProvider() != mDockOutline)
-                    surface.setOutlineProvider(mDockOutline);
-                else if (changed)
-                    surface.invalidateOutline();
-                mDockOutline.follow(surface);
-                surface.setClipToOutline(mDockOutline.clipsCorners());
-            }
-            return;
-        }
+        mDock.applyDockSurfaceShape(surface, capsule, surfaceHeightPx, ownsInnerEdge, innerRim);
+    }
 
-        // Barely-there containing stroke; where the program runs, its gathered light is the edge
-        // and the capsule keeps only the outline it clips to, or the two would read as a double
-        // line ("inside rim") over the glass.
-        float capsuleRadiusPx = resolveDockCapsuleCornerRadiusPx(surfaceHeightPx);
-        Drawable outline = dockGlassDrawsEdge()
-            ? mChrome.glass().outlineOnly(capsuleRadiusPx)
-            : mChrome.glass().rimUnderGlass(capsuleRadiusPx);
-        surface.setBackground(outline);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            surface.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+    /**
+     * Peek glass on the dock's host, for the dock's shape (DockController.Host#dressPeekCard):
+     * the card is worked out from the row and the host as laid out now; a layout that moves
+     * either reads it again (onPeekLayoutSettled). Whether a card stands, the host dressed as it.
+     */
+    private boolean dressPeekCard(@NonNull View surface) {
+        syncPeekListeners();
+        com.termux.app.dock.PeekGlassGeometry.Card wasPeek = mPeekCard;
+        mPeekCard = resolvePeekCard();
+        // The glass program's rect is the card's (or the slab's again): re-aimed once here,
+        // since the pass's backdrop may find nothing else changed and keep its effect.
+        if (!java.util.Objects.equals(wasPeek, mPeekCard)) rebuildBackdropGlassEffectForLens();
+        if (mPeekCard != null) {
+            // Its top edge through the icons' centres, its lower corners past the screen's
+            // edge: the host is clipped to it, and where the program does not draw the
+            // glass's edge the rim follows the card's outline.
+            surface.setBackground(mDock.dockGlassDrawsEdge() ? null : peekRimDrawable(mPeekCard,
+                surface.getWidth(), surface.getHeight()));
+            if (surface.getOutlineProvider() != mPeekOutline)
+                surface.setOutlineProvider(mPeekOutline);
+            else
+                surface.invalidateOutline();
             surface.setClipToOutline(true);
+            syncPeekReflection();
+            return true;
         }
+        syncPeekReflection();
+        return false;
     }
 
     private void configureAccessoryTopEdgeFx(boolean visible, float barAlpha) {
@@ -7447,35 +7268,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && !dockSheetStandsDownOnFrame();
     }
 
-    /**
-     * Whether the dock's own glass draws its outline: its backdrop is up with a refraction effect
-     * installed ({@link com.termux.app.chrome.GlassEffects}), whose gathered light is then the dock's
-     * edge, so the host lays no {@code rimUnderGlass} under it. What is installed, not the rule
-     * that would install it: a backdrop gone while a blur is in flight, an effect that threw or a
-     * driver that refused the program all leave the rim.
-     */
-    private boolean dockGlassDrawsEdge() {
-        return mDockProgramEdge;
-    }
-
-    /**
-     * Records whether the dock's backdrop now draws its edge, and re-cuts the host's shape when
-     * that moved: the shape is set early in a pass, before the effect is built, so the pass that
-     * installs or drops the effect re-dresses it at once rather than one pass late.
-     */
-    private void setDockProgramEdge(boolean drawsEdge) {
-        if (mDockProgramEdge == drawsEdge) return;
-        mDockProgramEdge = drawsEdge;
-        View host = findViewById(R.id.accessory_surface_host);
-        if (host != null && mDockShapeCut)
-            applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
-    }
-
-    /** The dock host's shape as last cut, so {@link #setDockProgramEdge} can re-cut it alone. */
-    private boolean mDockShapeCut;
-    private boolean mDockShapeCapsule;
-    private int mDockShapeHeightPx;
-
     private void clearAccessoryRenderEffectBackdrop() {
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         if (backdrop == null) {
@@ -7491,8 +7283,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK, false);
         mGlassEffects.invalidateParams(); // no live backdrop shader -> key lens falls back to the bubble border
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.ACCESSORY);
-        setDockProgramEdge(false);
-        syncDockShelf(null);
+        mDock.setDockProgramEdge(false);
+        mDock.syncDockShelf(null);
     }
 
     /**
@@ -7544,7 +7336,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSurfaceEditor.isActive()) return false;
         return shouldShowDecorNavBarSurface(state.toolbarShown, state.keyboardShown,
             mNavBarHeight, mKeyboardGeometry.lastImeVisible() || isImeVisible(),
-            dockFloats(),
+            mDock.dockFloats(),
             isInAppKeyboardCapsule());
     }
 
@@ -7779,7 +7571,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int targetHeight = visible ? resolveDecorNavBarSurfaceHeightPx() : 0;
         int targetHorizontalMargin = 0;
         int targetBottomMargin = 0;
-        applyDockSurfaceShape(overlay, false, targetHeight, false, false);
+        mDock.applyDockSurfaceShape(overlay, false, targetHeight, false, false);
         if (params.width != ViewGroup.LayoutParams.MATCH_PARENT ||
             params.height != targetHeight ||
             params.gravity != Gravity.BOTTOM ||
@@ -8368,7 +8160,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * 1 (no slicing) for the floating capsule or when there is no gesture-nav strip below.
      */
     private float defaultDockGlassFootFraction() {
-        if (dockFloats()) {
+        if (mDock.dockFloats()) {
             return 1f;
         }
         int navHeight = mNavBarHeight;
@@ -8602,7 +8394,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.LiveChromeShape.Clip keyboardClip = capsule ? chromeClipOf(
             KEYBOARD_PIECES) : null;
         float cornerRadiusPx = !capsule ? 0f : keyboardClip != null ? keyboardClip.radius
-            : resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
+            : mDock.resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
         applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
         // A floating keyboard paints nothing here: its card is already one solid panel in the
         // same surface role, and a glass slice inside it would draw a second material over the
@@ -9178,7 +8970,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // only) so the refraction edge band clears the visible seam and meets the dock's downward
         // overscan. The bitmap is taller than the overlay; a negative top margin pushes the overscan
         // above the overlay where clipChildren hides it.
-        int topOverscanPx = !dockFloats()
+        int topOverscanPx = !mDock.dockFloats()
             ? computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp) : 0;
         Rect targetRect = buildDecorNavBarBackdropTargetRect(topOverscanPx);
         if (targetRect == null) {
@@ -9203,7 +8995,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
-        float stripCover = dockGlassCover();
+        float stripCover = mDock.dockGlassCover();
         // Mid-drag the strip keeps the frame it shows at a moved radius, as the dock does.
         if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) &&
             stripCover == mNavStripGlassCover &&
@@ -9258,7 +9050,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // its bottom and sides seamed too, so neither bends there and the picture runs straight
             // through. The capsule's overlay keeps the rim it always had. Its own program, not the
             // dock's: the two effects were only apart because RenderEffect copies uniforms.
-            boolean capsuleOverlay = dockFloats();
+            boolean capsuleOverlay = mDock.dockFloats();
             int stripSeams = com.termux.app.chrome.ChromeEdgeRule.seams(capsuleOverlay,
                 com.termux.app.chrome.ChromeEdgeRule.flushEdges(PlaceLayout.Edge.BOTTOM),
                 capsuleOverlay ? 0 : com.termux.app.chrome.ChromeEdgeRule.TOP);
@@ -9302,7 +9094,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 boolean decorHealthy = mDecorNavBarBlurBackdrop != null
                     && mDecorNavBarBlurBackdrop.getVisibility() == View.VISIBLE
                     && mDecorNavBarBlurBackdrop.getDrawable() != null;
-                return dockFloats() ? accessoryHealthy && decorHealthy : decorHealthy;
+                return mDock.dockFloats() ? accessoryHealthy && decorHealthy : decorHealthy;
             }
             return accessoryHealthy;
         }
@@ -9820,7 +9612,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Lens beads follow the row as it is laid out now; a pass that moved them and
         // re-installs nothing rebuilds the effect once below.
         boolean beadsMoved = mDock.refreshDockBeads();
-        if (shouldUseDockDecorNavBarSurface(state) && !dockFloats()) {
+        if (shouldUseDockDecorNavBarSurface(state) && !mDock.dockFloats()) {
             clearAccessoryRenderEffectBackdrop();
             return;
         }
@@ -9852,7 +9644,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             seamOverscanPx);
         com.termux.app.chrome.SharedFrameDrawable installed =
             com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable());
-        float dockCover = dockGlassCover();
+        float dockCover = mDock.dockGlassCover();
         // A Frost drag moves the radius every tick; the bakes are held, so a re-install would put
         // up a stand-in and rebuild the refraction effect for nothing the eye gains. The frame
         // up stays until the release's pass, which re-cuts at the radius the drag settled on.
@@ -9869,7 +9661,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             backdrop.setColorFilter(dockFrostFilter(mGlassDragPreview ? null : surfaceHost));
             backdrop.setVisibility(View.VISIBLE);
             if (beadsMoved) rebuildBackdropGlassEffectForLens();
-            syncDockShelf(state);
+            mDock.syncDockShelf(state);
             return;
         }
         Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
@@ -9890,7 +9682,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
                     false);
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
-                setDockProgramEdge(false);
+                mDock.setDockProgramEdge(false);
             }
             return;
         }
@@ -9906,9 +9698,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Put the shader's bottom edge at the overscanned bitmap bottom (below the visible seam)
             // so the visible dock bottom reads as interior glass, not a refracting edge.
             float capBottom = Math.max(1, surfaceHost.getHeight()) + seamOverscanPx;
-            boolean capsuleDock = dockFloats();
+            boolean capsuleDock = mDock.dockFloats();
             float radiusPx = capsuleDock
-                ? resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
+                ? mDock.resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
                 : 0f;
             // The edge rule is the model's: Docked, the dock's sides, its bottom and its joins
             // are seams and the rim rect is pushed past them; only the edge facing the opening
@@ -9935,8 +9727,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setColorFilter(dockFrostFilter(surfaceHost));
         backdrop.setVisibility(View.VISIBLE);
         // Below Android 13 there is no effect to install, and the dock keeps its rim.
-        setDockProgramEdge(mGlassEffects.paramsValid());
-        syncDockShelf(state);
+        mDock.setDockProgramEdge(mGlassEffects.paramsValid());
+        mDock.syncDockShelf(state);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, state.blurRadiusDp,
             usingManagedWallpaperSource, backdropTargetRect);
         // The keyboard-local cover is deliberately retained until this expanded surface is ready.
@@ -10048,7 +9840,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // own sheet stands down.
         Trace.beginSection("Chrome.dockRows");
         mDockRows.apply(state, mStatusBarEdge == PlaceLayout.Edge.BOTTOM,
-            useDecorSurface && !dockFloats());
+            useDecorSurface && !mDock.dockFloats());
         Trace.endSection();
         if (state.toolbarShown && !state.appsRowEnabled) {
             mSuggestionBarExplicitSearchActive = false;
@@ -12601,7 +12393,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
         // Riding a row that is itself off the dock, the index is one of two bars on a shared
         // plank: its own capsule goes, the plank's glass is the one sheet under both of them.
-        boolean onPlank = wantHost && offDockPlankElements(layout, edge).contains(Element.AZ);
+        boolean onPlank = wantHost && mDock.offDockPlankElements(layout, edge).contains(Element.AZ);
         boolean changed = mAzBarEdge != edge || mAzBarOnPlank != onPlank
             || (host.getVisibility() == View.VISIBLE) != wantHost
             || mAzTabShown != tabShown;
@@ -12776,19 +12568,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** As above, against the layout in hand rather than the stored one. */
     private void refreshOffDockGlass(@NonNull PlaceLayout layout) {
         refreshAzTabGlass();
-        View plank = findViewById(R.id.place_off_dock_plank_host);
-        if (plank != null && plank.getVisibility() == View.VISIBLE) {
-            applyOffDockPlankGlass(R.id.place_off_dock_plank_glass,
-                R.id.place_off_dock_plank_frost,
-                R.id.place_off_dock_plank_surface,
-                com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK,
-                mOffDockPlankOutline, mOffDockPlankEdge, offDockPlankGlassHeightPx(),
-                chromePieceIds(offDockPlankElements(layout, mOffDockPlankEdge)), layout);
-        }
+        mDock.refreshOffDockPlankGlass(layout);
         View host = findViewById(R.id.place_az_bar_host);
         if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank
                 && !hasDockedFrameCard() && azGlassBackground()) {
-            applyOffDockPlankGlass(R.id.place_az_bar_host_glass,
+            mDock.applyOffDockPlankGlass(R.id.place_az_bar_host_glass,
                 R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
                 mAzBarHostOutline, mAzBarEdge, azBarThicknessPx(),
@@ -12889,81 +12673,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 azBarThicknessPx())
             : marginPx;
         updateViewPadding(host, framedPadPx, 0, framedPadPx, 0);
-    }
-
-    /**
-     * The dock's own glass behind a sheet that is not on the dock: the same material, the same blur
-     * and the same radius rule, so a plank on another edge reads as a piece of the same kit.
-     *
-     * <p>{@code heightPx} is the sheet's own thickness across the edge it stands on — one bar's for
-     * a capsule, both bars' for the shared plank — because the radius is clamped to a true
-     * half-capsule of whatever is being glazed. Handing it one bar's thickness while two stood on
-     * it is what kept a top plank looking square.
-     *
-     * <p>The blur is the shared wallpaper frame at the sheet's own place on screen, as every other
-     * sheet's is, through Fancier Glass's refraction when that is on, rimmed along the sheet's own
-     * outline (the Wallpaper backdrop kind). With no frame yet, or with wallpaper mode off, the
-     * sheet wears its wash alone: only the launcher's own flat ground is behind it then.
-     */
-    private void applyOffDockPlankGlass(
-        int glassId,
-        int frostId,
-        int surfaceId,
-        @NonNull com.termux.app.chrome.SurfaceDirtyLedger.FrostRect frostKey,
-        @NonNull com.termux.app.chrome.ChromeShapeOutlineProvider outline,
-        @NonNull PlaceLayout.Edge edge,
-        int heightPx,
-        @NonNull List<com.termux.app.place.ChromeShape.PieceId> pieces,
-        @NonNull PlaceLayout layout
-    ) {
-        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
-        // Floating's card radius is Corners, clamped to half of the sheet being glazed. Under
-        // Docked the sheet carries no radius of its own: its glass view clips to its slice of
-        // the frame below, and the frost beneath it stays square.
-        boolean capsule = arrangement().floating();
-        float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(heightPx) : 0f;
-        View glass = findViewById(glassId);
-        View sheetHost = glass != null && glass.getParent() instanceof View
-            ? (View) glass.getParent() : null;
-        // The edge rule is the model's: Docked, only the edge facing the opening is a rim and
-        // every join and screen edge is a seam; the one leading the top edge runs on into the
-        // strip behind the status bar as well, and renders the lower slice of the light model the
-        // strip renders the top of. Floating keeps a rim all round, as it always has.
-        com.termux.app.place.ChromeShape shape = chromeShape(layout);
-        boolean continuesStrip = !capsule && edge == PlaceLayout.Edge.TOP
-            && continuesIntoStatusInsetStrip(sheetHost);
-        int seams = capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
-            : com.termux.app.chrome.LiveChromeShape.seamEdges(shape, pieces);
-        float sliceStart = continuesStrip ? statusInsetSheetSliceStart(sheetHost) : 0f;
-        View frostView = findViewById(frostId);
-        // Under a joined Docked frame the frame's glass is this sheet: frost and wash go.
-        if (frameStandsDown()) {
-            if (frostView instanceof ImageView)
-                mChrome.frost().hideOffDockSheet((ImageView) frostView, frostKey);
-            View ownSurface = findViewById(surfaceId);
-            if (ownSurface != null) ownSurface.setBackground(null);
-            return;
-        }
-        // The Wallpaper kind: the stored pre-blurred frame at the sheet's own place on screen.
-        if (frostView instanceof ImageView)
-            mChrome.frost().applyOffDockSheet((ImageView) frostView, frostKey, cornerRadiusPx, seams);
-        View surface = findViewById(surfaceId);
-        if (surface != null) {
-            // Without the dark foot: this is a plank floating clear of the screen's edges, not a
-            // slab standing on one, so a shaded underside would read as a drawn border.
-            surface.setBackground(deckSlabOr(
-                mChrome.glass().dockSurface(opacity, sliceStart, 1f, false)));
-            surface.setAlpha(1f);
-        }
-        // The sheet is what clips, not the host: the host has to let the wave's lift out of it.
-        // Its clip is the model's: its own card under Floating, its slice of the one frame under
-        // Docked.
-        if (glass == null) return;
-        outline.setClip(com.termux.app.chrome.LiveChromeShape.outlineOf(shape, pieces));
-        if (glass.getOutlineProvider() != outline) glass.setOutlineProvider(outline);
-        outline.follow(glass);
-        glass.setClipToOutline(outline.clipsCorners());
-        glass.invalidateOutline();
     }
 
     /** The model's pieces for these elements, in order. */
@@ -14183,7 +13892,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
         syncExtraKeysInk(dockOpacity);
         syncPromptLineInk(dockOpacity);
-        syncDockTilesInk(dockOpacity);
+        mDock.syncDockTilesInk(dockOpacity);
         // The Wall strip's clock is the status bar's and takes its ink the bar's way, from the
         // theme's roles; its tiles are the terminal scheme's. Either redraws only if it moved.
         if (mWallStripRow != null) mWallStripRow.refreshTheme();
@@ -14204,24 +13913,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         field.setGlassFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK,
             mPromptLineInkRect));
     }
-
-    /**
-     * The apps row's Drawer tile and Command palette tile glyphs on the dock's face as measured
-     * under the row, as the extra keys' labels are: a dark theme over a light wallpaper gets dark
-     * glyphs. The row retints only when the ink moved.
-     */
-    private void syncDockTilesInk(float dockOpacity) {
-        SuggestionBarView row = mSuggestionBarView;
-        if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0 || !row.isShown()) return;
-        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
-        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(row, mDockTilesInkRect,
-            mDockTilesInkLocation, mDockInkRootScratch);
-        row.setTileFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mDockTilesInkRect),
-            mChrome.ink().target(OnGlass.TARGET_LARGE_TEXT));
-    }
-
-    @NonNull private final Rect mDockTilesInkRect = new Rect();
-    @NonNull private final int[] mDockTilesInkLocation = new int[2];
 
     @NonNull private final Rect mPromptLineInkRect = new Rect();
     @NonNull private final int[] mPromptLineInkLocation = new int[2];
@@ -15086,7 +14777,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The same call applyInAppKeyboardSurfaceState clips the surface with, uncapped by
             // height for the same reason it is there: the keyboard is never short enough to need it.
             return isInAppKeyboardCapsule()
-                ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
+                ? mDock.resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         }
 
         @Nullable @Override
@@ -16909,14 +16600,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // that pads the dock's own row is handed the dock's numbers rather than the place's.
         // Remembered here, where the arrangement arrives.
         mAppsRowNextToCanvas = isAppsRowNextToCanvas(layout);
-        PlaceLayout.Edge plankEdge = offDockPlankEdge(layout);
+        PlaceLayout.Edge plankEdge = mDock.offDockPlankEdge(layout);
         View plankHost = findViewById(R.id.place_off_dock_plank_host);
         com.termux.app.place.EdgeStackView plankBars =
             findViewById(R.id.place_off_dock_plank_bars);
         for (PlaceLayout.Edge edge : PlaceLayout.Edge.values()) {
             boolean planked = plankHost != null && plankBars != null && edge == plankEdge;
             List<Element> onPlank = planked
-                ? offDockPlankElements(layout, edge) : Collections.<Element>emptyList();
+                ? mDock.offDockPlankElements(layout, edge) : Collections.<Element>emptyList();
             com.termux.app.place.EdgeStackView stack = edgeStack(edge);
             // One list per edge, filled in the policy's order, so the stack gets its bands
             // outermost first. One edge is one stack: the bottom's is the dock's own row stack.
@@ -16993,44 +16684,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The edge a pinned-apps row lies down on away from the dock, or null when no such row stands.
-     * Along the bottom the row is the dock's own and wears the dock's glass; on a side it is the
-     * rail, which is a column rather than a plank.
-     */
-    @Nullable
-    private PlaceLayout.Edge offDockPlankEdge(@NonNull PlaceLayout layout) {
-        if (!PlaceChromePolicy.appsShown(layout)) return null;
-        PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(layout);
-        if (edge.isOnSide() || edge == PlaceLayout.Edge.BOTTOM) return null;
-        return edge;
-    }
-
-    /**
-     * The bars sharing one plank on that edge, outermost first: the pinned apps row, and the
-     * alphabets index when it rides that row from the band right beside it. An index riding from
-     * further up the stack — with something else standing between the two — keeps its own capsule,
-     * because a plank that swallowed it would draw the two bars in an order the user did not ask
-     * for.
-     */
-    @NonNull
-    private List<Element> offDockPlankElements(@NonNull PlaceLayout layout,
-                                               @Nullable PlaceLayout.Edge edge) {
-        if (edge == null || edge != offDockPlankEdge(layout)) return Collections.emptyList();
-        return com.termux.app.dock.DockGeometry.offDockPlankBars(layout);
-    }
-
-    /**
-     * The air a plank keeps <em>outside</em> its sheet of glass. A plank carrying two bars keeps
-     * the margin every bar off the dock has always kept from the screen. A plank that is one lone
-     * row keeps its air inside the sheet instead ({@link DockLayoutPolicy#LONE_ROW_AIR_DP}), so the
-     * sheet is exactly the bar and the row is not spaced twice over — which is what a row on its
-     * own plank read as: the plank's margin, then the dock's own row padding inside it.
-     */
-    private int offDockPlankAirPx(@NonNull List<Element> onPlank) {
-        return onPlank.size() > 1 ? azBarHostMarginPx() : 0;
-    }
-
-    /**
      * Docked, with the strip behind the status bar showing: whether the band the top edge shows
      * first is one of {@code elements}. Read off the arrangement rather than the views, because the
      * sheets are sized before the walk stands them in their stack. A status bar the split panes do
@@ -17070,61 +16723,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.dock.DockGeometry.appsRowAlone(layout);
     }
 
-    /**
-     * The glass sheet's own thickness: the bars standing on the plank, without the air around
-     * them. It is what the corner radius is clamped to, so it is kept from the pass that sized the
-     * plank rather than measured off a view that may not have been laid out yet.
-     */
+    /** The off-dock plank's glass thickness (DockController); kept for the arrangement test. */
     int offDockPlankGlassHeightPx() {
-        return mOffDockPlankGlassHeightPx;
+        return mDock.offDockPlankGlassHeightPx();
     }
 
     /**
-     * The plank a lying-down row off the dock stands on: shown while such a row stands, inset from
-     * the screen's sides by the dock's own side gap and keeping the same air above and below it
-     * that a bar off the dock has always kept.
-     *
-     * <p>Package-visible, and given the arrangement rather than reading it, for the same reason
-     * {@link #applyEdgeStacks} is: the arrangement test drives it against the real layout.
-     *
-     * @return whether the plank appeared, went or changed size, which the content's edge padding
-     *     and every crop cut against it are derived from
+     * The off-dock plank for {@code layout} (DockController); package-visible, and given the
+     * arrangement rather than reading it, for the same reason {@link #applyEdgeStacks} is: the
+     * arrangement test drives it against the real layout.
      */
     boolean syncOffDockPlank(@NonNull PlaceLayout layout) {
-        View host = findViewById(R.id.place_off_dock_plank_host);
-        if (host == null) return false;
-        PlaceLayout.Edge edge = offDockPlankEdge(layout);
-        boolean want = edge != null;
-        int glassHeightPx = 0;
-        if (want) {
-            mOffDockPlankEdge = edge;
-            List<Element> onPlank = offDockPlankElements(layout, edge);
-            DockLayout dockLayout = mDock.dockLayoutIn(layout);
-            // The row's band carries the ticks inside its own air, so the plank is the band and
-            // whatever else stands on it — nothing is added for the strip.
-            glassHeightPx = dockLayout.appsRowBandPx
-                + (onPlank.contains(Element.AZ) ? azBarThicknessPx() : 0);
-            int sideInsetPx = dockLayout.horizontalInsetPx;
-            int airPx = offDockPlankAirPx(onPlank);
-            // Padding rather than margins: the glass fills the padded box, so whatever air the
-            // plank keeps is outside the sheet and the sheet is exactly what the radius rounds.
-            // A lone row keeps none here — its air is inside the sheet instead. Docked and leading
-            // the top edge, the sheet runs on into the strip behind the status bar, so its air goes
-            // below it instead: the same band claimed, with no gap between the sheet and the strip.
-            boolean flushTop = dockedStatusStripLeadsWith(layout, onPlank);
-            updateViewPadding(host, sideInsetPx, flushTop ? 0 : airPx, sideInsetPx,
-                flushTop ? 2 * airPx : airPx);
-        }
-        boolean changed = (host.getVisibility() == View.VISIBLE) != want
-            || mOffDockPlankGlassHeightPx != glassHeightPx;
-        mOffDockPlankGlassHeightPx = glassHeightPx;
-        host.setVisibility(want ? View.VISIBLE : View.GONE);
-        if (changed) {
-            refreshOffDockGlass(layout);
-            if (mTermuxActivityRootView != null)
-                ViewCompat.requestApplyInsets(mTermuxActivityRootView);
-        }
-        return changed;
+        return mDock.syncOffDockPlank(layout);
     }
 
     /**
@@ -17321,7 +16931,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout layout = arranged.layout();
         boolean lettersOffDock = mPreferences != null && arranged.azRowShown()
             && azBarEdge() != PlaceLayout.Edge.BOTTOM;
-        List<Element> onPlank = offDockPlankElements(layout, offDockPlankEdge(layout));
+        List<Element> onPlank = mDock.offDockPlankElements(layout, mDock.offDockPlankEdge(layout));
         // The plank carries the air either side of it once, for both bars: the row's band grows by
         // it and the index riding the plank claims only the letters themselves. The ticks stand in
         // the row's own air wherever it lies down, so a lying-down row claims its band and nothing
@@ -17330,7 +16940,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // row over it, on the same slab.
         int appsRowPx = dockLayout.appsRowBandPx + dockLayout.promptFieldBandPx
             + dockLayout.wallStripBandPx
-            + (onPlank.isEmpty() ? 0 : 2 * offDockPlankAirPx(onPlank));
+            + (onPlank.isEmpty() ? 0 : 2 * mDock.offDockPlankAirPx(onPlank));
         int azRowPx = onPlank.contains(Element.AZ)
             ? azBarThicknessPx()
             : lettersOffDock
@@ -17875,7 +17485,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keyboard it answers to is the one of the half whose rows the stack stands
         // (SeamCrossing#footKeyboardUp), so Home's rows arrive with their foot.
         boolean dockFoot = com.termux.app.dock.DockSpec.footExists(mDockRows.surfaceShown(),
-            dockFloats(), mCrossing.seam().footKeyboardUp(state.keyboardShown), isImeVisible(),
+            mDock.dockFloats(), mCrossing.seam().footKeyboardUp(state.keyboardShown), isImeVisible(),
             mBottomKeptPx);
         com.termux.app.place.BottomInsets bottomInsets = com.termux.app.place.BottomInsets.forKept(
             0, mBottomKeptPx, dockFoot, stack.bottomMarginPx, stack.flushBottomInsetPx);
@@ -18173,19 +17783,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    private boolean updateViewHorizontalMargins(int viewId, int marginHorizontal) {
-        View view = findViewById(viewId);
-        if (view == null) return false;
-        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
-        ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
-        if (marginParams.leftMargin == marginHorizontal && marginParams.rightMargin == marginHorizontal) return false;
-        marginParams.leftMargin = marginHorizontal;
-        marginParams.rightMargin = marginHorizontal;
-        view.setLayoutParams(marginParams);
-        return true;
-    }
-
     private boolean updateViewPadding(int viewId, int left, int top, int right, int bottom) {
         return updateViewPadding(findViewById(viewId), left, top, right, bottom);
     }
@@ -18198,58 +17795,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         view.setPadding(left, top, right, bottom);
         return true;
-    }
-
-    /**
-     * @param layout the dock being applied — not one computed afresh off the stored arrangement,
-     *               which the row's air now depends on through its place in the stack
-     */
-    private boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
-        int surfaceInset = layout.horizontalInsetPx;
-        int contentInset = layout.capsule ? layout.capsuleContentInsetPx : surfaceInset;
-        int extraKeysInset = layout.capsule ? layout.capsuleExtraKeysInsetPx : surfaceInset;
-        // The band the ticks stand in is that side's air rather than a band added to it: the
-        // pager keeps whatever is left of the air there, which is nothing while the strip fills
-        // it. Which side that is follows the row's place in the bottom stack.
-        boolean ticksLeadDockRow =
-            PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM, mAppsRowNextToCanvas);
-        int appsTopPadding = ticksLeadDockRow
-            ? layout.appsRowPaddingBesideTicksPx() : layout.appsTopPaddingPx;
-        int appsBottomPadding = ticksLeadDockRow
-            ? layout.appsBottomPaddingPx : layout.appsRowPaddingBesideTicksPx();
-        // The apps row's inset, trimmed from the content inset so its space-between icons line up
-        // with the A–Z row's letters, and narrowed under Lens beads so the end beads stand clear
-        // of the screen's edges (DockLayoutPolicy.appsRowSideInsetPx); the Search field's capsule
-        // under the beads is as wide as this.
-        int appsContentInset = layout.appsRowSideInsetPx();
-        // What a bead covers in those narrower slots is in the slot's icon itself
-        // (DockLayout#slotIconPx), which applyDockLayout hands the row.
-
-        // The find strip is dock furniture: it spans exactly the dock's own width, whichever style
-        // is set, so it reads as the bar's top edge rather than as a floating panel.
-        boolean moved = updateViewHorizontalMargins(R.id.terminal_find_bar_host, surfaceInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_viewpager, appsContentInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_indicator_band, contentInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_row, contentInset);
-        moved |= updateViewHorizontalMargins(R.id.terminal_toolbar_view_pager, extraKeysInset);
-        moved |= updateViewPadding(R.id.apps_bar_viewpager, 0, appsTopPadding, 0, appsBottomPadding);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_underlay, surfaceInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_overlay, surfaceInset);
-
-        // Keep the extra-keys ViewPager from leaking its adjacent (text-input) page. In capsule mode
-        // the pager is inset from the dock edges, so the off-screen page's edge (the "❮" button)
-        // peeked into the visible page. clipChildren alone doesn't clip a ViewPager's off-screen
-        // pages, so hard-clip the pager to its own rectangular bounds via clipToOutline.
-        View toolbarPager = findViewById(R.id.terminal_toolbar_view_pager);
-        if (toolbarPager instanceof ViewGroup) {
-            ((ViewGroup) toolbarPager).setClipChildren(true);
-            ((ViewGroup) toolbarPager).setClipToPadding(true);
-        }
-        if (toolbarPager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            toolbarPager.setOutlineProvider(ViewOutlineProvider.BOUNDS);
-            toolbarPager.setClipToOutline(true);
-        }
-        return moved;
     }
 
     /**
@@ -18621,7 +18166,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float alpha = promptFieldAlpha(mAppliedPromptFieldReveal);
         if (field.getAlpha() != alpha) field.setAlpha(alpha);
         // The well nests in the slab: the dock's radius less the air between them.
-        float dockRadius = arrangement().floating() ? resolveDockCapsuleCornerRadiusPx(
+        float dockRadius = arrangement().floating() ? mDock.resolveDockCapsuleCornerRadiusPx(
             layout.appsBarHeightPx + layout.promptFieldFullBandPx) : 0f;
         mPromptFieldSlabWellRadiusPx = com.termux.app.dock.WallStripRowPolicy.tileRadiusPx(
             dockRadius, layout.promptFieldWellGapPx);
@@ -18872,7 +18417,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyWallStripGeometry(@NonNull DockLayout layout) {
         com.termux.app.dock.WallStripRowView row = mWallStripRow;
         if (row == null || layout.wallStripFullBandPx <= 0) return;
-        float dockRadius = arrangement().floating() ? resolveDockCapsuleCornerRadiusPx(
+        float dockRadius = arrangement().floating() ? mDock.resolveDockCapsuleCornerRadiusPx(
             layout.appsBarHeightPx + layout.wallStripFullBandPx) : 0f;
         row.setGeometry(wallStripInsetPx(layout), dpToPx(WALL_STRIP_GAP_DP), dockRadius,
             layout.wallStripWellGapPx);
@@ -19845,7 +19390,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The radius the keyboard surface is clipped to (applyInAppKeyboardSurface).
             if (!isInAppKeyboardCapsule()) return 0f;
             com.termux.app.chrome.LiveChromeShape.Clip clip = chromeClipOf(KEYBOARD_PIECES);
-            return clip != null ? clip.radius : resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
+            return clip != null ? clip.radius : mDock.resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
         }
 
         @Override public float searchKeyboardCornerRadiusPx() {
@@ -24117,7 +23662,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View stack = findViewById(R.id.accessory_stack_container);
             // The band hangs below the stack, so it is laid only while the stack is.
             boolean show = deck != null && stack != null && stack.getVisibility() == View.VISIBLE
-                && !dockFloats();
+                && !mDock.dockFloats();
             if (show) setDeckSlab(nav, deck);
             setDeckBandShown(nav, show);
         }
@@ -25774,13 +25319,123 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public boolean dockFloats() {
-            return TermuxActivity.this.dockFloats();
+        public boolean floatingStyle() {
+            return arrangement().floating();
         }
 
         @Override
-        public float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) {
-            return TermuxActivity.this.resolveDockCapsuleCornerRadiusPx(surfaceHeightPx);
+        public boolean peekCardWanted() {
+            return TermuxActivity.this.peekCardWanted();
+        }
+
+        @Nullable
+        @Override
+        public com.termux.app.dock.PeekGlassGeometry.Card peekCard() {
+            return mPeekCard;
+        }
+
+        @Override
+        public float layoutCornersPx() {
+            return TermuxActivity.this.layoutCornersPx();
+        }
+
+        @Override
+        public int stackLookPage() {
+            return TermuxActivity.this.stackLookPage();
+        }
+
+        @NonNull
+        @Override
+        public com.termux.app.place.ChromeShape chromeShape() {
+            return TermuxActivity.this.chromeShape();
+        }
+
+        @NonNull
+        @Override
+        public com.termux.app.place.ChromeShape chromeShape(@NonNull PlaceLayout layout) {
+            return TermuxActivity.this.chromeShape(layout);
+        }
+
+        @NonNull
+        @Override
+        public List<com.termux.app.place.ChromeShape.PieceId> dockPieceIds(boolean withKeyboard) {
+            return TermuxActivity.this.dockPieceIds(withKeyboard);
+        }
+
+        @NonNull
+        @Override
+        public List<com.termux.app.place.ChromeShape.PieceId> chromePieceIds(
+            @NonNull List<Element> elements) {
+            return TermuxActivity.chromePieceIds(elements);
+        }
+
+        @Override
+        public int chromeRimEdges(@NonNull com.termux.app.place.ChromeShape.PieceId... ids) {
+            return TermuxActivity.this.chromeRimEdges(ids);
+        }
+
+        @Override
+        public boolean unifiedKeyboardGlass() {
+            return shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec());
+        }
+
+        @Override
+        public boolean frameStandsDown() {
+            return TermuxActivity.this.frameStandsDown();
+        }
+
+        @Nullable
+        @Override
+        public Drawable deckSlabOr(@Nullable Drawable glass) {
+            return TermuxActivity.this.deckSlabOr(glass);
+        }
+
+        @Override
+        public boolean dressPeekCard(@NonNull View surface) {
+            return TermuxActivity.this.dressPeekCard(surface);
+        }
+
+        @Override
+        public int azBarThicknessPx() {
+            return TermuxActivity.this.azBarThicknessPx();
+        }
+
+        @Override
+        public int azBarHostMarginPx() {
+            return TermuxActivity.this.azBarHostMarginPx();
+        }
+
+        @Override
+        public boolean dockedStatusStripLeadsWith(@NonNull PlaceLayout layout,
+                                                  @NonNull List<Element> elements) {
+            return TermuxActivity.this.dockedStatusStripLeadsWith(layout, elements);
+        }
+
+        @Override
+        public boolean continuesIntoStatusInsetStrip(@Nullable View sheet) {
+            return TermuxActivity.this.continuesIntoStatusInsetStrip(sheet);
+        }
+
+        @Override
+        public float statusInsetSheetSliceStart(@Nullable View sheet) {
+            return TermuxActivity.this.statusInsetSheetSliceStart(sheet);
+        }
+
+        @Override
+        public boolean updateViewPadding(@Nullable View view, int left, int top, int right,
+                                         int bottom) {
+            return TermuxActivity.this.updateViewPadding(view, left, top, right, bottom);
+        }
+
+        @Override
+        public void refreshOffDockGlass(@NonNull PlaceLayout layout) {
+            TermuxActivity.this.refreshOffDockGlass(layout);
+        }
+
+        @Override
+        public void requestRootInsets() {
+            if (mTermuxActivityRootView != null)
+                ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         }
 
         @NonNull
@@ -25846,8 +25501,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void onDockBeadsReplaced(@Nullable View host, boolean modeChanged) {
-            if (modeChanged && host != null && mDockShapeCut)
-                applyDockSurfaceShape(host, mDockShapeCapsule, mDockShapeHeightPx, true, true);
+            if (modeChanged && host != null && mDock.dockShapeCut())
+                mDock.applyDockSurfaceShape(host, mDock.dockShapeCapsule(), mDock.dockShapeHeightPx(), true, true);
             // The Search field's well nests in its capsule, or in the slab again.
             syncPromptFieldWell();
             TermuxActivity.this.syncFrameBeadCut();
@@ -26019,8 +25674,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean updateViewBottomMargin(int viewId, int marginBottom) {
             return TermuxActivity.this.updateViewBottomMargin(viewId, marginBottom);
         }
-        @Override public boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
-            return TermuxActivity.this.applyDockRowHorizontalInsets(layout);
+        @Override public boolean appsRowNextToCanvas() {
+            return mAppsRowNextToCanvas;
         }
         @Override public boolean syncPromptLineField(@NonNull DockLayout layout) {
             return TermuxActivity.this.syncPromptLineField(layout);

@@ -6,6 +6,8 @@ import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.SparseArray;
 import android.view.MotionEvent;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.FrameLayout;
 
@@ -20,6 +22,8 @@ import com.termux.app.chrome.ChromeSpec;
 import com.termux.app.chrome.TestChromeRenderers;
 import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.place.ChromeShape;
+import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
@@ -34,6 +38,9 @@ import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -365,6 +372,179 @@ public class DockControllerTest {
         assertFalse(mDock.dockBandEaseRunning());
     }
 
+    /** A view standing in for {@code id} with zero margins, for the row insets to write. */
+    private View marginedView(int id) {
+        View view = new View(RuntimeEnvironment.getApplication());
+        view.setLayoutParams(new android.view.ViewGroup.MarginLayoutParams(10, 10));
+        mHost.views.put(id, view);
+        return view;
+    }
+
+    private static int sideMargin(View view) {
+        android.view.ViewGroup.MarginLayoutParams params =
+            (android.view.ViewGroup.MarginLayoutParams) view.getLayoutParams();
+        assertEquals("both sides alike", params.leftMargin, params.rightMargin);
+        return params.leftMargin;
+    }
+
+    @Test
+    public void theCapsuleInsetsItsRowsByTheirOwnInsetsAndTheFindStripByTheSurfaces() {
+        View find = marginedView(R.id.terminal_find_bar_host);
+        View az = marginedView(R.id.apps_bar_az_row);
+        View keys = marginedView(R.id.terminal_toolbar_view_pager);
+        DockLayout capsule = TestDockLayouts.capsule(2.625f, 26);
+        mDock.applyDockLayout(capsule);
+        assertEquals("the find strip spans the dock's own width", 26, sideMargin(find));
+        assertEquals(capsule.capsuleContentInsetPx, sideMargin(az));
+        assertEquals(capsule.capsuleExtraKeysInsetPx, sideMargin(keys));
+        assertTrue("the keys' pager is clipped to its bounds", keys.getClipToOutline());
+
+        DockLayout docked = TestDockLayouts.defaultStyle(2.625f, 0);
+        mDock.applyDockLayout(docked);
+        assertEquals("Docked, every row is the surface's inset", 0, sideMargin(az));
+        assertEquals(0, sideMargin(keys));
+    }
+
+    // ------------------------------------------------------------------ Surface
+
+    @Test
+    public void theDockFloatsUnderFloatingUnlessThePeekCardStands() {
+        mHost.floating = false;
+        mHost.peekWanted = true;
+        assertFalse("Docked never floats", mDock.dockFloats());
+        assertEquals("Docked never asks after the card", 0, mHost.peekAsks);
+
+        mHost.floating = true;
+        mHost.peekWanted = false;
+        assertTrue("Floating with no card is the capsule", mDock.dockFloats());
+        mHost.peekWanted = true;
+        assertFalse("the Peek card rises from the edge as Docked", mDock.dockFloats());
+
+        mHost.floating = false;
+        assertTrue("measured in Floating, the card still stands down",
+            !mDock.dockFloatsIn(true));
+        mHost.peekWanted = false;
+        assertTrue(mDock.dockFloatsIn(true));
+        assertFalse(mDock.dockFloatsIn(false));
+    }
+
+    @Test
+    public void theCapsuleRadiusIsCornersCappedAtHalfTheSurface() {
+        mHost.cornersPx = 60f;
+        assertEquals("Corners on a tall surface", 60f,
+            mDock.resolveDockCapsuleCornerRadiusPx(400), 0f);
+        assertEquals("half of a short one", 40f, mDock.resolveDockCapsuleCornerRadiusPx(80), 0f);
+        assertEquals("no surface, no radius", 0f, mDock.resolveDockCapsuleCornerRadiusPx(-10), 0f);
+        assertEquals("the unbounded ask is Corners", 60f,
+            mDock.resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE), 0f);
+    }
+
+    @Test
+    public void theGlassCoverIsTheStackPagesOpacityOrNoneBeforePreferences() {
+        assertEquals("no preferences", 0f, mDock.dockGlassCover(), 0f);
+        mHost.prefsStore = TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true);
+        float expected = mHost.prefsStore.getAppBarOpacity(mHost.stackLookPage()) / 100f;
+        assertEquals(expected, mDock.dockGlassCover(), 0f);
+    }
+
+    @Test
+    public void theProgramEdgeRecutsTheHostOnlyWhenItMovesAndOnlyOnceCut() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        host.setId(R.id.accessory_surface_host);
+        host.layout(0, 0, 400, 100);
+        mHost.surfaceHost = host;
+        mHost.peekStands = true;
+
+        mDock.setDockProgramEdge(true);
+        assertTrue(mDock.dockGlassDrawsEdge());
+        assertEquals("nothing cut yet, nothing re-cut", 0, mHost.peekDresses);
+
+        mDock.applyDockSurfaceShape(host, true, 100, true, true);
+        assertEquals(1, mHost.peekDresses);
+        assertTrue(mDock.dockShapeCut());
+        assertTrue(mDock.dockShapeCapsule());
+        assertEquals(100, mDock.dockShapeHeightPx());
+
+        mDock.setDockProgramEdge(true);
+        assertEquals("the same edge re-cuts nothing", 1, mHost.peekDresses);
+        mDock.setDockProgramEdge(false);
+        assertFalse(mDock.dockGlassDrawsEdge());
+        assertEquals("a moved edge re-cuts the host as last cut", 2, mHost.peekDresses);
+    }
+
+    @Test
+    public void theHostDropsItsPaddingAndLensBeadsLeaveItUnclipped() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        host.setId(R.id.accessory_surface_host);
+        host.setPadding(4, 4, 4, 4);
+        host.setBackground(new ColorDrawable(0xFF000000));
+        ReflectionHelpers.setField(mDock, "mDockBeads", sevenBeads());
+        mDock.applyDockSurfaceShape(host, false, 100, true, true);
+        assertEquals(0, host.getPaddingLeft());
+        assertEquals(0, host.getPaddingBottom());
+        assertNull("no slab under the beads", host.getBackground());
+        assertFalse(host.getClipToOutline());
+    }
+
+    @Test
+    public void theShelfShowsNothingWithoutAChromeState() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        mHost.surfaceHost = host;
+        com.termux.app.DockShelfView shelf =
+            new com.termux.app.DockShelfView(RuntimeEnvironment.getApplication());
+        mHost.views.put(R.id.accessory_shelf_fx, shelf);
+        mHost.rows.setShelfShown(true);
+        mDock.syncDockShelf(null);
+        assertFalse(mHost.rows.shelfShown());
+    }
+
+    // ------------------------------------------------------------------ Off-dock plank
+
+    /** Home with the pinned apps lying down along the top. */
+    private static final PlaceLayout APPS_TOP = HOME.withSlot(Element.APPS,
+        com.termux.app.place.Slot.on(Edge.TOP, 0));
+
+    @Test
+    public void thePlankStandsOnlyWhereTheAppsRowLiesDownOffTheDock() {
+        assertNull("along the bottom the row is the dock's own", mDock.offDockPlankEdge(HOME));
+        assertEquals(Edge.TOP, mDock.offDockPlankEdge(APPS_TOP));
+        assertTrue("another edge than the plank's carries nothing",
+            mDock.offDockPlankElements(APPS_TOP, Edge.BOTTOM).isEmpty());
+        assertTrue(mDock.offDockPlankElements(HOME, null).isEmpty());
+        assertEquals(DockGeometry.offDockPlankBars(APPS_TOP),
+            mDock.offDockPlankElements(APPS_TOP, Edge.TOP));
+    }
+
+    @Test
+    public void aPlankOfTwoBarsKeepsItsAirOutsideAndALoneRowNone() {
+        List<Element> lone = new ArrayList<>();
+        lone.add(Element.APPS);
+        assertEquals("a lone row keeps its air inside the sheet", 0, mDock.offDockPlankAirPx(lone));
+        lone.add(Element.AZ);
+        assertEquals("two bars keep the bar margin", 12, mDock.offDockPlankAirPx(lone));
+    }
+
+    @Test
+    public void thePlankIsPutAwayWhereNoRowLiesDownAndReGlazedOnlyWhenItChanges() {
+        FrameLayout plank = new FrameLayout(RuntimeEnvironment.getApplication());
+        mHost.views.put(R.id.place_off_dock_plank_host, plank);
+        assertTrue("shown before, gone now: a change", mDock.syncOffDockPlank(HOME));
+        assertEquals(View.GONE, plank.getVisibility());
+        assertEquals(0, mDock.offDockPlankGlassHeightPx());
+        assertEquals(1, mHost.offDockGlassPasses);
+        assertEquals(1, mHost.insetRequests);
+
+        assertFalse("the same answer again", mDock.syncOffDockPlank(HOME));
+        assertEquals("no second glaze", 1, mHost.offDockGlassPasses);
+        assertEquals(1, mHost.insetRequests);
+    }
+
+    @Test
+    public void noPlankHostNoPlank() {
+        assertFalse(mDock.syncOffDockPlank(APPS_TOP));
+        assertEquals(0, mHost.offDockGlassPasses);
+    }
+
     static class FakeHost implements DockController.Host {
         boolean prefs = true;
         float share = Float.NaN;
@@ -377,6 +557,7 @@ public class DockControllerTest {
         final DockRows rows = new DockRows(new DockRowViews(id -> null, band -> false));
         final SeamCrossing seam = new SeamCrossing();
         @Nullable PlaceLayoutStore store;
+        @Nullable TermuxAppSharedPreferences prefsStore;
         @Nullable ChromeRenderer chrome;
         @Nullable PaneWallPage travelledTo;
         boolean reducedMotion;
@@ -384,6 +565,15 @@ public class DockControllerTest {
         boolean keyboardShown;
         boolean fieldWanted;
         boolean recomputeTrips;
+        boolean floating;
+        boolean peekWanted;
+        boolean peekStands;
+        float cornersPx = 26f * 2.625f;
+        int peekAsks;
+        int peekDresses;
+        boolean stripLeads;
+        int offDockGlassPasses;
+        int insetRequests;
         int barHeightPasses;
         int toolbarPasses;
 
@@ -424,8 +614,14 @@ public class DockControllerTest {
         @Override public boolean isAppDrawerEngaged() { return drawerEngaged; }
         @NonNull @Override public PlaceLayout placeLayout() { return layout; }
         @NonNull @Override public DockRows dockRows() { return rows; }
-        @Override public boolean dockFloats() { return false; }
-        @Override public float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) { return 0f; }
+        @Override public boolean floatingStyle() { return floating; }
+        @Override public boolean peekCardWanted() {
+            peekAsks++;
+            return peekWanted;
+        }
+        @Nullable @Override public PeekGlassGeometry.Card peekCard() { return null; }
+        @Override public float layoutCornersPx() { return cornersPx; }
+        @Override public int stackLookPage() { return 7; }
         @Override public boolean stackStandsDownOnFrame() { return false; }
         @NonNull @Override public DisplayMetrics displayMetrics() {
             return context().getResources().getDisplayMetrics();
@@ -440,7 +636,8 @@ public class DockControllerTest {
             return 5;
         }
         @Override public int homeMarginDp() { return 16; }
-        @Nullable @Override public TermuxAppSharedPreferences preferences() { return null; }
+        @Override public boolean appsRowNextToCanvas() { return true; }
+        @Nullable @Override public TermuxAppSharedPreferences preferences() { return prefsStore; }
         @Nullable @Override public PlaceLayoutStore placeLayoutStore() { return store; }
         @NonNull @Override public ResolvedArrangement arrangementOf(@NonNull PageRef page) {
             return arranged(page.isHome() ? design : designOf(PaneWallPage.TERMINAL), page);
@@ -484,6 +681,24 @@ public class DockControllerTest {
         @Nullable @Override public AzScrubRowView azTabRowView() { return null; }
         @NonNull @Override public PlaceLayout.Edge azBarEdge() { return Edge.BOTTOM; }
         @Override public boolean isInAppKeyboardVisible() { return false; }
+        @NonNull @Override public ChromeShape chromeShape() {
+            throw new UnsupportedOperationException();
+        }
+        @NonNull @Override public ChromeShape chromeShape(@NonNull PlaceLayout layout) {
+            throw new UnsupportedOperationException();
+        }
+        @NonNull @Override public List<ChromeShape.PieceId> dockPieceIds(boolean withKeyboard) {
+            return new ArrayList<>();
+        }
+        @NonNull @Override public List<ChromeShape.PieceId> chromePieceIds(
+            @NonNull List<Element> elements) {
+            List<ChromeShape.PieceId> ids = new ArrayList<>(elements.size());
+            for (Element element : elements) ids.add(ChromeShape.PieceId.of(element));
+            return ids;
+        }
+        @Override public int chromeRimEdges(@NonNull ChromeShape.PieceId... ids) { return 0; }
+        @Override public boolean unifiedKeyboardGlass() { return false; }
+        @Override public boolean frameStandsDown() { return false; }
         @Nullable @Override public ChromeRenderer chrome() { return chrome; }
         @Override public void rebuildBackdropGlassEffectForLens() { }
         @Override public boolean glassParamsValid() { return true; }
@@ -493,6 +708,7 @@ public class DockControllerTest {
         @Override public float glassOriginTop() { return 0f; }
         @Override public boolean isGlassTouchLightAllowed() { return true; }
         @Override public int resolveDockAccentColor() { return 0xFF3366CC; }
+        @Nullable @Override public Drawable deckSlabOr(@Nullable Drawable glass) { return glass; }
         @Override public float beadShare() { return share; }
         @NonNull @Override public SeamCrossing seam() { return seam; }
         @Nullable @Override public PaneWallPage dockDesignTravelledTo() { return travelledTo; }
@@ -512,10 +728,33 @@ public class DockControllerTest {
         }
         @Override public void syncWallStripFeed() { }
         @Override public boolean updateViewBottomMargin(int viewId, int marginBottom) { return false; }
-        @Override public boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
-            return false;
-        }
         @Override public boolean syncPromptLineField(@NonNull DockLayout layout) { return false; }
         @Override public boolean syncWallStripRow(@NonNull DockLayout layout) { return false; }
+        @Override public boolean dressPeekCard(@NonNull View surface) {
+            peekDresses++;
+            return peekStands;
+        }
+        @Override public int azBarThicknessPx() { return 50; }
+        @Override public int azBarHostMarginPx() { return 12; }
+        @Override public boolean dockedStatusStripLeadsWith(@NonNull PlaceLayout layout,
+                                                            @NonNull List<Element> elements) {
+            return stripLeads;
+        }
+        @Override public boolean continuesIntoStatusInsetStrip(@Nullable View sheet) {
+            return false;
+        }
+        @Override public float statusInsetSheetSliceStart(@Nullable View sheet) { return 0f; }
+        @Override public boolean updateViewPadding(@Nullable View view, int left, int top,
+                                                   int right, int bottom) {
+            if (view == null) return false;
+            boolean moved = view.getPaddingLeft() != left || view.getPaddingTop() != top
+                || view.getPaddingRight() != right || view.getPaddingBottom() != bottom;
+            if (moved) view.setPadding(left, top, right, bottom);
+            return moved;
+        }
+        @Override public void refreshOffDockGlass(@NonNull PlaceLayout layout) {
+            offDockGlassPasses++;
+        }
+        @Override public void requestRootInsets() { insetRequests++; }
     }
 }
