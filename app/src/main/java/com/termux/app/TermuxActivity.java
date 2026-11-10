@@ -605,7 +605,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * re-reads availability on its next onStart anyway.
      */
     private final com.termux.privileged.PrivilegedAvailabilitySignal.Listener
-        mPrivilegedAvailabilityListener = available -> updateStatusWidgets();
+        mPrivilegedAvailabilityListener = available -> this.mStatusBar.updateStatusWidgets();
     @Nullable private com.termux.app.statusbar.SystemStatsCardView mStatsCardView;
     /**
      * Presentation smoothing for the two bar readings only. One controller feeds both surfaces, and
@@ -2340,7 +2340,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // neither onStart nor onResume calls. Without this the CPU and memory readings never
         // resumed after leaving the app and coming back.
         PrivilegedBackendManager.getInstance().addAvailabilityListener(mPrivilegedAvailabilityListener);
-        updateStatusWidgets();
+        mStatusBar.updateStatusWidgets();
         // onStop let go of the display's surface; nothing else re-attaches it when the wall
         // already rests on the Display place, and a display whose surface is not attached takes
         // no touch and misses every setting changed while we were away.
@@ -9378,7 +9378,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // pass that re-cuts the glass — a wallpaper, palette, mode or geometry change reaches
             // both through one request.
             Trace.beginSection("Chrome.statusBarInk");
-            syncStatusBarInk();
+            mStatusBar.syncStatusBarInk();
             Trace.endSection();
         } finally {
             Trace.endSection();
@@ -10824,9 +10824,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mGeometry.dispose();
         releasePeekReflection();
         // The badge store is process-wide: it must not hold on to a dead activity.
-        com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.removeListener(
-            mStatusNotificationsListener);
-        mStatusNotificationsListener = null;
+        mStatusBar.removeStatusNotificationsListener();
         // Dropped, not resumed: the panes go with the window.
         mReturnHold.cancel();
         Choreographer.getInstance().removeFrameCallback(mReturnHoldFrame);
@@ -24770,6 +24768,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isSplitPanesEnabled() { return TermuxActivity.this.isSplitPanesEnabled(); }
         @Override public com.termux.app.dock.DockRows dockRows() { return mDockRows; }
         @Override public TermuxActivityRootView termuxActivityRootView() { return mTermuxActivityRootView; }
+        @Override public void ensureAiIndicatorController() { TermuxActivity.this.ensureAiIndicatorController(); }
+        @Override public com.termux.app.statusbar.SystemStatsController ensureStatsController() { return TermuxActivity.this.ensureStatsController(); }
+        @Override public @NonNull com.termux.app.statusbar.WeatherController ensureWeatherController() { return TermuxActivity.this.ensureWeatherController(); }
+        @Override public void runOnUiThread(@NonNull Runnable action) { TermuxActivity.this.runOnUiThread(action); }
+        @Override public boolean statsConsumerVisible() { return TermuxActivity.this.statsConsumerVisible(); }
+        @Override public long statsInterval(long normalMs) { return TermuxActivity.this.statsInterval(normalMs); }
+        @Override public long statsBarIntervalMs() { return STATS_BAR_INTERVAL_MS; }
+        @Override public long statsCardIntervalMs() { return STATS_CARD_INTERVAL_MS; }
+        @Override public com.termux.app.statusbar.StatusBarStatSmoother barCpuSmoother() { return mBarCpuSmoother; }
+        @Override public com.termux.app.statusbar.StatusBarStatSmoother barMemorySmoother() { return mBarMemorySmoother; }
+        @Override public ChromeRenderer chrome() { return mChrome; }
+        @Override public @Nullable com.termux.app.statusbar.SystemStatsCardView statsCardView() { return mStatsCardView; }
+        @Override public @Nullable com.termux.app.statusbar.SystemStatsController statsController() { return mStatsController; }
+        @Override public com.termux.app.statusbar.StatusCardHost statusCardHost() { return mStatusCardHost; }
+        @Override public @Nullable com.termux.app.statusbar.WeatherController weatherController() { return mWeatherController; }
+        @Override public @NonNull android.content.Context context() { return TermuxActivity.this; }
+        @Override public void toggleStatsCard(@NonNull View anchor) { TermuxActivity.this.toggleStatsCard(anchor); }
+        @Override public void toggleWeatherCard(@NonNull View anchor) { TermuxActivity.this.toggleWeatherCard(anchor); }
         // @@HOSTIMPL@@
     }
 
@@ -30076,65 +30092,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         dot.setVisibility(mFrameContent.isMouseMode() && anyStatBefore
             ? View.VISIBLE : View.GONE);
         dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
-        syncStatusBarInk();
-    }
-
-    /**
-     * Hears the notifications the dock badges its icons with, while the status bar's
-     * notifications indicator is on; null while it is off.
-     */
-    @Nullable private com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.Listener
-        mStatusNotificationsListener;
-
-    /**
-     * The status bar's notifications mark ({@code status_widget_notifications}): a bell and the
-     * count while notifications wait, the same ones the dock badges ({@link
-     * com.termux.app.statusbar.StatusNotificationsMark}); gone with none, or with the indicator
-     * off. Listens to the badge store only while the indicator is on.
-     */
-    private void syncStatusNotificationsMark() {
-        boolean enabled = mPreferences != null && mPreferences.isStatusWidgetNotificationsEnabled();
-        if (enabled && mStatusNotificationsListener == null) {
-            mStatusNotificationsListener = packages -> runOnUiThread(this::showStatusNotificationsMark);
-            // Adding it reports the packages at once, which draws the mark.
-            com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.addListener(
-                mStatusNotificationsListener);
-            return;
-        }
-        if (!enabled && mStatusNotificationsListener != null) {
-            com.termux.app.launcher.notifications.LauncherNotificationBadgeStore.removeListener(
-                mStatusNotificationsListener);
-            mStatusNotificationsListener = null;
-        }
-        showStatusNotificationsMark();
-    }
-
-    private void showStatusNotificationsMark() {
-        com.termux.app.statusbar.StatusBarWidgetView mark =
-            findViewById(R.id.terminal_status_widget_notifications);
-        com.termux.app.statusbar.MaterialDotSeparatorView dot =
-            findViewById(R.id.terminal_status_dot_notifications);
-        if (mark == null || dot == null) return;
-        boolean enabled = mPreferences != null && mPreferences.isStatusWidgetNotificationsEnabled();
-        int count = enabled ? com.termux.app.launcher.notifications.LauncherNotificationBadgeStore
-            .countFor(com.termux.app.launcher.notifications.LauncherNotificationBadgeStore
-                .getActivePackages()) : 0;
-        boolean shown = com.termux.app.statusbar.StatusNotificationsMark.shown(enabled, count);
-        if (shown && mark.getTag() == null) {
-            mark.setTag("wired");
-            mark.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-            mark.setIconGlyph(com.termux.app.statusbar.StatusNotificationsMark.GLYPH);
-        }
-        if (shown)
-            mark.setValue(com.termux.app.statusbar.StatusNotificationsMark.label(count));
-        boolean anyStatBefore = mPreferences != null && (mPreferences.isStatusWidgetCpuEnabled()
-            || mPreferences.isStatusWidgetRamEnabled() || mPreferences.isStatusWidgetWeatherEnabled());
-        int visibility = shown ? View.VISIBLE : View.GONE;
-        boolean changed = mark.getVisibility() != visibility;
-        mark.setVisibility(visibility);
-        dot.setVisibility(shown && anyStatBefore ? View.VISIBLE : View.GONE);
-        dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-        if (changed) syncStatusBarInk();
+        mStatusBar.syncStatusBarInk();
     }
 
     public boolean isMouseMode() {
@@ -31003,7 +30961,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Idempotence: the widgets live inside the GONE host here, so nothing is shown either
             // way — but updateStatusWidgets also owns starting and stopping the sampler, and
             // skipping it would make that depend on which mode the user happens to be in.
-            updateStatusWidgets();
+            mStatusBar.updateStatusWidgets();
             return;
         }
 
@@ -31063,7 +31021,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         Trace.beginSection("Bar.widgets");
         try {
-            updateStatusWidgets();
+            mStatusBar.updateStatusWidgets();
         } finally {
             Trace.endSection();
         }
@@ -31718,206 +31676,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }, WINDOW_LABEL_POLL_MS);
     }
 
-    // ---- What the status bar's content is drawn in, measured against what it is standing on ----
-
-    /** The bar's own rect on screen: one measurement, and every ink in the bar comes out of it. */
-    private final android.graphics.Rect mStatusInkRect = new android.graphics.Rect();
-
-    /** The status widgets and their dots, in the order the row lays them out. */
-    private static final int[] STATUS_INK_WIDGET_IDS = {
-        R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
-        R.id.terminal_status_widget_weather, R.id.terminal_status_widget_notifications,
-        R.id.terminal_status_widget_ai, R.id.terminal_status_widget_mouse,
-    };
-
-    private static final int[] STATUS_INK_DOT_IDS = {
-        R.id.terminal_status_dot_cpu_ram, R.id.terminal_status_dot_ram_weather,
-        R.id.terminal_status_dot_notifications, R.id.terminal_status_dot_ai,
-        R.id.terminal_status_dot_mouse,
-    };
-
-    /**
-     * What every piece of the status bar's own content is drawn in, resolved from one measurement
-     * of what the bar is actually standing on.
-     *
-     * <p>The bar carries four contrast tiers at once — the stats' labels are body text, their icons
-     * and the place marks are graphics, the separator dots are decoration — and a band can only
-     * carry one veil. So the band is resolved <em>once</em> here, at its strictest tier and in the
-     * role colour of its most saturated content, and every other ink on it comes from
-     * {@link com.termux.app.chrome.ChromeInk#inkOn} at its own looser tier, which asks for no more
-     * veil. Anything else in this activity that stands on the status bar should read the resolution
-     * this method takes rather than call {@code onGlass} for the band a second time: the last
-     * caller in a frame would otherwise decide the veil for all of them.</p>
-     *
-     * <p>The band is measured on the pane this content is laid out in — the top pane's glass,
-     * shared with the window chips — and not on the strip that continues that glass under the
-     * system status bar, which nothing stands on. {@code ChromeInk} owns that mapping; this method
-     * names the band and asks its question.</p>
-     *
-     * <p>Silently does nothing until the bar has been laid out and a wallpaper sample exists; the
-     * accessory render pass runs this again, and the chrome asks for a pass of its own whenever a
-     * band's veil moves.</p>
-     */
-    private void syncStatusBarInk() {
-        com.termux.app.chrome.ChromeInk ink = mChrome.ink();
-        if (!ink.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect))
-            return;
-        int primary = statusInkSeed(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
-        // A real ink pair: the primary role toned dark (about 30) for pale glass and pale (about
-        // 85) for dark glass, so the band can flip with the chrome's polarity rather than buying
-        // a veil to keep one ink legible.
-        double primaryTone = com.termux.app.theme.SchemeTone.tone(primary);
-        int darkPrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 30d - primaryTone);
-        int palePrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 85d - primaryTone);
-        com.termux.app.chrome.OnGlass.Resolution band = ink.onGlass(
-            com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect,
-            darkPrimary, palePrimary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
-
-        // A muted widget is the AI glyph's few seconds of afterlife: the state is said by the
-        // neutral role, and the fade is allowed only as far as the backdrop can carry it.
-        int muted = com.termux.app.statusbar.StatusBarInk.inkAtAlpha(band.surface,
-            MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-                primary),
-            com.termux.app.statusbar.StatusBarInk.MUTED_ALPHA,
-            com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
-
-        for (int widgetId : STATUS_INK_WIDGET_IDS) {
-            com.termux.app.statusbar.StatusBarWidgetView widget = findViewById(widgetId);
-            if (widget == null) continue;
-            int seed = statusInkSeed(widget.colorRole());
-            widget.setInk(
-                ink.inkOn(band, seed, seed, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT),
-                ink.inkOn(band, seed, seed, com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT),
-                muted);
-        }
-        for (int dotId : STATUS_INK_DOT_IDS) {
-            com.termux.app.statusbar.MaterialDotSeparatorView dot = findViewById(dotId);
-            if (dot == null) continue;
-            int seed = statusInkSeed(dot.colorRole());
-            dot.setInk(ink.inkOn(band, seed, seed,
-                com.termux.app.chrome.OnGlass.TARGET_DECORATION));
-        }
-        com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
-        if (lens != null) lens.setBandSurface(band.surface);
-        com.termux.app.statusbar.SessionsIndicatorView sessions =
-            findViewById(R.id.terminal_sessions_indicator);
-        if (sessions != null) sessions.setBandInk(ink, band);
-        // What stands on the same band takes its ink from the same resolution.
-        com.termux.app.statusbar.PinnedNotificationsView pinned =
-            findViewById(R.id.terminal_pinned_notifications);
-        if (pinned != null) pinned.setBandSurface(band.surface);
-        com.termux.app.statusbar.MediaWidgetView media = findViewById(R.id.terminal_media_widget);
-        if (media != null) media.onThemeChanged();
-        com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
-        if (clock != null) {
-            clock.setBandInk(band.surface, band.ink);
-            clock.onThemeChanged();
-        }
-    }
-
-    /** The role colour a status tier is written in; its hue is the tier, and the toning keeps it. */
-    private int statusInkSeed(@NonNull com.termux.app.statusbar.StatusBarWidgetView.ColorRole role) {
-        return com.termux.app.statusbar.StatusBarWidgetView.seedFor(this, role);
-    }
-
-    // ---- Trailing status widgets (CPU / RAM / weather) + their anchored detail cards ----
-
-    /** Apply widget visibility from preferences, wire taps once, and drive the data controllers. */
-    private void updateStatusWidgets() {
-        com.termux.app.statusbar.StatusBarWidgetView cpu = findViewById(R.id.terminal_status_widget_cpu);
-        com.termux.app.statusbar.StatusBarWidgetView ram = findViewById(R.id.terminal_status_widget_ram);
-        com.termux.app.statusbar.StatusBarWidgetView weather = findViewById(R.id.terminal_status_widget_weather);
-        com.termux.app.statusbar.MaterialDotSeparatorView cpuRamDot =
-            findViewById(R.id.terminal_status_dot_cpu_ram);
-        com.termux.app.statusbar.MaterialDotSeparatorView ramWeatherDot =
-            findViewById(R.id.terminal_status_dot_ram_weather);
-        // The CPU reading needs privileged access; without it the widget hides rather than show a
-        // dash, and comes back through mPrivilegedAvailabilityListener. The backend itself is
-        // brought up (and retried) by refreshPrivilegedBackendIfNeeded() on every resume.
-        boolean cpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
-            mPreferences != null && mPreferences.isStatusWidgetCpuEnabled(),
-            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
-        boolean ramOn = mPreferences != null && mPreferences.isStatusWidgetRamEnabled();
-        boolean weatherOn = mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
-        View widgetSlot = findViewById(R.id.terminal_top_widget_area);
-        if (widgetSlot instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
-            ((com.termux.app.statusbar.TopPaneWidgetSlot) widgetSlot).setMediaEnabled(
-                mPreferences == null || mPreferences.isStatusWidgetMediaEnabled());
-        }
-
-        if (cpu != null) {
-            cpu.setVisibility(cpuOn ? View.VISIBLE : View.GONE);
-            cpu.dressAsCpu();
-            // Seeded from the smoother every pass: onStatsUpdated skips hidden widgets, so a value
-            // published while this one was off or covered is otherwise only repainted when the
-            // reading next changes \u2014 and before the first sample this is what puts "--" on screen
-            // instead of an empty slot.
-            if (cpuOn) cpu.setValue(mBarCpuSmoother.text());
-            if (cpu.getTag() == null) {
-                cpu.setTag("wired");
-                cpu.setOnClickListener(v -> toggleStatsCard(v));
-            }
-        }
-        if (ram != null) {
-            ram.setVisibility(ramOn ? View.VISIBLE : View.GONE);
-            ram.dressAsRam();
-            if (ramOn) ram.setValue(mBarMemorySmoother.text());
-            if (ram.getTag() == null) {
-                ram.setTag("wired");
-                ram.setOnClickListener(v -> toggleStatsCard(v));
-            }
-        }
-        if (weather != null) {
-            weather.setVisibility(weatherOn ? View.VISIBLE : View.GONE);
-            weather.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-            if (weather.getTag() == null) {
-                weather.setTag("wired");
-                weather.setIconAnimation(
-                    com.termux.app.statusbar.WeatherController.animationAssetFor(0, true));
-                weather.setValue("--");
-                weather.setOnClickListener(v -> toggleWeatherCard(v));
-            }
-        }
-
-        if (cpuRamDot != null) {
-            boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
-                .cpuRamDotVisible(cpuOn, ramOn, weatherOn);
-            cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
-            // The dot takes the tier it leads into: RAM, or the weather when RAM is off. Both are
-            // secondary now, so AI alone carries the tertiary role.
-            cpuRamDot.setColorRole(
-                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-        }
-        if (ramWeatherDot != null) {
-            boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
-                .ramWeatherDotVisible(ramOn, weatherOn);
-            ramWeatherDot.setVisibility(show ? View.VISIBLE : View.GONE);
-            ramWeatherDot.setColorRole(
-                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-        }
-
-        if (cpuOn || ramOn) {
-            boolean cardShowing = mStatusCardHost.isShowing() && mStatsCardView != null;
-            ensureStatsController().start(
-                statsInterval(cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS),
-                cardShowing);
-            // The sampler pauses while nothing shows its numbers (StatsPollCadence).
-            mStatsController.setConsumerVisible(statsConsumerVisible());
-        } else if (mStatsController != null) {
-            mStatsController.stop();
-        }
-
-        if (weatherOn) {
-            ensureWeatherController().refreshIfStale();
-        } else if (mWeatherController != null) {
-            mWeatherController.stop();
-        }
-
-        ensureAiIndicatorController();
-        syncStatusNotificationsMark();
-        // The tiers just moved, and a tier is which hue this widget's ink is toned from.
-        syncStatusBarInk();
-    }
 
     /**
      * Whether anything showing the CPU and RAM readings is on screen, for the sampler's pause
@@ -32025,7 +31783,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setWidgetAccent(anchor, true);
         mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
         mStatusCardHost.setEdge(mStatusBar.statusBarEdge());
-        mStatusCardHost.show(anchor, mStatsCardView, statusCardStyleProvider(), () -> {
+        mStatusCardHost.show(anchor, mStatsCardView, mStatusBar.statusCardStyleProvider(), () -> {
             setWidgetAccent(anchor, false);
             if (mStatsController != null
                 && mPreferences != null
@@ -32057,35 +31815,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             text -> mTermuxTerminalSessionActivityClient.addNewSession(false, text),
             R.string.action_new_session_failsafe,
             text -> mTermuxTerminalSessionActivityClient.addNewSession(true, text), -1, null, null);
-    }
-
-    @NonNull
-    private com.termux.app.statusbar.StatusCardHost.StyleProvider statusCardStyleProvider() {
-        return new com.termux.app.statusbar.StatusCardHost.StyleProvider() {
-            @Override
-            public Drawable cardBackground() {
-                com.google.android.material.shape.MaterialShapeDrawable card =
-                    com.termux.app.material.M3.surface(TermuxActivity.this,
-                        com.google.android.material.R.attr.shapeAppearanceCornerLarge,
-                        com.termux.app.material.M3.surfaceContainer(TermuxActivity.this));
-                card.setStroke(getResources().getDimension(
-                        com.google.android.material.R.dimen.m3_comp_outlined_card_outline_width),
-                    com.termux.app.material.M3.outlineVariant(TermuxActivity.this));
-                return card;
-            }
-
-            @Override
-            public float cornerRadiusPx() {
-                return com.termux.app.material.M3.shape(TermuxActivity.this,
-                    com.google.android.material.R.attr.shapeAppearanceCornerLarge)
-                    .getTopLeftCornerSize().getCornerSize(new android.graphics.RectF(0, 0, 1, 1));
-            }
-
-            @Override
-            public float contentInsetPx() {
-                return dpToPx(12);
-            }
-        };
     }
 
     private void setWidgetAccent(@NonNull View anchor, boolean accent) {
@@ -32210,7 +31939,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setWidgetAccent(anchor, true);
         mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
         mStatusCardHost.setEdge(mStatusBar.statusBarEdge());
-        mStatusCardHost.show(anchor, mWeatherCardView, statusCardStyleProvider(),
+        mStatusCardHost.show(anchor, mWeatherCardView, mStatusBar.statusCardStyleProvider(),
             () -> setWidgetAccent(anchor, false));
     }
 
