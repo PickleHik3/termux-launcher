@@ -73,8 +73,9 @@ public class DockBeadsLeaveTest {
         // beads clipped and cut sideways mid-swipe, the shelf shadowing each bead.
         LensBeadGeometry.Beads beads = sevenBeads();
         LensBeadGeometry.Beads moving = beads.offset(-40f, 0f);
-        ReflectionHelpers.setField(activity, "mDockBeads", beads);
-        ReflectionHelpers.setField(activity, "mDockBeadsMoving", moving);
+        Object dock = ReflectionHelpers.getField(activity, "mDock");
+        ReflectionHelpers.setField(dock, "mDockBeads", beads);
+        ReflectionHelpers.setField(dock, "mDockBeadsMoving", moving);
         ReflectionHelpers.callInstanceMethod(activity, "applyDockSurfaceShape",
             ReflectionHelpers.ClassParameter.from(View.class, host),
             ReflectionHelpers.ClassParameter.from(boolean.class, true),
@@ -90,12 +91,12 @@ public class DockBeadsLeaveTest {
         assertNull("control: beads draw no rim", host.getBackground());
         assertTrue("control: beads clip themselves, not to the outline", !host.getClipToOutline());
 
-        boolean changed = ReflectionHelpers.callInstanceMethod(activity, "refreshDockBeads");
+        boolean changed = ReflectionHelpers.callInstanceMethod(dock, "refreshDockBeads");
 
         assertTrue("leaving the beads is a change", changed);
-        assertNull(ReflectionHelpers.getField(activity, "mDockBeads"));
+        assertNull(ReflectionHelpers.getField(dock, "mDockBeads"));
         assertNull("a swipe's moving beads outlived the beads",
-            ReflectionHelpers.getField(activity, "mDockBeadsMoving"));
+            ReflectionHelpers.getField(dock, "mDockBeadsMoving"));
         assertNull("the host still clips to beads", host.beads());
         assertNull("the shelf still shadows beads", shelf.beads());
         assertNotNull("the slab's rim did not come back", host.getBackground());
@@ -150,17 +151,17 @@ public class DockBeadsLeaveTest {
         assertEquals("a new shelf shows its bead shadows whole", 1f, shelf.beadShelfAlpha(), 0f);
 
         crossingOf(activity).beadShare(LensBeadGeometry.MELT_COVERED_SHARE);
-        float covered = ReflectionHelpers.callInstanceMethod(activity, "dockBeadShelfAlpha");
+        float covered = ReflectionHelpers.<com.termux.app.dock.DockController>getField(activity, "mDock").dockBeadShelfAlpha();
         assertEquals("beads covering the slab still shadow the wallpaper", 0f, covered, 0.0001f);
         shelf.setBeadShelfAlpha(covered);
         assertEquals(0f, shelf.beadShelfAlpha(), 0.0001f);
 
         crossingOf(activity).beadShare(0.6f);
-        float melting = ReflectionHelpers.callInstanceMethod(activity, "dockBeadShelfAlpha");
+        float melting = ReflectionHelpers.<com.termux.app.dock.DockController>getField(activity, "mDock").dockBeadShelfAlpha();
         assertTrue(melting > 0f && melting < 1f);
 
         crossingOf(activity).beadShare(Float.NaN);
-        float rest = ReflectionHelpers.callInstanceMethod(activity, "dockBeadShelfAlpha");
+        float rest = ReflectionHelpers.<com.termux.app.dock.DockController>getField(activity, "mDock").dockBeadShelfAlpha();
         assertEquals("at rest the bead shadows are whole", 1f, rest, 0f);
         shelf.setBeadShelfAlpha(rest);
         assertEquals(1f, shelf.beadShelfAlpha(), 0f);
