@@ -962,3 +962,18 @@ longer counted as an error. Owed:
   rate rows are still text-only (a check mark on the selected one, as before) · pong.
 
 - **Video import shows progress (feat/video-progress).** 2026-11-09 · Wallpaper picker, Video: choose an animated GIF. Under "Choose video or GIF" a bar appears with "Copying…", then fills with "Converting GIF to video… NN%" rising to 100; Choose, the rate pills and Back to photo are greyed meanwhile; then the bar goes and the line shows "In use: name" with its hint. Choose a plain MP4: a brief "Copying…", then the same final state. Pick a broken file: the bar goes and the error line shows, controls back. Rotate or leave mid-import: no crash; reopen later and the final state is shown. Font scale 1.3: the label stays on one line · pong.
+
+- **The crossing's views adapter left the activity (11-10, refactor/crossing-driver).** A move
+  with no intended change, so any difference in a swipe is a defect. Home ⇄ Terminal ten times
+  each way, Docked and Floating, keyboard up and down: the extra keys fold into their own bottom
+  edge towards Home and come back; a whole-stack dip shows the stack's picture sliding and lets
+  it go at the landing; the status bar rides and is opaque at rest. Then once rotated, and once
+  with the app drawer opened straight after a landing. Frame time as before (the emulator passed
+  positions 8 of 8 on d117e1d31; it cannot judge motion) · pong.
+- **Edit pages reads its rules from one place (11-10, refactor/overview-host).** A move with no
+  intended change. Set as home on a Home page, the Terminal page, the Assistant and a Display
+  page. Drag a Home page past the Terminal card, and the Terminal card to the front. Bind a
+  Display page to an app: its card carries the app's name, in order beside the Terminal card.
+  With a temporary display up, "Add display" still shows and its card is not listed. Home on the
+  Terminal page, remove the last window: home falls back to a Home page. Use as Terminal only:
+  "bring back" appears. Rename a Home page · emulator, then pong.
