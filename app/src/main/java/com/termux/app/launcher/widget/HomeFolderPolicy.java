@@ -40,6 +40,8 @@ public final class HomeFolderPolicy {
     public static final int HARD_MAX_APPS = 20;
     /** How long a dragged icon rests over an icon or a folder before releasing it merges. */
     public static final long MERGE_HOVER_MS = 300L;
+    /** How much a merge target swells once a release would merge into it. */
+    public static final float MERGE_TARGET_SCALE = 1.12f;
     /** The name of a folder whose first app has no label, before the caller's own translation. */
     public static final String DEFAULT_NAME = "Folder";
 

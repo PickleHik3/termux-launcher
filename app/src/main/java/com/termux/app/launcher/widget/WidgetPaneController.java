@@ -1364,8 +1364,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private final Runnable edgeFlip = this::flipDragPage;
     /** The hover over a merge target has lasted long enough: say so with the ghost. */
     private final Runnable mergeArm = this::armMergeTarget;
-    /** How much a merge target swells once a release would merge into it. */
-    private static final float MERGE_TARGET_SCALE = 1.12f;
+    private static final float MERGE_TARGET_SCALE = HomeFolderPolicy.MERGE_TARGET_SCALE;
     private final int[] paneLocation = new int[2];
 
     /** The layout as the edit session found it; the cross on the border tab puts it back. */
