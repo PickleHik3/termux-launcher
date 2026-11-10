@@ -256,6 +256,31 @@ public class SheetsControllerTest {
         assertEquals(2, mHost.dockRestyles);
     }
 
+    // ------------------------------------------------------------------ glass and shape
+
+    @Test
+    public void thePaletteIsGivenCornersThatFollowDockedOrFloating() {
+        // No store: the Sheets element's Corners as shipped, on the resting page.
+        int shipped = com.termux.app.chrome.ElementGlass.of(null,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, 0).cornersDp;
+        assertEquals(shipped, mSheets.commandPaletteCornersDp());
+        // Where they follow the Style (CommandPaletteShape.openRadiusDp): square Docked, the
+        // rounded-surface token Floating.
+        assertEquals(0, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            .resolveAutoCornerRadiusDp(com.termux.shared.termux.settings.preferences
+                .TermuxAppSharedPreferences.SurfaceSlot.SHEETS, false));
+        assertEquals(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP,
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .resolveAutoCornerRadiusDp(com.termux.shared.termux.settings.preferences
+                    .TermuxAppSharedPreferences.SurfaceSlot.SHEETS, true));
+
+        // Read from the live store when there is one: the same answer for an untouched store.
+        mHost.preferences = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            .build(mHost.activity, false);
+        assertEquals(shipped, mSheets.commandPaletteCornersDp());
+    }
+
     // ------------------------------------------------------------------ the fake
 
     private static final class FakeHost implements SheetsController.Host {
@@ -355,6 +380,12 @@ public class SheetsControllerTest {
         @Nullable @Override public com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences() { return preferences; }
         @Override public void restyleDockSurface() { dockRestyles++; }
         @Override public boolean openHomeFloatHere() { return false; }
+        @SuppressWarnings("ConstantConditions")
+        @NonNull @Override public com.termux.app.chrome.WallpaperFrostPainter chromeFrost() { return null; }
+        @SuppressWarnings("ConstantConditions")
+        @NonNull @Override public com.termux.app.chrome.GlassSurfaceFactory chromeGlass() { return null; }
+        @Override public int restingPage() { return 0; }
+        @Override public float dpToPx(float dp) { return dp; }
         @Override public void flushPendingAccessoryGeometry() { }
         @Override public void setPromptFieldUnderPalette(boolean under) { promptUnderPalette.add(under); }
         @Override public void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer) {

@@ -146,6 +146,15 @@ public final class SheetsController {
         void restyleDockSurface();
         /** The float the Terminal entry's New float here opens. */
         boolean openHomeFloatHere();
+
+        // -------------------------------------------------------------- glass and shape
+        /** The chrome renderer's wallpaper frost ({@code mChrome.frost()}). */
+        @NonNull com.termux.app.chrome.WallpaperFrostPainter chromeFrost();
+        /** The chrome renderer's glass builder ({@code mChrome.glass()}). */
+        @NonNull com.termux.app.chrome.GlassSurfaceFactory chromeGlass();
+        /** The half the wall rests on, or the one a crossing is arriving at. */
+        int restingPage();
+        float dpToPx(float dp);
     }
 
     @NonNull private final Host mHost;
@@ -1005,5 +1014,47 @@ public final class SheetsController {
             : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN,
                 com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
         bar.setFloatTile(floatOn, floatColumn, floatOn ? mHost::openHomeFloatHere : null);
+    }
+
+    // ================================================================== glass and shape
+
+    /** Wallpaper frost for the command palette glass; true when the live blur should rest. */
+    public boolean applyCommandPaletteWallpaperFrost(@NonNull android.widget.ImageView frost) {
+        return mHost.chromeFrost().applyCommandPalette(frost);
+    }
+
+    /** Wallpaper frost for the sheet plane's glass; true when the live blur should rest. */
+    public boolean applyTerminalSheetWallpaperFrost(@NonNull android.widget.ImageView frost) {
+        return mHost.chromeFrost().applyTerminalSheet(frost);
+    }
+
+    /**
+     * The Menus and dialogs surface's Corners on the resting page, as stored (dp; -1 follows the
+     * style), and whether the style is Floating: what the command palette's corners follow.
+     */
+    public int commandPaletteCornersDp() {
+        return com.termux.app.chrome.ElementGlass.of(mHost.preferences(),
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, mHost.restingPage())
+            .cornersDp;
+    }
+
+    /**
+     * Glass for a sheet card. Same builder, tint and rim as the dock and the rename chip, so the
+     * plane reads as the same kit rather than as a Material dialog that lost its window.
+     */
+    @NonNull
+    public android.graphics.drawable.Drawable buildTerminalSheetSurface() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            mHost.preferences();
+        // The Sheets element's glass (ADR 0017), no longer the dock's.
+        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(preferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, mHost.restingPage());
+        float barAlpha = preferences != null ? sheets.tintAlpha() : 0.5f;
+        int grain = preferences != null ? sheets.grainPercent
+            : com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
+        // Modifier: floored well above the Sheets opacity. A sheet has body text over a live blur,
+        // and at a bar's tint the terminal behind it reads straight through the words.
+        return mHost.chromeGlass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
+            mHost.dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), !sheets.rimOff(),
+            null, sheets.tintPercent);
     }
 }

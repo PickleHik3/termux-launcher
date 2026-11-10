@@ -6201,16 +6201,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The Floating Style for one surface's dress: the arrangement of the half it wears. */
-    /**
-     * The Menus and dialogs surface's Corners on the resting page, as stored (dp; -1 follows the
-     * style), and whether the style is Floating: what the command palette's corners follow.
-     */
-    public int commandPaletteCornersDp() {
-        return com.termux.app.chrome.ElementGlass.of(mPreferences,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage())
-            .cornersDp;
-    }
-
     /** Whether chrome is in the Floating style (rounded cards) rather than Docked. */
     public boolean isFloatingStyle() {
         return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
@@ -10230,16 +10220,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int sheetPx = sheet.getId() == R.id.place_off_dock_plank_host
             ? offDockPlankGlassHeightPx() : azBarThicknessPx();
         return com.termux.app.chrome.ChromeEdgeRule.stripFraction(mLastStatusBarInsetTop, sheetPx);
-    }
-
-    /** Wallpaper frost for the command palette glass; true when the live blur should rest. */
-    public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost) {
-        return mChrome.frost().applyCommandPalette(frost);
-    }
-
-    /** Wallpaper frost for the sheet plane's glass; true when the live blur should rest. */
-    public boolean applyTerminalSheetWallpaperFrost(@NonNull ImageView frost) {
-        return mChrome.frost().applyTerminalSheet(frost);
     }
 
     private float terminalWindowGlassStatusFraction(@NonNull View host) {
@@ -18475,11 +18455,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost) {
-            return TermuxActivity.this.applyCommandPaletteWallpaperFrost(frost);
+            return mSheets.applyCommandPaletteWallpaperFrost(frost);
         }
 
         @Override public int commandPaletteCornersDp() {
-            return TermuxActivity.this.commandPaletteCornersDp();
+            return mSheets.commandPaletteCornersDp();
         }
 
         @Override public boolean isFloatingStyle() {
@@ -18548,11 +18528,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
-            return applyTerminalSheetWallpaperFrost(frost);
+            return mSheets.applyTerminalSheetWallpaperFrost(frost);
         }
 
         @NonNull @Override public Drawable sheetSurface() {
-            return buildTerminalSheetSurface();
+            return mSheets.buildTerminalSheetSurface();
         }
 
         @Override public boolean terminalFrameOnScreen(@NonNull Rect out) {
@@ -18586,24 +18566,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Guarded on the field, not the lazy accessor: asking must not build a plane. */
     private boolean isTerminalSheetOpen() { return mSheets.isTerminalSheetOpen(); }
-
-    /**
-     * Glass for a sheet card. Same builder, tint and rim as the dock and the rename chip, so the
-     * plane reads as the same kit rather than as a Material dialog that lost its window.
-     */
-    @NonNull
-    private Drawable buildTerminalSheetSurface() {
-        // The Sheets element's glass (ADR 0017), no longer the dock's.
-        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage());
-        float barAlpha = mPreferences != null ? sheets.tintAlpha() : 0.5f;
-        int grain = mPreferences != null ? sheets.grainPercent
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-        // Modifier: floored well above the Sheets opacity. A sheet has body text over a live blur,
-        // and at a bar's tint the terminal behind it reads straight through the words.
-        return mChrome.glass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
-            dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), !sheets.rimOff(),
-            null, sheets.tintPercent);
-    }
 
     /**
      * Makes a keyboard available for typing into a focusless surface, and reports whether one is.
@@ -24229,6 +24191,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @Nullable TermuxAppSharedPreferences preferences() { return mPreferences; }
         @Override public void restyleDockSurface() { mDock.restyleDockSurface(); }
         @Override public boolean openHomeFloatHere() { return TermuxActivity.this.openHomeFloatHere(); }
+        // -------------------------------------------------------------- glass and shape
+        @Override public @NonNull com.termux.app.chrome.WallpaperFrostPainter chromeFrost() { return mChrome.frost(); }
+        @Override public @NonNull com.termux.app.chrome.GlassSurfaceFactory chromeGlass() { return mChrome.glass(); }
+        @Override public int restingPage() { return TermuxActivity.this.restingPage(); }
+        @Override public float dpToPx(float dp) { return TermuxActivity.this.dpToPx(dp); }
     }
 
     /** What only the activity gives the status bar's controller (statusbar.StatusBarController). */
