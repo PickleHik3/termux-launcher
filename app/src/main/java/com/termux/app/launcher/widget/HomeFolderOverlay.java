@@ -167,8 +167,7 @@ final class HomeFolderOverlay extends FrameLayout {
         x = Math.max(0, Math.min(x, getWidth() - width));
         y = Math.max(0, Math.min(y, getHeight() - height));
         panel.layout(x, y, x + width, y + height);
-        panel.setPivotX(width / 2f);
-        panel.setPivotY(height / 2f);
+        // The pivot is the motion's, set once at the first placement; re-layouts keep it.
         if (!opened && !closing) startOpen(self[0] + x, self[1] + y, width, height);
     }
 

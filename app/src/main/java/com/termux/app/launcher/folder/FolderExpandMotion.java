@@ -12,8 +12,8 @@ import androidx.annotation.Nullable;
 import com.termux.app.material.ModalSheetMotion;
 
 /**
- * Plays {@link FolderExpandGeometry} on a folder panel: one animator driving the panel's scale,
- * translation and alpha, view properties only, so nothing is laid out while it runs. Opens on the
+ * Plays {@link FolderExpandGeometry} on a folder panel: one animator driving the panel's scale
+ * and alpha, view properties only (scale about a point inside the panel, and alpha), so nothing is laid out while it runs. Opens on the
  * emphasized decelerate and closes on the emphasized accelerate (the sheets' curves), and a close
  * takes only as long as the open it undoes had got, so an open caught half way closes from there.
  *
@@ -29,7 +29,7 @@ public final class FolderExpandMotion {
     @NonNull private final PathInterpolator accelerate = new PathInterpolator(
         ModalSheetMotion.ACCELERATE_X1, ModalSheetMotion.ACCELERATE_Y1,
         ModalSheetMotion.ACCELERATE_X2, ModalSheetMotion.ACCELERATE_Y2);
-    @NonNull private FolderExpandGeometry geometry = FolderExpandGeometry.fallback();
+    @NonNull private FolderExpandGeometry geometry = FolderExpandGeometry.fallback(0, 0);
     @Nullable private ValueAnimator animator;
     @Nullable private Runnable onEnd;
     private float progress;
@@ -43,11 +43,18 @@ public final class FolderExpandMotion {
                             int panelLeft, int panelTop, int panelRight, int panelBottom) {
         geometry = FolderExpandGeometry.of(iconLeft, iconTop, iconRight, iconBottom,
             panelLeft, panelTop, panelRight, panelBottom);
+        applyPivot();
     }
 
-    /** Uses the no-icon look: a small scale and fade in place. */
+    /** Uses the no-icon look: a small scale and fade about the panel's centre. */
     public void setFallbackGeometry() {
-        geometry = FolderExpandGeometry.fallback();
+        geometry = FolderExpandGeometry.fallback(target.getWidth(), target.getHeight());
+        applyPivot();
+    }
+
+    private void applyPivot() {
+        target.setPivotX(geometry.pivotX());
+        target.setPivotY(geometry.pivotY());
     }
 
     /** Shows the panel at the icon (invisible) and grows it to its rest position. */
@@ -107,8 +114,6 @@ public final class FolderExpandMotion {
         geometry.frameAt(progress, frame);
         target.setScaleX(frame.scale);
         target.setScaleY(frame.scale);
-        target.setTranslationX(frame.translationX);
-        target.setTranslationY(frame.translationY);
         target.setAlpha(frame.alpha);
     }
 }
