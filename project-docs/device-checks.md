@@ -1022,3 +1022,12 @@ longer counted as an error. Owed:
   on and off in the Dock card: the dock restyles once. Cold start: the drawer warms up, the
   "Windows restored" notice shows. Notices while a split or the terminal limit refuses · emulator,
   then pong.
+- **The crossing's driver left the activity (11-10, refactor/crossing-lead, ADR 0012).** A move
+  with no intended change. Home ⇄ Workspace ten times each way with different dock designs on
+  the two halves, Docked and Floating, keyboard up and down: the dock morphs, the beads melt
+  across the seam, the look blends, the bar rides, and the landing lays out nothing. A swipe
+  abandoned half way from each side. Home ⇄ Home between two Home pages. A swipe begun while the
+  keyboard is rising, and one begun from a Display page. The emulator A/B matched at rest and
+  mid-swipe from Home; Home ⇄ Home and the abandon from the Workspace were not seen, and in the
+  mid-swipe hold the dock plate stood about 150 px higher in two of three old-build runs and in
+  none of the new build's (read as timing, not proven) · pong.
