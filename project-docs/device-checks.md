@@ -206,11 +206,6 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   for one round trip (`LiveBackdrop.pageLayer` sections show the captures, at most three per
   swipe and usually one).
 
-- **Dictation on staging (11-06, fix/litert-jni-keep).** Staging R8 had stripped the LiteRT
-  constructors liblitert_jni calls, so every speech model aborted tai_runtime. Passes: the
-  in-app keyboard mic types a spoken sentence on staging with Whisper Base (GPU) and one CPU
-  model, and `logcat -b crash` stays empty. How: pong staging build, the developer dictates while
-  `logcat --pid` runs.
 - **Float titlebar wears Live glass.** Owed on pong, Live blur on: a floating window's titlebar
   shows what is beneath the float (the page, the terminal behind, another float's glass), not only
   the wallpaper; drag it over a second float and the strip shows that float through it; resize
