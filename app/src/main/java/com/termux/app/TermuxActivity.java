@@ -740,8 +740,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The chrome's clock through a slide with no finger on it, under a turning transition. */
     private final com.termux.app.place.ChromeSettle mChromeSettle =
         new com.termux.app.place.ChromeSettle();
-    /** Where the status bar was last drawn from its rest as it travels with the Workspace's page. */
-    private float mStatusTravelXPx;
     /** Something was moved or faded during this slide, so settle has transforms to put back. */
     private boolean mChromeTravelMoved;
     /** The accessory stack's share of its translationY that the wall's travel owns. */
@@ -6364,7 +6362,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         flushLandingRestyle();
         // The re-dress has laid the bar out at the Margin it eased to; whatever it found to do,
         // no ease outlives the crossing.
-        if (!mCrossing.crossing()) resetStatusMarginEase();
+        if (!mCrossing.crossing()) mStatusBar.resetStatusMarginEase();
         if (mChrome != null && !mCrossing.crossing()) mChrome.settleEvenOut();
     }
 
@@ -10225,7 +10223,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 glassMargins.leftMargin = glassInset;
                 glassMargins.rightMargin = glassInset;
                 statusGlass.setLayoutParams(glassMargins);
-                if (!mCrossing.seam().sliding()) resetStatusMarginEase(statusGlass);
+                if (!mCrossing.seam().sliding()) mStatusBar.resetStatusMarginEase(statusGlass);
             }
         }
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
@@ -10239,7 +10237,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Shown, or dressed again, while the bar rides: it stands where the bar stands from this
         // pass, not at its rest until the bar's next move.
-        syncStatusStripTravel();
+        mStatusBar.syncStatusStripTravel();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
     }
 
@@ -10259,7 +10257,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 glassMargins.leftMargin = glassInset;
                 glassMargins.rightMargin = glassInset;
                 statusGlass.setLayoutParams(glassMargins);
-                if (!mCrossing.seam().sliding()) resetStatusMarginEase(statusGlass);
+                if (!mCrossing.seam().sliding()) mStatusBar.resetStatusMarginEase(statusGlass);
             }
         }
         statusGlass.setTranslationY(-mLastStatusBarInsetTop);
@@ -10273,7 +10271,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Shown, or dressed again, while the bar rides: it stands where the bar stands from this
         // pass, not at its rest until the bar's next move.
-        syncStatusStripTravel();
+        mStatusBar.syncStatusStripTravel();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
     }
 
@@ -23672,9 +23670,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the pages slide; it fades in place where it cannot ride (a bar on a side or the bottom
         // edge, or pages that turn).
         Trace.beginSection("Travel.status");
-        boolean barRides = syncStatusTravel(wallFrame, seam);
+        boolean barRides = mStatusBar.syncStatusTravel(wallFrame, seam);
         // A bar that stands still eases from one page's Margin to the other's with the wall.
-        syncStatusMarginEase(seam);
+        mStatusBar.syncStatusMarginEase(seam);
         // Under a transition that turns the pages, a bar one end wears apart fades in place.
         float statusFade = seam.statusFade();
         float statusAlpha = barRides ? 1f : !Float.isNaN(statusFade) ? statusFade
@@ -23907,7 +23905,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 travelDockRowsPx(keyboardPx));
             if (translation != 0f || wasMoved) mChromeTravelMoved = true;
             if (mCrossing.holdsContent()) mCrossing.coverAt(translation, stackPictureCoverPx());
-            boolean barRides = syncStatusTravel(frame, seam);
+            boolean barRides = mStatusBar.syncStatusTravel(frame, seam);
             float fade = seam.statusFade();
             float statusAlpha = barRides ? 1f : !Float.isNaN(fade) ? fade : frame.statusReveal;
             if (statusAlpha != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
@@ -24173,39 +24171,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return seam.dockReveal();
     }
 
-    /**
-     * The status bar drawn where the Workspace's page stands (SeamTravel.workspaceScreenXPx) on
-     * any frame the crossing says it rides (SeamCrossing.rideBar), with the strip behind the system
-     * bar when it continues the bar's glass: a translation, and the bar dressed for that page
-     * rather than the one the wall has committed to, so its chips do not change while it is on
-     * screen. Whether it rides.
-     */
-    private boolean syncStatusTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame,
-                                     @NonNull com.termux.app.place.SeamCrossing.Answers seam) {
-        View host = hotView(R.id.terminal_window_bar_host);
-        // The crossing rides the bar (Crossing#rideBar), through its Bar adapter.
-        boolean rides = mCrossing.rideBar(frame, host != null
-            && host.getVisibility() == View.VISIBLE
-            && mStatusBar.statusBarEdge() == PlaceLayout.Edge.TOP && mPaneWallController != null,
-            mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth());
-        if (rides) {
-            mChromeTravelMoved = true;
-            // The bar carries its place content with it: the strip does not also pan inside it.
-            View strip = hotView(R.id.terminal_status_place_content);
-            if (strip != null) {
-                if (strip.getTranslationX() != 0f) strip.setTranslationX(0f);
-                if (strip.getTranslationY() != 0f) strip.setTranslationY(0f);
-                if (strip.getAlpha() != 1f) strip.setAlpha(1f);
-                if (strip.getClipBounds() != null) strip.setClipBounds(null);
-            }
-        }
-        if (seam.barRedressed()) syncPlaceBar();
-        // The strip behind the system bar stands with the bar on every riding frame, whatever
-        // pass of this frame dressed or showed it.
-        if (rides) syncStatusStripTravel();
-        return rides;
-    }
-
     /** The dock's opacity at each end of a look blend, read as the crossing begins. */
     private int mLookBlendHereOpacity = 100, mLookBlendThereOpacity = 100;
     /** The blend's step last applied; NaN while none has been. */
@@ -24262,36 +24227,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (blend == null) return;
         View sheet = findViewById(R.id.extrakeys_background);
         if (sheet != null && sheet.getBackground() == blend) sheet.setBackground(blend.endpoint());
-    }
-
-    /**
-     * The status bar, and the strip behind the system bar while it continues the bar's inset,
-     * drawn at the Margin the crossing eases them to (SeamCrossing.Answers#barMarginShare): both
-     * stay laid out at the committed page's Margin and are drawn at the inset between the two
-     * pages' resolved insets, so no frame lays anything out. The bar stretches only its plain
-     * glass; its chips, clock and readings keep their size and move with their edge
-     * ({@link #applyBarMarginEase}). The strip is plain glass and is stretched whole. The frame the wall lands on draws them at the arriving page's inset, which the
-     * landing's re-dress then lays out as it resets the scale ({@link #resetStatusMarginEase}).
-     * Nothing while the Margin holds.
-     */
-    private void syncStatusMarginEase(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
-        float share = seam.barMarginShare();
-        if (Float.isNaN(share) || mStatusBar.isStatusBarVertical()) return;
-        com.termux.app.place.SeamCrossing crossing = mCrossing.seam();
-        boolean capsule = isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
-        float here = resolveSurfaceHorizontalInsetPx(
-            TermuxAppSharedPreferences.clampSurfaceHorizontalInset(crossing.committedBarMarginDp()),
-            capsule);
-        float there = resolveSurfaceHorizontalInsetPx(
-            TermuxAppSharedPreferences.clampSurfaceHorizontalInset(crossing.otherBarMarginDp()),
-            capsule);
-        float insetPx = here + (there - here) * share;
-        View host = hotView(R.id.terminal_window_bar_host);
-        applyBarMarginEase(host, insetPx);
-        // The strip eases with the bar only where it wears the bar's inset (not a dock sheet's).
-        View strip = hotView(R.id.terminal_status_bar_background);
-        if (host != null && strip != null && strip.getWidth() == host.getWidth())
-            applyStatusMarginEase(strip, insetPx);
     }
 
     /** The bar host's plain glass layers: what a Margin ease stretches, and nothing else. */
@@ -24363,74 +24298,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (row != null) row.setEdgeGrow(0f);
         com.termux.app.statusbar.TopPaneWidgetSlot slot = findViewById(R.id.terminal_top_widget_area);
         if (slot != null) slot.setEdgeGrow(0f);
-    }
-
-    /** One of the bar's views scaled about its centre so it stands {@code insetPx} from each side. */
-    private static void applyStatusMarginEase(@Nullable View view, float insetPx) {
-        if (view == null || view.getWidth() <= 0 || !(view.getParent() instanceof View)) return;
-        View parent = (View) view.getParent();
-        float room = parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight();
-        // The inset it is laid out at, read from where it stands: its margins are even.
-        float laidInsetPx = (room - view.getWidth()) / 2f;
-        float scale = (view.getWidth() + 2f * (laidInsetPx - insetPx)) / view.getWidth();
-        if (!(scale > 0f)) return;
-        float pivot = view.getWidth() / 2f;
-        if (view.getPivotX() != pivot) view.setPivotX(pivot);
-        if (view.getScaleX() != scale) view.setScaleX(scale);
-    }
-
-    /** Both of the bar's views drawn at their laid-out width again. */
-    private void resetStatusMarginEase() {
-        resetStatusMarginEase(findViewById(R.id.terminal_window_bar_host));
-        resetStatusMarginEase(findViewById(R.id.terminal_status_bar_background));
-    }
-
-    /** {@code view} drawn at its laid-out width again; the bar's host with everything it eased. */
-    private void resetStatusMarginEase(@Nullable View view) {
-        if (view == null) return;
-        if (view.getId() == R.id.terminal_window_bar_host) resetBarMarginEase(view);
-        else if (view.getScaleX() != 1f) view.setScaleX(1f);
-    }
-
-    /**
-     * The status bar, and the strip behind the system bar while it continues the bar's glass, at
-     * {@code x} from their rest. Their glass samples the wallpaper where it is drawn, and a
-     * transform alone redraws nothing, so the bar's backdrop is re-aimed with the move.
-     */
-    private void applyStatusTravelX(float x) {
-        boolean moved = x != mStatusTravelXPx;
-        mStatusTravelXPx = x;
-        if (moved) {
-            View host = hotView(R.id.terminal_window_bar_host);
-            if (host != null) host.setTranslationX(x);
-        }
-        // The strip follows on every call, moved or not: one shown since the last move (dressed
-        // for the Workspace as the ride began) must not stand at its rest while the bar arrives.
-        syncStatusStripTravel();
-        if (!moved) return;
-        View backdrop = hotView(R.id.terminal_window_bar_wallpaper_backdrop);
-        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-        View sideBackdrop = hotView(R.id.terminal_window_bar_wallpaper_backdrop_side);
-        if (sideBackdrop != null && sideBackdrop.getVisibility() == View.VISIBLE)
-            sideBackdrop.invalidate();
-    }
-
-    /**
-     * The strip behind the system bar where the bar stands now: with it while the strip is the
-     * bar's own glass running up under the system bar (the lead it was last dressed for, not one
-     * read live mid-crossing, which can still answer for the half the bar left), at rest
-     * otherwise (StatusStripRide). Its backdrop samples where it is drawn, so it is re-aimed.
-     */
-    private void syncStatusStripTravel() {
-        View strip = hotView(R.id.terminal_status_bar_background);
-        if (strip == null) return;
-        float stripX = com.termux.app.place.StatusStripRide.stripX(mStatusTravelXPx,
-            strip.getVisibility() == View.VISIBLE,
-            mStatusStripLead == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR);
-        if (strip.getTranslationX() == stripX) return;
-        strip.setTranslationX(stripX);
-        View backdrop = hotView(R.id.terminal_status_bar_wallpaper_backdrop);
-        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
     }
 
     /**
@@ -24756,8 +24623,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public float layoutCornersPx() { return TermuxActivity.this.layoutCornersPx(); }
         @Override public float layoutCornersPx(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.layoutCornersPx(surface); }
         @Override public int lookPageId(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.lookPageId(surface); }
-        @Override public void resetStatusMarginEase() { TermuxActivity.this.resetStatusMarginEase(); }
-        @Override public void resetStatusMarginEase(@Nullable View view) { TermuxActivity.this.resetStatusMarginEase(view); }
         @Override public int resolveSurfaceHorizontalInsetPx(int configuredDp, boolean capsule) { return TermuxActivity.this.resolveSurfaceHorizontalInsetPx(configuredDp, capsule); }
         @Override public int terminalLookPageId() { return TermuxActivity.this.terminalLookPageId(); }
         @Override public boolean wallpaperSampleable() { return TermuxActivity.this.wallpaperSampleable(); }
@@ -24786,6 +24651,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @NonNull android.content.Context context() { return TermuxActivity.this; }
         @Override public void toggleStatsCard(@NonNull View anchor) { TermuxActivity.this.toggleStatsCard(anchor); }
         @Override public void toggleWeatherCard(@NonNull View anchor) { TermuxActivity.this.toggleWeatherCard(anchor); }
+        @Override public void applyBarMarginEase(@Nullable View host, float insetPx) { TermuxActivity.this.applyBarMarginEase(host, insetPx); }
+        @Override public @Nullable @SuppressWarnings("unchecked") <T extends View> T hotView(int id) { return TermuxActivity.this.hotView(id); }
+        @Override public void resetBarMarginEase(@NonNull View host) { TermuxActivity.this.resetBarMarginEase(host); }
+        @Override public void syncPlaceBar() { TermuxActivity.this.syncPlaceBar(); }
+        @Override public @NonNull com.termux.app.chrome.ChromeEdgeRule.TopLead statusStripLead() { return mStatusStripLead; }
+        @Override public void markChromeTravelMoved() { mChromeTravelMoved = true; }
         // @@HOSTIMPL@@
     }
 
@@ -25207,7 +25078,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void rideStatusX(float px) {
-            applyStatusTravelX(px);
+            mStatusBar.applyStatusTravelX(px);
         }
 
         @Override
