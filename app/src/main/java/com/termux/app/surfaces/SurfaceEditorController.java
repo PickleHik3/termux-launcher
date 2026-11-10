@@ -5739,23 +5739,21 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     // ------------------------------------------------------------------------- unsaved and exit
 
     /**
-     * One dirty state for the whole editor: the look on either half, a card's saved Custom, an
-     * app-wide choice, minimal mode or the arrangement moved since open.
+     * One dirty state for the whole editor: the look on either half, an app-wide choice, minimal
+     * mode or the arrangement moved since open. A card's saved Custom is left out on purpose: it
+     * changes without the look changing only when a card goes to a Look and back, which shows
+     * nothing to save; Undo and a killed session still put it back.
      */
     private boolean isDirty() {
         TermuxAppSharedPreferences prefs = prefs();
         boolean look = prefs != null && mEntrySignature != null
             && !mEntrySignature.equals(AppearanceSnapshot.signatureOf(prefs));
-        boolean cardLooks = prefs != null && mEntrySignature != null
-            && !java.util.Objects.equals(mEntryCardCustoms,
-                CardCustoms.raw(prefs.getSharedPreferences()));
         boolean settings = mEntrySettings != null && mSettingsNow != null
             && !mEntrySettings.signature().equals(mSettingsNow);
         boolean minimal = mHost.isMinimalMode() != mEntryMinimal;
         boolean theme = ThemePreview.pending() != null;
         LayoutEditorController layout = mHost.layoutEditor();
-        return look || cardLooks || settings || minimal || theme
-            || (layout != null && layout.isDirty());
+        return look || settings || minimal || theme || (layout != null && layout.isDirty());
     }
 
     /** Undo: everything — both halves' look, the choices, the arrangement — back to the open. */

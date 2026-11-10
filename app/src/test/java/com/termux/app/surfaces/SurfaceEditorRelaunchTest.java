@@ -104,21 +104,6 @@ public class SurfaceEditorRelaunchTest {
     }
 
     @Test
-    public void aChangedCardLookIsAnUnsavedChange() {
-        SharedPreferences store = preferences.getSharedPreferences();
-        CardCustoms.restore(store, "{\"home\":[1,2,3]}");
-        SurfaceEditorController editor = editorOnNewActivity();
-        present(editor);
-        assertFalse(isDirty(editor));
-        // A card's Custom saved while the look on screen ends where it began.
-        CardCustoms.put(store, "home", new int[] {4, 5, 6});
-        assertTrue("a changed card look is an unsaved change", isDirty(editor));
-        editor.undo();
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertFalse(isDirty(editor));
-    }
-
-    @Test
     public void undoPutsTheCardLooksBackEvenAfterARelaunch() {
         SharedPreferences store = preferences.getSharedPreferences();
         String atOpen = "{\"home\":[1,2,3]}";
@@ -131,7 +116,6 @@ public class SurfaceEditorRelaunchTest {
         SurfaceEditorController after = editorOnNewActivity();
         after.adoptSessionNext(carried);
         present(after);
-        assertTrue("still unsaved after the relaunch", isDirty(after));
 
         after.undo();
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
