@@ -23251,6 +23251,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * which comes up for it, and never the phone's.
      */
     public void onAssistantTypingFocus(boolean focused) {
+        // With the launcher's keyboard turned off the phone's is the only one there is: the field
+        // takes it as any text field does.
+        boolean inApp = isInAppKeyboardEnabled();
+        View field = getCurrentFocus();
+        if (field instanceof EditText) ((EditText) field).setShowSoftInputOnFocus(!inApp);
+        if (!inApp) {
+            if (focused && field instanceof EditText) {
+                onSystemImeRequested();
+                KeyboardUtils.showSoftKeyboard(this, field);
+            }
+            return;
+        }
         if (mInAppKeyboard == null) return;
         mInAppKeyboard.setTextFieldHoldsFocus(isAssistantFieldTyping());
         if (focused) mInAppKeyboard.show(
