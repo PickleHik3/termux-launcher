@@ -85,7 +85,7 @@ public class WallpaperLiveHostTest {
     @Test
     public void opensOnPhotoWithNothingInUse() {
         WallpaperLiveHost host = open(true);
-        assertEquals(LiveSceneLogic.Kind.PHOTO, host.kind());
+        assertEquals(WallpaperMotion.Kind.PHOTO, host.kind());
         assertFalse(host.showingLive());
         assertNotNull(host.list());
         assertEquals(View.VISIBLE, host.picker().root().getVisibility());
@@ -105,18 +105,18 @@ public class WallpaperLiveHostTest {
         assertEquals(R.id.segmented_pill_default, group.getCheckedButtonId());
 
         group.check(R.id.segmented_pill_third);
-        assertEquals(LiveSceneLogic.Kind.SHADER, host.kind());
+        assertEquals(WallpaperMotion.Kind.SHADER, host.kind());
         assertTrue(host.showingLive());
         assertEquals(View.GONE, host.picker().root().getVisibility());
         assertEquals(View.VISIBLE, host.list().root().getVisibility());
 
         group.check(R.id.segmented_pill_capsule);
-        assertEquals(LiveSceneLogic.Kind.VIDEO, host.kind());
+        assertEquals(WallpaperMotion.Kind.VIDEO, host.kind());
         assertEquals(View.VISIBLE, host.video().root().getVisibility());
         assertEquals(View.GONE, host.list().root().getVisibility());
 
         group.check(R.id.segmented_pill_default);
-        assertEquals(LiveSceneLogic.Kind.PHOTO, host.kind());
+        assertEquals(WallpaperMotion.Kind.PHOTO, host.kind());
         assertEquals(View.VISIBLE, host.picker().root().getVisibility());
     }
 
@@ -124,7 +124,7 @@ public class WallpaperLiveHostTest {
     public void opensOnShaderWhileOneIsInUse_withBackToPhotoOnTheList() {
         ShaderStore.apply(mActivity, mStore, WallpaperMotion.shader("abc"));
         WallpaperLiveHost host = open(true);
-        assertEquals(LiveSceneLogic.Kind.SHADER, host.kind());
+        assertEquals(WallpaperMotion.Kind.SHADER, host.kind());
         // The sheet must not wait on the GONE photo picker's readiness (it never comes).
         assertTrue(host.showingLive());
         assertEquals(View.GONE, host.picker().root().getVisibility());
@@ -135,7 +135,7 @@ public class WallpaperLiveHostTest {
     public void opensOnVideoWhileOneIsInUse() {
         ShaderStore.apply(mActivity, mStore, WallpaperMotion.video("loop.mp4"));
         WallpaperLiveHost host = open(true);
-        assertEquals(LiveSceneLogic.Kind.VIDEO, host.kind());
+        assertEquals(WallpaperMotion.Kind.VIDEO, host.kind());
         assertEquals(View.VISIBLE, host.video().backToPhotoButton().getVisibility());
     }
 

@@ -164,7 +164,7 @@ public final class WallpaperLiveHost {
     private final FrameLayout mLive;
     private final View mPhotoRoot;
     @Nullable private MaterialButtonToggleGroup mKindGroup;
-    private LiveSceneLogic.Kind mKind = LiveSceneLogic.Kind.PHOTO;
+    private WallpaperMotion.Kind mKind = WallpaperMotion.Kind.PHOTO;
     @Nullable private Page mPage;
     private final LivePageSwap mSwap = new LivePageSwap();
     /** The list's scroll when the editor opened over it; put back when the list returns. */
@@ -457,8 +457,8 @@ public final class WallpaperLiveHost {
         final int videoId = video.getId();
         group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
             if (!isChecked || mReleased) return;
-            showKind(checkedId == photoId ? LiveSceneLogic.Kind.PHOTO
-                : checkedId == videoId ? LiveSceneLogic.Kind.VIDEO : LiveSceneLogic.Kind.SHADER);
+            showKind(checkedId == photoId ? WallpaperMotion.Kind.PHOTO
+                : checkedId == videoId ? WallpaperMotion.Kind.VIDEO : WallpaperMotion.Kind.SHADER);
         });
         return row;
     }
@@ -477,7 +477,7 @@ public final class WallpaperLiveHost {
      * centred card, so whoever waits on the picker's readiness must not wait while this is true.
      */
     public boolean showingLive() {
-        return mKind != LiveSceneLogic.Kind.PHOTO;
+        return mKind != WallpaperMotion.Kind.PHOTO;
     }
 
     /**
@@ -496,29 +496,29 @@ public final class WallpaperLiveHost {
      */
     public void restoreSide(boolean live, int gridScrollY) {
         if (mReleased || !mSupported) return;
-        LiveSceneLogic.Kind kind = LiveSceneLogic.Kind.PHOTO;
+        WallpaperMotion.Kind kind = WallpaperMotion.Kind.PHOTO;
         if (live) {
-            LiveSceneLogic.Kind stored = LiveSceneLogic.kindOf(readStored());
-            kind = stored == LiveSceneLogic.Kind.VIDEO ? stored : LiveSceneLogic.Kind.SHADER;
+            WallpaperMotion.Kind stored = readStored().kind;
+            kind = stored == WallpaperMotion.Kind.VIDEO ? stored : WallpaperMotion.Kind.SHADER;
         }
         if (kind != mKind) showKind(kind);
-        if (kind == LiveSceneLogic.Kind.SHADER && mList != null) {
+        if (kind == WallpaperMotion.Kind.SHADER && mList != null) {
             mListScrollY = gridScrollY;
             mList.restoreScrollYWhenLaidOut(gridScrollY);
         }
     }
 
-    private void showKind(@NonNull LiveSceneLogic.Kind kind) {
+    private void showKind(@NonNull WallpaperMotion.Kind kind) {
         if (mPage == Page.EDITOR) discardEditor();
         mSwap.cancel();
         mKind = kind;
         MaterialButtonToggleGroup group = mKindGroup;
         if (group != null) {
-            int id = kind == LiveSceneLogic.Kind.PHOTO ? R.id.segmented_pill_default
-                : kind == LiveSceneLogic.Kind.VIDEO ? R.id.segmented_pill_capsule : R.id.segmented_pill_third;
+            int id = kind == WallpaperMotion.Kind.PHOTO ? R.id.segmented_pill_default
+                : kind == WallpaperMotion.Kind.VIDEO ? R.id.segmented_pill_capsule : R.id.segmented_pill_third;
             if (group.getCheckedButtonId() != id) group.check(id);
         }
-        boolean photo = kind == LiveSceneLogic.Kind.PHOTO;
+        boolean photo = kind == WallpaperMotion.Kind.PHOTO;
         if (photo && mPhotoStale) {
             mPhotoStale = false;
             mPicker.refreshStored();
@@ -528,7 +528,7 @@ public final class WallpaperLiveHost {
         if (photo) {
             hidePages();
             mPage = null;
-        } else if (kind == LiveSceneLogic.Kind.VIDEO) {
+        } else if (kind == WallpaperMotion.Kind.VIDEO) {
             showVideo();
         } else {
             mPage = null;
@@ -747,7 +747,7 @@ public final class WallpaperLiveHost {
 
     /** The surface shows the page (again); the thumbnails follow their own visibility. */
     public void onShown() {
-        if (mReleased || mKind != LiveSceneLogic.Kind.SHADER || mPage != Page.LIST) return;
+        if (mReleased || mKind != WallpaperMotion.Kind.SHADER || mPage != Page.LIST) return;
         if (mList != null) mList.bind(readStored());
     }
 
@@ -1109,7 +1109,7 @@ public final class WallpaperLiveHost {
     // --- tests ---
 
     @NonNull
-    LiveSceneLogic.Kind kind() {
+    WallpaperMotion.Kind kind() {
         return mKind;
     }
 
