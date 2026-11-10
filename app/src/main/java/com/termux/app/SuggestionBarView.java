@@ -8368,6 +8368,8 @@ public final class SuggestionBarView extends GridLayout
     private int reorderCount;
     private boolean[] reorderMergeable = new boolean[8];
     private final Runnable reorderTick = this::tickReorder;
+    /** When the posted {@link #reorderTick} runs, or -1 with none posted. */
+    private long reorderTickDueMs = -1L;
 
     /**
      * The finger is at {@code localX} along the row with a pin or app in hand: the icons part
@@ -8429,6 +8431,7 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void tickReorder() {
+        reorderTickDueMs = -1L;
         if (!reorderActive) return;
         int was = reorder.gap();
         if (reorder.tick(SystemClock.uptimeMillis())) {
@@ -8442,8 +8445,11 @@ public final class SuggestionBarView extends GridLayout
 
     /** One pending run, at the moment the policy next has something to commit. */
     private void scheduleReorderTick() {
-        removeCallbacks(reorderTick);
         long due = reorder.nextDueMs();
+        // A finger moving within one slot keeps the run already posted for it.
+        if (due == reorderTickDueMs) return;
+        removeCallbacks(reorderTick);
+        reorderTickDueMs = due;
         if (due >= 0L) postDelayed(reorderTick, Math.max(0L, due - SystemClock.uptimeMillis()));
     }
 
@@ -8495,6 +8501,7 @@ public final class SuggestionBarView extends GridLayout
     /** The finger left the row or the drag ended: the icons ease back and the reorder is over. */
     private void reorderExit() {
         removeCallbacks(reorderTick);
+        reorderTickDueMs = -1L;
         if (!reorderActive) return;
         reorderActive = false;
         reorder.leave();
@@ -8504,6 +8511,7 @@ public final class SuggestionBarView extends GridLayout
     /** The row is drawn again, or the drop re-lays it: the reorder is over, views left as they are. */
     private void reorderDiscard() {
         removeCallbacks(reorderTick);
+        reorderTickDueMs = -1L;
         reorderActive = false;
     }
 
