@@ -17625,12 +17625,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keeps the IME even with the launcher's keyboard up, because there that keyboard is only
         // the frame mouse mode's touchpad stands in.
         boolean display = displayTakesSystemKeyboard();
-        // The Assistant place does as well: its composer is a real text field, typed into with the
-        // phone's keyboard whether or not the launcher's own is up.
-        boolean assistant = mPaneWallController != null
-            && mPaneWallController.currentPage() == com.termux.app.wall.PaneWallPage.ASSISTANT;
-        mInAppKeyboard.setPlaceOwnsSystemIme(isWidgetsPageShowing() || display || assistant,
-            display || assistant);
+        mInAppKeyboard.setPlaceOwnsSystemIme(isWidgetsPageShowing() || display, display);
     }
 
     // ---------------------------------------------------------------- the edge stacks
@@ -23185,8 +23180,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer) {
         if (mInAppKeyboard == null) return;
         boolean folderRename = mFolderRenameController.isActive();
+        mInAppKeyboard.setTextFieldHoldsFocus(isAssistantFieldTyping());
         switch (com.termux.app.terminal.inappkeyboard.TypingClaim.owner(palette, sheet,
-            folderRename || isTerminalRenameActive(), drawer, isDisplayWindowTyping())) {
+            folderRename || isTerminalRenameActive(), drawer, isDisplayWindowTyping(),
+            isAssistantFieldTyping())) {
             case COMMAND_PALETTE:
                 mInAppKeyboard.setKeyValueInterceptor(getCommandPaletteController());
                 break;
@@ -23206,6 +23203,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case DISPLAY:
                 mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
                 break;
+            case ASSISTANT: {
+                com.termux.app.assistant.AssistantPageView page = assistantPageView();
+                mInAppKeyboard.setKeyValueInterceptor(page == null ? null : page.typingKeys());
+                break;
+            }
             default:
                 mInAppKeyboard.setKeyValueInterceptor(null);
                 break;
@@ -23228,6 +23230,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean isDisplayWindowTyping() {
         return settledWallPage() == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
             && mPaneWallController != null && mPaneWallController.displayWindow() != null;
+    }
+
+    @Nullable
+    private com.termux.app.assistant.AssistantPageView assistantPageView() {
+        return mPaneWallController != null && mPaneWallController.assistantView()
+            instanceof com.termux.app.assistant.AssistantPageView
+            ? (com.termux.app.assistant.AssistantPageView) mPaneWallController.assistantView() : null;
+    }
+
+    /** Whether the settled place is the Assistant page and one of its text fields holds focus. */
+    private boolean isAssistantFieldTyping() {
+        com.termux.app.assistant.AssistantPageView page = assistantPageView();
+        return page != null && settledWallPage() == com.termux.app.wall.PaneWallPage.ASSISTANT
+            && page.isTyping();
+    }
+
+    /**
+     * An Assistant text field took or lost focus: it is typed into with the launcher's keyboard,
+     * which comes up for it, and never the phone's.
+     */
+    public void onAssistantTypingFocus(boolean focused) {
+        if (mInAppKeyboard == null) return;
+        mInAppKeyboard.setTextFieldHoldsFocus(isAssistantFieldTyping());
+        if (focused) mInAppKeyboard.show(
+            com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.FOCUS);
+        restoreInAppKeyboardTypingClaim();
     }
 
     private final VoiceInputSession.Host mVoiceInputHost = new VoiceInputSession.Host() {
@@ -28414,6 +28442,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // becomes the layout.
         mSettledWallPage = page;
         settlePlaceChrome(page);
+        restoreInAppKeyboardTypingClaim();
         noteTerminalPlaceMayBeVisible();
         if (mWidgetPaneController != null) {
             mWidgetPaneController.onWallPageShown(

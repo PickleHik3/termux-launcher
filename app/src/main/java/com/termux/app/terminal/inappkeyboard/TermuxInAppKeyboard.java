@@ -1322,6 +1322,16 @@ public final class TermuxInAppKeyboard {
         syncPlaceSystemIme();
     }
 
+    private volatile boolean mTextFieldHoldsFocus;
+
+    /**
+     * Whether a text field on screen is being typed into with this keyboard. While it is, the
+     * suppression of the system IME leaves focus where it is instead of handing it to the terminal.
+     */
+    public void setTextFieldHoldsFocus(boolean holds) {
+        mTextFieldHoldsFocus = holds;
+    }
+
     /** Applies strict activity-wide system-IME suppression while embedded mode is enabled. */
     public void suppressSystemIme() {
         if (!mEnabled || mDestroyed || mHost == null || mExternalTextInputActive)
@@ -1364,7 +1374,9 @@ public final class TermuxInAppKeyboard {
                     };
                     terminalView.setOnFocusChangeListener(mSystemImeFocusListener);
                 }
-                terminalView.requestFocus();
+                // A text field of the place that is typed into with this keyboard (the Assistant's)
+                // keeps the focus it has: taking it back would end the typing it was shown for.
+                if (!mTextFieldHoldsFocus) terminalView.requestFocus();
             } finally {
                 Trace.endSection();
             }

@@ -41,8 +41,8 @@ final class AssistantComposer extends FrameLayout {
 
         void onDoneDictation();
 
-        /** The field took focus: the system keyboard is about to show. */
-        void onFieldFocused();
+        /** The field took (true) or lost (false) focus, or was tapped: the launcher's keyboard follows. */
+        void onFieldFocused(boolean focused);
     }
 
     private static final int MAX_LINES = 6;
@@ -88,6 +88,9 @@ final class AssistantComposer extends FrameLayout {
         field.setHint(R.string.assistant_composer_hint);
         field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
             | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        // The launcher's own keyboard types into the field (AssistantFieldKeys); the phone's
+        // never opens for it. The caret, selection handles and long-press stay the field's own.
+        field.setShowSoftInputOnFocus(false);
         field.setMinHeight(size);
         field.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         field.setVerticalScrollBarEnabled(true);
@@ -144,10 +147,10 @@ final class AssistantComposer extends FrameLayout {
         });
         field.setOnFocusChangeListener((v, hasFocus) -> {
             refreshShape(hasFocus);
-            if (hasFocus && listener != null) listener.onFieldFocused();
+            if (listener != null) listener.onFieldFocused(hasFocus);
         });
         field.setOnClickListener(v -> {
-            if (listener != null) listener.onFieldFocused();
+            if (listener != null) listener.onFieldFocused(true);
         });
         send.setOnClickListener(v -> {
             if (listener == null) return;
@@ -155,8 +158,7 @@ final class AssistantComposer extends FrameLayout {
                 listener.onStop();
                 return;
             }
-            String text = text();
-            if (!text.trim().isEmpty()) listener.onSend(text);
+            submit();
         });
         mic.setOnClickListener(v -> {
             if (listener != null) listener.onMic();
@@ -169,6 +171,18 @@ final class AssistantComposer extends FrameLayout {
         });
         applyPalette(palette);
         applyLineCap(context.getResources().getConfiguration());
+    }
+
+    /** Sends the field's text when it is not blank and no answer streams: what Send does, and Enter. */
+    void submit() {
+        if (listener == null || generating) return;
+        String text = text();
+        if (!text.trim().isEmpty()) listener.onSend(text);
+    }
+
+    /** Whether the field holds the focus, which is when the launcher's keyboard types into it. */
+    boolean isTyping() {
+        return field.hasFocus();
     }
 
     void setListener(@Nullable Listener listener) {
