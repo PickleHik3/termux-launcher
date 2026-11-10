@@ -179,6 +179,30 @@ public class AssistantPageView extends PaneContentFrame {
         rim.setTravelAlpha(alpha);
     }
 
+    @Nullable private AssistantFieldKeys fieldKeys;
+
+    /** Whether one of the page's text fields holds focus, which is when the launcher's keyboard types into it. */
+    public boolean isTyping() {
+        return chat.composer().isTyping() || chats.isSearchTyping();
+    }
+
+    /**
+     * The in-app keyboard's interceptor for this page: its keys edit whichever field has focus.
+     * Enter sends from the composer and does nothing in the search.
+     */
+    @NonNull
+    public com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler.KeyValueInterceptor typingKeys() {
+        if (fieldKeys == null) {
+            AssistantComposer composer = chat.composer();
+            fieldKeys = new AssistantFieldKeys(
+                () -> chats.isSearchTyping() ? chats.search()
+                    : composer.isTyping() ? composer.field() : null,
+                field -> { if (field == composer.field()) composer.submit(); },
+                com.termux.app.terminal.ClipboardText.forContext(getContext()));
+        }
+        return fieldKeys;
+    }
+
     /** Back closes the Chats list first; false when there is nothing for it to do. */
     public boolean handleBack() {
         return controller.handleBack();
