@@ -96,6 +96,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
     @NonNull private WallpaperMotion mMotion = WallpaperMotion.photo();
     /** The stored shader's settings, re-read on every refresh. */
     @Nullable private ShaderStore.Meta mMeta;
+    /** What the stored choice plays, set by {@link #currentSpec}; null while a debug file or nothing plays. */
+    @Nullable private SceneSource mSource;
     /** The stored shader as of the last refresh, the one the running layer was built from, and one that failed its check. */
     @Nullable private ShaderStamp mStoredStamp, mRunningStamp, mRejectedStamp;
     /** A changed source or texture is being checked offscreen before the layer is rebuilt. */
@@ -313,6 +315,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
     /** What should run now: the debug file, else the stored shader, else nothing. */
     @Nullable
     private SceneLayerView.Spec currentSpec(long now) {
+        mSource = null;
         String path = SHADER_FILE.get(now);
         if (path != null && !path.trim().isEmpty()) {
             path = path.trim();
@@ -335,18 +338,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
         mDebugVideoPath = null;
         mDebugVideoName = null;
         mDebugGaveUp = null;
-        if (mMotion.kind == WallpaperMotion.Kind.VIDEO && mMotion.id != null) {
-            File video = VideoVariants.playable(mActivity, mVideoRateHz);
-            // An import from before frame-rate versions is the file named after the choice.
-            if (video == null) video = VideoImport.file(mActivity, mMotion.id);
-            // The file name is in the key: a version finishing swaps the layer to it.
-            return video.isFile()
-                ? new SceneLayerView.Spec(mMotion.format() + "@" + video.getName(), video, false) : null;
-        }
-        if (mMotion.kind != WallpaperMotion.Kind.SHADER || mMotion.id == null || mMeta == null) return null;
-        File channel0 = ShaderStore.textureFile(mActivity, mMotion.id, mMeta);
-        return new SceneLayerView.Spec(mMotion.format(), ShaderStore.sourceFile(mActivity, mMotion.id),
-            channel0, mMeta.quality, false);
+        mSource = SceneSource.resolve(mActivity, mMotion, mVideoRateHz, mMeta);
+        return mSource == null ? null : mSource.spec();
     }
 
     /** Copies the debug file in on a worker thread, then polls again on main; a file that cannot be imported is given up on. */
@@ -380,8 +373,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
         SceneLayerView layer = mLayer;
         if (layer == null || spec == null) return;
         String rateProp = RATE.get(now);
-        int choiceRate = mMotion.kind == WallpaperMotion.Kind.VIDEO && !spec.debugFile ? mVideoRateHz
-            : spec.debugFile || mMeta == null ? SceneFramePolicy.DEFAULT_RATE_HZ : mMeta.rateHz;
+        int choiceRate = mSource == null ? SceneFramePolicy.DEFAULT_RATE_HZ : mSource.rateHz();
         int sceneRate = rateProp == null || rateProp.isEmpty()
             ? choiceRate : SceneFramePolicy.parseRate(rateProp);
         layer.setRateHz(sceneRate);
