@@ -43,7 +43,7 @@ public class TermuxActivityDrawerIntakeTest {
         assertFalse(activity.handleAppDrawerCodePoint('a', false));
         assertFalse(activity.handleAppDrawerKey(KeyEvent.KEYCODE_A, keyDown(KeyEvent.KEYCODE_A)));
         assertFalse(activity.isAppDrawerOpen());
-        assertNull(ReflectionHelpers.getField(activity, "mAppDrawerController"));
+        assertNull(((com.termux.app.chrome.sheets.SheetsController) ReflectionHelpers.getField(activity, "mSheets")).appDrawerControllerIfBuilt());
 
         // And with one built but shut.
         activity.getAppDrawerController();
@@ -100,7 +100,7 @@ public class TermuxActivityDrawerIntakeTest {
         activity.setAppDrawerInterceptorActive(false);
         activity.setAppDrawerInterceptorActive(true);
 
-        assertNull(ReflectionHelpers.getField(activity, "mAppDrawerController"));
+        assertNull(((com.termux.app.chrome.sheets.SheetsController) ReflectionHelpers.getField(activity, "mSheets")).appDrawerControllerIfBuilt());
     }
 
     private static KeyEvent keyDown(int keyCode) {

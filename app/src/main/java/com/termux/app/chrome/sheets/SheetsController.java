@@ -84,10 +84,24 @@ public final class SheetsController {
         /** Holds the keyboard's visibility listener off while a raise is nobody's pin. */
         void setRaisingDisplayFrameKeyboard(boolean raising);
 
-        // -------------------------------------------------------------- the sheets still built in the activity
+        // -------------------------------------------------------------- the sheets' own Hosts (still the activity's)
 
-        /** The app drawer's controller if it has been built; null otherwise (never builds one). */
-        @Nullable com.termux.app.launcher.drawer.AppDrawerController appDrawerControllerIfBuilt();
+        /** A new activity half of each sheet's seam, made when that sheet is first built. */
+        @NonNull com.termux.app.terminal.TerminalCommandPaletteController.Host newCommandPaletteHost();
+        @NonNull com.termux.app.terminal.CommandPaletteHomeHost newPaletteHomeHost();
+        @NonNull com.termux.app.terminal.TerminalSheetController.Host newTerminalSheetHost();
+        @NonNull com.termux.app.launcher.drawer.AppDrawerController.Host newAppDrawerHost();
+        /** The dock row the drawer choreographs with; null before it is made. */
+        @Nullable com.termux.app.launcher.drawer.AppDrawerController.AppDrawerDockChoreographyTarget dockChoreographyTarget();
+
+        // -------------------------------------------------------------- the stack and the typing slot
+
+        /** Re-applies the accessory geometry the drawer's freeze held back, if any is owed. */
+        void flushPendingAccessoryGeometry();
+        /** The dock's Search field gives way to the open palette, or comes back. */
+        void setPromptFieldUnderPalette(boolean under);
+        /** The one owner of the in-app keyboard's interceptor slot, given what is open now. */
+        void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer);
     }
 
     @NonNull private final Host mHost;
@@ -423,11 +437,239 @@ public final class SheetsController {
             }
             // Raised after the pull, the keyboard was not among the bands the drawer measured;
             // it measures them again so the reveal can bring it up through the plane.
-            com.termux.app.launcher.drawer.AppDrawerController drawer = mHost.appDrawerControllerIfBuilt();
-            if (drawer != null) drawer.onBuiltInKeyboardRaised();
+            if (mAppDrawerController != null) mAppDrawerController.onBuiltInKeyboardRaised();
             return;
         }
         mHost.onSystemImeRequested();
         KeyboardUtils.showSoftKeyboard(mHost.activity(), mHost.terminalView());
+    }
+
+    // ================================================================== builders and state
+
+    @Nullable private com.termux.app.terminal.TerminalCommandPaletteController mCommandPalette;
+    @Nullable private com.termux.app.terminal.TerminalSheetController mTerminalSheet;
+    @Nullable private com.termux.app.launcher.drawer.AppDrawerController mAppDrawerController;
+
+    /** The command palette if it has been built; null otherwise (never builds one). */
+    @Nullable
+    public com.termux.app.terminal.TerminalCommandPaletteController commandPaletteIfBuilt() {
+        return mCommandPalette;
+    }
+
+    /** The terminal sheet plane if it has been built; null otherwise (never builds one). */
+    @Nullable
+    public com.termux.app.terminal.TerminalSheetController terminalSheetIfBuilt() {
+        return mTerminalSheet;
+    }
+
+    /** The app drawer if it has been built; null otherwise (never builds one). */
+    @Nullable
+    public com.termux.app.launcher.drawer.AppDrawerController appDrawerControllerIfBuilt() {
+        return mAppDrawerController;
+    }
+
+    /**
+     * The command palette overlay, created on first use. It lives in the activity rather than in
+     * a dialog window so typing reaches it from the in-app keyboard without the system IME.
+     */
+    @NonNull
+    public com.termux.app.terminal.TerminalCommandPaletteController getCommandPaletteController() {
+        if (mCommandPalette == null) {
+            mCommandPalette = new com.termux.app.terminal.TerminalCommandPaletteController(
+                mHost.newCommandPaletteHost());
+            mCommandPalette.setHomeHost(mHost.newPaletteHomeHost());
+        }
+        return mCommandPalette;
+    }
+
+    public boolean isCommandPaletteOpen() {
+        return mCommandPalette != null && mCommandPalette.isOpen();
+    }
+
+    /**
+     * The terminal sheet plane, created on first use. Like the palette it lives in the activity
+     * rather than in a dialog window, so a prompt costs no focus change and no system IME, and it
+     * binds its views lazily so a session that never opens a prompt never pays for them.
+     */
+    @NonNull
+    public com.termux.app.terminal.TerminalSheetController getTerminalSheetController() {
+        if (mTerminalSheet == null)
+            mTerminalSheet = new com.termux.app.terminal.TerminalSheetController(
+                mHost.newTerminalSheetHost());
+        return mTerminalSheet;
+    }
+
+    /** Guarded on the field, not the lazy accessor: asking must not build a plane. */
+    public boolean isTerminalSheetOpen() {
+        return mTerminalSheet != null && mTerminalSheet.isOpen();
+    }
+
+    /**
+     * The app drawer plane, created on first use. Like the palette it lives in the activity rather
+     * than in a window of its own, and binds its views lazily, so an install that never pulls the
+     * drawer down never pays for it.
+     */
+    @NonNull
+    public com.termux.app.launcher.drawer.AppDrawerController getAppDrawerController() {
+        if (mAppDrawerController == null) {
+            mAppDrawerController = new com.termux.app.launcher.drawer.AppDrawerController(
+                mHost.newAppDrawerHost());
+            // Registered here rather than in setSuggestionBarView() so the accessor stays lazy: the
+            // only thing that builds a controller is a drag, and a drag comes from the row itself,
+            // which therefore already exists by the time this runs.
+            mAppDrawerController.setDockChoreographyTarget(mHost.dockChoreographyTarget());
+        }
+        return mAppDrawerController;
+    }
+
+    /**
+     * True while the app drawer plane owns the accessory stack's transforms — open, or mid open/
+     * close drag. Every accessory-geometry seam gates on this: while the plane is engaged the stack
+     * must not relayout, because that runs the flush-padding solver and a terminal resize (SIGWINCH)
+     * per frame.
+     */
+    public boolean isAppDrawerEngaged() {
+        return mAppDrawerController != null && mAppDrawerController.isEngaged();
+    }
+
+    /**
+     * Closes the app drawer plane with no animation. Called from the lifecycle and HOME paths, where
+     * a settling spring would otherwise be resumed against stale geometry.
+     *
+     * <p>Deliberately does not go through {@link #getAppDrawerController()}: a drawer that was never
+     * opened has nothing to close, and building the controller here would defeat the lazy accessor.
+     */
+    public void closeAppDrawerImmediate(boolean homePress) {
+        try {
+            if (mAppDrawerController != null) mAppDrawerController.closeImmediate(homePress);
+        } finally {
+            mHost.flushPendingAccessoryGeometry();
+        }
+    }
+
+    /** True while the drawer plane is up — what the key-release swallow asks. */
+    public boolean isAppDrawerOpen() {
+        return mAppDrawerController != null && mAppDrawerController.isOpen();
+    }
+
+    /**
+     * A Linux app opens inside the launcher, so nothing puts the drawer away the way starting an
+     * Android app does — that one is closed by {@code onStop} on the way out. Tapping a Linux tile
+     * never leaves the launcher, so the drawer would stay over the place the app just opened on.
+     * Guarded on the open check rather than reached through the lazy accessor, so a launch from
+     * launcherctl does not build a drawer nobody pulled down.
+     */
+    public void closeAppDrawerForLinuxLaunch() {
+        if (isAppDrawerOpen()) mAppDrawerController.close(false);
+    }
+
+    /** The activity is destroyed: the palette and the sheet plane go with it, unanimated. */
+    public void releasePaletteAndSheet() {
+        if (mCommandPalette != null) {
+            mCommandPalette.dismissImmediately();
+            mCommandPalette = null;
+        }
+        if (mTerminalSheet != null) {
+            mTerminalSheet.dismissImmediately();
+            mTerminalSheet = null;
+        }
+    }
+
+    // ================================================================== keys and interceptors
+
+    /**
+     * Routes in-app keyboard values to the palette while it is open. The palette owns the
+     * interceptor slot on the keyboard's own handler, so nothing forks the key pipeline.
+     *
+     * <p>This is only one of three ways typing reaches a focusless overlay, and any new one must
+     * wire all three or it will look dead on somebody's keyboard:
+     *
+     * <ul>
+     *   <li>hardware and external keyboards, as key events through
+     *       {@link #handleCommandPaletteKey};
+     *   <li>the in-app keyboard, as resolved key values through this interceptor;
+     *   <li>system IMEs, as committed text through {@link #handleCommandPaletteCodePoint} — those
+     *       send no key events at all for ordinary characters.
+     * </ul>
+     */
+    public void setCommandPaletteInterceptorActive(boolean active) {
+        // The Search field is not a second search box under the open palette.
+        mHost.setPromptFieldUnderPalette(active);
+        if (mHost.inAppKeyboard() == null)
+            return;
+        mHost.applyInAppKeyboardTypingClaim(active, isTerminalSheetOpen(), isAppDrawerOpen());
+    }
+
+    /**
+     * Routes in-app keyboard values to the terminal sheet plane while a sheet is up, the same slot
+     * and the same three channels the palette documents above.
+     *
+     * <p>Releasing means "whoever owns the slot now", not "nobody": the drawer's search may be open
+     * behind a sheet the drawer itself never closed.
+     */
+    public void setTerminalSheetInterceptorActive(boolean active) {
+        if (mHost.inAppKeyboard() == null)
+            return;
+        mHost.applyInAppKeyboardTypingClaim(isCommandPaletteOpen(), active, isAppDrawerOpen());
+    }
+
+    /**
+     * Routes in-app keyboard values to the app drawer's search while it is open.
+     *
+     * <p>Shares the single interceptor slot with the palette, which is safe in exactly one
+     * direction: {@code TerminalCommandPaletteController.show()} closes the drawer before it
+     * installs its own interceptor, and the drawer's close releases this one on the way. The drawer
+     * cannot open over the palette — the dock's arbiter vetoes a drawer drag while it is up — so the
+     * two are never both claiming.
+     *
+     * <p>Guarded on the field rather than the lazy accessor: deactivating a drawer that was never
+     * opened must not build one.
+     */
+    public void setAppDrawerInterceptorActive(boolean active) {
+        mHost.applyInAppKeyboardTypingClaim(isCommandPaletteOpen(), isTerminalSheetOpen(), active);
+    }
+
+    /** Hardware and external-keyboard strokes claimed by the open app drawer's search. */
+    public boolean handleAppDrawerKey(int keyCode, @NonNull android.view.KeyEvent event) {
+        if (mFolderRenameController.handleKeyDown(keyCode, event)) return true;
+        return mAppDrawerController != null
+            && mAppDrawerController.handleSearchKey(keyCode, event);
+    }
+
+    /**
+     * Text committed by a system IME, claimed by the open app drawer's search. The drawer has no
+     * focused text field by design, so this is the only route by which a third-party keyboard's
+     * ordinary characters reach it rather than the shell behind the plane.
+     */
+    public boolean handleAppDrawerCodePoint(int codePoint, boolean ctrlDown) {
+        if (mFolderRenameController.handleCodePoint(codePoint, ctrlDown)) return true;
+        return mAppDrawerController != null
+            && mAppDrawerController.handleSearchCodePoint(codePoint, ctrlDown);
+    }
+
+    /** Hardware and external-keyboard strokes claimed by the open palette. */
+    public boolean handleCommandPaletteKey(int keyCode, @NonNull android.view.KeyEvent event) {
+        return mCommandPalette != null && mCommandPalette.handleHardwareKey(keyCode, event);
+    }
+
+    /**
+     * Text committed by a system IME, claimed by the open palette. Third-party keyboards commit
+     * characters through the input connection instead of sending key events, so without this they
+     * would type straight into the shell behind the overlay.
+     */
+    public boolean handleCommandPaletteCodePoint(int codePoint, boolean ctrlDown) {
+        return mCommandPalette != null
+            && mCommandPalette.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
+    }
+
+    /** Hardware and external-keyboard strokes claimed by the open sheet plane. */
+    public boolean handleTerminalSheetKey(int keyCode, @NonNull android.view.KeyEvent event) {
+        return mTerminalSheet != null && mTerminalSheet.handleHardwareKey(keyCode, event);
+    }
+
+    /** The sheet plane's twin of {@link #handleCommandPaletteCodePoint}, for the same reason. */
+    public boolean handleTerminalSheetCodePoint(int codePoint, boolean ctrlDown) {
+        return mTerminalSheet != null
+            && mTerminalSheet.handleSoftKeyboardCodePoint(codePoint, ctrlDown);
     }
 }

@@ -72,7 +72,7 @@ public class TermuxActivityBackOrderTest {
 
         // The branch is guarded on the field, not on the lazy accessor: a back press on a session
         // that never pulled the drawer down must not build one.
-        assertNull(ReflectionHelpers.getField(activity, "mAppDrawerController"));
+        assertNull(((com.termux.app.chrome.sheets.SheetsController) ReflectionHelpers.getField(activity, "mSheets")).appDrawerControllerIfBuilt());
     }
 
     // ------------------------------------------------------------------ back inside the drawer
