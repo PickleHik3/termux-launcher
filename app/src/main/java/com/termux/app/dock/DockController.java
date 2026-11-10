@@ -184,6 +184,21 @@ public final class DockController {
         /** Whether the joined Docked frame's glass is the sheets' now. */
         boolean frameStandsDown();
 
+        // -------------------------------------------------------------- sheets off the dock
+
+        /** The A–Z bar's thickness, and the air a bar off the dock keeps from the screen, px. */
+        int azBarThicknessPx();
+        int azBarHostMarginPx();
+        /** Docked with the strip behind the status bar showing: whether it leads with these. */
+        boolean dockedStatusStripLeadsWith(@NonNull PlaceLayout layout,
+            @NonNull java.util.List<com.termux.app.place.Element> elements);
+        /** Whether {@code sheet} runs on into the strip behind the status bar. */
+        boolean continuesIntoStatusInsetStrip(@Nullable View sheet);
+        /** Where {@code sheet}'s slice of the strip's light model starts, 0..1. */
+        float statusInsetSheetSliceStart(@Nullable View sheet);
+        /** {@code view}'s padding set; whether it moved. */
+        boolean updateViewPadding(@Nullable View view, int left, int top, int right, int bottom);
+
         // -------------------------------------------------------------- glass
 
         /** The chrome's renderer; null before it is made. */
@@ -246,6 +261,10 @@ public final class DockController {
          * one stands, and the reflection; whether a card stands (the host is then dressed).
          */
         boolean dressPeekCard(@NonNull View surface);
+        /** Every sheet off the dock glazed again against {@code layout} (the plank's among them). */
+        void refreshOffDockGlass(@NonNull PlaceLayout layout);
+        /** The content root asked to apply its insets again. */
+        void requestRootInsets();
     }
 
     @NonNull private final Host mHost;
@@ -330,6 +349,55 @@ public final class DockController {
     /** The shelf under a floating slab, shown or put away for {@code state}. */
     public void syncDockShelf(@Nullable com.termux.app.chrome.ChromeSpec state) {
         mSurface.syncDockShelf(state);
+    }
+
+    /** The edge a pinned-apps row lies down on away from the dock; null where none does. */
+    @Nullable
+    public PlaceLayout.Edge offDockPlankEdge(@NonNull PlaceLayout layout) {
+        return mSurface.offDockPlankEdge(layout);
+    }
+
+    /** The bars sharing the off-dock plank on {@code edge}, outermost first. */
+    @NonNull
+    public java.util.List<com.termux.app.place.Element> offDockPlankElements(
+            @NonNull PlaceLayout layout, @Nullable PlaceLayout.Edge edge) {
+        return mSurface.offDockPlankElements(layout, edge);
+    }
+
+    /** The air the plank keeps outside its sheet of glass. */
+    public int offDockPlankAirPx(@NonNull java.util.List<com.termux.app.place.Element> onPlank) {
+        return mSurface.offDockPlankAirPx(onPlank);
+    }
+
+    /** The plank's glass thickness as last sized. */
+    public int offDockPlankGlassHeightPx() {
+        return mSurface.offDockPlankGlassHeightPx();
+    }
+
+    /** The off-dock plank shown, sized or put away for {@code layout}; whether it changed. */
+    public boolean syncOffDockPlank(@NonNull PlaceLayout layout) {
+        return mSurface.syncOffDockPlank(layout);
+    }
+
+    /** The plank's glass glazed again, while the plank is up. */
+    public void refreshOffDockPlankGlass(@NonNull PlaceLayout layout) {
+        mSurface.refreshOffDockPlankGlass(layout);
+    }
+
+    /** The dock's own glass behind a sheet that is not on the dock (the plank, the A–Z bar). */
+    public void applyOffDockPlankGlass(int glassId, int frostId, int surfaceId,
+            @NonNull com.termux.app.chrome.SurfaceDirtyLedger.FrostRect frostKey,
+            @NonNull com.termux.app.chrome.ChromeShapeOutlineProvider outline,
+            @NonNull PlaceLayout.Edge edge, int heightPx,
+            @NonNull java.util.List<com.termux.app.place.ChromeShape.PieceId> pieces,
+            @NonNull PlaceLayout layout) {
+        mSurface.applyOffDockPlankGlass(glassId, frostId, surfaceId, frostKey, outline, edge,
+            heightPx, pieces, layout);
+    }
+
+    /** The row's own tiles' glyphs on the dock's face at {@code dockOpacity}. */
+    public void syncDockTilesInk(float dockOpacity) {
+        mSurface.syncDockTilesInk(dockOpacity);
     }
 
     // ------------------------------------------------------------------ Layout and dress

@@ -1133,12 +1133,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mAzTabShown;
     /** Whether the touch stream in progress began on the pull tab, which is the letters' alone. */
     private boolean mAzTabTouch;
-    /** The plank's glass height as last sized, which its corner radius is clamped to. */
-    private int mOffDockPlankGlassHeightPx;
-    /** The edge the shared off-dock plank is standing on, as last applied from the place. */
-    @NonNull private PlaceLayout.Edge mOffDockPlankEdge = PlaceLayout.Edge.TOP;
-    private final com.termux.app.chrome.ChromeShapeOutlineProvider mOffDockPlankOutline =
-        new com.termux.app.chrome.ChromeShapeOutlineProvider();
     @Nullable private View mAzTerminalToolbarView;
     LauncherAzGestureFxView mLauncherAzGestureFxUnderlayView;
     LauncherAzGestureFxView mLauncherAzGestureFxOverlayView;
@@ -12399,7 +12393,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
         // Riding a row that is itself off the dock, the index is one of two bars on a shared
         // plank: its own capsule goes, the plank's glass is the one sheet under both of them.
-        boolean onPlank = wantHost && offDockPlankElements(layout, edge).contains(Element.AZ);
+        boolean onPlank = wantHost && mDock.offDockPlankElements(layout, edge).contains(Element.AZ);
         boolean changed = mAzBarEdge != edge || mAzBarOnPlank != onPlank
             || (host.getVisibility() == View.VISIBLE) != wantHost
             || mAzTabShown != tabShown;
@@ -12574,19 +12568,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** As above, against the layout in hand rather than the stored one. */
     private void refreshOffDockGlass(@NonNull PlaceLayout layout) {
         refreshAzTabGlass();
-        View plank = findViewById(R.id.place_off_dock_plank_host);
-        if (plank != null && plank.getVisibility() == View.VISIBLE) {
-            applyOffDockPlankGlass(R.id.place_off_dock_plank_glass,
-                R.id.place_off_dock_plank_frost,
-                R.id.place_off_dock_plank_surface,
-                com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK,
-                mOffDockPlankOutline, mOffDockPlankEdge, offDockPlankGlassHeightPx(),
-                chromePieceIds(offDockPlankElements(layout, mOffDockPlankEdge)), layout);
-        }
+        mDock.refreshOffDockPlankGlass(layout);
         View host = findViewById(R.id.place_az_bar_host);
         if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank
                 && !hasDockedFrameCard() && azGlassBackground()) {
-            applyOffDockPlankGlass(R.id.place_az_bar_host_glass,
+            mDock.applyOffDockPlankGlass(R.id.place_az_bar_host_glass,
                 R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
                 mAzBarHostOutline, mAzBarEdge, azBarThicknessPx(),
@@ -12687,81 +12673,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 azBarThicknessPx())
             : marginPx;
         updateViewPadding(host, framedPadPx, 0, framedPadPx, 0);
-    }
-
-    /**
-     * The dock's own glass behind a sheet that is not on the dock: the same material, the same blur
-     * and the same radius rule, so a plank on another edge reads as a piece of the same kit.
-     *
-     * <p>{@code heightPx} is the sheet's own thickness across the edge it stands on — one bar's for
-     * a capsule, both bars' for the shared plank — because the radius is clamped to a true
-     * half-capsule of whatever is being glazed. Handing it one bar's thickness while two stood on
-     * it is what kept a top plank looking square.
-     *
-     * <p>The blur is the shared wallpaper frame at the sheet's own place on screen, as every other
-     * sheet's is, through Fancier Glass's refraction when that is on, rimmed along the sheet's own
-     * outline (the Wallpaper backdrop kind). With no frame yet, or with wallpaper mode off, the
-     * sheet wears its wash alone: only the launcher's own flat ground is behind it then.
-     */
-    private void applyOffDockPlankGlass(
-        int glassId,
-        int frostId,
-        int surfaceId,
-        @NonNull com.termux.app.chrome.SurfaceDirtyLedger.FrostRect frostKey,
-        @NonNull com.termux.app.chrome.ChromeShapeOutlineProvider outline,
-        @NonNull PlaceLayout.Edge edge,
-        int heightPx,
-        @NonNull List<com.termux.app.place.ChromeShape.PieceId> pieces,
-        @NonNull PlaceLayout layout
-    ) {
-        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity(stackLookPage()) / 100f;
-        // Floating's card radius is Corners, clamped to half of the sheet being glazed. Under
-        // Docked the sheet carries no radius of its own: its glass view clips to its slice of
-        // the frame below, and the frost beneath it stays square.
-        boolean capsule = arrangement().floating();
-        float cornerRadiusPx = capsule ? mDock.resolveDockCapsuleCornerRadiusPx(heightPx) : 0f;
-        View glass = findViewById(glassId);
-        View sheetHost = glass != null && glass.getParent() instanceof View
-            ? (View) glass.getParent() : null;
-        // The edge rule is the model's: Docked, only the edge facing the opening is a rim and
-        // every join and screen edge is a seam; the one leading the top edge runs on into the
-        // strip behind the status bar as well, and renders the lower slice of the light model the
-        // strip renders the top of. Floating keeps a rim all round, as it always has.
-        com.termux.app.place.ChromeShape shape = chromeShape(layout);
-        boolean continuesStrip = !capsule && edge == PlaceLayout.Edge.TOP
-            && continuesIntoStatusInsetStrip(sheetHost);
-        int seams = capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
-            : com.termux.app.chrome.LiveChromeShape.seamEdges(shape, pieces);
-        float sliceStart = continuesStrip ? statusInsetSheetSliceStart(sheetHost) : 0f;
-        View frostView = findViewById(frostId);
-        // Under a joined Docked frame the frame's glass is this sheet: frost and wash go.
-        if (frameStandsDown()) {
-            if (frostView instanceof ImageView)
-                mChrome.frost().hideOffDockSheet((ImageView) frostView, frostKey);
-            View ownSurface = findViewById(surfaceId);
-            if (ownSurface != null) ownSurface.setBackground(null);
-            return;
-        }
-        // The Wallpaper kind: the stored pre-blurred frame at the sheet's own place on screen.
-        if (frostView instanceof ImageView)
-            mChrome.frost().applyOffDockSheet((ImageView) frostView, frostKey, cornerRadiusPx, seams);
-        View surface = findViewById(surfaceId);
-        if (surface != null) {
-            // Without the dark foot: this is a plank floating clear of the screen's edges, not a
-            // slab standing on one, so a shaded underside would read as a drawn border.
-            surface.setBackground(deckSlabOr(
-                mChrome.glass().dockSurface(opacity, sliceStart, 1f, false)));
-            surface.setAlpha(1f);
-        }
-        // The sheet is what clips, not the host: the host has to let the wave's lift out of it.
-        // Its clip is the model's: its own card under Floating, its slice of the one frame under
-        // Docked.
-        if (glass == null) return;
-        outline.setClip(com.termux.app.chrome.LiveChromeShape.outlineOf(shape, pieces));
-        if (glass.getOutlineProvider() != outline) glass.setOutlineProvider(outline);
-        outline.follow(glass);
-        glass.setClipToOutline(outline.clipsCorners());
-        glass.invalidateOutline();
     }
 
     /** The model's pieces for these elements, in order. */
@@ -13981,7 +13892,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
         syncExtraKeysInk(dockOpacity);
         syncPromptLineInk(dockOpacity);
-        syncDockTilesInk(dockOpacity);
+        mDock.syncDockTilesInk(dockOpacity);
         // The Wall strip's clock is the status bar's and takes its ink the bar's way, from the
         // theme's roles; its tiles are the terminal scheme's. Either redraws only if it moved.
         if (mWallStripRow != null) mWallStripRow.refreshTheme();
@@ -14002,24 +13913,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         field.setGlassFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK,
             mPromptLineInkRect));
     }
-
-    /**
-     * The apps row's Drawer tile and Command palette tile glyphs on the dock's face as measured
-     * under the row, as the extra keys' labels are: a dark theme over a light wallpaper gets dark
-     * glyphs. The row retints only when the ink moved.
-     */
-    private void syncDockTilesInk(float dockOpacity) {
-        SuggestionBarView row = mSuggestionBarView;
-        if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0 || !row.isShown()) return;
-        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
-        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(row, mDockTilesInkRect,
-            mDockTilesInkLocation, mDockInkRootScratch);
-        row.setTileFace(mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mDockTilesInkRect),
-            mChrome.ink().target(OnGlass.TARGET_LARGE_TEXT));
-    }
-
-    @NonNull private final Rect mDockTilesInkRect = new Rect();
-    @NonNull private final int[] mDockTilesInkLocation = new int[2];
 
     @NonNull private final Rect mPromptLineInkRect = new Rect();
     @NonNull private final int[] mPromptLineInkLocation = new int[2];
@@ -16707,14 +16600,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // that pads the dock's own row is handed the dock's numbers rather than the place's.
         // Remembered here, where the arrangement arrives.
         mAppsRowNextToCanvas = isAppsRowNextToCanvas(layout);
-        PlaceLayout.Edge plankEdge = offDockPlankEdge(layout);
+        PlaceLayout.Edge plankEdge = mDock.offDockPlankEdge(layout);
         View plankHost = findViewById(R.id.place_off_dock_plank_host);
         com.termux.app.place.EdgeStackView plankBars =
             findViewById(R.id.place_off_dock_plank_bars);
         for (PlaceLayout.Edge edge : PlaceLayout.Edge.values()) {
             boolean planked = plankHost != null && plankBars != null && edge == plankEdge;
             List<Element> onPlank = planked
-                ? offDockPlankElements(layout, edge) : Collections.<Element>emptyList();
+                ? mDock.offDockPlankElements(layout, edge) : Collections.<Element>emptyList();
             com.termux.app.place.EdgeStackView stack = edgeStack(edge);
             // One list per edge, filled in the policy's order, so the stack gets its bands
             // outermost first. One edge is one stack: the bottom's is the dock's own row stack.
@@ -16791,44 +16684,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The edge a pinned-apps row lies down on away from the dock, or null when no such row stands.
-     * Along the bottom the row is the dock's own and wears the dock's glass; on a side it is the
-     * rail, which is a column rather than a plank.
-     */
-    @Nullable
-    private PlaceLayout.Edge offDockPlankEdge(@NonNull PlaceLayout layout) {
-        if (!PlaceChromePolicy.appsShown(layout)) return null;
-        PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(layout);
-        if (edge.isOnSide() || edge == PlaceLayout.Edge.BOTTOM) return null;
-        return edge;
-    }
-
-    /**
-     * The bars sharing one plank on that edge, outermost first: the pinned apps row, and the
-     * alphabets index when it rides that row from the band right beside it. An index riding from
-     * further up the stack — with something else standing between the two — keeps its own capsule,
-     * because a plank that swallowed it would draw the two bars in an order the user did not ask
-     * for.
-     */
-    @NonNull
-    private List<Element> offDockPlankElements(@NonNull PlaceLayout layout,
-                                               @Nullable PlaceLayout.Edge edge) {
-        if (edge == null || edge != offDockPlankEdge(layout)) return Collections.emptyList();
-        return com.termux.app.dock.DockGeometry.offDockPlankBars(layout);
-    }
-
-    /**
-     * The air a plank keeps <em>outside</em> its sheet of glass. A plank carrying two bars keeps
-     * the margin every bar off the dock has always kept from the screen. A plank that is one lone
-     * row keeps its air inside the sheet instead ({@link DockLayoutPolicy#LONE_ROW_AIR_DP}), so the
-     * sheet is exactly the bar and the row is not spaced twice over — which is what a row on its
-     * own plank read as: the plank's margin, then the dock's own row padding inside it.
-     */
-    private int offDockPlankAirPx(@NonNull List<Element> onPlank) {
-        return onPlank.size() > 1 ? azBarHostMarginPx() : 0;
-    }
-
-    /**
      * Docked, with the strip behind the status bar showing: whether the band the top edge shows
      * first is one of {@code elements}. Read off the arrangement rather than the views, because the
      * sheets are sized before the walk stands them in their stack. A status bar the split panes do
@@ -16868,61 +16723,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.dock.DockGeometry.appsRowAlone(layout);
     }
 
-    /**
-     * The glass sheet's own thickness: the bars standing on the plank, without the air around
-     * them. It is what the corner radius is clamped to, so it is kept from the pass that sized the
-     * plank rather than measured off a view that may not have been laid out yet.
-     */
+    /** The off-dock plank's glass thickness (DockController); kept for the arrangement test. */
     int offDockPlankGlassHeightPx() {
-        return mOffDockPlankGlassHeightPx;
+        return mDock.offDockPlankGlassHeightPx();
     }
 
     /**
-     * The plank a lying-down row off the dock stands on: shown while such a row stands, inset from
-     * the screen's sides by the dock's own side gap and keeping the same air above and below it
-     * that a bar off the dock has always kept.
-     *
-     * <p>Package-visible, and given the arrangement rather than reading it, for the same reason
-     * {@link #applyEdgeStacks} is: the arrangement test drives it against the real layout.
-     *
-     * @return whether the plank appeared, went or changed size, which the content's edge padding
-     *     and every crop cut against it are derived from
+     * The off-dock plank for {@code layout} (DockController); package-visible, and given the
+     * arrangement rather than reading it, for the same reason {@link #applyEdgeStacks} is: the
+     * arrangement test drives it against the real layout.
      */
     boolean syncOffDockPlank(@NonNull PlaceLayout layout) {
-        View host = findViewById(R.id.place_off_dock_plank_host);
-        if (host == null) return false;
-        PlaceLayout.Edge edge = offDockPlankEdge(layout);
-        boolean want = edge != null;
-        int glassHeightPx = 0;
-        if (want) {
-            mOffDockPlankEdge = edge;
-            List<Element> onPlank = offDockPlankElements(layout, edge);
-            DockLayout dockLayout = mDock.dockLayoutIn(layout);
-            // The row's band carries the ticks inside its own air, so the plank is the band and
-            // whatever else stands on it — nothing is added for the strip.
-            glassHeightPx = dockLayout.appsRowBandPx
-                + (onPlank.contains(Element.AZ) ? azBarThicknessPx() : 0);
-            int sideInsetPx = dockLayout.horizontalInsetPx;
-            int airPx = offDockPlankAirPx(onPlank);
-            // Padding rather than margins: the glass fills the padded box, so whatever air the
-            // plank keeps is outside the sheet and the sheet is exactly what the radius rounds.
-            // A lone row keeps none here — its air is inside the sheet instead. Docked and leading
-            // the top edge, the sheet runs on into the strip behind the status bar, so its air goes
-            // below it instead: the same band claimed, with no gap between the sheet and the strip.
-            boolean flushTop = dockedStatusStripLeadsWith(layout, onPlank);
-            updateViewPadding(host, sideInsetPx, flushTop ? 0 : airPx, sideInsetPx,
-                flushTop ? 2 * airPx : airPx);
-        }
-        boolean changed = (host.getVisibility() == View.VISIBLE) != want
-            || mOffDockPlankGlassHeightPx != glassHeightPx;
-        mOffDockPlankGlassHeightPx = glassHeightPx;
-        host.setVisibility(want ? View.VISIBLE : View.GONE);
-        if (changed) {
-            refreshOffDockGlass(layout);
-            if (mTermuxActivityRootView != null)
-                ViewCompat.requestApplyInsets(mTermuxActivityRootView);
-        }
-        return changed;
+        return mDock.syncOffDockPlank(layout);
     }
 
     /**
@@ -17119,7 +16931,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout layout = arranged.layout();
         boolean lettersOffDock = mPreferences != null && arranged.azRowShown()
             && azBarEdge() != PlaceLayout.Edge.BOTTOM;
-        List<Element> onPlank = offDockPlankElements(layout, offDockPlankEdge(layout));
+        List<Element> onPlank = mDock.offDockPlankElements(layout, mDock.offDockPlankEdge(layout));
         // The plank carries the air either side of it once, for both bars: the row's band grows by
         // it and the index riding the plank claims only the letters themselves. The ticks stand in
         // the row's own air wherever it lies down, so a lying-down row claims its band and nothing
@@ -17128,7 +16940,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // row over it, on the same slab.
         int appsRowPx = dockLayout.appsRowBandPx + dockLayout.promptFieldBandPx
             + dockLayout.wallStripBandPx
-            + (onPlank.isEmpty() ? 0 : 2 * offDockPlankAirPx(onPlank));
+            + (onPlank.isEmpty() ? 0 : 2 * mDock.offDockPlankAirPx(onPlank));
         int azRowPx = onPlank.contains(Element.AZ)
             ? azBarThicknessPx()
             : lettersOffDock
@@ -25646,6 +25458,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public boolean dressPeekCard(@NonNull View surface) {
             return TermuxActivity.this.dressPeekCard(surface);
+        }
+
+        @Override
+        public int azBarThicknessPx() {
+            return TermuxActivity.this.azBarThicknessPx();
+        }
+
+        @Override
+        public int azBarHostMarginPx() {
+            return TermuxActivity.this.azBarHostMarginPx();
+        }
+
+        @Override
+        public boolean dockedStatusStripLeadsWith(@NonNull PlaceLayout layout,
+                                                  @NonNull List<Element> elements) {
+            return TermuxActivity.this.dockedStatusStripLeadsWith(layout, elements);
+        }
+
+        @Override
+        public boolean continuesIntoStatusInsetStrip(@Nullable View sheet) {
+            return TermuxActivity.this.continuesIntoStatusInsetStrip(sheet);
+        }
+
+        @Override
+        public float statusInsetSheetSliceStart(@Nullable View sheet) {
+            return TermuxActivity.this.statusInsetSheetSliceStart(sheet);
+        }
+
+        @Override
+        public boolean updateViewPadding(@Nullable View view, int left, int top, int right,
+                                         int bottom) {
+            return TermuxActivity.this.updateViewPadding(view, left, top, right, bottom);
+        }
+
+        @Override
+        public void refreshOffDockGlass(@NonNull PlaceLayout layout) {
+            TermuxActivity.this.refreshOffDockGlass(layout);
+        }
+
+        @Override
+        public void requestRootInsets() {
+            if (mTermuxActivityRootView != null)
+                ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         }
 
         @NonNull

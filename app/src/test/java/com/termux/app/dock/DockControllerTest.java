@@ -465,6 +465,53 @@ public class DockControllerTest {
         assertFalse(mHost.rows.shelfShown());
     }
 
+    // ------------------------------------------------------------------ Off-dock plank
+
+    /** Home with the pinned apps lying down along the top. */
+    private static final PlaceLayout APPS_TOP = HOME.withSlot(Element.APPS,
+        com.termux.app.place.Slot.on(Edge.TOP, 0));
+
+    @Test
+    public void thePlankStandsOnlyWhereTheAppsRowLiesDownOffTheDock() {
+        assertNull("along the bottom the row is the dock's own", mDock.offDockPlankEdge(HOME));
+        assertEquals(Edge.TOP, mDock.offDockPlankEdge(APPS_TOP));
+        assertTrue("another edge than the plank's carries nothing",
+            mDock.offDockPlankElements(APPS_TOP, Edge.BOTTOM).isEmpty());
+        assertTrue(mDock.offDockPlankElements(HOME, null).isEmpty());
+        assertEquals(DockGeometry.offDockPlankBars(APPS_TOP),
+            mDock.offDockPlankElements(APPS_TOP, Edge.TOP));
+    }
+
+    @Test
+    public void aPlankOfTwoBarsKeepsItsAirOutsideAndALoneRowNone() {
+        List<Element> lone = new ArrayList<>();
+        lone.add(Element.APPS);
+        assertEquals("a lone row keeps its air inside the sheet", 0, mDock.offDockPlankAirPx(lone));
+        lone.add(Element.AZ);
+        assertEquals("two bars keep the bar margin", 12, mDock.offDockPlankAirPx(lone));
+    }
+
+    @Test
+    public void thePlankIsPutAwayWhereNoRowLiesDownAndReGlazedOnlyWhenItChanges() {
+        FrameLayout plank = new FrameLayout(RuntimeEnvironment.getApplication());
+        mHost.views.put(R.id.place_off_dock_plank_host, plank);
+        assertTrue("shown before, gone now: a change", mDock.syncOffDockPlank(HOME));
+        assertEquals(View.GONE, plank.getVisibility());
+        assertEquals(0, mDock.offDockPlankGlassHeightPx());
+        assertEquals(1, mHost.offDockGlassPasses);
+        assertEquals(1, mHost.insetRequests);
+
+        assertFalse("the same answer again", mDock.syncOffDockPlank(HOME));
+        assertEquals("no second glaze", 1, mHost.offDockGlassPasses);
+        assertEquals(1, mHost.insetRequests);
+    }
+
+    @Test
+    public void noPlankHostNoPlank() {
+        assertFalse(mDock.syncOffDockPlank(APPS_TOP));
+        assertEquals(0, mHost.offDockGlassPasses);
+    }
+
     static class FakeHost implements DockController.Host {
         boolean prefs = true;
         float share = Float.NaN;
@@ -491,6 +538,9 @@ public class DockControllerTest {
         float cornersPx = 26f * 2.625f;
         int peekAsks;
         int peekDresses;
+        boolean stripLeads;
+        int offDockGlassPasses;
+        int insetRequests;
         int barHeightPasses;
         int toolbarPasses;
 
@@ -653,5 +703,27 @@ public class DockControllerTest {
             peekDresses++;
             return peekStands;
         }
+        @Override public int azBarThicknessPx() { return 50; }
+        @Override public int azBarHostMarginPx() { return 12; }
+        @Override public boolean dockedStatusStripLeadsWith(@NonNull PlaceLayout layout,
+                                                            @NonNull List<Element> elements) {
+            return stripLeads;
+        }
+        @Override public boolean continuesIntoStatusInsetStrip(@Nullable View sheet) {
+            return false;
+        }
+        @Override public float statusInsetSheetSliceStart(@Nullable View sheet) { return 0f; }
+        @Override public boolean updateViewPadding(@Nullable View view, int left, int top,
+                                                   int right, int bottom) {
+            if (view == null) return false;
+            boolean moved = view.getPaddingLeft() != left || view.getPaddingTop() != top
+                || view.getPaddingRight() != right || view.getPaddingBottom() != bottom;
+            if (moved) view.setPadding(left, top, right, bottom);
+            return moved;
+        }
+        @Override public void refreshOffDockGlass(@NonNull PlaceLayout layout) {
+            offDockGlassPasses++;
+        }
+        @Override public void requestRootInsets() { insetRequests++; }
     }
 }
