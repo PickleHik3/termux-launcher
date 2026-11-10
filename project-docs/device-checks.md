@@ -18,6 +18,22 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Quick switch with the built-in keyboard up (11-10, fix/home-gestures 6d26e6add).** The
+  keyboard now asks the back swipe for its two side strips only. Emulator: in the drawer with the
+  keyboard up, `dumpsys window | grep mSystemGestureExclusion` shows two 78 px strips, and a
+  sideways swipe starting on the keyboard's bottom pixel row (y 2337, inside the old exclusion)
+  now switches to the previous app (it did nothing before); the edge-column swipe on the keyboard
+  still types instead of going Back. The developer's own failure (a swipe on the pill itself) did
+  not reproduce on the emulator, whose keyboard rests 1 px into the handle band. Owed · pong:
+  drawer open, built-in keyboard up, swipe right along the pill: the previous app comes up; the
+  same with the keyboard up on the Workspace and in the palette; a swipe in from the screen side
+  over the keyboard's edge keys still types, not Back.
+- **A Display page with no display takes plain swipes (11-10, fix/home-gestures a1fac567a).**
+  Policy unit test only. Owed · emulator or pong: on the Display page with nothing running
+  ("No display is running"), a sideways swipe across the middle pages to the neighbour, both
+  ways; Start display, then the same swipe goes to the display (the page is left only by its
+  border); stop the display, and the plain swipe pages again.
+
 - **A category sort survives a second tap (11-10, #195).** Robolectric test only. Owed · pong or
   emulator: Settings › Dock › Drawer › Category sorting: start a sort, tap the row again
   mid-run: the progress notification stays, the run finishes and posts its result.
