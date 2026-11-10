@@ -19,7 +19,7 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 ## Agent
 
 - **A category sort survives a second tap (11-10, #195).** Robolectric test only. Owed · pong or
-  emulator: Settings › Dock › drawer categories, start Sort apps into categories, tap the row again
+  emulator: Settings › Dock › Drawer › Category sorting: start a sort, tap the row again
   mid-run: the progress notification stays, the run finishes and posts its result.
 - **Voice settings fixes (11-10, #232).** Unit tests for the picker only. Owed · pong: Settings ›
   On-device AI › Voice input at font scale 1.5: the Speech engine segments read "Android system"
