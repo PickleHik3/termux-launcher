@@ -167,6 +167,12 @@ public class SheetsControllerTest {
     }
 
     @Test
+    public void noTerminalActionsSheetOpensWithoutASession() {
+        assertFalse(mSheets.showTerminalActionSheet(null));
+        assertNull("nothing is built for nothing", mSheets.terminalActionsSheetIfBuilt());
+    }
+
+    @Test
     public void noTouchIsARenameTypingTouchWhileNoRenameIsActive() {
         assertFalse(mSheets.isFolderRenameTypingTouch(10f, 10f));
     }
@@ -270,6 +276,18 @@ public class SheetsControllerTest {
             return proxy(com.termux.app.launcher.drawer.AppDrawerController.Host.class);
         }
         @Nullable @Override public com.termux.app.launcher.drawer.AppDrawerController.AppDrawerDockChoreographyTarget dockChoreographyTarget() { return null; }
+        @Nullable @Override public com.termux.terminal.TerminalSession currentSession() { return null; }
+        @Override public void setHomeSheetDecorNavStripAlpha(float alpha) { }
+        @Override public void prepareWallpaperDoor() { }
+        @Override public void releasePreparedWallpaper() { }
+        @Override public boolean shouldUseWallpaperPassthroughMode() { return false; }
+        @Override public boolean isTerminalStylingAvailable() { return false; }
+        @Override public void handleTerminalAction(@NonNull com.termux.app.launcher.home.TerminalActionsSheet.Action action) { }
+        @Override public void runHomeAction(@NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) { }
+        @Nullable @Override public WidgetPaneController widgetPaneController() { return null; }
+        @Override public boolean isDefaultHomeApp() { return false; }
+        @NonNull @Override public com.termux.app.wall.UseAs useAs() { return com.termux.app.wall.UseAs.TERMINAL; }
+        @Override public void setHomeActionsAnchor(float rawX, float rawY) { }
         @Override public void flushPendingAccessoryGeometry() { }
         @Override public void setPromptFieldUnderPalette(boolean under) { promptUnderPalette.add(under); }
         @Override public void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer) {

@@ -106,6 +106,30 @@ public final class SheetsController {
         void setPromptFieldUnderPalette(boolean under);
         /** The one owner of the in-app keyboard's interceptor slot, given what is open now. */
         void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer);
+
+        // -------------------------------------------------------------- the actions sheets
+
+        /** The session in front; null when there is none. */
+        @Nullable com.termux.terminal.TerminalSession currentSession();
+        /** The decor strip under the pill, faded as a sheet's card covers it (the dock's overlay). */
+        void setHomeSheetDecorNavStripAlpha(float alpha);
+        /** The wallpaper door a row may open, made ready on arm and let go when the sheet is gone. */
+        void prepareWallpaperDoor();
+        void releasePreparedWallpaper();
+        /** Facts the terminal's rows are chosen by. */
+        boolean shouldUseWallpaperPassthroughMode();
+        boolean isTerminalStylingAvailable();
+        /** Runs a terminal actions row (the activity's menu id for it, through handleTerminalAction). */
+        void handleTerminalAction(@NonNull com.termux.app.launcher.home.TerminalActionsSheet.Action action);
+        /** Runs a Home actions row. */
+        void runHomeAction(@NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item);
+        /** The Home pages' controller; null before it is made. */
+        @Nullable com.termux.app.launcher.widget.WidgetPaneController widgetPaneController();
+        /** Facts Home's rows are chosen by. */
+        boolean isDefaultHomeApp();
+        @NonNull com.termux.app.wall.UseAs useAs();
+        /** Where the long press that opened Home's sheet landed, for the action it runs. */
+        void setHomeActionsAnchor(float rawX, float rawY);
     }
 
     @NonNull private final Host mHost;
@@ -741,5 +765,121 @@ public final class SheetsController {
         margins.topMargin = -barTop;
         margins.bottomMargin = -barBottom;
         host.setLayoutParams(margins);
+    }
+
+    // ================================================================== the actions sheets
+
+    @Nullable private com.termux.app.launcher.home.HomeActionsSheet mTerminalActionsSheet;
+    @Nullable private com.termux.app.launcher.home.HomeActionsSheet mHomeActionsSheet;
+
+    /** The terminal's actions sheet if it has been built; null otherwise. */
+    @Nullable
+    public com.termux.app.launcher.home.HomeActionsSheet terminalActionsSheetIfBuilt() {
+        return mTerminalActionsSheet;
+    }
+
+    /** Home's actions sheet if it has been built; null otherwise. */
+    @Nullable
+    public com.termux.app.launcher.home.HomeActionsSheet homeActionsSheetIfBuilt() {
+        return mHomeActionsSheet;
+    }
+
+    /**
+     * @param anchor accepted for the callers that pass one; the sheet always rises from the bottom.
+     */
+    public boolean showTerminalActionSheet(@Nullable android.graphics.PointF anchor) {
+        com.termux.terminal.TerminalSession currentSession = mHost.currentSession();
+        if (currentSession == null) {
+            return false;
+        }
+        if (mTerminalActionsSheet != null && mTerminalActionsSheet.isOpen()) {
+            return true;
+        }
+        Activity activity = mHost.activity();
+        android.view.ViewGroup content = activity.findViewById(android.R.id.content);
+        if (content == null) return false;
+        if (mTerminalActionsSheet == null) {
+            mTerminalActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(activity,
+                new com.termux.app.launcher.home.HomeActionsSheet.Listener() {
+                    @Override public void onHomeAction(
+                            @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) { }
+                    @Override public void onNavBandCovered(float covered) {
+                        mHost.setHomeSheetDecorNavStripAlpha(1f - covered);
+                    }
+                    @Override public void onSheetClosed() {
+                        TerminalView terminalView = mHost.terminalView();
+                        if (terminalView != null) terminalView.onContextMenuClosed(null);
+                    }
+                    @Override public void onRowArmed(
+                            @NonNull com.termux.app.launcher.home.ActionSheetRow row) {
+                        if (row.token instanceof com.termux.app.launcher.home.TerminalActionsSheet.Action
+                            && ((com.termux.app.launcher.home.TerminalActionsSheet.Action) row.token)
+                                .preparesWallpaper())
+                            mHost.prepareWallpaperDoor();
+                    }
+                    @Override public void onSheetGone() {
+                        mHost.releasePreparedWallpaper();
+                    }
+                });
+            content.addView(mTerminalActionsSheet, new android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Workspace.
+        // Style stands only when the companion is installed: a row that opens the Appearance
+        // settings under the name of a plugin the device does not have is a broken promise.
+        mTerminalActionsSheet.openRows(activity.getString(R.string.terminal_actions_title),
+            com.termux.app.launcher.home.TerminalActionsSheet.rows(activity,
+                mHost.shouldUseWallpaperPassthroughMode(), mHost.isTerminalStylingAvailable(),
+                currentSession.getPid()),
+            row -> mHost.handleTerminalAction(
+                (com.termux.app.launcher.home.TerminalActionsSheet.Action) row.token));
+        return true;
+    }
+
+    public void showHomeActionsSheet(float rawX, float rawY) {
+        Activity activity = mHost.activity();
+        android.view.ViewGroup content = activity.findViewById(android.R.id.content);
+        if (content == null) return;
+        if (mHomeActionsSheet == null) {
+            mHomeActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(activity,
+                new com.termux.app.launcher.home.HomeActionsSheet.Listener() {
+                    @Override public void onHomeAction(
+                            @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
+                        mHost.runHomeAction(item);
+                    }
+                    @Override public void onActionArmed(
+                            @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
+                        if (com.termux.app.launcher.home.HomeActionsSheetPolicy.preparesWallpaper(item))
+                            mHost.prepareWallpaperDoor();
+                    }
+                    @Override public void onSheetGone() {
+                        mHost.releasePreparedWallpaper();
+                    }
+                    // The card runs under the pill; the strip above it fades as the card arrives.
+                    @Override public void onNavBandCovered(float covered) {
+                        mHost.setHomeSheetDecorNavStripAlpha(1f - covered);
+                    }
+                    @Override public void onLayoutLockChanged(boolean locked) {
+                        com.termux.app.launcher.home.HomeSettings.setLayoutLocked(
+                            activity, locked);
+                        com.termux.app.launcher.widget.WidgetPaneController pane = mHost.widgetPaneController();
+                        if (pane != null) pane.setLayoutLocked(locked);
+                    }
+                });
+            content.addView(mHomeActionsSheet, new android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        mHost.setHomeActionsAnchor(rawX, rawY);
+        com.termux.app.launcher.widget.WidgetPaneController pane = mHost.widgetPaneController();
+        boolean hasPages = pane != null;
+        // Set as default home is for people using the launcher as Home and not yet holding it;
+        // someone who chose Terminal in the welcome card is never asked.
+        boolean defaultHome = mHost.isDefaultHomeApp()
+            || mHost.useAs() == com.termux.app.wall.UseAs.TERMINAL;
+        boolean pageEmpty = hasPages && pane.currentPageEmpty();
+        int pageCount = hasPages ? pane.homePageCount() : 0;
+        mHomeActionsSheet.open(locked -> com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
+                defaultHome, hasPages, pageEmpty, pageCount, locked),
+            com.termux.app.launcher.home.HomeSettings.isLayoutLocked(activity));
     }
 }

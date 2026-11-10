@@ -1485,7 +1485,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int CONTEXT_MENU_COMMAND_PALETTE_ID = 10;
 
     /** The terminal's More sheet, built on first use and laid over everything. */
-    @Nullable private com.termux.app.launcher.home.HomeActionsSheet mTerminalActionsSheet;
 
     private static final String ARG_TERMINAL_TOOLBAR_TEXT_INPUT = "terminal_toolbar_text_input";
 
@@ -1982,8 +1981,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
             // The root consumes the insets, so the overlays after it in this frame are handed them.
-            if (mHomeActionsSheet != null) mHomeActionsSheet.applyInsets(insetsCompat);
-            if (mTerminalActionsSheet != null) mTerminalActionsSheet.applyInsets(insetsCompat);
+            if (mSheets.homeActionsSheetIfBuilt() != null) mSheets.homeActionsSheetIfBuilt().applyInsets(insetsCompat);
+            if (mSheets.terminalActionsSheetIfBuilt() != null) mSheets.terminalActionsSheetIfBuilt().applyInsets(insetsCompat);
             // The drawer plane pins itself above a system keyboard; guarded on the field so a
             // keyboard rising over the terminal never builds a drawer that was never opened.
             if (mSheets.appDrawerControllerIfBuilt() != null) {
@@ -11291,7 +11290,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void resetUiForInPlaceSessionRecovery(@NonNull String reason) {
         Logger.logWarn(LOG_TAG, "Resetting launcher UI before in-place empty-session recovery from " + reason);
-        if (mTerminalActionsSheet != null) mTerminalActionsSheet.closeImmediately();
+        if (mSheets.terminalActionsSheetIfBuilt() != null) mSheets.terminalActionsSheetIfBuilt().closeImmediately();
         if (mSheets.terminalSheetIfBuilt() != null) mSheets.terminalSheetIfBuilt().dismissImmediately();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
@@ -18440,52 +18439,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * @param anchor accepted for the callers that pass one; the sheet always rises from the bottom.
      */
-    boolean showTerminalActionSheet(@Nullable android.graphics.PointF anchor) {
-        TerminalSession currentSession = getCurrentSession();
-        if (currentSession == null) {
-            return false;
-        }
-        if (mTerminalActionsSheet != null && mTerminalActionsSheet.isOpen()) {
-            return true;
-        }
-        ViewGroup content = findViewById(android.R.id.content);
-        if (content == null) return false;
-        if (mTerminalActionsSheet == null) {
-            mTerminalActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(this,
-                new com.termux.app.launcher.home.HomeActionsSheet.Listener() {
-                    @Override public void onHomeAction(
-                            @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) { }
-                    @Override public void onNavBandCovered(float covered) {
-                        setHomeSheetDecorNavStripAlpha(1f - covered);
-                    }
-                    @Override public void onSheetClosed() {
-                        if (mTerminalView != null) mTerminalView.onContextMenuClosed(null);
-                    }
-                    @Override public void onRowArmed(
-                            @NonNull com.termux.app.launcher.home.ActionSheetRow row) {
-                        if (row.token instanceof com.termux.app.launcher.home.TerminalActionsSheet.Action
-                            && ((com.termux.app.launcher.home.TerminalActionsSheet.Action) row.token)
-                                .preparesWallpaper())
-                            prepareWallpaperDoor();
-                    }
-                    @Override public void onSheetGone() {
-                        releasePreparedWallpaper();
-                    }
-                });
-            content.addView(mTerminalActionsSheet, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        }
-        // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Workspace.
-        // Style stands only when the companion is installed: a row that opens the Appearance
-        // settings under the name of a plugin the device does not have is a broken promise.
-        mTerminalActionsSheet.openRows(getString(R.string.terminal_actions_title),
-            com.termux.app.launcher.home.TerminalActionsSheet.rows(this,
-                shouldUseWallpaperPassthroughMode(), isTerminalStylingAvailable(),
-                currentSession.getPid()),
-            row -> handleTerminalAction(terminalActionId(
-                (com.termux.app.launcher.home.TerminalActionsSheet.Action) row.token)));
-        return true;
-    }
+    boolean showTerminalActionSheet(@Nullable android.graphics.PointF anchor) { return mSheets.showTerminalActionSheet(anchor); }
 
     private static int terminalActionId(
             @NonNull com.termux.app.launcher.home.TerminalActionsSheet.Action action) {
@@ -19096,29 +19050,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             // Home's long-press sheet lies over the Home page that summoned it.
             @Override public boolean onBack() {
-                if (mHomeActionsSheet == null || !mHomeActionsSheet.isOpen()) return false;
-                mHomeActionsSheet.close();
+                if (mSheets.homeActionsSheetIfBuilt() == null || !mSheets.homeActionsSheetIfBuilt().isOpen()) return false;
+                mSheets.homeActionsSheetIfBuilt().close();
                 return true;
             }
             @Override public boolean isOpen() {
-                return mHomeActionsSheet != null && mHomeActionsSheet.isOpen();
+                return mSheets.homeActionsSheetIfBuilt() != null && mSheets.homeActionsSheetIfBuilt().isOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                if (mHomeActionsSheet != null) mHomeActionsSheet.closeImmediately();
+                if (mSheets.homeActionsSheetIfBuilt() != null) mSheets.homeActionsSheetIfBuilt().closeImmediately();
             }
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             // The terminal's More sheet, the Home sheet's twin.
             @Override public boolean onBack() {
-                if (mTerminalActionsSheet == null || !mTerminalActionsSheet.isOpen()) return false;
-                mTerminalActionsSheet.close();
+                if (mSheets.terminalActionsSheetIfBuilt() == null || !mSheets.terminalActionsSheetIfBuilt().isOpen()) return false;
+                mSheets.terminalActionsSheetIfBuilt().close();
                 return true;
             }
             @Override public boolean isOpen() {
-                return mTerminalActionsSheet != null && mTerminalActionsSheet.isOpen();
+                return mSheets.terminalActionsSheetIfBuilt() != null && mSheets.terminalActionsSheetIfBuilt().isOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                if (mTerminalActionsSheet != null) mTerminalActionsSheet.closeImmediately();
+                if (mSheets.terminalActionsSheetIfBuilt() != null) mSheets.terminalActionsSheetIfBuilt().closeImmediately();
             }
         });
         registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
@@ -24302,6 +24256,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void flushPendingAccessoryGeometry() { TermuxActivity.this.flushPendingAccessoryGeometry(); }
         @Override public void setPromptFieldUnderPalette(boolean under) { TermuxActivity.this.setPromptFieldUnderPalette(under); }
         @Override public void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer) { TermuxActivity.this.applyInAppKeyboardTypingClaim(palette, sheet, drawer); }
+        // -------------------------------------------------------------- the actions sheets
+        @Override public @Nullable TerminalSession currentSession() { return TermuxActivity.this.getCurrentSession(); }
+        @Override public void setHomeSheetDecorNavStripAlpha(float alpha) { TermuxActivity.this.setHomeSheetDecorNavStripAlpha(alpha); }
+        @Override public void prepareWallpaperDoor() { TermuxActivity.this.prepareWallpaperDoor(); }
+        @Override public void releasePreparedWallpaper() { TermuxActivity.this.releasePreparedWallpaper(); }
+        @Override public boolean shouldUseWallpaperPassthroughMode() { return TermuxActivity.this.shouldUseWallpaperPassthroughMode(); }
+        @Override public boolean isTerminalStylingAvailable() { return TermuxActivity.this.isTerminalStylingAvailable(); }
+        @Override public void handleTerminalAction(@NonNull com.termux.app.launcher.home.TerminalActionsSheet.Action action) { TermuxActivity.this.handleTerminalAction(terminalActionId(action)); }
+        @Override public void runHomeAction(@NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) { TermuxActivity.this.runHomeAction(item); }
+        @Override public @Nullable com.termux.app.launcher.widget.WidgetPaneController widgetPaneController() { return mWidgetPaneController; }
+        @Override public boolean isDefaultHomeApp() { return TermuxActivity.this.isDefaultHomeApp(); }
+        @Override public @NonNull com.termux.app.wall.UseAs useAs() { return TermuxActivity.this.useAs(); }
+        @Override public void setHomeActionsAnchor(float rawX, float rawY) { mHomeActionsRawX = rawX; mHomeActionsRawY = rawY; }
     }
 
     /** What only the activity gives the status bar's controller (statusbar.StatusBarController). */
@@ -27989,55 +27956,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** Home's long-press sheet, built on the first long press and laid over everything. */
-    @Nullable private com.termux.app.launcher.home.HomeActionsSheet mHomeActionsSheet;
     /** Where the long press that opened the sheet rested, on screen; Edit pages' wheels hang there. */
     private float mHomeActionsRawX, mHomeActionsRawY;
 
     /** A long press on a Home page's free area: the sheet of what Home and the launcher offer. */
-    private void showHomeActionsSheet(float rawX, float rawY) {
-        ViewGroup content = findViewById(android.R.id.content);
-        if (content == null) return;
-        if (mHomeActionsSheet == null) {
-            mHomeActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(this,
-                new com.termux.app.launcher.home.HomeActionsSheet.Listener() {
-                    @Override public void onHomeAction(
-                            @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
-                        runHomeAction(item);
-                    }
-                    @Override public void onActionArmed(
-                            @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) {
-                        if (com.termux.app.launcher.home.HomeActionsSheetPolicy.preparesWallpaper(item))
-                            prepareWallpaperDoor();
-                    }
-                    @Override public void onSheetGone() {
-                        releasePreparedWallpaper();
-                    }
-                    // The card runs under the pill; the strip above it fades as the card arrives.
-                    @Override public void onNavBandCovered(float covered) {
-                        setHomeSheetDecorNavStripAlpha(1f - covered);
-                    }
-                    @Override public void onLayoutLockChanged(boolean locked) {
-                        com.termux.app.launcher.home.HomeSettings.setLayoutLocked(
-                            TermuxActivity.this, locked);
-                        if (mWidgetPaneController != null) mWidgetPaneController.setLayoutLocked(locked);
-                    }
-                });
-            content.addView(mHomeActionsSheet, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        }
-        mHomeActionsRawX = rawX;
-        mHomeActionsRawY = rawY;
-        boolean hasPages = mWidgetPaneController != null;
-        // Set as default home is for people using the launcher as Home and not yet holding it;
-        // someone who chose Terminal in the welcome card is never asked.
-        boolean defaultHome = isDefaultHomeApp()
-            || useAs() == com.termux.app.wall.UseAs.TERMINAL;
-        boolean pageEmpty = hasPages && mWidgetPaneController.currentPageEmpty();
-        int pageCount = hasPages ? mWidgetPaneController.homePageCount() : 0;
-        mHomeActionsSheet.open(locked -> com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
-                defaultHome, hasPages, pageEmpty, pageCount, locked),
-            com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
-    }
+    private void showHomeActionsSheet(float rawX, float rawY) { mSheets.showHomeActionsSheet(rawX, rawY); }
 
     /**
      * Puts an app on Home as an icon, from the app menu's Add to Home or the sheet's Add an app:
