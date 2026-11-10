@@ -203,6 +203,84 @@ public class SheetsControllerTest {
         assertNull(mSheets.terminalSheetIfBuilt());
     }
 
+    // ------------------------------------------------------------------ the Home palette
+
+    @Test
+    public void theHomePaletteGestureFollowsItsSetting() {
+        com.termux.app.launcher.home.HomeSettings.setGestureAction(mHost.activity,
+            com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP,
+            com.termux.app.launcher.home.HomeGestures.Action.PALETTE);
+        assertTrue(mSheets.isHomePaletteGestureEnabled());
+        com.termux.app.launcher.home.HomeSettings.setGestureAction(mHost.activity,
+            com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP,
+            com.termux.app.launcher.home.HomeGestures.Action.NONE);
+        assertFalse(mSheets.isHomePaletteGestureEnabled());
+    }
+
+    @Test
+    public void openingTheHomePaletteWhileItIsOpenDoesNothing() {
+        mHost.raises = true;
+        mSheets.openHomePalette(false);
+        assertEquals("closed, the palette raises the keyboard first", 1, mHost.keyboardRaises);
+        shadowOf(Looper.getMainLooper()).idle();
+
+        ReflectionHelpers.setField(mSheets.getCommandPaletteController(), "mOpen", true);
+        mSheets.openHomePalette(false);
+        mSheets.openHomePalette(false);
+        assertEquals("open, nothing is raised again", 1, mHost.keyboardRaises);
+    }
+
+    @Test
+    public void thePaletteTileRestylesTheDockOncePerChangeOfItsStoredValue() {
+        mHost.preferences = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            .build(mHost.activity, false);
+        mHost.hasBar = true;
+        com.termux.app.SuggestionBarView bar = new com.termux.app.SuggestionBarView(mHost.activity, null);
+        mSheets.syncPaletteTile(bar);
+        mSheets.syncPaletteTile(bar);
+        assertEquals("syncing restyles nothing itself", 0, mHost.dockRestyles);
+
+        android.content.SharedPreferences store = mHost.preferences.getSharedPreferences();
+        boolean on = store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
+            com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
+        store.edit().putBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON, !on).commit();
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals("heard once though synced twice", 1, mHost.dockRestyles);
+
+        store.edit().putString("some_other_key", "x").commit();
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals("another key is not the tile's", 1, mHost.dockRestyles);
+
+        store.edit().putBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON, on).commit();
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(2, mHost.dockRestyles);
+    }
+
+    // ------------------------------------------------------------------ glass and shape
+
+    @Test
+    public void thePaletteIsGivenCornersThatFollowDockedOrFloating() {
+        // No store: the Sheets element's Corners as shipped, on the resting page.
+        int shipped = com.termux.app.chrome.ElementGlass.of(null,
+            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, 0).cornersDp;
+        assertEquals(shipped, mSheets.commandPaletteCornersDp());
+        // Where they follow the Style (CommandPaletteShape.openRadiusDp): square Docked, the
+        // rounded-surface token Floating.
+        assertEquals(0, com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            .resolveAutoCornerRadiusDp(com.termux.shared.termux.settings.preferences
+                .TermuxAppSharedPreferences.SurfaceSlot.SHEETS, false));
+        assertEquals(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.DEFAULT_ROUNDED_SURFACE_CORNER_RADIUS_DP,
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                .resolveAutoCornerRadiusDp(com.termux.shared.termux.settings.preferences
+                    .TermuxAppSharedPreferences.SurfaceSlot.SHEETS, true));
+
+        // Read from the live store when there is one: the same answer for an untouched store.
+        mHost.preferences = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            .build(mHost.activity, false);
+        assertEquals(shipped, mSheets.commandPaletteCornersDp());
+    }
+
     // ------------------------------------------------------------------ the fake
 
     private static final class FakeHost implements SheetsController.Host {
@@ -214,6 +292,11 @@ public class SheetsControllerTest {
         int hostsMade;
         final List<String> claims = new ArrayList<>();
         final List<Boolean> promptUnderPalette = new ArrayList<>();
+        boolean raises;
+        int keyboardRaises;
+        boolean hasBar;
+        int dockRestyles;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences;
 
         FakeHost(Activity activity) { this.activity = activity; }
 
@@ -235,7 +318,7 @@ public class SheetsControllerTest {
 
         @NonNull @Override public Activity activity() { return activity; }
         @Override public boolean isActivityVisible() { return true; }
-        @Override public boolean hasSuggestionBarView() { return false; }
+        @Override public boolean hasSuggestionBarView() { return hasBar; }
         @Override public boolean hasPreferences() { return false; }
         @NonNull @Override public TerminalDress.Source terminalDressSource() {
             return new TerminalDress.Source() {
@@ -288,6 +371,21 @@ public class SheetsControllerTest {
         @Override public boolean isDefaultHomeApp() { return false; }
         @NonNull @Override public com.termux.app.wall.UseAs useAs() { return com.termux.app.wall.UseAs.TERMINAL; }
         @Override public void setHomeActionsAnchor(float rawX, float rawY) { }
+        @Override public boolean isOnHome() { return false; }
+        @Override public boolean raiseInAppKeyboard() { keyboardRaises++; return raises; }
+        @Override public boolean isHomeKeyboardAlwaysOn() { return false; }
+        @NonNull @Override public com.termux.app.place.PlaceLayout.Edge appsEdge() {
+            return com.termux.app.place.PlaceLayout.Edge.values()[0];
+        }
+        @Nullable @Override public com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences() { return preferences; }
+        @Override public void restyleDockSurface() { dockRestyles++; }
+        @Override public boolean openHomeFloatHere() { return false; }
+        @SuppressWarnings("ConstantConditions")
+        @NonNull @Override public com.termux.app.chrome.WallpaperFrostPainter chromeFrost() { return null; }
+        @SuppressWarnings("ConstantConditions")
+        @NonNull @Override public com.termux.app.chrome.GlassSurfaceFactory chromeGlass() { return null; }
+        @Override public int restingPage() { return 0; }
+        @Override public float dpToPx(float dp) { return dp; }
         @Override public void flushPendingAccessoryGeometry() { }
         @Override public void setPromptFieldUnderPalette(boolean under) { promptUnderPalette.add(under); }
         @Override public void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer) {

@@ -4565,7 +4565,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void feedTerminalPlank(MotionEvent ev) {
         if (!mTerminalGlassActive || mPaneController == null) return;
-        if (isAppDrawerEngaged() || mSurfaceEditor.isActive() || isCommandPaletteOpen()) {
+        if (mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive() || mSheets.isCommandPaletteOpen()) {
             mPaneController.cancelPaneGlassTouch();
             return;
         }
@@ -6201,16 +6201,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The Floating Style for one surface's dress: the arrangement of the half it wears. */
-    /**
-     * The Menus and dialogs surface's Corners on the resting page, as stored (dp; -1 follows the
-     * style), and whether the style is Floating: what the command palette's corners follow.
-     */
-    public int commandPaletteCornersDp() {
-        return com.termux.app.chrome.ElementGlass.of(mPreferences,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage())
-            .cornersDp;
-    }
-
     /** Whether chrome is in the Floating style (rounded cards) rather than Docked. */
     public boolean isFloatingStyle() {
         return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
@@ -10232,16 +10222,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.chrome.ChromeEdgeRule.stripFraction(mLastStatusBarInsetTop, sheetPx);
     }
 
-    /** Wallpaper frost for the command palette glass; true when the live blur should rest. */
-    public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost) {
-        return mChrome.frost().applyCommandPalette(frost);
-    }
-
-    /** Wallpaper frost for the sheet plane's glass; true when the live blur should rest. */
-    public boolean applyTerminalSheetWallpaperFrost(@NonNull ImageView frost) {
-        return mChrome.frost().applyTerminalSheet(frost);
-    }
-
     private float terminalWindowGlassStatusFraction(@NonNull View host) {
         int paneHeight = host.getLayoutParams() != null ? host.getLayoutParams().height : 0;
         if (paneHeight <= 0) {
@@ -11548,12 +11528,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                 @Override
                 public boolean isCommandPaletteOpen() {
-                    return TermuxActivity.this.isCommandPaletteOpen();
+                    return mSheets.isCommandPaletteOpen();
                 }
 
                 @Override
                 public boolean isAppDrawerEngaged() {
-                    return TermuxActivity.this.isAppDrawerEngaged();
+                    return mSheets.isAppDrawerEngaged();
                 }
 
                 @Override
@@ -12254,7 +12234,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The one exception is the pass the drawer books for a keyboard its search raised.
         boolean thawed = mDrawerKeyboardStackPassPending;
         mDrawerKeyboardStackPassPending = false;
-        if (isAppDrawerEngaged() && !thawed) {
+        if (mSheets.isAppDrawerEngaged() && !thawed) {
             mAppDrawerGeometryFreezePending = true;
             return;
         }
@@ -12280,7 +12260,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * or a batch is open, and the pass that runs next is the one let through.
      */
     private void layOutAccessoryStackForDrawerKeyboard() {
-        if (!isAppDrawerEngaged()) return;
+        if (!mSheets.isAppDrawerEngaged()) return;
         mDrawerKeyboardStackPassPending = true;
         mGeometry.requestNow(GeometryScheduler.Reason.DRAWER, GeometryScheduler.ResizePolicy.NOW);
     }
@@ -15511,9 +15491,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     true,
                     mDock.appliedDockLayout().railPull,
                     !mSurfaceEditor.isActive(),
-                    !isCommandPaletteOpen(),
+                    !mSheets.isCommandPaletteOpen(),
                     true,
-                    !isAppDrawerEngaged());
+                    !mSheets.isAppDrawerEngaged());
             }
 
             @Override
@@ -16731,7 +16711,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Frozen while the app drawer plane is engaged: this path resizes the toolbar and the
         // terminal, and driving it per animation frame is a SIGWINCH storm. Replayed on close.
         // The drawer's one pass for a keyboard its search raised comes through.
-        if (isAppDrawerEngaged() && !mAccessoryGeometryThawedForDrawer) {
+        if (mSheets.isAppDrawerEngaged() && !mAccessoryGeometryThawedForDrawer) {
             mAppDrawerGeometryFreezePending = true;
             return false;
         }
@@ -17304,55 +17284,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bar.setDrawerTileAt(on ? (store != null ? store.drawerTilePlace()
                 : com.termux.app.dock.DrawerTilePolicy.DEFAULT_PLACE) : null,
             mDrawerTileListener);
-        syncPaletteTile(bar);
-    }
-
-    // ------------------------------------------------------------------ Command palette tile
-    //
-    // The Command palette button (Dock card Options, pref dock_command_palette_button, one switch
-    // for both halves): the apps row's trailing slot (PaletteTilePolicy), with any Dock design.
-    // A tap opens the palette with the keyboard raised, as the Search field's does.
-
-    @Nullable private android.content.SharedPreferences mPaletteTileStore;
-    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
-        mPaletteTileKnob = (preferences, key) -> {
-            if ((com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON.equals(key)
-                || com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON.equals(key)
-                || com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN.equals(key)
-                || com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN.equals(key))
-                && mSuggestionBarView != null) {
-                // The row takes or gives back the slot, and the dock is dressed again (beads).
-                mDock.restyleDockSurface();
-            }
-        };
-
-    private void syncPaletteTile(@NonNull SuggestionBarView bar) {
-        android.content.SharedPreferences store =
-            mPreferences == null ? null : mPreferences.getSharedPreferences();
-        if (store != null && mPaletteTileStore != store) {
-            if (mPaletteTileStore != null)
-                mPaletteTileStore.unregisterOnSharedPreferenceChangeListener(mPaletteTileKnob);
-            store.registerOnSharedPreferenceChangeListener(mPaletteTileKnob);
-            mPaletteTileStore = store;
-        }
-        boolean on = store == null
-            ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
-            : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
-                com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
-        // Its column is one for every layout; absent, the row's last.
-        int column = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
-            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN,
-                com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
-        bar.setPaletteTile(on, column,
-            on ? () -> getCommandPaletteController().openFromField(null, true) : null);
-        // New float terminal: the same float the Terminal entry's New float here opens.
-        boolean floatOn = store != null && store.getBoolean(
-            com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON,
-            com.termux.app.surfaces.cards.DockCard.DEFAULT_FLOAT_TERMINAL_BUTTON);
-        int floatColumn = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
-            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN,
-                com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
-        bar.setFloatTile(floatOn, floatColumn, floatOn ? this::openHomeFloatHere : null);
+        mSheets.syncPaletteTile(bar);
     }
 
     /**
@@ -17362,7 +17294,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final SuggestionBarView.DrawerTileListener mDrawerTileListener =
         new SuggestionBarView.DrawerTileListener() {
             @Override public void onDrawerTileTapped() {
-                openAppDrawerFromHome();
+                mSheets.openAppDrawerFromHome();
             }
 
             @Override public void onTileColumnsMoved(int drawerColumn, int paletteColumn,
@@ -18358,7 +18290,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case CONTEXT_MENU_COMMAND_PALETTE_ID:
                 // Opened on a Home page, the palette shows the Home set.
                 com.termux.app.terminal.TerminalCommandPalette.show(getCommandPaletteController(),
-                    paletteContextHere());
+                    mSheets.paletteContextHere());
                 return true;
             case CONTEXT_MENU_STYLE_ID:
                 openTerminalStyling();
@@ -18433,13 +18365,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@code terminal.action_sheet} both read it as "was the gesture spent here".
      */
     boolean showTerminalActionSheet() {
-        return showTerminalActionSheet(null);
+        return mSheets.showTerminalActionSheet(null);
     }
-
-    /**
-     * @param anchor accepted for the callers that pass one; the sheet always rises from the bottom.
-     */
-    boolean showTerminalActionSheet(@Nullable android.graphics.PointF anchor) { return mSheets.showTerminalActionSheet(anchor); }
 
     private static int terminalActionId(
             @NonNull com.termux.app.launcher.home.TerminalActionsSheet.Action action) {
@@ -18497,7 +18424,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void setCommandPaletteInterceptorActive(boolean active) {
-            TermuxActivity.this.setCommandPaletteInterceptorActive(active);
+            mSheets.setCommandPaletteInterceptorActive(active);
         }
 
         @Override public void closeAppDrawerImmediate() {
@@ -18523,11 +18450,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean applyCommandPaletteWallpaperFrost(@NonNull ImageView frost) {
-            return TermuxActivity.this.applyCommandPaletteWallpaperFrost(frost);
+            return mSheets.applyCommandPaletteWallpaperFrost(frost);
         }
 
         @Override public int commandPaletteCornersDp() {
-            return TermuxActivity.this.commandPaletteCornersDp();
+            return mSheets.commandPaletteCornersDp();
         }
 
         @Override public boolean isFloatingStyle() {
@@ -18548,8 +18475,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 REQUEST_CODE_PALETTE_CONTACTS);
         }
     }
-
-    public boolean isCommandPaletteOpen() { return mSheets.isCommandPaletteOpen(); }
 
     /** The terminal sheet plane, created on first use (SheetsController#getTerminalSheetController). */
     @NonNull
@@ -18584,7 +18509,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void setSheetInterceptorActive(boolean active) {
-            setTerminalSheetInterceptorActive(active);
+            mSheets.setTerminalSheetInterceptorActive(active);
         }
 
         @Override public boolean isPointOnInAppKeyboard(float rawX, float rawY) {
@@ -18596,11 +18521,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
-            return applyTerminalSheetWallpaperFrost(frost);
+            return mSheets.applyTerminalSheetWallpaperFrost(frost);
         }
 
         @NonNull @Override public Drawable sheetSurface() {
-            return buildTerminalSheetSurface();
+            return mSheets.buildTerminalSheetSurface();
         }
 
         @Override public boolean terminalFrameOnScreen(@NonNull Rect out) {
@@ -18630,27 +18555,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mFancierGlassLook == null || isLazyModeEnabled()) return false;
         android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
         return power == null || !power.isPowerSaveMode();
-    }
-
-    /** Guarded on the field, not the lazy accessor: asking must not build a plane. */
-    private boolean isTerminalSheetOpen() { return mSheets.isTerminalSheetOpen(); }
-
-    /**
-     * Glass for a sheet card. Same builder, tint and rim as the dock and the rename chip, so the
-     * plane reads as the same kit rather than as a Material dialog that lost its window.
-     */
-    @NonNull
-    private Drawable buildTerminalSheetSurface() {
-        // The Sheets element's glass (ADR 0017), no longer the dock's.
-        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage());
-        float barAlpha = mPreferences != null ? sheets.tintAlpha() : 0.5f;
-        int grain = mPreferences != null ? sheets.grainPercent
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-        // Modifier: floored well above the Sheets opacity. A sheet has body text over a live blur,
-        // and at a bar's tint the terminal behind it reads straight through the words.
-        return mChrome.glass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
-            dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), !sheets.rimOff(),
-            null, sheets.tintPercent);
     }
 
     /**
@@ -18856,11 +18760,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         };
 
-    /** True while the app drawer plane owns the accessory stack's transforms (SheetsController). */
-    private boolean isAppDrawerEngaged() { return mSheets.isAppDrawerEngaged(); }
-
-    private void closeAppDrawerImmediate(boolean homePress) { mSheets.closeAppDrawerImmediate(homePress); }
-
     /**
      * Re-applies the accessory geometry that {@link #isAppDrawerEngaged()} suppressed. Called on
      * drawer close and unconditionally from {@link #onStart()}: a suppression that is never flushed
@@ -18870,7 +18769,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * flush must run even if restoring the plane's transforms throws.
      */
     private void flushPendingAccessoryGeometry() {
-        if (!mAppDrawerGeometryFreezePending || isAppDrawerEngaged()) {
+        if (!mAppDrawerGeometryFreezePending || mSheets.isAppDrawerEngaged()) {
             return;
         }
         mAppDrawerGeometryFreezePending = false;
@@ -18882,11 +18781,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences != null && mPreferences.isAppHapticsEnabled()
             && mPreferences.isAppLauncherRowHapticsEnabled();
     }
-
-    /** Routes in-app keyboard values to the palette while it is open (SheetsController). */
-    public void setCommandPaletteInterceptorActive(boolean active) { mSheets.setCommandPaletteInterceptorActive(active); }
-
-    private void setTerminalSheetInterceptorActive(boolean active) { mSheets.setTerminalSheetInterceptorActive(active); }
 
     /** Seed rect for surfaces growing out of the space bar; false when the keyboard is hidden. */
     public boolean getInAppKeyboardSpaceBarRect(@NonNull Rect out) {
@@ -19082,21 +18976,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && ((com.termux.app.assistant.AssistantPageView) mPaneWallController.assistantView()).handleBack());
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
-                if (!isCommandPaletteOpen()) return false;
+                if (!mSheets.isCommandPaletteOpen()) return false;
                 mSheets.commandPaletteIfBuilt().collapse();
                 return true;
             }
             @Override public boolean isOpen() {
-                return isCommandPaletteOpen();
+                return mSheets.isCommandPaletteOpen();
             }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
-                return handleCommandPaletteKey(keyCode, event);
+                return mSheets.handleCommandPaletteKey(keyCode, event);
             }
             @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
-                return handleCommandPaletteCodePoint(codePoint, ctrlDown);
+                return mSheets.handleCommandPaletteCodePoint(codePoint, ctrlDown);
             }
             @Override public boolean swallowsKeyUp() {
-                return isCommandPaletteOpen();
+                return mSheets.isCommandPaletteOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 if (mSheets.commandPaletteIfBuilt() != null) mSheets.commandPaletteIfBuilt().dismissImmediately();
@@ -19111,7 +19005,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mSheets.terminalSheetIfBuilt() != null && mSheets.terminalSheetIfBuilt().onBackPressed();
             }
             @Override public boolean isOpen() {
-                return isTerminalSheetOpen();
+                return mSheets.isTerminalSheetOpen();
             }
             @Override public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
                 return handleTerminalSheetKey(keyCode, event);
@@ -19120,7 +19014,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return handleTerminalSheetCodePoint(codePoint, ctrlDown);
             }
             @Override public boolean swallowsKeyUp() {
-                return isTerminalSheetOpen();
+                return mSheets.isTerminalSheetOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 if (mSheets.terminalSheetIfBuilt() != null) mSheets.terminalSheetIfBuilt().dismissImmediately();
@@ -19148,7 +19042,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mSheets.isFolderRenameActive() || isAppDrawerOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                closeAppDrawerImmediate(reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
+                mSheets.closeAppDrawerImmediate(reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
             }
         });
         registry.register(() -> {
@@ -19253,7 +19147,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // typing. The sheets also have to go for a second reason: the chip anchors to the window
         // bar or the session indicator, both of which sit behind a modal sheet, so a rename started
         // from the browser would otherwise open an editor nobody can see.
-        if (isCommandPaletteOpen()) mSheets.commandPaletteIfBuilt().collapse();
+        if (mSheets.isCommandPaletteOpen()) mSheets.commandPaletteIfBuilt().collapse();
         if (mSheets.terminalSheetIfBuilt() != null) mSheets.terminalSheetIfBuilt().dismissAll();
         if (mSheets.appDrawerControllerIfBuilt() != null && mSheets.appDrawerControllerIfBuilt().isOpen())
             mSheets.appDrawerControllerIfBuilt().close(true);
@@ -19582,11 +19476,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }, -1, null, -1, null, null);
     }
 
-    /** Hardware and external-keyboard strokes claimed by the open palette. */
-    private boolean handleCommandPaletteKey(int keyCode, @NonNull KeyEvent event) { return mSheets.handleCommandPaletteKey(keyCode, event); }
-
-    private boolean handleCommandPaletteCodePoint(int codePoint, boolean ctrlDown) { return mSheets.handleCommandPaletteCodePoint(codePoint, ctrlDown); }
-
     /** Hardware and external-keyboard strokes claimed by the open sheet plane. */
     public boolean handleTerminalSheetKey(int keyCode, @NonNull KeyEvent event) { return mSheets.handleTerminalSheetKey(keyCode, event); }
 
@@ -19623,11 +19512,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (text == null || text.isEmpty() || mSheets.areNoticesSuppressed())
             return;
         AppNotice.show(this, text, longDuration);
-    }
-
-    /** Raises a notice the terminal is the subject of (SheetsController#showTerminalNotice). */
-    void showTerminalNotice(@Nullable String text, @NonNull AppNoticeItem.Hold hold) {
-        mSheets.showTerminalNotice(text, hold);
     }
 
     // ------------------------------------------------------------- "how do I drive this mode?"
@@ -20476,7 +20360,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * hidden behind it.
      */
     private void restoreInAppKeyboardTypingClaim() {
-        applyInAppKeyboardTypingClaim(isCommandPaletteOpen(), isTerminalSheetOpen(),
+        applyInAppKeyboardTypingClaim(mSheets.isCommandPaletteOpen(), mSheets.isTerminalSheetOpen(),
             isAppDrawerOpen());
     }
 
@@ -23169,7 +23053,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!wall.isMoving() && offsetPx == 0f && !mChromeTravelMoved) return;
         // Reduced motion snaps the wall, so the chrome snaps with it, at settle. The app drawer
         // and the editors own the stack while they are up and move it their own way.
-        if (isReducedMotionEnabled() || isAppDrawerEngaged() || mSurfaceEditor.isActive()
+        if (isReducedMotionEnabled() || mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive()
             || appliedContentReservationPx() < 0) return;
         // The Workspace's page is the display's place while the display window is in front of it,
         // so the chrome travels to and from the state that place rests in.
@@ -23449,7 +23333,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
         if (mLastWallPage != com.termux.app.wall.PaneWallPage.WIDGETS || wall.isMoving()
-            || mKeyboardSwipeTravel || isAppDrawerEngaged() || mSurfaceEditor.isActive()
+            || mKeyboardSwipeTravel || mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive()
             || appliedContentReservationPx() < 0 || mCrossing.crossing()) return false;
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return false;
@@ -24269,6 +24153,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isDefaultHomeApp() { return TermuxActivity.this.isDefaultHomeApp(); }
         @Override public @NonNull com.termux.app.wall.UseAs useAs() { return TermuxActivity.this.useAs(); }
         @Override public void setHomeActionsAnchor(float rawX, float rawY) { mHomeActionsRawX = rawX; mHomeActionsRawY = rawY; }
+        // -------------------------------------------------------------- the Home palette
+        @Override public boolean isOnHome() { return isWidgetsPageShowing(); }
+        @Override public boolean raiseInAppKeyboard() { return terminalHost().showInAppKeyboard(false); }
+        @Override public boolean isHomeKeyboardAlwaysOn() { return TermuxActivity.this.isHomeKeyboardAlwaysOn(); }
+        @Override public @NonNull PlaceLayout.Edge appsEdge() { return arrangement().appsEdge(); }
+        @Override public @Nullable TermuxAppSharedPreferences preferences() { return mPreferences; }
+        @Override public void restyleDockSurface() { mDock.restyleDockSurface(); }
+        @Override public boolean openHomeFloatHere() { return TermuxActivity.this.openHomeFloatHere(); }
+        // -------------------------------------------------------------- glass and shape
+        @Override public @NonNull com.termux.app.chrome.WallpaperFrostPainter chromeFrost() { return mChrome.frost(); }
+        @Override public @NonNull com.termux.app.chrome.GlassSurfaceFactory chromeGlass() { return mChrome.glass(); }
+        @Override public int restingPage() { return TermuxActivity.this.restingPage(); }
+        @Override public float dpToPx(float dp) { return TermuxActivity.this.dpToPx(dp); }
     }
 
     /** What only the activity gives the status bar's controller (statusbar.StatusBarController). */
@@ -24281,8 +24178,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @Nullable <T extends View> T findViewById(int id) { return TermuxActivity.this.findViewById(id); }
         @Override public @NonNull android.content.res.Resources getResources() { return TermuxActivity.this.getResources(); }
         @Override public void growAccessoryStackBy(int deltaPx) { TermuxActivity.this.growAccessoryStackBy(deltaPx); }
-        @Override public boolean isAppDrawerEngaged() { return TermuxActivity.this.isAppDrawerEngaged(); }
-        @Override public boolean isCommandPaletteOpen() { return TermuxActivity.this.isCommandPaletteOpen(); }
+        @Override public boolean isAppDrawerEngaged() { return mSheets.isAppDrawerEngaged(); }
+        @Override public boolean isCommandPaletteOpen() { return mSheets.isCommandPaletteOpen(); }
         @Override public boolean isReducedMotionEnabled() { return TermuxActivity.this.isReducedMotionEnabled(); }
         @Override public boolean isRoundedStyle(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.isRoundedStyle(surface); }
         @Override public @Nullable PlaceLayoutStore placeLayoutStore() { return TermuxActivity.this.placeLayoutStore(); }
@@ -24592,7 +24489,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public boolean isAppDrawerEngaged() {
-            return TermuxActivity.this.isAppDrawerEngaged();
+            return mSheets.isAppDrawerEngaged();
         }
 
         @Override
@@ -25373,35 +25270,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             return isHomeKeyboardAlwaysOn();
         }
-        if (palette.isOpen() || !isHomePaletteGestureEnabled()) return true;
-        openHomePalette(keyboardWasUp);
+        if (palette.isOpen() || !mSheets.isHomePaletteGestureEnabled()) return true;
+        mSheets.openHomePalette(keyboardWasUp);
         return true;
-    }
-
-    /**
-     * The Home palette with the keyboard, as one overlay: the swipe up's, and any other Home
-     * gesture set to the palette (Settings › Home › Gestures).
-     */
-    private void openHomePalette(boolean keyboardWasUp) {
-        com.termux.app.terminal.TerminalCommandPaletteController palette =
-            getCommandPaletteController();
-        if (palette.isOpen()) return;
-        if (keyboardWasUp || !terminalHost().showInAppKeyboard(false)) {
-            // Nothing raised (already up, or no in-app keyboard to raise): the palette alone.
-            palette.showHomeOverlay(true);
-            return;
-        }
-        // A keyboard raised just now is laid out by the next frame; the palette sprouts from its
-        // space bar, so it opens once the keyboard stands where it will be.
-        View decor = getWindow().getDecorView();
-        decor.post(() -> {
-            if (isWidgetsPageShowing()) palette.showHomeOverlay(false);
-            else if (mInAppKeyboard != null && mInAppKeyboard.isVisible()
-                && !isHomeKeyboardAlwaysOn()) {
-                // The wall moved away before the palette could open: nothing to pair with.
-                lowerHomePaletteKeyboard();
-            }
-        });
     }
 
     /**
@@ -25429,7 +25300,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? action == com.termux.app.launcher.home.HomeGestures.Action.PALETTE
                 || action == com.termux.app.launcher.home.HomeGestures.Action.NONE
             : action == com.termux.app.launcher.home.HomeGestures.Action.NONE
-                || isCommandPaletteOpen()
+                || mSheets.isCommandPaletteOpen()
                 || (committedKeyboardVisible() && !isHomeKeyboardAlwaysOn());
     }
 
@@ -25480,8 +25351,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.launcher.home.HomeSettings.gestureAction(this, gesture),
             com.termux.app.launcher.home.HomeSettings.gestureApp(this, gesture),
             new com.termux.app.launcher.home.HomeGestureActions.Host() {
-                @Override public void openPalette() { openHomePalette(committedKeyboardVisible()); }
-                @Override public void openDrawer() { openAppDrawerFromHome(); }
+                @Override public void openPalette() { mSheets.openHomePalette(committedKeyboardVisible()); }
+                @Override public void openDrawer() { mSheets.openAppDrawerFromHome(); }
                 @Override public void goToTerminal() {
                     if (mPaneWallController != null) mPaneWallController.returnToTerminal(true);
                 }
@@ -25496,13 +25367,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     AppNotice.show(TermuxActivity.this, R.string.home_gesture_shade_failed, false);
                 }
             });
-    }
-
-    /** The app drawer, grown out of the pinned apps row wherever it lies, as the palette opens it. */
-    private void openAppDrawerFromHome() {
-        PlaceLayout.Edge edge = arrangement().appsEdge();
-        getAppDrawerController().open(AppDrawerPullGeometry.pullFor(edge),
-            AppDrawerPullGeometry.seedFor(edge));
     }
 
     /**
@@ -25524,20 +25388,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean isHomeKeyboardAlwaysOn() {
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isHomeKeyboardAlwaysOn();
-    }
-
-    /** Whether the swipe up on a Home page opens the palette (Settings › Home › Gestures). */
-    private boolean isHomePaletteGestureEnabled() {
-        return com.termux.app.launcher.home.HomeSettings.gestureAction(this,
-                com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP)
-            == com.termux.app.launcher.home.HomeGestures.Action.PALETTE;
-    }
-
-    /** The keyboard the Home palette raised goes down with it. */
-    private void lowerHomePaletteKeyboard() {
-        if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return;
-        mInAppKeyboard.hide(
-            com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
     }
 
     // ---- The keyboard swipe under the finger (wall/KeyboardReveal) --------------------------
@@ -25574,7 +25424,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
         if (wall.isMoving() || wall.offsetPx() != 0f || mCrossing.holdsContent()
             || mCrossing.keyboardPreRolled() || mChromeTravelMoved) return 0;
-        if (isReducedMotionEnabled() || isAppDrawerEngaged() || mSurfaceEditor.isActive()
+        if (isReducedMotionEnabled() || mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive()
             || appliedContentReservationPx() < 0) return 0;
         if (!canPreRollTravelKeyboard() || mInAppKeyboard.isTurnedOff()
             || displayTakesSystemKeyboard() || isDisplayTouchpadFrame()) return 0;
@@ -25582,8 +25432,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (opening == up) return 0;
         // On Home the finger raises the palette gesture's keyboard only; a down swipe that closes
         // the palette, or meets always on, is decided on release (applyHomeKeyboardSwipe).
-        if (isWidgetsPageShowing() && (opening ? !isHomePaletteGestureEnabled()
-            : isCommandPaletteOpen() || isHomeKeyboardAlwaysOn())) return 0;
+        if (isWidgetsPageShowing() && (opening ? !mSheets.isHomePaletteGestureEnabled()
+            : mSheets.isCommandPaletteOpen() || isHomeKeyboardAlwaysOn())) return 0;
         mKeyboardSwipeTravel = true;
         mKeyboardSwipeFromOpen = up;
         // The room the content has now, read before anything moves; the other end is read once
@@ -25852,7 +25702,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // On Home the swipe is the palette gesture: off in Settings, it is armed only
                 // to put away a keyboard that is up.
                 @Override public boolean isBorderKeyboardSwipeEnabled() {
-                    return !isWidgetsPageShowing() || isHomePaletteGestureEnabled()
+                    return !isWidgetsPageShowing() || mSheets.isHomePaletteGestureEnabled()
                         || committedKeyboardVisible();
                 }
                 // Settings › Terminal › Windows & panes, then the pane under the finger.
@@ -27583,7 +27433,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The one refusal the user can act on; the others pass once the service is up.
             if (mTermuxService != null && mTermuxService.getTermuxSessionsSize()
                     >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
-                showTerminalNotice(getString(R.string.title_max_terminals_reached) + " — "
+                mSheets.showTerminalNotice(getString(R.string.title_max_terminals_reached) + " — "
                     + getString(R.string.msg_max_terminals_reached), AppNoticeItem.Hold.REFUSAL);
             }
             return;
@@ -27754,7 +27604,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.x11.DisplayViewFocus.Route route =
             com.termux.app.x11.DisplayViewFocus.routeFor(holder, event.getKeyCode(),
                 terminal != null && terminal.mEmulator != null, terminalShown,
-                isAppDrawerOpen() || isCommandPaletteOpen());
+                isAppDrawerOpen() || mSheets.isCommandPaletteOpen());
         if (route == com.termux.app.x11.DisplayViewFocus.Route.PASS) return false;
         if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
             returnKeysToTerminal();
@@ -27958,9 +27808,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Home's long-press sheet, built on the first long press and laid over everything. */
     /** Where the long press that opened the sheet rested, on screen; Edit pages' wheels hang there. */
     private float mHomeActionsRawX, mHomeActionsRawY;
-
-    /** A long press on a Home page's free area: the sheet of what Home and the launcher offer. */
-    private void showHomeActionsSheet(float rawX, float rawY) { mSheets.showHomeActionsSheet(rawX, rawY); }
 
     /**
      * Puts an app on Home as an icon, from the app menu's Add to Home or the sheet's Add an app:
@@ -30041,7 +29888,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mPreferences == null ? null : mPreferences.getAppLauncherBuiltinWidgetStyle());
                 }
                 @Override public void onHomeLongPressed(float rawX, float rawY) {
-                    showHomeActionsSheet(rawX, rawY);
+                    mSheets.showHomeActionsSheet(rawX, rawY);
                 }
                 // A folder on Home opens the dock's popup, in the dock's look, and renames through the
                 // dock's own focusless intake.
@@ -30087,12 +29934,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The drag runs on a mirrored axis (the pull is measured downward), so up is
                 // positive travel and the release velocity flips with it.
                 @Override public void onHomeDrawerPressed() {
-                    if (isWidgetsPageShowing() && canWarmAppDrawer()) {
+                    if (isWidgetsPageShowing() && mSheets.canWarmAppDrawer()) {
                         getAppDrawerController().warmUp();
                     }
                 }
                 @Override public boolean onHomeDrawerDragBegin(float claimRawY) {
-                    if (!isWidgetsPageShowing() || isAppDrawerEngaged()) return false;
+                    if (!isWidgetsPageShowing() || mSheets.isAppDrawerEngaged()) return false;
                     PlaceLayout.Edge edge = arrangement().appsEdge();
                     com.termux.app.launcher.drawer.AppDrawerController drawer = getAppDrawerController();
                     drawer.beginFollowDrag(-claimRawY, AppDrawerPullGeometry.pullFor(edge),
@@ -30341,7 +30188,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public boolean isStatusGestureBlocked() {
                     // A live COMPACT/EXPANDED animator is deliberately eligible for takeover.
-                    return isCommandPaletteOpen() || isAppDrawerEngaged() || mSurfaceEditor.isActive();
+                    return mSheets.isCommandPaletteOpen() || mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive();
                 }
             });
         }
@@ -31565,8 +31412,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!(view instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
         ((com.termux.app.launcher.widget.WidgetPaneView) view).setEmptyHintCover(
             new com.termux.app.launcher.widget.WidgetPaneView.HintCover() {
-                @Override public boolean drawerUp() { return isAppDrawerEngaged(); }
-                @Override public boolean paletteUp() { return isCommandPaletteOpen(); }
+                @Override public boolean drawerUp() { return mSheets.isAppDrawerEngaged(); }
+                @Override public boolean paletteUp() { return mSheets.isCommandPaletteOpen(); }
             });
     }
 
@@ -32153,7 +32000,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void splitCurrentPane(int orientation) {
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         if (mTermuxService == null || mPaneController.getActiveSession() == null) {
-            showTerminalNotice(getString(R.string.msg_no_session_to_split),
+            mSheets.showTerminalNotice(getString(R.string.msg_no_session_to_split),
                 AppNoticeItem.Hold.REFUSAL);
             return;
         }
@@ -32174,7 +32021,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void splitCurrentPaneAuto() {
         if (!isSplitPanesEnabled() || mPaneController == null) return;
         if (mTermuxService == null || mPaneController.getActiveSession() == null) {
-            showTerminalNotice(getString(R.string.msg_no_session_to_split),
+            mSheets.showTerminalNotice(getString(R.string.msg_no_session_to_split),
                 AppNoticeItem.Hold.REFUSAL);
             return;
         }
@@ -32409,7 +32256,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxService == null) return null;
         if (mTermuxService.getTermuxSessionsSize()
                 >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
-            showTerminalNotice(getString(R.string.title_max_terminals_reached) + " — "
+            mSheets.showTerminalNotice(getString(R.string.title_max_terminals_reached) + " — "
                 + getString(R.string.msg_max_terminals_reached), AppNoticeItem.Hold.REFUSAL);
             return null;
         }
@@ -32589,7 +32436,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View windowBar = findViewById(R.id.terminal_window_bar_host);
         if (windowBar == null || !windowBar.isShown()) {
             String direction = getString(forward ? R.string.tool_window_next : R.string.tool_window_previous);
-            showTerminalNotice(getString(R.string.msg_window_switch_position, direction, target + 1, n),
+            mSheets.showTerminalNotice(getString(R.string.msg_window_switch_position, direction, target + 1, n),
                 AppNoticeItem.Hold.READOUT);
         }
     }
@@ -32883,13 +32730,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    /** The palette's row set where it is opened: the Home set on a Home page. */
-    @NonNull
-    public com.termux.app.terminal.CommandPaletteContext paletteContextHere() {
-        return isWidgetsPageShowing() ? com.termux.app.terminal.CommandPaletteContext.HOME
-            : com.termux.app.terminal.CommandPaletteContext.TERMINAL;
-    }
-
     /** The Home palette's actions that need the wall, and what it asks about Home floats. */
     private final class PaletteHomeHost implements com.termux.app.terminal.CommandPaletteHomeHost {
         @Override public int rowIndexOf(int window) {
@@ -32932,7 +32772,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean isKeyboardAlwaysOn() { return isHomeKeyboardAlwaysOn(); }
 
-        @Override public void lowerKeyboard() { lowerHomePaletteKeyboard(); }
+        @Override public void lowerKeyboard() { mSheets.lowerHomePaletteKeyboard(); }
 
         // The Search field opens the palette with the keyboard: up already, or raised
         // by hand as the swipe up raises it (openHomePalette).
@@ -33518,7 +33358,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean showTerminalActionSheet(@Nullable android.graphics.PointF anchor) {
-            return TermuxActivity.this.showTerminalActionSheet(anchor);
+            return mSheets.showTerminalActionSheet(anchor);
         }
 
         @Override @NonNull public com.termux.app.terminal.TerminalSheetController sheetController() {
@@ -33777,7 +33617,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void showTerminalNotice(@Nullable String text,
                 @NonNull AppNoticeItem.Hold hold) {
-            TermuxActivity.this.showTerminalNotice(text, hold);
+            mSheets.showTerminalNotice(text, hold);
         }
 
         @Override public void syncBackgroundProcessStack() {
@@ -34049,7 +33889,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // (setCommandPaletteInterceptorActive), whichever way it was asked for.
             // Opened on a Home page, the palette shows the Home set.
             com.termux.app.terminal.TerminalCommandPalette.show(getCommandPaletteController(),
-                paletteContextHere());
+                mSheets.paletteContextHere());
         }
 
         @Override public boolean toggleMouseMode() {
@@ -34935,8 +34775,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
         Looper.myQueue().addIdleHandler(mToolbarTextInputWarmIdleHandler);
     }
-
-    private boolean canWarmAppDrawer() { return mSheets.canWarmAppDrawer(); }
 
     private void unregisterPackageChangeReceiver() {
         if (!mPackageChangeReceiverRegistered)
