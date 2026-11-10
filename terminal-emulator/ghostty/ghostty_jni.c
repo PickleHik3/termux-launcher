@@ -735,6 +735,12 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeResize(
         c->rows = (uint16_t) c->buf_rows;
         return;
     }
+    // The library trims blank rows below the cursor when the screen gets shorter, and stops at any
+    // row holding a tracked pin; with the bottom pin on the last row it trims nothing and pushes
+    // the top of the screen into history instead (a keyboard opening at a short session). The pin
+    // waits on the top row, which is never trimmed, and pin_top() puts it back.
+    GhosttyPoint top = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = 0}}};
+    c->bottom_set = ghostty_tracked_grid_ref_set(c->bottom, c->term, top) == GHOSTTY_SUCCESS;
     c->env = env;
     ghostty_terminal_resize(c->term, c->cols, c->rows, c->cell_w, c->cell_h);
     c->env = NULL;

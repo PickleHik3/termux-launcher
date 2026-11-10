@@ -58,13 +58,20 @@ final class GhosttyContent implements TerminalContent {
 
     /**
      * How far a rows-only resize moves the rows on a Ghostty pane's primary screen (see
-     * {@link TerminalEmulator#predictRowsOnlyResizeShift}). Ghostty keeps the bottom of the screen
-     * where it is: losing rows pushes that many off the top into history, blank rows below the
-     * cursor included (the Java core drops those first), and gaining rows pulls as many back down
-     * as history holds. {@code GhosttyContentTest} checks this against the library.
+     * {@link TerminalEmulator#predictRowsOnlyResizeShift}). Losing rows gives up the blank rows at
+     * the bottom of the screen first, as far up as the cursor's row, and only the rest go off the
+     * top into history. Gaining rows pulls history back down only when the cursor sits on the last
+     * row, as many rows as history holds; otherwise the new rows go below and nothing moves.
+     * {@code GhosttyContentTest} checks this against the library.
+     *
+     * @param blankRowsBelowCursor the unbroken run of blank rows at the bottom of the screen, below
+     *                             the cursor's row
      */
-    static int rowsOnlyResizeShift(int rowChange, int historyRows) {
-        return rowChange < 0 ? rowChange : Math.min(rowChange, Math.max(0, historyRows));
+    static int rowsOnlyResizeShift(int rowChange, int historyRows, int cursorRow, int screenRows,
+                                   int blankRowsBelowCursor) {
+        if (rowChange < 0) return Math.min(0, rowChange + Math.max(0, blankRowsBelowCursor));
+        if (cursorRow < screenRows - 1) return 0;
+        return Math.min(rowChange, Math.max(0, historyRows));
     }
 
     /** The rows the window holds no longer sit where their keys say: a reflow, a reset. */

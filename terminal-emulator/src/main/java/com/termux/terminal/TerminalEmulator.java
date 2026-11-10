@@ -1149,7 +1149,8 @@ public final class TerminalEmulator {
         if (rows == mRows || rows < 2 || mScreen == mAltBuffer) return 0;
         // The Ghostty core settles the resize, so it predicts it too.
         if (mGhosttyContent != null)
-            return GhosttyContent.rowsOnlyResizeShift(rows - mRows, mGhosttyContent.historyRows());
+            return GhosttyContent.rowsOnlyResizeShift(rows - mRows, mGhosttyContent.historyRows(),
+                mCursorRow, mRows, mScreen.blankRowsAtBottomBelow(mCursorRow));
         return mScreen.predictRowsOnlyResizeShift(rows, mCursorRow);
     }
 

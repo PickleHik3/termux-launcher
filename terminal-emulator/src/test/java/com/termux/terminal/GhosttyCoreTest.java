@@ -169,12 +169,12 @@ public class GhosttyCoreTest extends TerminalTestCase {
         enterString("abcdef");
         mTerminal.resize(3, 3, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS);
         assertEquals(3, mTerminal.mColumns);
-        // Ghostty's reflow, not the Java buffer's: the cursor's row stays put, so the line's first
-        // half goes into history, and the screen and cursor agree on where the text is.
-        assertEquals(1, mTerminal.getContent().historyRows());
-        assertLineIs(-1, "abc");
-        assertLineIs(0, "def");
-        assertEquals(0, mTerminal.getCursorRow());
+        // Ghostty's reflow, not the Java buffer's: the blank rows below take the second half, so
+        // nothing goes into history, and the screen and cursor agree on where the text is.
+        assertEquals(0, mTerminal.getContent().historyRows());
+        assertLineIs(0, "abc");
+        assertLineIs(1, "def");
+        assertEquals(1, mTerminal.getCursorRow());
     }
 
     public void testOneWriteLongerThanAPageLandsWholeAndInOrder() {
