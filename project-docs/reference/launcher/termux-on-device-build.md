@@ -28,7 +28,6 @@ Storage, as actually measured:
 | `~/android-sdk` | 2.5 GB — of which NDK 1.8 GB, platforms 287 MB, build-tools 190 MB |
 | `~/.gradle` | 1.1 GB — wrapper distribution and the dependency cache |
 | `app/build` | 570 MB — five debug APKs, 118 MB of which is the universal one |
-| `app/src/main/cpp` | 113 MB — the four cached `bootstrap-*.zip` |
 | Installer tarballs | 950 MB — deletable after setup |
 
 A phone that only ever builds `arm64-v8a` needs less, but the module `ndk` blocks list all four
@@ -167,10 +166,8 @@ AGENTS.md's advice to stop the Gradle daemon before memory-hungry work applies d
 
 ## Other phone-specific notes
 
-- The first debug build downloads four `bootstrap-*.zip` into `app/src/main/cpp/`, one per ABI.
-  They are checksum-verified and cached; only `./gradlew clean` deletes them. They are not packaged
-  into the debug APK — the prefix is provisioned on first run — but `downloadBootstraps` fetches and
-  verifies them as part of every build.
+- The build downloads no bootstrap; the prefix is provisioned on first run. `bootstrap-*.zip` files
+  left in `app/src/main/cpp/` by an older build can be deleted.
 - Debug builds default to split APKs: four per-ABI plus a universal.
   `TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS=0` gives the universal alone, though native code is still
   compiled for all four ABIs either way.
