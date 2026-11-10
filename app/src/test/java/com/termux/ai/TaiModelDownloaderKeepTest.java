@@ -20,6 +20,8 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * A download of a file that is already complete on disk keeps it instead of fetching it again.
@@ -27,6 +29,7 @@ import static org.junit.Assert.assertTrue;
  * com.sun.net.httpserver), so these network-free cases actually run.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiModelDownloaderKeepTest {
     private Context context;
     private TaiModelStore store;

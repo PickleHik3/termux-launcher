@@ -22,13 +22,14 @@ import org.robolectric.annotation.Config;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * A settle's clock starts only after the arriving content has drawn once (#173): the frame the
  * new page first draws in no longer eats the settle.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class FirstDrawGateTest {
 
     private View view;

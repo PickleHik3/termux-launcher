@@ -13,9 +13,12 @@ import org.robolectric.RobolectricTestRunner;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** The status bar menu's fold item: its words and what it asks of the activity. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class SurfaceLongPressFoldItemTest {
 
     @Test public void labelIsExpandOnACompactBarAndCompactOnAnExpandedOne() {

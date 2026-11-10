@@ -26,6 +26,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.shadows.ShadowLooper;
+import android.app.Application;
 
 /**
  * The Photo | Video | Shader host on Android 13: it opens on the stored motion, the Shader kind
@@ -35,7 +36,7 @@ import org.robolectric.shadows.ShadowLooper;
  * does not draw under Robolectric). Android 9 and below: {@link WallpaperLiveHostBelow29Test}.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.TIRAMISU}, qualifiers = "w411dp-h891dp-xxhdpi")
+@Config(sdk = {android.os.Build.VERSION_CODES.TIRAMISU}, qualifiers = "w411dp-h891dp-xxhdpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class WallpaperLiveHostTest {
 

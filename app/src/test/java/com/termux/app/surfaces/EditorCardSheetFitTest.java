@@ -34,6 +34,7 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * Every card fits pong at the default text size, at Large (1.3) and at 2.0, at both detents: the
@@ -43,7 +44,7 @@ import java.util.List;
  * so text is measured with real font metrics.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class EditorCardSheetFitTest {
 

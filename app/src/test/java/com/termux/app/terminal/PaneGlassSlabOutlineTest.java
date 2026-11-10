@@ -24,6 +24,7 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.util.Arrays;
 import java.util.Collections;
+import android.app.Application;
 
 /**
  * What a copy of the glass may cover. The window-switch card once painted the blurred frame over
@@ -31,7 +32,7 @@ import java.util.Collections;
  * and nothing around them.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE) // Region.setPath needs real path geometry.
 public class PaneGlassSlabOutlineTest {
 

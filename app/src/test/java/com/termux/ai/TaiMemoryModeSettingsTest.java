@@ -16,12 +16,15 @@ import java.nio.file.Files;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The memory limits live in a file both processes read, not in the per-process preferences cache:
  * a change written by one process must reach the other's next read.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiMemoryModeSettingsTest {
     private Context context;
     private TaiSettings settings;

@@ -23,6 +23,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Memory manager phase 3 around the budget: what history keeps of a measured load, which residents
@@ -30,6 +32,7 @@ import static org.junit.Assert.assertTrue;
  * GPU->CPU fallback runs with.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiLoadMeasurementTest {
     private static final long E4B = 3_659_530_240L;
 

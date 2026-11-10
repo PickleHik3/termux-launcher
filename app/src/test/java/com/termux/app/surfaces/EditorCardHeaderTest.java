@@ -28,6 +28,7 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The card header (appearance-cards overhaul §1): main cards wear the Customization | Home |
@@ -35,7 +36,7 @@ import java.util.List;
  * object can be hidden (Status bar, Dock, Keyboard). Both end in ⋮, whose Reset asks nothing.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class EditorCardHeaderTest {
 

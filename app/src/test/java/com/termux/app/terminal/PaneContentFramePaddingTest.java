@@ -15,6 +15,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * The pane's content is held clear of the corner arc with the clearance traded toward the sides
@@ -25,7 +26,7 @@ import org.robolectric.annotation.Config;
  * frame does not know which it is in, which is the point).
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class PaneContentFramePaddingTest {
 
     private static final int FRAME_WIDTH = 600;

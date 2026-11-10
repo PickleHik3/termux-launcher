@@ -25,6 +25,7 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * Home's long-press sheet under the navigation bar, on pong's 1080x2412 at 420 dpi: the card's
@@ -34,7 +35,7 @@ import java.util.List;
  * strip (the decor's topmost child) fades out instead of painting over the card's foot.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28, qualifiers = "w411dp-h918dp-420dpi")
+@Config(sdk = 28, qualifiers = "w411dp-h918dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class HomeActionsSheetNavBandTest {
 

@@ -20,8 +20,11 @@ import java.util.Map;
 
 import juloo.keyboard2.Keyboard2View;
 import juloo.keyboard2.Theme;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class InAppKeyboardColorSchemeTest {
 
     @Test

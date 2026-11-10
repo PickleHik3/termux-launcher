@@ -32,6 +32,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import android.app.Application;
 
 /**
  * The editor's host: every door opens the editor (on its object), the wallpaper picker stands
@@ -40,7 +41,7 @@ import java.util.function.Consumer;
  * the session on.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class AppearanceSurfaceControllerTest {
 
     private Activity activity;

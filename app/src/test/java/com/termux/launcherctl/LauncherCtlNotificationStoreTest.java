@@ -20,8 +20,11 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class LauncherCtlNotificationStoreTest {
     private static final long DAY = TimeUnit.DAYS.toMillis(1);
     private static final long NOW = 1_800_000_000_000L;

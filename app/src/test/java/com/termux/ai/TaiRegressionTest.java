@@ -28,6 +28,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Regression tests proving LiteRT preservation after MNN backend introduction.
@@ -36,6 +38,7 @@ import static org.junit.Assert.assertTrue;
  * MNN native runtime or network access.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiRegressionTest {
     private Context context;
 

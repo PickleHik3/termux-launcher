@@ -29,6 +29,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
+import org.robolectric.annotation.Config;
 
 /**
  * The runtime process dying under a request (SIGKILL mid-load, plan §3c) is the end of that
@@ -37,6 +38,7 @@ import static org.robolectric.Shadows.shadowOf;
  * a new request binds a fresh runtime.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiRuntimeServiceClientBinderDeathTest {
     private static final long PROMPT_MS = 5_000L;
 

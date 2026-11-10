@@ -21,13 +21,14 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * A floating window's glass takes Live blur's picture only while the float can be seen and the
  * slab is its own and shown; the slab holds the picture while it shows it and lets it go after.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.TIRAMISU})
+@Config(sdk = {Build.VERSION_CODES.TIRAMISU}, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class FloatLiveGlassTest {
 

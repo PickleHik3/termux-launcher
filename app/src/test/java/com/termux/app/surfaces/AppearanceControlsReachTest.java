@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import android.app.Application;
 
 /**
  * Every glass card's Opacity, Blur, Grain and Depth, moved through the editor's model, reach
@@ -39,7 +40,7 @@ import java.util.TreeSet;
  * hid Customization, Home, Workspace and Keyboard › Global.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class AppearanceControlsReachTest {
 
     private static final int HOME_PAGE = 0, TERMINAL_PAGE = 1, DISPLAY_PAGE = 2;

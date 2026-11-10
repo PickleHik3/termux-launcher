@@ -22,8 +22,11 @@ import java.util.Map;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiRemoteSettingsTest {
     private SharedPreferences prefs;
     private TaiRemoteSettings settings;

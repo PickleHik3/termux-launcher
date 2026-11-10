@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import android.app.Application;
 
 /**
  * Stills (ADR 0016 section 2): one page-still policy for every kind. A page is live while its
@@ -36,7 +37,7 @@ import java.util.List;
  * picture goes when the page is live again or leaves the wall.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PageStillsTest {
 
     private static final int WIDTH = 1080;

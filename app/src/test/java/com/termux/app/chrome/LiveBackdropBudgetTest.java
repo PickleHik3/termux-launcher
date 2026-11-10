@@ -18,6 +18,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * Live blur's memory budget (docs/agents/performance.md rule 2): at most
@@ -25,7 +26,7 @@ import org.robolectric.annotation.Config;
  * all, and every picture released when Live goes off or a surface hides.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.TIRAMISU)
+@Config(sdk = Build.VERSION_CODES.TIRAMISU, application = Application.class)
 public class LiveBackdropBudgetTest {
 
     @Test

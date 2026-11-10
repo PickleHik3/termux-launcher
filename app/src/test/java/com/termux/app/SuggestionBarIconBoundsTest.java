@@ -11,9 +11,10 @@ import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28, manifest = Config.NONE)
+@Config(sdk = 28, manifest = Config.NONE, application = Application.class)
 public class SuggestionBarIconBoundsTest {
 
     @Test

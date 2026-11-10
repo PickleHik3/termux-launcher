@@ -21,6 +21,7 @@ import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The clearance the pane's shape owes the terminal is still the terminal's to touch.
@@ -31,7 +32,7 @@ import java.util.List;
  * hears the edge cell rather than the middle one a {@code TouchDelegate} would have reported.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class PaneContentFrameTouchTest {
 
     private static final int FRAME_WIDTH = 200;

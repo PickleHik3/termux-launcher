@@ -25,9 +25,12 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** The image routes' refusals and discovery, before any generation is committed to. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class ImageGenerationRouteTest {
     private Context context;
     private LauncherCtlApiServer server;

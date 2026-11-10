@@ -30,6 +30,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
+import org.robolectric.annotation.Config;
 
 /**
  * The runtime's idle exit is a request to be let go, not a death: the client unbinds when it has
@@ -37,6 +38,7 @@ import static org.robolectric.Shadows.shadowOf;
  * neither case does anything become {@code tai_runtime_crashed} or leave a crash marker.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiRuntimeServiceClientIdleExitTest {
     private static final long PROMPT_MS = 5_000L;
 

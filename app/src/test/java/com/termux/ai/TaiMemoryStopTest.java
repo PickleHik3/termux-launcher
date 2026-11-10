@@ -20,6 +20,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * A native load the runtime's watch ends for memory is not a crash: the crash marker goes, the next
@@ -27,6 +29,7 @@ import static org.junit.Assert.assertTrue;
  * and automatic loads of that model on that accelerator wait out a short cooldown.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiMemoryStopTest {
     private static final long MIB = 1024L * 1024L;
     private static final long E4B = 3_659_530_240L;

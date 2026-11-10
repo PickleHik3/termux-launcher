@@ -18,9 +18,12 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** The observable the model centre subscribes to: main-thread delivery, throttled per item. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiDownloadHubTest {
     private Context context;
     private TaiModelStore store;

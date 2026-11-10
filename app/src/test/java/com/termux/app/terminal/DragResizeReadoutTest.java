@@ -10,10 +10,11 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /** The size read-out a pane drag shows on the notice (ADR 0019): cells, columns × rows. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class DragResizeReadoutTest {
 
     private final Resources mRes = RuntimeEnvironment.getApplication().getResources();

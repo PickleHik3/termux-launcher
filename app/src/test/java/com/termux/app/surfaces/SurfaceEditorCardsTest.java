@@ -24,6 +24,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
+import android.app.Application;
 
 /**
  * The editor's cards through the controller: a card writes the half the frame shows, Reset puts
@@ -31,7 +32,7 @@ import org.robolectric.util.ReflectionHelpers;
  * covers both halves, and Undo puts both back.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class SurfaceEditorCardsTest {
 
     private TermuxAppSharedPreferences preferences;

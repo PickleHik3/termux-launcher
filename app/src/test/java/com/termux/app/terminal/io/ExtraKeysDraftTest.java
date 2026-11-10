@@ -5,19 +5,12 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
-import android.app.Application;
-import android.os.Build;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.Config;
 
 import java.util.Arrays;
 
 /** Every edit the page editor can make, on the JVM. org.json needs Robolectric's implementation. */
-@RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class ExtraKeysDraftTest {
 
     private static ExtraKeysDraft draft(String one, String two) {

@@ -36,6 +36,7 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The Keyboard, Home, Global and Workspace cards drawn with the redesigned rows (editor-redesign
@@ -46,7 +47,7 @@ import java.util.List;
  * EditorCardSheet.Model#rowView} to a {@link CardBody}. Native graphics, so text has real metrics.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class EditorCardBodyTest {
 

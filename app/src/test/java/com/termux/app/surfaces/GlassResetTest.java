@@ -24,10 +24,11 @@ import org.robolectric.annotation.Config;
 
 import java.util.Map;
 import java.util.TreeMap;
+import android.app.Application;
 
 /** Reset everything's scope (overhaul §6): glass and colours only. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class GlassResetTest {
 
     private Context context;

@@ -20,6 +20,8 @@ import java.util.LinkedHashSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * An MNN diffusion package is a model, but never a chat model: it exposes only image generation,
@@ -27,6 +29,7 @@ import static org.junit.Assert.assertTrue;
  * embeddings and speech models.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiImageModelGatingTest {
     private static final String ID = "sd15-test";
     private Context context;

@@ -35,6 +35,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The Home card's Options grid as pong shows it (420 dpi): one-line and two-line words in one
@@ -43,7 +44,7 @@ import java.util.List;
  * {@code build/reports/tile-grid}.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class TileGridLayoutTest {
 

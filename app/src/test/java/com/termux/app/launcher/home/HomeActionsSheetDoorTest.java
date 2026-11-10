@@ -28,6 +28,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import android.app.Application;
 
 /**
  * A row that opens the Appearance editor is handed to the activity only once Home's sheet has
@@ -35,7 +36,7 @@ import java.util.List;
  * at once, and a sheet put away without its slide drops the waiting row.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28, qualifiers = "w411dp-h918dp-420dpi")
+@Config(sdk = 28, qualifiers = "w411dp-h918dp-420dpi", application = Application.class)
 public class HomeActionsSheetDoorTest {
 
     private ContextThemeWrapper themed;

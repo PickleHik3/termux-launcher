@@ -5,8 +5,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -14,7 +12,6 @@ import java.nio.file.Files;
 import java.util.List;
 
 /** The bundled examples: the index, and every shader through the same prelude the app builds. */
-@RunWith(RobolectricTestRunner.class)
 public class ShaderExamplesTest {
 
     private static final File DIR = new File("src/main/assets/" + ShaderExamples.DIR);

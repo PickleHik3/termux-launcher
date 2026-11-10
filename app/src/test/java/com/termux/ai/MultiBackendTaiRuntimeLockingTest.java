@@ -3,8 +3,6 @@ package com.termux.ai;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.lang.reflect.Field;
 import java.util.Collections;
@@ -24,7 +22,6 @@ import static org.junit.Assert.assertTrue;
  * straight to the backend while a load is blocked, and an embedding batch never holds anything a
  * status poll would wait on.
  */
-@RunWith(RobolectricTestRunner.class)
 public class MultiBackendTaiRuntimeLockingTest {
     private static final long PROMPT_MS = 2_000L;
 

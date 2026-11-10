@@ -33,6 +33,7 @@ import org.robolectric.util.ReflectionHelpers;
 
 import java.util.Arrays;
 import java.util.List;
+import android.app.Application;
 
 /**
  * A Look by card (appearance-cards-overhaul §1): Customization's reaches every page; Home's lands
@@ -40,7 +41,7 @@ import java.util.List;
  * and their Reset returns those pages to Base.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class EditorScreenLookTest {
 
     private static final int SOLID = AppearanceLooks.stopForPresetId("solid");

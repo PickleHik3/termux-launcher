@@ -20,6 +20,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
+import android.app.Application;
 
 /**
  * Contrast is previewed live: a change on the Global or the Workspace card rebuilds the terminal
@@ -27,7 +28,7 @@ import org.robolectric.util.ReflectionHelpers;
  * Both cards' rows are the one stored setting.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class ContrastRowLiveTest {
 
     private TermuxAppSharedPreferences preferences;

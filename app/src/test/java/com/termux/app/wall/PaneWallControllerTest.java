@@ -23,6 +23,7 @@ import org.robolectric.annotation.Config;
 
 import java.util.Arrays;
 import java.util.Collections;
+import android.app.Application;
 
 /**
  * The controller's jobs on the wall's row (ADR 0008): which pages exist (Home always, the
@@ -31,7 +32,7 @@ import java.util.Collections;
  * recreate, and the display window standing as the Workspace's page while it is in front.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PaneWallControllerTest {
 
     /** A host with a number of Home pages and windows, each with one in front. */

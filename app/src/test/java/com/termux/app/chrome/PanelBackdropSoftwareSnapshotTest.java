@@ -30,6 +30,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * Below Android 12 a panel's Snapshot is drawn in software: one when it opens, none while it
@@ -37,7 +38,7 @@ import org.robolectric.annotation.GraphicsMode;
  * crash.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class PanelBackdropSoftwareSnapshotTest {
 

@@ -3,13 +3,8 @@ package com.termux.app.chrome;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import android.app.Application;
-import android.os.Build;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.Config;
 
 /**
  * A band that stands alone — the extra-keys row with the dock's rows hidden, or the card under the
@@ -20,8 +15,6 @@ import org.robolectric.annotation.Config;
  * <p>The numbers are the developer's phone's: bend 21 dp, edge width 14 dp, Corners 3 dp, the dock
  * design's 24 dp soft rim with the whole shelf under Floating.</p>
  */
-@RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class GlassLoneBandTest {
 
     private static final float D = 2.625f;

@@ -17,6 +17,7 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
+import android.app.Application;
 
 /**
  * Pair 3 of the motion audit: where the travel draws the terminal's rows while the grid waits
@@ -32,7 +33,7 @@ import java.util.List;
  * package-private prediction; in the app's tests for the layout fixtures.</p>
  */
 @RunWith(ParameterizedRobolectricTestRunner.class)
-@Config(sdk = 28)
+@Config(sdk = 28, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class TerminalResizeParityTest {
 

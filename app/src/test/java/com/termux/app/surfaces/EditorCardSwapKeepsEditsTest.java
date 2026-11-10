@@ -33,6 +33,7 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import android.app.Application;
 
 /**
  * (Workspace edits are its Terminal and Display pages' cells, overhaul §1.)
@@ -41,7 +42,7 @@ import java.util.ArrayList;
  * never puts a value back, and the bar keeps showing the session dirty.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class EditorCardSwapKeepsEditsTest {
 
     private TermuxAppSharedPreferences preferences;

@@ -23,6 +23,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
+import android.app.Application;
 
 /**
  * The Home and Workspace cards' glass strips (appearance-cards-overhaul §1): Home writes the
@@ -30,7 +31,7 @@ import org.robolectric.util.ReflectionHelpers;
  * neither touches Base, which Customization writes. Reset clears the card's cells alone.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class SurfaceEditorHomeGlassTest {
 
     private TermuxAppSharedPreferences preferences;

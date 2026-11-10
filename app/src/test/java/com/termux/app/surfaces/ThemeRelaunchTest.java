@@ -31,6 +31,7 @@ import org.robolectric.util.ReflectionHelpers;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import android.app.Application;
 
 /**
  * A theme picked on the Appearance card relaunches the activity into it, and the editor comes
@@ -40,7 +41,7 @@ import java.util.function.Consumer;
  * the new night mode), before its posted reopen ran.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class ThemeRelaunchTest {
 
     /** The Theme row's segments: System, Light, Dark. */

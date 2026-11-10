@@ -5,23 +5,16 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
-import android.app.Application;
-import android.os.Build;
 
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.Config;
 
 /**
  * ADR 0014 wave 2c (decided 2026-10-28): which even-out a chrome band draws with. By default the
  * terminal pane's own stage; a band with an Opacity of its own that no longer follows Base, its
  * own text target at its own strength; the switch off, none at all.
  */
-@RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class EvenOutBandPolicyTest {
 
     private static ChromeInk.EvenOutPolicy terminal(TerminalContrastLevel level, int strength) {

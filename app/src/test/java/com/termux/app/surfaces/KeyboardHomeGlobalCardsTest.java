@@ -25,6 +25,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
+import android.app.Application;
 
 /**
  * The Keyboard, Home and Global cards through the controller (editor-redesign §2, §6): the
@@ -33,7 +34,7 @@ import org.robolectric.util.ReflectionHelpers;
  * stands at any Look, and the sections carry their notes.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class KeyboardHomeGlobalCardsTest {
 
     private TermuxAppSharedPreferences preferences;

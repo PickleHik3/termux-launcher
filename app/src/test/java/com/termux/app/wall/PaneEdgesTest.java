@@ -14,6 +14,7 @@ import org.robolectric.annotation.Config;
 
 import java.util.Arrays;
 import java.util.Collections;
+import android.app.Application;
 
 /**
  * The pane whose bottom border a finger pressed ({@link PaneEdges#pick}): the bottom border's glow
@@ -21,7 +22,7 @@ import java.util.Collections;
  * whole width.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PaneEdgesTest {
 
     private static final float EPS = 0.001f;

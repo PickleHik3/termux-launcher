@@ -21,6 +21,8 @@ import java.util.LinkedHashSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Voice input phase 1: a speech-to-text model is downloadable but must never behave like a chat
@@ -28,6 +30,7 @@ import static org.junit.Assert.assertTrue;
  * WhisperSttRuntime's job, phase 2).
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiSpeechToTextExclusionTest {
     private Context context;
     private TaiModelStore store;

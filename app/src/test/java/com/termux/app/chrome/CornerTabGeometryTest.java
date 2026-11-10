@@ -8,6 +8,8 @@ import android.graphics.RectF;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Where a corner tab lands, and what shape it is. One rule serves the Widgets page, the Display
@@ -17,6 +19,7 @@ import org.robolectric.RobolectricTestRunner;
  * edge, and never crosses the far side however narrow the frame gets.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class CornerTabGeometryTest {
 
     private static final float GAP = 8f;

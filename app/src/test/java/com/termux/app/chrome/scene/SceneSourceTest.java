@@ -16,9 +16,12 @@ import org.robolectric.RobolectricTestRunner;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** What the stored choice plays: the files, key and rate the scene and the still both read. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class SceneSourceTest {
 
     private final Context mContext = ApplicationProvider.getApplicationContext();

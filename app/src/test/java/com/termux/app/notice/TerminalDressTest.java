@@ -17,6 +17,7 @@ import org.robolectric.annotation.LooperMode;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
 
 /**
  * The dress is the one place a terminal-styled surface reads its shape and colour from, so the
@@ -24,7 +25,7 @@ import static org.junit.Assert.assertTrue;
  * without a terminal on it.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 @LooperMode(LooperMode.Mode.LEGACY)
 public class TerminalDressTest {
 

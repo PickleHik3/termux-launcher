@@ -21,6 +21,7 @@ import org.robolectric.annotation.Config;
 import java.io.FileDescriptor;
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * One Binder, one death link. The server re-announces itself every second until its socket is
@@ -28,7 +29,7 @@ import java.util.List;
  * replaced server must take its recipient with it.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class X11ServerLinkTest {
 
     /** A Binder that remembers who is linked to it and can be killed. */

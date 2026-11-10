@@ -10,6 +10,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Every raw-key decision the capture overlay makes lives here, because the controller needs a live
@@ -17,6 +19,7 @@ import static org.junit.Assert.assertTrue;
  * controller is left holding only routing.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class CommandPaletteCaptureModelTest {
 
     @Test
