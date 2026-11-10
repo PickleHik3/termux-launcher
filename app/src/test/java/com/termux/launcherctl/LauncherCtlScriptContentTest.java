@@ -3,8 +3,6 @@ package com.termux.launcherctl;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -13,15 +11,11 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import android.app.Application;
-import org.robolectric.annotation.Config;
 
 /**
  * The CLI scripts are rewritten only when what is on disk differs from what this build would
  * write; this pins the content half of that test.
  */
-@RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class)
 public class LauncherCtlScriptContentTest {
 
     @Rule

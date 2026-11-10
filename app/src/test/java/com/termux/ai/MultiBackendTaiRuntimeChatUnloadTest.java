@@ -4,24 +4,18 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.lang.reflect.Field;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import android.app.Application;
-import org.robolectric.annotation.Config;
 
 /**
  * {@link MultiBackendTaiRuntime#unloadChatModel}: the app sort gives back the chat model it loaded and
  * nothing else. Speech in, speech out and embeddings stay resident, and a chat model that is no longer
  * the sort's is left alone.
  */
-@RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class)
 public class MultiBackendTaiRuntimeChatUnloadTest {
     private static final String SORT_MODEL = "sort-model";
 

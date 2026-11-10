@@ -1,14 +1,9 @@
 package com.termux.app.terminal.io;
 
-import android.app.Application;
-import android.os.Build;
 
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -16,8 +11,6 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 /** Who is asked whether to take this release's key row, and who is left alone. */
-@RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class ExtraKeysDefaultOfferTest {
 
     private static final String CUSTOM_ROW = "[['ESC','TAB','CTRL','ALT','UP','DOWN']]";

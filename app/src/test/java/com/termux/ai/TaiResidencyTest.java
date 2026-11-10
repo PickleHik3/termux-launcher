@@ -3,8 +3,6 @@ package com.termux.ai;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,15 +14,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
-import android.app.Application;
-import org.robolectric.annotation.Config;
 
 /**
  * The resident table and what the budget makes of it. Sizes are the catalog's: gemma-4-e4b on the
  * GPU at 4k, EmbeddingGemma 300M, Qwen3 Embedding 0.6B (MNN); the phone is pong (12 GB class).
  */
-@RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class)
 public class TaiResidencyTest {
 
     private static final long PONG_TOTAL = 11_530_736L * 1024L;

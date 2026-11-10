@@ -3,15 +3,10 @@ package com.termux.app.chrome;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import android.app.Application;
-import android.os.Build;
 
 import com.termux.app.dock.DockSurfaceSpec;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.Config;
 
 /**
  * The strip under the gesture pill as the Peek glass card's foot: its sides are the card's sides
@@ -24,8 +19,6 @@ import org.robolectric.annotation.Config;
  * frost holds the bright wallpaper the blur bleeds in from beside the card; the card's soft band
  * reads past it, the strip's narrow ring shows it, starting at the seam.</p>
  */
-@RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PeekCardFootGlassTest {
 
     private static final float DENSITY = 2.625f; // pong, 420 dpi

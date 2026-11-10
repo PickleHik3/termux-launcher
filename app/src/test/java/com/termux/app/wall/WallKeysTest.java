@@ -4,8 +4,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import android.app.Application;
-import android.os.Build;
 
 import com.termux.app.terminal.io.ExtraKeyEligibility;
 import com.termux.app.terminal.io.ExtraKeysDefaultRow;
@@ -15,9 +13,6 @@ import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,8 +20,6 @@ import java.util.Collections;
 import java.util.List;
 
 /** The wall keys follow the arranged page list: a kind's key is there iff the list has its page. */
-@RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class WallKeysTest {
 
     private static final WallPages.PageKind H = WallPages.PageKind.HOME;

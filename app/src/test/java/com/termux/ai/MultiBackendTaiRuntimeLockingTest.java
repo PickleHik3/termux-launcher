@@ -3,8 +3,6 @@ package com.termux.ai;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.lang.reflect.Field;
 import java.util.Collections;
@@ -18,16 +16,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import android.app.Application;
-import org.robolectric.annotation.Config;
 
 /**
  * The router's load lock must be the only lock that spans a native load: state reads and cancel go
  * straight to the backend while a load is blocked, and an embedding batch never holds anything a
  * status poll would wait on.
  */
-@RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class)
 public class MultiBackendTaiRuntimeLockingTest {
     private static final long PROMPT_MS = 2_000L;
 

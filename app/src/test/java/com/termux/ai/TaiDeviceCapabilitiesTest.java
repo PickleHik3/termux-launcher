@@ -5,8 +5,6 @@ import com.termux.BuildConfig;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -18,11 +16,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
-import android.app.Application;
-import org.robolectric.annotation.Config;
 
-@RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class)
 public class TaiDeviceCapabilitiesTest {
 
     @After

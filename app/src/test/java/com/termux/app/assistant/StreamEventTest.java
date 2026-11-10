@@ -7,13 +7,7 @@ import static org.junit.Assert.assertTrue;
 
 import org.json.JSONObject;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import android.app.Application;
-import org.robolectric.annotation.Config;
 
-@RunWith(RobolectricTestRunner.class)
-@Config(application = Application.class)
 public class StreamEventTest {
     private static StreamEvent parse(String json) throws Exception {
         return StreamEvent.parse(new JSONObject(json));
