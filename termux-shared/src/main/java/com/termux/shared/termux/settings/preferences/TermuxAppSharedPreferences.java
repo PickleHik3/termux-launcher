@@ -436,14 +436,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS, value);
     }
 
-    public void setAppLauncherDrawerCornerRadius(int value) {
-        if (value < 0)
-            lookGrid().clear(LookGrid.Property.CORNERS, LookGrid.Element.SHEETS, LookGrid.NO_PAGE);
-        else
-            lookGrid().write(LookGrid.Property.CORNERS, LookGrid.Element.SHEETS, LookGrid.NO_PAGE,
-                Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS, value));
-    }
-
     /** What {@code getStatusBarBlurRadius} answers for one page, a negative id for the wall (ADR 0015). */
     public int getStatusBarBlurRadius(int pageId) {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
@@ -545,12 +537,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.DEFAULT_STATUS_INDICATOR_CORNER_RADIUS);
         return value < 0 ? -1
             : Math.min(TERMUX_APP.MAX_STATUS_INDICATOR_CORNER_RADIUS, value);
-    }
-
-    public void setStatusIndicatorCornerRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_STATUS_INDICATOR_CORNER_RADIUS,
-            value < 0 ? -1 : Math.min(TERMUX_APP.MAX_STATUS_INDICATOR_CORNER_RADIUS, value), false);
     }
 
     /** Wallpaper blur radius (dp) of the terminal's bordered glass pane; 0 disables. */
@@ -1429,29 +1415,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_APPS_ROW_ENABLED, value, false);
     }
 
-    /** @return {@code "left"} or {@code "right"}; anything else stored reads back as the default. */
-    public String getAppLauncherDockRailSide() {
-        String value = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_RAIL_SIDE, true);
-        return TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT.equals(value)
-            ? TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT
-            : TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT;
-    }
-
-    public void setAppLauncherDockRailSide(String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE,
-            TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT.equals(value)
-                ? TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT
-                : TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_LEFT, false);
-    }
-
-    /** @return true when the landscape rail sits on the right, i.e. the drawer pull runs left. */
-    public boolean isAppLauncherDockRailOnRight() {
-        return TERMUX_APP.APP_LAUNCHER_DOCK_RAIL_SIDE_RIGHT.equals(getAppLauncherDockRailSide());
-    }
-
     public boolean isAppLauncherExtraKeysRowEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED,
@@ -1680,29 +1643,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setX11StartWithCommand(String value) {
         SharedPreferenceUtils.setString(mSharedPreferences,
             TERMUX_APP.KEY_X11_START_WITH_COMMAND, value == null ? "" : value.trim(), false);
-    }
-
-    /**
-     * @return {@code "bottom"}, {@code "left"} or {@code "right"}; anything else stored reads back
-     * as the bottom row, so the keys are never nowhere.
-     */
-    @NonNull
-    public String getX11ExtraKeysSide() {
-        String value = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, TERMUX_APP.DEFAULT_X11_EXTRA_KEYS_SIDE, true);
-        return normalizeX11ExtraKeysSide(value);
-    }
-
-    public void setX11ExtraKeysSide(String value) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, normalizeX11ExtraKeysSide(value), false);
-    }
-
-    @NonNull
-    private static String normalizeX11ExtraKeysSide(String value) {
-        if (TERMUX_APP.X11_EXTRA_KEYS_SIDE_LEFT.equals(value)) return TERMUX_APP.X11_EXTRA_KEYS_SIDE_LEFT;
-        if (TERMUX_APP.X11_EXTRA_KEYS_SIDE_RIGHT.equals(value)) return TERMUX_APP.X11_EXTRA_KEYS_SIDE_RIGHT;
-        return TERMUX_APP.X11_EXTRA_KEYS_SIDE_BOTTOM;
     }
 
     public boolean areX11DefaultsApplied() {
@@ -2696,16 +2636,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING));
     }
 
-    public void setInAppKeyboardBottomPadding(int value) {
-        if (mPlaceSizes != null) {
-            mPlaceSizes.setKeyboardChinDp(value);
-            return;
-        }
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
-            clampInAppKeyboardBottomPadding(value), false);
-    }
-
     public static int clampInAppKeyboardBottomPadding(int value) {
         return DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING,
             TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING);
@@ -2837,22 +2767,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, value, false);
     }
 
-    public int getInAppKeyboardGrainRaw() {
-        return SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_GRAIN);
-    }
-
-    public void setInAppKeyboardGrainRaw(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, value, false);
-    }
-
-    public int getInAppKeyboardBackdropOpacityRaw() {
-        return SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY);
-    }
-
     public void setInAppKeyboardBackdropOpacityRaw(int value) {
         SharedPreferenceUtils.setInt(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, value, false);
@@ -2964,11 +2878,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED,
             TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_COLLAPSED);
-    }
-
-    public void setTopPaneClockCollapsed(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_TOP_PANE_CLOCK_COLLAPSED, value, false);
     }
 
     public String getEssentialNotificationRules() {
@@ -3213,15 +3122,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (isUseSystemWallpaperEnabled()) {
             setWallpaperEnabledTerminalBackgroundOpacity(clamped);
         }
-    }
-
-    public int getSessionsOpacity() {
-        int opacity = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_SESSIONS_OPACITY, TERMUX_APP.DEFAULT_VALUE_SESSIONS_OPACITY);
-        return DataUtils.clamp(opacity, 0, 100);
-    }
-
-    public void setSessionsOpacity(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_SESSIONS_OPACITY, DataUtils.clamp(value, 0, 100), false);
     }
 
     /**
@@ -3561,17 +3461,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void detachSurfaceValue(SurfaceSlot slot, SurfaceProperty property,
                                    int pageId, int value) {
         writeSurfaceRaw(slot, property, pageId, value);
-    }
-
-    /**
-     * Gives the Terminal page (the Workspace) its own value of a surface's property, which wins
-     * over the wall's. A no-op where no Terminal page is known or a page may not hold the value.
-     */
-    public void setSurfaceWorkspaceOverride(SurfaceSlot slot, SurfaceProperty property, int value) {
-        LookGrid.Element element = cellElement(slot, property);
-        if (element == null || sTerminalPageId < 0 || !hasSurfaceProperty(slot, property))
-            return;
-        lookGrid().write(property.grid, element, sTerminalPageId, toGrid(property, value));
     }
 
     private void writeSurfaceRaw(SurfaceSlot slot, SurfaceProperty property, int value) {
@@ -4485,14 +4374,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE;
     }
 
-    public boolean isExtraKeysBlurEnabled() {
-        return getExtraKeysBlurRadius(sTerminalPageId) > 0;
-    }
-    
-    public void setExtraKeysBlurEnabled(boolean value) {
-        setExtraKeysBlurRadius(value ? Math.max(1, getExtraKeysBlurRadius(sTerminalPageId)) : 0);
-    }
-    
     public boolean isTerminalDynamicColorsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, TERMUX_APP.DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED);
     }
