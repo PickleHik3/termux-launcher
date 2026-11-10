@@ -20,6 +20,9 @@ import android.view.ViewGroup;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
+import com.termux.app.place.Element;
+import com.termux.app.terminal.TermuxActivityRootView;
+import androidx.core.view.ViewCompat;
 // @@IMPORTS@@
 
 /**
@@ -31,7 +34,6 @@ public final class StatusBarController {
     /** What only the activity gives the status bar. */
     public interface Host {
         void applyPlaceStripInset(float expansion);
-        int bottomStatusBandPx();
         @Nullable com.termux.app.chrome.LiveChromeShape.Clip chromeClipOf( @NonNull com.termux.app.place.ChromeShape.PieceId... ids);
         PlaceOrientation currentPlaceOrientation();
         float dpToPx(float dp);
@@ -47,7 +49,6 @@ public final class StatusBarController {
         GeometryScheduler geometry();
         @Nullable com.termux.app.wall.PaneWallController paneWallController();
         TermuxAppSharedPreferences preferences();
-        @NonNull PlaceLayout.Edge statusBarEdge();
         SurfaceEditorController surfaceEditor();
         int chromeMarginDp();
         int chromeMarginDp(@NonNull com.termux.app.place.SeamDress.Surface surface);
@@ -68,7 +69,10 @@ public final class StatusBarController {
         com.termux.app.place.Crossing crossing();
         @NonNull float[] displayCornerRadiiPx();
         TermuxAppSharedProperties properties();
-        com.termux.app.statusbar.StatusBarController statusBar();
+        void applyTerminalWindowBarBackdropInsets();
+        boolean isSplitPanesEnabled();
+        com.termux.app.dock.DockRows dockRows();
+        TermuxActivityRootView termuxActivityRootView();
         // @@HOST@@
     }
 
@@ -100,7 +104,7 @@ public final class StatusBarController {
      * never moves the bar.
      */
     public boolean isStatusBarCompact() {
-        if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mHost.statusBarEdge())) {
+        if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
         }
         // The Look editor holds the bar open without touching the stored choice.
@@ -121,7 +125,7 @@ public final class StatusBarController {
         boolean vertical = isStatusBarVertical();
         ViewGroup.LayoutParams params = host.getLayoutParams();
         if (vertical ? params.width != height : params.height != height) {
-            int bandBeforePx = mHost.bottomStatusBandPx();
+            int bandBeforePx = bottomStatusBandPx();
             if (vertical) params.width = height;
             else params.height = height;
             host.setLayoutParams(params);
@@ -131,8 +135,8 @@ public final class StatusBarController {
             // whole geometry pass per frame was a full chrome apply per frame, and the fold's
             // settle runs the one pass that lays everything else out
             // (beginStatusBarTerminalResize).
-            if (mHost.statusBarEdge() == PlaceLayout.Edge.BOTTOM)
-                mHost.growAccessoryStackBy(mHost.bottomStatusBandPx() - bandBeforePx);
+            if (mStatusBarEdge == PlaceLayout.Edge.BOTTOM)
+                mHost.growAccessoryStackBy(bottomStatusBandPx() - bandBeforePx);
         }
         int collapsedHeight = targetStatusBarHeightPx(capsule, true);
         int expandedHeight = targetStatusBarHeightPx(capsule, false);
@@ -163,7 +167,7 @@ public final class StatusBarController {
             // The slot stands above the row on both row edges, so what it shows is always the
             // stretch the row has not reached — its own top down to the row's crown. It slides in
             // the way the bar is growing: down out of a top bar, up out of a bottom one.
-            float sign = com.termux.app.statusbar.StatusBarGesturePolicy.expandSign(mHost.statusBarEdge());
+            float sign = com.termux.app.statusbar.StatusBarGesturePolicy.expandSign(mStatusBarEdge);
             // The clock and the cards show only once the bar has the height to hold them, rising
             // the last of the way in (StatusBarFoldMotion.CONTENT_REVEAL_START): a function of the
             // height, so a fold reads the same curve down and half-drawn content never shows. The
@@ -205,10 +209,10 @@ public final class StatusBarController {
                                               int collapsedHeight, int expandedHeight) {
         float density = mHost.getResources().getDisplayMetrics().density;
         com.termux.app.statusbar.StatusBarEdgeGeometry.RowGeometry folded =
-            com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mHost.statusBarEdge(), capsule,
+            com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mStatusBarEdge, capsule,
                 true, true, density);
         com.termux.app.statusbar.StatusBarEdgeGeometry.RowGeometry open =
-            com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mHost.statusBarEdge(), capsule,
+            com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mStatusBarEdge, capsule,
                 false, false, density);
         int collapsedRowHeight = folded.rowHeight;
         int expandedRowHeight = open.rowHeight;
@@ -226,7 +230,7 @@ public final class StatusBarController {
             // The row keeps the bar's own screen edge, so the offset the resize geometry measured
             // from the panel's foot is the answer on a top bar and a bottom one alike.
             params.topMargin = com.termux.app.statusbar.StatusBarLensPolicy.rowOffsetPx(
-                mHost.statusBarEdge(), surfaceHeight, geometry.height, geometry.top);
+                mStatusBarEdge, surfaceHeight, geometry.height, geometry.top);
             params.bottomMargin = 0;
             params.width = ViewGroup.LayoutParams.MATCH_PARENT;
             params.height = geometry.height;
@@ -299,7 +303,7 @@ public final class StatusBarController {
      */
     public void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate) {
         boolean held = expanded
-            && com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mHost.statusBarEdge());
+            && com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge);
         if (mStatusBarExpandedForEditor == held) return;
         mStatusBarExpandedForEditor = held;
         setTopStatusBarCollapsed(isStatusBarCompact(), animate);
@@ -321,7 +325,7 @@ public final class StatusBarController {
         // A bar down a side never rests expanded; isStatusBarCompact() already reflects that, so
         // this coercion never lands on a preference write below — it only refuses the request.
         boolean collapsed = requestedCollapsed
-            || !com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mHost.statusBarEdge());
+            || !com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge);
         View host = mHost.findViewById(R.id.terminal_window_bar_host);
         View topWidgets = mHost.findViewById(R.id.terminal_top_widget_area);
         com.termux.app.statusbar.StatusBarSwipeLayout swipeHost = host instanceof
@@ -447,7 +451,7 @@ public final class StatusBarController {
      */
     public void dragTopStatusBar(float towardOpenPx) {
         if (mHost.preferences() == null
-            || !com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mHost.statusBarEdge())) {
+            || !com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return;
         }
         View host = mHost.findViewById(R.id.terminal_window_bar_host);
@@ -482,8 +486,8 @@ public final class StatusBarController {
      * grabber that marks it, go with a bar along the top that can unfold.
      */
     public void syncBorderStatusSwipe(boolean barShown) {
-        boolean foldable = barShown && mHost.statusBarEdge() == PlaceLayout.Edge.TOP
-            && com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mHost.statusBarEdge());
+        boolean foldable = barShown && mStatusBarEdge == PlaceLayout.Edge.TOP
+            && com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge);
         if (foldable == mBorderStatusBarFoldable) return;
         mBorderStatusBarFoldable = foldable;
         if (mHost.paneWallController() != null) mHost.paneWallController().wall().invalidate();
@@ -550,7 +554,7 @@ public final class StatusBarController {
      */
     public void applyStatusBarStyle(@NonNull View host) {
         boolean capsule = mHost.isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS);
-        boolean collapsed = mHost.statusBar().isStatusBarCompact();
+        boolean collapsed = isStatusBarCompact();
         ViewGroup.LayoutParams lp = host.getLayoutParams();
         if (lp instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
@@ -560,7 +564,7 @@ public final class StatusBarController {
             int outerMargin = statusBarColumnOuterMarginPx();
             int targetThickness = targetStatusBarHeightPx(capsule, collapsed);
             com.termux.app.statusbar.StatusBarEdgeGeometry.RowGeometry rows =
-                com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mHost.statusBarEdge(),
+                com.termux.app.statusbar.StatusBarEdgeGeometry.rowGeometry(mStatusBarEdge,
                     capsule, collapsed, collapsed, mHost.getResources().getDisplayMetrics().density);
             boolean vertical = isStatusBarVertical();
             // A column keeps only its own air from the band beside it. The camera hole it used to
@@ -568,9 +572,9 @@ public final class StatusBarController {
             // can never be reckoned from different origins again.
             int columnLeadIn = vertical ? outerMargin : 0;
             int leftMargin = vertical
-                ? (mHost.statusBarEdge() == PlaceLayout.Edge.LEFT ? columnLeadIn : 0) : sideMargin;
+                ? (mStatusBarEdge == PlaceLayout.Edge.LEFT ? columnLeadIn : 0) : sideMargin;
             int rightMargin = vertical
-                ? (mHost.statusBarEdge() == PlaceLayout.Edge.RIGHT ? columnLeadIn : 0) : sideMargin;
+                ? (mStatusBarEdge == PlaceLayout.Edge.RIGHT ? columnLeadIn : 0) : sideMargin;
             // And it runs the canvas band, not the display: a side stack flanks the terminal
             // between the top and bottom stacks, so a column reaches exactly as far as the canvas
             // beside it and cancels nothing. It used to be a sibling of the padded content root and
@@ -582,14 +586,14 @@ public final class StatusBarController {
             boolean floatsOnScreenEdge = capsule && mStatusStyleFullScreen;
             float barRadius = resolveStatusBarCapsuleCornerRadiusPx(targetThickness);
             int topMargin = vertical ? 0
-                : (mHost.statusBarEdge() == PlaceLayout.Edge.TOP
+                : (mStatusBarEdge == PlaceLayout.Edge.TOP
                     ? com.termux.app.chrome.FullScreenCornerPolicy.floatingEdgeGapPx(
                         floatsOnScreenEdge, outerMargin, sideMargin, barRadius,
                         Math.max(mHost.displayCornerRadiiPx()[0], mHost.displayCornerRadiiPx()[1]))
                     : 0);
             int bottomMargin = vertical ? 0
-                : (mHost.statusBarEdge() == PlaceLayout.Edge.BOTTOM ? outerMargin : 0);
-            boolean sizeStale = !mHost.statusBar().isStatusBarFoldInteractive()
+                : (mStatusBarEdge == PlaceLayout.Edge.BOTTOM ? outerMargin : 0);
+            boolean sizeStale = !isStatusBarFoldInteractive()
                 && (vertical ? mlp.width != targetThickness : mlp.height != targetThickness);
             if (mlp.leftMargin != leftMargin || mlp.rightMargin != rightMargin
                 || mlp.topMargin != topMargin || mlp.bottomMargin != bottomMargin || sizeStale) {
@@ -597,7 +601,7 @@ public final class StatusBarController {
                 mlp.rightMargin = rightMargin;
                 mlp.topMargin = topMargin;
                 mlp.bottomMargin = bottomMargin;
-                if (!mHost.statusBar().isStatusBarFoldInteractive()) {
+                if (!isStatusBarFoldInteractive()) {
                     if (vertical) mlp.width = targetThickness;
                     else mlp.height = targetThickness;
                 }
@@ -614,7 +618,7 @@ public final class StatusBarController {
                     widgetParams.height = targetWidgetHeight;
                     topWidgets.setLayoutParams(widgetParams);
                 }
-                if (!mHost.statusBar().isStatusBarFoldInteractive()) {
+                if (!isStatusBarFoldInteractive()) {
                     topWidgets.setAlpha(1f);
                     topWidgets.setTranslationY(0f);
                     // A column carries the stacked clock instead of the row's widget slot.
@@ -622,7 +626,7 @@ public final class StatusBarController {
                 }
             }
             View stackedClock = mHost.findViewById(R.id.terminal_status_column_clock);
-            if (stackedClock != null && !mHost.statusBar().isStatusBarFoldInteractive()) {
+            if (stackedClock != null && !isStatusBarFoldInteractive()) {
                 stackedClock.setAlpha(1f);
                 stackedClock.setVisibility(vertical && !collapsed && isStatusClockShown()
                     ? View.VISIBLE : View.GONE);
@@ -645,7 +649,7 @@ public final class StatusBarController {
             // A live collapse/expand animator owns the row's position, as does the finger folding
             // the bar; a refresh mid-animation must not re-anchor it to its rest rule and park it
             // where the gesture is not.
-            boolean interactiveGeometryOwnsRow = mHost.statusBar().isStatusBarFoldInteractive();
+            boolean interactiveGeometryOwnsRow = isStatusBarFoldInteractive();
 
             // Keep the bottom chip corners inside the capsule's 26dp outline. At the former 4dp
             // inset, the rounded host clip intersected the session and weather chip backgrounds.
@@ -867,7 +871,7 @@ public final class StatusBarController {
      * surface looking precisely as it did while a raised radius stops clipping the chips.</p>
      */
     private int statusBarContentEdgeInsetPx(boolean capsule) {
-        boolean collapsed = mHost.statusBar().isStatusBarCompact();
+        boolean collapsed = isStatusBarCompact();
         float radiusPx = capsule
             ? resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(true, collapsed))
             : statusPieceCornerRadiusPx();
@@ -920,13 +924,13 @@ public final class StatusBarController {
     public int targetStatusBarHeightPx(boolean capsule, boolean collapsed) {
         // Minimal mode needs no case of its own: the minimal layout puts the bar away, or keeps it,
         // like any layout does (applyStatusBarEdge), and a bar it keeps is a bar with a band.
-        return com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(mHost.statusBarEdge(), capsule,
+        return com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(mStatusBarEdge, capsule,
             collapsed, mHost.getResources().getDisplayMetrics().density);
     }
 
     /** The bar stands in a column rather than a row, so its content runs down the screen. */
     public boolean isStatusBarVertical() {
-        return com.termux.app.statusbar.StatusBarEdgeGeometry.isVertical(mHost.statusBarEdge());
+        return com.termux.app.statusbar.StatusBarEdgeGeometry.isVertical(mStatusBarEdge);
     }
 
     /** @see #getEffectiveExtraKeysBlurRadius() */
@@ -938,6 +942,12 @@ public final class StatusBarController {
     /** Whether the status bar shows its clock (the Status bar card's Clock toggle). */
     public boolean isStatusClockShown() {
         return mHost.preferences() == null || mHost.preferences().isStatusClockShown();
+    }
+
+    /** The edge the bar stands on, as {@link #applyStatusBarEdge} last placed it. */
+    @NonNull
+    public PlaceLayout.Edge statusBarEdge() {
+        return mStatusBarEdge;
     }
 
     /** The bar's surface outline, which the crossing's margin ease grows sideways. */
@@ -955,6 +965,142 @@ public final class StatusBarController {
     @Nullable
     public float[] statusStyleCornerRadii() {
         return mStatusStyleCornerRadii;
+    }
+
+    /** The edge the bar is standing on right now; every piece of its geometry reads this. */
+    @NonNull private PlaceLayout.Edge mStatusBarEdge = PlaceLayout.Edge.TOP;
+    /** Whether the bar has been stood on that edge at least once since the views were built. */
+    private boolean mStatusBarEdgeApplied;
+
+    /**
+     * Where the status bar stands. Every arrangement keeps a bar — it moves rather than hides, so
+     * the wall's paging gesture always has one.
+     *
+     * <p>A row along the top lives in the content column and takes its slice of the terminal's
+     * height. A row along the bottom is a band of the dock's own stack, standing where its order
+     * puts it among the dock's rows — on the dock's sheet of glass between them, on a sheet of its
+     * own as the band touching the canvas. A column
+     * down a side lives beside the padded content root, in the band the apps rail and the extra
+     * keys column already share, and the content is inset from it by the same seam. One host, one
+     * set of views: the bar is moved rather than rebuilt, so everything bound to it by id follows.
+     */
+    public void applyStatusBarEdge(@NonNull PlaceLayout layout) {
+        View host = mHost.findViewById(R.id.terminal_window_bar_host);
+        if (!(host instanceof ViewGroup)) return;
+        // Put away in the Layout editor: the bar and its fold go, and the content takes the band.
+        if (layout.slot(Element.STATUS).hidden) {
+            if (mHost.dockRows().statusBarShown()) {
+                cancelTopStatusBarAnimator();
+                finishStatusBarTerminalResize(endTopStatusBarDrag(), true);
+                // Through Dock rows, which counts a bar along the bottom as a band of the stack.
+                mHost.dockRows().setStatusBarShown(false);
+                mHost.applyTerminalWindowBarBackdropInsets();
+                if (mHost.termuxActivityRootView() != null) ViewCompat.requestApplyInsets(mHost.termuxActivityRootView());
+            }
+            return;
+        }
+        if (!mHost.dockRows().statusBarShown() && mHost.isSplitPanesEnabled()) {
+            mHost.dockRows().setStatusBarShown(true);
+            mHost.applyTerminalWindowBarBackdropInsets();
+            setTopStatusBarCollapsed(isStatusBarCompact(), false);
+            mHost.refreshTerminalWindowBar();
+            if (mHost.termuxActivityRootView() != null) ViewCompat.requestApplyInsets(mHost.termuxActivityRootView());
+        }
+        PlaceLayout.Edge edge = layout.slot(Element.STATUS).edge;
+        boolean edgeChanged = edge != mStatusBarEdge;
+        if (!edgeChanged && mStatusBarEdgeApplied) {
+            // The edge has not moved, but a column is measured against the screen's height, which
+            // a turn changes; the style pass is what re-derives that.
+            if (isStatusBarVertical()) applyStatusBarStyle(host);
+            return;
+        }
+        if (edgeChanged) {
+            // A fold under way on the old edge — animated or under a finger — is dropped; the new
+            // edge is laid out at rest below. The drag's lease is returned with it.
+            cancelTopStatusBarAnimator();
+            finishStatusBarTerminalResize(endTopStatusBarDrag(), true);
+        }
+        mStatusBarEdge = edge;
+        boolean first = !mStatusBarEdgeApplied;
+        mStatusBarEdgeApplied = true;
+        // The XML already stands the bar along the top; a place that wants it there costs nothing.
+        if (first && edge == PlaceLayout.Edge.TOP) return;
+        // Which stack the host now stands in is the arrangement walk's answer; this only gives it
+        // the band that edge asks for and turns its contents to face the right way.
+        com.termux.app.statusbar.StatusBarEdgeArrangement.band(host, edge,
+            targetStatusBarHeightPx(mHost.isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), isStatusBarCompact()));
+        com.termux.app.statusbar.StatusBarEdgeArrangement.apply((ViewGroup) host, edge);
+        if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+            com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
+                (com.termux.app.statusbar.StatusBarSwipeLayout) host;
+            swipeHost.setEdge(edge);
+            swipeHost.setExpansionAllowed(
+                com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(edge));
+        }
+        // The bar is not the system status bar's glass anywhere but along the top; everywhere else
+        // the terminal simply starts under the system bar, as it does with the bar folded today.
+        mHost.applyTerminalWindowBarBackdropInsets();
+        setTopStatusBarCollapsed(isStatusBarCompact(), false);
+        mHost.refreshTerminalWindowBar();
+        // The bar's column is a band on its edge like the rail's; the insets pass re-derives what
+        // the content gives up to the whole stack.
+        if (mHost.termuxActivityRootView() != null) ViewCompat.requestApplyInsets(mHost.termuxActivityRootView());
+    }
+
+    /**
+     * The band a status bar standing along the bottom claims inside the dock's stack: the bar
+     * itself plus the air the style keeps under it. Zero on every other edge, and zero while the
+     * window bar is switched off.
+     *
+     * <p>Read off the host's own layout params rather than off the style's target, because the
+     * expand/collapse animator is the writer of that height while it runs and the stack has to
+     * follow it frame by frame instead of jumping to where it will end up.
+     */
+    public int bottomStatusBandPx() {
+        if (mStatusBarEdge != PlaceLayout.Edge.BOTTOM || !mHost.dockRows().statusBarShown()) return 0;
+        View host = mHost.findViewById(R.id.terminal_window_bar_host);
+        if (host == null) return 0;
+        ViewGroup.LayoutParams params = host.getLayoutParams();
+        int thicknessPx = params != null && params.height > 0
+            ? params.height : targetStatusBarHeightPx(mHost.isRoundedStyle(com.termux.app.place.SeamDress.Surface.STATUS), isStatusBarCompact());
+        return thicknessPx + statusBarColumnOuterMarginPx();
+    }
+
+    /**
+     * The band a status bar along the bottom claims at rest in a Style, as {@link
+     * #bottomStatusBandPx} measures the one on screen: the bar at its Style's thickness and the
+     * air a Floating bar keeps under it. Zero while the window bar is switched off. A half's rest
+     * reads it in its own Style (Stack layout's StatusBand).
+     */
+    public int bottomStatusBandAtRestPx(boolean floating) {
+        if (!mHost.isSplitPanesEnabled()) return 0;
+        return com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(PlaceLayout.Edge.BOTTOM,
+                floating, isStatusBarCompact(), mHost.getResources().getDisplayMetrics().density)
+            + (floating ? Math.round(mHost.dpToPx(2)) : 0);
+    }
+
+    /**
+     * The status bar as the layout just applied has it. Whether it is there at all is the
+     * layout's ({@link #applyStatusBarEdge} puts it away or keeps it), so this only settles what a
+     * bar that stays looks like: folded or open as the orientation remembers, with its swipe, the
+     * same in the minimal layout as in the normal one, and drawn in full.
+     */
+    public void applyMinimalStatusChrome() {
+        View host = mHost.findViewById(R.id.terminal_window_bar_host);
+        if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+            com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
+                (com.termux.app.statusbar.StatusBarSwipeLayout) host;
+            swipeHost.setExpansionAllowed(
+                com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
+        }
+        if (host != null && host.getAlpha() != 1f) host.setAlpha(1f);
+        View row = mHost.findViewById(R.id.terminal_status_row);
+        if (row != null && row.getVisibility() != View.VISIBLE) row.setVisibility(View.VISIBLE);
+        View lens = mHost.findViewById(R.id.terminal_status_lens);
+        if (lens != null && lens.getVisibility() != View.VISIBLE) lens.setVisibility(View.VISIBLE);
+        // The fold's own path sizes the bar, under the resize lease that gives the panes one
+        // row-and-column update for the change instead of one per pass.
+        setTopStatusBarCollapsed(isStatusBarCompact(), false);
     }
 
     // @@BODY@@
