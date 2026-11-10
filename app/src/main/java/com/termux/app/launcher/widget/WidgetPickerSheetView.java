@@ -31,14 +31,18 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
 import com.termux.app.material.M3;
+import com.termux.app.material.ModalSheetMotion;
+import com.termux.app.material.ModalSheetSlide;
 
 import java.util.Collections;
 import java.util.List;
 
 /**
  * Modal child sheet that never creates a window of its own: a {@link BottomSheetBehavior} sheet in
- * a {@link CoordinatorLayout} that fills the widget pane, so the stock bottom-sheet drag, settle
- * and nested scroll apply without the sheet taking a window (and with it, the keyboard).
+ * a {@link CoordinatorLayout} that fills the widget pane, so the stock bottom-sheet drag, swipe
+ * to dismiss and nested scroll apply without the sheet taking a window (and with it, the
+ * keyboard). It opens and closes by {@link ModalSheetSlide} in {@link ModalSheetMotion}'s time and
+ * curves, the same as Home's sheet; the behavior stays expanded and only the drag is its own.
  *
  * <p>It carries one text field, for searching the catalog, and it refuses to be the thing that
  * takes the keyboard: the field is not focusable until it is tapped, and when it is, the focus is
@@ -51,7 +55,11 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
 
     private final View scrim;
     private final LinearLayout sheet;
-    private final BottomSheetBehavior<LinearLayout> behavior;
+    private BottomSheetBehavior<LinearLayout> behavior;
+    private final BottomSheetBehavior.BottomSheetCallback behaviorCallback;
+    private final ModalSheetSlide slide;
+    private final android.view.ViewTreeObserver.OnPreDrawListener slideInOnFirstDraw;
+    private final android.graphics.Rect cardBounds = new android.graphics.Rect();
     private final TextView title;
     private final EditText search;
     private final TextView notice;
@@ -82,8 +90,9 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
             CoordinatorLayout.LayoutParams.MATCH_PARENT, CoordinatorLayout.LayoutParams.MATCH_PARENT));
         sheet = new LinearLayout(context); sheet.setOrientation(LinearLayout.VERTICAL);
         sheet.setFocusable(false); sheet.setClickable(true);
-        ShapeAppearanceModel topCorners = M3.shape(context,
-            com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge).toBuilder()
+        ShapeAppearanceModel topCorners = ShapeAppearanceModel.builder()
+            .setTopLeftCornerSize(dp(ModalSheetMotion.TOP_CORNER_DP))
+            .setTopRightCornerSize(dp(ModalSheetMotion.TOP_CORNER_DP))
             .setBottomLeftCornerSize(0f).setBottomRightCornerSize(0f).build();
         MaterialShapeDrawable background = new MaterialShapeDrawable(topCorners);
         background.initializeElevationOverlay(context);
@@ -136,14 +145,27 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         behavior.setHideable(true); behavior.setSkipCollapsed(true);
         behavior.setFitToContents(false); behavior.setDraggable(true);
         behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
-        behavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
+        behaviorCallback = new BottomSheetBehavior.BottomSheetCallback() {
             @Override public void onStateChanged(@NonNull View bottomSheet, int newState) {
                 if (newState == BottomSheetBehavior.STATE_HIDDEN) finishClosing();
             }
             @Override public void onSlide(@NonNull View bottomSheet, float slideOffset) {
+                // A layout mid-slide reports the card's resting offset; the slide owns the dim.
+                if (slide.isRunning()) return;
                 scrim.setAlpha(Math.max(0f, Math.min(1f, 1f + slideOffset)));
             }
-        });
+        };
+        behavior.addBottomSheetCallback(behaviorCallback);
+        slide = new ModalSheetSlide(sheet, this::onSlideFrame);
+        slideInOnFirstDraw = new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                getViewTreeObserver().removeOnPreDrawListener(this);
+                if (!open) return true;
+                slide.slideIn(null);
+                scrim.setAlpha(slide.scrimAlpha());
+                return true;
+            }
+        };
         sheetParams.setBehavior(behavior);
         addView(sheet, sheetParams);
         scrim.setAlpha(0f); setVisibility(GONE);
@@ -207,7 +229,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
     public void setSearchFocusListener(@Nullable SearchFocusListener value) {
         searchFocusListener = value;
     }
-    /** Kept for callers; the stock sheet's settle follows the system animation scale. */
+    /** Kept for callers; the slide follows the system animator scale. */
     public void setReducedMotion(boolean value) { }
     public boolean isOpen() { return open; }
 
@@ -293,8 +315,15 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         View current = getRootView().findFocus();
         previousFocus = current != null && !isInside(current)
             ? new java.lang.ref.WeakReference<>(current) : null;
-        open = true; setVisibility(VISIBLE); bringToFront();
-        behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+        open = true;
+        behavior = ModalSheetSlide.armExpanded(sheet, behavior, behaviorCallback);
+        setVisibility(VISIBLE); bringToFront();
+        if (slide.isRunning()) {
+            slide.slideIn(null);
+        } else {
+            scrim.setAlpha(0f);
+            getViewTreeObserver().addOnPreDrawListener(slideInOnFirstDraw);
+        }
     }
     public void close() {
         if (!open) return; open = false;
@@ -302,7 +331,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         clearSearch();
         restoreFocus(hadFocus);
         adapter.submit(Collections.emptyList());
-        behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        slide.slideOut(this::finishClosing);
     }
     public void closeImmediate() {
         boolean hadFocus = open && findFocus() != null;
@@ -310,6 +339,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         clearSearch();
         restoreFocus(hadFocus);
         adapter.submit(Collections.emptyList());
+        slide.reset();
         behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
         scrim.setAlpha(0f); setVisibility(GONE);
     }
@@ -324,7 +354,26 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
             adapter.submit(Collections.emptyList());
         }
         scrim.setAlpha(0f); setVisibility(GONE);
+        slide.reset();
     }
+
+    private void onSlideFrame() { scrim.setAlpha(slide.scrimAlpha()); }
+
+    /** A touch that lands on the card while it slides stops the slide, so a drag starts from rest. */
+    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN && slide.isRunning()) {
+            sheet.getHitRect(cardBounds);
+            cardBounds.offset(0, Math.round(sheet.getTranslationY()));
+            if (cardBounds.contains(Math.round(event.getX()), Math.round(event.getY()))) slide.end();
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
+    @androidx.annotation.VisibleForTesting
+    BottomSheetBehavior<LinearLayout> behaviorForTest() { return behavior; }
+
+    @androidx.annotation.VisibleForTesting
+    float cardTranslationYForTest() { return sheet.getTranslationY(); }
 
     private boolean isInside(@NonNull View view) {
         for (android.view.ViewParent p = view.getParent(); p != null; p = p.getParent()) {
@@ -371,4 +420,5 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         }
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    private float dp(float value) { return value * getResources().getDisplayMetrics().density; }
 }
