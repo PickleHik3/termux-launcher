@@ -18,6 +18,13 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **One resolver for what the stored wallpaper plays (11-10, refactor/scene-source).** A refactor
+  with no intended change: `SceneSource` now feeds both the running scene and the still. Unit tests
+  pin the file and key rules; nothing drawn was looked at. Owed · emulator or pong: with a video
+  stored, tap another rate pill (the scene keeps playing and switches to that version once made);
+  Use as wallpaper with a video and with a shader (the still on Home and Lock is the frame of what
+  is playing); cold start with each stored (the scene comes up); `debug.tl.shader_file` and
+  `debug.tl.video_file` still override and clear.
 - **GIF import converts to video (11-09, perf/gif-wallpaper).** Seen on pong 11-09 with the
   developer's 32 MB 800x1412 5 s GIF: the stored file is a 3.2 MB HEVC .mp4, the GIF is gone, the
   hint reads "GIF converted to video · 800×1412 · 5 s · 3 MB · hardware decoded", it plays through

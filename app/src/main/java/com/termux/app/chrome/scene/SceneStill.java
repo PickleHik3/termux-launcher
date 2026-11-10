@@ -62,18 +62,12 @@ public final class SceneStill {
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
         if (prefs == null) return null;
         WallpaperMotion motion = ShaderStore.readMotion(prefs.getSharedPreferences());
-        if (motion.kind == WallpaperMotion.Kind.VIDEO && motion.id != null
-            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            File video = VideoVariants.playable(context, ShaderStore.readVideoRate(prefs.getSharedPreferences()));
-            if (video == null) video = VideoImport.file(context, motion.id);
-            return video.isFile() ? VideoStill.render(video, widthPx, heightPx) : null;
-        }
-        if (motion.kind != WallpaperMotion.Kind.SHADER || motion.id == null) return null;
-        String source = ShaderStore.readText(ShaderStore.sourceFile(context, motion.id));
+        ShaderStore.Meta meta = motion.kind == WallpaperMotion.Kind.SHADER && motion.id != null
+            ? ShaderStore.readMeta(context, motion.id) : null;
+        SceneSource source = SceneSource.resolve(context, motion,
+            ShaderStore.readVideoRate(prefs.getSharedPreferences()), meta);
         if (source == null) return null;
-        ShaderStore.Meta meta = ShaderStore.readMeta(context, motion.id);
-        return render(source, ShaderStore.textureFile(context, motion.id, meta), widthPx, heightPx,
-            look != null ? look : ShaderLook.resolve(context));
+        return source.still(widthPx, heightPx, look != null ? look : ShaderLook.resolve(context));
     }
 
     /**

@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 
 import com.termux.R;
 import com.termux.app.chrome.scene.LiveWallpaperChoice;
+import com.termux.app.chrome.scene.WallpaperMotion;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,7 +50,7 @@ public class WallpaperLiveHostBelow29Test {
         activity.setContentView(host.root());
 
         assertFalse(LiveWallpaperChoice.isSupported());
-        assertEquals(LiveSceneLogic.Kind.PHOTO, host.kind());
+        assertEquals(WallpaperMotion.Kind.PHOTO, host.kind());
         assertNull(host.list());
         assertNull(host.editor());
         assertNull(host.video());
