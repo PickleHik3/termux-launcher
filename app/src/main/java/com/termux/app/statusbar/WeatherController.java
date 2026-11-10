@@ -23,7 +23,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStreamReader;
+import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -32,6 +34,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -129,7 +132,7 @@ public final class WeatherController {
      * The place picked in Settings: the label the header shows and the coordinates the forecast is
      * asked for. An empty label means the weather follows the device.
      */
-    private static final class PlaceSetting {
+    static final class PlaceSetting {
         @NonNull final String label;
         /** {latitude, longitude}; null when only a label was stored. */
         @Nullable final double[] coords;
@@ -172,21 +175,91 @@ public final class WeatherController {
     private static final Weather sLastValid = new Weather();
     @Nullable private static String sLastValidPlace;
 
-    private final Context mContext;
-    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
-    // Daemon thread so a controller left over from an activity recreation never keeps the process
-    // alive; the pool is GC'd with the controller.
-    private final ExecutorService mExecutor = Executors.newSingleThreadExecutor(r -> {
+    /** A forecast older than this is never shown in place of a failure, nor restored after a restart. */
+    public static final long MAX_KEPT_AGE_MS = 3 * 60 * 60 * 1000L;
+    /** Pause before the one retry of a forecast request that failed on I/O or a 5xx. */
+    private static final long RETRY_DELAY_MS = 1500L;
+    /** A fetch still "in flight" after this long is presumed lost, so it cannot wedge refreshes. */
+    private static final long IN_FLIGHT_LOST_MS = 60_000L;
+    private static final String PERSIST_FILE = "weather_last.json";
+
+    // ---- shared by every controller in the process (main thread only unless noted) ----
+
+    /** Made on first use: the class also loads in plain JVM tests, where there is no Looper. */
+    @Nullable private static Handler sMainHandler;
+    // Daemon thread so a fetch never keeps the process alive.
+    private static final ExecutorService sFetchExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "weather-fetch");
         t.setDaemon(true);
         return t;
     });
+    /** Controllers to hand a finished fetch to; weak, and removed by {@link #stop()}. */
+    private static final List<WeakReference<WeatherController>> sLive = new ArrayList<>();
+    private static final WeatherBackoff sBackoff = new WeatherBackoff();
+    private static boolean sInFlight;
+    private static long sInFlightSinceMs;
+    private static boolean sSeeded;
+
+    // ---- test seams ----
+
+    /** One HTTP exchange: {@code code} 0 means the request failed before an answer. */
+    static final class HttpResult {
+        final int code;
+        @Nullable final String body;
+        HttpResult(int code, @Nullable String body) {
+            this.code = code;
+            this.body = body;
+        }
+    }
+
+    interface Transport { @NonNull HttpResult get(@NonNull String url); }
+    interface Clock { long nowMs(); }
+    interface PlaceSource { @NonNull PlaceSetting get(); }
+
+    private static Transport sTransport = WeatherController::realGet;
+    private static Clock sClock = System::currentTimeMillis;
+    private static Executor sExecutor = sFetchExecutor;
+    private static long sRetryDelayMs = RETRY_DELAY_MS;
+    @Nullable private static PlaceSource sPlaceSource;
+
+    static void setTransportForTest(@Nullable Transport transport) {
+        sTransport = transport != null ? transport : WeatherController::realGet;
+    }
+    static void setClockForTest(@Nullable Clock clock) {
+        sClock = clock != null ? clock : System::currentTimeMillis;
+    }
+    static void setExecutorForTest(@Nullable Executor executor) {
+        sExecutor = executor != null ? executor : sFetchExecutor;
+    }
+    static void setPlaceSourceForTest(@Nullable PlaceSource source) {
+        sPlaceSource = source;
+    }
+    static void setRetryDelayForTest(long ms) {
+        sRetryDelayMs = ms;
+    }
+    /** Forget everything shared, as a fresh process would. */
+    static void resetSharedForTest() {
+        sLive.clear();
+        sBackoff.onSuccess();
+        sInFlight = false;
+        sSeeded = false;
+        copyInto(sLastValid, new Weather());
+        sLastValidPlace = null;
+        sTransport = WeatherController::realGet;
+        sClock = System::currentTimeMillis;
+        sExecutor = sFetchExecutor;
+        sRetryDelayMs = RETRY_DELAY_MS;
+        sPlaceSource = null;
+    }
+
+    private final Context mContext;
     @Nullable private final Listener mListener;
 
     private final Weather mCache = new Weather();
     /** {@link PlaceSetting#key()} of the place {@link #mCache} belongs to; main thread only. */
     @Nullable private String mCachePlace;
-    private volatile boolean mInFlight;
+    /** The last failure this controller saw, replayed while a backoff holds the next attempt. */
+    @Nullable private Weather mLastFailure;
 
     public WeatherController(@NonNull Context context, @Nullable Listener listener) {
         mContext = context.getApplicationContext();
@@ -198,44 +271,121 @@ public final class WeatherController {
         return mCache;
     }
 
-    /** Fetch only when the cache is missing, older than the TTL, or for another place. */
+    /**
+     * Fetch only when the cache is missing, older than the TTL, or for another place, and not
+     * before the failure backoff allows. A refresh that is held back replays what is known.
+     */
     public void refreshIfStale() {
-        syncPlace(placeSetting());
+        PlaceSetting place = placeSetting();
+        syncPlace(place);
+        register();
         long now = nowMs();
         if (mCache.valid && now - mCache.fetchedAtMs < CACHE_TTL_MS) {
             publish(mCache);
             return;
         }
-        forceRefresh();
+        if (!sBackoff.allows(place.key(), now)) {
+            if (keptForecast(now)) publish(mCache);
+            else if (mLastFailure != null) publish(mLastFailure);
+            return;
+        }
+        startFetch(place);
     }
 
+    /** An explicit refresh: a tap, a permission grant. It ignores the failure backoff. */
     public void forceRefresh() {
         PlaceSetting place = placeSetting();
         syncPlace(place);
-        if (mInFlight) return;
-        mInFlight = true;
-        mExecutor.execute(() -> {
-            Weather result = fetch(place);
-            mMainHandler.post(() -> {
-                mInFlight = false;
-                // The place changed while this was in flight, and the refresh that saw the change
-                // was turned away by mInFlight: this answer is for the old place, so fetch again.
-                if (!place.key().equals(mCachePlace)) {
-                    forceRefresh();
-                    return;
-                }
-                if (result.valid) {
-                    copyInto(mCache, result);
-                    copyInto(sLastValid, result);
-                    sLastValidPlace = mCachePlace;
-                }
-                publish(result.valid ? mCache : result);
-            });
+        register();
+        startFetch(place);
+    }
+
+    /** The surface is gone: stop being handed fetch results until the next refresh. */
+    public void stop() {
+        sLive.removeIf(ref -> {
+            WeatherController c = ref.get();
+            return c == null || c == this;
         });
     }
 
-    public void stop() {
-        // No persistent work to cancel; kept for symmetry with the stats controller.
+    private void register() {
+        for (WeakReference<WeatherController> ref : sLive) {
+            if (ref.get() == this) return;
+        }
+        sLive.add(new WeakReference<>(this));
+    }
+
+    /** The cache holds a forecast for the current place young enough to stand in for a failure. */
+    private boolean keptForecast(long now) {
+        return mCache.valid && now - mCache.fetchedAtMs < MAX_KEPT_AGE_MS;
+    }
+
+    private void startFetch(@NonNull PlaceSetting place) {
+        long now = nowMs();
+        // Another fetch is under way (this controller's or another's): its answer reaches us.
+        if (sInFlight && now - sInFlightSinceMs < IN_FLIGHT_LOST_MS) return;
+        sInFlight = true;
+        sInFlightSinceMs = now;
+        final String key = place.key();
+        final File file = persistFile(mContext);
+        sExecutor.execute(() -> {
+            Weather result;
+            try {
+                result = fetch(place);
+            } catch (Throwable t) {
+                result = new Weather();
+                result.error = "network";
+            }
+            if (result.valid) writePersisted(file, key, result);
+            final Weather done = result;
+            mainHandler().post(() -> onFetchDone(key, done));
+        });
+    }
+
+    @NonNull
+    private static Handler mainHandler() {
+        Handler h = sMainHandler;
+        if (h == null) sMainHandler = h = new Handler(Looper.getMainLooper());
+        return h;
+    }
+
+    private static void onFetchDone(@NonNull String key, @NonNull Weather result) {
+        sInFlight = false;
+        if (result.valid) {
+            copyInto(sLastValid, result);
+            sLastValidPlace = key;
+            sBackoff.onSuccess();
+        } else {
+            sBackoff.onFailure(key, nowMs());
+        }
+        List<WeatherController> targets = new ArrayList<>();
+        for (int i = sLive.size() - 1; i >= 0; i--) {
+            WeatherController c = sLive.get(i).get();
+            if (c == null) sLive.remove(i); else targets.add(0, c);
+        }
+        for (WeatherController c : targets) c.deliver(key, result);
+    }
+
+    private void deliver(@NonNull String key, @NonNull Weather result) {
+        if (!key.equals(mCachePlace)) {
+            // The place changed while this was in flight: this answer is for the old one.
+            PlaceSetting current = placeSetting();
+            syncPlace(current);
+            if (!key.equals(mCachePlace)) {
+                startFetch(current);
+                return;
+            }
+        }
+        if (result.valid) {
+            copyInto(mCache, result);
+            mLastFailure = null;
+            publish(mCache);
+        } else if (keptForecast(nowMs())) {
+            publish(mCache);
+        } else {
+            mLastFailure = result;
+            publish(result);
+        }
     }
 
     private void publish(@NonNull Weather weather) {
@@ -245,6 +395,7 @@ public final class WeatherController {
     /** The place picked in Settings, read fresh: this is how a change there reaches the weather. */
     @NonNull
     private PlaceSetting placeSetting() {
+        if (sPlaceSource != null) return sPlaceSource.get();
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
         if (preferences == null) return new PlaceSetting("", null);
         return new PlaceSetting(preferences.getStatusWidgetWeatherLocation(),
@@ -260,6 +411,8 @@ public final class WeatherController {
         if (key.equals(mCachePlace)) return;
         if (mCachePlace != null) copyInto(mCache, new Weather());
         mCachePlace = key;
+        mLastFailure = null;
+        seedFromDisk(key);
         if (!mCache.valid && sLastValid.valid && key.equals(sLastValidPlace)) {
             copyInto(mCache, sLastValid);
         }
@@ -311,7 +464,7 @@ public final class WeatherController {
                     + ",uv_index_max"
                     + "&timezone=auto&forecast_days=7",
                 latitude, longitude);
-            String body = httpGet(url);
+            String body = forecastGet(url);
             if (body == null) {
                 w.error = "network";
                 return w;
@@ -524,9 +677,34 @@ public final class WeatherController {
         }
     }
 
+    /**
+     * The forecast request, with one quick retry when it failed on I/O or a 5xx (a flaky link often
+     * answers the second time). A 4xx is the request's fault and is not retried.
+     */
+    @Nullable
+    private static String forecastGet(@NonNull String url) {
+        HttpResult r = sTransport.get(url);
+        if (r.code == 0 || r.code >= 500) {
+            try {
+                Thread.sleep(sRetryDelayMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+            r = sTransport.get(url);
+        }
+        return r.code == 200 ? r.body : null;
+    }
+
     /** A GET returning the body, or null on any failure; shared with {@link WeatherGeocoder}. */
     @Nullable
     static String httpGet(@NonNull String urlString) {
+        HttpResult r = sTransport.get(urlString);
+        return r.code == 200 ? r.body : null;
+    }
+
+    @NonNull
+    private static HttpResult realGet(@NonNull String urlString) {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(urlString);
@@ -534,18 +712,136 @@ public final class WeatherController {
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(8000);
             conn.setRequestProperty("Accept", "application/json");
-            if (conn.getResponseCode() != 200) return null;
+            int code = conn.getResponseCode();
+            if (code != 200) return new HttpResult(code, null);
             StringBuilder sb = new StringBuilder();
             try (BufferedReader r = new BufferedReader(
                 new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = r.readLine()) != null) sb.append(line);
             }
-            return sb.toString();
+            return new HttpResult(200, sb.toString());
         } catch (Exception e) {
-            return null;
+            return new HttpResult(0, null);
         } finally {
             if (conn != null) conn.disconnect();
+        }
+    }
+
+    // ---- last forecast on disk, so a restart has something to show until a fetch lands ----
+
+    @NonNull
+    private static File persistFile(@NonNull Context context) {
+        return new File(context.getFilesDir(), PERSIST_FILE);
+    }
+
+    /** Once per process: restore the saved forecast if it is for this place and young enough. */
+    private void seedFromDisk(@NonNull String key) {
+        if (sSeeded) return;
+        sSeeded = true;
+        if (sLastValid.valid) return;
+        Weather saved = readPersisted(persistFile(mContext), key, nowMs());
+        if (saved == null) return;
+        copyInto(sLastValid, saved);
+        sLastValidPlace = key;
+    }
+
+    /** Written off the main thread on each successful fetch; a failure to write loses nothing. */
+    static void writePersisted(@NonNull File file, @NonNull String key, @NonNull Weather w) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("place", key);
+            o.put("fetchedAtMs", w.fetchedAtMs);
+            o.put("currentIsDay", w.currentIsDay);
+            o.put("currentCode", w.currentCode);
+            putNum(o, "currentC", w.currentC);
+            putNum(o, "feelsLikeC", w.feelsLikeC);
+            putNum(o, "humidityPct", w.humidityPct);
+            putNum(o, "windKmh", w.windKmh);
+            putNum(o, "uvIndexMax", w.uvIndexMax);
+            o.put("sunrise", w.sunrise);
+            o.put("sunset", w.sunset);
+            o.put("sunriseTomorrow", w.sunriseTomorrow);
+            o.put("locationName", w.locationName);
+            o.put("requestedPlace", w.requestedPlace);
+            JSONArray hourly = new JSONArray();
+            for (Hourly h : w.hourly) {
+                JSONObject j = new JSONObject();
+                j.put("iso", h.iso);
+                putNum(j, "tempC", h.tempC);
+                j.put("code", h.code);
+                j.put("isDay", h.isDay);
+                j.put("precipProb", h.precipProb);
+                hourly.put(j);
+            }
+            o.put("hourly", hourly);
+            JSONArray daily = new JSONArray();
+            for (Daily d : w.daily) {
+                JSONObject j = new JSONObject();
+                j.put("date", d.date);
+                putNum(j, "maxC", d.maxC);
+                putNum(j, "minC", d.minC);
+                j.put("code", d.code);
+                daily.put(j);
+            }
+            o.put("daily", daily);
+            File tmp = new File(file.getPath() + ".tmp");
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(tmp)) {
+                out.write(o.toString().getBytes(StandardCharsets.UTF_8));
+            }
+            java.nio.file.Files.move(tmp.toPath(), file.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (Exception e) {
+            Logger.logVerbose(LOG_TAG, "Could not save the forecast: " + e.getMessage());
+        }
+    }
+
+    /** JSON has no NaN: a missing reading is left out and reads back as NaN. */
+    private static void putNum(@NonNull JSONObject o, @NonNull String name, double v) throws Exception {
+        if (!Double.isNaN(v) && !Double.isInfinite(v)) o.put(name, v);
+    }
+
+    /** The saved forecast when it is for {@code key} and under {@link #MAX_KEPT_AGE_MS}, else null. */
+    @Nullable
+    static Weather readPersisted(@NonNull File file, @NonNull String key, long nowMs) {
+        try {
+            if (!file.isFile()) return null;
+            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+            JSONObject o = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
+            if (!key.equals(o.optString("place", null))) return null;
+            long fetchedAt = o.getLong("fetchedAtMs");
+            long age = nowMs - fetchedAt;
+            if (fetchedAt <= 0L || age < 0L || age >= MAX_KEPT_AGE_MS) return null;
+            Weather w = new Weather();
+            w.fetchedAtMs = fetchedAt;
+            w.currentIsDay = o.optBoolean("currentIsDay", true);
+            w.currentCode = o.optInt("currentCode", 0);
+            w.currentC = o.optDouble("currentC", Double.NaN);
+            w.feelsLikeC = o.optDouble("feelsLikeC", Double.NaN);
+            w.humidityPct = o.optDouble("humidityPct", Double.NaN);
+            w.windKmh = o.optDouble("windKmh", Double.NaN);
+            w.uvIndexMax = o.optDouble("uvIndexMax", Double.NaN);
+            w.sunrise = o.optString("sunrise", "");
+            w.sunset = o.optString("sunset", "");
+            w.sunriseTomorrow = o.optString("sunriseTomorrow", "");
+            w.locationName = o.optString("locationName", "");
+            w.requestedPlace = o.optString("requestedPlace", "");
+            JSONArray hourly = o.getJSONArray("hourly");
+            for (int i = 0; i < hourly.length(); i++) {
+                JSONObject j = hourly.getJSONObject(i);
+                w.hourly.add(new Hourly(j.getString("iso"), j.optDouble("tempC", Double.NaN),
+                    j.getInt("code"), j.optBoolean("isDay", true), j.optInt("precipProb", -1)));
+            }
+            JSONArray daily = o.getJSONArray("daily");
+            for (int i = 0; i < daily.length(); i++) {
+                JSONObject j = daily.getJSONObject(i);
+                w.daily.add(new Daily(j.getString("date"), j.optDouble("maxC", Double.NaN),
+                    j.optDouble("minC", Double.NaN), j.getInt("code")));
+            }
+            w.valid = true;
+            return w;
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -570,7 +866,7 @@ public final class WeatherController {
     }
 
     private static long nowMs() {
-        return System.currentTimeMillis();
+        return sClock.nowMs();
     }
 
     // ---- WMO weather-code presentation shared with the card ----
