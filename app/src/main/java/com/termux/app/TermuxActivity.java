@@ -24612,15 +24612,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @Nullable com.termux.app.wall.PaneWallController paneWallController() { return mPaneWallController; }
         @Override public TermuxAppSharedPreferences preferences() { return mPreferences; }
         @Override public SurfaceEditorController surfaceEditor() { return mSurfaceEditor; }
-        @Override public int chromeMarginDp() { return TermuxActivity.this.chromeMarginDp(); }
         @Override public int chromeMarginDp(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.chromeMarginDp(surface); }
-        @Override public @NonNull com.termux.app.place.ChromeShape chromeShape() { return TermuxActivity.this.chromeShape(); }
         @Override public @NonNull com.termux.app.place.ChromeShape chromeShape( @NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.chromeShape(surface); }
-        @Override public @NonNull com.termux.app.place.ChromeShape chromeShape(@NonNull PlaceLayout stored) { return TermuxActivity.this.chromeShape(stored); }
-        @Override public @NonNull com.termux.app.place.ChromeShape chromeShape( @NonNull com.termux.app.place.SeamDress.Surface surface, @NonNull PlaceLayout stored) { return TermuxActivity.this.chromeShape(surface, stored); }
         @Override public @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PaneWallPage page) { return TermuxActivity.this.dressOf(page); }
-        @Override public @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.dressOf(page); }
-        @Override public float layoutCornersPx() { return TermuxActivity.this.layoutCornersPx(); }
         @Override public float layoutCornersPx(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.layoutCornersPx(surface); }
         @Override public int lookPageId(@NonNull com.termux.app.place.SeamDress.Surface surface) { return TermuxActivity.this.lookPageId(surface); }
         @Override public int resolveSurfaceHorizontalInsetPx(int configuredDp, boolean capsule) { return TermuxActivity.this.resolveSurfaceHorizontalInsetPx(configuredDp, capsule); }
@@ -24657,7 +24651,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void syncPlaceBar() { TermuxActivity.this.syncPlaceBar(); }
         @Override public @NonNull com.termux.app.chrome.ChromeEdgeRule.TopLead statusStripLead() { return mStatusStripLead; }
         @Override public void markChromeTravelMoved() { mChromeTravelMoved = true; }
-        // @@HOSTIMPL@@
     }
 
     /**
