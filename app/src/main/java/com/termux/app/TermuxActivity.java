@@ -30477,15 +30477,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!now.equals(wallPages().startIn())) chooseWallStartIn(now);
     }
 
-    /** Edit pages really removed a window: Start in falls back if it named it. */
-    private void startInAfterRemoval(@NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind,
-                                     int terminalsLeft) {
-        if (mPreferences == null) return;
-        String next = com.termux.app.wall.StartInPolicy.afterRemoval(
-            wallPages().startIn(), kind, terminalsLeft);
-        if (next != null) chooseWallStartIn(next);
-    }
-
     /** Listens for the display's start and Start in, for {@link #settleStartIn} and the marker. */
     private void watchStartIn() {
         android.content.SharedPreferences store =
@@ -30695,7 +30686,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View root = findViewById(R.id.activity_termux_root_view);
         ViewGroup content = findViewById(android.R.id.content);
         if (root == null || content == null) return;
-        mPageOverview = new com.termux.app.wall.PageOverviewView(this,
+        // Edit pages' rules over the wall's pages; the launcher's steps they need are these.
+        final com.termux.app.wall.PageOverviewPages overviewPages =
+            new com.termux.app.wall.PageOverviewPages(wallPagesStore(),
+                getString(R.string.page_overview_assistant),
+                new com.termux.app.wall.PageOverviewPages.Launcher() {
+                    @Override public void moveHomePage(int id, int to) {
+                        if (mWidgetPaneController == null) return;
+                        mWidgetPaneController.movePage(id, to);
+                    }
+                    @Override public void removeHomePage(int id) {
+                        if (mWidgetPaneController == null) return;
+                        mWidgetPaneController.removePage(id);
+                    }
+                    @Override public void applyStartIn(
+                            @NonNull com.termux.app.wall.StartInPolicy.Choice choice) {
+                        TermuxActivity.this.applyStartIn(choice);
+                    }
+                    @Override @Nullable public String displayAppName(@NonNull String binding) {
+                        com.termux.app.x11.LinuxAppCatalog.LinuxApp app =
+                            displayCards().find(binding);
+                        return app == null ? null : app.name;
+                    }
+                    @Override public int pageAfterCurrent() {
+                        return linuxRouteFromPageId();
+                    }
+                    @Override public void refreshDisplayCards() {
+                        TermuxActivity.this.refreshDisplayCards();
+                    }
+                    @Override public void refreshPages() {
+                        if (mPaneWallController != null) mPaneWallController.refreshPages();
+                    }
+                });
+        mPageOverview = new com.termux.app.wall.PageOverviewView(this, overviewPages,
             new com.termux.app.wall.PageOverviewView.Host() {
                 @Override public int pageCount() {
                     return mWidgetPaneController == null ? 1 : mWidgetPaneController.homePageCount();
@@ -30705,25 +30728,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public int floatsOn(int page) {
                     return mPaneController == null ? 0 : mPaneController.homeFloatCountOn(page);
-                }
-                @Override public int defaultPage() {
-                    return wallPages().homeIndex();
-                }
-                // Each edit of Home's pages is mirrored in the wall's pages, so their order stays
-                // the widget repository's. Removal is final at once: the undo window comes later.
-                // The overview shows the Home pages in order; its cards are positions in that
-                // order, and the page operations name the page by id.
-                @Override public void movePage(int from, int to) {
-                    if (mWidgetPaneController == null) return;
-                    java.util.List<Integer> ids = wallPages().homePageIdsForRepository();
-                    if (from < 0 || from >= ids.size()) return;
-                    mWidgetPaneController.movePage(ids.get(from), to);
-                }
-                @Override public void removePage(int page) {
-                    if (mWidgetPaneController == null) return;
-                    java.util.List<Integer> ids = wallPages().homePageIdsForRepository();
-                    if (page < 0 || page >= ids.size()) return;
-                    mWidgetPaneController.removePage(ids.get(page));
                 }
                 @Override public void addPage() {
                     if (mWidgetPaneController == null) return;
@@ -30742,86 +30746,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         refreshGroundStrip();
                     }
                 }
-                @Override public void chooseHome(
-                        @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index) {
-                    if (kind == com.termux.app.wall.PageOverviewPolicy.Kind.HOME_PAGE) {
-                        editWallPages(pages -> pages.chooseHomePage(index));
-                        return;
-                    }
-                    if (kind == com.termux.app.wall.PageOverviewPolicy.Kind.ASSISTANT) {
-                        editWallPages(pages -> pages.setHome(index));
-                        return;
-                    }
-                    applyStartIn(com.termux.app.wall.StartInPolicy.choose(kind));
-                }
-                @Override public boolean hasAssistantPage() {
-                    return wallPages().assistant() != null;
-                }
-                @Override public boolean assistantIsHome() {
-                    com.termux.app.wall.WallPages pages = wallPages();
-                    com.termux.app.wall.WallPages.Page assistant = pages.assistant();
-                    com.termux.app.wall.WallPages.Page home = pages.home();
-                    return assistant != null && home != null && home.id == assistant.id;
-                }
                 @Override public void addAssistantPage() {
                     TermuxActivity.this.addAssistantPage(linuxRouteFromPageId());
                 }
                 @Override public void removeAssistantPage(int id) {
                     removeAssistantPageFromWall(id);
                 }
-                // The wall's order (ADR 0015, A2a): the Terminal page anywhere among Home's.
-                @Override public int homePagesBeforeTerminal() {
-                    com.termux.app.wall.WallPages pages = wallPages();
-                    com.termux.app.wall.WallPages.Page terminal = pages.terminal();
-                    if (terminal == null) return Integer.MAX_VALUE;
-                    int n = 0;
-                    for (com.termux.app.wall.WallPages.Page page : pages.pages()) {
-                        if (page.id == terminal.id) return n;
-                        if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) n++;
-                    }
-                    return n;
-                }
-                // Display pages stand on the wall like any page: the overview lists them in order.
-                @Override @NonNull public java.util.List<com.termux.app.wall.PageOverviewView.DisplayPage>
-                        displayPages() {
-                    com.termux.app.wall.WallPages pages = wallPages();
-                    com.termux.app.wall.WallPages.Page terminal = pages.terminal();
-                    java.util.List<com.termux.app.wall.PageOverviewView.DisplayPage> out =
-                        new java.util.ArrayList<>();
-                    int homes = 0;
-                    boolean afterTerminal = false;
-                    // A temporary page (a drawer launch's) is not listed: it goes with its display.
-                    for (com.termux.app.wall.WallPages.Page page : pages.listedPages()) {
-                        if (terminal != null && page.id == terminal.id) afterTerminal = true;
-                        if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) homes++;
-                        if (page.kind == com.termux.app.wall.WallPages.PageKind.ASSISTANT) {
-                            out.add(new com.termux.app.wall.PageOverviewView.DisplayPage(page.id,
-                                com.termux.app.wall.PageCardMenuPolicy.cardName(page.name,
-                                    getString(R.string.page_overview_assistant)), homes,
-                                afterTerminal, true));
-                            continue;
-                        }
-                        if (page.kind != com.termux.app.wall.WallPages.PageKind.DISPLAY) continue;
-                        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = page.binding == null
-                            ? null : displayCards().find(page.binding);
-                        out.add(new com.termux.app.wall.PageOverviewView.DisplayPage(page.id,
-                            com.termux.app.wall.PageCardMenuPolicy.cardName(page.name,
-                                com.termux.app.wall.DisplayPagePolicy.cardName(page,
-                                    app == null ? null : app.name)), homes, afterTerminal));
-                    }
-                    return out;
-                }
                 @Override public boolean displayPageHolds(int id) {
                     return isDisplayUp() && mBoundDisplayPage == id;
                 }
                 @Override public void removeDisplayPage(int id) {
                     removeDisplayPageAndStop(id);
-                }
-                @Override public boolean hasTerminalPage() {
-                    return wallPages().terminal() != null;
-                }
-                @Override public boolean terminalPageRemovable() {
-                    return wallPages().terminal() != null && wallPages().listedPages().size() > 1;
                 }
                 @Override public int terminalWindowCount() {
                     return terminalWindowTotal();
@@ -30842,28 +30777,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean homePagesShown() {
                     return useAs().showsHomePage();
                 }
-                @Override public int detachedHomePages() {
-                    int n = 0;
-                    for (com.termux.app.wall.WallPages.Page page : wallPages().detached()) {
-                        if (page.kind == com.termux.app.wall.WallPages.PageKind.HOME) n++;
-                    }
-                    return n;
-                }
-                @Override public int hiddenHomePages() {
-                    // Settings' Use as leaves the Home pages in the list, hidden by the wall.
-                    return useAs().showsHomePage() ? 0 : wallPages().homePages().size();
-                }
                 @Override public void bringBackHomePages() {
                     // The setting's own path: the preference, then the pages brought back.
                     com.termux.app.settings.UseAsSetting.write(TermuxActivity.this,
                         com.termux.app.wall.UseAs.HOME);
-                }
-                // A card's menu and the Display picker (ADR 0015 section 2): names and bindings
-                // are the wall's pages', by id.
-                @Override @Nullable public String homePageName(int page) {
-                    java.util.List<com.termux.app.wall.WallPages.Page> homes =
-                        wallPages().homePages();
-                    return page >= 0 && page < homes.size() ? homes.get(page).name : null;
                 }
                 @Override public void promptRename(
                         @NonNull com.termux.app.wall.PageOverviewPolicy.Kind kind, int index,
@@ -30890,46 +30807,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     return out;
                 }
-                @Override @Nullable public String displayBinding(int id) {
-                    com.termux.app.wall.WallPages.Page page = wallPages().page(id);
-                    return page == null ? null : page.binding;
-                }
-                @Override public void bindDisplayPage(int id, @Nullable String app) {
-                    editWallPages(pages -> pages.bind(id, app));
-                    refreshDisplayCards();
-                    if (mPaneWallController != null) mPaneWallController.refreshPages();
-                }
-                @Override public int addBoundDisplay(@NonNull String app) {
-                    final int after = linuxRouteFromPageId();
-                    com.termux.app.wall.WallPages.Result added = wallPagesStore().edit(pages ->
-                        pages.add(com.termux.app.wall.WallPages.PageKind.DISPLAY,
-                            pages.page(after) != null ? after
-                                : com.termux.app.wall.WallPages.END, app));
-                    if (!added.ok() || added.page == null) return -1;
-                    refreshDisplayCards();
-                    if (mPaneWallController != null) mPaneWallController.refreshPages();
-                    return added.page.id;
-                }
-                @Override public void moveHomePageOnWall(int homeIndex, int wallIndex) {
-                    java.util.List<com.termux.app.wall.WallPages.Page> homes =
-                        wallPages().homePages();
-                    if (homeIndex < 0 || homeIndex >= homes.size()) return;
-                    int id = homes.get(homeIndex).id;
-                    // The overview counts the listed pages; the wall also holds a temporary one.
-                    editWallPages(pages -> pages.move(id, pages.wallIndexOfListed(wallIndex)));
-                }
-                @Override public void moveTerminalPage(int wallIndex) {
-                    com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
-                    if (terminal == null) return;
-                    int id = terminal.id;
-                    editWallPages(pages -> pages.move(id, pages.wallIndexOfListed(wallIndex)));
-                }
-                @Override public void setTerminalHome() {
-                    com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
-                    if (terminal == null) return;
-                    int id = terminal.id;
-                    editWallPages(pages -> pages.setHome(id));
-                }
                 @Override @NonNull public String startIn() {
                     return effectiveStartIn();
                 }
@@ -30952,7 +30829,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void removeWindow(int row) {
                     int terminals = rowWindows().size();
                     closeWindow(row);
-                    startInAfterRemoval(com.termux.app.wall.PageOverviewPolicy.Kind.TERMINAL,
+                    if (mPreferences != null) overviewPages.startInAfterRemoval(
+                        com.termux.app.wall.PageOverviewPolicy.Kind.TERMINAL,
                         Math.max(0, terminals - 1));
                 }
                 @Override public void addTerminal(int row) {
@@ -30963,9 +30841,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public boolean displayOpen() {
                     return isDisplayUp();
-                }
-                @Override public boolean displayTemporary() {
-                    return wallPages().temporaryDisplay() != null;
                 }
                 @Override public void addDisplay(int row) {
                     // A lasting unbound Display page, after the current page: a drawer launch's
@@ -31003,17 +30878,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void preview(@NonNull com.termux.app.wall.WallRow.Position position) {
                     showWallPositionAtOnce(position, false);
-                    if (position.kind == com.termux.app.wall.PaneWallPage.WIDGETS) {
-                        mSurfaceEditor.onOverviewCard(
-                            com.termux.app.wall.PageOverviewPolicy.Kind.HOME_PAGE);
-                    } else {
-                        mSurfaceEditor.onOverviewCard(
-                            position.kind == com.termux.app.wall.PaneWallPage.DISPLAY
-                            ? com.termux.app.wall.PageOverviewPolicy.Kind.DISPLAY
-                            : position.kind == com.termux.app.wall.PaneWallPage.ASSISTANT
-                            ? com.termux.app.wall.PageOverviewPolicy.Kind.ASSISTANT
-                            : com.termux.app.wall.PageOverviewPolicy.Kind.TERMINAL);
-                    }
+                    mSurfaceEditor.onOverviewCard(
+                        com.termux.app.wall.PageOverviewPages.cardKind(position.kind));
                 }
                 @Override public void land(@NonNull com.termux.app.wall.WallRow.Position position) {
                     showWallPositionAtOnce(position, true);
