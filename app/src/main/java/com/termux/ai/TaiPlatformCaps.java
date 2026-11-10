@@ -3,6 +3,7 @@ package com.termux.ai;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -390,9 +391,20 @@ public final class TaiPlatformCaps {
 
     // The verdict file is written by either process: a read stays good for a few seconds, then the file is read again.
     private static final long VERDICT_TTL_MS = 5_000L;
-    @Nullable private static volatile TaiGpuVerdict.State sVerdict;
-    @Nullable private static volatile String sVerdictKey;
-    private static volatile long sVerdictAt;
+    /** One verdict read, published as a whole so a reader never pairs one read's state with another's key. */
+    private static final class VerdictRead {
+        @NonNull final TaiGpuVerdict.State state;
+        @NonNull final String key;
+        final long atElapsedMs;
+
+        VerdictRead(@NonNull TaiGpuVerdict.State state, @NonNull String key, long atElapsedMs) {
+            this.state = state;
+            this.key = key;
+            this.atElapsedMs = atElapsedMs;
+        }
+    }
+
+    @Nullable private static volatile VerdictRead sVerdict;
 
     /** Forgets the remembered verdict, after the store changed. */
     static void invalidateVerdict() {
@@ -406,15 +418,14 @@ public final class TaiPlatformCaps {
     @NonNull
     private static TaiPlatformCaps withVerdict(@NonNull TaiPlatformCaps raw, @Nullable Context context) {
         String key = TaiGpuVerdict.keyFor(raw);
-        TaiGpuVerdict.State state = sVerdict;
-        long now = System.currentTimeMillis();
-        if (context != null && (state == null || !key.equals(sVerdictKey) || now - sVerdictAt > VERDICT_TTL_MS)) {
-            state = TaiGpuVerdict.current(context, raw);
-            sVerdict = state;
-            sVerdictKey = key;
-            sVerdictAt = now;
+        VerdictRead read = sVerdict;
+        long now = SystemClock.elapsedRealtime();
+        if (context != null && (read == null || !key.equals(read.key) || now - read.atElapsedMs > VERDICT_TTL_MS)) {
+            read = new VerdictRead(TaiGpuVerdict.current(context, raw), key, now);
+            sVerdict = read;
         }
-        if (state == null || !key.equals(sVerdictKey)) return raw;
+        if (read == null || !key.equals(read.key)) return raw;
+        TaiGpuVerdict.State state = read.state;
         GpuPath path = TaiGpuVerdict.apply(raw.gpuPath, state);
         if (path == raw.gpuPath) return raw;
         String reason = state == TaiGpuVerdict.State.FAILED ? TaiGpuVerdict.REASON_FAILED : "Checked on this phone.";
