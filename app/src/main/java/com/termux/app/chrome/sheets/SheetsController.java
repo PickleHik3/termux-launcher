@@ -130,6 +130,22 @@ public final class SheetsController {
         @NonNull com.termux.app.wall.UseAs useAs();
         /** Where the long press that opened Home's sheet landed, for the action it runs. */
         void setHomeActionsAnchor(float rawX, float rawY);
+
+        // -------------------------------------------------------------- the Home palette
+        /** Whether a Home page is in front ({@code isWidgetsPageShowing}). */
+        boolean isOnHome();
+        /** Raises the in-app keyboard by hand ({@code terminalHost().showInAppKeyboard(false)}); true when it raised. */
+        boolean raiseInAppKeyboard();
+        /** Whether the Home layout keeps the keyboard up on Home (always on). */
+        boolean isHomeKeyboardAlwaysOn();
+        /** The edge the pinned apps row lies on, where the drawer grows from. */
+        @NonNull com.termux.app.place.PlaceLayout.Edge appsEdge();
+        /** The preferences; null until they have been read. */
+        @Nullable com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences();
+        /** The dock is dressed again (the row took or gave back a tile's slot). */
+        void restyleDockSurface();
+        /** The float the Terminal entry's New float here opens. */
+        boolean openHomeFloatHere();
     }
 
     @NonNull private final Host mHost;
@@ -881,5 +897,113 @@ public final class SheetsController {
         mHomeActionsSheet.open(locked -> com.termux.app.launcher.home.HomeActionsSheetPolicy.itemsFor(
                 defaultHome, hasPages, pageEmpty, pageCount, locked),
             com.termux.app.launcher.home.HomeSettings.isLayoutLocked(activity));
+    }
+
+    // ================================================================== the Home palette
+
+    /**
+     * The Home palette with the keyboard, as one overlay: the swipe up's, and any other Home
+     * gesture set to the palette (Settings › Home › Gestures).
+     */
+    public void openHomePalette(boolean keyboardWasUp) {
+        com.termux.app.terminal.TerminalCommandPaletteController palette =
+            getCommandPaletteController();
+        if (palette.isOpen()) return;
+        if (keyboardWasUp || !mHost.raiseInAppKeyboard()) {
+            // Nothing raised (already up, or no in-app keyboard to raise): the palette alone.
+            palette.showHomeOverlay(true);
+            return;
+        }
+        // A keyboard raised just now is laid out by the next frame; the palette sprouts from its
+        // space bar, so it opens once the keyboard stands where it will be.
+        View decor = mHost.activity().getWindow().getDecorView();
+        decor.post(() -> {
+            if (mHost.isOnHome()) palette.showHomeOverlay(false);
+            else if (mHost.inAppKeyboard() != null && mHost.inAppKeyboard().isVisible()
+                && !mHost.isHomeKeyboardAlwaysOn()) {
+                // The wall moved away before the palette could open: nothing to pair with.
+                lowerHomePaletteKeyboard();
+            }
+        });
+    }
+
+    /** The app drawer, grown out of the pinned apps row wherever it lies, as the palette opens it. */
+    public void openAppDrawerFromHome() {
+        com.termux.app.place.PlaceLayout.Edge edge = mHost.appsEdge();
+        getAppDrawerController().open(com.termux.app.launcher.drawer.AppDrawerPullGeometry.pullFor(edge),
+            com.termux.app.launcher.drawer.AppDrawerPullGeometry.seedFor(edge));
+    }
+
+    /** Whether the swipe up on a Home page opens the palette (Settings › Home › Gestures). */
+    public boolean isHomePaletteGestureEnabled() {
+        return com.termux.app.launcher.home.HomeSettings.gestureAction(mHost.activity(),
+                com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP)
+            == com.termux.app.launcher.home.HomeGestures.Action.PALETTE;
+    }
+
+    /** The keyboard the Home palette raised goes down with it. */
+    public void lowerHomePaletteKeyboard() {
+        TermuxInAppKeyboard keyboard = mHost.inAppKeyboard();
+        if (keyboard == null || !keyboard.isVisible()) return;
+        keyboard.hide(
+            com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
+    }
+
+    /** The palette's row set where it is opened: the Home set on a Home page. */
+    @NonNull
+    public com.termux.app.terminal.CommandPaletteContext paletteContextHere() {
+        return mHost.isOnHome() ? com.termux.app.terminal.CommandPaletteContext.HOME
+            : com.termux.app.terminal.CommandPaletteContext.TERMINAL;
+    }
+
+    // ------------------------------------------------------------------ Command palette tile
+    //
+    // The Command palette button (Dock card Options, pref dock_command_palette_button, one switch
+    // for both halves): the apps row's trailing slot (PaletteTilePolicy), with any Dock design.
+    // A tap opens the palette with the keyboard raised, as the Search field's does.
+
+    @Nullable private android.content.SharedPreferences mPaletteTileStore;
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
+        mPaletteTileKnob = (preferences, key) -> {
+            if ((com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON.equals(key)
+                || com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON.equals(key)
+                || com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN.equals(key)
+                || com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN.equals(key))
+                // Qualified: a field initialiser's lambda may not name mHost before the constructor sets it.
+                && SheetsController.this.mHost.hasSuggestionBarView()) {
+                // The row takes or gives back the slot, and the dock is dressed again (beads).
+                SheetsController.this.mHost.restyleDockSurface();
+            }
+        };
+
+    public void syncPaletteTile(@NonNull com.termux.app.SuggestionBarView bar) {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            mHost.preferences();
+        android.content.SharedPreferences store =
+            preferences == null ? null : preferences.getSharedPreferences();
+        if (store != null && mPaletteTileStore != store) {
+            if (mPaletteTileStore != null)
+                mPaletteTileStore.unregisterOnSharedPreferenceChangeListener(mPaletteTileKnob);
+            store.registerOnSharedPreferenceChangeListener(mPaletteTileKnob);
+            mPaletteTileStore = store;
+        }
+        boolean on = store == null
+            ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
+            : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
+                com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
+        // Its column is one for every layout; absent, the row's last.
+        int column = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
+            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN,
+                com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
+        bar.setPaletteTile(on, column,
+            on ? () -> getCommandPaletteController().openFromField(null, true) : null);
+        // New float terminal: the same float the Terminal entry's New float here opens.
+        boolean floatOn = store != null && store.getBoolean(
+            com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON,
+            com.termux.app.surfaces.cards.DockCard.DEFAULT_FLOAT_TERMINAL_BUTTON);
+        int floatColumn = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
+            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN,
+                com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
+        bar.setFloatTile(floatOn, floatColumn, floatOn ? mHost::openHomeFloatHere : null);
     }
 }
