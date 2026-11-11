@@ -221,6 +221,8 @@ probe osc5522-read '\033]5522;type=read;Lg==\033\\' consent
 
 # --- Program status, semantic prompt --------------------------------------------------
 probe osc7501-query '\033]7501;?\033\\'
+probe osc7501-query-bel '\033]7501;?\007'
+probe osc7501-report '\033]7501;state=working:progress=40\033\\'
 probe osc133-a '\033]133;A\033\\'
 probe osc133-b '\033]133;B\033\\'
 probe osc133-d '\033]133;D;0\033\\'
