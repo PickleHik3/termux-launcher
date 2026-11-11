@@ -130,6 +130,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     /** Pastes, and a program's picture reads and writes: see {@link TerminalClipboard}. */
     @NonNull private final TerminalClipboard mClipboard;
 
+    /** Asks before a program reads the clipboard; built at the first request. */
+    @Nullable private ClipboardReadConsent mClipboardConsent;
+
     public TermuxTerminalSessionActivityClient(@NonNull Context context, @NonNull TerminalHost host) {
         this.mContext = context;
         this.mHost = host;
@@ -204,6 +207,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // while the launcher is in the background, and a frozen process only hears of the exits
         // as it comes back, before the notice pill can show anything.
         mResumed = true;
+        onFrontPaneMaybeChanged();
         if (!mHeldKilledShellNotices.isEmpty())
             mMainHandler.postDelayed(this::sayHeldKilledShellNotices, KILLED_SHELL_NOTICE_DELAY_MS);
     }
@@ -441,6 +445,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // running in it (tlstore-ui's `keyboard.hide --hold`) must not leave it stuck down just
         // because the shell exited instead of asking nicely with `keyboard.show`.
         TerminalActionDispatcher.getInstance().onSessionFinished(finishedSession);
+        if (mClipboardConsent != null) mClipboardConsent.onSessionFinished(finishedSession);
         // Before anything below drops its pane: the host reads its status and whether it is the
         // shell on screen.
         mHost.onShellFinished(finishedSession);
@@ -613,6 +618,91 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     @Override
     public String onReadTextFromClipboard(@NonNull TerminalSession session) {
         return mSignals.clipboardRead();
+    }
+
+    /**
+     * A clipboard read on the Fast engine: whether the program may have it is
+     * {@link ClipboardReadConsent}'s call, which may ask on a sheet.
+     */
+    @Override
+    public void onClipboardReadRequest(@NonNull TerminalSession session,
+                                       @NonNull com.termux.terminal.ClipboardReadRequest request) {
+        clipboardConsent().onRequest(session, new ClipboardReadConsent.Request() {
+            @Override public void allow(@Nullable String text) { request.allow(text); }
+            @Override public void deny() { request.deny(); }
+            @Override public boolean isPasted() { return request.isPasted(); }
+            @Override public boolean isListingOnly() { return request.isListingOnly(); }
+        });
+    }
+
+    /** The front pane or the launcher's visibility may have changed: queued clipboard reads may be due. */
+    public void onFrontPaneMaybeChanged() {
+        if (mClipboardConsent != null) mClipboardConsent.onFrontMaybeChanged();
+    }
+
+    @NonNull
+    private ClipboardReadConsent clipboardConsent() {
+        if (mClipboardConsent == null) {
+            mClipboardConsent = new ClipboardReadConsent(new ClipboardReadConsent.Ui() {
+                private boolean mSheetOpen;
+
+                @Override public boolean isReadSettingOn() {
+                    com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+                        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(mContext, false);
+                    return preferences != null && preferences.isOsc52ClipboardReadEnabled();
+                }
+
+                @Override public boolean isLauncherVisible() {
+                    return mHost.isVisible();
+                }
+
+                @Nullable @Override public Object frontSession() {
+                    return mHost.currentSession();
+                }
+
+                @Nullable @Override public String programName(@NonNull Object session) {
+                    return ((TerminalSession) session).getForegroundProgramName();
+                }
+
+                @Nullable @Override public String readClipboard() {
+                    return com.termux.shared.interact.ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
+                }
+
+                @Override public boolean showSheet(@Nullable String programName,
+                                                   @NonNull ClipboardReadConsent.Callback callback) {
+                    TerminalSheetController sheet = mHost.sheetController();
+                    android.widget.LinearLayout body = TerminalSheetViews.body(mContext);
+                    TerminalSheetViews.addMenuRow(body, mContext.getString(R.string.clipboard_read_deny),
+                        () -> callback.onChoice(ClipboardReadConsent.Choice.DENY));
+                    TerminalSheetViews.addMenuRow(body, mContext.getString(R.string.clipboard_read_once),
+                        () -> callback.onChoice(ClipboardReadConsent.Choice.ONCE));
+                    TerminalSheetViews.addMenuRow(body, mContext.getString(R.string.clipboard_read_session),
+                        () -> callback.onChoice(ClipboardReadConsent.Choice.SESSION));
+                    if (programName != null)
+                        TerminalSheetViews.addMenuRow(body,
+                            mContext.getString(R.string.clipboard_read_always, programName),
+                            () -> callback.onChoice(ClipboardReadConsent.Choice.ALWAYS));
+                    String title = programName != null
+                        ? mContext.getString(R.string.clipboard_read_title, programName)
+                        : mContext.getString(R.string.clipboard_read_title_unnamed);
+                    mSheetOpen = true;
+                    boolean shown = sheet.show(title, body, false, null, () -> {
+                        mSheetOpen = false;
+                        callback.onDismissed();
+                    });
+                    if (!shown) mSheetOpen = false;
+                    return shown;
+                }
+
+                @Override public void closeSheet() {
+                    if (!mSheetOpen) return;
+                    mSheetOpen = false;
+                    mHost.sheetController().dismiss();
+                }
+            }, new ClipboardReadGrants(
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(mContext, false)));
+        }
+        return mClipboardConsent;
     }
 
     @Override

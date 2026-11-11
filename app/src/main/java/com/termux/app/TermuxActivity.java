@@ -32344,11 +32344,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onActivePaneChanged() {
             adoptActivePane();
+            if (mTermuxTerminalSessionActivityClient != null)
+                mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
             refreshTerminalWindowBar();
         }
 
         @Override public void onActivePaneMoved() {
             adoptActivePane();
+            if (mTermuxTerminalSessionActivityClient != null)
+                mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
             // Another pane of the same window: the bar's glass, clock, widgets and place row read
             // nothing the active pane moves, only its window chips do.
             refreshTerminalWindowBarChips();
