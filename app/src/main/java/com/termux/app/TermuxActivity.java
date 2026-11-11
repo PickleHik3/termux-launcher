@@ -5861,7 +5861,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyUnderKeyboardStackGlass(@NonNull ChromeSpec state) {
         View under = findViewById(R.id.accessory_under_keyboard_stack);
         if (under == null) return;
-        if (!mDockRows.underKeyboardBandsShown() || !state.toolbarShown) {
+        // The Peek card is the dock's only glass: the bands under the keyboard then ride on it.
+        if (!com.termux.app.dock.UnderKeyboardBand.wearsSheet(
+                mDockRows.underKeyboardBandsShown(), state.toolbarShown, peekCardWanted())) {
             if (under.getBackground() != null) under.setBackground(null);
             mUnderKeyboardBackdropBitmap = null;
             releaseUnderKeyboardBackdrop();
