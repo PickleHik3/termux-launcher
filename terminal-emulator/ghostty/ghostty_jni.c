@@ -70,7 +70,7 @@ typedef struct {
 
 // Events handed to Java during a write (GhosttyNative.EVENT_*), in the order they happened.
 enum { EVENT_PROMPT = 1, EVENT_PROGRESS = 2, EVENT_NOTIFICATION = 3, EVENT_KITTY_NOTIFICATION = 4,
-       EVENT_CLIPBOARD_READ = 5 };
+       EVENT_CLIPBOARD_READ = 5, EVENT_PROGRAM_STATUS = 6 };
 // EVENT_PROMPT's second value when the shell reported no exit code.
 #define NO_EXIT_CODE INT32_MIN
 
@@ -412,6 +412,29 @@ static void on_desktop_notification(GhosttyTerminal t, void* ud, const GhosttyTe
                n->title.len, n->body.ptr != NULL ? n->body.ptr : (const uint8_t*) "", n->body.len);
 }
 
+// OSC 7501 program status: one validated report. The library's strings are valid only during this
+// call; send_event's byte_array copies them, which is the copy this contract asks for. a = state |
+// (kind << 8), b = progress (-1 none), first = id + NUL + app, second = title + NUL + message. NUL is
+// a safe separator: the library refuses C0 controls in decoded title and message, and id and app
+// are limited to a charset without it.
+static void on_program_status(GhosttyTerminal t, void* ud, const GhosttyTerminalProgramStatus* s) {
+    (void) t;
+    if (s == NULL) return;
+    // The library caps these (id 128, app 32, decoded title 192, message 2048); the buffers hold more.
+    uint8_t first[512], second[4096];
+    size_t id_len = s->id.ptr != NULL ? s->id.len : 0, app_len = s->app.ptr != NULL ? s->app.len : 0;
+    size_t title_len = s->title.ptr != NULL ? s->title.len : 0, msg_len = s->message.ptr != NULL ? s->message.len : 0;
+    if (id_len + 1 + app_len > sizeof first || title_len + 1 + msg_len > sizeof second) return;
+    if (id_len) memcpy(first, s->id.ptr, id_len);
+    first[id_len] = 0;
+    if (app_len) memcpy(first + id_len + 1, s->app.ptr, app_len);
+    if (title_len) memcpy(second, s->title.ptr, title_len);
+    second[title_len] = 0;
+    if (msg_len) memcpy(second + title_len + 1, s->message.ptr, msg_len);
+    send_event(ud, EVENT_PROGRAM_STATUS, (int) s->state | ((int) s->kind << 8), (int) s->progress,
+               first, id_len + 1 + app_len, second, title_len + 1 + msg_len);
+}
+
 static void core_free(Core* c, JNIEnv* env) {
     if (c == NULL) return;
     kitty_free(c);
@@ -562,6 +585,7 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT, (const void*) on_semantic_prompt);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT, (const void*) on_progress);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, (const void*) on_desktop_notification);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PROGRAM_STATUS, (const void*) on_program_status);
     // History only has to hold what the next sync copies into the Java transcript; Java picks the
     // row limit (GhosttyCore.historyLimit). Bytes are unlimited so a styled burst cannot prune rows
     // the next sync still needs.

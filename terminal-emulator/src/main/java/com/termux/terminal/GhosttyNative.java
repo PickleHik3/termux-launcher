@@ -118,6 +118,12 @@ final class GhosttyNative {
      * request, bit 1 when a listing was asked for, bit 2 when the string ended with ST (not BEL).
      */
     static final int EVENT_CLIPBOARD_READ = 5;
+    /**
+     * OSC 7501 program status, one validated report: {@code a} is the state (0 idle, 1 working, 2 done,
+     * 3 blocked, 4 error, 5 clear) | (kind (0 none, 1 permission, 2 question, 3 auth) << 8), {@code b}
+     * the progress or -1, {@code first} is id, NUL, app and {@code second} is title, NUL, message.
+     */
+    static final int EVENT_PROGRAM_STATUS = 6;
 
     /** OSC 133 steps in {@link #EVENT_PROMPT}. */
     static final int SEMANTIC_PROMPT_START = 1;

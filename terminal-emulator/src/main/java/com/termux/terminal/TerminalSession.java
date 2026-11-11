@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
@@ -571,6 +572,11 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     @Override
+    public void onProgramStatusChanged(@NonNull List<ProgramStatus> raised) {
+        mClient.onProgramStatusChanged(this, raised);
+    }
+
+    @Override
     public void onKittyNotificationClose(String id) {
         mClient.onKittyNotificationClose(this, id);
     }
@@ -888,6 +894,8 @@ public final class TerminalSession extends TerminalOutput {
                 drainProcessOutputBeforeExit();
                 int exitCode = (Integer) msg.obj;
                 cleanupResources(exitCode);
+                // Working and blocked records end with the process (OSC 7501); done and error stay.
+                if (mEmulator != null) mEmulator.onProgramStatusProcessExit();
                 String exitDescription = "\r\n[Process completed";
                 if (exitCode > 0) {
                     // Non-zero process exit.

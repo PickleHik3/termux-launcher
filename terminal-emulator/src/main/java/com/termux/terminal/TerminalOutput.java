@@ -3,6 +3,7 @@ package com.termux.terminal;
 import androidx.annotation.NonNull;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -110,6 +111,14 @@ public abstract class TerminalOutput {
      */
     public void onKittyNotification(KittyNotification notification) {
         onNotification(notification.getTitle(), notification.getBody());
+    }
+
+    /**
+     * The OSC 7501 program-status records changed during one turn of output (or at process exit or
+     * when seen). {@code raised} holds the records that entered blocked, done or error in the turn,
+     * one per id; it is empty when only the picture changed. Called once per turn, never per report.
+     */
+    public void onProgramStatusChanged(@NonNull List<ProgramStatus> raised) {
     }
 
     /** Take down the notification the program named, if it is still up. */

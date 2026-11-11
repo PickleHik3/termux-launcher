@@ -1578,11 +1578,75 @@ public final class TerminalEmulator {
                             (a & 4) != 0, (a & 1) != 0, pasted));
                     }
                     break;
+                case GhosttyNative.EVENT_PROGRAM_STATUS:
+                    onGhosttyProgramStatus(a, b, first, second);
+                    break;
                 default:
                     break;
             }
         }
     };
+
+    /** The OSC 7501 records of this terminal; stays empty on the Java core, which never produces them. */
+    private final ProgramStatusStore mProgramStatus = new ProgramStatusStore();
+    /** Whether the records changed during the delivery turn in progress. */
+    private boolean mProgramStatusDirty;
+    /** The records that entered blocked, done or error in this turn, by id; the last report of an id wins. */
+    private final java.util.LinkedHashMap<String, ProgramStatus> mProgramStatusRaised = new java.util.LinkedHashMap<>();
+
+    /** The OSC 7501 program-status records. Read-only for callers; the emulator is the only writer. */
+    public ProgramStatusStore getProgramStatus() {
+        return mProgramStatus;
+    }
+
+    /**
+     * The user came back and pressed a key: finished (done, error) records go, and the session is
+     * told once if that changed anything. Called by the app; the emulator never calls it itself.
+     */
+    public void markProgramStatusSeen() {
+        if (mProgramStatus.markSeen()) mSession.onProgramStatusChanged(java.util.Collections.<ProgramStatus>emptyList());
+    }
+
+    /** The process ended: working and blocked records go, and the session is told once if that changed anything. */
+    void onProgramStatusProcessExit() {
+        if (mProgramStatus.onProcessExit()) mSession.onProgramStatusChanged(java.util.Collections.<ProgramStatus>emptyList());
+    }
+
+    private void onGhosttyProgramStatus(int a, int b, String first, String second) {
+        if (first == null || second == null) return;
+        int firstNul = first.indexOf('\0');
+        int secondNul = second.indexOf('\0');
+        if (firstNul < 0 || secondNul < 0) return;
+        String id = first.substring(0, firstNul);
+        int state = a & 0xff;
+        if (!mProgramStatus.apply(state, (a >> 8) & 0xff, b, id, first.substring(firstNul + 1),
+            second.substring(0, secondNul), second.substring(secondNul + 1))) return;
+        mProgramStatusDirty = true;
+        if (state == ProgramStatusStore.STATE_CLEAR) return;
+        ProgramStatus record = mProgramStatus.get(id);
+        if (record != null && (record.state == ProgramStatus.State.BLOCKED || record.state == ProgramStatus.State.DONE
+            || record.state == ProgramStatus.State.ERROR)) {
+            mProgramStatusRaised.put(id, record);
+        } else {
+            mProgramStatusRaised.remove(id);
+        }
+    }
+
+    /**
+     * Ends one delivery turn: one call to the session however many reports the turn held, with the
+     * records that entered blocked, done or error and are still stored (a later clear, prompt or
+     * replacement in the same turn takes a record out of it).
+     */
+    private void flushGhosttyProgramStatus() {
+        if (!mProgramStatusDirty) return;
+        mProgramStatusDirty = false;
+        java.util.List<ProgramStatus> raised = new java.util.ArrayList<>(mProgramStatusRaised.size());
+        for (ProgramStatus record : mProgramStatusRaised.values()) {
+            if (mProgramStatus.get(record.id) == record) raised.add(record);
+        }
+        mProgramStatusRaised.clear();
+        mSession.onProgramStatusChanged(raised);
+    }
     /** The kitty keyboard flags Ghostty holds for the current screen. */
     private int mGhosttyKeyboardFlags;
     /** Set while {@link #applyGhosttyState} runs, so ending a hold from inside it does not sync again. */
@@ -1890,6 +1954,7 @@ public final class TerminalEmulator {
             mSession.onColorsChanged();
         }
         core.deliver(mGhosttyEvents, mSession);
+        flushGhosttyProgramStatus();
         core.flushClipboard(mSession);
         if ((flags & GhosttyNative.FLAG_BELL) != 0) mSession.onBell();
     }
@@ -4857,6 +4922,7 @@ public final class TerminalEmulator {
         switch (step) {
             case GhosttyNative.SEMANTIC_PROMPT_START:
                 mShellIntegrationCommandRunning = false;
+                if (mProgramStatus.onPromptStart()) mProgramStatusDirty = true;
                 break;
             case GhosttyNative.SEMANTIC_OUTPUT_START:
                 mShellIntegrationCommandRunning = true;

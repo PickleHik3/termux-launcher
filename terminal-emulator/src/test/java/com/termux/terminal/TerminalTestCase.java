@@ -34,6 +34,14 @@ public abstract class TerminalTestCase extends TestCase {
 			else super.onClipboardReadRequest(request);
 		}
 
+		/** One entry per {@link #onProgramStatusChanged} call: the raised records it carried. */
+		public final List<List<ProgramStatus>> programStatusChanges = new ArrayList<>();
+
+		@Override
+		public void onProgramStatusChanged(List<ProgramStatus> raised) {
+			programStatusChanges.add(new ArrayList<>(raised));
+		}
+
 		/** What {@link #getTerminfoName()} returns; null means none. */
 		public String terminfoName = null;
 
