@@ -17,8 +17,9 @@ import java.io.IOException;
  */
 final class MessengerTaiRuntimeLink implements TaiRuntimeLink {
     /**
-     * Turns an app-side chat, completion, load or keep-warm body into the one the runtime process
-     * receives: the model resolved here, where the picks live, with its spec and options attached.
+     * Turns an app-side load or keep-warm body into the one the runtime process receives: the model
+     * resolved here, where the picks live, with its spec and options attached. A generation is not
+     * prepared here: the Feature request already built its body.
      */
     interface BodyPreparer {
         @NonNull String prepare(@NonNull String body) throws JSONException;
@@ -44,7 +45,8 @@ final class MessengerTaiRuntimeLink implements TaiRuntimeLink {
     @NonNull
     @Override
     public Generation generate(@NonNull GenerationRequest request, @NonNull GenerationSink sink) throws JSONException {
-        String body = preparer.prepare(request.body);
+        // The body is the Feature request's: its model, options and plan are already in it (plan once).
+        String body = request.body;
         TaiRuntimeServiceClient.PendingRequest call = client.startGeneration(
             operation(request.kind, request.stream), body, request.id, request.priority);
         return new Generation() {

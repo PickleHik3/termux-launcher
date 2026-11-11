@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat;
 import com.termux.R;
 import com.termux.ai.TaiCallerRequests;
 import com.termux.ai.TaiFunction;
+import com.termux.ai.FeatureRequest;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiRuntimePresence;
 import com.termux.app.activities.SettingsActivity;
@@ -499,14 +500,16 @@ public final class LauncherCategorySortService extends Service {
                                                   boolean emptyFails,
                                                   @NonNull Function<String, Map<String, String>> parse) {
         try {
-            String body = TaiCallerRequests.categoryBody(modelId, prompt, maxTokens).toString();
-            JSONObject response = timeoutMs > 0 ? manager.openAiChatCompletions(body, timeoutMs)
-                : manager.openAiChatCompletions(body);
-            JSONArray choices = response.optJSONArray("choices");
-            JSONObject choice = choices == null ? null : choices.optJSONObject(0);
-            if (choice == null) return LauncherCategoryRemoteSort.Answer.failed(errorText(response));
-            JSONObject reply = choice.optJSONObject("message");
-            String content = reply == null ? "" : reply.optString("content", "");
+            FeatureRequest.Result response = FeatureRequest.get(this).collect(
+                FeatureRequest.Call.chat(TaiFunction.APP_CATEGORIES, TaiCallerRequests.categoryBody(modelId, prompt, maxTokens))
+                    .priority(FeatureRequest.Priority.NORMAL)
+                    .timeoutMs(timeoutMs > 0 ? timeoutMs : TaiManager.DEFAULT_CHAT_TIMEOUT_MS));
+            if (!response.ok()) {
+                JSONObject failure = response.error != null ? response.error
+                    : new JSONObject().put("message", response.errorMessage == null ? "" : response.errorMessage);
+                return LauncherCategoryRemoteSort.Answer.failed(errorText(failure));
+            }
+            String content = response.text;
             if (emptyFails && content.trim().isEmpty())
                 return LauncherCategoryRemoteSort.Answer.failed(getString(R.string.settings_app_drawer_category_sort_remote_failed));
             return LauncherCategoryRemoteSort.Answer.of(parse.apply(content));

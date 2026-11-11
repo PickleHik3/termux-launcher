@@ -4,16 +4,12 @@ import android.content.Context;
 
 import androidx.annotation.NonNull;
 
-import com.termux.ai.TaiManager;
+import com.termux.ai.FeatureRequest;
+import com.termux.ai.TaiFunction;
 
 import org.json.JSONObject;
 
-import java.io.IOException;
-
-/**
- * The real transport: the existing runtime client behind {@link TaiManager}, which reaches the
- * engine in the {@code :tai_runtime} process. Nothing runs in this process.
- */
+/** The real transport: the Assistant's answers go through Feature request, as its function. */
 public final class TaiChatTransport implements ChatTransport {
     private final Context appContext;
 
@@ -21,28 +17,22 @@ public final class TaiChatTransport implements ChatTransport {
         appContext = context.getApplicationContext();
     }
 
+    @NonNull
     @Override
-    public void stream(@NonNull String body, @NonNull Sink sink) throws Exception {
-        TaiManager.getInstance(appContext).openAiChatCompletionsStream(body, new TaiManager.OpenAiStreamSink() {
+    public Call start(@NonNull String body, @NonNull FeatureRequest.Sink sink) throws Exception {
+        FeatureRequest.Handle handle = FeatureRequest.get(appContext).start(
+            FeatureRequest.Call.chat(TaiFunction.ASSISTANT, new JSONObject(body))
+                .priority(FeatureRequest.Priority.INTERACTIVE), sink);
+        return new Call() {
             @Override
-            public void onEvent(@NonNull JSONObject event) throws IOException {
-                sink.onEvent(event);
+            public void cancel() {
+                handle.cancel();
             }
 
             @Override
-            public void onDone() throws IOException {
-                sink.onDone();
+            public void await() throws Exception {
+                handle.await();
             }
-        });
-    }
-
-    /**
-     * {@link TaiManager#cancelRuntime()} ends whatever generation the runtime is running, whoever
-     * asked for it (the local API's included), and stops a running benchmark. The engine calls it
-     * only while its own answer is the one running.
-     */
-    @Override
-    public void cancel() throws Exception {
-        TaiManager.getInstance(appContext).cancelRuntime();
+        };
     }
 }

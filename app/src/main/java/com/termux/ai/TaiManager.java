@@ -80,6 +80,7 @@ public final class TaiManager {
     @Nullable private InProcessTaiRuntimeLink inProcessLink;
     @Nullable private MessengerTaiRuntimeLink messengerLink;
     @Nullable private volatile TaiRuntimeLink linkForTesting;
+    @Nullable private FeatureRequest featureRequest;
     private final RuntimeHost runtimeHost = new RuntimeHost();
     /** Total device RAM, detected once; {@code -1} until first use, {@code 0} when unknown. */
     private volatile long deviceMemoryBytes = -1L;
@@ -227,47 +228,6 @@ public final class TaiManager {
         runtimeLink().cancel(generationId);
     }
 
-    @NonNull
-    private JSONObject generateThroughLink(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body,
-                                           @NonNull TaiRuntimeLink.Priority priority, long timeoutMs) throws JSONException {
-        TaiRuntimeLink.GenerationRequest request = new TaiRuntimeLink.GenerationRequest(kind, false, body, priority, null, timeoutMs);
-        JSONObject result;
-        try {
-            result = runtimeLink().generate(request, NO_SIGNALS).await();
-        } catch (IOException e) {
-            // A non-streaming generation writes to no sink; nothing here does I/O of the caller's.
-            throw new IllegalStateException(e);
-        }
-        return result != null ? result : error(500, "tai_runtime_unavailable", "On-device AI runtime did not return a result.");
-    }
-
-    private void streamThroughLink(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body, @NonNull OpenAiStreamSink sink,
-                                   @NonNull TaiRuntimeLink.Priority priority, @Nullable String generationId)
-        throws JSONException, IOException {
-        TaiRuntimeLink.GenerationRequest request = new TaiRuntimeLink.GenerationRequest(kind, true, body, priority, generationId, 0L);
-        runtimeLink().generate(request, generationSink(sink)).await();
-    }
-
-    /** A sink that hears nothing but chunks: every caller before ADR 0027's events. */
-    private static final TaiRuntimeLink.GenerationSink NO_SIGNALS = new TaiRuntimeLink.GenerationSink() {
-    };
-
-    @NonNull
-    private static TaiRuntimeLink.GenerationSink generationSink(@NonNull OpenAiStreamSink sink) {
-        if (sink instanceof TaiRuntimeLink.GenerationSink) return (TaiRuntimeLink.GenerationSink) sink;
-        return new TaiRuntimeLink.GenerationSink() {
-            @Override
-            public void onEvent(@NonNull JSONObject event) throws IOException {
-                sink.onEvent(event);
-            }
-
-            @Override
-            public void onDone() throws IOException {
-                sink.onDone();
-            }
-        };
-    }
-
     /** The work each seam operation does where the runtime is; see {@link InProcessTaiRuntimeLink.Host}. */
     private final class RuntimeHost implements InProcessTaiRuntimeLink.Host {
         @NonNull
@@ -348,7 +308,7 @@ public final class TaiManager {
 
     /** {@link TaiRuntimeServiceClient}'s own flat default, kept here for callers that don't pass one. */
     static final long DEFAULT_TRANSCRIBE_TIMEOUT_MS = 120_000L;
-    static final long DEFAULT_CHAT_TIMEOUT_MS = 120_000L;
+    public static final long DEFAULT_CHAT_TIMEOUT_MS = 120_000L;
 
     @NonNull
     private JSONObject runtimeRequest(@NonNull String operation, @Nullable String body) throws JSONException {
@@ -375,16 +335,31 @@ public final class TaiManager {
     @NonNull
     private String delegatedRuntimeBody(@NonNull String body, boolean chatRoute) throws JSONException {
         JSONObject request = parseBody(body);
-        request.remove(INTERNAL_MODEL_SPEC);
-        request.remove(INTERNAL_RUNTIME_OPTIONS);
-        request.remove(INTERNAL_FEATURE_PLAN);
+        stripInternalKeys(request);
         // The request's feature loads by its plan, resolved here where the picks live.
         TaiFunction feature = TaiCallerRequests.featureFor(request, chatRoute);
         TaiFeaturePlan plan = feature == null ? null : TaiFeaturePlans.forContext(appContext).plan(feature);
         if (plan != null && plan.where == TaiFeaturePlan.Where.ON_DEVICE && !namesModel(request)) {
             request.put("model", plan.requestModel());
         }
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        return runtimeBodyFor(request, plan);
+    }
+
+    /** Removes what only this app's process may put in a request for the runtime: the model's spec, its options and the plan. */
+    static void stripInternalKeys(@NonNull JSONObject request) {
+        request.remove(INTERNAL_MODEL_SPEC);
+        request.remove(INTERNAL_RUNTIME_OPTIONS);
+        request.remove(INTERNAL_FEATURE_PLAN);
+    }
+
+    /**
+     * The body the runtime receives for {@code request}, whose model the caller has already chosen (the
+     * Default model when it names none): the model resolved here, where the picks live, with its spec and
+     * options, and the plan when it is on-device. Shared by {@link FeatureRequest} and the load routes.
+     */
+    @NonNull
+    String runtimeBodyFor(@NonNull JSONObject request, @Nullable TaiFeaturePlan plan) throws JSONException {
+        String modelId = modelOf(request);
         TaiModelSpec spec = resolveModel(modelId);
         if (spec != null) {
             request.put("model", spec.id);
@@ -395,24 +370,28 @@ public final class TaiManager {
         return request.toString();
     }
 
-    /**
-     * App process, chat routes: a request that names no model and whose feature (the one it names, else
-     * the assistant) runs on the remote provider asks for the provider's model, so the remote routing
-     * that follows sees it. A local plan's model is filled in with the rest of the plan by {@link
-     * #delegatedRuntimeBody(String, boolean)}. Anything else is left as it is.
-     */
+    /** The plan a Feature loads by, resolved here where the picks live. */
     @NonNull
-    private String withRemoteFeatureModel(@NonNull String body) {
-        if (runtimeProcess) return body;
-        try {
-            JSONObject request = parseBody(body);
-            if (namesModel(request)) return body;
-            TaiFunction feature = TaiCallerRequests.featureFor(request, true);
-            if (feature == null) return body;
-            TaiFeaturePlan plan = TaiFeaturePlans.forContext(appContext).plan(feature);
-            return plan.isRemote() ? request.put("model", plan.requestModel()).toString() : body;
-        } catch (JSONException | RuntimeException e) {
-            return body;
+    TaiFeaturePlan featurePlanFor(@NonNull TaiFunction feature) {
+        return TaiFeaturePlans.forContext(appContext).plan(feature);
+    }
+
+    /** The Default model: what a request that names none and has no plan model runs. */
+    @NonNull
+    String defaultAssistantModelId() {
+        return settings.getDefaultAssistantModel();
+    }
+
+    boolean isRuntimeProcess() {
+        return runtimeProcess;
+    }
+
+    /** The Feature request this manager's chat entry points go through. */
+    @NonNull
+    FeatureRequest featureRequest() {
+        synchronized (runtimeHost) {
+            if (featureRequest == null) featureRequest = new FeatureRequest(FeatureRequest.productionBackend(this, appContext));
+            return featureRequest;
         }
     }
 
@@ -904,7 +883,7 @@ public final class TaiManager {
     @NonNull
     public JSONObject loadModel(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        String modelId = modelOf(request);
         TaiModelSpec spec = resolveModel(request, modelId);
         JSONObject refusal = loadRefusal(request, modelId, spec);
         if (refusal != null) return refusal;
@@ -957,61 +936,16 @@ public final class TaiManager {
     @NonNull
     private JSONObject loadModelHere(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        String modelId = modelOf(request);
         TaiModelSpec spec = resolveModel(request, modelId);
         JSONObject refusal = loadRefusal(request, modelId, spec);
         if (refusal != null) return refusal;
         if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
-        // A load that names its feature reuses its model when the runtime holds it with a window as large as
-        // the plan's. One that names none (tai load, the Model Centre's Load) still reloads, as it always did.
-        if (TaiCallerRequests.featureOf(request) != null && !request.optBoolean("clearCache", false)) {
-            JSONObject reused = reuseForFeature(spec, options);
-            if (reused != null) return reused;
-        }
-        // The reset hook (tai load --fresh, or clearCache on the load routes directly): thrown away
-        // before the load itself picks the fingerprinted directory, so the model always rebuilds
-        // its converted-weight cache from scratch instead of trusting whatever is on disk.
-        if (request.optBoolean("clearCache", false) && TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
-            MnnTaiRuntime.clearMmapCache(appContext, spec.id);
-        }
-        if (hasInjectedRuntimeOverride()) {
-            JSONObject result = localRuntime().load(spec, options);
-            return result;
-        }
-        // A resident model the load cannot replace keeps serving as it is, as a generation's own load
-        // treats it (ensureModelLoadedForGeneration): the caller gets it, reused, rather than a refusal
-        // that reads as no model at all. A fresh load (clearCache) asked for a rebuild and is refused.
-        boolean fresh = request.optBoolean("clearCache", false);
-        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
-        if (preflight.blocked) {
-            if (!fresh && localRuntime().isModelLoaded(spec.id)) return residentAsIs(spec);
-            // Only a refusal that says something about the accelerator belongs in its history. Free
-            // memory running short is a moment, a missing or unreadable file is the download not
-            // being done yet, and a known failure is the record itself: writing any of them down
-            // locked the GPU out for good (a load tried mid-download left "failed on gpu: Download
-            // or import this model" behind, and automatic loads were refused from then on).
-            if (TaiRuntimeHistory.isAcceleratorVerdict(preflight.errorCode)) {
-                TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
-                    preflight.effectiveAccelerator, preflight.message);
-            }
-            return preflight.blockingError(preflightStatusCode(preflight));
-        }
         // tai load and the Model Centre's Load name no feature: the user asking, which a memory stop's
         // cooldown does not hold back. A feature's load (dictation cleanup's warm-up) is automatic.
-        LoadDecision decision = decideLoad(spec, options, preflight, TaiCallerRequests.featureOf(request) == null);
-        if (decision.refusal != null) {
-            return !fresh && localRuntime().isModelLoaded(spec.id) ? residentAsIs(spec) : decision.refusal;
-        }
-        JSONObject result = loadWithCanary(spec, decision.options);
-        result.put("preflight", preflight.toJson());
-        decision.describe(result);
-        recordRuntimeResult(spec, preflight, result);
-        if (result.optBoolean("ok", false)) {
-            markLoadedAsking(spec, options);
-            markUsedByFeature(spec, options);
-        }
-        return result;
+        return makeResident(spec, options, true, request.optBoolean("clearCache", false),
+            TaiCallerRequests.featureOf(request) == null);
     }
 
     @NonNull
@@ -1060,8 +994,8 @@ public final class TaiManager {
     private JSONObject keepWarmRuntimeHere(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
         TaiRuntimeState state = localRuntime().getState();
-        String fallbackModel = state.loadedModelId != null ? state.loadedModelId : settings.getDefaultAssistantModel();
-        String modelId = requestedModelId(request, fallbackModel);
+        String modelId = modelOf(request,
+            () -> state.loadedModelId != null ? state.loadedModelId : settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         int minutes = request.optInt("minutes", request.optInt("keepWarmMinutes", 0));
@@ -1758,7 +1692,7 @@ public final class TaiManager {
     @NonNull
     public JSONObject benchmark(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        String modelId = modelOf(request);
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
@@ -1948,77 +1882,102 @@ public final class TaiManager {
         return runtimeLink().runtimeState();
     }
 
-    @NonNull
-    public JSONObject openAiChatCompletions(@NonNull String body) throws JSONException {
-        return openAiChatCompletions(body, DEFAULT_CHAT_TIMEOUT_MS);
-    }
-
     /**
-     * As {@link #openAiChatCompletions(String)}, with the IPC deadline the caller wants instead of
-     * the flat default — a voice-input rewrite gives itself a few seconds, so a slow answer costs
-     * that one phrase its polish instead of stalling the session for two minutes.
+     * A chat or completion request checked and made ready where the runtime is: the error body that
+     * ends it (the caller wraps it as the route needs), or what generating takes, with the model loaded.
      */
-    @NonNull
-    public JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs) throws JSONException {
-        return openAiChatCompletions(body, timeoutMs, TaiRuntimeLink.Priority.NORMAL);
-    }
+    private static final class Prepared {
+        @Nullable JSONObject error;
+        /** The model was loaded, but the job was cancelled by id meanwhile: end as a waiting cancel does. */
+        boolean cancelled;
+        String modelId = "";
+        List<String> stopSequences = Collections.emptyList();
+        TaiRuntimeOptions options;
+        @Nullable JSONArray messages;
+        @Nullable OpenAiChatRequest chat;
+        @Nullable String prompt;
 
-    /**
-     * As {@link #openAiChatCompletions(String, long)}, with the place the generation takes in the
-     * runtime's queue: an interactive one goes ahead of waiting normal ones (ADR 0027 §4).
-     */
-    @NonNull
-    JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs, @NonNull TaiRuntimeLink.Priority priority)
-        throws JSONException {
-        body = withRemoteFeatureModel(body);
-        // A remote/<id> model goes to the remote provider here, in the app process: the :tai_runtime
-        // process is never woken for it (remote provider design, section 4.2).
-        if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
-            return new TaiRemoteProvider(appContext).chatCompletions(
-                TaiCallerRequests.remoteBody(parseBody(body)), timeoutMs);
+        static Prepared failed(@NonNull JSONObject error) {
+            Prepared prepared = new Prepared();
+            prepared.error = error;
+            return prepared;
         }
-        return generateThroughLink(TaiRuntimeLink.Kind.CHAT, body, priority, timeoutMs);
+    }
+
+    /**
+     * Validates a chat ({@code chat}) or a completion, resolves its model, builds what generating takes
+     * and loads the model: the one prologue the plain and the streamed route share, so an error reads the
+     * same on both.
+     */
+    @NonNull
+    private Prepared prepare(@NonNull JSONObject request, boolean chat) throws JSONException {
+        JSONArray messages = null;
+        String prompt = null;
+        if (chat) {
+            messages = request.optJSONArray("messages");
+            if (messages == null || messages.length() == 0) {
+                return Prepared.failed(error(400, "bad_request", "Missing messages"));
+            }
+        } else {
+            prompt = promptFromCompletionRequest(request);
+            if (prompt.trim().isEmpty()) return Prepared.failed(error(400, "bad_request", "Missing prompt"));
+        }
+        List<String> stopSequences;
+        try {
+            stopSequences = OpenAiStopSequences.fromRequest(request);
+        } catch (JSONException e) {
+            return Prepared.failed(error(400, "invalid_stop", e.getMessage()));
+        }
+
+        String modelId = modelOf(request);
+        TaiModelSpec spec = resolveModel(request, modelId);
+        if (spec == null) return Prepared.failed(error(404, "model_not_found", "Unknown model: " + modelId));
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+            return Prepared.failed(generationCapabilityError(spec));
+        }
+        OpenAiChatRequest chatRequest = null;
+        if (chat) {
+            omitAutomaticToolsForCompatibility(request, spec);
+            if (!modelSupportsRequestedTools(request, spec)) {
+                return Prepared.failed(error(400, "capability_not_supported",
+                    "Model " + spec.id + " does not support tool use through this endpoint."));
+            }
+            JSONObject audioOutputError = unsupportedAudioOutputRequest(request);
+            if (audioOutputError != null) return Prepared.failed(audioOutputError);
+            try {
+                chatRequest = openAiChatRequest(request, messages, spec);
+            } catch (JSONException e) {
+                return Prepared.failed(chatRequestError(e));
+            }
+        }
+        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
+        JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
+        if (loadError != null) return Prepared.failed(loadError);
+
+        Prepared ready = new Prepared();
+        ready.modelId = modelId;
+        ready.stopSequences = stopSequences;
+        ready.options = options;
+        ready.messages = messages;
+        ready.chat = chatRequest;
+        ready.prompt = prompt;
+        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
+        ready.cancelled = GenerationQueue.currentJobCancelled();
+        return ready;
     }
 
     /** A chat completion where the runtime is. */
     @NonNull
     private JSONObject chatCompletionsHere(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
-        JSONArray messages = request.optJSONArray("messages");
-        if (messages == null || messages.length() == 0) {
-            return openAiError(error(400, "bad_request", "Missing messages"));
-        }
-        List<String> stopSequences;
-        try {
-            stopSequences = OpenAiStopSequences.fromRequest(request);
-        } catch (JSONException e) {
-            return openAiError(error(400, "invalid_stop", e.getMessage()));
-        }
-
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
-        TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown model: " + modelId));
-        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
-            return openAiError(generationCapabilityError(spec));
-        }
-        omitAutomaticToolsForCompatibility(request, spec);
-        if (!modelSupportsRequestedTools(request, spec)) {
-            return openAiError(error(400, "capability_not_supported",
-                "Model " + spec.id + " does not support tool use through this endpoint."));
-        }
-        JSONObject audioOutputError = unsupportedAudioOutputRequest(request);
-        if (audioOutputError != null) return openAiError(audioOutputError);
-        OpenAiChatRequest chatRequest;
-        try {
-            chatRequest = openAiChatRequest(request, messages, spec);
-        } catch (JSONException e) {
-            return openAiError(chatRequestError(e));
-        }
-        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
-        JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
-        if (loadError != null) return openAiError(loadError);
-        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
-        if (GenerationQueue.currentJobCancelled()) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
+        Prepared ready = prepare(request, true);
+        if (ready.error != null) return openAiError(ready.error);
+        if (ready.cancelled) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
+        String modelId = ready.modelId;
+        JSONArray messages = ready.messages;
+        List<String> stopSequences = ready.stopSequences;
+        TaiRuntimeOptions options = ready.options;
+        OpenAiChatRequest chatRequest = ready.chat;
 
         JSONObject chat = TaiRuntime.generate(localRuntime(), modelId, chatRequest.request, options);
         if (!chat.optBoolean("ok", false)) {
@@ -2063,35 +2022,17 @@ public final class TaiManager {
         choice.put("message", message);
     }
 
-    @NonNull
-    public JSONObject openAiCompletions(@NonNull String body) throws JSONException {
-        return generateThroughLink(TaiRuntimeLink.Kind.COMPLETION, body, TaiRuntimeLink.Priority.NORMAL, DEFAULT_CHAT_TIMEOUT_MS);
-    }
-
     /** A completion where the runtime is. */
     @NonNull
     private JSONObject completionsHere(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
-        String prompt = promptFromCompletionRequest(request);
-        if (prompt.trim().isEmpty()) return openAiError(error(400, "bad_request", "Missing prompt"));
-        List<String> stopSequences;
-        try {
-            stopSequences = OpenAiStopSequences.fromRequest(request);
-        } catch (JSONException e) {
-            return openAiError(error(400, "invalid_stop", e.getMessage()));
-        }
-
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
-        TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown model: " + modelId));
-        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
-            return openAiError(generationCapabilityError(spec));
-        }
-        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
-        JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
-        if (loadError != null) return openAiError(loadError);
-        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
-        if (GenerationQueue.currentJobCancelled()) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
+        Prepared ready = prepare(request, false);
+        if (ready.error != null) return openAiError(ready.error);
+        if (ready.cancelled) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
+        String modelId = ready.modelId;
+        String prompt = ready.prompt;
+        List<String> stopSequences = ready.stopSequences;
+        TaiRuntimeOptions options = ready.options;
 
         JSONObject completion = TaiRuntime.generate(localRuntime(), modelId, TaiChatRequest.completion(prompt), options);
         if (!completion.optBoolean("ok", false)) {
@@ -2126,84 +2067,25 @@ public final class TaiManager {
         }
     }
 
-    public void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
-        openAiChatCompletionsStream(body, sink, TaiRuntimeLink.Priority.NORMAL, null);
-    }
-
-    /**
-     * As {@link #openAiChatCompletionsStream(String, OpenAiStreamSink)}, with the generation's
-     * place in the runtime's queue and, when the caller wants to cancel it later through
-     * {@link #cancelGeneration}, its id (ADR 0027 §4). A remote request is not queued and has no id.
-     */
-    void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink,
-                                     @NonNull TaiRuntimeLink.Priority priority, @Nullable String generationId)
-        throws JSONException, IOException {
-        body = withRemoteFeatureModel(body);
-        if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
-            new TaiRemoteProvider(appContext).stream(
-                TaiCallerRequests.remoteBody(parseBody(body)), DEFAULT_CHAT_TIMEOUT_MS, sink);
-            return;
-        }
-        streamThroughLink(TaiRuntimeLink.Kind.CHAT, body, sink, priority, generationId);
-    }
-
     /** A streamed chat completion where the runtime is. */
     private void chatCompletionsStreamHere(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
         JSONObject request = parseBody(body);
-        JSONArray messages = request.optJSONArray("messages");
-        if (messages == null || messages.length() == 0) {
-            emitOpenAiError(sink, error(400, "bad_request", "Missing messages"));
+        Prepared ready = prepare(request, true);
+        if (ready.error != null) {
+            emitOpenAiError(sink, ready.error);
             return;
         }
-        List<String> stopSequences;
-        try {
-            stopSequences = OpenAiStopSequences.fromRequest(request);
-        } catch (JSONException e) {
-            emitOpenAiError(sink, error(400, "invalid_stop", e.getMessage()));
-            return;
-        }
-        boolean includeUsage = includeStreamUsage(request);
-
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
-        TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) {
-            emitOpenAiError(sink, error(404, "model_not_found", "Unknown model: " + modelId));
-            return;
-        }
-        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
-            emitOpenAiError(sink, generationCapabilityError(spec));
-            return;
-        }
-        omitAutomaticToolsForCompatibility(request, spec);
-        if (!modelSupportsRequestedTools(request, spec)) {
-            emitOpenAiError(sink, error(400, "capability_not_supported",
-                "Model " + spec.id + " does not support tool use through this endpoint."));
-            return;
-        }
-        JSONObject audioOutputError = unsupportedAudioOutputRequest(request);
-        if (audioOutputError != null) {
-            emitOpenAiError(sink, audioOutputError);
-            return;
-        }
-        OpenAiChatRequest chatRequest;
-        try {
-            chatRequest = openAiChatRequest(request, messages, spec);
-        } catch (JSONException e) {
-            emitOpenAiError(sink, chatRequestError(e));
-            return;
-        }
-        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
-        JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
-        if (loadError != null) {
-            emitOpenAiError(sink, loadError);
-            return;
-        }
-        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
-        if (GenerationQueue.currentJobCancelled()) {
+        if (ready.cancelled) {
             sink.onEvent(InProcessTaiRuntimeLink.cancelledWhileWaiting());
             sink.onDone();
             return;
         }
+        boolean includeUsage = includeStreamUsage(request);
+        String modelId = ready.modelId;
+        JSONArray messages = ready.messages;
+        List<String> stopSequences = ready.stopSequences;
+        TaiRuntimeOptions options = ready.options;
+        OpenAiChatRequest chatRequest = ready.chat;
         String id = "tai-chatcmpl-" + System.currentTimeMillis();
         long created = System.currentTimeMillis() / 1000L;
         emitChatChunk(sink, id, created, modelId, "", "assistant", null);
@@ -2297,49 +2179,24 @@ public final class TaiManager {
         sink.onDone();
     }
 
-    public void openAiCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
-        streamThroughLink(TaiRuntimeLink.Kind.COMPLETION, body, sink, TaiRuntimeLink.Priority.NORMAL, null);
-    }
-
     /** A streamed completion where the runtime is. */
     private void completionsStreamHere(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
         JSONObject request = parseBody(body);
-        String prompt = promptFromCompletionRequest(request);
-        if (prompt.trim().isEmpty()) {
-            emitOpenAiError(sink, error(400, "bad_request", "Missing prompt"));
+        Prepared ready = prepare(request, false);
+        if (ready.error != null) {
+            emitOpenAiError(sink, ready.error);
             return;
         }
-        List<String> stopSequences;
-        try {
-            stopSequences = OpenAiStopSequences.fromRequest(request);
-        } catch (JSONException e) {
-            emitOpenAiError(sink, error(400, "invalid_stop", e.getMessage()));
-            return;
-        }
-        boolean includeUsage = includeStreamUsage(request);
-
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
-        TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) {
-            emitOpenAiError(sink, error(404, "model_not_found", "Unknown model: " + modelId));
-            return;
-        }
-        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
-            emitOpenAiError(sink, generationCapabilityError(spec));
-            return;
-        }
-        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
-        JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
-        if (loadError != null) {
-            emitOpenAiError(sink, loadError);
-            return;
-        }
-        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
-        if (GenerationQueue.currentJobCancelled()) {
+        if (ready.cancelled) {
             sink.onEvent(InProcessTaiRuntimeLink.cancelledWhileWaiting());
             sink.onDone();
             return;
         }
+        boolean includeUsage = includeStreamUsage(request);
+        String modelId = ready.modelId;
+        String prompt = ready.prompt;
+        List<String> stopSequences = ready.stopSequences;
+        TaiRuntimeOptions options = ready.options;
 
         String id = "tai-cmpl-" + System.currentTimeMillis();
         long created = System.currentTimeMillis() / 1000L;
@@ -2723,7 +2580,7 @@ public final class TaiManager {
             return runtimeRequest(TaiRuntimeIpc.OP_EMBEDDINGS, delegatedRuntimeBody(body), embeddingsTimeoutMs(n));
         }
         JSONObject request = parseBody(body);
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        String modelId = modelOf(request);
         String encodingFormat = request.optString("encoding_format", "float");
         boolean base64 = "base64".equalsIgnoreCase(encodingFormat);
         if (!encodingFormat.isEmpty() && !"float".equalsIgnoreCase(encodingFormat) && !base64) {
@@ -2806,7 +2663,7 @@ public final class TaiManager {
     public JSONObject tokenize(@NonNull String body) throws JSONException {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_TOKENIZE, delegatedRuntimeBody(body));
         JSONObject request = parseBody(body);
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        String modelId = modelOf(request);
         String input = request.optString("input", "");
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) {
@@ -3444,7 +3301,7 @@ public final class TaiManager {
     @NonNull
     public JSONObject preflight(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
-        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        String modelId = modelOf(request);
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         String requestedBackend = request.optString("backend", "").trim();
@@ -3468,40 +3325,84 @@ public final class TaiManager {
 
     @Nullable
     private JSONObject ensureModelLoadedForGeneration(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
-        String modelId = spec.id;
+        JSONObject result = makeResident(spec, options, false, false, false);
+        return result == null || result.optBoolean("ok", false) ? null : result;
+    }
+
+    /**
+     * The one decision on making a chat model resident, for an explicit load ({@code explicit}: tai load,
+     * the Model Centre, a feature's load route) and for a generation's own load. {@code fresh} is the
+     * reset hook (clearCache): the resident is rebuilt, never kept in place of a refusal.
+     * {@code userAsking} is a load no feature named, which a memory stop's cooldown does not hold back.
+     * <p>
+     * Answers as an explicit load does: the resident state marked {@code reused}, or the load's result,
+     * or a refusal. A generation ({@code !explicit}) gets {@code null} where the resident serves or kept
+     * serving, and otherwise the same result; its caller reads {@code ok}. The two differ on purpose in
+     * four places: a generation reuses a resident whenever it serves (a load only for a named feature
+     * and not fresh); only a generation obeys the auto-load setting; the preflight is asked for a
+     * generation or a load; and only an explicit load writes an accelerator refusal into the history.
+     */
+    @Nullable
+    private JSONObject makeResident(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options,
+                                    boolean explicit, boolean fresh, boolean userAsking) throws JSONException {
         // Resident: used as it is, unless a feature asks for a larger window than it was loaded with
         // (decision 5) - then it reloads once at the feature's window, and stays if that cannot happen.
-        boolean resident = localRuntime().isModelLoaded(modelId);
-        if (resident && residentServes(spec, options)) {
+        boolean resident = localRuntime().isModelLoaded(spec.id);
+        // A resident the load cannot replace keeps serving as it is, rather than a refusal that reads as
+        // no model at all; a fresh load asked for a rebuild and is refused.
+        boolean keeps = resident && !fresh;
+        if (resident && residentServes(spec, options)
+                && (!explicit || (!userAsking && !fresh && options.feature != null))) {
             markUsedByFeature(spec, options);
-            return null;
+            return residentAnswer(explicit, spec);
+        }
+        // The reset hook (tai load --fresh, or clearCache on the load routes directly): thrown away
+        // before the load itself picks the fingerprinted directory, so the model always rebuilds
+        // its converted-weight cache from scratch instead of trusting whatever is on disk.
+        if (fresh && TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+            MnnTaiRuntime.clearMmapCache(appContext, spec.id);
         }
         if (hasInjectedRuntimeOverride()) {
-            JSONObject load = localRuntime().load(spec, options);
-            if (!load.optBoolean("ok", false)) return load;
-            return null;
+            return localRuntime().load(spec, options);
         }
-        if (!settings.isOpenAiAutoLoadEnabled()) {
-            if (resident) return null;
+        if (!explicit && !settings.isOpenAiAutoLoadEnabled()) {
+            if (resident) return residentAnswer(explicit, spec);
             JSONObject data = error(409, "model_not_loaded",
                 "Model is not loaded. Load it explicitly with tai load or from On-device AI settings.");
             data.put("autoLoadEnabled", false);
             return data;
         }
-        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, true);
+        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, !explicit);
         if (preflight.blocked) {
-            return resident ? null : preflight.blockingError(preflightStatusCode(preflight));
+            if (keeps) return residentAnswer(explicit, spec);
+            // Only a refusal that says something about the accelerator belongs in its history. Free
+            // memory running short is a moment, a missing or unreadable file is the download not
+            // being done yet, and a known failure is the record itself: writing any of them down
+            // locked the GPU out for good (a load tried mid-download left "failed on gpu: Download
+            // or import this model" behind, and automatic loads were refused from then on).
+            if (explicit && TaiRuntimeHistory.isAcceleratorVerdict(preflight.errorCode)) {
+                TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
+                    preflight.effectiveAccelerator, preflight.message);
+            }
+            return preflight.blockingError(preflightStatusCode(preflight));
         }
-        LoadDecision decision = decideLoad(spec, options, preflight, false);
-        if (decision.refusal != null) return resident ? null : decision.refusal;
-        JSONObject load = loadWithCanary(spec, decision.options);
-        load.put("preflight", preflight.toJson());
-        decision.describe(load);
-        recordRuntimeResult(spec, preflight, load);
-        if (!load.optBoolean("ok", false)) return load;
-        markLoadedAsking(spec, options);
-        markUsedByFeature(spec, options);
-        return null;
+        LoadDecision decision = decideLoad(spec, options, preflight, explicit && userAsking);
+        if (decision.refusal != null) return keeps ? residentAnswer(explicit, spec) : decision.refusal;
+        JSONObject result = loadWithCanary(spec, decision.options);
+        result.put("preflight", preflight.toJson());
+        decision.describe(result);
+        recordRuntimeResult(spec, preflight, result);
+        if (result.optBoolean("ok", false)) {
+            markLoadedAsking(spec, options);
+            markUsedByFeature(spec, options);
+        }
+        return result;
+    }
+
+    /** What serving as it is answers: the state marked reused to an explicit load, nothing to a generation. */
+    @Nullable
+    private JSONObject residentAnswer(boolean explicit, @NonNull TaiModelSpec spec) throws JSONException {
+        return explicit ? residentAsIs(spec) : null;
     }
 
     /** The canary runs at most once per process, whatever it finds. */
@@ -4343,7 +4244,7 @@ public final class TaiManager {
 
     @NonNull
     private TaiRuntimeOptions runtimeOptionsFromRequest(@NonNull JSONObject request, @NonNull TaiModelSpec spec) {
-        JSONObject suppliedOptions = runtimeProcess ? request.optJSONObject(INTERNAL_RUNTIME_OPTIONS) : null;
+        JSONObject suppliedOptions = request.optJSONObject(INTERNAL_RUNTIME_OPTIONS);
         TaiRuntimeOptions options = suppliedOptions == null
             ? settings.getRuntimeOptions(spec)
             : TaiRuntimeOptions.fromJson(suppliedOptions);
@@ -4380,12 +4281,15 @@ public final class TaiManager {
     }
 
     /**
-     * The plan of the feature a request names: the one the app process resolved, in the runtime
-     * process; resolved here otherwise. {@code null} for a request that names no feature.
+     * The plan of the feature a request names: the one the Feature request resolved and sent, when
+     * there is one; else, outside the runtime process, resolved here. {@code null} for a request that names no feature.
+     * The fallback is for the load and keep-warm routes called in this process with a feature named and
+     * no plan attached (the feature check runner's load); no chat or completion reaches it.
      */
     @Nullable
     private TaiFeaturePlan featurePlan(@NonNull JSONObject request) {
-        if (runtimeProcess) return TaiFeaturePlan.fromJson(request.optJSONObject(INTERNAL_FEATURE_PLAN));
+        JSONObject supplied = request.optJSONObject(INTERNAL_FEATURE_PLAN);
+        if (supplied != null || runtimeProcess) return TaiFeaturePlan.fromJson(supplied);
         TaiFunction feature = TaiCallerRequests.featureOf(request);
         return feature == null ? null : TaiFeaturePlans.forContext(appContext).plan(feature);
     }
@@ -4414,18 +4318,6 @@ public final class TaiManager {
     /** Records which feature used the resident chat model, for its groups and the next window check. */
     private void markUsedByFeature(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) {
         residency().markUsedBy(TaiResidency.Kind.CHAT, spec.id, TaiFunction.fromId(options.feature));
-    }
-
-    /**
-     * An explicit load for a feature whose model the runtime already holds well enough: the state as it
-     * is, marked {@code reused}, instead of a reload that costs seconds and a second memory peak.
-     * {@code null} when the load should go ahead.
-     */
-    @Nullable
-    private JSONObject reuseForFeature(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
-        if (options.feature == null || !localRuntime().isModelLoaded(spec.id) || !residentServes(spec, options)) return null;
-        markUsedByFeature(spec, options);
-        return residentAsIs(spec);
     }
 
     /**
@@ -4475,11 +4367,26 @@ public final class TaiManager {
         return value.isEmpty() ? null : value;
     }
 
+    /**
+     * The model a request names ({@code model}, else {@code modelId}); the Default model only when it
+     * names none, resolved then and not before ({@code getDefaultAssistantModel} runs a resolve).
+     */
+    @NonNull
+    private String modelOf(@NonNull JSONObject request) {
+        return modelOf(request, settings::getDefaultAssistantModel);
+    }
+
+    /** As {@link #modelOf(JSONObject)}, with the caller's own fallback, computed only when needed. */
+    @NonNull
+    private String modelOf(@NonNull JSONObject request, @NonNull java.util.function.Supplier<String> fallback) {
+        String model = request.optString("model", request.optString("modelId", ""));
+        String resolved = model == null || model.trim().isEmpty() ? fallback.get() : model.trim();
+        return TaiSettings.migrateBuiltInModelId(resolved);
+    }
+
     @NonNull
     private String requestedModelId(@NonNull JSONObject request, @NonNull String fallback) {
-        String model = request.optString("model", request.optString("modelId", fallback));
-        String resolved = model == null || model.trim().isEmpty() ? fallback : model.trim();
-        return TaiSettings.migrateBuiltInModelId(resolved);
+        return modelOf(request, () -> fallback);
     }
 
     @Nullable
@@ -4546,7 +4453,7 @@ public final class TaiManager {
 
     @Nullable
     private TaiModelSpec resolveModel(@NonNull JSONObject request, @Nullable String modelId) {
-        JSONObject serialized = runtimeProcess ? request.optJSONObject(INTERNAL_MODEL_SPEC) : null;
+        JSONObject serialized = request.optJSONObject(INTERNAL_MODEL_SPEC);
         if (serialized != null) {
             try {
                 TaiModelSpec supplied = TaiModelSpec.fromJson(serialized);

@@ -284,7 +284,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         AssistantModelStatus.Snapshot snap = snapshot;
         AssistantModelStatus.Kind kind = snap == null ? AssistantModelStatus.Kind.NONE : snap.defaultModel.state.kind;
         AssistantModelPresenter.Stage stage = AssistantModelPresenter.stage(engine.isGenerating(),
-            live == null || live.isEmpty(), kind);
+            live == null || live.isEmpty(), kind, engine.answerPhase());
         String name = snap == null ? "" : context.getString(AssistantModelPresenter.fullName(snap.defaultModel.modelId));
         chatView.setAnswerStatus(stage, name);
     }

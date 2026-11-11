@@ -16,9 +16,8 @@ import java.io.IOException;
  * That namespace stays outside {@link TaiModelSpec}/{@link TaiModelStore} on purpose: a remote
  * model has no file, no backend and no catalogue entry.
  *
- * <p>The seam is {@code TaiManager.openAiChatCompletions} and its stream variant, before
- * {@code shouldDelegateRuntime()}: a request whose model is {@code remote/<id>}
- * ({@link TaiCallerRequests#isRemoteRequest}) goes to {@link #chatCompletions}/{@link #stream} here,
+ * <p>The seam is {@link FeatureRequest}: a request whose model is {@code remote/<id>}
+ * ({@link TaiCallerRequests#isRemoteModel}) goes to {@link #chatCompletions}/{@link #stream} here,
  * in the app process, and the {@code :tai_runtime} process is never woken. The feature callers
  * (categories, dictation cleanup) reach it through their function's pick
  * ({@link TaiFunctionModels.Resolution#remoteModel}).
@@ -80,19 +79,32 @@ public final class TaiRemoteProvider {
      */
     @NonNull
     public JSONObject chatCompletions(@NonNull String body, long timeoutMs) throws JSONException {
+        return chatCompletions(body, timeoutMs, new TaiRemoteClient.Cancel());
+    }
+
+    /** As above, stoppable through {@code cancel} (ADR 0027 section 5). */
+    @NonNull
+    public JSONObject chatCompletions(@NonNull String body, long timeoutMs, @NonNull TaiRemoteClient.Cancel cancel)
+        throws JSONException {
         if (!isConfigured()) return TaiManager.openAiError(notConfigured());
-        return client().chatCompletions(withModel(body), timeoutMs);
+        return client().chatCompletions(withModel(body), timeoutMs, cancel);
     }
 
     /** The streaming twin of {@link #chatCompletions}, feeding the same sink TaiManager uses. */
     public void stream(@NonNull String body, long timeoutMs, @NonNull TaiManager.OpenAiStreamSink sink)
         throws JSONException, IOException {
+        stream(body, timeoutMs, sink, new TaiRemoteClient.Cancel());
+    }
+
+    /** As above, stoppable through {@code cancel}. */
+    public void stream(@NonNull String body, long timeoutMs, @NonNull TaiManager.OpenAiStreamSink sink,
+                       @NonNull TaiRemoteClient.Cancel cancel) throws JSONException, IOException {
         if (!isConfigured()) {
             sink.onEvent(TaiManager.openAiError(notConfigured()));
             sink.onDone();
             return;
         }
-        client().chatCompletionsStream(withModel(body), timeoutMs, sink);
+        client().chatCompletionsStream(withModel(body), timeoutMs, sink, cancel);
     }
 
     @NonNull

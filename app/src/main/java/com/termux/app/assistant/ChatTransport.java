@@ -2,24 +2,22 @@ package com.termux.app.assistant;
 
 import androidx.annotation.NonNull;
 
-import org.json.JSONObject;
-
-import java.io.IOException;
+import com.termux.ai.FeatureRequest;
 
 /**
- * How a request reaches the model, and how a running answer is stopped. The engine talks to this so
- * it can be tested without the runtime.
+ * How a request reaches the model. The engine talks to this so it can be tested without the
+ * runtime. Each request has its own {@link Call}: stopping one never touches another.
  */
 public interface ChatTransport {
-    interface Sink {
-        void onEvent(@NonNull JSONObject event) throws IOException;
+    interface Call {
+        /** Stops this request only; a waiting one leaves the queue. May be called from any thread. */
+        void cancel();
 
-        void onDone() throws IOException;
+        /** Blocks until the answer ends. A throw from the sink aborts it. */
+        void await() throws Exception;
     }
 
-    /** Blocks until the answer ends. Called on a background thread. A throw from the sink aborts it. */
-    void stream(@NonNull String body, @NonNull Sink sink) throws Exception;
-
-    /** Stops the generation that is running. Called on a background thread. */
-    void cancel() throws Exception;
+    /** Starts the request; events reach the sink as they come. */
+    @NonNull
+    Call start(@NonNull String body, @NonNull FeatureRequest.Sink sink) throws Exception;
 }

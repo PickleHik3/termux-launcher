@@ -663,43 +663,33 @@ public final class TaiFeatureCheckRunner {
         Reply reply = new Reply();
         AtomicLong lastEvent = new AtomicLong();
         try {
-            manager.openAiChatCompletionsStream(body.toString(), new TaiManager.OpenAiStreamSink() {
-                @Override
-                public void onEvent(@NonNull JSONObject event) {
-                    String code = event.has("choices") || event.has("usage") ? null : errorCode(event);
-                    if (code != null) {
-                        reply.errorCode = code;
-                        reply.error = event;
-                        return;
-                    }
-                    JSONObject usage = event.optJSONObject("usage");
-                    if (usage != null) reply.usageTokens = usage.optInt("completion_tokens", -1);
-                    JSONArray choices = event.optJSONArray("choices");
-                    JSONObject choice = choices == null ? null : choices.optJSONObject(0);
-                    JSONObject delta = choice == null ? null : choice.optJSONObject("delta");
-                    if (delta == null) return;
-                    String content = delta.optString("content", "");
-                    String thinking = delta.optString("reasoning_content", "");
-                    if (content.isEmpty() && thinking.isEmpty()) return;
-                    long now = System.currentTimeMillis();
-                    if (reply.firstMs == 0L) reply.firstMs = now;
-                    reply.lastMs = now;
-                    reply.chunks++;
-                    reply.text.append(content);
-                    if (now - lastEvent.get() >= TaiBenchHarness.TOKEN_EVENT_INTERVAL_MS) {
-                        lastEvent.set(now);
-                        long decodeMs = reply.lastMs - reply.firstMs;
-                        emit(event("token").put("phase", PHASE_FEATURE).put("run", index).put("runs", runs)
-                            .put("text", content).put("tokens", reply.chunks)
-                            .put("tps", reply.chunks > 1 && decodeMs > 0L ? (reply.chunks - 1) * 1000.0 / decodeMs : 0.0)
-                            .put("ttftMs", reply.firstMs - reply.submitMs));
-                    }
+            FeatureRequest.Sink sink = event -> {
+                if (event.type == FeatureRequest.Event.Type.ERROR) {
+                    reply.errorCode = event.errorCode != null ? event.errorCode : "tai_error";
+                    reply.error = event.openAi;
+                    return;
                 }
-
-                @Override
-                public void onDone() {
+                JSONObject usage = event.usage;
+                if (usage != null) reply.usageTokens = usage.optInt("completion_tokens", -1);
+                if (event.type != FeatureRequest.Event.Type.TEXT) return;
+                String content = event.text;
+                if (content.isEmpty() && event.reasoning.isEmpty()) return;
+                long now = System.currentTimeMillis();
+                if (reply.firstMs == 0L) reply.firstMs = now;
+                reply.lastMs = now;
+                reply.chunks++;
+                reply.text.append(content);
+                if (now - lastEvent.get() >= TaiBenchHarness.TOKEN_EVENT_INTERVAL_MS) {
+                    lastEvent.set(now);
+                    long decodeMs = reply.lastMs - reply.firstMs;
+                    emit(event("token").put("phase", PHASE_FEATURE).put("run", index).put("runs", runs)
+                        .put("text", content).put("tokens", reply.chunks)
+                        .put("tps", reply.chunks > 1 && decodeMs > 0L ? (reply.chunks - 1) * 1000.0 / decodeMs : 0.0)
+                        .put("ttftMs", reply.firstMs - reply.submitMs));
                 }
-            });
+            };
+            FeatureRequest.get(app).start(FeatureRequest.Call.chat(run.feature, body)
+                .priority(FeatureRequest.Priority.NORMAL), sink).await();
         } catch (IOException | RuntimeException e) {
             reply.errorCode = "stream_failed";
             reply.error = new JSONObject().put("message", message(e));

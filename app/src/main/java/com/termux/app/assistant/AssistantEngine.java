@@ -8,6 +8,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.FeatureRequest;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -64,6 +66,9 @@ public final class AssistantEngine {
     @Nullable private Generation current;
     private volatile boolean modelReady = true;
 
+    /** Where the running answer is, from the request's events. */
+    public enum AnswerPhase { NONE, WAITING, LOADING, STARTED }
+
     private static final class Generation {
         final long chatId;
         /** The user text of a send; null for a retry. */
@@ -76,8 +81,9 @@ public final class AssistantEngine {
         boolean finishSeen;
         boolean done;
         volatile boolean stopped;
-        /** True once the runtime has answered the request: its generation is ours to cancel. */
-        volatile boolean started;
+        /** This answer's request; null until the transport has started it. */
+        @Nullable volatile ChatTransport.Call call;
+        volatile AnswerPhase phase = AnswerPhase.NONE;
         final AtomicBoolean cancelSent = new AtomicBoolean();
         long lastPersistMs;
         long lastNotifyMs;
@@ -144,6 +150,14 @@ public final class AssistantEngine {
     public long generatingMessageId() {
         synchronized (lock) {
             return current == null || current.stopped ? 0L : current.messageId;
+        }
+    }
+
+    /** The phase of the answer being written; NONE when there is none. */
+    @NonNull
+    public AnswerPhase answerPhase() {
+        synchronized (lock) {
+            return current == null || current.stopped ? AnswerPhase.NONE : current.phase;
         }
     }
 
@@ -239,8 +253,8 @@ public final class AssistantEngine {
     }
 
     /**
-     * Stops the running answer. It is marked stopped at once, keeping the text it has; the runtime
-     * is told to cancel only if it has begun this answer.
+     * Stops the running answer. It is marked stopped at once, keeping the text it has; its own
+     * request is cancelled (a waiting one leaves the queue), no other.
      */
     public void stop() {
         final Generation g;
@@ -250,15 +264,16 @@ public final class AssistantEngine {
             g.stopped = true;
         }
         controlExecutor.execute(() -> {
-            if (g.started) cancelRuntime(g);
+            cancelCall(g);
             finish(g, AssistantMessage.STATE_STOPPED, null);
         });
     }
 
-    private void cancelRuntime(Generation g) {
-        if (!g.cancelSent.compareAndSet(false, true)) return;
+    private void cancelCall(Generation g) {
+        ChatTransport.Call call = g.call;
+        if (call == null || !g.cancelSent.compareAndSet(false, true)) return;
         try {
-            transport.cancel();
+            call.cancel();
         } catch (Exception e) {
             Log.w(LOG_TAG, "Cancel failed: " + e.getMessage());
         }
@@ -307,29 +322,11 @@ public final class AssistantEngine {
             return;
         }
         try {
-            transport.stream(body, new ChatTransport.Sink() {
-                @Override
-                public void onEvent(@NonNull JSONObject event) throws IOException {
-                    g.started = true;
-                    if (g.stopped) {
-                        // The runtime may still be generating for nobody: end it, then stop reading.
-                        cancelRuntime(g);
-                        throw new IOException("stopped");
-                    }
-                    StreamEvent parsed = StreamEvent.parse(event);
-                    if (parsed.isError()) {
-                        g.errorCode = parsed.errorCode;
-                        Log.w(LOG_TAG, "Answer failed: " + parsed.rawErrorCode);
-                        return;
-                    }
-                    if (parsed.finished) g.finishSeen = true;
-                    if (!parsed.delta.isEmpty()) appendDelta(g, parsed.delta);
-                }
-
-                @Override
-                public void onDone() {
-                }
-            });
+            ChatTransport.Call call = transport.start(body, event -> onEvent(g, event));
+            g.call = call;
+            // A Stop that came before the request existed.
+            if (g.stopped) cancelCall(g);
+            call.await();
         } catch (Exception e) {
             if (!g.stopped) {
                 Log.w(LOG_TAG, "Answer failed: " + e);
@@ -349,6 +346,40 @@ public final class AssistantEngine {
         } else {
             finish(g, AssistantMessage.STATE_COMPLETE, null);
         }
+    }
+
+    private void onEvent(Generation g, FeatureRequest.Event event) throws IOException {
+        switch (event.type) {
+            case WAITING:
+                setPhase(g, AnswerPhase.WAITING);
+                return;
+            case LOADING:
+                setPhase(g, AnswerPhase.LOADING);
+                return;
+            case ERROR:
+                g.errorCode = AssistantMessage.errorFor(event.errorCode);
+                Log.w(LOG_TAG, "Answer failed: " + event.errorCode);
+                return;
+            case DONE:
+                return;
+            default:
+                break;
+        }
+        // TEXT
+        setPhase(g, AnswerPhase.STARTED);
+        if (g.stopped) {
+            // The request may still be generating for nobody: end it, then stop reading.
+            cancelCall(g);
+            throw new IOException("stopped");
+        }
+        if (event.finishReason != null) g.finishSeen = true;
+        if (!event.text.isEmpty()) appendDelta(g, event.text);
+    }
+
+    private void setPhase(Generation g, AnswerPhase phase) {
+        if (g.phase == phase) return;
+        g.phase = phase;
+        notifyMessage(g.chatId, g.messageId);
     }
 
     private void appendDelta(Generation g, String delta) {
@@ -406,7 +437,7 @@ public final class AssistantEngine {
         for (ContextFitter.Sent sent : fit.sent) {
             messages.put(new JSONObject().put("role", sent.role).put("content", sent.text));
         }
-        // No "model": the runtime falls back to the default assistant model.
+        // No "model": Feature request picks the Assistant's model.
         return new JSONObject().put("messages", messages).put("stream", true).toString();
     }
 

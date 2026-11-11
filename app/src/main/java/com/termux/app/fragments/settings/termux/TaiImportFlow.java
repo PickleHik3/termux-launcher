@@ -29,6 +29,7 @@ import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
+import com.termux.ai.FeatureRequest;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiHuggingFace;
@@ -1206,7 +1207,18 @@ final class TaiImportFlow {
                     JSONObject body = new JSONObject().put("model", modelId).put("max_tokens", 96).put("stream", false)
                         .put("messages", new JSONArray().put(new JSONObject().put("role", "user").put("content", TRY_PROMPT)));
                     if (accelerator != null) body.put("accelerator", accelerator);
-                    chat = TaiManager.getInstance(app).openAiChatCompletions(body.toString(), TRY_TIMEOUT_MS);
+                    FeatureRequest.Result answer = FeatureRequest.get(app).collect(
+                        FeatureRequest.Call.chat(null, body).priority(FeatureRequest.Priority.NORMAL).timeoutMs(TRY_TIMEOUT_MS));
+                    if (answer.ok()) {
+                        chat = new JSONObject().put("choices", new JSONArray().put(new JSONObject()
+                            .put("message", new JSONObject().put("role", "assistant").put("content", answer.text))));
+                    } else if (answer.error != null) {
+                        chat = answer.error.put("ok", false);
+                    } else {
+                        chat = new JSONObject().put("ok", false)
+                            .put("error", answer.errorCode == null ? "tai_error" : answer.errorCode)
+                            .put("message", answer.errorMessage == null ? "" : answer.errorMessage);
+                    }
                 }
             } catch (JSONException | RuntimeException ignored) {
             }

@@ -18,6 +18,7 @@
     <string name="assistant_dictate">Dictate</string>
     <string name="assistant_you">You: %1$s</string>
     <string name="assistant_status_loading">Loading %1$s</string>
+    <string name="assistant_status_waiting">Waiting in queue</string>
     <string name="assistant_status_thinking">Thinking</string>
     <string name="assistant_status_responding">Responding</string>
     <string name="assistant_working">Working on it</string>
