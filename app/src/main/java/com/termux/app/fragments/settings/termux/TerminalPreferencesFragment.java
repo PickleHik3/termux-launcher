@@ -46,6 +46,18 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         if (composite != null) composite.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
         androidx.preference.Preference engine = findPreference("terminal_engine");
         if (engine != null) engine.setVisible(com.termux.terminal.TerminalEngine.isAvailable());
+        androidx.preference.Preference clipboardReset = findPreference("terminal_clipboard_read_reset");
+        if (clipboardReset != null) {
+            clipboardReset.setVisible(com.termux.terminal.TerminalEngine.isAvailable());
+            clipboardReset.setOnPreferenceClickListener(row -> {
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+                    com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context, false);
+                if (preferences != null) preferences.clearClipboardReadAlways();
+                android.widget.Toast.makeText(context, R.string.msg_clipboard_permissions_reset,
+                    android.widget.Toast.LENGTH_SHORT).show();
+                return true;
+            });
+        }
         androidx.preference.Preference layout = findPreference("terminal_layout_editor");
         if (layout != null) layout.setOnPreferenceClickListener(row -> {
             SettingsEditorDoors.openEditor(this, row,

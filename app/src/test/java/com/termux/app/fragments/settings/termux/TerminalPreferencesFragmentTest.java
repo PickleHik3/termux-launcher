@@ -125,6 +125,25 @@ public class TerminalPreferencesFragmentTest {
         assertEquals("search finds it exactly when the row shows", available, searchable);
     }
 
+    @Test
+    public void theResetRowIsOnTheClipboardPageAndClearsTheAlwaysGrants() {
+        Application app = RuntimeEnvironment.getApplication();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(app, false);
+        assertTrue(preferences != null);
+        preferences.addClipboardReadAlways("claude");
+        assertTrue(preferences.getClipboardReadAlways().contains("claude"));
+
+        TerminalClipboardPreferencesFragment fragment = launch(TerminalClipboardPreferencesFragment.class);
+        androidx.preference.Preference row = fragment.findPreference("terminal_clipboard_read_reset");
+        assertTrue(row != null);
+        assertEquals("Reset clipboard permissions", row.getTitle().toString());
+        assertEquals("shown only where the Fast engine can run",
+            com.termux.terminal.TerminalEngine.isAvailable(), row.isVisible());
+        row.performClick();
+        assertTrue(preferences.getClipboardReadAlways().isEmpty());
+    }
+
     private static String activityTitle(Fragment fragment) {
         return fragment.getActivity() == null ? null : fragment.getActivity().getTitle().toString();
     }
