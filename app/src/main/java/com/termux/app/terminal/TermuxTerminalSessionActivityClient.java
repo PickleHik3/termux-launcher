@@ -127,6 +127,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     @NonNull private final ShellSignals mSignals;
 
+    /** Which program-status records have already alerted, and when each session last did. */
+    @NonNull private final ProgramStatusAlerts mProgramStatusAlerts = new ProgramStatusAlerts();
+
     /** Pastes, and a program's picture reads and writes: see {@link TerminalClipboard}. */
     @NonNull private final TerminalClipboard mClipboard;
 
@@ -445,6 +448,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // running in it (tlstore-ui's `keyboard.hide --hold`) must not leave it stuck down just
         // because the shell exited instead of asking nicely with `keyboard.show`.
         TerminalActionDispatcher.getInstance().onSessionFinished(finishedSession);
+        mProgramStatusAlerts.forget(finishedSession);
         if (mClipboardConsent != null) mClipboardConsent.onSessionFinished(finishedSession);
         // Before anything below drops its pane: the host reads its status and whether it is the
         // shell on screen.
@@ -745,6 +749,42 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     @Override
     public void onNotification(@NonNull TerminalSession session, String title, String body) {
         mSignals.notice(session, title, body);
+    }
+
+    /**
+     * A program's own status moved. The window bar is asked to repaint (the host coalesces those
+     * into one pass per refresh interval), and a record that needs the user, finished or failed
+     * is shown as an in-app notice when its pane is not the one in front.
+     */
+    @Override
+    public void onProgramStatusChanged(@NonNull TerminalSession session,
+                                       @NonNull java.util.List<com.termux.terminal.ProgramStatus> raised) {
+        mHost.scheduleWindowBarRefresh();
+        if (raised.isEmpty()) return;
+        boolean inFront = mHost.isVisible() && mHost.isTerminalShowing()
+            && session == mHost.currentSession();
+        if (inFront) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        TerminalEmulator emulator = session.getEmulator();
+        for (com.termux.terminal.ProgramStatus record : raised) {
+            if (!mProgramStatusAlerts.shouldAlert(session, record, now)) continue;
+            String app = emulator == null ? "" : emulator.getProgramStatus().resolvedApp(record);
+            String tag = mSignals.sessionTag(session);
+            String name = !app.isEmpty() ? app : record.title;
+            boolean named = !name.isEmpty();
+            if (!named) name = tag == null ? "" : tag;
+            String headline;
+            switch (record.state) {
+                case BLOCKED: headline = mContext.getString(R.string.notice_program_needs_input, name); break;
+                case DONE: headline = mContext.getString(R.string.notice_program_done, name); break;
+                default: headline = mContext.getString(R.string.notice_program_error, name); break;
+            }
+            String detail = ProgramStatusLabel.oneLine(record.message, 200);
+            if (named && tag != null && !tag.isEmpty()) {
+                detail = detail.isEmpty() ? tag : detail + " · " + tag;
+            }
+            mSignals.statusNotice(session, headline, detail);
+        }
     }
 
     /** OSC 99: the phone's notification shade, through the same path the local API uses. */

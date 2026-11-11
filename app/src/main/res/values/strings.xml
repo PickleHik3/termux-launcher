@@ -1019,6 +1019,9 @@
     <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
     <string name="notice_tap_to_open">tap to open</string>
     <string name="notice_shell_wants_attention">%1$s wants attention</string>
+    <string name="notice_program_needs_input">%1$s needs input</string>
+    <string name="notice_program_done">%1$s is done</string>
+    <string name="notice_program_error">%1$s stopped with an error</string>
     <string name="notice_keyboard_turned_off">Keyboard off. The keyboard key turns it back on.</string>
     <string name="notice_keyboard_turned_on">Keyboard on</string>
     <string name="shell_notification_channel">Terminal messages</string>
