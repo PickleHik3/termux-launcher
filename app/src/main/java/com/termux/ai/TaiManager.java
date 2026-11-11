@@ -323,7 +323,7 @@ public final class TaiManager {
 
     /** {@link TaiRuntimeServiceClient}'s own flat default, kept here for callers that don't pass one. */
     static final long DEFAULT_TRANSCRIBE_TIMEOUT_MS = 120_000L;
-    static final long DEFAULT_CHAT_TIMEOUT_MS = 120_000L;
+    public static final long DEFAULT_CHAT_TIMEOUT_MS = 120_000L;
 
     @NonNull
     private JSONObject runtimeRequest(@NonNull String operation, @Nullable String body) throws JSONException {

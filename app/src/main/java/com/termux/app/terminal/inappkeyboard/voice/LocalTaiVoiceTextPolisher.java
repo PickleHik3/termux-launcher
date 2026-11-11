@@ -5,6 +5,7 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.FeatureRequest;
 import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiCallerRequests;
 import com.termux.ai.TaiDeviceCapabilities;
@@ -222,10 +223,7 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         long start = System.nanoTime();
         try {
             // The plan's load: TAI reuses a resident model whose window is cleanup's or larger.
-            JSONObject request = new JSONObject();
-            request.put("model", resolved);
-            request.put(TaiCallerRequests.FUNCTION, TaiFunction.TIDY_DICTATION.id());
-            JSONObject result = TaiManager.getInstance(appContext).loadModel(request.toString());
+            JSONObject result = FeatureRequest.get(appContext).warm(TaiFunction.TIDY_DICTATION, resolved);
             VoiceInputSession.Failure failure = VoiceInputSession.Failure.of(result);
             long loadMs = (System.nanoTime() - start) / 1_000_000L;
             if (failure != null) {
@@ -289,15 +287,21 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
             }
         }
         try {
-            JSONObject response = TaiManager.getInstance(appContext)
-                .openAiChatCompletions(request(model, level, text, context, language).toString(), timeoutMs);
-            VoiceInputSession.Failure failure = VoiceInputSession.Failure.of(response);
-            if (failure != null) {
-                if (useRemoteFallback(failure.code)) return polish(text, context, language, timeoutMs);
-                if (disablesForSession(failure.code)) unavailableReason = failure.code;
-                return Result.fallback(text, failure.code);
+            FeatureRequest.Result response = FeatureRequest.get(appContext).collect(
+                FeatureRequest.Call.chat(TaiFunction.TIDY_DICTATION, request(model, level, text, context, language))
+                    .priority(FeatureRequest.Priority.INTERACTIVE)
+                    .timeoutMs(timeoutMs)
+                    .answerGuard(answer -> rejectsAnswer(text, context, answer)));
+            // A guarded answer keeps its text and is judged below, by the same rules as before.
+            String code = response.errorCode;
+            if (code != null && !"refusal_or_answer".equals(code)) {
+                String failureMessage = response.errorMessage == null ? "" : response.errorMessage;
+                if (useRemoteFallback(code)) return polish(text, context, language, timeoutMs);
+                if (disablesForSession(code)) unavailableReason = code;
+                Logger.logWarn(LOG_TAG, "polish failed: " + code + ": " + failureMessage);
+                return Result.fallback(text, code);
             }
-            String answer = VoicePolishRules.contentOf(response);
+            String answer = response.text.isEmpty() ? null : response.text;
             String content = VoicePolishRules.withoutEcho(context, text,
                 VoicePolishRules.withoutRepeatedEarlier(context, text, answer));
             if (answer != null && content == null) return Result.fallback(text, "context_echo");
@@ -310,6 +314,13 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         } catch (JSONException | RuntimeException e) {
             return Result.fallback(text, "exception");
         }
+    }
+
+    /** The refusal guard: today's check, on the answer as {@link #polish} judges it (echo removed). */
+    private static boolean rejectsAnswer(@NonNull String text, @NonNull String context, @NonNull String answer) {
+        String content = VoicePolishRules.withoutEcho(context, text,
+            VoicePolishRules.withoutRepeatedEarlier(context, text, answer));
+        return content != null && !content.trim().isEmpty() && VoicePolishRules.looksLikeRefusalOrAnswer(text, content);
     }
 
     /**
