@@ -183,6 +183,10 @@ typedef struct {
     // nativeEncodeMouse. mouse_sig_known is false until the first call.
     uint32_t mouse_sig;
     bool mouse_sig_known;
+    // The size the mouse encoder was last given. Setting a size forgets the last cell as well, so it
+    // is set only when one of these changed.
+    uint32_t mouse_size[4];
+    bool mouse_size_known;
 } Core;
 
 static void kitty_free(Core* c);
@@ -1148,20 +1152,25 @@ JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeEncode
     Core* c = core_of(h);
     if (c == NULL || c->mouse_enc == NULL || c->mouse_ev == NULL) return NULL;
     if (screen_w < 1 || screen_h < 1 || cell_w < 1 || cell_h < 1) return NULL;
-    // set_from_terminal also forgets the last cell the motion de-dup compares with, so it runs
-    // only when a tracking or format mode changed since it last ran.
+    // set_from_terminal (like setting a size, event or format) also forgets the last cell the motion
+    // de-dup compares with, so it runs only when a tracking or format mode changed since it last ran.
     uint32_t sig = mouse_signature(c);
     if (!c->mouse_sig_known || sig != c->mouse_sig) {
         if (ghostty_mouse_encoder_set_from_terminal(c->mouse_enc, c->term) != GHOSTTY_SUCCESS) return NULL;
         c->mouse_sig = sig;
         c->mouse_sig_known = true;
     }
-    GhosttyMouseEncoderSize size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
-    size.screen_width = (uint32_t) screen_w;
-    size.screen_height = (uint32_t) screen_h;
-    size.cell_width = (uint32_t) cell_w;
-    size.cell_height = (uint32_t) cell_h;
-    ghostty_mouse_encoder_set(c->mouse_enc, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+    uint32_t dims[4] = {(uint32_t) screen_w, (uint32_t) screen_h, (uint32_t) cell_w, (uint32_t) cell_h};
+    if (!c->mouse_size_known || memcmp(dims, c->mouse_size, sizeof(dims)) != 0) {
+        GhosttyMouseEncoderSize size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
+        size.screen_width = dims[0];
+        size.screen_height = dims[1];
+        size.cell_width = dims[2];
+        size.cell_height = dims[3];
+        if (ghostty_mouse_encoder_set(c->mouse_enc, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size) != GHOSTTY_SUCCESS) return NULL;
+        memcpy(c->mouse_size, dims, sizeof(dims));
+        c->mouse_size_known = true;
+    }
     bool pressed = any_pressed != JNI_FALSE;
     ghostty_mouse_encoder_set(c->mouse_enc, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed);
     ghostty_mouse_event_set_action(c->mouse_ev, (GhosttyMouseAction) action);
