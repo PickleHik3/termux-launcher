@@ -26,6 +26,11 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   down. Arriving started the display on pong because "Start with the launcher" (Display ›
   Startup, also set by Start in = Display) starts it on landing too; with it off the emulator
   landed on Start display.
+- **Drawer keeps its icons while the catalogue reloads (11-11, fix/display-idle-swipe).** Pong
+  11-11: during a category sort the drawer showed "Nothing here yet" for about a second. Owed on
+  pong: Settings › Dock › Drawer › Category sorting, run a sort, open the drawer as it finishes
+  (and after): the previous icons, never the empty message; a category with no apps still shows
+  it once loaded. Unit-tested only (AppDrawerContentCategoriesTest).
 - **Live dock reorder and drawer-to-dock pins (11-10, feat/dock-live-reorder-155, #155).**
   Pong 11-11: reorder in the dock works; the developer found the part too slow (about a second),
   the pick-up needing an exactly sideways move, the edge page turn too quick, no way to turn the
