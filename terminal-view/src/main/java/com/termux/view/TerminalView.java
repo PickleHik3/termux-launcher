@@ -2264,7 +2264,17 @@ public final class TerminalView extends View {
         if (mTermSession == null) return;
         if (isSelectingText()) stopTextSelectionMode();
         snapToBottomForInput();
+        markProgramStatusSeen();
         mTermSession.write(text);
+    }
+
+    /**
+     * The user typed into this pane, so a program's finished or failed status in it has been seen.
+     * Called only where the view writes the user's own input, never for bytes the emulator sends.
+     */
+    private void markProgramStatusSeen() {
+        TerminalEmulator emulator = mEmulator;
+        if (emulator != null) emulator.markProgramStatusSeen();
     }
 
     private void snapToBottomForInput() {
@@ -2922,6 +2932,7 @@ public final class TerminalView extends View {
         } else if (event.isSystem() && (!mClient.shouldBackButtonBeMappedToEscape() || keyCode != KeyEvent.KEYCODE_BACK)) {
             return super.onKeyDown(keyCode, event);
         } else if (event.getAction() == KeyEvent.ACTION_MULTIPLE && keyCode == KeyEvent.KEYCODE_UNKNOWN) {
+            markProgramStatusSeen();
             mTermSession.write(event.getCharacters());
             return true;
         } else if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH) {
@@ -3061,6 +3072,7 @@ public final class TerminalView extends View {
                 }
             }
             snapToBottomForInput();
+            markProgramStatusSeen();
             // If left alt, send escape before the code point to make e.g. Alt+B and Alt+F work in readline:
             mTermSession.writeCodePoint(altDown, codePoint);
             if (mKeyInputProbe != null) {
@@ -3083,6 +3095,7 @@ public final class TerminalView extends View {
         if (code == null)
             return false;
         snapToBottomForInput();
+        markProgramStatusSeen();
         mTermSession.write(code);
         probeKeyBytes("keyhandler", code);
         return true;
@@ -3177,6 +3190,7 @@ public final class TerminalView extends View {
             if (TERMINAL_VIEW_KEY_LOGGING_ENABLED)
                 mClient.logInfo(LOG_TAG, "kitty keyboard flags=" + flags + " sent " + encoded.substring(1));
             mEmulator.setCursorBlinkState(true);
+            markProgramStatusSeen();
             mTermSession.write(encoded);
             probeKeyBytes("kitty", encoded);
         }
@@ -4567,6 +4581,7 @@ public final class TerminalView extends View {
     @Override
     public void autofill(AutofillValue value) {
         if (value.isText()) {
+            markProgramStatusSeen();
             mTermSession.write(value.getTextValue().toString());
         }
 

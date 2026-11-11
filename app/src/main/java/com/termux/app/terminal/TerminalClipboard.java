@@ -129,7 +129,10 @@ public final class TerminalClipboard {
             return;
         }
         String text = ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
-        if (text != null) emulator.paste(text);
+        if (text != null) {
+            emulator.paste(text);
+            emulator.markProgramStatusSeen();
+        }
     }
 
     /**
