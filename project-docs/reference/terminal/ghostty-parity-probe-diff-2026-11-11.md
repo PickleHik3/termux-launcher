@@ -240,3 +240,27 @@ clipboard" off refuses without asking. The library's reply is synchronous, so th
 libghostty-vt terminal is fed the same request and its reply bytes are written to the pty, so the
 answer is byte-for-byte what the library writes. Only text/plain is served (pictures on the
 clipboard are not offered on Fast).
+
+## Wave 3 rerun (f3b405352)
+
+Raw file: [`results/fast-f3b405352.txt`](../../../scripts/terminal-probe/results/fast-f3b405352.txt).
+Debug x86_64 build of `f3b405352` with `-Pghostty=true` on emulator AVD `tl16`, a Fast pane in
+front; DA1 answered `\e[?62;4;22;52c`. The probe gained two rows, `osc7501-query-bel` and
+`osc7501-report`.
+
+| Former gap | Probe | Ghostty 1.4.0 | Fast f3b405352 | Now |
+|---|---|---|---|---|
+| G2 | osc7501-query | `<none>` | `\e]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth\e\\` | intended difference: Fast answers the support query (OSC 7501 rev 0.4, wave 3); Ghostty 1.4.0 does not |
+| - | osc7501-query-bel | not run | same reply ending in BEL | the reply uses the query's terminator (libghostty-vt) |
+| - | osc7501-report | not run | `<none>` | a report has no reply: records are never echoed |
+
+Other rows that changed against fast-3635c0432: `osc52-read` is `<none>` because the consent
+sheet was up and unanswered during the run (no grant this time); `osc5522-read` lists no
+text/plain because the emulator's clipboard was empty; `decrqss-decstbm`, `dsr-6`, `dsr-dec-6`,
+`csi-14t`, `csi-18t`, `mode2048-enable` follow the pane's size and cursor; `osc4-1`, `osc12`,
+`osc21-fg-bg-cursor` follow the colour scheme in use. No reply changed in kind.
+
+Program status on Fast: reports are stored per id by the app (the library keeps none), shown on
+the window's pill (most urgent first: needs input, error, working, done) and raised as an in-app
+notice for needs input, done and error when the pane is not in front. Details in
+[`ghostty-parity-wave3-report.md`](ghostty-parity-wave3-report.md).
