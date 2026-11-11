@@ -76,7 +76,7 @@ final class TaiFunctionRows {
     interface Labels {
         @NonNull String text(@NonNull Msg msg, @NonNull Object... args);
 
-        /** "Assistant and endpoint", "Voice typing", .... */
+        /** "Default model", "Voice typing", .... */
         @NonNull String functionName(@NonNull TaiFunction function);
 
         /** The model's name as people read it; a {@code -vision} id and the file are the same name. */
@@ -279,7 +279,7 @@ final class TaiFunctionRows {
         return modelId.endsWith(VISION) ? modelId.substring(0, modelId.length() - VISION.length()) : modelId;
     }
 
-    /** "Used by: Assistant and endpoint, Tidy dictation", or empty when no function uses the model. */
+    /** "Used by: Default model, Tidy dictation", or empty when no function uses the model. */
     @NonNull
     static String usedByLine(@NonNull List<TaiFunction> functions, @NonNull Labels labels) {
         Set<String> names = functionNames(functions, labels);
@@ -299,7 +299,7 @@ final class TaiFunctionRows {
         return out;
     }
 
-    /** "For: Assistant and endpoint, Tidy dictation": what a catalogue model can serve; empty for none. */
+    /** "For: Default model, Tidy dictation": what a catalogue model can serve; empty for none. */
     @NonNull
     static String forLine(@NonNull TaiTierPolicy.Env env, @NonNull ModelInfo info, @NonNull Labels labels) {
         Set<String> names = functionNames(servedBy(env, info), labels);
