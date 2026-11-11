@@ -120,6 +120,9 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         @Nullable String thermalStatus;
     }
 
+    /** True for the one layout after the first load fills in the device card and the board: no move animation. */
+    private boolean skipMoves;
+    @Nullable private DeviceFacts lastFacts;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tai-bench-home");
@@ -234,7 +237,17 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         if (TaiMotion.reduced(context)) {
             list.setItemAnimator(null);
         } else {
-            DefaultItemAnimator animator = new DefaultItemAnimator();
+            DefaultItemAnimator animator = new DefaultItemAnimator() {
+                @Override
+                public boolean animateMove(RecyclerView.ViewHolder holder, int fromX, int fromY, int toX, int toY) {
+                    // Rows shifting because data arrived (not because the user moved them) land in place.
+                    if (skipMoves) {
+                        dispatchMoveFinished(holder);
+                        return false;
+                    }
+                    return super.animateMove(holder, fromX, fromY, toX, toY);
+                }
+            };
             animator.setSupportsChangeAnimations(false);
             animator.setMoveDuration(TaiMotion.ARRIVE_MS);
             list.setItemAnimator(animator);
@@ -459,6 +472,22 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         // The list keeps its first row in place across an insert, so a card arriving above it
         // would sit off screen until the user pulls down: when the list rests at the top, stay there.
         boolean atTop = featuresArrive && restsAtTop();
+        boolean firstFill = facts != null && lastFacts == null;
+        lastFacts = facts;
+        View host = getView();
+        RecyclerView hostList = host == null ? null : host.findViewById(R.id.tai_bench_list);
+        if (firstFill && hostList != null) {
+            skipMoves = true;
+            hostList.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override
+                public boolean onPreDraw() {
+                    skipMoves = false;
+                    android.view.ViewTreeObserver observer = hostList.getViewTreeObserver();
+                    if (observer.isAlive()) observer.removeOnPreDrawListener(this);
+                    return true;
+                }
+            });
+        }
         adapter.submit(items);
         if (atTop) {
             View view = getView();
