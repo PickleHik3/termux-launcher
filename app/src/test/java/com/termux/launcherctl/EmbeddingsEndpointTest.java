@@ -614,11 +614,6 @@ public class EmbeddingsEndpointTest {
         }
 
         @Override
-        public JSONObject embed(TaiModelSpec spec, List<String> inputs, int dimensions) throws org.json.JSONException {
-            return embeddingResponse(spec.id, inputs, dimensions > 0 ? dimensions : 768, "document", null);
-        }
-
-        @Override
         public JSONObject embed(TaiModelSpec spec, List<String> inputs, int dimensions, String inputType, String title)
                 throws org.json.JSONException {
             lastInputType = inputType;
