@@ -42,6 +42,17 @@ public final class AppDrawerCategoryGridMetrics {
      * for an icon nobody wants to look at.
      */
     public static final float MAX_ICON_DP = 72f;
+    /**
+     * Widest a card may get before the overview adds columns instead. Phones never reach it (three
+     * columns stay under it up to a 768dp body); a tablet's wide body gets more, smaller cards.
+     */
+    public static final float MAX_TILE_DP = 240f;
+    /** Column ceiling for the width rule. */
+    public static final int MAX_COLUMNS = 8;
+    /** Card inner padding / slot gap ceiling, applied only once the width rule added columns. */
+    public static final float MAX_SPACING_DP = 24f;
+    /** Icon ceiling on a wide layout, where the cards can carry a larger icon than a phone's. */
+    public static final float WIDE_MAX_ICON_DP = 96f;
     public static final float EMPTY_TOP_MIN_DP = 32f;
     public static final float HEADER_LIST_GAP_DP = 12f;
     public static final float PREVIEW_BUDGET_FRACTION = 0.60f;
@@ -141,6 +152,17 @@ public final class AppDrawerCategoryGridMetrics {
             if (fitting > columns) columns = Math.min(HEIGHT_FIT_MAX_COLUMNS, fitting);
         }
         float span = Math.max(0f, (available - (columns - 1) * gap) / columns);
+        // Wide bodies: a card past MAX_TILE_DP is mostly empty padding, so add columns until it is
+        // not. Never fires on a phone, whose three-column cards stay narrower than that.
+        boolean wide = false;
+        if (requestedColumns < 1 || requestedColumns > 3) {
+            if (columns >= 3 && span > MAX_TILE_DP * d) {
+                columns = Math.max(columns, Math.min(MAX_COLUMNS,
+                    (int) Math.ceil((available + gap) / (MAX_TILE_DP * d + gap))));
+                span = Math.max(0f, (available - (columns - 1) * gap) / columns);
+                wide = true;
+            }
+        }
         float inset = Math.min(TILE_HORIZONTAL_INSET_DP * d, span / 2f);
         float tile = Math.max(0f, span - 2f * inset);
         float heading = finiteNonNegative(headingHeightPx);
@@ -158,10 +180,15 @@ public final class AppDrawerCategoryGridMetrics {
         // inside is the rhythm itself. The old 0.80 of an over-sized slot is what left every preview
         // sitting in a ring of dead space.
         int geometryIcon = (int) Math.floor(Math.max(0f, (tile - 3f * pad) / 2f));
+        int iconCapPx = Math.round(MAX_ICON_DP * d);
+        if (wide) {
+            float grown = Math.min(WIDE_MAX_ICON_DP * d, (tile - 3f * MAX_SPACING_DP * d) / 2f);
+            iconCapPx = Math.max(iconCapPx, (int) Math.floor(grown));
+        }
         int requestedIconPx = requestedIconDp == 36 || requestedIconDp == 40
             || requestedIconDp == 44 || requestedIconDp == 48
-            ? Math.round(requestedIconDp * d) : Math.round(MAX_ICON_DP * d);
-        int icon = Math.max(0, Math.min(Math.min(Math.min(Math.round(MAX_ICON_DP * d),
+            ? Math.round(requestedIconDp * d) : iconCapPx;
+        int icon = Math.max(0, Math.min(Math.min(Math.min(iconCapPx,
             requestedIconPx), geometryIcon),
             Math.max(0, budgetIcon)));
         int detailColumns = EXPANDED_COLUMNS;
@@ -178,6 +205,7 @@ public final class AppDrawerCategoryGridMetrics {
         // the bottom row — which is what keeps the padding even on all four sides however small a
         // low-memory budget forced the icons.
         float spacing = icon > 0 ? Math.max(0f, (tile - 2f * icon) / 3f) : pad;
+        if (wide) spacing = Math.min(spacing, MAX_SPACING_DP * d);
         // Slot == icon: there is no ring left for anything to float inside.
         float largeSlot = icon;
         float itemHeight = tile + spacing + heading + bottom;
