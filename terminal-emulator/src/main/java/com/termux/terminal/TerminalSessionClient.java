@@ -31,6 +31,15 @@ public interface TerminalSessionClient {
     }
 
     /**
+     * A clipboard read on the Fast engine (OSC 52 {@code ?} or an OSC 5522 read): answer it with
+     * {@link ClipboardReadRequest#allow} or {@link ClipboardReadRequest#deny}, now or later. The
+     * default allows it with {@link #onReadTextFromClipboard}.
+     */
+    default void onClipboardReadRequest(@NonNull TerminalSession session, @NonNull ClipboardReadRequest request) {
+        request.allow(onReadTextFromClipboard(session));
+    }
+
+    /**
      * Answer an OSC 5522 clipboard read: call {@code callback} exactly once with what the
      * clipboard holds, or null when the read is refused. {@code pasted} is true when the read
      * fetches a paste the user just made. The callback may run later and on another thread; see

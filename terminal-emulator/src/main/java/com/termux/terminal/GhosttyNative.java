@@ -112,6 +112,12 @@ final class GhosttyNative {
     static final int EVENT_NOTIFICATION = 3;
     /** OSC 99: {@code first} is everything after {@code 99;}. */
     static final int EVENT_KITTY_NOTIFICATION = 4;
+    /**
+     * A clipboard read (OSC 52 {@code ?} or OSC 5522 read): {@code first} is the whole string after
+     * {@code ESC ]} (such as {@code 52;c;?}); {@code a} has bit 0 set for a listing-only 5522
+     * request, bit 1 when a listing was asked for, bit 2 when the string ended with ST (not BEL).
+     */
+    static final int EVENT_CLIPBOARD_READ = 5;
 
     /** OSC 133 steps in {@link #EVENT_PROMPT}. */
     static final int SEMANTIC_PROMPT_START = 1;
@@ -238,6 +244,14 @@ final class GhosttyNative {
 
     /** Set the TERM name XTGETTCAP TN answers with (1 to 128 bytes). */
     static native void nativeSetTerminfoName(long handle, byte[] name);
+
+    /**
+     * The bytes the library writes to answer the clipboard read {@code request} (the string after
+     * {@code ESC ]}), given the app's decision: denied, or allowed with {@code text} (null for an
+     * empty clipboard). Touches no core, so it may be called at any time from any thread; null when
+     * nothing is written.
+     */
+    static native byte[] nativeEncodeClipboardReply(byte[] request, boolean st, boolean allowed, byte[] text);
 
     /** End a render hold that outlived its timeout, as if the program had reset mode 2026. */
     static native void nativeEndHold(long handle);

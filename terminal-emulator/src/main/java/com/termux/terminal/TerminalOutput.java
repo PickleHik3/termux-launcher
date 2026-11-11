@@ -1,5 +1,7 @@
 package com.termux.terminal;
 
+import androidx.annotation.NonNull;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -53,6 +55,15 @@ public abstract class TerminalOutput {
      */
     public String onReadTextFromClipboard() {
         return null;
+    }
+
+    /**
+     * The Fast engine's clipboard read ({@code OSC 52 ?} or an {@code OSC 5522} read), to be
+     * answered once through {@code request}, now or later. The default answers with
+     * {@link #onReadTextFromClipboard()} at once.
+     */
+    public void onClipboardReadRequest(@NonNull ClipboardReadRequest request) {
+        request.allow(onReadTextFromClipboard());
     }
 
     /**

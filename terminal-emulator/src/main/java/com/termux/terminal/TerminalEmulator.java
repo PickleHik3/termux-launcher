@@ -1570,6 +1570,14 @@ public final class TerminalEmulator {
                 case GhosttyNative.EVENT_KITTY_NOTIFICATION:
                     if (first != null) mKittyNotifications.handle(first, mKittyNotificationHandler);
                     break;
+                case GhosttyNative.EVENT_CLIPBOARD_READ:
+                    if (first != null) {
+                        boolean pasted = first.startsWith("5522;")
+                            && mKittyClipboard.redeemsPasteEvent(first.substring(5), System.currentTimeMillis());
+                        mSession.onClipboardReadRequest(new ClipboardReadRequest(mSession, first,
+                            (a & 4) != 0, (a & 1) != 0, pasted));
+                    }
+                    break;
                 default:
                     break;
             }

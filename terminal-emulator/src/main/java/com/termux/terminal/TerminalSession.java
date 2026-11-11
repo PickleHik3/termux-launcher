@@ -8,6 +8,7 @@ import android.os.Trace;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
+import androidx.annotation.NonNull;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -515,6 +516,11 @@ public final class TerminalSession extends TerminalOutput {
     @Override
     public String onReadTextFromClipboard() {
         return mClient.onReadTextFromClipboard(this);
+    }
+
+    @Override
+    public void onClipboardReadRequest(@NonNull ClipboardReadRequest request) {
+        mClient.onClipboardReadRequest(this, request);
     }
 
     @Override
