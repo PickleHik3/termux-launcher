@@ -259,8 +259,8 @@ final class CategorySortDialogs {
         // What the sort will really load with: the plan's accelerator, the one the load is told; and
         // only the apps it will really ask about.
         String onDeviceNote = onDeviceEnabled
-            ? context.getString(R.string.settings_app_drawer_category_sort_on_device_warning,
-                plan.estimatedMinutes(preview.pending))
+            ? context.getResources().getQuantityString(R.plurals.settings_app_drawer_category_sort_on_device_warning,
+                plan.estimatedMinutes(preview.pending), plan.estimatedMinutes(preview.pending))
             : null;
         // A large model may make Android close cached background apps (tai-device-tiers spec section 4.4).
         if (onDeviceNote != null && plan.warnBackground) {
