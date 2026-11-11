@@ -3660,14 +3660,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return elementsView(screen);
             }
             // The status bar's position and the dock's type are every page's (ADR 0023 §1): the
-            // Global card holds them, drawn by the cards they came from.
-            if (row == Row.DOCK_TYPE)
-                return dockCard().view(row, widthPx);
+            // Global card holds them, and so do the Status bar and Dock cards, which say so.
+            if (row == Row.DOCK_TYPE) {
+                View type = dockCard().view(row, widthPx);
+                return card == EditorCard.DOCK ? withAllPagesNote(type) : type;
+            }
             if (row == Row.STATUS_POSITION) {
                 com.termux.app.surfaces.cards.CardRowView position =
                     com.termux.app.surfaces.cards.StatusBarCard.view(mHost.context(), row,
                         widthPx, mStatusCardHost);
                 if (position == null) return null;
+                if (card == EditorCard.STATUS)
+                    position = new com.termux.app.surfaces.cards.CardRowView(
+                        withAllPagesNote(position.view), position::restate);
                 mOwnRows.put(row, position);
                 return position.view;
             }
@@ -6213,6 +6218,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     // ------------------------------------------------------- Status bar and Terminal cards
+
+    /** {@code row} with the line "All pages" under it: a value the per-page cards share. */
+    @NonNull
+    private View withAllPagesNote(@NonNull View row) {
+        Context context = mHost.context();
+        android.widget.LinearLayout column = new android.widget.LinearLayout(context);
+        column.setOrientation(android.widget.LinearLayout.VERTICAL);
+        column.addView(row);
+        android.widget.TextView note = com.termux.app.surfaces.rows.RowKit.caption(context,
+            context.getString(R.string.editor_row_all_pages));
+        int edge = com.termux.app.surfaces.rows.RowKit.dp(context,
+            com.termux.app.surfaces.rows.RowKit.EDGE_DP);
+        note.setPadding(edge, 0, edge, com.termux.app.surfaces.rows.RowKit.dp(context, 4));
+        column.addView(note);
+        return column;
+    }
 
     /** The rows the Status bar and Terminal cards drew themselves, for their restates. */
     @NonNull private final java.util.Map<Row, com.termux.app.surfaces.cards.CardRowView> mOwnRows =
