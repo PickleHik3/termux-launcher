@@ -3077,6 +3077,12 @@ public final class TerminalView extends View {
         final boolean shift = event.isShiftPressed() || mClient.readShiftKey();
         final boolean fn = mClient.readFnKey();
         final boolean rightAlt = (metaState & KeyEvent.META_ALT_RIGHT_ON) != 0;
+        // Shift+Page Up/Down scroll the scrollback instead of typing, as on the Java path, where a
+        // program that asked for the kitty protocol gets the key instead.
+        mEmulator.setCursorBlinkState(true);
+        if (mEmulator.getKeyboardFlags() == 0 && !event.isFunctionPressed()
+                && handleKeyCodeAction(keyCode, shift ? KeyHandler.KEYMOD_SHIFT : 0))
+            return true;
         int key = keyCode == KeyEvent.KEYCODE_BACK ? GhosttyKeys.KEY_ESCAPE : GhosttyKeys.fromAndroidKeyCode(keyCode);
         int mods = GhosttyKeys.fromAndroidMetaState(metaState);
         if (ctrl)
