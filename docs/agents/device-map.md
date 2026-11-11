@@ -487,3 +487,10 @@ a Linux app.
   it). `set-home-activity com.termux/.app.TermuxActivity` makes it home for a check; set the
   stock launcher back afterwards. After a lease wait the emulator may be stopped: `ad -s emu emu
   start` under the lease.
+- **Setup wizard and its AI card**: rerun the wizard with `am start -n com.termux/.app.TermuxActivity
+  --ez com.termux.app.extra.RERUN_SETUP true` (Skip on step 01 ends the whole wizard; On-device AI
+  is step 05/07). Once the wizard is finished, the AI card ("Models for this phone") opens directly
+  with `am start -n com.termux/.app.TermuxActivity --ez com.termux.app.extra.SHOW_SETUP_CARDS true
+  --es com.termux.app.extra.SETUP_CARD_ID ai`. A cold start shows ~3 s of splash first: poll `ui`
+  for `desc="Voice typing"` before tapping. The AI GPU probe's cache is `files/tai/gpu-probe.json`
+  (written by `:tai_runtime`); delete it with `run-as` to make the card or the Model Centre probe again.
