@@ -72,4 +72,37 @@ public class LauncherCategorySortChoiceTest {
         assertEquals("remote/x", choice.onDeviceModel);
         assertFalse(choice.advisesAgainstOnDevice);
     }
+
+    @Test
+    public void ramWarningAlone_doesNotDisableTheOnDeviceRow() {
+        assertTrue(LauncherCategorySortChoice.onDeviceRunnable(true, false, true));
+    }
+
+    @Test
+    public void noModelInstalled_orAHardBlock_stillDisablesIt() {
+        assertFalse(LauncherCategorySortChoice.onDeviceRunnable(false, false, false));
+        assertFalse(LauncherCategorySortChoice.onDeviceRunnable(true, true, false));
+    }
+
+    @Test
+    public void roomyPhone_isRunnableWithoutAdvice() {
+        assertTrue(LauncherCategorySortChoice.onDeviceRunnable(true, false, false));
+    }
+
+    @Test
+    public void acceleratorFollowsTheStoredPickElseAutomatic() {
+        assertEquals("cpu", LauncherCategorySortChoice.accelerator("cpu", "gpu"));
+        assertEquals("gpu", LauncherCategorySortChoice.accelerator("", "gpu"));
+        assertEquals("gpu", LauncherCategorySortChoice.accelerator(null, "gpu"));
+    }
+
+    @Test
+    public void userAskedLoad_namesNoFeatureAndCarriesTheAccelerator() throws Exception {
+        org.json.JSONObject explicit = LauncherCategorySortService.loadRequest(E2B, true, "cpu");
+        assertFalse(explicit.has("function"));
+        assertEquals("cpu", explicit.getString("accelerator"));
+        org.json.JSONObject automatic = LauncherCategorySortService.loadRequest(E2B, false, "cpu");
+        assertEquals("app_categories", automatic.getString("function"));
+        assertFalse(automatic.has("accelerator"));
+    }
 }

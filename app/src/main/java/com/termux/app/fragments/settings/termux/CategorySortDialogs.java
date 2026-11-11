@@ -139,7 +139,9 @@ final class CategorySortDialogs {
         LauncherCategorySortPlan onDevicePlan = plan;
         if (choice.explicit && choice.onDeviceModel != null) {
             TaiModelSpec spec = ModelAvailability.get(context).models().get(choice.onDeviceModel);
-            String accelerator = env.noGpu() ? TaiTierPolicy.ACCEL_CPU : TaiTierPolicy.defaultAccelerator(env);
+            String accelerator = LauncherCategorySortChoice.accelerator(
+                storedAcceleratorFor(models, choice.onDeviceModel),
+                env.noGpu() ? TaiTierPolicy.ACCEL_CPU : TaiTierPolicy.defaultAccelerator(env));
             onDevicePlan = LauncherCategorySortPlan.explicit(choice.onDeviceModel, accelerator,
                 spec != null && TaiTierPolicy.warnsBackground(env, spec.sizeBytes));
         }
@@ -147,8 +149,22 @@ final class CategorySortDialogs {
             unavailableReason(context, onDevicePlan), onDevicePlan, choice.advisesAgainstOnDevice);
     }
 
+    /**
+     * The accelerator stored for this model, when it is the pick of app sorting or of the Default
+     * model (Dawn chat); {@code ""} otherwise, so Automatic's choice stands.
+     */
+    @NonNull
+    private static String storedAcceleratorFor(@NonNull TaiFunctionModels models, @NonNull String modelId) {
+        if (modelId.equals(models.pick(TaiFunction.APP_CATEGORIES))) {
+            String pick = models.acceleratorPick(TaiFunction.APP_CATEGORIES);
+            if (!pick.isEmpty()) return pick;
+        }
+        if (modelId.equals(models.pick(TaiFunction.DAWN_CHAT))) return models.acceleratorPick(TaiFunction.DAWN_CHAT);
+        return "";
+    }
+
     /** The RAM check says this installed model will not fit cleanly (the check {@link #unavailableReason} uses). */
-    private static boolean ramAdvisesAgainst(@NonNull Context context, @NonNull String modelId) {
+    static boolean ramAdvisesAgainst(@NonNull Context context, @NonNull String modelId) {
         TaiModelSpec spec = ModelAvailability.get(context).models().get(modelId);
         if (spec == null) return false;
         return TaiDeviceCapabilities.detect(context).checkModelCapability(spec).warning != null;
@@ -170,15 +186,13 @@ final class CategorySortDialogs {
     static String unavailableReason(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
         if (plan.remote) return null; // the remote provider runs it: nothing to download or fit
         TaiModelSpec model = specFor(context, plan);
-        if (model == null)
+        TaiDeviceCapabilities.ModelCapabilityCheck check = model == null ? null
+            : TaiDeviceCapabilities.detect(context).checkModelCapability(model);
+        // check.warning (RAM short of the recommendation) is not a block: the row stays enabled with a
+        // slow-here note, and the tap loads the model as the user's own request.
+        if (!LauncherCategorySortChoice.onDeviceRunnable(model != null,
+                check != null && check.blockingReason != null, check != null && check.warning != null))
             return context.getString(R.string.settings_app_drawer_category_sort_unavailable_model);
-        TaiDeviceCapabilities.ModelCapabilityCheck check =
-            TaiDeviceCapabilities.detect(context).checkModelCapability(model);
-        if (check.blockingReason != null)
-            return context.getString(R.string.settings_app_drawer_category_sort_unavailable_model);
-        if (check.warning != null)
-            return context.getString(R.string.settings_app_drawer_category_sort_unavailable_memory,
-                model.recommendedRamGb + " GB");
         return null;
     }
 
