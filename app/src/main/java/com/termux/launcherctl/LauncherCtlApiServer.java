@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import com.termux.ai.FeatureRequest;
 import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
 import com.termux.ai.TaiEventLog;
@@ -606,14 +607,14 @@ public class LauncherCtlApiServer {
                 if (chatRequest.optBoolean("stream", true)) {
                     return ndjsonResponse(output -> writeOllamaChatStream(context, chatRequest.toString(), output, false));
                 }
-                return ollamaJsonResponse(TaiApiCompatibility.ollamaChatFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaChatFromOpenAi(chatReply(context, chatRequest.toString())));
             } else if ("POST".equals(request.method) && "/api/generate".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 JSONObject chatRequest = TaiApiCompatibility.ollamaGenerateRequest(request.body);
                 if (chatRequest.optBoolean("stream", true)) {
                     return ndjsonResponse(output -> writeOllamaChatStream(context, chatRequest.toString(), output, true));
                 }
-                return ollamaJsonResponse(TaiApiCompatibility.ollamaGenerateFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaGenerateFromOpenAi(chatReply(context, chatRequest.toString())));
             } else if ("POST".equals(request.method) && "/api/embed".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 JSONObject embedRequest = TaiApiCompatibility.ollamaEmbedRequest(request.body);
@@ -757,20 +758,20 @@ public class LauncherCtlApiServer {
                 if (manager.isStreamRequest(request.body)) {
                     return sseResponse(output -> writeChatCompletionStream(context, request.body, output));
                 }
-                return jsonResponse(TaiManager.getInstance(context).openAiChatCompletions(request.body));
+                return jsonResponse(chatReply(context, request.body));
             } else if ("POST".equals(request.method) && "/v1/responses".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 JSONObject chatRequest = TaiApiCompatibility.responsesRequestToChat(request.body);
                 if (chatRequest.optBoolean("stream", false)) {
                     return sseResponse(output -> writeResponsesStream(context, chatRequest.toString(), output));
                 }
-                return jsonResponse(TaiApiCompatibility.responsesFromChat(manager.openAiChatCompletions(chatRequest.toString())));
+                return jsonResponse(TaiApiCompatibility.responsesFromChat(chatReply(context, chatRequest.toString())));
             } else if ("POST".equals(request.method) && "/v1/completions".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 if (manager.isStreamRequest(request.body)) {
                     return sseResponse(output -> writeCompletionStream(context, request.body, output));
                 }
-                return jsonResponse(TaiManager.getInstance(context).openAiCompletions(request.body));
+                return jsonResponse(completionReply(context, request.body));
             } else if ("POST".equals(request.method) && "/v1/embeddings".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).embeddings(request.body));
             } else if ("POST".equals(request.method) && "/v1/tokenize".equals(request.path)) {
@@ -4199,6 +4200,35 @@ public class LauncherCtlApiServer {
         return new HttpResponse(200, "text/plain; charset=utf-8", bodyWriter, headers);
     }
 
+    /** A single chat reply from Feature request, as the OpenAI chat route returns it. */
+    private static JSONObject chatReply(Context context, String body) throws JSONException {
+        return FeatureRequest.get(context).reply(FeatureRequest.Call.http(FeatureRequest.Kind.CHAT, body));
+    }
+
+    private static JSONObject completionReply(Context context, String body) throws JSONException {
+        return FeatureRequest.get(context).reply(FeatureRequest.Call.http(FeatureRequest.Kind.COMPLETION, body));
+    }
+
+    /**
+     * Streams a chat or completion from Feature request into one of this server's writers: TEXT and
+     * ERROR events go to {@code onEvent} as the exact OpenAI chunk, DONE to {@code onDone}, WAITING and
+     * LOADING to nothing.
+     *
+     * The writers' IOException (the HTTP client went away) must come out of this sink, never be
+     * swallowed: Feature request cancels that one request when its sink throws, which stops the
+     * generation (or drops the remote connection) instead of letting it run on unheard.
+     */
+    private static void streamFeature(Context context, FeatureRequest.Kind kind, String body,
+                                      TaiManager.OpenAiStreamSink sink) throws JSONException, IOException {
+        FeatureRequest.get(context).start(FeatureRequest.Call.http(kind, body).stream(true), event -> {
+            if (event.type == FeatureRequest.Event.Type.DONE) {
+                sink.onDone();
+            } else if (event.openAi != null) {
+                sink.onEvent(event.openAi);
+            }
+        }).await();
+    }
+
     private void writeResponsesStream(Context context, String chatBody, OutputStream output) throws IOException {
         String responseId = "resp_" + System.currentTimeMillis();
         String messageId = "msg_" + System.currentTimeMillis();
@@ -4219,7 +4249,7 @@ public class LauncherCtlApiServer {
         StringBuilder fullText = new StringBuilder();
         boolean[] failed = new boolean[]{false};
         try {
-            TaiManager.getInstance(context).openAiChatCompletionsStream(chatBody, new TaiManager.OpenAiStreamSink() {
+            streamFeature(context, FeatureRequest.Kind.CHAT, chatBody, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     try {
@@ -4303,7 +4333,7 @@ public class LauncherCtlApiServer {
             throw new IOException(e);
         }
         try {
-            TaiManager.getInstance(context).openAiChatCompletionsStream(chatBody, new TaiManager.OpenAiStreamSink() {
+            streamFeature(context, FeatureRequest.Kind.CHAT, chatBody, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     try {
@@ -4359,7 +4389,7 @@ public class LauncherCtlApiServer {
 
     private void writeChatCompletionStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).openAiChatCompletionsStream(body, new TaiManager.OpenAiStreamSink() {
+            streamFeature(context, FeatureRequest.Kind.CHAT, body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     writeSseEvent(output, event.toString());
@@ -4420,7 +4450,7 @@ public class LauncherCtlApiServer {
 
     private void writeCompletionStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).openAiCompletionsStream(body, new TaiManager.OpenAiStreamSink() {
+            streamFeature(context, FeatureRequest.Kind.COMPLETION, body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     writeSseEvent(output, event.toString());

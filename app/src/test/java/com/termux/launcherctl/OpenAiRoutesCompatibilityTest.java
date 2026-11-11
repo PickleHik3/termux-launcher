@@ -196,6 +196,26 @@ public class OpenAiRoutesCompatibilityTest {
             "{\"model\":\"" + MODEL + "\",\"input\":\"hi\",\"stream\":true}"), EXPECTED_responsesStream);
     }
 
+    /** A client that goes away mid-stream cancels its generation instead of letting it run on. */
+    @Test public void aClientThatDisconnectsCancelsItsGeneration() throws Exception {
+        runtime.endless = true;
+        HttpURLConnection conn = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/v1/chat/completions").openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Authorization", "Bearer " + token);
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+        conn.getOutputStream().write((CHAT + ",\"stream\":true}").getBytes(StandardCharsets.UTF_8));
+        assertEquals(200, conn.getResponseCode());
+        InputStream stream = conn.getInputStream();
+        byte[] first = new byte[16];
+        assertEquals(16, stream.read(first)); // the first SSE chunk is on the wire
+        stream.close();
+        conn.disconnect();
+        long deadline = System.currentTimeMillis() + 5_000;
+        while (!runtime.cancelled && System.currentTimeMillis() < deadline) Thread.sleep(20);
+        org.junit.Assert.assertTrue("the runtime was told to cancel", runtime.cancelled);
+    }
+
     // ---- expected output ----
 
     private static final String EXPECTED_ollamaChatStream =
@@ -395,6 +415,9 @@ public class OpenAiRoutesCompatibilityTest {
     private static final class ScriptedRuntime implements TaiRuntime {
         volatile String loadedModelId;
         volatile String lastGenerateModelId;
+        /** Emits a token every 20 ms until {@link #cancel} (or ten seconds) instead of the script. */
+        volatile boolean endless;
+        volatile boolean cancelled;
 
         @NonNull @Override public TaiRuntimeState getState() {
             return new TaiRuntimeState(loadedModelId != null, loadedModelId, "stub", "Stub.");
@@ -408,13 +431,28 @@ public class OpenAiRoutesCompatibilityTest {
         @NonNull @Override public JSONObject keepWarm(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
             return new JSONObject().put("ok", true);
         }
-        @NonNull @Override public JSONObject cancel() throws JSONException { return new JSONObject().put("ok", true); }
+        @NonNull @Override public JSONObject cancel() throws JSONException {
+            cancelled = true;
+            return new JSONObject().put("ok", true);
+        }
 
         @NonNull @Override
         public JSONObject generate(@NonNull String modelId, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options,
                                    @Nullable TaiGenerationCallback callback) throws JSONException {
             lastGenerateModelId = modelId;
             String full = "Hello world";
+            if (endless && callback != null) {
+                for (int i = 0; i < 500 && !cancelled && !callback.shouldCancelGeneration(); i++) {
+                    callback.onToken("tick ");
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException e) {
+                        break;
+                    }
+                }
+                callback.onComplete("tick");
+                return new JSONObject().put("ok", true).put("model", modelId).put("response", "tick").put("finishReason", "stop");
+            }
             if (callback != null) {
                 callback.onThinkingToken("Let me ");
                 callback.onThinkingToken("think.");

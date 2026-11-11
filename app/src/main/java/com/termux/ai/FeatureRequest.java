@@ -250,7 +250,7 @@ public final class FeatureRequest {
         }
 
         @NonNull
-        Call stream(boolean stream) {
+        public Call stream(boolean stream) {
             this.stream = stream;
             return this;
         }
@@ -404,7 +404,7 @@ public final class FeatureRequest {
      * OpenAI routes). The runtime's own failure to answer is the {@code tai_runtime_unavailable} error.
      */
     @NonNull
-    JSONObject reply(@NonNull Call call) throws JSONException {
+    public JSONObject reply(@NonNull Call call) throws JSONException {
         try {
             JSONObject reply = start(call.stream(false), event -> { }).await();
             return reply != null ? reply : Run.unavailable();
