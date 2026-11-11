@@ -25198,6 +25198,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
                         if (wall != null && !wall.isMoving() && wall.offsetPx() == 0f)
                             settlePlaceChrome(placeOf(page));
+                        // At rest with no settle to follow: clipboard reads waiting for the
+                        // terminal may be due.
+                        if (wall != null && !wall.isMoving()
+                            && mTermuxTerminalSessionActivityClient != null)
+                            mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
                     });
                 }
             });
@@ -25255,6 +25260,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } finally {
             Trace.endSection();
         }
+        // The wall is at rest here: clipboard reads that waited for the terminal may be due.
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
     }
 
     private void doRunWallPageSettle(
@@ -32749,6 +32757,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean isTerminalPlaceOnScreen() {
             return mPaneWallController == null || mPaneWallController.isTerminalOnScreen();
+        }
+
+        @Override public boolean isTerminalShowing() {
+            return mPaneWallController != null && mPaneWallController.isTerminalShowing();
         }
 
         @Override public void showTerminalActionHint(@NonNull String toolName) {

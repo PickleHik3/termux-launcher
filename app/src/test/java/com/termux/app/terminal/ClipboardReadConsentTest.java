@@ -56,7 +56,7 @@ public class ClipboardReadConsentTest {
         ClipboardReadConsent.Callback callback;
 
         @Override public boolean isReadSettingOn() { return settingOn; }
-        @Override public boolean isLauncherVisible() { return visible; }
+        @Override public boolean isTerminalShowing() { return visible; }
         @Override public Object frontSession() { return front; }
         @Override public String programName(Object session) { return names.get(session); }
         @Override public String readClipboard() { return clipboard; }
@@ -272,5 +272,26 @@ public class ClipboardReadConsentTest {
         FakeRequest next = new FakeRequest(false, false);
         consent.onRequest(a, next);
         assertEquals(2, ui.sheets);
+    }
+
+    @Test
+    public void aRequestWhileTheTerminalIsNotShowingOpensNoSheetUntilItShows() {
+        ui.visible = false;
+        FakeRequest r = new FakeRequest(false, false);
+        consent.onRequest(a, r);
+        assertEquals(0, ui.sheets);
+        assertNull(r.answer);
+        ui.visible = true;
+        consent.onFrontMaybeChanged();
+        assertEquals(1, ui.sheets);
+        assertTrue(ui.sheetOpen);
+    }
+
+    @Test
+    public void aRequestWhileTheTerminalIsShowingOpensTheSheetAtOnce() {
+        FakeRequest r = new FakeRequest(false, false);
+        consent.onRequest(a, r);
+        assertEquals(1, ui.sheets);
+        assertTrue(ui.sheetOpen);
     }
 }

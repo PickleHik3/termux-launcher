@@ -274,6 +274,15 @@ public interface TerminalHost extends SoftKeyboardPolicy {
         return true;
     }
 
+    /**
+     * Whether the terminal is the page on screen, at rest: the wall is not moving and a terminal
+     * window is the place the user is on. Stricter than {@link #isTerminalPlaceOnScreen()}. The
+     * default is true so a host that does not model pages behaves as before.
+     */
+    default boolean isTerminalShowing() {
+        return true;
+    }
+
     /** Says which action just ran, once it has run. */
     void showTerminalActionHint(@NonNull String toolName);
 

@@ -652,8 +652,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     return preferences != null && preferences.isOsc52ClipboardReadEnabled();
                 }
 
-                @Override public boolean isLauncherVisible() {
-                    return mHost.isVisible();
+                @Override public boolean isTerminalShowing() {
+                    return mHost.isVisible() && mHost.isTerminalShowing();
                 }
 
                 @Nullable @Override public Object frontSession() {

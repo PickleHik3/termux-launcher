@@ -14,7 +14,7 @@ import java.util.Map;
  * {@link Request}, so the policy runs on the JVM. Main thread only.
  *
  * <p>A request that needs consent waits in a queue per session until that pane is in front and the
- * launcher is on screen; then one sheet asks, and every request of that session waiting on it
+ * terminal is showing; then one sheet asks, and every request of that session waiting on it
  * gets the same answer. Only one sheet is open at a time.
  */
 public final class ClipboardReadConsent {
@@ -39,8 +39,8 @@ public final class ClipboardReadConsent {
     public interface Ui {
         /** Whether "Let programs read the clipboard" is on. */
         boolean isReadSettingOn();
-        /** Whether the launcher is on screen. */
-        boolean isLauncherVisible();
+        /** Whether the terminal is the page on screen, at rest. */
+        boolean isTerminalShowing();
         /** The session of the pane in front, or null. */
         @Nullable Object frontSession();
         /** The foreground program of the session's pty, or null when it cannot be read. */
@@ -127,7 +127,7 @@ public final class ClipboardReadConsent {
     }
 
     private void pump() {
-        if (!mUi.isLauncherVisible()) return;
+        if (!mUi.isTerminalShowing()) return;
         Object front = mUi.frontSession();
         if (front == null) return;
         List<Entry> queue = mQueues.get(front);
