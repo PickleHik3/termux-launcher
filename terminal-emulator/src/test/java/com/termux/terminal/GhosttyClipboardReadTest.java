@@ -108,6 +108,59 @@ public class GhosttyClipboardReadTest extends TerminalTestCase {
         assertFalse(mOutput.clipboardReadRequests.get(2).isPasted());
     }
 
+    private static String repeat(char c, int n) {
+        char[] chars = new char[n];
+        Arrays.fill(chars, c);
+        return new String(chars);
+    }
+
+    // A read request over the sniffer's 16 KiB cap is refused in the protocol's own form, with the
+    // request's terminator, and never reaches Java.
+    // A whitespace-separated MIME list of about {@code bytes} bytes, base64 as the protocol wants.
+    private static String mimeListB64(int bytes) {
+        StringBuilder sb = new StringBuilder();
+        while (sb.length() < bytes) sb.append("text/plain ");
+        return b64(sb.toString());
+    }
+
+    // OSC 52 read grammar is "52;<one selection letter>;?", so a read cannot be longer than the
+    // cap; a long selection string is not a read to the library (it drops the sequence with no
+    // callback and no reply). Pinned: nothing reaches Java.
+    public void testOsc52WithAnOver16KibSelectionIsNotAReadAndReachesNobody() {
+        if (!ghostty()) return;
+        enterString("\033]52;" + repeat('c', 20000) + ";?\033\\");
+        enterString("\033]52;" + repeat('c', 20000) + ";?\007");
+        assertEquals(0, mOutput.clipboardReadRequests.size());
+    }
+
+    public void testOsc5522ReadWithAMimeListUnderTheCapReachesJava() {
+        if (!ghostty()) return;
+        enterString("\033]5522;type=read;" + mimeListB64(3000) + "\033\\");
+        assertEquals(1, mOutput.clipboardReadRequests.size());
+        assertEquals("", mOutput.getOutputAndClear());
+    }
+
+    public void testOsc5522ReadWithAMimeListOver16KibGetsEpermWithSt() {
+        if (!ghostty()) return;
+        enterString("\033]5522;type=read;" + mimeListB64(20000) + "\033\\");
+        assertEquals(0, mOutput.clipboardReadRequests.size());
+        assertEquals("\033]5522;type=read:status=EPERM\033\\", mOutput.getOutputAndClear());
+    }
+
+    public void testOsc5522ReadWithAMimeListOver16KibGetsEpermWithBel() {
+        if (!ghostty()) return;
+        enterString("\033]5522;type=read;" + mimeListB64(20000) + "\007");
+        assertEquals(0, mOutput.clipboardReadRequests.size());
+        assertEquals("\033]5522;type=read:status=EPERM\007", mOutput.getOutputAndClear());
+    }
+
+    public void testOsc5522ReadWithAnIdOver16KibKeepsTheIdInTheEperm() {
+        if (!ghostty()) return;
+        enterString("\033]5522;type=read:id=abc;" + mimeListB64(20000) + "\033\\");
+        assertEquals(0, mOutput.clipboardReadRequests.size());
+        assertEquals("\033]5522;type=read:status=EPERM:id=abc\033\\", mOutput.getOutputAndClear());
+    }
+
     public void testOtherRepliesKeepTheirOrderAndAreNotHeldBack() {
         if (!ghostty()) return;
         enterString("\033[5n\033]52;c;?\033\\\033[6n");

@@ -77,6 +77,7 @@ enum { EVENT_PROMPT = 1, EVENT_PROGRESS = 2, EVENT_NOTIFICATION = 3, EVENT_KITTY
 // The OSC strings the sniffer keeps (99 and 66), at most this many bytes after "NN;"; a longer one
 // is dropped whole, like the Java core drops an OSC past MAX_STRING_SEQUENCE_LENGTH.
 #define OSC_CAP (16 * 1024)
+#define CLIP_DENY_CAP 1024
 
 // ST_FLAGS bits.
 enum {
@@ -158,6 +159,10 @@ typedef struct {
     // hand the request to Java, clip_flags is that event's first value (bit 0 listing-only, bit 1 list).
     bool clip_mute, clip_pending;
     int clip_flags;
+    // The library's own denial bytes, kept while clip_mute drops them, so that a request the sniffer
+    // could not keep whole (over OSC_CAP) is still answered with them from osc_end.
+    uint8_t clip_deny[CLIP_DENY_CAP];
+    size_t clip_deny_len;
     int progress_state, progress_value;
     // The snapshot Java reads, from the last capture(): a sync outside a render hold, or the
     // start of one. While held, syncs leave it and the render state as the hold found them.
@@ -218,7 +223,14 @@ static void clear_exception(JNIEnv* env) {
 static void on_write_pty(GhosttyTerminal t, void* ud, const uint8_t* data, size_t len) {
     (void) t;
     Core* c = ud;
-    if (c == NULL || c->env == NULL || c->sink == NULL || len == 0 || len > (1u << 24) || c->clip_mute) return;
+    if (c != NULL && c->clip_mute) {
+        if (len <= CLIP_DENY_CAP - c->clip_deny_len) {
+            memcpy(c->clip_deny + c->clip_deny_len, data, len);
+            c->clip_deny_len += len;
+        }
+        return;
+    }
+    if (c == NULL || c->env == NULL || c->sink == NULL || len == 0 || len > (1u << 24)) return;
     JNIEnv* env = c->env;
     jbyteArray arr = (*env)->NewByteArray(env, (jsize) len);
     if (arr == NULL) { clear_exception(env); return; }
@@ -304,6 +316,7 @@ static void on_clipboard_read(GhosttyTerminal t, void* ud, const GhosttyClipboar
     }
     c->clip_flags = (read->mimes_len == 0 ? 1 : 0) | (read->list ? 2 : 0);
     c->clip_mute = true;
+    c->clip_deny_len = 0;
     read->reply(read, &reply);
     c->clip_mute = false;
     c->clip_pending = true;
@@ -663,8 +676,13 @@ static void osc_end(Core* c, GhosttyTerminalStringEnd end) {
                 free(raw);
             }
         }
-        // Not kept (over OSC_CAP, or cancelled): the request was already answered silently. Known
-        // limit for a request over 16 KiB; such a read never reaches the app.
+        // Not kept (over OSC_CAP, or cancelled): the library's own denial, held back in
+        // on_clipboard_read, is written now, so a request over 16 KiB never goes unanswered.
+        if (!kept && c->clip_deny_len > 0) {
+            size_t n = c->clip_deny_len;
+            c->clip_deny_len = 0;
+            on_write_pty(c->term, c, c->clip_deny, n);
+        }
         send_progress(c, false);
         return;
     }
