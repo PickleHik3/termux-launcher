@@ -685,24 +685,24 @@ public class LauncherCtlApiServer {
             } else if ("GET".equals(request.method) && "/v1/ai/models".equals(request.path)) {
                 return maybeTextResponse(request, "models", TaiManager.getInstance(context).models());
             } else if ("POST".equals(request.method) && "/v1/ai/models/import".equals(request.path)) {
-                return maybeTextResponse(request, "import", TaiManager.getInstance(context).importModel(request.body));
+                return maybeTextResponse(request, "import", TaiManager.getInstance(context).modelManagement().importModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/download".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).downloadModel(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().downloadModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/download-catalog".equals(request.path)) {
                 JSONObject body = request.body == null || request.body.trim().isEmpty() ? new JSONObject() : new JSONObject(request.body);
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).downloadCatalogModel(body.optString("modelId", body.optString("model", ""))));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().downloadCatalogModel(body.optString("modelId", body.optString("model", ""))));
             } else if ("GET".equals(request.method) && "/v1/ai/models/downloads".equals(request.path)) {
-                return maybeTextResponse(request, "downloads", TaiManager.getInstance(context).downloads());
+                return maybeTextResponse(request, "downloads", TaiManager.getInstance(context).modelManagement().downloads());
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/cancel".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).cancelDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().cancelDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/pause".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).pauseDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().pauseDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/resume".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).resumeDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().resumeDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/prioritize".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).prioritizeDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().prioritizeDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/delete".equals(request.path)) {
-                return maybeTextResponse(request, "delete", TaiManager.getInstance(context).deleteModel(request.body));
+                return maybeTextResponse(request, "delete", TaiManager.getInstance(context).modelManagement().deleteModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/load".equals(request.path)) {
                 return maybeTextResponse(request, "load", TaiManager.getInstance(context).loadModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/load".equals(request.path)) {

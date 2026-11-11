@@ -35,7 +35,7 @@ final class AssistantModelActions implements AssistantModelStatus.Actions {
     @Override
     public AssistantModelStatus.ActionResult download(@NonNull String modelId) {
         try {
-            return result(TaiManager.getInstance(appContext).downloadCatalogModel(modelId));
+            return result(TaiManager.getInstance(appContext).modelManagement().downloadCatalogModel(modelId));
         } catch (Exception e) {
             return failure(e);
         }
@@ -46,7 +46,7 @@ final class AssistantModelActions implements AssistantModelStatus.Actions {
     public AssistantModelStatus.ActionResult cancelDownload(@NonNull String modelId) {
         try {
             return result(TaiManager.getInstance(appContext)
-                .cancelDownload(new JSONObject().put("modelId", modelId).toString()));
+                .modelManagement().cancelDownload(new JSONObject().put("modelId", modelId).toString()));
         } catch (Exception e) {
             return failure(e);
         }

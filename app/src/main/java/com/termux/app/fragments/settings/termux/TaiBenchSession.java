@@ -419,7 +419,7 @@ public final class TaiBenchSession {
         if (plan.removeAfterwards) {
             for (String modelId : downloaded) {
                 try {
-                    manager.deleteModel(new JSONObject().put("modelId", modelId).put("confirm", true).toString());
+                    manager.modelManagement().deleteModel(new JSONObject().put("modelId", modelId).put("confirm", true).toString());
                 } catch (JSONException | RuntimeException ignored) {
                 }
             }
@@ -439,7 +439,7 @@ public final class TaiBenchSession {
             .put("totalBytes", model.sizeBytes));
         JSONObject started;
         try {
-            started = manager.downloadCatalogModel(model.modelId);
+            started = manager.modelManagement().downloadCatalogModel(model.modelId);
         } catch (JSONException | RuntimeException e) {
             started = null;
         }
@@ -452,7 +452,7 @@ public final class TaiBenchSession {
         while (true) {
             if (stopRequested.get()) {
                 try {
-                    manager.cancelDownload(new JSONObject().put("modelId", model.modelId).toString());
+                    manager.modelManagement().cancelDownload(new JSONObject().put("modelId", model.modelId).toString());
                 } catch (JSONException | RuntimeException ignored) {
                 }
                 post(synthetic("download_done").put("modelId", model.modelId).put("ok", false).put("reason", "stopped"));

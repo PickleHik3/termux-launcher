@@ -146,11 +146,11 @@ final class AiModelDownloads {
                     boolean speech = entry != null
                         && entry.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
                     if (!speech) {
-                        TaiManager.getInstance(app).downloadCatalogModel(id);
+                        TaiManager.getInstance(app).modelManagement().downloadCatalogModel(id);
                     } else if (noSpeechYet && startedSpeech.isEmpty() && noPendingVoiceChoice(app)) {
                         TaiSpeechModels.startDownload(app, id, WHISPER_WINDOW_SECONDS);
                     } else {
-                        TaiManager.getInstance(app).downloadSpeechModel(id, WHISPER_WINDOW_SECONDS);
+                        TaiManager.getInstance(app).modelManagement().downloadSpeechModel(id, WHISPER_WINDOW_SECONDS);
                     }
                     if (speech) startedSpeech.add(id);
                 } catch (Exception ignored) {
