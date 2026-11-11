@@ -224,9 +224,6 @@ public final class SuggestionBarView extends GridLayout
     private static final String PAGING_LOG_TAG = "DockPaging";
     private static final char[] AZ_ORDER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".toCharArray();
     private static final long APP_LAUNCH_TOUCH_DELAY_MS = 120L;
-    private static final long PICKUP_DECISION_WINDOW_MS = 650L;
-    private static final float PICKUP_X_AXIS_SLOP_FACTOR = 0.9f;
-    private static final float PICKUP_Y_INTENT_SLOP_FACTOR = 1.8f;
     private static final float MENU_SELECTION_ARM_SLOP_FACTOR = 0.8f;
     /**
      * The pinned folder's shell — the disc that says these four icons are one thing. Seeds: white
@@ -6617,8 +6614,6 @@ public final class SuggestionBarView extends GridLayout
                 activeLongPressPickupState = state;
             }
             state.menuShown = true;
-            state.menuShownAtMs = SystemClock.uptimeMillis();
-            state.definitiveYMovement = false;
             state.selectionArmed = false;
             return true;
         });
@@ -6680,24 +6675,19 @@ public final class SuggestionBarView extends GridLayout
                     float absDx = Math.abs(dx);
                     float absDy = Math.abs(dy);
                     int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
-                    float yIntentThreshold = slop * PICKUP_Y_INTENT_SLOP_FACTOR;
-                    float xPickupThreshold = slop * PICKUP_X_AXIS_SLOP_FACTOR;
-                    if (absDy >= yIntentThreshold) {
-                        state.definitiveYMovement = true;
-                    }
                     state.maxTravelPx = Math.max(state.maxTravelPx, Math.max(absDx, absDy));
                     if (!state.selectionArmed && Math.max(absDx, absDy) >= (slop * MENU_SELECTION_ARM_SLOP_FACTOR)) {
                         state.selectionArmed = true;
                     }
 
-                    boolean withinPickupWindow = (SystemClock.uptimeMillis() - state.menuShownAtMs) <= PICKUP_DECISION_WINDOW_MS;
-                    boolean shouldStartPickup = allowDragPickup
-                        && withinPickupWindow
-                        && !state.definitiveYMovement
-                        && absDx >= xPickupThreshold
-                        && (pinnedIndex >= 0 || folderEntryPickup != null);
-                    if (drawerPickup != null) shouldStartPickup = withinPickupWindow
-                        && !state.definitiveYMovement && absDx >= xPickupThreshold;
+                    // Home's rule (Launcher3's): once the hold has opened the menu, a finger that
+                    // travels past the lift distance, in any direction and however long it held,
+                    // closes the menu and carries the icon.
+                    boolean liftable = drawerPickup != null || (allowDragPickup
+                        && (pinnedIndex >= 0 || folderEntryPickup != null));
+                    boolean shouldStartPickup = liftable
+                        && com.termux.app.launcher.widget.HomeIconLift.pastLiftDistance(dx, dy,
+                            com.termux.app.launcher.widget.HomeIconLift.liftDistancePx(slop));
 
                     if (shouldStartPickup) {
                         state.dragStarted = true;
@@ -7988,8 +7978,6 @@ public final class SuggestionBarView extends GridLayout
         float maxTravelPx = 0f;
         boolean menuShown = false;
         boolean dragStarted = false;
-        long menuShownAtMs = 0L;
-        boolean definitiveYMovement = false;
         boolean selectionArmed = false;
         boolean leftAnchor = false;
         boolean notificationSwipeStarted = false;
