@@ -100,6 +100,11 @@ final class TaiRuntimeIpc {
      */
     static final String OP_IMAGE_GENERATE = "imageGenerate";
     static final String OP_IMAGE_CANCEL = "imageCancel";
+    /**
+     * Answers once the GPU probe this process runs as it starts has finished (runs it when it has
+     * not): {@code probed} and the {@code gpuPath}. On a thread of its own, never behind the lane.
+     */
+    static final String OP_GPU_PROBE = "gpuProbe";
 
     private TaiRuntimeIpc() {
     }

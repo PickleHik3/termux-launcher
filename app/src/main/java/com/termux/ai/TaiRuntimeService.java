@@ -40,6 +40,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -177,6 +178,33 @@ public final class TaiRuntimeService extends Service {
         // id is ours, and nothing of ours is posted under it until ensureForeground() runs.
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) manager.cancel(NOTIFICATION_ID);
+        startGpuProbe();
+    }
+
+    /** How long the lane waits for the start-up GPU probe before native work goes ahead anyway. */
+    static final long GPU_PROBE_LANE_WAIT_MS = 3_000L;
+
+    /**
+     * The GPU probe, once per app build (later starts read its cache file): here and never in the
+     * launcher's process, so a driver that crashes takes down only this one. It runs on a thread of
+     * its own; the lane holds native work back until it is done (or {@link #GPU_PROBE_LANE_WAIT_MS}
+     * has passed, should a driver hang), so the first load does not meet the drivers mid-probe and
+     * sees the probed GPU path.
+     */
+    private void startGpuProbe() {
+        CountDownLatch probed = new CountDownLatch(1);
+        TaiPlatformCaps.probeAsync(this, probed::countDown);
+        try {
+            lane().submitTask(() -> {
+                try {
+                    probed.await(GPU_PROBE_LANE_WAIT_MS, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        } catch (RuntimeException e) {
+            Log.w(LOG_TAG, "could not hold the lane for the GPU probe: " + message(e));
+        }
     }
 
     @Nullable
@@ -237,6 +265,16 @@ public final class TaiRuntimeService extends Service {
             String body = data.getString(TaiRuntimeIpc.KEY_BODY, null);
             String bodyFile = data.getString(TaiRuntimeIpc.KEY_BODY_FILE, null);
             Messenger replyTo = message.replyTo;
+            if (TaiRuntimeIpc.OP_GPU_PROBE.equals(operation)) {
+                // From a one-off client that lets go right after: it is not the client an idle-exit
+                // notice should reach, nor use of the runtime. It waits for the start-up probe, so
+                // neither the main thread nor any lane is held by it.
+                inFlight.incrementAndGet();
+                Thread thread = new Thread(() -> runRequest(replyTo, requestId, operation, body, bodyFile), "tai-gpu-probe-reply");
+                thread.setDaemon(true);
+                thread.start();
+                return;
+            }
             // A request means the client kept the binding; whatever exit was announced is off.
             lastClient = replyTo;
             idleExitAnnounced = false;
@@ -466,7 +504,7 @@ public final class TaiRuntimeService extends Service {
             if (speech) ttsInFlight.decrementAndGet();
             if (image) imageInFlight.decrementAndGet();
             deleteBodyFile(bodyFile);
-            if (!isStatusOperation(operation)) lastActivityMs = System.currentTimeMillis();
+            if (!isStatusOperation(operation) && !TaiRuntimeIpc.OP_GPU_PROBE.equals(operation)) lastActivityMs = System.currentTimeMillis();
             inFlight.decrementAndGet();
             updateForegroundAfterOperation();
         }
@@ -547,6 +585,8 @@ public final class TaiRuntimeService extends Service {
                 return manager.speech().speechState();
             case TaiRuntimeIpc.OP_IMAGE_CANCEL:
                 return manager.images().cancelImage();
+            case TaiRuntimeIpc.OP_GPU_PROBE:
+                return TaiPlatformCaps.probeReply(TaiPlatformCaps.probe(this));
             default:
                 return error(400, "bad_runtime_operation", "Unknown On-device AI runtime operation: " + operation);
         }

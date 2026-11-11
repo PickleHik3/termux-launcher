@@ -450,6 +450,24 @@ public final class TaiRuntimeServiceClient {
     }
 
     /**
+     * Lets this client's binding go, for a one-off client ({@link TaiPlatformCaps#probeInRuntime}):
+     * with no other binding the service is destroyed and its process left to Android. A request
+     * still waiting fails as unavailable; a later request binds again.
+     */
+    void close() {
+        synchronized (connectionLock) {
+            releaseBindingLocked();
+            service = null;
+            binding = false;
+            if (connectingLatch != null) connectingLatch.countDown();
+        }
+        for (PendingRequest request : pending.values()) {
+            request.finish(runtimeUnavailable("tai_runtime_closed", "On-device AI runtime client closed."));
+        }
+        pending.clear();
+    }
+
+    /**
      * Unbinds once. Guarded by {@link #bound} so a disconnect callback that follows our own unbind
      * (Robolectric delivers one; a second unbind would recurse) releases nothing twice.
      */
