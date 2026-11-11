@@ -174,6 +174,15 @@ typedef struct {
     bool snap_visible;
     int snap_mouse;  // the OSC 22 pointer shape
     struct KittyState* kitty;  // kitty graphics, set up by nativeKittySetup; see the end of this file
+    // The library's input encoders (see nativeEncodeKey / nativeEncodeMouse), made with the terminal.
+    GhosttyKeyEncoder key_enc;
+    GhosttyKeyEvent key_ev;
+    GhosttyMouseEncoder mouse_enc;
+    GhosttyMouseEvent mouse_ev;
+    // The mouse tracking/format mode bits the mouse encoder was last configured from; see
+    // nativeEncodeMouse. mouse_sig_known is false until the first call.
+    uint32_t mouse_sig;
+    bool mouse_sig_known;
 } Core;
 
 static void kitty_free(Core* c);
@@ -443,6 +452,10 @@ static void core_free(Core* c, JNIEnv* env) {
     if (c->row_cells) ghostty_render_state_row_cells_free(c->row_cells);
     if (c->row_iter) ghostty_render_state_row_iterator_free(c->row_iter);
     if (c->render) ghostty_render_state_free(c->render);
+    if (c->key_enc) ghostty_key_encoder_free(c->key_enc);
+    if (c->key_ev) ghostty_key_event_free(c->key_ev);
+    if (c->mouse_enc) ghostty_mouse_encoder_free(c->mouse_enc);
+    if (c->mouse_ev) ghostty_mouse_event_free(c->mouse_ev);
     if (c->term) ghostty_terminal_free(c->term);
     if (c->sink != NULL && env != NULL) (*env)->DeleteGlobalRef(env, c->sink);
     free(c->xtversion);
@@ -553,10 +566,17 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     if (ghostty_terminal_new(NULL, &c->term, (uint16_t) cols, (uint16_t) rows) != GHOSTTY_SUCCESS
         || ghostty_render_state_new(NULL, &c->render) != GHOSTTY_SUCCESS
         || ghostty_render_state_row_iterator_new(NULL, &c->row_iter) != GHOSTTY_SUCCESS
-        || ghostty_render_state_row_cells_new(NULL, &c->row_cells) != GHOSTTY_SUCCESS) {
+        || ghostty_render_state_row_cells_new(NULL, &c->row_cells) != GHOSTTY_SUCCESS
+        || ghostty_key_encoder_new(NULL, &c->key_enc) != GHOSTTY_SUCCESS
+        || ghostty_key_event_new(NULL, &c->key_ev) != GHOSTTY_SUCCESS
+        || ghostty_mouse_encoder_new(NULL, &c->mouse_enc) != GHOSTTY_SUCCESS
+        || ghostty_mouse_event_new(NULL, &c->mouse_ev) != GHOSTTY_SUCCESS) {
         core_free(c, env);
         return 0;
     }
+    // First-party Ghostty drops motion inside one cell; the encoder keeps the last cell for that.
+    bool track_cell = true;
+    ghostty_mouse_encoder_set(c->mouse_enc, GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL, &track_cell);
     GhosttyPoint origin = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = 0}}};
     if (ghostty_terminal_grid_ref_track(c->term, origin, &c->top) != GHOSTTY_SUCCESS
         || ghostty_terminal_grid_ref_track(c->term, origin, &c->bottom) != GHOSTTY_SUCCESS
@@ -1032,6 +1052,137 @@ static int read_modes(Core* c) {
             bits |= MODE_BITS[i].bit;
     }
     return bits;
+}
+
+// The library's input encoders. Like every entry point they run on the session's thread (the main
+// thread, the one that calls nativeWrite), so the encoders and the terminal they read are never
+// touched from two threads at once.
+
+// Bytes of an encoder's output: a 128-byte stack buffer first, a heap one of the size the library
+// reports when that was too small. Returns a new byte[] (empty for no output), NULL on an error.
+typedef GhosttyResult (*EncodeFn)(Core* c, uint8_t* buf, size_t len, size_t* written);
+
+static GhosttyResult key_encode_fn(Core* c, uint8_t* buf, size_t len, size_t* written) {
+    return ghostty_key_encoder_encode(c->key_enc, c->key_ev, buf, len, written);
+}
+
+static GhosttyResult mouse_encode_fn(Core* c, uint8_t* buf, size_t len, size_t* written) {
+    return ghostty_mouse_encoder_encode(c->mouse_enc, c->mouse_ev, buf, len, written);
+}
+
+static jbyteArray encode_to_array(JNIEnv* env, Core* c, EncodeFn fn) {
+    uint8_t stack[128];
+    uint8_t* buf = stack;
+    size_t written = 0;
+    GhosttyResult r = fn(c, stack, sizeof(stack), &written);
+    uint8_t* heap = NULL;
+    if (r == GHOSTTY_OUT_OF_SPACE && written > 0) {
+        heap = malloc(written);
+        if (heap == NULL) return NULL;
+        buf = heap;
+        size_t need = written;
+        r = fn(c, heap, need, &written);
+    }
+    jbyteArray out = NULL;
+    if (r == GHOSTTY_SUCCESS) {
+        out = (*env)->NewByteArray(env, (jsize) written);
+        if (out != NULL && written > 0) (*env)->SetByteArrayRegion(env, out, 0, (jsize) written, (const jbyte*) buf);
+    }
+    free(heap);
+    return out;
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeEncodeKey(
+    JNIEnv* env, jclass cls, jlong h, jint key, jint action, jint mods, jint consumed_mods,
+    jint unshifted, jbyteArray utf8, jboolean composing) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || c->key_enc == NULL || c->key_ev == NULL) return NULL;
+    if (ghostty_key_encoder_set_from_terminal(c->key_enc, c->term) != GHOSTTY_SUCCESS) return NULL;
+    uint8_t text_stack[64];
+    uint8_t* text = text_stack;
+    uint8_t* text_heap = NULL;
+    size_t text_len = 0;
+    if (utf8 != NULL) {
+        jsize n = (*env)->GetArrayLength(env, utf8);
+        if (n > (jsize) sizeof(text_stack)) {
+            text_heap = malloc((size_t) n);
+            if (text_heap == NULL) return NULL;
+            text = text_heap;
+        }
+        if (n > 0) (*env)->GetByteArrayRegion(env, utf8, 0, n, (jbyte*) text);
+        text_len = (size_t) (n > 0 ? n : 0);
+    }
+    GhosttyString str = {.ptr = text_len > 0 ? text : NULL, .len = text_len};
+    ghostty_key_event_set_action(c->key_ev, (GhosttyKeyAction) action);
+    ghostty_key_event_set_key(c->key_ev, (GhosttyKey) key);
+    ghostty_key_event_set_mods(c->key_ev, (GhosttyMods) mods);
+    ghostty_key_event_set_consumed_mods(c->key_ev, (GhosttyMods) consumed_mods);
+    ghostty_key_event_set_composing(c->key_ev, composing != JNI_FALSE);
+    ghostty_key_event_set_unshifted_codepoint(c->key_ev, (uint32_t) unshifted);
+    ghostty_key_event_set_utf8(c->key_ev, str);
+    jbyteArray out = encode_to_array(env, c, key_encode_fn);
+    // The event keeps the pointer, not a copy of the text.
+    GhosttyString none = {.ptr = NULL, .len = 0};
+    ghostty_key_event_set_utf8(c->key_ev, none);
+    free(text_heap);
+    return out;
+}
+
+// The mouse tracking and format modes the encoder is configured from, as one number.
+static uint32_t mouse_signature(Core* c) {
+    static const int modes[] = {9, 1000, 1002, 1003, 1005, 1006, 1015, 1016};
+    uint32_t sig = 0;
+    for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
+        GhosttyTerminalModeConfig cfg = {.mode = ghostty_mode_new((uint16_t) modes[i], false), .value = false};
+        if (ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_MODE, &cfg) == GHOSTTY_SUCCESS && cfg.value)
+            sig |= 1u << i;
+    }
+    return sig;
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeEncodeMouse(
+    JNIEnv* env, jclass cls, jlong h, jint action, jint button, jint mods, jfloat x, jfloat y,
+    jint screen_w, jint screen_h, jint cell_w, jint cell_h, jboolean any_pressed) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || c->mouse_enc == NULL || c->mouse_ev == NULL) return NULL;
+    if (screen_w < 1 || screen_h < 1 || cell_w < 1 || cell_h < 1) return NULL;
+    // set_from_terminal also forgets the last cell the motion de-dup compares with, so it runs
+    // only when a tracking or format mode changed since it last ran.
+    uint32_t sig = mouse_signature(c);
+    if (!c->mouse_sig_known || sig != c->mouse_sig) {
+        if (ghostty_mouse_encoder_set_from_terminal(c->mouse_enc, c->term) != GHOSTTY_SUCCESS) return NULL;
+        c->mouse_sig = sig;
+        c->mouse_sig_known = true;
+    }
+    GhosttyMouseEncoderSize size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
+    size.screen_width = (uint32_t) screen_w;
+    size.screen_height = (uint32_t) screen_h;
+    size.cell_width = (uint32_t) cell_w;
+    size.cell_height = (uint32_t) cell_h;
+    ghostty_mouse_encoder_set(c->mouse_enc, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+    bool pressed = any_pressed != JNI_FALSE;
+    ghostty_mouse_encoder_set(c->mouse_enc, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed);
+    ghostty_mouse_event_set_action(c->mouse_ev, (GhosttyMouseAction) action);
+    if (button == 0) ghostty_mouse_event_clear_button(c->mouse_ev);
+    else ghostty_mouse_event_set_button(c->mouse_ev, (GhosttyMouseButton) button);
+    ghostty_mouse_event_set_mods(c->mouse_ev, (GhosttyMods) mods);
+    GhosttyMousePosition pos = {.x = x, .y = y};
+    ghostty_mouse_event_set_position(c->mouse_ev, pos);
+    return encode_to_array(env, c, mouse_encode_fn);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeEncodeFocus(
+    JNIEnv* env, jclass cls, jboolean gained) {
+    (void) cls;
+    uint8_t buf[16];
+    size_t written = 0;
+    if (ghostty_focus_encode(gained ? GHOSTTY_FOCUS_GAINED : GHOSTTY_FOCUS_LOST, buf, sizeof(buf), &written)
+        != GHOSTTY_SUCCESS) return NULL;
+    jbyteArray out = (*env)->NewByteArray(env, (jsize) written);
+    if (out != NULL && written > 0) (*env)->SetByteArrayRegion(env, out, 0, (jsize) written, (const jbyte*) buf);
+    return out;
 }
 
 // Copy one render-state row (the iterator's current row) into cells/extra. Returns the number of

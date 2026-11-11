@@ -153,6 +153,27 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         GhosttyNative.nativeWrite(mHandle, data, offset, length);
     }
 
+    /** The bytes for a key event (see {@link GhosttyNative#nativeEncodeKey}), null once freed or on failure. */
+    byte[] encodeKey(int key, int action, int mods, int consumedMods, int unshiftedCodePoint, byte[] utf8,
+                     boolean composing) {
+        if (mHandle == 0) return null;
+        return GhosttyNative.nativeEncodeKey(mHandle, key, action, mods, consumedMods, unshiftedCodePoint, utf8,
+            composing);
+    }
+
+    /** The bytes for a mouse event (see {@link GhosttyNative#nativeEncodeMouse}), null once freed or on failure. */
+    byte[] encodeMouse(int action, int button, int mods, float x, float y, int screenWidth, int screenHeight,
+                       int cellWidth, int cellHeight, boolean anyButtonPressed) {
+        if (mHandle == 0) return null;
+        return GhosttyNative.nativeEncodeMouse(mHandle, action, button, mods, x, y, screenWidth, screenHeight,
+            cellWidth, cellHeight, anyButtonPressed);
+    }
+
+    /** The focus report bytes, or null when the library is not loaded. */
+    static byte[] encodeFocus(boolean gained) {
+        return GhosttyNative.isAvailable() ? GhosttyNative.nativeEncodeFocus(gained) : null;
+    }
+
     void setHistoryLimit(int rows) {
         if (mHandle == 0) return;
         GhosttyNative.nativeSetHistoryLimit(mHandle, rows);

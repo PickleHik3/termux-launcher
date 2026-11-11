@@ -235,6 +235,30 @@ final class GhosttyNative {
     /** Parse {@code length} bytes from {@code offset} in one go. */
     static native void nativeWrite(long handle, byte[] data, int offset, int length);
 
+    /**
+     * The bytes for one key event, encoded from the terminal's live modes (cursor keys, keypad, kitty
+     * flags of the active screen). {@code key}, {@code action} and {@code mods} are the library's
+     * GhosttyKey, GhosttyKeyAction and GhosttyMods values (see {@link GhosttyKeys}); {@code utf8} is
+     * the text the key produced or null, and holds no C0 control character. Length 0 means nothing
+     * to send; null means the encoder failed.
+     */
+    static native byte[] nativeEncodeKey(long handle, int key, int action, int mods, int consumedMods,
+                                         int unshiftedCodePoint, byte[] utf8OrNull, boolean composing);
+
+    /**
+     * The bytes for one mouse event under the terminal's live tracking and format modes. {@code action}
+     * is 0 press, 1 release, 2 motion; {@code button} is the library's GhosttyMouseButton, 0 for none;
+     * {@code x}, {@code y} are pixels from the top-left of a {@code screenWidth} x {@code screenHeight}
+     * area of {@code cellWidth} x {@code cellHeight} cells. Length 0 means nothing to send; null
+     * means the encoder failed.
+     */
+    static native byte[] nativeEncodeMouse(long handle, int action, int button, int mods, float x, float y,
+                                           int screenWidth, int screenHeight, int cellWidth, int cellHeight,
+                                           boolean anyButtonPressed);
+
+    /** {@code CSI I} for focus gained, {@code CSI O} for lost, as the library writes them. */
+    static native byte[] nativeEncodeFocus(boolean gained);
+
     /** The most rows of history the primary screen keeps; Ghostty prunes in whole pages. */
     static native void nativeSetHistoryLimit(long handle, int rows);
 
