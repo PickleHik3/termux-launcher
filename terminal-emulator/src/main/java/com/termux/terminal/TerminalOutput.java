@@ -24,6 +24,14 @@ public abstract class TerminalOutput {
     public abstract void write(byte[] data, int offset, int count);
 
     /**
+     * The TERM value the session exports, which the Fast engine answers an XTGETTCAP TN query
+     * with; null when there is none.
+     */
+    public String getTerminfoName() {
+        return null;
+    }
+
+    /**
      * Notify the terminal client that the terminal title has changed.
      */
     public abstract void titleChanged(String oldTitle, String newTitle);

@@ -792,6 +792,19 @@ JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetCol
     return arr;
 }
 
+// The TERM the session exports, for XTGETTCAP TN. The library copies it (128 bytes at most; longer
+// is refused and the old name stays). Empty clears it.
+JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetTerminfoName(JNIEnv* env, jclass cls, jlong h, jbyteArray name) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || name == NULL) return;
+    jsize n = (*env)->GetArrayLength(env, name);
+    if (n <= 0 || n > 128) return;
+    uint8_t buf[128];
+    (*env)->GetByteArrayRegion(env, name, 0, n, (jbyte*) buf);
+    GhosttyString s = {.ptr = buf, .len = (size_t) n};
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_TERMINFO_NAME, &s);
+}
 
 // End a render hold that ran past Java's timeout: reset mode 2026 as the program would have. Setting
 // the mode from here never calls on_render_hold, so the hold is marked over here too; the next sync

@@ -177,6 +177,12 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         return mHandle != 0 ? GhosttyNative.nativeSetColorScheme(mHandle, dark) : null;
     }
 
+    /** The TERM the session exports, which XTGETTCAP TN answers with. */
+    void setTerminfoName(String name) {
+        if (mHandle != 0 && name != null && !name.isEmpty())
+            GhosttyNative.nativeSetTerminfoName(mHandle, name.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     /** End a render hold (mode 2026) the program has not ended; the next sync takes a fresh frame. */
     void endHold() {
         if (mHandle != 0) GhosttyNative.nativeEndHold(mHandle);

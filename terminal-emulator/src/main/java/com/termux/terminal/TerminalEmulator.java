@@ -1617,6 +1617,7 @@ public final class TerminalEmulator {
         if (core == null) return false;
         mGhostty = core;
         core.setColorScheme(isDefaultBackgroundDark());
+        core.setTerminfoName(mSession.getTerminfoName());
         mGhosttyLinks = new GhosttyLinks(mHyperlinks, new GhosttyLinks.UsedIds() {
             @Override
             public void markUsed(boolean[] used) {

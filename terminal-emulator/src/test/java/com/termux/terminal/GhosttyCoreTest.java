@@ -334,4 +334,26 @@ public class GhosttyCoreTest extends TerminalTestCase {
         }
     }
 
+    public void testTerminfoNameAnswersXtgettcapTn() {
+        if (System.getProperty(GhosttyNative.TEST_LIBRARY_DIR_PROPERTY) == null) return;
+        withTerminalSized(5, 3);
+        mOutput.terminfoName = "xterm-kitty";
+        assertTrue(mTerminal.useGhosttyCore());
+        enterString("\033P+q544E\033\\");
+        assertEquals("\033P1+r544E=" + hex("xterm-kitty") + "\033\\", mOutput.getOutputAndClear());
+        enterString("\033c\033P+q544E\033\\");
+        assertEquals("the name survives RIS", "\033P1+r544E=" + hex("xterm-kitty") + "\033\\", mOutput.getOutputAndClear());
+    }
+
+    public void testNoTerminfoNameGivesNoTnAnswer() {
+        if (!ghostty(5, 3)) return;
+        enterString("\033P+q544E\033\\");
+        assertFalse(mOutput.getOutputAndClear().contains("544E="));
+    }
+
+    private static String hex(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : s.getBytes(StandardCharsets.UTF_8)) sb.append(String.format("%02X", b));
+        return sb.toString();
+    }
 }

@@ -133,6 +133,20 @@ public final class TerminalSession extends TerminalOutput {
 
     private static final String LOG_TAG = "TerminalSession";
 
+    @Override
+    public String getTerminfoName() {
+        return termValue(mEnv);
+    }
+
+    /** The value of the {@code TERM=} entry of an environment array, or null when there is none. */
+    static String termValue(String[] env) {
+        if (env == null) return null;
+        for (String entry : env) {
+            if (entry != null && entry.startsWith("TERM=")) return entry.substring(5);
+        }
+        return null;
+    }
+
     public TerminalSession(String shellPath, String cwd, String[] args, String[] env, Integer transcriptRows, TerminalSessionClient client) {
         this(shellPath, cwd, args, env, transcriptRows, client, null);
     }

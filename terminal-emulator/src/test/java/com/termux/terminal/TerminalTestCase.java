@@ -24,6 +24,14 @@ public abstract class TerminalTestCase extends TestCase {
 		/** What an OSC 52 read query ({@code ESC ] 52 ; c ; ?}) should answer with; null answers empty. */
 		public String clipboardContents = null;
 		public int bellsRung = 0;
+		/** What {@link #getTerminfoName()} returns; null means none. */
+		public String terminfoName = null;
+
+		@Override
+		public String getTerminfoName() {
+			return terminfoName;
+		}
+
 		public int colorsChanged = 0;
 		public final List<String[]> notifications = new ArrayList<>();
 

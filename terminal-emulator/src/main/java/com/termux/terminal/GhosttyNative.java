@@ -236,6 +236,9 @@ final class GhosttyNative {
      */
     static native byte[] nativeSetColorScheme(long handle, boolean dark);
 
+    /** Set the TERM name XTGETTCAP TN answers with (1 to 128 bytes). */
+    static native void nativeSetTerminfoName(long handle, byte[] name);
+
     /** End a render hold that outlived its timeout, as if the program had reset mode 2026. */
     static native void nativeEndHold(long handle);
 
