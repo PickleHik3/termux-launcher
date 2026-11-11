@@ -6895,6 +6895,8 @@ public final class SuggestionBarView extends GridLayout
             && addToHomeListener.canOpenWidgets() && hasWidgetProviders(packageName);
         inputs.canAddToHome = addToHomeListener != null && addToHomeListener.canAddToHome();
         inputs.canMoveToCategory = categoryChoiceHandler != null;
+        inputs.canAddToFolder = categoryChoiceHandler != null && !linuxApp
+            && !drawerFoldersFor(entry).isEmpty();
         if (folderSource) {
             inputs.customIcon = folderApp != null
                 && getIconResolver().loadOverride(folderApp.iconOverride) != null;
@@ -7143,6 +7145,10 @@ public final class SuggestionBarView extends GridLayout
             case REMOVE_FROM_FOLDER:
                 return appMenuItem(R.string.app_menu_remove_from_folder,
                     R.drawable.ic_app_menu_remove_from_folder, () -> removeFromContextSource(context));
+            case ADD_TO_FOLDER:
+                return appMenuItem(R.string.app_menu_add_to_folder,
+                    R.drawable.ic_app_menu_add_to_folder,
+                    () -> showAddToFolderPopup(entry, context.anchor));
             case CHANGE_ICON:
                 return appMenuItem(R.string.app_menu_change_icon, R.drawable.ic_app_menu_change_icon, () -> {
                     if (folderSource) {
@@ -7662,6 +7668,59 @@ public final class SuggestionBarView extends GridLayout
                                         boolean checked, int tintBase, @NonNull Runnable action) {
         return menuRows.addCheckableRow(shell, title, R.drawable.ic_symbol_check_circle, checked,
             tintBase, action);
+    }
+
+    /** The drawer's folders {@code entry} can still join, from the shared store. */
+    @NonNull
+    private List<PinnedFolderItem> drawerFoldersFor(@NonNull LauncherAppEntry entry) {
+        if (configRepository == null) return java.util.Collections.emptyList();
+        return com.termux.app.launcher.folder.DrawerFolderChoices.offered(
+            configRepository.loadSnapshot().folders.values(), entry.appRef);
+    }
+
+    /**
+     * The choice behind the App menu's Add to folder row: the drawer's folders by name, in the
+     * same shell as the category picker. A pick adds the app through the store a drop used to use.
+     */
+    private void showAddToFolderPopup(@NonNull LauncherAppEntry entry, @NonNull View anchor) {
+        List<PinnedFolderItem> folders = drawerFoldersFor(entry);
+        if (folders.isEmpty()) return;
+        dismissContextPopups();
+        LinearLayout shell = menuRows.newShell();
+
+        TextView header = new TextView(getContext());
+        header.setText(entry.label);
+        header.setTextColor(resolveLauncherTextColor());
+        header.setTextSize(12f);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(8), dp(6), dp(8), dp(7));
+        shell.addView(header, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int tintBase = inheritedTintColor & 0x00FFFFFF;
+        List<MenuRow> rows = new ArrayList<>();
+        for (PinnedFolderItem folder : folders) {
+            String folderId = folder.id;
+            rows.add(new MenuRow(menuRows.addActionRow(shell, folder.title, tintBase, () -> {
+                dismissCategoryPickerPopup();
+                addDrawerAppToFolderFromMenu(folderId, entry);
+            }), () -> {}));
+        }
+
+        int rowWidth = MenuRowWidths.normalize(rows);
+        MenuRowWidths.constrainHeader(header, rowWidth);
+        categoryPickerMenu.show(MenuSpec.of(shell, tintBase).rows(rows).build(), anchor);
+    }
+
+    private void addDrawerAppToFolderFromMenu(@NonNull String folderId,
+                                              @NonNull LauncherAppEntry entry) {
+        if (configRepository == null) return;
+        LauncherConfigRepository.MutationResult result = addDrawerAppToFolder(
+            configRepository.loadSnapshot().revision, folderId, entry.appRef.stableId());
+        if (result == LauncherConfigRepository.MutationResult.CAPACITY) {
+            AppNotice.show(getContext(), R.string.folder_capacity_reached, false);
+        }
     }
 
     private void dismissCategoryPickerPopup() {
