@@ -491,6 +491,28 @@ public final class TerminalSession extends TerminalOutput {
         return mShellPid != -1;
     }
 
+    /**
+     * The name of the program in the foreground of this session's pty (tcgetpgrp, then
+     * /proc/pgid/comm), or null when the session is not running or the name cannot be read.
+     */
+    @androidx.annotation.Nullable
+    public String getForegroundProgramName() {
+        final int fd;
+        synchronized (this) {
+            if (mShellPid == -1) return null;
+            fd = mTerminalFileDescriptor;
+        }
+        try {
+            final int pgid = JNI.getForegroundProcessGroup(fd);
+            if (pgid <= 0) return null;
+            final byte[] raw = java.nio.file.Files.readAllBytes(new File("/proc/" + pgid + "/comm").toPath());
+            final String name = new String(raw, StandardCharsets.UTF_8).trim();
+            return name.isEmpty() ? null : name;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     /** Whether the process ended because {@link #finishIfRunning()} asked it to. */
     public boolean isFinishRequested() {
         return mFinishRequested;
