@@ -850,6 +850,9 @@
     <string name="app_menu_unpin">Unpin</string>
     <string name="app_menu_move_to_dock">Move to dock</string>
     <string name="app_menu_remove_from_folder">Remove from folder</string>
+    <string name="app_menu_add_to_folder">Add to folder</string>
+    <string name="app_menu_new_folder_with">New folder with\u2026</string>
+    <string name="app_menu_pick_second_app">Pick an app for the folder</string>
     <string name="app_menu_move_to_category">Move to category</string>
     <string name="app_menu_change_icon">Change icon</string>
     <string name="app_menu_reset_icon">Reset icon</string>

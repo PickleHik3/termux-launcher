@@ -1,5 +1,6 @@
 package com.termux.app.launcher.popup;
 
+import static com.termux.app.launcher.popup.AppMenuPlan.Row.ADD_TO_FOLDER;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.ADD_TO_HOME;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.APP_INFO;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.CHANGE_ICON;
@@ -199,5 +200,31 @@ public class AppMenuPlanTest {
         assertTrue(AppMenuPlan.movesToCategory(in));
         in.androidPackage = false;
         assertFalse(AppMenuPlan.movesToCategory(in));
+    }
+
+    @Test
+    public void aDrawerAppWithAFolderToJoin_offersAddToFolderAfterAddToHome() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.source = AppMenuPlan.Source.UNPINNED;
+        in.canAddToFolder = true;
+        assertEquals(Collections.singletonList(
+                Arrays.asList(WIDGETS, APP_INFO, ADD_TO_HOME, ADD_TO_FOLDER, PIN, CHANGE_ICON, UNINSTALL)),
+            AppMenuPlan.groups(in));
+    }
+
+    @Test
+    public void addToFolderIsNeverOnTheDockHomeOrAFolderMember() {
+        for (AppMenuPlan.Source source : AppMenuPlan.Source.values()) {
+            AppMenuPlan.Inputs in = dockApp();
+            in.source = source;
+            in.canAddToFolder = true;
+            boolean shown = AppMenuPlan.groups(in).get(0).contains(ADD_TO_FOLDER);
+            assertEquals(source.toString(), source == AppMenuPlan.Source.UNPINNED
+                || source == AppMenuPlan.Source.PINNED, shown);
+        }
+        AppMenuPlan.Inputs onDock = dockApp();
+        onDock.canAddToFolder = true;
+        onDock.onDock = true;
+        assertFalse(AppMenuPlan.groups(onDock).get(0).contains(ADD_TO_FOLDER));
     }
 }

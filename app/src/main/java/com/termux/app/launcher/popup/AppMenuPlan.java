@@ -32,6 +32,7 @@ public final class AppMenuPlan {
         WIDGETS,
         APP_INFO,
         ADD_TO_HOME,
+        ADD_TO_FOLDER,
         PIN,
         UNPIN,
         MOVE_TO_DOCK,
@@ -72,6 +73,8 @@ public final class AppMenuPlan {
         public boolean onDock;
         /** The drawer can reassign categories (the host has its picker); see {@link #movesToCategory}. */
         public boolean canMoveToCategory;
+        /** The drawer has a folder this app can still join; see {@link #addsToFolder}. */
+        public boolean canAddToFolder;
     }
 
     private AppMenuPlan() {
@@ -92,6 +95,12 @@ public final class AppMenuPlan {
     public static boolean movesToCategory(@NonNull Inputs in) {
         return in.canMoveToCategory && in.androidPackage && !in.onDock
             && in.source != Source.FOLDER_MEMBER;
+    }
+
+    /** Whether Add to folder shows: from the drawer, on an app that is not in a folder or on Home. */
+    public static boolean addsToFolder(@NonNull Inputs in) {
+        return in.canAddToFolder && !in.onDock
+            && (in.source == Source.UNPINNED || in.source == Source.PINNED);
     }
 
     /** The groups, top to bottom; never an empty group. */
@@ -116,6 +125,7 @@ public final class AppMenuPlan {
         if (in.canAddToHome && in.source != Source.FOLDER_MEMBER && in.source != Source.HOME) {
             actions.add(Row.ADD_TO_HOME);
         }
+        if (addsToFolder(in)) actions.add(Row.ADD_TO_FOLDER);
         switch (in.source) {
             case FOLDER_MEMBER:
                 actions.add(Row.MOVE_TO_DOCK);
