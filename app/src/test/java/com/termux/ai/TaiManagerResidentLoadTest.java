@@ -47,8 +47,7 @@ public class TaiManagerResidentLoadTest {
         new TaiModelStore(context).upsertUserModel(chatModel(MODEL, "/nonexistent/tai-test/" + MODEL + ".litertlm"));
         manager = TaiManager.getInstance(context);
         runtime = new StubRuntime();
-        setField(manager, "runtimeProcess", true);
-        setField(manager, "runtime", runtime);
+        manager.useLocalRuntimeForTesting(runtime, true);
     }
 
     @Test
@@ -102,12 +101,6 @@ public class TaiManagerResidentLoadTest {
             0,
             null
         );
-    }
-
-    private static void setField(Object target, String name, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(target, value);
     }
 
     private static final class StubRuntime implements TaiRuntime {

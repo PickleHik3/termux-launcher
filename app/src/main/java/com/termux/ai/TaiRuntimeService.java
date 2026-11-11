@@ -62,11 +62,17 @@ public final class TaiRuntimeService extends Service {
     static final int MSG_IDLE_EXIT = 5;
     private static final long MIB = 1024L * 1024L;
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "tai-runtime-service");
-        thread.setDaemon(true);
-        return thread;
-    });
+    /**
+     * The serial lane for native work: chat and completion generations with their ids and
+     * priorities (ADR 0027 §4), and loads, keep warm, embeddings, tokenize, preflight and the
+     * benchmarks as plain jobs at normal priority, all one at a time in the order they came. It is
+     * the runtime-process TaiManager's own queue ({@link TaiManager#runtimeQueue}), so a direct
+     * in-process generation is ordered against it too; it lives with the process, not the service.
+     */
+    @NonNull
+    private GenerationQueue lane() {
+        return TaiManager.getRuntimeProcessInstance(this).runtimeQueue();
+    }
     private final ExecutorService controlExecutor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tai-runtime-control");
         thread.setDaemon(true);
@@ -189,7 +195,13 @@ public final class TaiRuntimeService extends Service {
         cancelIdleExitCheck();
         releaseBenchWakeLock();
         watchScheduler.shutdownNow();
-        executor.shutdownNow();
+        // The lane outlives the service (it is the process's); what still waits on it was asked for
+        // through this service and must not run after it. The running job is left as it was.
+        try {
+            lane().cancelWaiting();
+        } catch (RuntimeException e) {
+            Log.w(LOG_TAG, "could not clear the lane on destroy: " + message(e));
+        }
         controlExecutor.shutdownNow();
         sttExecutor.shutdownNow();
         ttsExecutor.shutdownNow();
@@ -242,8 +254,14 @@ public final class TaiRuntimeService extends Service {
                 inFlight.decrementAndGet();
                 return;
             }
+            if (TaiRuntimeIpc.OP_CANCEL.equals(operation) && data.containsKey(TaiRuntimeIpc.KEY_GENERATION_ID)) {
+                // One generation by id; a cancel without an id is the cancel-all below.
+                String generationId = data.getString(TaiRuntimeIpc.KEY_GENERATION_ID, "");
+                controlExecutor.execute(() -> runCancelById(replyTo, requestId, generationId, bodyFile));
+                return;
+            }
             if (isConcurrentControlOperation(operation)) {
-                // Generation occupies the serial native-work executor. Control operations need an
+                // Generation occupies the serial native-work lane. Control operations need an
                 // independent lane so they can signal it instead of queuing behind it.
                 controlExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
                 return;
@@ -263,7 +281,91 @@ public final class TaiRuntimeService extends Service {
             // Raised as the bench is queued, so everything already ahead of it on the serial lane
             // is still served and everything after it is refused at once rather than left to wait.
             if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) benchRunning.set(true);
-            executor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+            if (isGenerationOperation(operation)) {
+                // A client that sends no id still gets one, so the queue can name it.
+                String generationId = data.getString(TaiRuntimeIpc.KEY_GENERATION_ID, requestId);
+                TaiRuntimeLink.Priority priority = TaiRuntimeLink.Priority.fromWire(data.getString(TaiRuntimeIpc.KEY_PRIORITY));
+                lane().submit(generationId, priority, new GenerationQueue.Job() {
+                    @Override
+                    public void run() {
+                        runRequest(replyTo, requestId, operation, body, bodyFile);
+                    }
+
+                    @Override
+                    public void onWaiting() {
+                        sendGenerationState(replyTo, requestId, TaiRuntimeIpc.STATE_WAITING);
+                    }
+
+                    @Override
+                    public void onStarted() {
+                        sendGenerationState(replyTo, requestId, TaiRuntimeIpc.STATE_STARTED);
+                    }
+
+                    @Override
+                    public void onCancelled() {
+                        finishCancelledWhileWaiting(replyTo, requestId, operation, bodyFile);
+                    }
+                });
+                return;
+            }
+            lane().submitTask(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+        }
+    }
+
+    /** Chat and completion: the operations that go through the lane with an id and a priority. */
+    static boolean isGenerationOperation(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_OPENAI_CHAT.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_COMPLETION.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation);
+    }
+
+    /**
+     * A cancel by id: a waiting generation leaves the lane (it answers its own client with
+     * {@code generation_cancelled}), the running one is stopped, any other id is left alone.
+     */
+    private void runCancelById(@NonNull Messenger replyTo, @NonNull String requestId, @NonNull String generationId,
+                               @Nullable String bodyFile) {
+        try {
+            GenerationQueue.CancelOutcome outcome = lane().cancel(generationId);
+            JSONObject result = new JSONObject();
+            result.put("ok", true);
+            result.put("id", generationId);
+            result.put("cancelled", outcome != GenerationQueue.CancelOutcome.NONE);
+            result.put("was", outcome == GenerationQueue.CancelOutcome.REMOVED_WAITING ? "waiting"
+                : outcome == GenerationQueue.CancelOutcome.STOPPED_RUNNING ? "running" : "none");
+            sendResponse(replyTo, requestId, result);
+        } catch (Throwable throwable) {
+            sendResponse(replyTo, requestId, error(500, "tai_runtime_service_error", message(throwable)));
+        } finally {
+            deleteBodyFile(bodyFile);
+            inFlight.decrementAndGet();
+        }
+    }
+
+    /**
+     * Ends a generation that was cancelled before its turn, as {@link #runRequest} would have ended
+     * it: the client hears {@code generation_cancelled} the way the chat routes report their own
+     * errors (an OpenAI error event and a done for a stream, an OpenAI error reply otherwise).
+     */
+    private void finishCancelledWhileWaiting(@NonNull Messenger replyTo, @NonNull String requestId,
+                                             @NonNull String operation, @Nullable String bodyFile) {
+        try {
+            JSONObject error = InProcessTaiRuntimeLink.cancelledWhileWaiting();
+            if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
+                || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)) {
+                sendStreamEvent(replyTo, requestId, error);
+                sendStreamDone(replyTo, requestId);
+            } else {
+                sendResponse(replyTo, requestId, error);
+            }
+        } catch (IOException ignored) {
+            // The client is gone; nothing is waiting for the answer.
+        } finally {
+            deleteBodyFile(bodyFile);
+            lastActivityMs = System.currentTimeMillis();
+            inFlight.decrementAndGet();
+            updateForegroundAfterOperation();
         }
     }
 
@@ -416,9 +518,9 @@ public final class TaiRuntimeService extends Service {
             case TaiRuntimeIpc.OP_BENCH_HOLD:
                 return manager.holdBench(body);
             case TaiRuntimeIpc.OP_OPENAI_CHAT:
-                return manager.openAiChatCompletions(body);
+                return manager.runtimeHost().generateHere(TaiRuntimeLink.Kind.CHAT, body);
             case TaiRuntimeIpc.OP_OPENAI_COMPLETION:
-                return manager.openAiCompletions(body);
+                return manager.runtimeHost().generateHere(TaiRuntimeLink.Kind.COMPLETION, body);
             case TaiRuntimeIpc.OP_EMBEDDINGS:
                 return manager.embeddings(body);
             case TaiRuntimeIpc.OP_TOKENIZE:
@@ -475,9 +577,9 @@ public final class TaiRuntimeService extends Service {
         } else if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) {
             manager.benchRun(body, sink);
         } else if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
-            manager.openAiChatCompletionsStream(body, sink);
+            manager.runtimeHost().streamHere(TaiRuntimeLink.Kind.CHAT, body, sink);
         } else {
-            manager.openAiCompletionsStream(body, sink);
+            manager.runtimeHost().streamHere(TaiRuntimeLink.Kind.COMPLETION, body, sink);
         }
     }
 
@@ -997,6 +1099,13 @@ public final class TaiRuntimeService extends Service {
         data.putString(TaiRuntimeIpc.KEY_REQUEST_ID, requestId);
         data.putString(TaiRuntimeIpc.KEY_EVENT, event.toString());
         sendOrThrow(replyTo, TaiRuntimeIpc.MSG_STREAM_EVENT, data);
+    }
+
+    private void sendGenerationState(@NonNull Messenger replyTo, @NonNull String requestId, @NonNull String state) {
+        Bundle data = new Bundle();
+        data.putString(TaiRuntimeIpc.KEY_REQUEST_ID, requestId);
+        data.putString(TaiRuntimeIpc.KEY_STATE, state);
+        send(replyTo, TaiRuntimeIpc.MSG_GENERATION_STATE, data);
     }
 
     private void sendStreamDone(@NonNull Messenger replyTo, @NonNull String requestId) throws IOException {

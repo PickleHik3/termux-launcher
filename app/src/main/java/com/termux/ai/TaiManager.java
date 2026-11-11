@@ -8,6 +8,7 @@ import java.util.Base64;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.google.ai.edge.litertlm.Backend;
 import com.google.ai.edge.litertlm.BenchmarkInfo;
@@ -70,7 +71,16 @@ public final class TaiManager {
     @Nullable private final TaiDownloadEngine downloadEngine;
     @Nullable private TaiRuntime runtime;
     @Nullable private final TaiRuntimeServiceClient runtimeClient;
-    private final boolean runtimeProcess;
+    /** Not final only for {@link #useLocalRuntimeForTesting}. */
+    private boolean runtimeProcess;
+    /**
+     * The seam's two sides (ADR 0027 §4), each built once when first used; {@link #runtimeLink}
+     * chooses between them. A test may set its own link instead.
+     */
+    @Nullable private InProcessTaiRuntimeLink inProcessLink;
+    @Nullable private MessengerTaiRuntimeLink messengerLink;
+    @Nullable private volatile TaiRuntimeLink linkForTesting;
+    private final RuntimeHost runtimeHost = new RuntimeHost();
     /** Total device RAM, detected once; {@code -1} until first use, {@code 0} when unknown. */
     private volatile long deviceMemoryBytes = -1L;
     /**
@@ -142,6 +152,195 @@ public final class TaiManager {
 
     private boolean hasInjectedRuntimeOverride() {
         return !runtimeProcess && runtime != null;
+    }
+
+    /**
+     * The link generations and residency go through (ADR 0027 §4): the Messenger adapter in the app
+     * process, the in-process adapter where this manager holds the runtime itself ({@code
+     * :tai_runtime}, or a test's runtime). Both adapters are built once; the choice follows
+     * {@link #shouldDelegateRuntime} so a runtime a test sets after construction is honoured.
+     */
+    @NonNull
+    TaiRuntimeLink runtimeLink() {
+        TaiRuntimeLink testing = linkForTesting;
+        if (testing != null) return testing;
+        synchronized (runtimeHost) {
+            if (shouldDelegateRuntime()) {
+                if (messengerLink == null) {
+                    if (runtimeClient == null) throw new IllegalStateException("On-device AI runtime service client is unavailable.");
+                    messengerLink = new MessengerTaiRuntimeLink(runtimeClient, body -> delegatedRuntimeBody(body, true));
+                }
+                return messengerLink;
+            }
+            return inProcessLink();
+        }
+    }
+
+    @NonNull
+    private InProcessTaiRuntimeLink inProcessLink() {
+        synchronized (runtimeHost) {
+            if (inProcessLink == null) inProcessLink = new InProcessTaiRuntimeLink(runtimeHost);
+            return inProcessLink;
+        }
+    }
+
+    /**
+     * The runtime's one serial lane: {@link TaiRuntimeService} queues on it, and so does a direct
+     * call through the in-process link, so both are ordered against each other.
+     */
+    @NonNull
+    GenerationQueue runtimeQueue() {
+        return inProcessLink().queue();
+    }
+
+    /** The runtime half of this manager, which {@link TaiRuntimeService} serves the Messenger adapter from. */
+    @NonNull
+    InProcessTaiRuntimeLink.Host runtimeHost() {
+        return runtimeHost;
+    }
+
+    /** Tests: the link every generation and residency call goes through; {@code null} restores the choice. */
+    @VisibleForTesting
+    void setRuntimeLinkForTesting(@Nullable TaiRuntimeLink link) {
+        linkForTesting = link;
+    }
+
+    /**
+     * Tests: run on {@code runtime} in this process through the in-process link, as {@code
+     * :tai_runtime} does when {@code asRuntimeProcess} (preflight and the memory budget consulted),
+     * or as an injected app-process runtime otherwise.
+     */
+    @VisibleForTesting
+    void useLocalRuntimeForTesting(@NonNull TaiRuntime runtime, boolean asRuntimeProcess) {
+        synchronized (runtimeHost) {
+            this.runtime = runtime;
+            this.runtimeProcess = asRuntimeProcess;
+            this.linkForTesting = null;
+        }
+    }
+
+    /**
+     * Cancels the on-device generation started with {@code generationId}: stops it if it is running,
+     * takes it out of the queue if it is waiting, and does nothing otherwise (ADR 0027 §4).
+     */
+    public void cancelGeneration(@NonNull String generationId) {
+        runtimeLink().cancel(generationId);
+    }
+
+    @NonNull
+    private JSONObject generateThroughLink(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body,
+                                           @NonNull TaiRuntimeLink.Priority priority, long timeoutMs) throws JSONException {
+        TaiRuntimeLink.GenerationRequest request = new TaiRuntimeLink.GenerationRequest(kind, false, body, priority, null, timeoutMs);
+        JSONObject result;
+        try {
+            result = runtimeLink().generate(request, NO_SIGNALS).await();
+        } catch (IOException e) {
+            // A non-streaming generation writes to no sink; nothing here does I/O of the caller's.
+            throw new IllegalStateException(e);
+        }
+        return result != null ? result : error(500, "tai_runtime_unavailable", "On-device AI runtime did not return a result.");
+    }
+
+    private void streamThroughLink(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body, @NonNull OpenAiStreamSink sink,
+                                   @NonNull TaiRuntimeLink.Priority priority, @Nullable String generationId)
+        throws JSONException, IOException {
+        TaiRuntimeLink.GenerationRequest request = new TaiRuntimeLink.GenerationRequest(kind, true, body, priority, generationId, 0L);
+        runtimeLink().generate(request, generationSink(sink)).await();
+    }
+
+    /** A sink that hears nothing but chunks: every caller before ADR 0027's events. */
+    private static final TaiRuntimeLink.GenerationSink NO_SIGNALS = new TaiRuntimeLink.GenerationSink() {
+    };
+
+    @NonNull
+    private static TaiRuntimeLink.GenerationSink generationSink(@NonNull OpenAiStreamSink sink) {
+        if (sink instanceof TaiRuntimeLink.GenerationSink) return (TaiRuntimeLink.GenerationSink) sink;
+        return new TaiRuntimeLink.GenerationSink() {
+            @Override
+            public void onEvent(@NonNull JSONObject event) throws IOException {
+                sink.onEvent(event);
+            }
+
+            @Override
+            public void onDone() throws IOException {
+                sink.onDone();
+            }
+        };
+    }
+
+    /** The work each seam operation does where the runtime is; see {@link InProcessTaiRuntimeLink.Host}. */
+    private final class RuntimeHost implements InProcessTaiRuntimeLink.Host {
+        @NonNull
+        @Override
+        public JSONObject generateHere(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body) throws JSONException {
+            return kind == TaiRuntimeLink.Kind.CHAT ? chatCompletionsHere(body) : completionsHere(body);
+        }
+
+        @Override
+        public void streamHere(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body, @NonNull OpenAiStreamSink sink)
+            throws JSONException, IOException {
+            if (kind == TaiRuntimeLink.Kind.CHAT) chatCompletionsStreamHere(body, sink);
+            else completionsStreamHere(body, sink);
+        }
+
+        @Override
+        public void cancelActiveGeneration() {
+            TaiRuntime local = runtime;
+            if (local == null) return;
+            try {
+                local.cancel();
+            } catch (JSONException | RuntimeException ignored) {
+            }
+        }
+
+        @NonNull
+        @Override
+        public JSONObject cancelAllHere(@NonNull String stopReason) throws JSONException {
+            return cancelRuntimeHere(stopReason);
+        }
+
+        @NonNull
+        @Override
+        public JSONObject loadHere(@NonNull String body) throws JSONException {
+            return loadModelHere(body);
+        }
+
+        @NonNull
+        @Override
+        public JSONObject unloadHere() throws JSONException {
+            return unloadModelHere();
+        }
+
+        @NonNull
+        @Override
+        public JSONObject unloadChatHere(@NonNull String modelId) throws JSONException {
+            return unloadChatModelHere(modelId);
+        }
+
+        @NonNull
+        @Override
+        public JSONObject keepWarmHere(@NonNull String body) throws JSONException {
+            return keepWarmRuntimeHere(body);
+        }
+
+        @NonNull
+        @Override
+        public JSONObject statusHere() throws JSONException {
+            return status();
+        }
+
+        @NonNull
+        @Override
+        public JSONArray residentsHere() throws JSONException {
+            if (!(runtime instanceof MultiBackendTaiRuntime)) return new JSONArray();
+            return ((MultiBackendTaiRuntime) runtime).residency().toJson();
+        }
+
+        @NonNull
+        @Override
+        public TaiRuntimeState stateHere() {
+            return localRuntime().getState();
+        }
     }
 
     /** Status queries should return quickly; cap them so a busy/hung runtime can't stall callers. */
@@ -266,12 +465,12 @@ public final class TaiManager {
     @NonNull
     public JSONObject runtimeStatus() throws JSONException {
         // One round trip to the runtime process answers both the state and the resident table.
-        JSONObject remote = shouldDelegateRuntime() ? remoteRuntimeStatus() : null;
-        TaiRuntimeState state = shouldDelegateRuntime() ? remoteRuntimeState(remote) : localRuntime().getState();
+        TaiRuntimeLink.RuntimeSnapshot snapshot = runtimeLink().runtimeStatus();
+        TaiRuntimeState state = snapshot.state;
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("runtime", state.toJson());
-        JSONArray residents = residentsJson(remote);
+        JSONArray residents = snapshot.residents;
         data.put("residents", residents);
         data.put("embedder", embedderStateJson(residents));
         data.put("settings", settings.toJson());
@@ -314,17 +513,6 @@ public final class TaiManager {
             embedder.put("busy", embedding.optBoolean("busy", false));
         }
         return embedder;
-    }
-
-    /** The resident table: the runtime process's own, or the one its status reply carried. */
-    @NonNull
-    private JSONArray residentsJson(@Nullable JSONObject remoteStatus) throws JSONException {
-        if (shouldDelegateRuntime()) {
-            JSONArray residents = remoteStatus == null ? null : remoteStatus.optJSONArray("residents");
-            return residents == null ? new JSONArray() : residents;
-        }
-        if (!(runtime instanceof MultiBackendTaiRuntime)) return new JSONArray();
-        return ((MultiBackendTaiRuntime) runtime).residency().toJson();
     }
 
     @NonNull
@@ -718,6 +906,15 @@ public final class TaiManager {
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
+        JSONObject refusal = loadRefusal(request, modelId, spec);
+        if (refusal != null) return refusal;
+        return runtimeLink().load(body);
+    }
+
+    /** What a load is refused for before it reaches the runtime: an unknown model, or one that never loads for chat. */
+    @Nullable
+    private JSONObject loadRefusal(@NonNull JSONObject request, @NonNull String modelId, @Nullable TaiModelSpec spec)
+        throws JSONException {
         if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
                 && !spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
@@ -753,7 +950,18 @@ public final class TaiManager {
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
             return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
         }
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_LOAD_MODEL, delegatedRuntimeBody(body, true));
+        return null;
+    }
+
+    /** {@link #loadModel} where the runtime is. */
+    @NonNull
+    private JSONObject loadModelHere(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        TaiModelSpec spec = resolveModel(request, modelId);
+        JSONObject refusal = loadRefusal(request, modelId, spec);
+        if (refusal != null) return refusal;
+        if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         // A load that names its feature reuses its model when the runtime holds it with a window as large as
         // the plan's. One that names none (tai load, the Model Centre's Load) still reloads, as it always did.
@@ -808,7 +1016,11 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject unloadModel() throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_UNLOAD_MODEL, "{}");
+        return runtimeLink().unload();
+    }
+
+    @NonNull
+    private JSONObject unloadModelHere() throws JSONException {
         // An unload under a running benchmark ends the benchmark: its entry is recorded as
         // stopped and the phases that finished are kept.
         TaiBenchHarness bench = activeBench;
@@ -828,9 +1040,11 @@ public final class TaiManager {
         if (requested.isEmpty()) return error(400, "bad_request", "Missing model id");
         TaiModelSpec spec = resolveModel(requested);
         String id = spec != null ? spec.id : TaiSettings.migrateBuiltInModelId(requested);
-        if (shouldDelegateRuntime()) {
-            return runtimeRequest(TaiRuntimeIpc.OP_UNLOAD_CHAT_MODEL, new JSONObject().put("model", id).toString());
-        }
+        return runtimeLink().unloadChat(id);
+    }
+
+    @NonNull
+    private JSONObject unloadChatModelHere(@NonNull String id) throws JSONException {
         TaiRuntime local = localRuntime();
         TaiBenchHarness bench = activeBench;
         if (bench != null && local.isModelLoaded(id)) bench.requestStop("unloaded");
@@ -839,7 +1053,11 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject keepWarmRuntime(@NonNull String body) throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_KEEP_WARM, delegatedRuntimeBody(body, true));
+        return runtimeLink().keepWarm(body);
+    }
+
+    @NonNull
+    private JSONObject keepWarmRuntimeHere(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
         TaiRuntimeState state = localRuntime().getState();
         String fallbackModel = state.loadedModelId != null ? state.loadedModelId : settings.getDefaultAssistantModel();
@@ -878,7 +1096,11 @@ public final class TaiManager {
      */
     @NonNull
     public JSONObject cancelRuntime(@NonNull String stopReason) throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_CANCEL, "{}");
+        return runtimeLink().cancelAll(stopReason);
+    }
+
+    @NonNull
+    private JSONObject cancelRuntimeHere(@NonNull String stopReason) throws JSONException {
         // tai cancel is how a running benchmark is stopped from outside; see TaiRuntimeService's
         // busy rule. The harness cancels the generation itself and records the entry as stopped.
         TaiBenchHarness bench = activeBench;
@@ -1723,26 +1945,7 @@ public final class TaiManager {
 
     @NonNull
     public TaiRuntimeState getRuntimeState() {
-        if (!shouldDelegateRuntime()) return localRuntime().getState();
-        return remoteRuntimeState(remoteRuntimeStatus());
-    }
-
-    /** The runtime process's full status reply, or {@code null} when it could not be reached. */
-    @Nullable
-    private JSONObject remoteRuntimeStatus() {
-        try {
-            return runtimeRequest(TaiRuntimeIpc.OP_RUNTIME_STATUS, "{}", RUNTIME_STATUS_TIMEOUT_MS);
-        } catch (JSONException e) {
-            return null;
-        }
-    }
-
-    @NonNull
-    private static TaiRuntimeState remoteRuntimeState(@Nullable JSONObject status) {
-        if (status == null) return TaiRuntimeState.fromJson(null);
-        JSONObject runtimeJson = status.optJSONObject("runtime");
-        if (runtimeJson == null) runtimeJson = status.optJSONObject("state");
-        return TaiRuntimeState.fromJson(runtimeJson);
+        return runtimeLink().runtimeState();
     }
 
     @NonNull
@@ -1757,6 +1960,16 @@ public final class TaiManager {
      */
     @NonNull
     public JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs) throws JSONException {
+        return openAiChatCompletions(body, timeoutMs, TaiRuntimeLink.Priority.NORMAL);
+    }
+
+    /**
+     * As {@link #openAiChatCompletions(String, long)}, with the place the generation takes in the
+     * runtime's queue: an interactive one goes ahead of waiting normal ones (ADR 0027 §4).
+     */
+    @NonNull
+    JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs, @NonNull TaiRuntimeLink.Priority priority)
+        throws JSONException {
         body = withRemoteFeatureModel(body);
         // A remote/<id> model goes to the remote provider here, in the app process: the :tai_runtime
         // process is never woken for it (remote provider design, section 4.2).
@@ -1764,7 +1977,12 @@ public final class TaiManager {
             return new TaiRemoteProvider(appContext).chatCompletions(
                 TaiCallerRequests.remoteBody(parseBody(body)), timeoutMs);
         }
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, delegatedRuntimeBody(body, true), timeoutMs);
+        return generateThroughLink(TaiRuntimeLink.Kind.CHAT, body, priority, timeoutMs);
+    }
+
+    /** A chat completion where the runtime is. */
+    @NonNull
+    private JSONObject chatCompletionsHere(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
         JSONArray messages = request.optJSONArray("messages");
         if (messages == null || messages.length() == 0) {
@@ -1799,6 +2017,8 @@ public final class TaiManager {
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) return openAiError(loadError);
+        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
+        if (GenerationQueue.currentJobCancelled()) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
 
         JSONObject chat = TaiRuntime.generate(localRuntime(), modelId, chatRequest.request, options);
         if (!chat.optBoolean("ok", false)) {
@@ -1845,7 +2065,12 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject openAiCompletions(@NonNull String body) throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_COMPLETION, delegatedRuntimeBody(body, true));
+        return generateThroughLink(TaiRuntimeLink.Kind.COMPLETION, body, TaiRuntimeLink.Priority.NORMAL, DEFAULT_CHAT_TIMEOUT_MS);
+    }
+
+    /** A completion where the runtime is. */
+    @NonNull
+    private JSONObject completionsHere(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
         String prompt = promptFromCompletionRequest(request);
         if (prompt.trim().isEmpty()) return openAiError(error(400, "bad_request", "Missing prompt"));
@@ -1865,6 +2090,8 @@ public final class TaiManager {
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) return openAiError(loadError);
+        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
+        if (GenerationQueue.currentJobCancelled()) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
 
         JSONObject completion = TaiRuntime.generate(localRuntime(), modelId, TaiChatRequest.completion(prompt), options);
         if (!completion.optBoolean("ok", false)) {
@@ -1900,20 +2127,28 @@ public final class TaiManager {
     }
 
     public void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        openAiChatCompletionsStream(body, sink, TaiRuntimeLink.Priority.NORMAL, null);
+    }
+
+    /**
+     * As {@link #openAiChatCompletionsStream(String, OpenAiStreamSink)}, with the generation's
+     * place in the runtime's queue and, when the caller wants to cancel it later through
+     * {@link #cancelGeneration}, its id (ADR 0027 §4). A remote request is not queued and has no id.
+     */
+    void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink,
+                                     @NonNull TaiRuntimeLink.Priority priority, @Nullable String generationId)
+        throws JSONException, IOException {
         body = withRemoteFeatureModel(body);
         if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
             new TaiRemoteProvider(appContext).stream(
                 TaiCallerRequests.remoteBody(parseBody(body)), DEFAULT_CHAT_TIMEOUT_MS, sink);
             return;
         }
-        if (shouldDelegateRuntime()) {
-            if (runtimeClient == null) {
-                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
-                return;
-            }
-            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM, delegatedRuntimeBody(body, true), sink);
-            return;
-        }
+        streamThroughLink(TaiRuntimeLink.Kind.CHAT, body, sink, priority, generationId);
+    }
+
+    /** A streamed chat completion where the runtime is. */
+    private void chatCompletionsStreamHere(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
         JSONObject request = parseBody(body);
         JSONArray messages = request.optJSONArray("messages");
         if (messages == null || messages.length() == 0) {
@@ -1961,6 +2196,12 @@ public final class TaiManager {
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) {
             emitOpenAiError(sink, loadError);
+            return;
+        }
+        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
+        if (GenerationQueue.currentJobCancelled()) {
+            sink.onEvent(InProcessTaiRuntimeLink.cancelledWhileWaiting());
+            sink.onDone();
             return;
         }
         String id = "tai-chatcmpl-" + System.currentTimeMillis();
@@ -2057,14 +2298,11 @@ public final class TaiManager {
     }
 
     public void openAiCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
-        if (shouldDelegateRuntime()) {
-            if (runtimeClient == null) {
-                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
-                return;
-            }
-            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM, delegatedRuntimeBody(body, true), sink);
-            return;
-        }
+        streamThroughLink(TaiRuntimeLink.Kind.COMPLETION, body, sink, TaiRuntimeLink.Priority.NORMAL, null);
+    }
+
+    /** A streamed completion where the runtime is. */
+    private void completionsStreamHere(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
         JSONObject request = parseBody(body);
         String prompt = promptFromCompletionRequest(request);
         if (prompt.trim().isEmpty()) {
@@ -2094,6 +2332,12 @@ public final class TaiManager {
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) {
             emitOpenAiError(sink, loadError);
+            return;
+        }
+        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
+        if (GenerationQueue.currentJobCancelled()) {
+            sink.onEvent(InProcessTaiRuntimeLink.cancelledWhileWaiting());
+            sink.onDone();
             return;
         }
 

@@ -7,6 +7,12 @@ final class TaiRuntimeIpc {
     static final int MSG_RESPONSE = 2;
     static final int MSG_STREAM_EVENT = 3;
     static final int MSG_STREAM_DONE = 4;
+    /**
+     * A generation's place in the runtime's queue (ADR 0027 §4): {@link #KEY_STATE} is
+     * {@link #STATE_WAITING} when it waits behind another, {@link #STATE_STARTED} when its turn has
+     * come. Sent in order with the generation's own messages. 5 is the service's idle-exit notice.
+     */
+    static final int MSG_GENERATION_STATE = 6;
 
     static final String KEY_REQUEST_ID = "requestId";
     static final String KEY_OPERATION = "operation";
@@ -16,6 +22,16 @@ final class TaiRuntimeIpc {
     static final String KEY_EVENT = "event";
     static final String KEY_ERROR = "error";
     static final String KEY_MESSAGE = "message";
+    /**
+     * A generation's id, on the chat and completion operations and on {@link #OP_CANCEL}: a cancel
+     * that carries one cancels that generation alone; one without stays the cancel-all.
+     */
+    static final String KEY_GENERATION_ID = "generationId";
+    /** A generation's priority: {@code normal} (also when missing) or {@code interactive}. */
+    static final String KEY_PRIORITY = "priority";
+    static final String KEY_STATE = "state";
+    static final String STATE_WAITING = "waiting";
+    static final String STATE_STARTED = "started";
 
     static final String OP_STATUS = "status";
     static final String OP_RUNTIME_STATUS = "runtimeStatus";
