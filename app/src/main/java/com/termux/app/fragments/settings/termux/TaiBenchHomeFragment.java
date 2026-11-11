@@ -491,8 +491,23 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         }
     }
 
+    /** TEMP BENCHOVERLAP logging. */
+    private static void logLayout(@NonNull View view, @NonNull String name) {
+        view.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> android.util.Log.i("BENCHOVERLAP",
+            name + " layout t=" + t + " b=" + b + " (was " + ot + ".." + ob + ") h=" + (b - t) + " ty=" + v.getTranslationY()
+            + " up=" + android.os.SystemClock.uptimeMillis()));
+    }
+
     @Override
     public void bind(@NonNull View view, @NonNull TaiBenchListAdapter.Item item) {
+        if (item.type == TYPE_DEVICE || item.type == TYPE_EMPTY) {
+            if (view.getTag(R.id.tai_bench_text) == null) {
+                view.setTag(R.id.tai_bench_text, Boolean.TRUE);
+                logLayout(view, item.type == TYPE_DEVICE ? "device" : "empty");
+            }
+            android.util.Log.i("BENCHOVERLAP", "bind type=" + item.type + " sig=" + item.signature + " t=" + view.getTop() + " h=" + view.getHeight()
+                + " ty=" + view.getTranslationY() + " up=" + android.os.SystemClock.uptimeMillis());
+        }
         switch (item.type) {
             case TYPE_BANNER: ((TextView) view.findViewById(R.id.tai_bench_text)).setText((String) item.data); break;
             case TYPE_DEVICE: bindDevice(view, (DeviceFacts) item.data); break;
