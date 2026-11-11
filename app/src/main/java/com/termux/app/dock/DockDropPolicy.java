@@ -18,9 +18,10 @@ public final class DockDropPolicy {
 
     /**
      * How long a carried icon rests in the band at either end of the row before the row turns a
-     * page: Home's own edge hold.
+     * page, and again before each turn after it: twice Home's edge hold, since the row's ends sit
+     * where an icon is put at the end of a page, so a turn has to be meant.
      */
-    public static final long EDGE_HOLD_MS = WidgetPaneController.EDGE_FLIP_DELAY_MS;
+    public static final long EDGE_HOLD_MS = 2L * WidgetPaneController.EDGE_FLIP_DELAY_MS;
     /** That band's width, measured in from each end of the row: Home's edge band. */
     public static final int EDGE_BAND_DP = WidgetPaneController.EDGE_BAND_DP;
 
@@ -122,6 +123,21 @@ public final class DockDropPolicy {
         if (x <= bandPx) return page > 0 ? -1 : 0;
         if (x >= width - bandPx) return page < pageCount - 1 ? 1 : 0;
         return 0;
+    }
+
+    /**
+     * The page a second finger's swipe turns to while an icon is carried: the plain swipe's rule
+     * ({@code DockPagingModel.commitPageDelta}, +1 forward when the finger moved left), but 0 when
+     * it would go before the first page or past the last (a carried icon does not wrap round, as in
+     * {@link #edgeDirection}) and on a single page.
+     */
+    public static int secondFingerTurn(float dx, float dy, float vx, float commitDistancePx,
+                                       float density, int page, int pageCount) {
+        if (pageCount <= 1) return 0;
+        int delta = com.termux.app.launcher.paging.DockPagingModel.commitPageDelta(dx, dy, vx,
+            commitDistancePx, density);
+        int target = page + delta;
+        return target < 0 || target >= pageCount ? 0 : delta;
     }
 
     /**

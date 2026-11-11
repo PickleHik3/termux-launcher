@@ -10,12 +10,22 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
-## Live dock reorder (2026-11-10, #155)
-- 2026-11-10 · feat/dock-live-reorder-155 · By hand on pong, Docked and Floating, keyboard down
-  and up: a dock icon held over another place parts the row after about two thirds of a second
-  and the slide (0.15 s) reads as calm, not jumpy; a quick drop still lands where it was let go;
-  resting on an icon's middle swells it within about a third of a second and a release makes a
-  folder; an app dragged up out of the drawer and down onto the row parts it the same way · pong.
+## Dock carry feel (2026-11-11, #155 rework)
+- 2026-11-11 · fix/dock-carry-feel · By hand on pong, Docked and Floating, keyboard down and up:
+  a dock icon carried over another place parts the row about 0.2 s after it settles; resting on an
+  icon's middle still swells it within about a third of a second and a release makes a folder,
+  and the faster parting does not make a folder hard to aim for · pong.
+- 2026-11-11 · fix/dock-carry-feel · Hold a dock icon and a drawer icon until the menu opens, then
+  slide it up, diagonally and down: each lifts the icon after a short slide, and the drawer no
+  longer closes under the finger. Note what you lose: a slide from the held icon onto a menu row
+  now lifts the icon instead of choosing the row (Home already worked this way) · pong.
+- 2026-11-11 · fix/dock-carry-feel · Several dock pages: a carried icon held at either end of the
+  row turns the page after about 0.7 s, and again only after another full hold; with one finger
+  carrying, a sideways swipe by a second finger on the row turns the page both ways and the gap
+  opens on the new page; lifting the carrying finger first drops the icon there · pong.
+- 2026-11-11 · fix/dock-carry-feel · Pick up an app in the drawer: the drawer closes by itself and
+  Home with its dock shows under the finger; let go on the row (it pins at that slot) and on a
+  Home cell (it is placed there); with Home's layout locked, the drawer stays open as before · pong.
 
 ## Swipe stalls (2026-11-08)
 - 2026-11-08 · 96f3c94ae, 30270fe41 · Bench `set.sh` x3, H2 ↔ WS and WS ↔ AI, against

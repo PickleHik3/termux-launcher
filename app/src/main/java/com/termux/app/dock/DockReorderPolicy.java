@@ -3,10 +3,12 @@ package com.termux.app.dock;
 import com.termux.app.launcher.widget.HomeFolderPolicy;
 
 /**
- * The live reorder of the dock's pinned row while an icon is carried over it. The icons on the
- * page in view part around a gap once the finger has hovered a slot for {@link #PART_HOVER_MS},
- * and a drop lands in the slot under the finger; resting on an icon for {@link #FOLDER_REST_MS}
- * arms it to take the carried icon as a folder. Pure: times are passed in, nothing reads a clock.
+ * The live reorder of the dock's pinned row while an icon is carried over it, timed as Launcher3's
+ * hotseat feels. The icons on the page in view part around a gap once the finger has settled over
+ * a slot for {@link #PART_HOVER_MS}, and a drop lands in the slot under the finger. The middle of
+ * an icon that can take the carried one is the exception: there the row does not part, and a
+ * rest of {@link #FOLDER_REST_MS} arms the icon to take the carried one as a folder
+ * ({@link DockDropPolicy#onIcon}). Pure: times are passed in, nothing reads a clock.
  *
  * <p>One instance serves a whole drag and is reused for the next ({@link #begin}). The items are
  * the page's drawn icons by page-local slot; the carried icon's own slot is the {@code source}
@@ -16,8 +18,8 @@ import com.termux.app.launcher.widget.HomeFolderPolicy;
  */
 public final class DockReorderPolicy {
 
-    /** How long a finger hovers a slot before the icons part to open it. */
-    public static final long PART_HOVER_MS = 650L;
+    /** How long a finger settles over a slot before the icons part to open it; under a folder's rest. */
+    public static final long PART_HOVER_MS = 200L;
     /** The parting's slide. */
     public static final long SLIDE_MS = 150L;
     /** How long a finger rests on an icon before it takes the carried icon as a folder: Home's. */
