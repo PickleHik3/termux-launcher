@@ -195,6 +195,13 @@ public final class TaiRuntimeService extends Service {
         cancelIdleExitCheck();
         releaseBenchWakeLock();
         watchScheduler.shutdownNow();
+        // The lane outlives the service (it is the process's); what still waits on it was asked for
+        // through this service and must not run after it. The running job is left as it was.
+        try {
+            lane().cancelWaiting();
+        } catch (RuntimeException e) {
+            Log.w(LOG_TAG, "could not clear the lane on destroy: " + message(e));
+        }
         controlExecutor.shutdownNow();
         sttExecutor.shutdownNow();
         ttsExecutor.shutdownNow();

@@ -158,6 +158,20 @@ final class GenerationQueue {
         return current != null && current.cancelled;
     }
 
+    /**
+     * Takes every waiting job out of the queue; each hears {@link Job#onCancelled} and never runs.
+     * The running job is left as it is. Returns how many were cancelled.
+     */
+    int cancelWaiting() {
+        List<Entry> removed;
+        synchronized (lock) {
+            removed = new ArrayList<>(waiting);
+            waiting.clear();
+        }
+        for (Entry entry : removed) entry.job.onCancelled();
+        return removed.size();
+    }
+
     /** The running job's id, or {@code null}. */
     @Nullable
     String runningId() {
