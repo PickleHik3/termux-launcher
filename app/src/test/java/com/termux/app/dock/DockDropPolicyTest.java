@@ -159,4 +159,33 @@ public class DockDropPolicyTest {
         assertEquals(2, DockDropPolicy.restoreIndex(3, 2));
         assertEquals(0, DockDropPolicy.restoreIndex(-1, 4));
     }
+
+    // ---- a second finger turning the page while an icon is carried
+
+    private static final float COMMIT_PX = 120f;
+    private static final float DENSITY = 2f;
+
+    @Test
+    public void aSecondFingerSwipedLeftTurnsForwardAndRightBack() {
+        assertEquals(1, DockDropPolicy.secondFingerTurn(-300f, 10f, 0f, COMMIT_PX, DENSITY, 1, 3));
+        assertEquals(-1, DockDropPolicy.secondFingerTurn(300f, 10f, 0f, COMMIT_PX, DENSITY, 1, 3));
+    }
+
+    @Test
+    public void aShortOrVerticalSwipeTurnsNothing() {
+        assertEquals(0, DockDropPolicy.secondFingerTurn(-40f, 0f, 0f, COMMIT_PX, DENSITY, 1, 3));
+        assertEquals(0, DockDropPolicy.secondFingerTurn(-300f, 400f, 0f, COMMIT_PX, DENSITY, 1, 3));
+    }
+
+    @Test
+    public void aFlingTurnsOnAShortTravel() {
+        assertEquals(1, DockDropPolicy.secondFingerTurn(-80f, 0f, -3000f, COMMIT_PX, DENSITY, 0, 2));
+    }
+
+    @Test
+    public void itDoesNotWrapPastEitherEndOrTurnOnePage() {
+        assertEquals(0, DockDropPolicy.secondFingerTurn(300f, 0f, 0f, COMMIT_PX, DENSITY, 0, 3));
+        assertEquals(0, DockDropPolicy.secondFingerTurn(-300f, 0f, 0f, COMMIT_PX, DENSITY, 2, 3));
+        assertEquals(0, DockDropPolicy.secondFingerTurn(-300f, 0f, 0f, COMMIT_PX, DENSITY, 0, 1));
+    }
 }

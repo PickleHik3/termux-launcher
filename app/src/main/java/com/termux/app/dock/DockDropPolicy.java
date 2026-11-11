@@ -126,6 +126,21 @@ public final class DockDropPolicy {
     }
 
     /**
+     * The page a second finger's swipe turns to while an icon is carried: the plain swipe's rule
+     * ({@code DockPagingModel.commitPageDelta}, +1 forward when the finger moved left), but 0 when
+     * it would go before the first page or past the last (a carried icon does not wrap round, as in
+     * {@link #edgeDirection}) and on a single page.
+     */
+    public static int secondFingerTurn(float dx, float dy, float vx, float commitDistancePx,
+                                       float density, int page, int pageCount) {
+        if (pageCount <= 1) return 0;
+        int delta = com.termux.app.launcher.paging.DockPagingModel.commitPageDelta(dx, dy, vx,
+            commitDistancePx, density);
+        int target = page + delta;
+        return target < 0 || target >= pageCount ? 0 : delta;
+    }
+
+    /**
      * Whether an icon lifted out of the row, now at ({@code x}, {@code y}) on screen, has left the
      * row ({@code left}, {@code top}, {@code right}, {@code bottom}) far enough to be Home's: as an
      * icon leaves the drawer, a finger {@link DrawerHandOverPolicy#CROSS_DP} above or below it. A

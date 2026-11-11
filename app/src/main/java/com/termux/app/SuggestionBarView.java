@@ -3714,6 +3714,18 @@ public final class SuggestionBarView extends GridLayout
             routeDockLift(lift, event);
             return true;
         }
+        if (swallowDockLiftStream) {
+            // The carrying finger lifted while another stayed down: what is left of that stream
+            // is nobody's, so the remaining finger starts nothing. A new DOWN is a new stream.
+            int swallowed = event.getActionMasked();
+            if (swallowed != MotionEvent.ACTION_DOWN) {
+                if (swallowed == MotionEvent.ACTION_UP || swallowed == MotionEvent.ACTION_CANCEL) {
+                    swallowDockLiftStream = false;
+                }
+                return true;
+            }
+            swallowDockLiftStream = false;
+        }
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
             if (activeAzLetter != null) {
@@ -6703,7 +6715,8 @@ public final class SuggestionBarView extends GridLayout
                             folderEntryPickup.run();
                         } else {
                             dismissFolderPopup();
-                            if (!beginDockLift(pressTarget, pinnedIndex, rawX, rawY)) {
+                            if (!beginDockLift(pressTarget, pinnedIndex, rawX, rawY,
+                                event.getPointerId(0))) {
                                 startPinnedDrag(pressTarget, pinnedIndex);
                             }
                         }
@@ -8699,9 +8712,23 @@ public final class SuggestionBarView extends GridLayout
             new com.termux.app.dock.LiftSourceSlot<>(LIFT_SOURCE_SHADE);
         /** The row's children have been told the stream is no longer theirs. */
         boolean childrenCancelled;
+        /** The pointer that lifted the icon and carries it. */
+        final int carryPointerId;
+        /** Where that pointer was last, on screen. */
+        float carryRawX;
+        float carryRawY;
+        /** A second pointer turning the dock page: its id (-1 none) and where it came down. */
+        int pagingPointerId = -1;
+        float pagingDownRawX;
+        float pagingDownRawY;
+        @Nullable VelocityTracker pagingVelocity;
 
         DockLift(@NonNull com.termux.app.launcher.widget.IconCarry carry,
-                 @NonNull PinnedAppItem pin, int sourceIndex, @NonNull LauncherAppEntry entry) {
+                 @NonNull PinnedAppItem pin, int sourceIndex, @NonNull LauncherAppEntry entry,
+                 int carryPointerId, float rawX, float rawY) {
+            this.carryPointerId = carryPointerId;
+            this.carryRawX = rawX;
+            this.carryRawY = rawY;
             this.carry = carry;
             this.pin = pin;
             this.sourceIndex = sourceIndex;
@@ -8713,6 +8740,8 @@ public final class SuggestionBarView extends GridLayout
         (slot, shown) -> slot.setAlpha(shown ? 1f : 0f);
 
     @Nullable private DockLift dockLift;
+    /** The row drops every event up to the end of the stream whose carrying finger has lifted. */
+    private boolean swallowDockLiftStream;
 
     /**
      * Lifts the app at {@code pinnedIndex} out of the row under the finger, which goes on from
@@ -8722,7 +8751,7 @@ public final class SuggestionBarView extends GridLayout
      * drag.
      */
     private boolean beginDockLift(@NonNull View pressTarget, int pinnedIndex, float rawX,
-                                  float rawY) {
+                                  float rawY, int pointerId) {
         LiftHost lifts = liftHost;
         if (lifts == null || vertical || pinnedItems == null || pinnedIndex < 0
             || pinnedIndex >= pinnedItems.size()) return false;
@@ -8806,7 +8835,7 @@ public final class SuggestionBarView extends GridLayout
                 }
                 @Override public boolean reducedMotion() { return lifts.reducedMotion(); }
             });
-        DockLift lift = new DockLift(carry, pin, pinnedIndex, entry);
+        DockLift lift = new DockLift(carry, pin, pinnedIndex, entry, pointerId, rawX, rawY);
         made[0] = lift;
         dockLift = lift;
         lift.source.hide(slot);
@@ -8820,8 +8849,16 @@ public final class SuggestionBarView extends GridLayout
 
     /**
      * The finger that lifted an icon out of the row, from the event after the lift to its release:
-     * the row's children are told once that the stream is no longer theirs, and every move goes to
-     * the carry. The row's own gesture state then stands down as for a cancel.
+     * the row's children are told once that the stream is no longer theirs, and every move of the
+     * carrying pointer goes to the carry. The row's own gesture state then stands down as for a
+     * cancel.
+     *
+     * <p>A second finger that lands while the icon is carried turns the dock page when it lifts, by
+     * the plain swipe's rule ({@link DockDropPolicy#secondFingerTurn}), and the carry goes on over
+     * the new page. It must land on the row (or another view in the row's touch chain): with
+     * motion-event splitting on, a finger elsewhere goes to the view under it and never reaches
+     * here. The carrying finger lifting first ends the carry there, and the rest of the stream is
+     * swallowed.
      */
     private void routeDockLift(@NonNull DockLift lift, @NonNull MotionEvent event) {
         if (!lift.childrenCancelled) {
@@ -8832,18 +8869,92 @@ public final class SuggestionBarView extends GridLayout
             cancel.recycle();
         }
         int action = event.getActionMasked();
+        int carryIndex = event.findPointerIndex(lift.carryPointerId);
+        if (carryIndex >= 0) {
+            lift.carryRawX = rawXOf(event, carryIndex);
+            lift.carryRawY = rawYOf(event, carryIndex);
+        }
+        if (lift.pagingVelocity != null) lift.pagingVelocity.addMovement(event);
         if (action == MotionEvent.ACTION_MOVE) {
-            lift.carry.move(event.getRawX(), event.getRawY());
+            if (carryIndex >= 0) lift.carry.move(lift.carryRawX, lift.carryRawY);
+            return;
+        }
+        if (action == MotionEvent.ACTION_POINTER_DOWN) {
+            int index = event.getActionIndex();
+            if (lift.pagingPointerId < 0 && event.getPointerId(index) != lift.carryPointerId) {
+                lift.pagingPointerId = event.getPointerId(index);
+                lift.pagingDownRawX = rawXOf(event, index);
+                lift.pagingDownRawY = rawYOf(event, index);
+                lift.pagingVelocity = VelocityTracker.obtain();
+                lift.pagingVelocity.addMovement(event);
+            }
+            return;
+        }
+        if (action == MotionEvent.ACTION_POINTER_UP) {
+            int index = event.getActionIndex();
+            int id = event.getPointerId(index);
+            if (id == lift.pagingPointerId) {
+                turnDockPageBySecondFinger(lift, event, index);
+                return;
+            }
+            if (id != lift.carryPointerId) return;
+            endDockLift(lift, event, lift.carryRawX, lift.carryRawY, false);
+            swallowDockLiftStream = true;
             return;
         }
         if (action != MotionEvent.ACTION_UP && action != MotionEvent.ACTION_CANCEL
             && action != MotionEvent.ACTION_DOWN) return;
+        endDockLift(lift, event, event.getRawX(), event.getRawY(),
+            action != MotionEvent.ACTION_UP);
+    }
+
+    /** Ends the carry at ({@code rawX}, {@code rawY}) and stands the row's own gesture down. */
+    private void endDockLift(@NonNull DockLift lift, @NonNull MotionEvent event, float rawX,
+                             float rawY, boolean canceled) {
         dockLift = null;
-        lift.carry.end(event.getRawX(), event.getRawY(), action != MotionEvent.ACTION_UP);
+        releaseDockLiftPaging(lift);
+        lift.carry.end(rawX, rawY, canceled);
         MotionEvent cancel = MotionEvent.obtain(event);
         cancel.setAction(MotionEvent.ACTION_CANCEL);
         dispatchTouchEvent(cancel);
         cancel.recycle();
+    }
+
+    /** The second finger lifted: its travel turns the page, or does not, and it is done either way. */
+    private void turnDockPageBySecondFinger(@NonNull DockLift lift, @NonNull MotionEvent event,
+                                            int index) {
+        VelocityTracker tracker = lift.pagingVelocity;
+        float vx = 0f;
+        if (tracker != null) {
+            tracker.computeCurrentVelocity(1000);
+            vx = tracker.getXVelocity(lift.pagingPointerId);
+        }
+        float dx = rawXOf(event, index) - lift.pagingDownRawX;
+        float dy = rawYOf(event, index) - lift.pagingDownRawY;
+        releaseDockLiftPaging(lift);
+        int delta = DockDropPolicy.secondFingerTurn(dx, dy, vx, resolvePageSwipeCommitDistancePx(),
+            density(), pinnedPageIndex, getPinnedPagesCount());
+        if (delta == 0) return;
+        if (!animatePageSwitch(delta, DockPagingModel.settleVelocityHint(dx, vx))) return;
+        // The next turn at the row's end needs a full hold again.
+        stopCarryEdge();
+    }
+
+    private static void releaseDockLiftPaging(@NonNull DockLift lift) {
+        lift.pagingPointerId = -1;
+        if (lift.pagingVelocity != null) {
+            lift.pagingVelocity.recycle();
+            lift.pagingVelocity = null;
+        }
+    }
+
+    /** The pointer's position on screen: {@code getRawX(int)} is API 29, the row's floor is 26. */
+    private static float rawXOf(@NonNull MotionEvent event, int index) {
+        return event.getX(index) + (event.getRawX() - event.getX());
+    }
+
+    private static float rawYOf(@NonNull MotionEvent event, int index) {
+        return event.getY(index) + (event.getRawY() - event.getY());
     }
 
     /** Ends an icon's lift that the row can no longer finish (it is hidden or torn down). */
@@ -8851,6 +8962,7 @@ public final class SuggestionBarView extends GridLayout
         DockLift lift = dockLift;
         if (lift == null) return;
         dockLift = null;
+        releaseDockLiftPaging(lift);
         lift.carry.end(0f, 0f, true);
     }
 
@@ -9421,6 +9533,9 @@ public final class SuggestionBarView extends GridLayout
         Runnable updateContent = () -> {
             pinnedPageIndex = targetPage;
             reloadWithInput("", lastTerminalView);
+            // A carried icon's gap goes with the old page: part the new one under the finger.
+            DockLift carried = dockLift;
+            if (carried != null) carried.carry.move(carried.carryRawX, carried.carryRawY);
         };
         if (swipePageDragging && swipePreviewPageIndex == targetPage) {
             logPaging("animatePageSwitch settle to page " + targetPage + " (swipe preview)");
