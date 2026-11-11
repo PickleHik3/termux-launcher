@@ -760,6 +760,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     public void onProgramStatusChanged(@NonNull TerminalSession session,
                                        @NonNull java.util.List<com.termux.terminal.ProgramStatus> raised) {
         mHost.scheduleWindowBarRefresh();
+        TerminalEmulator current = session.getEmulator();
+        if (current != null) mProgramStatusAlerts.retainCurrent(session, current.getProgramStatus());
         if (raised.isEmpty()) return;
         boolean inFront = mHost.isVisible() && mHost.isTerminalShowing()
             && session == mHost.currentSession();

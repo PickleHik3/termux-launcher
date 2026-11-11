@@ -28,6 +28,25 @@ public class ProgramStatusAlertsTest {
     }
 
     @Test
+    public void blockedWorkingBlockedAlertsTwiceAcrossTurns() {
+        ProgramStatusAlerts alerts = new ProgramStatusAlerts();
+        ProgramStatusStore store = new ProgramStatusStore();
+        Object s = new Object();
+        store.apply(3, 0, -1, "a", "", "", "");
+        alerts.retainCurrent(s, store);
+        assertTrue(alerts.shouldAlert(s, store.get("a"), 0));
+        // Next turn: working; the engine raises nothing, but the change re-arms the id.
+        store.apply(1, 0, -1, "a", "", "", "");
+        alerts.retainCurrent(s, store);
+        store.apply(3, 0, -1, "a", "", "", "");
+        alerts.retainCurrent(s, store);
+        assertTrue(alerts.shouldAlert(s, store.get("a"), 10_000));
+        // Blocked again with nothing in between stays quiet.
+        alerts.retainCurrent(s, store);
+        assertFalse(alerts.shouldAlert(s, store.get("a"), 20_000));
+    }
+
+    @Test
     public void sameStateDoesNotRepeatUntilItChanges() {
         ProgramStatusAlerts alerts = new ProgramStatusAlerts();
         Object s = new Object();

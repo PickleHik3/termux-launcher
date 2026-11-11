@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import androidx.annotation.NonNull;
 
 import com.termux.terminal.ProgramStatus;
+import com.termux.terminal.ProgramStatusStore;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -37,6 +38,20 @@ public final class ProgramStatusAlerts {
         byId.put(record.id, s);
         mLastAt.put(session, nowMs);
         return true;
+    }
+
+    /**
+     * The session's records moved: an id whose record is gone or no longer in the state it alerted
+     * for is armed again, so blocked, then working, then blocked alerts twice. Called on every
+     * change, before {@link #shouldAlert}.
+     */
+    public void retainCurrent(@NonNull Object session, @NonNull ProgramStatusStore store) {
+        Map<String, ProgramStatus.State> byId = mLastAlerted.get(session);
+        if (byId == null) return;
+        byId.entrySet().removeIf(entry -> {
+            ProgramStatus current = store.get(entry.getKey());
+            return current == null || current.state != entry.getValue();
+        });
     }
 
     /** The session ended. */
