@@ -88,6 +88,8 @@ public final class AppDrawerCategoryView extends ViewGroup
     @Nullable private Runnable frameRequestListener;
     @Nullable private Runnable popupDismissCallback;
     @NonNull private List<AppDrawerCategoryBucket> buckets = Collections.emptyList();
+    /** {@link #setCatalogueLoaded}: false while the catalogue (re)loads. */
+    private boolean catalogueLoaded = true;
     @Nullable private AppDrawerCategoryBucket selectedBucket;
     @NonNull private Part streamPart = Part.OUTSIDE;
     private boolean streamFinalized;
@@ -249,6 +251,21 @@ public final class AppDrawerCategoryView extends ViewGroup
         addView(morph);
     }
 
+    /**
+     * Whether the catalogue behind the buckets has finished loading. While it (re)loads the
+     * buckets may be empty for no reason the user should see, so "Nothing here yet" waits for it.
+     */
+    public void setCatalogueLoaded(boolean loaded) {
+        if (catalogueLoaded == loaded) return;
+        catalogueLoaded = loaded;
+        applyEmptyState();
+    }
+
+    /** "Nothing here yet" only once the catalogue has loaded and holds nothing to show. */
+    private void applyEmptyState() {
+        emptyState.setVisibility(buckets.isEmpty() && catalogueLoaded ? VISIBLE : GONE);
+    }
+
     public void setDock(@Nullable SuggestionBarView dock) {
         tileAdapter.setDock(dock);
         detailAdapter.setDock(dock);
@@ -381,7 +398,7 @@ public final class AppDrawerCategoryView extends ViewGroup
             int position = positionOfCategory(firstCategoryId);
             if (position >= 0) overviewLayout.scrollToPositionWithOffset(position, firstOffset);
         }
-        emptyState.setVisibility(buckets.isEmpty() ? VISIBLE : GONE);
+        applyEmptyState();
         overview.setVisibility(buckets.isEmpty() ? GONE : VISIBLE);
         requestLayout();
     }
@@ -581,7 +598,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         morph.setClickable(false);
         overview.setAlpha(1f);
         overview.setVisibility(buckets.isEmpty() ? GONE : VISIBLE);
-        emptyState.setVisibility(buckets.isEmpty() ? VISIBLE : GONE);
+        applyEmptyState();
     }
 
     private void abortToOverview() {

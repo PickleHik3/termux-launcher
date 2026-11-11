@@ -18,12 +18,19 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
-- **A Display page with no display takes plain swipes (11-10, fix/home-gestures a1fac567a).**
-  FAILED on pong 11-11: swiping onto the Display page started the display by itself, and after
-  the developer stopped it the page could not be left by a plain swipe. Being fixed; the check
-  stays owed: on the Display page with nothing running, a sideways swipe pages to the neighbour
-  both ways, arriving does not start anything; Start display, then the swipe goes to the display;
-  stop it, and the plain swipe pages again.
+- **A Display page with no display takes plain swipes (11-10 a1fac567a; 11-11 fix/display-idle-swipe).**
+  FAILED on pong 11-11: the page could not be left by a plain swipe (every Display page's border
+  zone owned its content, which refused the body swipe; it now owns it only while a display
+  runs). Emulator 11-11: idle page pages back by a plain swipe; Start display, the swipe goes to
+  X; server stopped, the plain swipe pages again. Owed on pong: the same three, keyboard up and
+  down. Arriving started the display on pong because "Start with the launcher" (Display ›
+  Startup, also set by Start in = Display) starts it on landing too; with it off the emulator
+  landed on Start display.
+- **Drawer keeps its icons while the catalogue reloads (11-11, fix/display-idle-swipe).** Pong
+  11-11: during a category sort the drawer showed "Nothing here yet" for about a second. Owed on
+  pong: Settings › Dock › Drawer › Category sorting, run a sort, open the drawer as it finishes
+  (and after): the previous icons, never the empty message; a category with no apps still shows
+  it once loaded. Unit-tested only (AppDrawerContentCategoriesTest).
 - **Live dock reorder and drawer-to-dock pins (11-10, feat/dock-live-reorder-155, #155).**
   Pong 11-11: reorder in the dock works; the developer found the part too slow (about a second),
   the pick-up needing an exactly sideways move, the edge page turn too quick, no way to turn the

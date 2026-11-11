@@ -1176,6 +1176,12 @@ public final class AppDrawerContentView extends FrameLayout
         // the wrong position for every letter that also has a profile app. Sorting here is what
         // makes each letter one contiguous run, which is the whole premise of both the section
         // index and the highlight.
+        // While the provider reloads (a finished category sort, an icon pack, a hidden app) it
+        // holds nothing; the drawer keeps what it shows until the warm-up's callback brings the
+        // fresh catalogue, rather than show an empty drawer for that second.
+        boolean loaded = provider.hasLoadedApps();
+        mCategoryView.setCatalogueLoaded(loaded);
+        if (!loaded) return;
         List<LauncherAppEntry> catalogue = AppDrawerSectionIndex.sortByLabel(provider.getAllApps());
         search.setCatalogue(catalogue);
         if (categoryTilesShown()) mCategoryView.submitBuckets(mCategoryBuckets);

@@ -1339,8 +1339,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             && mAssistantView instanceof com.termux.app.assistant.AssistantPageView
             && ((com.termux.app.assistant.AssistantPageView) mAssistantView)
                 .bodySwipePagesWall(rawX, rawY);
-        boolean displayRunning = mDisplayWindow != null && mDisplayWindow.isRunning();
-        return PaneWallPolicy.bodySwipePages(page, terminal, assistant, displayRunning);
+        return PaneWallPolicy.bodySwipePages(page, terminal, assistant, isDisplayRunning());
+    }
+
+    @Override
+    public boolean isDisplayRunning() {
+        return mDisplayWindow != null && mDisplayWindow.isRunning();
+    }
+
+    /** The display started or stopped: the Display page's borders follow ({@link #isDisplayRunning}). */
+    public void onDisplayRunningChanged() {
+        mWall.refreshBorderReach();
     }
 
     /**

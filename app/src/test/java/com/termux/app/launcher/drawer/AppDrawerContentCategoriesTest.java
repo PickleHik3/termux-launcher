@@ -15,6 +15,7 @@ import android.view.View;
 
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -57,6 +58,32 @@ public class AppDrawerContentCategoriesTest {
         content.bind(null, search);
         search.setCatalogue(apps());
         layout();
+    }
+
+    /**
+     * A finished category sort invalidates the catalogue (pong, 2026-11-11): the drawer opened
+     * while it reloads keeps the icons it had instead of flashing "Nothing here yet".
+     */
+    @Test public void aReloadingCatalogueKeepsTheIconsAndNeverShowsTheEmptyState() {
+        int tiles = content.getCategoryView().getTileAdapter().getItemCount();
+        assertTrue(tiles > 0);
+        LauncherAppDataProvider provider =
+            LauncherAppDataProvider.getInstance(RuntimeEnvironment.getApplication());
+        provider.invalidate();
+        content.bind(provider, search);
+        layout();
+        assertEquals(View.GONE, content.getCategoryView().getEmptyState().getVisibility());
+        assertEquals(tiles, content.getCategoryView().getTileAdapter().getItemCount());
+        provider.invalidate();
+    }
+
+    @Test public void theEmptyStateWaitsForTheCatalogueAndShowsOnceItIsTrulyEmpty() {
+        AppDrawerCategoryView view = content.getCategoryView();
+        view.setCatalogueLoaded(false);
+        view.submitBuckets(Collections.emptyList());
+        assertEquals("loading: nothing", View.GONE, view.getEmptyState().getVisibility());
+        view.setCatalogueLoaded(true);
+        assertEquals("loaded and empty", View.VISIBLE, view.getEmptyState().getVisibility());
     }
 
     @Test public void categoryOverviewUsesFullWidthAndRemovesEveryOtherSurface() {

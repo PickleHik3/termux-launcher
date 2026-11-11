@@ -224,6 +224,12 @@ public final class PaneWallLayout extends ViewGroup
          */
         default boolean isBorderPagingEnabled(@NonNull PaneWallPage page) { return true; }
         /**
+         * Whether a display runs on the Display page: its picture then owns the page to its rim
+         * ({@link BorderReach#ownsContent}). Asked as a finger lands and as the borders are
+         * published; {@link #refreshBorderReach} is the call when it changes.
+         */
+        default boolean isDisplayRunning() { return true; }
+        /**
          * Whether a sideways swipe that starts at the screen point ({@code rawX}, {@code rawY})
          * inside {@code page} — on a terminal's text — pages the wall as a slide off a border
          * does ({@link BorderDrag}): the terminal there gives the swipe away
@@ -2115,8 +2121,8 @@ public final class PaneWallLayout extends ViewGroup
                 BorderDrag.PILL_SWIPE_REACH_DP * density);
         // The display window's picture is the Linux app's to its rim: its borders stay in the
         // air around it (BorderReach). A terminal window shares its edges as it always has.
-        BorderReach.apply(mBorderZone, BorderReach.ownsContent(mCurrent),
-            density);
+        BorderReach.apply(mBorderZone, BorderReach.ownsContent(mCurrent,
+            mListener == null || mListener.isDisplayRunning()), density);
         // A window's bottom border is a seam band a fingertip tall, reaching into its last row
         // and the dock's top (SeamSwipe). Only for a press: the drawn borders never need it. A
         // Home page has no border.
@@ -3766,6 +3772,14 @@ public final class PaneWallLayout extends ViewGroup
             }
             child.layout(left, top, right, bottom);
         }
+        publishBackExclusion();
+    }
+
+    /**
+     * A display started or stopped: the Display page's borders change their reach
+     * ({@link Listener#isDisplayRunning}), so the stretches left to the wall are published again.
+     */
+    public void refreshBorderReach() {
         publishBackExclusion();
     }
 
