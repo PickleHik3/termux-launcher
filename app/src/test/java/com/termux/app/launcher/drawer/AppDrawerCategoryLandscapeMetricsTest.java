@@ -55,10 +55,10 @@ public class AppDrawerCategoryLandscapeMetricsTest {
             metrics.columns <= AppDrawerCategoryGridMetrics.HEIGHT_FIT_MAX_COLUMNS);
     }
 
-    /** A body that is wide but not short keeps the mock's three columns. */
+    /** A wide, not short body adds columns once a card would pass MAX_TILE_DP (1200dp: 380dp). */
     @Test
-    public void aTallWideBodyIsLeftOnTheMockGrid() {
-        assertEquals(3, AppDrawerCategoryGridMetrics.resolve(1200f, 600f, 1f, 20f, 16f, 24f,
+    public void aTallWideBodyAddsColumnsInsteadOfWideCards() {
+        assertEquals(5, AppDrawerCategoryGridMetrics.resolve(1200f, 600f, 1f, 20f, 16f, 24f,
             CACHE_BYTES).columns);
     }
 
