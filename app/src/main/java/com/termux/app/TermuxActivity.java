@@ -26271,7 +26271,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mDisplayRequested, app != null && !app.session && running
                     && linuxWindowIdFor(app) >= 0,
                 routed,
-                mPreferences != null && mPreferences.isX11DisplayAutostartEnabled());
+                com.termux.app.wall.DisplayPagePolicy.landingAutostarts(
+                    mPreferences != null && mPreferences.isX11DisplayAutostartEnabled(),
+                    mDisplayRanThisLaunch));
         switch (landing) {
             case NOTHING:
                 return;
@@ -28251,6 +28253,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (running) {
             mDisplayRequested = false;
             mDisplayConnectedSinceStart = true;
+            mDisplayRanThisLaunch = true;
             setDisplayStartFailure(null);
         }
         if (!running && !mDisplayRequested) {
@@ -28428,6 +28431,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mDisplayStartId;
     /** Whether a display came up since the last Start. */
     private boolean mDisplayConnectedSinceStart;
+    /**
+     * Whether a display has run since the launcher started. Once it has, landing on a stopped
+     * Display page shows Start instead of starting it again: the autostart setting starts the
+     * display with the launcher, and a stop the user made stays stopped.
+     */
+    private boolean mDisplayRanThisLaunch;
 
     /** Hand the Display window the reason the last Start died, or clear it with null. */
     private void setDisplayStartFailure(@Nullable String reason) {

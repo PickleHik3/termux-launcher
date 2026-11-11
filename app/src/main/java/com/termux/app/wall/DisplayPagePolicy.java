@@ -80,6 +80,15 @@ public final class DisplayPagePolicy {
     }
 
     /**
+     * Whether landing on an unbound, stopped Display page starts it: the autostart setting starts
+     * the display with the launcher only, so once a display has run since the launcher started
+     * ({@code ranThisLaunch}) a landing shows Start, and a stop the user made stays stopped.
+     */
+    public static boolean landingAutostarts(boolean autostartSetting, boolean ranThisLaunch) {
+        return autostartSetting && !ranThisLaunch;
+    }
+
+    /**
      * How long after the app drawer routes a Linux app to a page the landing there leaves the
      * app to the runner, in ms: past it a landing is the user's own.
      */

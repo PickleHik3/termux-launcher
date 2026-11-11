@@ -23,6 +23,14 @@ public class DisplayPageLandingTest {
         return DisplayPagePolicy.landing(binding, false, running, starting, false, false, false);
     }
 
+    @Test public void autostartStartsOnLandingOnlyUntilADisplayHasRun() {
+        assertTrue(DisplayPagePolicy.landingAutostarts(true, false));
+        // Stopped by the user after it ran: coming back shows Start, it does not restart.
+        assertFalse(DisplayPagePolicy.landingAutostarts(true, true));
+        assertFalse(DisplayPagePolicy.landingAutostarts(false, false));
+        assertFalse(DisplayPagePolicy.landingAutostarts(false, true));
+    }
+
     @Test public void unboundPageOnlyShowsStartWithAutostartOff() {
         assertEquals(Landing.SHOW_START, landNoAutostart(null, false, false));
         // A display already up or on its way is left alone either way (re-landing re-attaches
