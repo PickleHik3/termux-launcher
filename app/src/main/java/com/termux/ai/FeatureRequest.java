@@ -115,7 +115,7 @@ public final class FeatureRequest {
             return new Event(Type.DONE, "", "", finishReason, usage, errorCode, errorMessage, null);
         }
 
-        /** Reads one chunk or reply: an ERROR the way {@code StreamEvent.parse} detects one, else a TEXT. */
+        /** Reads one chunk or reply: an ERROR as the wire marks one, else a TEXT. */
         @NonNull
         static Event of(@NonNull JSONObject chunk) {
             JSONObject error = chunk.optJSONObject("error");

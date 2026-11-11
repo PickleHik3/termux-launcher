@@ -228,21 +228,6 @@ public final class TaiManager {
         runtimeLink().cancel(generationId);
     }
 
-    private void streamThrough(@NonNull FeatureRequest.Kind kind, @NonNull String body, @NonNull OpenAiStreamSink sink,
-                               @NonNull TaiRuntimeLink.Priority priority, @Nullable String generationId)
-        throws JSONException, IOException {
-        FeatureRequest.Call call = FeatureRequest.Call.http(kind, body).stream(true)
-            .priority(FeatureRequest.Priority.of(priority)).id(generationId);
-        // The edge writes each chunk as it came and ends with done: today's OpenAI bytes.
-        featureRequest().start(call, event -> {
-            if (event.type == FeatureRequest.Event.Type.DONE) {
-                sink.onDone();
-            } else if (event.openAi != null) {
-                sink.onEvent(event.openAi);
-            }
-        }).await();
-    }
-
     /** The work each seam operation does where the runtime is; see {@link InProcessTaiRuntimeLink.Host}. */
     private final class RuntimeHost implements InProcessTaiRuntimeLink.Host {
         @NonNull
@@ -1942,32 +1927,6 @@ public final class TaiManager {
         return runtimeLink().runtimeState();
     }
 
-    @NonNull
-    public JSONObject openAiChatCompletions(@NonNull String body) throws JSONException {
-        return openAiChatCompletions(body, DEFAULT_CHAT_TIMEOUT_MS);
-    }
-
-    /**
-     * As {@link #openAiChatCompletions(String)}, with the IPC deadline the caller wants instead of
-     * the flat default — a voice-input rewrite gives itself a few seconds, so a slow answer costs
-     * that one phrase its polish instead of stalling the session for two minutes.
-     */
-    @NonNull
-    public JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs) throws JSONException {
-        return openAiChatCompletions(body, timeoutMs, TaiRuntimeLink.Priority.NORMAL);
-    }
-
-    /**
-     * As {@link #openAiChatCompletions(String, long)}, with the place the generation takes in the
-     * runtime's queue: an interactive one goes ahead of waiting normal ones (ADR 0027 §4).
-     */
-    @NonNull
-    JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs, @NonNull TaiRuntimeLink.Priority priority)
-        throws JSONException {
-        return featureRequest().reply(FeatureRequest.Call.http(FeatureRequest.Kind.CHAT, body)
-            .stream(false).timeoutMs(timeoutMs).priority(FeatureRequest.Priority.of(priority)));
-    }
-
     /** A chat completion where the runtime is. */
     @NonNull
     private JSONObject chatCompletionsHere(@NonNull String body) throws JSONException {
@@ -2051,11 +2010,6 @@ public final class TaiManager {
         choice.put("message", message);
     }
 
-    @NonNull
-    public JSONObject openAiCompletions(@NonNull String body) throws JSONException {
-        return featureRequest().reply(FeatureRequest.Call.http(FeatureRequest.Kind.COMPLETION, body).stream(false));
-    }
-
     /** A completion where the runtime is. */
     @NonNull
     private JSONObject completionsHere(@NonNull String body) throws JSONException {
@@ -2112,21 +2066,6 @@ public final class TaiManager {
         } catch (JSONException e) {
             return false;
         }
-    }
-
-    public void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
-        openAiChatCompletionsStream(body, sink, TaiRuntimeLink.Priority.NORMAL, null);
-    }
-
-    /**
-     * As {@link #openAiChatCompletionsStream(String, OpenAiStreamSink)}, with the generation's
-     * place in the runtime's queue and, when the caller wants to cancel it later through
-     * {@link #cancelGeneration}, its id (ADR 0027 §4). A remote request is not queued and has no id.
-     */
-    void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink,
-                                     @NonNull TaiRuntimeLink.Priority priority, @Nullable String generationId)
-        throws JSONException, IOException {
-        streamThrough(FeatureRequest.Kind.CHAT, body, sink, priority, generationId);
     }
 
     /** A streamed chat completion where the runtime is. */
@@ -2277,10 +2216,6 @@ public final class TaiManager {
                 openAiUsage(chat, messages.toString(), chat.optString("response", "")));
         }
         sink.onDone();
-    }
-
-    public void openAiCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
-        streamThrough(FeatureRequest.Kind.COMPLETION, body, sink, TaiRuntimeLink.Priority.NORMAL, null);
     }
 
     /** A streamed completion where the runtime is. */

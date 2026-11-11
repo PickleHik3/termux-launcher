@@ -766,8 +766,6 @@ public final class TaiRemoteClient {
         void sleep(long ms) throws InterruptedException;
     }
 
-    private static final Sleeper DEFAULT_SLEEPER = Thread::sleep;
-
     @NonNull
     private Reply sendWithRetries(@NonNull JSONObject outgoing, long timeoutMs) throws IOException, JSONException {
         return sendWithRetries(outgoing, timeoutMs, new Cancel());
