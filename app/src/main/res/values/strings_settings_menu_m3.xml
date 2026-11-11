@@ -85,7 +85,7 @@
     <string name="settings_behavior_home_header">Home behavior</string>
 
     <!-- Keyboard overview and subpages -->
-    <string name="settings_keyboard_built_in_header">Built-in keyboard</string>
+    <string name="settings_keyboard_built_in_header">Keyboard &amp; extra keys</string>
     <string name="settings_keyboard_hardware_header">Hardware keyboard</string>
     <string name="settings_keyboard_layout_keys_header">Layouts and keys</string>
     <string name="settings_keyboard_docs_credits_header">Documentation and credits</string>

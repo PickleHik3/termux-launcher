@@ -36,6 +36,17 @@
             app:title="@string/settings_keyboard_sub_typing_title"
             app:summary="@string/settings_keyboard_sub_typing_summary"
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardTypingPreferencesFragment" />
+        <Preference
+            app:key="edit_extra_keys_row"
+            app:persistent="false"
+            app:fragment="com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment"
+            app:title="@string/settings_edit_extra_keys_title"
+            app:summary="@string/settings_edit_extra_keys_summary" />
+        <SwitchPreferenceCompat
+            app:key="extra_keys_text_all_caps"
+            app:title="@string/settings_extra_keys_all_caps_title"
+            app:summary="@string/settings_extra_keys_all_caps_summary"
+            android:defaultValue="true" />
     </PreferenceCategory>
 
     <!-- The keyboard's look, from Appearance: one place for everything about the keyboard. -->
@@ -52,20 +63,6 @@
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment"
             app:summary="@string/keyboard_theme_summary"
             app:title="@string/keyboard_theme_title" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:key="keyboard_terminal_hardware" app:title="@string/settings_terminal_key_row_header">
-        <Preference
-            app:key="edit_extra_keys_row"
-            app:persistent="false"
-            app:fragment="com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment"
-            app:title="@string/settings_edit_extra_keys_title"
-            app:summary="@string/settings_edit_extra_keys_summary" />
-        <SwitchPreferenceCompat
-            app:key="extra_keys_text_all_caps"
-            app:title="@string/settings_extra_keys_all_caps_title"
-            app:summary="@string/settings_extra_keys_all_caps_summary"
-            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_hardware">
