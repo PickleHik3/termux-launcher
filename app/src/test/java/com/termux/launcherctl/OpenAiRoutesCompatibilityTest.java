@@ -186,7 +186,47 @@ public class OpenAiRoutesCompatibilityTest {
             "{\"model\":\"" + MODEL + "\",\"input\":\"hi\",\"stream\":false}"), EXPECTED_responsesNonStream);
     }
 
+    @Test public void ollamaChatStream() throws Exception {
+        check("ollamaChatStream", 200, post("/api/chat",
+            "{\"model\":\"" + MODEL + "\",\"messages\":" + HI + ",\"stream\":true}"), EXPECTED_ollamaChatStream);
+    }
+
+    @Test public void responsesStream() throws Exception {
+        check("responsesStream", 200, post("/v1/responses",
+            "{\"model\":\"" + MODEL + "\",\"input\":\"hi\",\"stream\":true}"), EXPECTED_responsesStream);
+    }
+
     // ---- expected output ----
+
+    private static final String EXPECTED_ollamaChatStream =
+            "{\"model\":\"compat-chat\",\"created_at\":\"<T>\",\"done\":false,\"message\":{\"role\":\"assistant\",\"content\":\"\"}}\n"
+            + "{\"model\":\"compat-chat\",\"created_at\":\"<T>\",\"done\":false,\"message\":{\"role\":\"assistant\",\"content\":\"\"}}\n"
+            + "{\"model\":\"compat-chat\",\"created_at\":\"<T>\",\"done\":false,\"message\":{\"role\":\"assistant\",\"content\":\"\"}}\n"
+            + "{\"model\":\"compat-chat\",\"created_at\":\"<T>\",\"done\":false,\"message\":{\"role\":\"assistant\",\"content\":\"Hello\"}}\n"
+            + "{\"model\":\"compat-chat\",\"created_at\":\"<T>\",\"done\":false,\"message\":{\"role\":\"assistant\",\"content\":\" wor\"}}\n"
+            + "{\"model\":\"compat-chat\",\"created_at\":\"<T>\",\"done\":false,\"message\":{\"role\":\"assistant\",\"content\":\"ld\"}}\n"
+            + "{\"model\":\"compat-chat\",\"created_at\":\"<T>\",\"done\":true,\"done_reason\":\"stop\",\"total_duration\":0,\"load_duration\":0,\"prompt_eval_count\":0,\"prompt_eval_duration\":0,\"eval_count\":0,\"eval_duration\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"}}\n";
+    private static final String EXPECTED_responsesStream =
+            "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_<ID>\",\"object\":\"response\",\"created_at\":<T>,\"status\":\"in_progress\",\"model\":\"compat-chat\",\"output\":[]}}\n"
+            + "\n"
+            + "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"type\":\"message\",\"id\":\"msg_<ID>\",\"status\":\"in_progress\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"\",\"annotations\":[]}]}}\n"
+            + "\n"
+            + "data: {\"type\":\"response.content_part.added\",\"item_id\":\"msg_<ID>\",\"output_index\":0,\"content_index\":0,\"part\":{\"type\":\"output_text\",\"text\":\"\",\"annotations\":[]}}\n"
+            + "\n"
+            + "data: {\"type\":\"response.output_text.delta\",\"item_id\":\"msg_<ID>\",\"output_index\":0,\"content_index\":0,\"delta\":\"Hello\"}\n"
+            + "\n"
+            + "data: {\"type\":\"response.output_text.delta\",\"item_id\":\"msg_<ID>\",\"output_index\":0,\"content_index\":0,\"delta\":\" wor\"}\n"
+            + "\n"
+            + "data: {\"type\":\"response.output_text.delta\",\"item_id\":\"msg_<ID>\",\"output_index\":0,\"content_index\":0,\"delta\":\"ld\"}\n"
+            + "\n"
+            + "data: {\"type\":\"response.output_text.done\",\"item_id\":\"msg_<ID>\",\"output_index\":0,\"content_index\":0,\"text\":\"Hello world\"}\n"
+            + "\n"
+            + "data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"type\":\"message\",\"id\":\"msg_<ID>\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello world\",\"annotations\":[]}]}}\n"
+            + "\n"
+            + "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_<ID>\",\"object\":\"response\",\"created_at\":<T>,\"status\":\"completed\",\"model\":\"compat-chat\",\"output\":[{\"type\":\"message\",\"id\":\"msg_<ID>\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello world\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0}}}\n"
+            + "\n"
+            + "data: [DONE]\n"
+            + "\n";
 
     private static final String EXPECTED_chatStream =
             "data: {\"id\":\"tai-chatcmpl-<ID>\",\"object\":\"chat.completion.chunk\",\"created\":<T>,\"model\":\"compat-chat\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n"
