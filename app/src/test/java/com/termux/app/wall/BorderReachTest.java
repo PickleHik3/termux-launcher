@@ -96,9 +96,35 @@ public class BorderReachTest {
 
     @Test
     public void onlyTheDisplayWindowInFrontOwnsItsContent() {
-        assertTrue("a Display page", BorderReach.ownsContent(PaneWallPage.DISPLAY));
-        assertFalse("a terminal window", BorderReach.ownsContent(PaneWallPage.TERMINAL));
-        assertFalse("a Home page", BorderReach.ownsContent(PaneWallPage.WIDGETS));
+        assertTrue("a Display page", BorderReach.ownsContent(PaneWallPage.DISPLAY, true));
+        assertFalse("a terminal window", BorderReach.ownsContent(PaneWallPage.TERMINAL, true));
+        assertFalse("a Home page", BorderReach.ownsContent(PaneWallPage.WIDGETS, true));
+    }
+
+    /**
+     * A Display page with no display running shows only its empty state, so it owns nothing
+     * (pong, 2026-11-11): a plain sideways swipe on it, which the listener gives away
+     * ({@link PaneWallPolicy#bodySwipePages}), arms and pages as on a terminal's text. Owned, the
+     * same press arms nothing, whatever the listener says.
+     */
+    @Test
+    public void anIdleDisplayPageOwnsNothingAndPagesByAPlainSwipe() {
+        assertFalse(BorderReach.ownsContent(PaneWallPage.DISPLAY, false));
+        boolean gives = PaneWallPolicy.bodySwipePages(PaneWallPage.DISPLAY, false, false, false);
+        assertTrue(gives);
+        float[] c = new float[4];
+        BorderDrag.Zone idle = zone(SCREENS[0], 12f, Foot.KEYBOARD_DOWN, true,
+            BorderReach.ownsContent(PaneWallPage.DISPLAY, false));
+        assertTrue(BorderReach.contentBounds(idle, c));
+        float x = (c[0] + c[2]) / 2f;
+        float y = (c[1] + c[3]) / 2f;
+        BorderDrag drag = new BorderDrag();
+        assertTrue("armed on the empty state",
+            drag.down(x, y, idle, SLOP, true, true, true, 0f, gives));
+        assertEquals(BorderDrag.Claim.PAGING, drag.move(x + 3f * SLOP, y));
+        BorderDrag running = new BorderDrag();
+        assertFalse("a running display's picture keeps it",
+            running.down(x, y, displayAtRest(), SLOP, true, true, true, 0f, true));
     }
 
     // ---- The display window ------------------------------------------------------------------

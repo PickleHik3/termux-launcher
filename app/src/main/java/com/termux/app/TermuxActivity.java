@@ -28255,12 +28255,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!running && !mDisplayRequested) {
             tearDownEmbeddedDisplay();
+            if (mPaneWallController != null) mPaneWallController.onDisplayRunningChanged();
             syncPlaceBar();
             return;
         }
         com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
             ? null : mPaneWallController.displayWindow();
         if (frame != null) frame.applyRunning(running);
+        if (mPaneWallController != null) mPaneWallController.onDisplayRunningChanged();
         applyDisplayPageStill();
         syncPlaceBar();
         syncDisplayTouchpad();
