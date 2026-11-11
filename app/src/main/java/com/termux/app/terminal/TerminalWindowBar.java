@@ -1505,7 +1505,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /** The pill's text, and the width that text may take. */
     private void setTitle(@NonNull TextView tab, @NonNull WindowItem item) {
-        tab.setMaxWidth(dp(WHOLE_NAMES.contains(titleOf(item.label)) ? WIDE_CHIP_MAX_DP : 104));
+        // A program's status ("demo working 40%") is a name plus a word that must stay whole.
+        tab.setMaxWidth(dp(item.status != null ? STATUS_CHIP_MAX_DP
+            : WHOLE_NAMES.contains(titleOf(item.label)) ? WIDE_CHIP_MAX_DP : 104));
         tab.setText(tabText(item));
     }
 
@@ -2877,6 +2879,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /** The widest chip, for a {@link #WHOLE_NAMES} label: sixteen characters at 10.5sp. */
     private static final int WIDE_CHIP_MAX_DP = 124;
+
+    /**
+     * A chip showing a program's status: about 22 characters at 10.5sp, so "claude needs input
+     * 40%" stays whole; a longer name still ends in an ellipsis.
+     */
+    private static final int STATUS_CHIP_MAX_DP = 176;
 
     @NonNull
     public static String truncateProcess(@NonNull String process) {
