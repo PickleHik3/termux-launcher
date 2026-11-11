@@ -241,6 +241,7 @@ final class AssistantChatView extends LinearLayout {
         String line;
         switch (stage) {
             case LOADING_MODEL: line = c.getString(R.string.assistant_status_loading, modelName); break;
+            case WAITING: line = c.getString(R.string.assistant_status_waiting); break;
             case THINKING: line = c.getString(R.string.assistant_status_thinking); break;
             default: line = c.getString(R.string.assistant_status_responding); break;
         }

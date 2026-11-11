@@ -17,7 +17,7 @@ public final class AssistantModelPresenter {
     public enum Failure { NONE, DOWNLOAD_FAILED, NO_SPACE, NO_MEMORY }
 
     /** Where an answer in progress is: the stage the status line above the composer names. */
-    public enum Stage { NONE, LOADING_MODEL, THINKING, RESPONDING }
+    public enum Stage { NONE, WAITING, LOADING_MODEL, THINKING, RESPONDING }
 
     private AssistantModelPresenter() {
     }
@@ -27,6 +27,7 @@ public final class AssistantModelPresenter {
                               @NonNull AssistantEngine.AnswerPhase phase) {
         if (!generating) return Stage.NONE;
         if (!liveTextEmpty) return Stage.RESPONDING;
+        if (phase == AssistantEngine.AnswerPhase.WAITING) return Stage.WAITING;
         if (phase == AssistantEngine.AnswerPhase.LOADING) return Stage.LOADING_MODEL;
         if (phase == AssistantEngine.AnswerPhase.STARTED) return Stage.THINKING;
         return kind == AssistantModelStatus.Kind.READY ? Stage.THINKING : Stage.LOADING_MODEL;
