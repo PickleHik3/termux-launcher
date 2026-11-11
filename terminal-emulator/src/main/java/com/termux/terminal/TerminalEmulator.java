@@ -1010,6 +1010,7 @@ public final class TerminalEmulator {
      * @param pixelY the same from the top of the text area.
      */
     public void sendMouseEvent(int mouseButton, int column, int row, int pixelX, int pixelY, boolean pressed, int modifiers) {
+        if (usesLibraryInputEncoders() && sendLibraryMouse(mouseButton, pixelX, pixelY, pressed, modifiers)) return;
         modifiers &= MOUSE_MODIFIER_SHIFT | MOUSE_MODIFIER_ALT | MOUSE_MODIFIER_CTRL;
         if (column < 1)
             column = 1;
@@ -1367,8 +1368,16 @@ public final class TerminalEmulator {
      * Touch handling is untouched: this is not a mouse-tracking mode.
      */
     public void onFocusChanged(boolean focused) {
-        if (isDecsetInternalBitSet(DECSET_BIT_SEND_FOCUS_EVENTS))
-            mSession.write(focused ? "\033[I" : "\033[O");
+        boolean library = usesLibraryInputEncoders();
+        if (library) flushBatchedOutput();
+        if (isDecsetInternalBitSet(DECSET_BIT_SEND_FOCUS_EVENTS)) {
+            byte[] bytes = library ? GhosttyCore.encodeFocus(focused) : null;
+            if (bytes != null) {
+                if (bytes.length > 0) mSession.write(bytes, 0, bytes.length);
+            } else {
+                mSession.write(focused ? "\033[I" : "\033[O");
+            }
+        }
     }
 
     public void sendPasteEvent(List<String> mimeTypes) {
@@ -1676,6 +1685,106 @@ public final class TerminalEmulator {
         {GhosttyNative.MODE_PASTE_EVENTS, DECSET_BIT_PASTE_EVENTS},
     };
 
+    /** Where {@link #useGhosttyCore} reads {@link GhosttyCore#INPUT_PROPERTY} from; tests replace it. */
+    private static DebugSwitch.Reader sInputPropertyReader = DebugSwitch.SYSTEM_PROPERTIES;
+
+    static void setInputPropertyReaderForTests(DebugSwitch.Reader reader) {
+        sInputPropertyReader = reader != null ? reader : DebugSwitch.SYSTEM_PROPERTIES;
+    }
+
+    /** Whether this session's keys, mouse and focus bytes come from libghostty; read when the core attaches. */
+    private boolean mLibraryInput;
+    /** Library mouse buttons (bit n is GhosttyMouseButton n) pressed and not yet released. */
+    private int mLibraryButtonsDown;
+
+    /**
+     * Whether keys, mouse and focus reports are encoded by libghostty-vt: the Ghostty core is on and
+     * {@link GhosttyCore#INPUT_PROPERTY} did not ask for {@code java}.
+     */
+    public boolean usesLibraryInputEncoders() {
+        return mGhostty != null && mLibraryInput;
+    }
+
+    /**
+     * Encode one key with the library from the terminal's live modes and write the bytes to the
+     * session in one write. Callers pass no C0 control character as {@code text}; a single C0 or DEL
+     * character is dropped here. Output the shell has produced is applied first, so a reply to a
+     * query it made goes out before the key.
+     *
+     * @param ghosttyKey a GhosttyKeys.KEY_* value
+     * @param action one of GhosttyKeys.ACTION_*
+     * @param mods GhosttyKeys.MOD_* bits; {@code consumedMods} is the part the layout used to make {@code text}
+     * @param unshiftedCodePoint the code point the key types with no modifier, or 0
+     * @param text what the key produced, or null
+     * @return the number of bytes written (0 when the library has nothing to send), or -1 when nothing
+     *         was written because the library encoders are off or failed; the caller then uses the Java ones
+     */
+    public int sendLibraryKey(int ghosttyKey, int action, int mods, int consumedMods, int unshiftedCodePoint,
+                              String text, boolean composing) {
+        if (!usesLibraryInputEncoders()) return -1;
+        flushBatchedOutput();
+        GhosttyCore core = mGhostty;
+        if (core == null) return -1;
+        byte[] utf8 = null;
+        if (text != null && !text.isEmpty()
+            && !(text.length() == 1 && (text.charAt(0) < 0x20 || text.charAt(0) == 0x7f))) {
+            utf8 = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        }
+        byte[] bytes = core.encodeKey(ghosttyKey, action, mods, consumedMods, unshiftedCodePoint, utf8, composing);
+        if (bytes == null) return -1;
+        if (bytes.length > 0) mSession.write(bytes, 0, bytes.length);
+        return bytes.length;
+    }
+
+    /**
+     * {@link #sendMouseEvent} on the library path. False when the library failed, and the Java
+     * encoder then reports the event. A wheel release writes nothing here (the Java encoder reports
+     * one: SGR {@code m} or legacy code 3); the library has no wheel release.
+     */
+    private boolean sendLibraryMouse(int mouseButton, int pixelX, int pixelY, boolean pressed, int modifiers) {
+        GhosttyCore core = mGhostty;
+        if (core == null) return false;
+        int action, button;
+        boolean anyPressed;
+        switch (mouseButton) {
+            case MOUSE_LEFT_BUTTON: case 1: case 2:
+                // Library buttons: left 1, right 2, middle 3.
+                button = mouseButton == MOUSE_LEFT_BUTTON ? 1 : mouseButton == 1 ? 3 : 2;
+                action = pressed ? 0 : 1;
+                if (pressed) mLibraryButtonsDown |= 1 << button;
+                else mLibraryButtonsDown &= ~(1 << button);
+                anyPressed = mLibraryButtonsDown != 0;
+                break;
+            case MOUSE_LEFT_BUTTON_MOVED:
+                button = 1; action = 2; anyPressed = true;
+                break;
+            case MOUSE_MOVED_NO_BUTTON:
+                button = 0; action = 2; anyPressed = false;
+                break;
+            case MOUSE_WHEELUP_BUTTON: case MOUSE_WHEELDOWN_BUTTON: case MOUSE_WHEEL_LEFT: case MOUSE_WHEEL_RIGHT:
+                if (!pressed) return true;
+                button = 4 + (mouseButton - MOUSE_WHEELUP_BUTTON);
+                action = 0; anyPressed = mLibraryButtonsDown != 0;
+                break;
+            default:
+                return false;
+        }
+        flushBatchedOutput();
+        int mods = 0;
+        if ((modifiers & MOUSE_MODIFIER_SHIFT) != 0) mods |= GhosttyKeys.MOD_SHIFT;
+        if ((modifiers & MOUSE_MODIFIER_ALT) != 0) mods |= GhosttyKeys.MOD_ALT;
+        if ((modifiers & MOUSE_MODIFIER_CTRL) != 0) mods |= GhosttyKeys.MOD_CTRL;
+        int width = mColumns * mCellWidthPixels, height = mRows * mCellHeightPixels;
+        if (width < 1 || height < 1) return false;
+        float x = Math.max(0, Math.min(width - 1, pixelX));
+        float y = Math.max(0, Math.min(height - 1, pixelY));
+        byte[] bytes = core.encodeMouse(action, button, mods, x, y, width, height, mCellWidthPixels,
+            mCellHeightPixels, anyPressed);
+        if (bytes == null) return false;
+        if (bytes.length > 0) mSession.write(bytes, 0, bytes.length);
+        return true;
+    }
+
     /**
      * Parse this session's output with libghostty-vt from now on. False, with the Java parser kept,
      * when the library is not in this build or will not start.
@@ -1688,6 +1797,8 @@ public final class TerminalEmulator {
             GhosttyCore.historyLimit(mMainBuffer.mTotalRows, mColumns));
         if (core == null) return false;
         mGhostty = core;
+        mLibraryInput = !GhosttyCore.INPUT_JAVA.equals(sInputPropertyReader.read(GhosttyCore.INPUT_PROPERTY));
+        mLibraryButtonsDown = 0;
         core.setColorScheme(isDefaultBackgroundDark());
         core.setTerminfoName(mSession.getTerminfoName());
         mGhosttyLinks = new GhosttyLinks(mHyperlinks, new GhosttyLinks.UsedIds() {

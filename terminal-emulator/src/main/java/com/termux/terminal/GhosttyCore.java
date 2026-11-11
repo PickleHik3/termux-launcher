@@ -20,6 +20,10 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     static final String CORE_PROPERTY = "debug.tl.terminal_core";
     static final String CORE_GHOSTTY = "ghostty";
 
+    /** The system property that keeps the Java input encoders on this core when its value is "java". */
+    static final String INPUT_PROPERTY = "debug.tl.terminal_input";
+    static final String INPUT_JAVA = "java";
+
     /**
      * Bytes one Ghostty page takes at most, to bound how many rows a page holds. Its standard page
      * (215 x 215 cells plus style and grapheme tables) is under this; wider styles trade rows away.
