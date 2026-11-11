@@ -24,11 +24,16 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   stays owed: on the Display page with nothing running, a sideways swipe pages to the neighbour
   both ways, arriving does not start anything; Start display, then the swipe goes to the display;
   stop it, and the plain swipe pages again.
-- **Live dock reorder and drawer-to-dock pins (11-10, feat/dock-live-reorder-155, #155).**
-  Pong 11-11: reorder in the dock works; the developer found the part too slow (about a second),
-  the pick-up needing an exactly sideways move, the edge page turn too quick, no way to turn the
-  page with a second finger, and a drawer pick-up that neither closes the drawer nor lands on Home
-  or the dock. Being reworked; the device check is re-owed with the rework.
+- **Live dock reorder and drawer-to-dock pins (11-10, #155; reworked 11-11, fix/dock-carry-feel).**
+  Pong 11-11 found the part slow, the pick-up sideways-only, the edge turn quick, no second-finger
+  turn and a drawer pick-up that landed nowhere. Reworked: 200 ms parting (an icon's middle keeps
+  the 300 ms folder rest), a lift by any slide past 16 dp, a 700 ms edge hold, a second-finger page
+  turn, and a drawer pick-up handed to Home at once. Emulator emu2 11-11, Docked, keyboard down,
+  injected input: all five seen working (a diagonal lift, the row parted within half a second, no
+  edge turn at 0.4 s and a turn by 1 s, a two-finger turn to page 2, the drawer closed on pick-up
+  and the app pinned on the row and placed on Home). Owed · emulator: the same on Floating and with
+  the in-app keyboard up; a cancel leaves no icon offset, faded or enlarged. Back during a carry
+  does not cancel it (it never did).
 - **Card looks survive a relaunch and a kill mid-edit (11-10, fix/card-looks-session).** Unit tests
   only. Owed · emulator: in the Appearance editor take a card on Custom to a Look, change the theme
   (the editor relaunches), then Undo: the card is back on its Custom with the values from before

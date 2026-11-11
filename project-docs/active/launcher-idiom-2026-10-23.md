@@ -58,7 +58,7 @@ are still to build.
 
 ### 5. Live dock reorder (#155)
 
-A drag over the dock parts the other icons after a 650 ms hover (150 ms slide) and drops into the
+A drag over the dock parts the other icons after a 200 ms hover (150 ms slide) and drops into the
 slot; resting on an icon still previews and makes a folder. The pinned apps editor stays for bulk
 changes. Dock slots stay size-driven (the four size presets); no count setting.
 
@@ -71,6 +71,13 @@ by whole columns after 650 ms, 150 ms slide, around the still tiles; a 300 ms re
 middle swells it and a release then makes a folder or joins it, a quick release goes beside it; a
 full page's last icon slides off for an icon from outside) and pins from the drawer (an app
 carried out past the drawer's top and let go over the row). The rail keeps the old drop rule.
+
+Reworked 2026-11-11 (fix/dock-carry-feel) after the developer's pong pass: the row parts 200 ms
+after the icon settles (an icon's middle keeps the 300 ms folder rest), a held dock or drawer icon
+lifts on any slide past 16 dp (Home's `HomeIconLift` rule, so a slide onto a menu row lifts
+instead), the row's end turns a page after a 700 ms hold (Home's widget flip keeps 350 ms), a
+second finger's swipe on the row turns the page under a carried icon, and a drawer pick-up goes
+to Home at once, closing the drawer.
 
 ### 6. Dock items (#156)
 
