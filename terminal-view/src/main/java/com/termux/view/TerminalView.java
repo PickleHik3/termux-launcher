@@ -52,6 +52,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+import com.termux.terminal.GhosttyKeys;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.KittyKeyEncoder;
 import com.termux.terminal.TerminalContent;
@@ -1020,7 +1021,12 @@ public final class TerminalView extends View {
                     if (mClient.readShiftKey())
                         codePoint = Character.toUpperCase(codePoint);
                     boolean ctrlHeld = false;
-                    if (codePoint <= 31 && codePoint != 27) {
+                    // On the Fast engine Enter, Tab and Backspace stay the keys they are (Ctrl+M under
+                    // the kitty protocol is not Enter); inputCodePoint hands them to the library.
+                    final boolean library = mEmulator != null && mEmulator.usesLibraryInputEncoders();
+                    if (library && (codePoint == '\n' || codePoint == '\r')) {
+                        codePoint = '\r';
+                    } else if (codePoint <= 31 && codePoint != 27 && !(library && (codePoint == '\t' || codePoint == 8))) {
                         if (codePoint == '\n') {
                             // The AOSP keyboard and descendants seems to send \n as text when the enter key is pressed,
                             // instead of a key event like most other keyboard apps. A terminal expects \r for the enter
@@ -2940,10 +2946,22 @@ public final class TerminalView extends View {
             return super.onKeyDown(keyCode, event);
         } else if (event.getAction() == KeyEvent.ACTION_MULTIPLE && keyCode == KeyEvent.KEYCODE_UNKNOWN) {
             markProgramStatusSeen();
+            if (mEmulator.usesLibraryInputEncoders() && event.getCharacters() != null) {
+                typeCharactersOnLibrary(event.getCharacters());
+                return true;
+            }
             mTermSession.write(event.getCharacters());
             return true;
         } else if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH) {
             return super.onKeyDown(keyCode, event);
+        }
+        // The Fast engine's keys are encoded by libghostty-vt from the live terminal modes, after
+        // every client hook above has had its say, so app shortcuts win on both engines. Standard
+        // goes on to the Java encoders below, unchanged.
+        if (mEmulator.usesLibraryInputEncoders()) {
+            Boolean handled = onKeyDownOnLibrary(keyCode, event);
+            if (handled != null)
+                return handled;
         }
         // The kitty keyboard protocol, when the program on this session asked for it. It runs after the
         // client's own bindings so app shortcuts keep winning, and before the legacy encoders so that
@@ -3009,6 +3027,180 @@ public final class TerminalView extends View {
         return true;
     }
 
+    /** {@code cp} as the library takes key text: nothing for 0, a C0 control or DEL. */
+    private static int libraryCodePoint(int cp) {
+        return cp < 0x20 || cp == 0x7f ? 0 : cp;
+    }
+
+    private static String libraryText(int cp) {
+        cp = libraryCodePoint(cp);
+        return cp == 0 ? "" : new String(Character.toChars(cp));
+    }
+
+    /**
+     * One key event through the library encoder of the Fast engine, with what a key written to the
+     * session does around it.
+     *
+     * @return the bytes written, 0 when the library had nothing to send, -1 when this is not the
+     *         library path (or the library failed) and the Java encoders should have the key
+     */
+    private int sendKeyToLibrary(int key, int action, int mods, int consumedMods, int unshifted, String text,
+                                 boolean composing) {
+        TerminalEmulator emulator = mEmulator;
+        if (emulator == null)
+            return -1;
+        int written = emulator.sendLibraryKey(key, action, mods, consumedMods, unshifted, text, composing);
+        if (written > 0) {
+            emulator.setCursorBlinkState(true);
+            if (action != GhosttyKeys.ACTION_RELEASE)
+                snapToBottomForInput();
+            markProgramStatusSeen();
+            if (mKeyInputProbe != null)
+                probeKeyBytes("library", "key=" + key + " action=" + action + " mods=" + mods + " text=" + text
+                    + " -> " + written + " bytes");
+        }
+        return written;
+    }
+
+    /**
+     * A physical key on the Fast engine: modifiers, the text the layout makes of it and the dead-key
+     * state go to the library, which encodes them for the program's modes.
+     *
+     * @return whether the key was taken, or null when the library path is not in use and the Java
+     *         encoders should go on
+     */
+    private Boolean onKeyDownOnLibrary(int keyCode, KeyEvent event) {
+        final int metaState = event.getMetaState();
+        // Each sticky modifier of the extra keys is consumed by being read, so each is read once.
+        final boolean ctrl = event.isCtrlPressed() || mClient.readControlKey();
+        final boolean alt = event.isAltPressed() || mClient.readAltKey();
+        final boolean shift = event.isShiftPressed() || mClient.readShiftKey();
+        final boolean fn = mClient.readFnKey();
+        final boolean rightAlt = (metaState & KeyEvent.META_ALT_RIGHT_ON) != 0;
+        int key = keyCode == KeyEvent.KEYCODE_BACK ? GhosttyKeys.KEY_ESCAPE : GhosttyKeys.fromAndroidKeyCode(keyCode);
+        int mods = GhosttyKeys.fromAndroidMetaState(metaState);
+        if (ctrl)
+            mods |= GhosttyKeys.MOD_CTRL;
+        if (alt)
+            mods |= GhosttyKeys.MOD_ALT;
+        if (shift)
+            mods |= GhosttyKeys.MOD_SHIFT;
+        final int unshifted = libraryCodePoint(event.getUnicodeChar(0) & KeyCharacterMap.COMBINING_ACCENT_MASK);
+        // The text as the Java path builds it: Ctrl is the library's to apply, left Alt is a modifier,
+        // right Alt (Alt Gr) composes characters.
+        int bitsToClear = KeyEvent.META_CTRL_MASK;
+        if (!rightAlt)
+            bitsToClear |= KeyEvent.META_ALT_ON | KeyEvent.META_ALT_LEFT_ON;
+        int effectiveMetaState = metaState & ~bitsToClear;
+        if (shift)
+            effectiveMetaState |= KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON;
+        if (fn)
+            effectiveMetaState |= KeyEvent.META_FUNCTION_ON;
+        final int result = event.getUnicodeChar(effectiveMetaState);
+        if (TERMINAL_VIEW_KEY_LOGGING_ENABLED)
+            mClient.logInfo(LOG_TAG, "KeyEvent#getUnicodeChar(" + effectiveMetaState + ") returned: " + result);
+        // Fn plus a key the layout gives no character: Android sends the key's fallback instead.
+        if (event.isFunctionPressed() && result == 0)
+            return false;
+        final int action = event.getRepeatCount() > 0 ? GhosttyKeys.ACTION_REPEAT : GhosttyKeys.ACTION_PRESS;
+        int oldCombiningAccent = mCombiningAccent;
+        int text = result;
+        boolean composing = false;
+        if ((result & KeyCharacterMap.COMBINING_ACCENT) != 0) {
+            // A dead key: the program is told it is composing, and the accent waits for the next key.
+            if (mCombiningAccent != 0)
+                inputCodePoint(event.getDeviceId(), mCombiningAccent, ctrl, (metaState & KeyEvent.META_ALT_LEFT_ON) != 0);
+            mCombiningAccent = result & KeyCharacterMap.COMBINING_ACCENT_MASK;
+            composing = true;
+            text = 0;
+        } else if (mCombiningAccent != 0) {
+            int combinedChar = KeyCharacterMap.getDeadChar(mCombiningAccent, result);
+            if (combinedChar > 0)
+                text = combinedChar;
+            mCombiningAccent = 0;
+        }
+        if (mCombiningAccent != oldCombiningAccent)
+            invalidate();
+        final int typed = libraryCodePoint(text);
+        if (!composing && key == GhosttyKeys.KEY_UNIDENTIFIED && typed == 0)
+            return false;
+        int consumed = 0;
+        if (shift && typed != unshifted)
+            consumed |= GhosttyKeys.MOD_SHIFT;
+        if (rightAlt && !composing) {
+            int withoutAlt = libraryCodePoint(event.getUnicodeChar(effectiveMetaState
+                & ~(KeyEvent.META_ALT_ON | KeyEvent.META_ALT_LEFT_ON | KeyEvent.META_ALT_RIGHT_ON)));
+            if (withoutAlt != typed)
+                consumed |= GhosttyKeys.MOD_ALT | GhosttyKeys.MOD_ALT_SIDE;
+        }
+        int written = sendKeyToLibrary(key, action, mods, consumed, unshifted, composing ? "" : libraryText(typed), composing);
+        if (written < 0 && !composing)
+            return null;
+        return true;
+    }
+
+    /** Raw characters (ACTION_MULTIPLE) typed one by one on the Fast engine, as IME text is. */
+    private void typeCharactersOnLibrary(String characters) {
+        for (int i = 0; i < characters.length(); ) {
+            int cp = characters.codePointAt(i);
+            i += Character.charCount(cp);
+            inputCodePoint(KEY_EVENT_SOURCE_SOFT_KEYBOARD, cp == '\n' ? '\r' : cp, false, false);
+        }
+    }
+
+    /**
+     * One code point (from the soft or in-app keyboard, an extra key or IME text) as a key event for the
+     * library: the US-layout key that types it, Shift when the layout needs it, Ctrl and Alt as given.
+     * Enter, Tab, Escape and Backspace arrive as their control characters and are the keys, with no text;
+     * the other controls are Ctrl plus the character that makes them.
+     *
+     * @return whether the library took it
+     */
+    private boolean inputCodePointOnLibrary(int codePoint, boolean ctrl, boolean alt) {
+        int mods = (ctrl ? GhosttyKeys.MOD_CTRL : 0) | (alt ? GhosttyKeys.MOD_ALT : 0);
+        int key;
+        switch (codePoint) {
+            case 13:
+            case 10:
+                key = GhosttyKeys.KEY_ENTER;
+                break;
+            case 9:
+                key = GhosttyKeys.KEY_TAB;
+                break;
+            case 27:
+                key = GhosttyKeys.KEY_ESCAPE;
+                break;
+            case 127:
+            case 8:
+                key = GhosttyKeys.KEY_BACKSPACE;
+                break;
+            default:
+                key = GhosttyKeys.KEY_UNIDENTIFIED;
+        }
+        if (key != GhosttyKeys.KEY_UNIDENTIFIED)
+            return sendKeyToLibrary(key, GhosttyKeys.ACTION_PRESS, mods, 0, 0, "", false) >= 0;
+        int cp = codePoint;
+        if (cp == 0) {
+            cp = ' ';
+            mods |= GhosttyKeys.MOD_CTRL;
+        } else if (cp >= 1 && cp <= 26) {
+            cp += 96;
+            mods |= GhosttyKeys.MOD_CTRL;
+        } else if (cp >= 28 && cp <= 31) {
+            cp = "\\]^_".charAt(cp - 28);
+            mods |= GhosttyKeys.MOD_CTRL;
+        } else if (!Character.isValidCodePoint(cp) || (cp >= 0xD800 && cp <= 0xDFFF)) {
+            return false;
+        }
+        int consumed = 0;
+        if (GhosttyKeys.shiftForCodePoint(cp)) {
+            mods |= GhosttyKeys.MOD_SHIFT;
+            consumed = GhosttyKeys.MOD_SHIFT;
+        }
+        return sendKeyToLibrary(GhosttyKeys.keyForCodePoint(cp), GhosttyKeys.ACTION_PRESS, mods, consumed,
+            GhosttyKeys.unshiftedForCodePoint(cp), libraryText(cp), false) >= 0;
+    }
+
     public void inputCodePoint(int eventSource, int codePoint, boolean controlDownFromEvent, boolean leftAltDownFromEvent) {
         if (TERMINAL_VIEW_KEY_LOGGING_ENABLED) {
             mClient.logInfo(LOG_TAG, "inputCodePoint(eventSource=" + eventSource + ", codePoint=" + codePoint + ", controlDownFromEvent=" + controlDownFromEvent + ", leftAltDownFromEvent=" + leftAltDownFromEvent + ")");
@@ -3028,7 +3220,9 @@ public final class TerminalView extends View {
         final boolean altDown = leftAltDownFromEvent || mClient.readAltKey();
         if (mClient.onCodePoint(codePoint, controlDown, mTermSession))
             return;
-        if (controlDown) {
+        final boolean library = mEmulator != null && mEmulator.usesLibraryInputEncoders();
+        // On the Fast engine Ctrl travels as a modifier of the key; the library makes the control character.
+        if (controlDown && !library) {
             if (codePoint >= 'a' && codePoint <= 'z') {
                 codePoint = codePoint - 'a' + 1;
             } else if (codePoint >= 'A' && codePoint <= 'Z') {
@@ -3078,6 +3272,8 @@ public final class TerminalView extends View {
                         break;
                 }
             }
+            if (library && inputCodePointOnLibrary(codePoint, controlDown, altDown))
+                return;
             snapToBottomForInput();
             markProgramStatusSeen();
             // If left alt, send escape before the code point to make e.g. Alt+B and Alt+F work in readline:
@@ -3097,6 +3293,22 @@ public final class TerminalView extends View {
             mEmulator.setCursorBlinkState(true);
         if (handleKeyCodeAction(keyCode, keyMod))
             return true;
+        if (mEmulator != null && mEmulator.usesLibraryInputEncoders()) {
+            int key = GhosttyKeys.fromAndroidKeyCode(keyCode);
+            if (key == GhosttyKeys.KEY_UNIDENTIFIED)
+                return false;
+            int mods = 0;
+            if ((keyMod & KeyHandler.KEYMOD_CTRL) != 0)
+                mods |= GhosttyKeys.MOD_CTRL;
+            if ((keyMod & KeyHandler.KEYMOD_ALT) != 0)
+                mods |= GhosttyKeys.MOD_ALT;
+            if ((keyMod & KeyHandler.KEYMOD_SHIFT) != 0)
+                mods |= GhosttyKeys.MOD_SHIFT;
+            if ((keyMod & KeyHandler.KEYMOD_NUM_LOCK) != 0)
+                mods |= GhosttyKeys.MOD_NUM_LOCK;
+            if (sendKeyToLibrary(key, GhosttyKeys.ACTION_PRESS, mods, 0, 0, "", false) >= 0)
+                return true;
+        }
         TerminalEmulator term = mTermSession.getEmulator();
         String code = KeyHandler.getCode(keyCode, keyMod, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode());
         if (code == null)
@@ -3150,6 +3362,16 @@ public final class TerminalView extends View {
         } else if (event.isSystem()) {
             // Let system key events through.
             return super.onKeyUp(keyCode, event);
+        }
+        if (mEmulator != null && mEmulator.usesLibraryInputEncoders()) {
+            // Sticky modifiers were read by the press; a release carries the keyboard's own.
+            int key = keyCode == KeyEvent.KEYCODE_BACK ? GhosttyKeys.KEY_ESCAPE : GhosttyKeys.fromAndroidKeyCode(keyCode);
+            if (key == GhosttyKeys.KEY_UNIDENTIFIED)
+                return true;
+            int unshifted = libraryCodePoint(event.getUnicodeChar(0) & KeyCharacterMap.COMBINING_ACCENT_MASK);
+            if (sendKeyToLibrary(key, GhosttyKeys.ACTION_RELEASE, GhosttyKeys.fromAndroidMetaState(event.getMetaState()),
+                    0, unshifted, "", false) >= 0)
+                return true;
         }
         // Only the kitty keyboard protocol has any use for a release event; legacy encoding has none.
         handleKittyKeyEvent(keyCode, event, KittyKeyEncoder.EVENT_RELEASE);
