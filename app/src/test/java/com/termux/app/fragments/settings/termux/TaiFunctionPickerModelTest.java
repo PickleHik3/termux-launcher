@@ -228,7 +228,7 @@ public class TaiFunctionPickerModelTest {
     // ----------------------------------------------------------------------------- GPU choice
 
     @Test
-    public void theGpuChoiceShowsForALocalPickPreselectedByThePolicy() {
+    public void theGpuChoiceShowsForALocalPickWithTheCpuPreselectedWhileTheGpuIsUnconfirmed() {
         installGemma();
         TaiFunctionModels models = models(env(12, 34, GpuPath.UNKNOWN));
         models.set(TaiFunction.ASSISTANT, E4B);
@@ -236,7 +236,7 @@ public class TaiFunctionPickerModelTest {
             catalogue(), Collections.<String>emptySet(), LABELS).accelerator;
         assertNotNull(accelerator);
         assertTrue(accelerator.gpuOffered);
-        assertTrue(accelerator.gpuSelected);
+        assertFalse(accelerator.gpuSelected);
         assertEquals(TaiTierPolicy.NOTE_GPU_UNCONFIRMED, accelerator.note);
     }
 

@@ -41,6 +41,7 @@ import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiPlatformCaps;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
@@ -152,6 +153,8 @@ public class TaiModelCentreFragment extends Fragment
     @Nullable private TaiFunctionModels functionModels;
     @NonNull private String deviceLine = "";
     @NonNull private List<TaiFunctionRows.FunctionRow> functionRows = Collections.emptyList();
+    /** The feature the "Check the GPU" row opens the check for; null hides the row (the GPU is confirmed or not offered). */
+    @Nullable private TaiFunction gpuCheckFeature;
     /** "Used by: ..." per installed model id, empty text for a model no function uses. */
     @NonNull private Map<String, String> usedBy = Collections.emptyMap();
     /** What deleting each installed model would leave each function on; see {@link TaiFunctionRows#deleteWarning}. */
@@ -368,6 +371,20 @@ public class TaiModelCentreFragment extends Fragment
             String level = prefs == null ? "polished" : prefs.getInAppKeyboardVoicePolishLevel();
             List<TaiFunctionRows.FunctionRow> rows = withCheckOffers(app, plans,
                 TaiFunctionRows.functionRows(models, planner, labels, level));
+            TaiFunction gpuCheck = null;
+            if (models.env().gpuPath == TaiPlatformCaps.GpuPath.UNKNOWN && TaiTierPolicy.gpuOffered(models.env())) {
+                try {
+                    for (TaiFunction feature : TaiFeatureCheckRunner.featuresInUse(plans)) {
+                        if (feature.usesChatModel()) {
+                            gpuCheck = feature;
+                            break;
+                        }
+                    }
+                } catch (RuntimeException ignored) {
+                    // no row: the check cannot be started from here
+                }
+            }
+            final TaiFunction gpuCheckFor = gpuCheck;
             TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(app);
             String soc = capabilities.socModel == null || capabilities.socModel.trim().isEmpty() ? capabilities.model : capabilities.socModel;
             String device = TaiFunctionRows.deviceLine(models.env(), soc, Build.VERSION.RELEASE);
@@ -383,6 +400,7 @@ public class TaiModelCentreFragment extends Fragment
                 functionModels = models;
                 tidyLevel = level;
                 functionRows = rows;
+                gpuCheckFeature = gpuCheckFor;
                 deviceLine = device;
                 usedBy = used;
                 deleteWarnings = warnings;
@@ -614,6 +632,17 @@ public class TaiModelCentreFragment extends Fragment
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_FUNCTION, row.function.name(),
                 row.signature(), row, false));
         }
+        if (gpuCheckFeature != null) {
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_GPU_CHECK, "gpu-check", "gpu-check",
+                null, false));
+        }
+    }
+
+    /** "Check the GPU": opens the feature check, whose result settles the GPU verdict. */
+    @Override
+    public void onGpuCheck() {
+        TaiFunction feature = gpuCheckFeature;
+        if (feature != null) TaiBenchHomeFragment.openFeatureCheck(getActivity(), feature);
     }
 
     /** Brings a deep-linked model row to the top of the list once it is there. */

@@ -161,7 +161,7 @@ public class TaiTierPolicyTest {
     @Test
     public void gpuPathChoosesTheAcceleratorAndTheNote() {
         assertEquals("gpu", TaiTierPolicy.defaultAccelerator(env(12, GpuPath.YES)));
-        assertEquals("gpu", TaiTierPolicy.defaultAccelerator(env(12, GpuPath.UNKNOWN)));
+        assertEquals("cpu", TaiTierPolicy.defaultAccelerator(env(12, GpuPath.UNKNOWN)));
         assertEquals("cpu", TaiTierPolicy.defaultAccelerator(env(12, GpuPath.CPU_FIRST)));
         assertEquals("cpu", TaiTierPolicy.defaultAccelerator(env(12, GpuPath.NO)));
         assertNull(TaiTierPolicy.gpuNote(env(12, GpuPath.YES)));
@@ -169,7 +169,7 @@ public class TaiTierPolicyTest {
         assertEquals("Often fails on this GPU", TaiTierPolicy.gpuNote(env(12, GpuPath.CPU_FIRST)));
         assertTrue(TaiTierPolicy.gpuOffered(env(12, GpuPath.CPU_FIRST)));
         assertModel(E2B, "cpu", TaiTierPolicy.automatic(env(12, GpuPath.CPU_FIRST), TaiFunction.ASSISTANT));
-        assertModel(E2B, "gpu", TaiTierPolicy.automatic(env(12, GpuPath.UNKNOWN), TaiFunction.ASSISTANT));
+        assertModel(E2B, "cpu", TaiTierPolicy.automatic(env(12, GpuPath.UNKNOWN), TaiFunction.ASSISTANT));
     }
 
     // ------------------------------------------------------------------------- background rule
