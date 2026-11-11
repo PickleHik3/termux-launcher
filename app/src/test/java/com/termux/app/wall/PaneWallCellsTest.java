@@ -402,6 +402,40 @@ public class PaneWallCellsTest {
         assertEquals(2, on());
     }
 
+    @Test public void aFarJumpFromTheTerminalToHomeTravelsTheChromeTowardHome() {
+        // [Home 1][Home 3][Terminal], on the Terminal with its keyboard up; the house key's far
+        // jump to Home 1 slides the Terminal page away beside it, over Home 3.
+        start(homeTerminal().add(WallPages.PageKind.HOME, 1, null).pages);
+        assertEquals(Arrays.asList(1, 3, 2), cellIds());
+        controller.landOnColdStart(WallRow.START_IN_WORKSPACE);
+        assertEquals(2, on());
+        assertEquals(controller.cellKinds(), controller.slideCellKinds());
+        wall.setReducedMotion(false);
+        assertTrue(wall.goToCell(1, true));
+        assertTrue(wall.isMoving());
+        com.termux.app.place.PlaceChromeTravel.States states = place ->
+            new com.termux.app.place.PlaceChromeTravel.Rest(place == PaneWallPage.TERMINAL, false);
+        // Half way: the frame names the Terminal it leaves and the Home it arrives at, so the
+        // crossing gives the keyboard's room back to Home before it lands.
+        float offset = WIDTH * 0.5f * Math.signum(wall.offsetPx());
+        com.termux.app.place.PlaceChromeTravel.Frame frame =
+            com.termux.app.place.PlaceChromeTravel.at(controller.slideCellKinds(),
+                controller.currentCellIndex(), offset, WIDTH, states, PaneWallPage.TERMINAL,
+                null);
+        assertEquals(PaneWallPage.WIDGETS,
+            com.termux.app.place.PlaceChromeTravel.arriving(frame, PaneWallPage.TERMINAL));
+        assertTrue(frame.keyboardInPlay);
+        // From the stand-off on, the frame is the Terminal's, never Home with itself.
+        com.termux.app.place.PlaceChromeTravel.Frame first =
+            com.termux.app.place.PlaceChromeTravel.at(controller.slideCellKinds(),
+                controller.currentCellIndex(), wall.offsetPx(), WIDTH, states,
+                PaneWallPage.TERMINAL, null);
+        assertEquals(1f, first.keyboardReveal, 0.001f);
+        idle();
+        assertEquals(1, on());
+        assertEquals(controller.cellKinds(), controller.slideCellKinds());
+    }
+
     @Test public void aChangedListMidFarJumpDropsTheStandOff() {
         farJumpHomeFromDisplayMidSlide();
         host.pages = host.pages.add(WallPages.PageKind.DISPLAY, 3, null).pages;

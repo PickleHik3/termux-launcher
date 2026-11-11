@@ -511,6 +511,33 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         return mCellKinds;
     }
 
+    /** {@link #slideCellKinds}' list during a far jump; reused, so a frame allocates nothing. */
+    @NonNull private final java.util.ArrayList<PaneWallPage> mSlideKinds =
+        new java.util.ArrayList<>();
+
+    /**
+     * The page kinds of the cells as the slide shows them, for the chrome's travel: {@link
+     * #cellKinds}, but during a far jump (W3) the cell the wall left stands beside the arriving
+     * one, so every cell on that side reads as the left page's kind. Without this a jump from
+     * the Terminal to Home 1 over Home 2 read Home beside Home: a frame of Home with itself, so
+     * the content's room and the chrome never travelled toward the arriving place.
+     */
+    @NonNull
+    public java.util.List<PaneWallPage> slideCellKinds() {
+        java.util.List<PaneWallPage> kinds = cellKinds();
+        int left = mWall.jumpLeftCellIndex();
+        int side = mWall.jumpSide();
+        if (left < 0 || side == 0) return kinds;
+        int at = currentCellIndex();
+        PaneWallPage leftKind = kinds.get(left);
+        mSlideKinds.clear();
+        for (int i = 0; i < kinds.size(); i++) {
+            boolean onLeftSide = side > 0 ? i > at : i < at;
+            mSlideKinds.add(onLeftSide ? leftKind : kinds.get(i));
+        }
+        return mSlideKinds;
+    }
+
     /** The index of the current page's cell in {@link #cellKinds}. */
     public int currentCellIndex() {
         return Math.max(0, mWall.indexOfCell(mWall.currentPageId()));
