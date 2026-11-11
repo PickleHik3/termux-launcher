@@ -76,7 +76,7 @@ public class OpenAiRoutesCompatibilityTest {
         TaiManager.setImportPathAllowedRootForTesting(System.getProperty("java.io.tmpdir"));
         File file = File.createTempFile("compat-chat", ".litertlm");
         file.deleteOnExit();
-        JSONObject imported = manager.importModel(new JSONObject()
+        JSONObject imported = manager.modelManagement().importModel(new JSONObject()
             .put("path", file.getAbsolutePath())
             .put("modelId", MODEL)
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_CHAT))

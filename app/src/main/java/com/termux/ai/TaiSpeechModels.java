@@ -372,7 +372,7 @@ public final class TaiSpeechModels {
     @NonNull
     public static JSONObject startDownload(@NonNull Context context, @NonNull String modelId, int windowSeconds)
             throws JSONException {
-        JSONObject result = TaiManager.getInstance(context).downloadSpeechModel(modelId, windowSeconds);
+        JSONObject result = TaiManager.getInstance(context).modelManagement().downloadSpeechModel(modelId, windowSeconds);
         if (result.optBoolean("ok", false)) {
             synchronized (LOCK) {
                 new TaiSettings(context).setSttPendingDownloadJson(
@@ -390,7 +390,7 @@ public final class TaiSpeechModels {
     @NonNull
     public static JSONObject startWindowSwitch(@NonNull Context context, @NonNull TaiModelSpec installed, int windowSeconds)
             throws JSONException {
-        JSONObject result = TaiManager.getInstance(context).downloadSpeechModel(installed.id, windowSeconds);
+        JSONObject result = TaiManager.getInstance(context).modelManagement().downloadSpeechModel(installed.id, windowSeconds);
         if (result.optBoolean("ok", false)) {
             synchronized (LOCK) {
                 new TaiSettings(context).setSttPendingDownloadJson(

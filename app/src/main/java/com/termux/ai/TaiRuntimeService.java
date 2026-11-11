@@ -514,9 +514,9 @@ public final class TaiRuntimeService extends Service {
             case TaiRuntimeIpc.OP_CANCEL:
                 return manager.cancelRuntime();
             case TaiRuntimeIpc.OP_BENCH_SKIP_WAIT:
-                return manager.skipBenchCooldown();
+                return manager.benchHost().skipBenchCooldown();
             case TaiRuntimeIpc.OP_BENCH_HOLD:
-                return manager.holdBench(body);
+                return manager.benchHost().holdBench(body);
             case TaiRuntimeIpc.OP_OPENAI_CHAT:
                 return manager.runtimeHost().generateHere(TaiRuntimeLink.Kind.CHAT, body);
             case TaiRuntimeIpc.OP_OPENAI_COMPLETION:
@@ -528,25 +528,25 @@ public final class TaiRuntimeService extends Service {
             case TaiRuntimeIpc.OP_PREFLIGHT:
                 return manager.preflight(body);
             case TaiRuntimeIpc.OP_BENCHMARK:
-                return manager.benchmark(body);
+                return manager.benchHost().benchmark(body);
             case TaiRuntimeIpc.OP_TRANSCRIBE:
-                return manager.transcribe(body);
+                return manager.speech().transcribe(body);
             case TaiRuntimeIpc.OP_STT_WARM:
-                return manager.sttWarm(body);
+                return manager.speech().sttWarm(body);
             case TaiRuntimeIpc.OP_TTS_SPEAK:
-                return manager.speak(body);
+                return manager.speech().speak(body);
             case TaiRuntimeIpc.OP_TTS_WARM:
-                return manager.ttsWarm(body);
+                return manager.speech().ttsWarm(body);
             case TaiRuntimeIpc.OP_TTS_STOP:
-                return manager.stopSpeaking();
+                return manager.speech().stopSpeaking();
             case TaiRuntimeIpc.OP_TTS_PAUSE:
-                return manager.pauseSpeaking();
+                return manager.speech().pauseSpeaking();
             case TaiRuntimeIpc.OP_TTS_RESUME:
-                return manager.resumeSpeaking();
+                return manager.speech().resumeSpeaking();
             case TaiRuntimeIpc.OP_TTS_STATE:
-                return manager.speechState();
+                return manager.speech().speechState();
             case TaiRuntimeIpc.OP_IMAGE_CANCEL:
-                return manager.cancelImage();
+                return manager.images().cancelImage();
             default:
                 return error(400, "bad_runtime_operation", "Unknown On-device AI runtime operation: " + operation);
         }
@@ -571,11 +571,11 @@ public final class TaiRuntimeService extends Service {
             }
         };
         if (TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)) {
-            manager.synthesizeSpeechToEvents(body, sink);
+            manager.speech().synthesizeSpeechToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation)) {
-            manager.generateImageToEvents(body, sink);
+            manager.images().generateImageToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) {
-            manager.benchRun(body, sink);
+            manager.benchHost().benchRun(body, sink);
         } else if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
             manager.runtimeHost().streamHere(TaiRuntimeLink.Kind.CHAT, body, sink);
         } else {
@@ -772,7 +772,7 @@ public final class TaiRuntimeService extends Service {
      * The STT limit is the settings value the app process sent with its last speech request.
      */
     private void evaluateIdle(@NonNull List<TaiResidency.Entry> residents) {
-        long sttIdleMs = TaiManager.getRuntimeProcessInstance(this).sttIdleLimitMs();
+        long sttIdleMs = TaiManager.getRuntimeProcessInstance(this).speech().sttIdleLimitMs();
         List<TaiResidency.Entry> expired = TaiPressureWatch.idleExpired(residents, System.currentTimeMillis(), sttIdleMs);
         if (expired.isEmpty()) return;
         queuePressureAction(() -> evict(expired, "idle"));

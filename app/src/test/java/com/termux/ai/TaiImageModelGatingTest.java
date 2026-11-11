@@ -118,20 +118,20 @@ public class TaiImageModelGatingTest {
     @Test
     public void generateImageRefusesAChatModelAndAnUnknownOne() throws Exception {
         TaiManager manager = TaiManager.getInstance(context);
-        JSONObject unknown = manager.generateImage(new JSONObject().put("model", "nope").put("prompt", "p").toString(), p -> { });
+        JSONObject unknown = manager.images().generateImage(new JSONObject().put("model", "nope").put("prompt", "p").toString(), p -> { });
         assertEquals(404, unknown.getInt("_statusCode"));
         assertEquals("model_not_found", unknown.getJSONObject("error").getString("code"));
-        JSONObject invalid = manager.generateImage(new JSONObject().put("model", ID).toString(), p -> { });
+        JSONObject invalid = manager.images().generateImage(new JSONObject().put("model", ID).toString(), p -> { });
         assertEquals("missing_prompt", invalid.getJSONObject("error").getString("code"));
     }
 
     @Test
     public void checkImageRequestSpotsAMissingPackageBeforeAnyRun() throws Exception {
         store.upsertUserModel(imageModel(ID, installedPackage()));
-        JSONObject ok = TaiManager.getInstance(context).checkImageRequest(
+        JSONObject ok = TaiManager.getInstance(context).images().checkImageRequest(
             new JSONObject().put("model", ID).put("prompt", "a fox").put("size", "512x512").toString());
         assertEquals(null, ok);
-        JSONObject wrongSize = TaiManager.getInstance(context).checkImageRequest(
+        JSONObject wrongSize = TaiManager.getInstance(context).images().checkImageRequest(
             new JSONObject().put("model", ID).put("prompt", "a fox").put("size", "1024x1024").toString());
         assertEquals("invalid_size", wrongSize.getJSONObject("error").getString("code"));
     }

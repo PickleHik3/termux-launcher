@@ -305,7 +305,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             TaiBenchLeaderboard.Board loaded = null;
             TaiBenchLeaderboard.Board loadedVoice = null;
             try {
-                JSONObject benchmarks = TaiManager.getInstance(app).benchmarks();
+                JSONObject benchmarks = TaiManager.getInstance(app).benchHost().benchmarks();
                 loaded = TaiBenchLeaderboard.read(benchmarks, versions());
                 loadedVoice = TaiBenchLeaderboard.read(benchmarks, versions(), true);
             } catch (JSONException | RuntimeException ignored) {

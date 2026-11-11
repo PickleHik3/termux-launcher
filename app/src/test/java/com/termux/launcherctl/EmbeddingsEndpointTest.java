@@ -108,7 +108,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_withEmbeddingsCapableMnnModel_returnsOpenAiEmbeddingList() throws Exception {
         File tempFile = File.createTempFile("embed-model", ".mnn");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-mnn")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -135,7 +135,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_withArrayInput_returnsOneEmbeddingPerInput() throws Exception {
         File tempFile = File.createTempFile("embed-array-model", ".mnn");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-array-mnn")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -160,7 +160,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_withChatOnlyMnnModel_returnsCapabilityNotSupported() throws Exception {
         File tempFile = File.createTempFile("chat-model", ".mnn");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "chat-mnn")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_CHAT))
@@ -181,7 +181,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_withLiteRtModel_returnsUnsupportedError() throws Exception {
         File tempFile = File.createTempFile("litert-model", ".litertlm");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "litert-model")
             .toString());
@@ -200,7 +200,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_withLiteRtLmEmbeddingGemma2_returnsVectorsAndModelsShowsItsWindow() throws Exception {
         File tempFile = File.createTempFile("embeddinggemma-2-text-270m", ".litertlm");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embeddinggemma-2-text-270m")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -236,7 +236,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_withInputTypeAndTitle_reachesTheRuntime() throws Exception {
         File tempFile = File.createTempFile("embed-model", ".mnn");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-input-type")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -263,7 +263,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_withInvalidInputType_returns400() throws Exception {
         File tempFile = File.createTempFile("embed-model", ".mnn");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-bad-input-type")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -285,7 +285,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_withEncodingFormatBase64_returnsBase64Strings() throws Exception {
         File tempFile = File.createTempFile("embed-model", ".mnn");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-base64")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -310,7 +310,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_withBatchOverLimit_returns413NamingTheLimit() throws Exception {
         File tempFile = File.createTempFile("embed-model", ".mnn");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-batch")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -334,7 +334,7 @@ public class EmbeddingsEndpointTest {
     public void embeddings_overTheRateLimit_returns429WithRetryAfter() throws Exception {
         File tempFile = File.createTempFile("embed-model", ".mnn");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-rate-limited")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -356,7 +356,7 @@ public class EmbeddingsEndpointTest {
     public void tokenize_withNonLiteRtEmbeddingModel_returnsCapabilityNotSupported() throws Exception {
         File tempFile = File.createTempFile("embed-model", ".mnn");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-tokenize-mnn")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -387,7 +387,7 @@ public class EmbeddingsEndpointTest {
     public void models_returnsStandardOpenAiListWithBackendAndCapabilities() throws Exception {
         File tempFile = File.createTempFile("listed-litert-model", ".litertlm");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "listed-litert-model")
             .toString());
@@ -411,7 +411,7 @@ public class EmbeddingsEndpointTest {
     public void models_embedderEntry_carriesTheDawnMetadataFields() throws Exception {
         File tempFile = File.createTempFile("embed-model", ".tflite");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-metadata-mnn")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -432,7 +432,7 @@ public class EmbeddingsEndpointTest {
     public void models_embeddingGemma_reportsDimensionsAndMatryoshkaSizes() throws Exception {
         File tempFile = File.createTempFile("embeddinggemma-300M_seq512_mixed-precision", ".tflite");
         tempFile.deleteOnExit();
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embeddinggemma-300m")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
@@ -467,7 +467,7 @@ public class EmbeddingsEndpointTest {
         seq512.createNewFile();
         seq512.deleteOnExit();
 
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", primary.getAbsolutePath())
             .put("modelId", "embeddinggemma-300m-windows")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))

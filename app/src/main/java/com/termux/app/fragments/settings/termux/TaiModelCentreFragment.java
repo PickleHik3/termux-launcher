@@ -423,7 +423,7 @@ public class TaiModelCentreFragment extends Fragment
         executor.execute(() -> {
             JSONObject benchmarks;
             try {
-                benchmarks = TaiManager.getInstance(app).benchmarks();
+                benchmarks = TaiManager.getInstance(app).benchHost().benchmarks();
             } catch (JSONException | RuntimeException e) {
                 benchmarks = null;
             }
@@ -1028,11 +1028,11 @@ public class TaiModelCentreFragment extends Fragment
                 String body = new JSONObject().put("modelId", modelId).toString();
                 TaiManager manager = TaiManager.getInstance(app);
                 switch (action) {
-                    case PAUSE: result = manager.pauseDownload(body); break;
+                    case PAUSE: result = manager.modelManagement().pauseDownload(body); break;
                     case RESUME:
-                    case RETRY: result = manager.resumeDownload(body); break;
-                    case START_NOW: result = manager.prioritizeDownload(body); break;
-                    default: result = manager.cancelDownload(body); break;
+                    case RETRY: result = manager.modelManagement().resumeDownload(body); break;
+                    case START_NOW: result = manager.modelManagement().prioritizeDownload(body); break;
+                    default: result = manager.modelManagement().cancelDownload(body); break;
                 }
             } catch (JSONException | RuntimeException ignored) {
             }
@@ -1147,13 +1147,13 @@ public class TaiModelCentreFragment extends Fragment
             JSONObject result = null;
             try {
                 if (!speech) {
-                    result = TaiManager.getInstance(app).downloadCatalogModel(modelId);
+                    result = TaiManager.getInstance(app).modelManagement().downloadCatalogModel(modelId);
                 } else if (firstVoiceModel && noPendingVoiceChoice(app)) {
                     // The first speech model on the phone becomes the one voice input uses as
                     // soon as it lands; later ones wait for "Use for...".
                     result = TaiSpeechModels.startDownload(app, modelId, windowSeconds);
                 } else {
-                    result = TaiManager.getInstance(app).downloadSpeechModel(modelId, windowSeconds);
+                    result = TaiManager.getInstance(app).modelManagement().downloadSpeechModel(modelId, windowSeconds);
                 }
             } catch (JSONException | RuntimeException ignored) {
             }
@@ -1573,9 +1573,9 @@ public class TaiModelCentreFragment extends Fragment
                 TaiManager manager = TaiManager.getInstance(app);
                 JSONObject download = new TaiModelStore(app).findDownloadForModel(modelId);
                 if (download != null && TaiSpeechModels.isDownloadActive(download.optString("status", ""))) {
-                    manager.cancelDownload(new JSONObject().put("modelId", modelId).toString());
+                    manager.modelManagement().cancelDownload(new JSONObject().put("modelId", modelId).toString());
                 }
-                result = manager.deleteModel(new JSONObject().put("modelId", modelId).put("confirm", true).toString());
+                result = manager.modelManagement().deleteModel(new JSONObject().put("modelId", modelId).put("confirm", true).toString());
             } catch (JSONException | RuntimeException ignored) {
             }
             JSONObject finalResult = result;

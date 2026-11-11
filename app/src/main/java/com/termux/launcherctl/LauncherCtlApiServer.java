@@ -12,6 +12,7 @@ import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
 import com.termux.ai.TaiEventLog;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiSpeech;
 import com.termux.ai.TaiSettings;
 import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
@@ -684,24 +685,24 @@ public class LauncherCtlApiServer {
             } else if ("GET".equals(request.method) && "/v1/ai/models".equals(request.path)) {
                 return maybeTextResponse(request, "models", TaiManager.getInstance(context).models());
             } else if ("POST".equals(request.method) && "/v1/ai/models/import".equals(request.path)) {
-                return maybeTextResponse(request, "import", TaiManager.getInstance(context).importModel(request.body));
+                return maybeTextResponse(request, "import", TaiManager.getInstance(context).modelManagement().importModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/download".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).downloadModel(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().downloadModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/download-catalog".equals(request.path)) {
                 JSONObject body = request.body == null || request.body.trim().isEmpty() ? new JSONObject() : new JSONObject(request.body);
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).downloadCatalogModel(body.optString("modelId", body.optString("model", ""))));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().downloadCatalogModel(body.optString("modelId", body.optString("model", ""))));
             } else if ("GET".equals(request.method) && "/v1/ai/models/downloads".equals(request.path)) {
-                return maybeTextResponse(request, "downloads", TaiManager.getInstance(context).downloads());
+                return maybeTextResponse(request, "downloads", TaiManager.getInstance(context).modelManagement().downloads());
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/cancel".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).cancelDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().cancelDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/pause".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).pauseDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().pauseDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/resume".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).resumeDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().resumeDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/prioritize".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).prioritizeDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().prioritizeDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/delete".equals(request.path)) {
-                return maybeTextResponse(request, "delete", TaiManager.getInstance(context).deleteModel(request.body));
+                return maybeTextResponse(request, "delete", TaiManager.getInstance(context).modelManagement().deleteModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/load".equals(request.path)) {
                 return maybeTextResponse(request, "load", TaiManager.getInstance(context).loadModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/load".equals(request.path)) {
@@ -716,7 +717,7 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "keep-warm", TaiManager.getInstance(context).keepWarmRuntime(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/benchmark".equals(request.path)) {
                 // LiteRT-LM's own benchmark(): tai benchmark --native, kept for comparing numbers.
-                return maybeTextResponse(request, "benchmark", TaiManager.getInstance(context).benchmark(request.body));
+                return maybeTextResponse(request, "benchmark", TaiManager.getInstance(context).benchHost().benchmark(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/run".equals(request.path)) {
                 // Bench v1. With stream:true the harness's events go out as they happen — SSE, or
                 // one plain line per phase when the CLI asks for text; otherwise the run's summary.
@@ -727,11 +728,11 @@ public class LauncherCtlApiServer {
                     }
                     return sseResponse(output -> writeBenchStream(context, request.body, output));
                 }
-                return maybeTextResponse(request, "benchmark-run", manager.benchRunCollect(request.body));
+                return maybeTextResponse(request, "benchmark-run", manager.benchHost().benchRunCollect(request.body));
             } else if ("GET".equals(request.method) && "/v1/ai/benchmarks".equals(request.path)) {
-                return maybeTextResponse(request, "benchmarks", TaiManager.getInstance(context).benchmarks());
+                return maybeTextResponse(request, "benchmarks", TaiManager.getInstance(context).benchHost().benchmarks());
             } else if ("DELETE".equals(request.method) && "/v1/ai/benchmarks".equals(request.path)) {
-                return maybeTextResponse(request, "benchmarks-clear", TaiManager.getInstance(context).clearBenchmarks(request.body));
+                return maybeTextResponse(request, "benchmarks-clear", TaiManager.getInstance(context).benchHost().clearBenchmarks(request.body));
             } else if ("DELETE".equals(request.method) && "/v1/ai/runtime/history".equals(request.path)) {
                 return maybeTextResponse(request, "history-clear", TaiManager.getInstance(context).clearRuntimeHistory());
             } else if ("GET".equals(request.method) && "/v1/ai/logs".equals(request.path)) {
@@ -748,7 +749,7 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "cancel", TaiManager.getInstance(context).cancelRuntime());
             } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/skip-wait".equals(request.path)) {
                 // "Skip the wait" (spec Screen 5): ends the active bench's cool-down at once.
-                return maybeTextResponse(request, "skip-wait", TaiManager.getInstance(context).skipBenchCooldown());
+                return maybeTextResponse(request, "skip-wait", TaiManager.getInstance(context).benchHost().skipBenchCooldown());
             } else if ("GET".equals(request.method) && "/v1/models".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).openAiModels());
             } else if ("GET".equals(request.method) && isModelRetrievePath(request.path)) {
@@ -780,15 +781,15 @@ public class LauncherCtlApiServer {
                 return audioTranscriptions(context, request);
             } else if ("POST".equals(request.method) && "/v1/audio/speech".equals(request.path)) {
                 String body = request.body == null || request.body.trim().isEmpty() ? "{}" : request.body;
-                return audioSpeech(context, body, TaiManager.apiSpeechCharacterLimit());
+                return audioSpeech(context, body, TaiSpeech.apiSpeechCharacterLimit());
             } else if ("POST".equals(request.method) && "/v1/ai/speak".equals(request.path)) {
                 return aiSpeak(context, request);
             } else if ("POST".equals(request.method) && "/v1/ai/speak/stop".equals(request.path)) {
-                return maybeTextResponse(request, "speak-stop", TaiManager.getInstance(context).stopSpeaking());
+                return maybeTextResponse(request, "speak-stop", TaiManager.getInstance(context).speech().stopSpeaking());
             } else if ("POST".equals(request.method) && "/v1/ai/images/generations".equals(request.path)) {
                 return imageGenerations(context, request);
             } else if ("POST".equals(request.method) && "/v1/ai/images/cancel".equals(request.path)) {
-                return maybeTextResponse(request, "image-cancel", TaiManager.getInstance(context).cancelImage());
+                return maybeTextResponse(request, "image-cancel", TaiManager.getInstance(context).images().cancelImage());
             }
 
             JSONObject notFound = jsonError("not_found", "Unknown endpoint");
@@ -844,18 +845,18 @@ public class LauncherCtlApiServer {
      */
     private HttpResponse audioSpeech(Context context, String body, int maxChars) throws JSONException {
         TaiManager manager = TaiManager.getInstance(context);
-        JSONObject refusal = manager.checkSpeechRequest(body, maxChars);
+        JSONObject refusal = manager.speech().checkSpeechRequest(body, maxChars);
         if (refusal != null) return jsonResponse(refusal);
         Map<String, String> headers = new HashMap<>();
         headers.put("Cache-Control", "no-cache");
         headers.put("X-Tai-Sample-Rate", "24000");
-        if ("pcm".equals(TaiManager.speechResponseFormat(body))) {
-            JSONObject warm = manager.ttsWarm(body);
+        if ("pcm".equals(TaiSpeech.speechResponseFormat(body))) {
+            JSONObject warm = manager.speech().ttsWarm(body);
             if (isSpeechFailure(warm)) return jsonResponse(speechFailure(warm));
             headers.put("X-Accel-Buffering", "no");
             return new HttpResponse(200, "audio/pcm", output -> {
                 try {
-                    manager.synthesizeSpeech(body, maxChars, (pcm, sampleRate) -> {
+                    manager.speech().synthesizeSpeech(body, maxChars, (pcm, sampleRate) -> {
                         output.write(pcm);
                         output.flush();
                     });
@@ -875,7 +876,7 @@ public class LauncherCtlApiServer {
         final int[] rate = {24000};
         JSONObject result;
         try (FileOutputStream sink = new FileOutputStream(collected)) {
-            result = manager.synthesizeSpeech(body, maxChars, (bytes, sampleRate) -> {
+            result = manager.speech().synthesizeSpeech(body, maxChars, (bytes, sampleRate) -> {
                 rate[0] = sampleRate;
                 sink.write(bytes);
             });
@@ -891,10 +892,10 @@ public class LauncherCtlApiServer {
             return jsonResponse(speechFailure(result));
         }
         long dataBytes = collected.length();
-        headers.put("Content-Length", Long.toString(TaiManager.wavHeader(0, rate[0]).length + dataBytes));
+        headers.put("Content-Length", Long.toString(TaiSpeech.wavHeader(0, rate[0]).length + dataBytes));
         return new HttpResponse(200, "audio/wav", output -> {
             try (InputStream in = new java.io.FileInputStream(collected)) {
-                output.write(TaiManager.wavHeader((int) Math.min(Integer.MAX_VALUE, dataBytes), rate[0]));
+                output.write(TaiSpeech.wavHeader((int) Math.min(Integer.MAX_VALUE, dataBytes), rate[0]));
                 byte[] buffer = new byte[64 * 1024];
                 int read;
                 while ((read = in.read(buffer)) != -1) output.write(buffer, 0, read);
@@ -916,7 +917,7 @@ public class LauncherCtlApiServer {
     private HttpResponse imageGenerations(Context context, HttpRequest request) throws JSONException {
         String body = request.body == null || request.body.trim().isEmpty() ? "{}" : request.body;
         TaiManager manager = TaiManager.getInstance(context);
-        JSONObject refusal = manager.checkImageRequest(body);
+        JSONObject refusal = manager.images().checkImageRequest(body);
         if (refusal != null) return jsonResponse(refusal);
         boolean stream = new JSONObject(body).optBoolean("stream", false);
         if (stream && "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
@@ -924,7 +925,7 @@ public class LauncherCtlApiServer {
         }
         if (stream) return sseResponse(output -> writeImageSseStream(manager, body, output));
         try {
-            return jsonResponse(manager.generateImage(body, percent -> { }));
+            return jsonResponse(manager.images().generateImage(body, percent -> { }));
         } catch (IOException e) {
             return jsonResponse(jsonError("internal_error", e.getMessage() == null ? "" : e.getMessage()));
         }
@@ -932,7 +933,7 @@ public class LauncherCtlApiServer {
 
     private void writeImageSseStream(TaiManager manager, String body, OutputStream output) throws IOException {
         try {
-            JSONObject result = manager.generateImage(body, percent -> {
+            JSONObject result = manager.images().generateImage(body, percent -> {
                 try {
                     writeSseEvent(output, new JSONObject().put("type", "image_generation.progress")
                         .put("progress", percent).toString());
@@ -955,7 +956,7 @@ public class LauncherCtlApiServer {
     /** The lines {@code tai image} reads: {@code progress N}, then {@code done PATH} and {@code info JSON}, or {@code error TEXT}. */
     private void writeImageTextStream(TaiManager manager, String body, OutputStream output) throws IOException {
         try {
-            JSONObject result = manager.generateImage(body, percent -> writeTextLine(output, TaiCliFormatter.imageProgressLine(percent)));
+            JSONObject result = manager.images().generateImage(body, percent -> writeTextLine(output, TaiCliFormatter.imageProgressLine(percent)));
             writeTextLine(output, result.has("error") ? TaiCliFormatter.imageErrorLine(result)
                 : TaiCliFormatter.imageDoneLines(result));
         } catch (JSONException e) {
@@ -979,9 +980,9 @@ public class LauncherCtlApiServer {
     private HttpResponse aiSpeak(Context context, HttpRequest request) throws JSONException {
         JSONObject body = speakBody(request);
         if (body.has("response_format")) {
-            return audioSpeech(context, body.toString(), TaiManager.speakCharacterLimit());
+            return audioSpeech(context, body.toString(), TaiSpeech.speakCharacterLimit());
         }
-        JSONObject result = TaiManager.getInstance(context).speak(body.toString());
+        JSONObject result = TaiManager.getInstance(context).speech().speak(body.toString());
         if (isSpeechFailure(result) && "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
             JSONObject nested = result.optJSONObject("error");
             if (nested != null) {
@@ -1078,7 +1079,7 @@ public class LauncherCtlApiServer {
         }
         JSONObject result;
         try {
-            result = TaiManager.getInstance(context).transcribe(taiRequest.toString());
+            result = TaiManager.getInstance(context).speech().transcribe(taiRequest.toString());
         } finally {
             // The runtime process deletes the upload once it has read it; this covers every early exit.
             deleteQuietly(upload);
@@ -4409,7 +4410,7 @@ public class LauncherCtlApiServer {
     /** Bench v1 events as SSE, one {@code data:} line per event, ended by {@code [DONE]}. */
     private void writeBenchStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).benchRun(body, new TaiManager.OpenAiStreamSink() {
+            TaiManager.getInstance(context).benchHost().benchRun(body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     writeSseEvent(output, event.toString());
@@ -4429,7 +4430,7 @@ public class LauncherCtlApiServer {
     /** The same events as the lines {@code tai benchmark} shows; token events are not printed. */
     private void writeBenchTextStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).benchRun(body, new TaiManager.OpenAiStreamSink() {
+            TaiManager.getInstance(context).benchHost().benchRun(body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     String line = TaiCliFormatter.formatBenchEvent(event);
