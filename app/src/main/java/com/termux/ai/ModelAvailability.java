@@ -106,6 +106,7 @@ public final class ModelAvailability {
     private static volatile ModelAvailability instance;
 
     private final Backend backend;
+    private final boolean keepList;
     @Nullable private Context owner;
     private final Executor mainThread;
     private final java.util.function.LongSupplier clock;
@@ -121,6 +122,16 @@ public final class ModelAvailability {
 
     ModelAvailability(@NonNull Backend backend, @NonNull Executor mainThread,
                       @NonNull java.util.function.LongSupplier clock) {
+        this(backend, mainThread, clock, true);
+    }
+
+    /**
+     * @param keepList false in {@code :tai_runtime}: the app process writes the models and cannot tell
+     *                 this process, so the list is read fresh every time there, as it was before it was kept.
+     */
+    ModelAvailability(@NonNull Backend backend, @NonNull Executor mainThread,
+                      @NonNull java.util.function.LongSupplier clock, boolean keepList) {
+        this.keepList = keepList;
         this.backend = backend;
         this.mainThread = mainThread;
         this.clock = clock;
@@ -138,7 +149,7 @@ public final class ModelAvailability {
                     if (current != null) current.stopWatchingNow();
                     Handler handler = new Handler(Looper.getMainLooper());
                     instance = current = new ModelAvailability(contextBackend(app), handler::post,
-                        SystemClock::elapsedRealtime);
+                        SystemClock::elapsedRealtime, !TaiManager.isTaiRuntimeProcess(app));
                     current.owner = app;
                 }
             }
@@ -179,6 +190,7 @@ public final class ModelAvailability {
      */
     @NonNull
     public Map<String, TaiModelSpec> models() {
+        if (!keepList) return Collections.unmodifiableMap(new LinkedHashMap<>(backend.readModels()));
         long now = clock.getAsLong();
         long seen;
         synchronized (lock) {

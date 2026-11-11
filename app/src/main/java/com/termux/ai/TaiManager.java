@@ -227,7 +227,7 @@ public final class TaiManager {
         return runtime;
     }
 
-    private static boolean isTaiRuntimeProcess(@NonNull Context context) {
+    static boolean isTaiRuntimeProcess(@NonNull Context context) {
         String processName = ProcessUtils.getAppProcessNameForPid(context, Process.myPid());
         return processName != null && processName.endsWith(TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
     }

@@ -134,6 +134,17 @@ public class ModelAvailabilityTest {
     // --------------------------------------------------------------------------------- states
 
     @Test
+    public void outsideTheAppProcessTheListIsReadFreshEveryTime() {
+        ModelAvailability runtime = new ModelAvailability(backend, posted::add, () -> now, false);
+        backend.models.put(E2B, spec(E2B));
+        assertTrue(runtime.isOnPhone(E2B));
+        backend.models.clear();
+        assertFalse("a delete in the app process shows at once", runtime.isOnPhone(E2B));
+        backend.models.put(E4B, spec(E4B));
+        assertTrue(runtime.isOnPhone(E4B));
+    }
+
+    @Test
     public void aModelThatIsNowhereIsMissing() {
         assertEquals(ModelAvailability.State.MISSING, availability.stateOf(E2B));
     }
