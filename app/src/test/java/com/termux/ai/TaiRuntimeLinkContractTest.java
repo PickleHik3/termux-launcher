@@ -78,6 +78,20 @@ public abstract class TaiRuntimeLinkContractTest {
     }
 
     @Test
+    public void cancellingWhileTheModelLoadsEndsItBeforeItEverGenerates() throws Exception {
+        Recorder sink = new Recorder("a");
+        Running running = stream("a", FakeTaiRuntimeLink.script(Collections.singletonList("one"), 0L, null, null, "load-a"), sink);
+        assertTrue(gates.awaitReached("load-a", WAIT_MS));
+
+        running.generation.cancel();
+        gates.open("load-a");
+        running.join();
+
+        assertEquals(Arrays.asList("started", "error:generation_cancelled", "done"), sink.log());
+        assertEquals(0, gates.generateCalls.get());
+    }
+
+    @Test
     public void cancellingAWaitingGenerationTakesItOutOfTheQueueAndItNeverStarts() throws Exception {
         Recorder first = new Recorder("a");
         Running a = stream("a", FakeTaiRuntimeLink.script(Collections.singletonList("a"), 0L, "hold-a", null), first);

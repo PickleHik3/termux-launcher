@@ -54,12 +54,19 @@ final class InProcessTaiRuntimeLink implements TaiRuntimeLink {
 
     InProcessTaiRuntimeLink(@NonNull Host host) {
         this.host = host;
-        this.queue = new GenerationQueue("tai-generation", host::cancelActiveGeneration);
+        this.queue = new GenerationQueue("tai-runtime-service", host::cancelActiveGeneration);
+    }
+
+    /** The lane this link queues on; in {@code :tai_runtime} the service queues on it too. */
+    @NonNull
+    GenerationQueue queue() {
+        return queue;
     }
 
     /**
-     * The answer a generation cancelled while it waited ends with, as an OpenAI error; the same
-     * shape the runtime's own errors take on the chat routes.
+     * The answer a generation cancelled before it generated ends with (while it waited, or while
+     * its model loaded), as an OpenAI error; the same shape the runtime's own errors take on the
+     * chat routes.
      */
     @NonNull
     static JSONObject cancelledWhileWaiting() {

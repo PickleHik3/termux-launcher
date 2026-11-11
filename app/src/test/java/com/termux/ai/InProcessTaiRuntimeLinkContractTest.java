@@ -27,7 +27,7 @@ public class InProcessTaiRuntimeLinkContractTest extends TaiRuntimeLinkContractT
 
     /** Plays the script it was handed, one generation at a time; {@link #cancel} stops the active one. */
     private static final class ScriptedRuntime implements TaiRuntime {
-        private final FakeTaiRuntimeLink.Gates gates;
+        final FakeTaiRuntimeLink.Gates gates;
         @Nullable volatile String script;
         @Nullable private volatile AtomicBoolean active;
 
@@ -85,6 +85,9 @@ public class InProcessTaiRuntimeLinkContractTest extends TaiRuntimeLinkContractT
         @Override
         public JSONObject generateHere(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body) throws JSONException {
             runtime.script = body;
+            // As TaiManager's chat routes: load, then the cancel flag, then generate.
+            FakeTaiRuntimeLink.load(body, runtime.gates);
+            if (GenerationQueue.currentJobCancelled()) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
             return FakeTaiRuntimeLink.completionResult(
                 TaiRuntime.generate(runtime, "scripted", TaiChatRequest.simple("", "prompt"), OPTIONS));
         }
@@ -93,6 +96,12 @@ public class InProcessTaiRuntimeLinkContractTest extends TaiRuntimeLinkContractT
         public void streamHere(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body, @NonNull TaiManager.OpenAiStreamSink sink)
             throws JSONException, IOException {
             runtime.script = body;
+            FakeTaiRuntimeLink.load(body, runtime.gates);
+            if (GenerationQueue.currentJobCancelled()) {
+                sink.onEvent(InProcessTaiRuntimeLink.cancelledWhileWaiting());
+                sink.onDone();
+                return;
+            }
             JSONObject result;
             try {
                 result = runtime.generate("scripted", TaiChatRequest.simple("", "prompt"), OPTIONS, new TaiGenerationCallback() {

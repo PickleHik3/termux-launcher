@@ -172,9 +172,25 @@ public final class TaiManager {
                 }
                 return messengerLink;
             }
+            return inProcessLink();
+        }
+    }
+
+    @NonNull
+    private InProcessTaiRuntimeLink inProcessLink() {
+        synchronized (runtimeHost) {
             if (inProcessLink == null) inProcessLink = new InProcessTaiRuntimeLink(runtimeHost);
             return inProcessLink;
         }
+    }
+
+    /**
+     * The runtime's one serial lane: {@link TaiRuntimeService} queues on it, and so does a direct
+     * call through the in-process link, so both are ordered against each other.
+     */
+    @NonNull
+    GenerationQueue runtimeQueue() {
+        return inProcessLink().queue();
     }
 
     /** The runtime half of this manager, which {@link TaiRuntimeService} serves the Messenger adapter from. */
@@ -2001,6 +2017,8 @@ public final class TaiManager {
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) return openAiError(loadError);
+        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
+        if (GenerationQueue.currentJobCancelled()) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
 
         JSONObject chat = TaiRuntime.generate(localRuntime(), modelId, chatRequest.request, options);
         if (!chat.optBoolean("ok", false)) {
@@ -2072,6 +2090,8 @@ public final class TaiManager {
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) return openAiError(loadError);
+        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
+        if (GenerationQueue.currentJobCancelled()) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
 
         JSONObject completion = TaiRuntime.generate(localRuntime(), modelId, TaiChatRequest.completion(prompt), options);
         if (!completion.optBoolean("ok", false)) {
@@ -2176,6 +2196,12 @@ public final class TaiManager {
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) {
             emitOpenAiError(sink, loadError);
+            return;
+        }
+        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
+        if (GenerationQueue.currentJobCancelled()) {
+            sink.onEvent(InProcessTaiRuntimeLink.cancelledWhileWaiting());
+            sink.onDone();
             return;
         }
         String id = "tai-chatcmpl-" + System.currentTimeMillis();
@@ -2306,6 +2332,12 @@ public final class TaiManager {
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) {
             emitOpenAiError(sink, loadError);
+            return;
+        }
+        // Cancelled by id while the model loaded: end as a waiting cancel does, and never generate.
+        if (GenerationQueue.currentJobCancelled()) {
+            sink.onEvent(InProcessTaiRuntimeLink.cancelledWhileWaiting());
+            sink.onDone();
             return;
         }
 

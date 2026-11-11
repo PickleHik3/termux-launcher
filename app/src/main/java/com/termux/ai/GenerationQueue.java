@@ -55,6 +55,8 @@ final class GenerationQueue {
         final TaiRuntimeLink.Priority priority;
         final long order;
         final Job job;
+        /** Set when the running job's id is cancelled; the job reads it before it generates. */
+        volatile boolean cancelled;
 
         Entry(String id, TaiRuntimeLink.Priority priority, long order, Job job) {
             this.id = id;
@@ -63,6 +65,9 @@ final class GenerationQueue {
             this.job = job;
         }
     }
+
+    /** The job the current lane thread is running, for {@link #currentJobCancelled}. */
+    private static final ThreadLocal<Entry> CURRENT = new ThreadLocal<>();
 
     private final Object lock = new Object();
     private final List<Entry> waiting = new ArrayList<>();
@@ -129,6 +134,9 @@ final class GenerationQueue {
         synchronized (lock) {
             removed = removeWaitingLocked(id);
             isRunning = removed == null && running != null && running.id.equals(id);
+            // Before the canceller runs: a job still loading its model sees the flag before it
+            // generates, which TaiRuntime.cancel() alone could not reach.
+            if (isRunning) running.cancelled = true;
         }
         if (removed != null) {
             removed.job.onCancelled();
@@ -139,6 +147,15 @@ final class GenerationQueue {
             return CancelOutcome.STOPPED_RUNNING;
         }
         return CancelOutcome.NONE;
+    }
+
+    /**
+     * Whether the job running on this thread has had its id cancelled. A job checks this after
+     * its load and before it generates; {@code false} off a lane thread.
+     */
+    static boolean currentJobCancelled() {
+        Entry current = CURRENT.get();
+        return current != null && current.cancelled;
     }
 
     /** The running job's id, or {@code null}. */
@@ -177,12 +194,14 @@ final class GenerationQueue {
             waiting.remove(next);
             running = next;
         }
+        CURRENT.set(next);
         try {
             next.job.onStarted();
             next.job.run();
         } catch (Throwable ignored) {
             // A job reports its own failures; the lane must outlive any of them.
         } finally {
+            CURRENT.remove();
             synchronized (lock) {
                 running = null;
             }

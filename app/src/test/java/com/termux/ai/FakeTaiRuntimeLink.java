@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -30,6 +31,8 @@ final class FakeTaiRuntimeLink implements TaiRuntimeLink {
     static final class Gates {
         private final Map<String, CountDownLatch> gates = new ConcurrentHashMap<>();
         private final Map<String, CountDownLatch> reached = new ConcurrentHashMap<>();
+        /** How many scripted generations reached the runtime's generate step. */
+        final AtomicInteger generateCalls = new AtomicInteger();
 
         private CountDownLatch gate(@NonNull String name) {
             return gates.computeIfAbsent(name, key -> new CountDownLatch(1));
@@ -75,8 +78,19 @@ final class FakeTaiRuntimeLink implements TaiRuntimeLink {
      */
     @NonNull
     static String script(@NonNull List<String> chunks, long delayMs, @Nullable String gate, @Nullable String error) {
+        return script(chunks, delayMs, gate, error, null);
+    }
+
+    /**
+     * As above, with a load first that holds on {@code loadGate} and cannot be stopped, as a native
+     * model load cannot: only a cancel flag read after it keeps the generation from running.
+     */
+    @NonNull
+    static String script(@NonNull List<String> chunks, long delayMs, @Nullable String gate, @Nullable String error,
+                         @Nullable String loadGate) {
         try {
             JSONObject body = new JSONObject();
+            if (loadGate != null) body.put("loadGate", loadGate);
             body.put("chunks", new JSONArray(chunks));
             body.put("delayMs", delayMs);
             if (gate != null) body.put("gate", gate);
@@ -87,6 +101,12 @@ final class FakeTaiRuntimeLink implements TaiRuntimeLink {
         }
     }
 
+    /** The script's load step: holds on its {@code loadGate}, if it names one, until the gate opens. */
+    static void load(@NonNull String body, @NonNull Gates gates) throws JSONException {
+        String loadGate = new JSONObject(body).optString("loadGate", "");
+        if (!loadGate.isEmpty()) gates.hold(loadGate, () -> false);
+    }
+
     /**
      * Plays a script: the runtime half both this fake and the in-process contract test's fake
      * runtime run. Returns the runtime's result, {@code generation_cancelled} when stopped.
@@ -94,6 +114,7 @@ final class FakeTaiRuntimeLink implements TaiRuntimeLink {
     @NonNull
     static JSONObject play(@NonNull String body, @NonNull Gates gates, @NonNull BooleanSupplier cancelled,
                            @NonNull ChunkSink sink) throws JSONException, IOException {
+        gates.generateCalls.incrementAndGet();
         JSONObject script = new JSONObject(body);
         JSONArray chunks = script.optJSONArray("chunks");
         long delayMs = script.optLong("delayMs", 0L);
@@ -116,6 +137,12 @@ final class FakeTaiRuntimeLink implements TaiRuntimeLink {
         return new JSONObject().put("ok", true).put("response", text.toString());
     }
 
+    /** Marks a result as the cancel before generating, which ends exactly as a waiting cancel. */
+    @NonNull
+    static JSONObject cancelledBeforeGenerating() throws JSONException {
+        return new JSONObject().put("_beforeGenerating", true);
+    }
+
     @NonNull
     static JSONObject cancelledResult() throws JSONException {
         return new JSONObject().put("ok", false).put("error", "generation_cancelled")
@@ -133,6 +160,11 @@ final class FakeTaiRuntimeLink implements TaiRuntimeLink {
     /** Ends a stream as the chat routes do: an OpenAI error event for a failed result, then done. */
     static void finishStream(@NonNull TaiManager.OpenAiStreamSink sink, @NonNull JSONObject result)
         throws JSONException, IOException {
+        if (result.optBoolean("_beforeGenerating", false)) {
+            sink.onEvent(InProcessTaiRuntimeLink.cancelledWhileWaiting());
+            sink.onDone();
+            return;
+        }
         if (!result.optBoolean("ok", false)) sink.onEvent(TaiManager.openAiError(result));
         sink.onDone();
     }
@@ -140,6 +172,7 @@ final class FakeTaiRuntimeLink implements TaiRuntimeLink {
     /** A non-streaming answer: the text as a chat completion, or the OpenAI error. */
     @NonNull
     static JSONObject completionResult(@NonNull JSONObject result) throws JSONException {
+        if (result.optBoolean("_beforeGenerating", false)) return InProcessTaiRuntimeLink.cancelledWhileWaiting();
         if (!result.optBoolean("ok", false)) return TaiManager.openAiError(result);
         JSONObject message = new JSONObject().put("role", "assistant").put("content", result.optString("response", ""));
         JSONObject choice = new JSONObject().put("index", 0).put("message", message);
@@ -287,9 +320,12 @@ final class FakeTaiRuntimeLink implements TaiRuntimeLink {
             AtomicBoolean cancelled = new AtomicBoolean();
             runningCancelled = cancelled;
             try {
-                JSONObject played = play(request.body, gates, cancelled::get, text -> {
-                    if (request.stream) sink.onEvent(chunkEvent(text));
-                });
+                load(request.body, gates);
+                JSONObject played = GenerationQueue.currentJobCancelled()
+                    ? FakeTaiRuntimeLink.cancelledBeforeGenerating()
+                    : play(request.body, gates, cancelled::get, text -> {
+                        if (request.stream) sink.onEvent(chunkEvent(text));
+                    });
                 if (request.stream) finishStream(sink, played);
                 else result = completionResult(played);
             } catch (JSONException | IOException e) {

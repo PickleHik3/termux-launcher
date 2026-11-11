@@ -65,11 +65,14 @@ public final class TaiRuntimeService extends Service {
     /**
      * The serial lane for native work: chat and completion generations with their ids and
      * priorities (ADR 0027 §4), and loads, keep warm, embeddings, tokenize, preflight and the
-     * benchmarks as plain jobs at normal priority, all one at a time in the order they came. A
-     * cancel by id reaches a waiting generation here and a running one through
-     * {@link #cancelActiveGeneration}.
+     * benchmarks as plain jobs at normal priority, all one at a time in the order they came. It is
+     * the runtime-process TaiManager's own queue ({@link TaiManager#runtimeQueue}), so a direct
+     * in-process generation is ordered against it too; it lives with the process, not the service.
      */
-    private final GenerationQueue lane = new GenerationQueue("tai-runtime-service", this::cancelActiveGeneration);
+    @NonNull
+    private GenerationQueue lane() {
+        return TaiManager.getRuntimeProcessInstance(this).runtimeQueue();
+    }
     private final ExecutorService controlExecutor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tai-runtime-control");
         thread.setDaemon(true);
@@ -192,7 +195,6 @@ public final class TaiRuntimeService extends Service {
         cancelIdleExitCheck();
         releaseBenchWakeLock();
         watchScheduler.shutdownNow();
-        lane.shutdownNow();
         controlExecutor.shutdownNow();
         sttExecutor.shutdownNow();
         ttsExecutor.shutdownNow();
@@ -276,7 +278,7 @@ public final class TaiRuntimeService extends Service {
                 // A client that sends no id still gets one, so the queue can name it.
                 String generationId = data.getString(TaiRuntimeIpc.KEY_GENERATION_ID, requestId);
                 TaiRuntimeLink.Priority priority = TaiRuntimeLink.Priority.fromWire(data.getString(TaiRuntimeIpc.KEY_PRIORITY));
-                lane.submit(generationId, priority, new GenerationQueue.Job() {
+                lane().submit(generationId, priority, new GenerationQueue.Job() {
                     @Override
                     public void run() {
                         runRequest(replyTo, requestId, operation, body, bodyFile);
@@ -299,7 +301,7 @@ public final class TaiRuntimeService extends Service {
                 });
                 return;
             }
-            lane.submitTask(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+            lane().submitTask(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
         }
     }
 
@@ -311,11 +313,6 @@ public final class TaiRuntimeService extends Service {
             || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation);
     }
 
-    /** The lane's way to stop the generation running on it: {@code TaiRuntime.cancel()}, nothing more. */
-    private void cancelActiveGeneration() {
-        TaiManager.getRuntimeProcessInstance(this).runtimeHost().cancelActiveGeneration();
-    }
-
     /**
      * A cancel by id: a waiting generation leaves the lane (it answers its own client with
      * {@code generation_cancelled}), the running one is stopped, any other id is left alone.
@@ -323,7 +320,7 @@ public final class TaiRuntimeService extends Service {
     private void runCancelById(@NonNull Messenger replyTo, @NonNull String requestId, @NonNull String generationId,
                                @Nullable String bodyFile) {
         try {
-            GenerationQueue.CancelOutcome outcome = lane.cancel(generationId);
+            GenerationQueue.CancelOutcome outcome = lane().cancel(generationId);
             JSONObject result = new JSONObject();
             result.put("ok", true);
             result.put("id", generationId);
