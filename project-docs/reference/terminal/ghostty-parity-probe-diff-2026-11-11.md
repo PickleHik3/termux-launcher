@@ -264,3 +264,13 @@ Program status on Fast: reports are stored per id by the app (the library keeps 
 the window's pill (most urgent first: needs input, error, working, done) and raised as an in-app
 notice for needs input, done and error when the pane is not in front. Details in
 [`ghostty-parity-wave3-report.md`](ghostty-parity-wave3-report.md).
+
+## Wave 4 rerun (673e14423)
+
+Raw file: [`results/fast-673e14423.txt`](../../../scripts/terminal-probe/results/fast-673e14423.txt).
+Debug x86_64 build of `673e14423` with `-Pghostty=true` on emulator AVD `tl16`, a Fast pane in
+front, keys and mouse on libghostty's encoders (`debug.tl.terminal_input` unset); DA1 answered
+`\e[?62;4;22;52c`. Against fast-f3b405352 only `dsr-6` and `dsr-dec-6` (cursor row) and `osc4-1`,
+`osc12`, `osc21-fg-bg-cursor` (colour scheme in use) changed. No reply changed in kind; no new
+gaps. The probe asks no key or mouse questions; the input byte differences are in
+[`ghostty-parity-input-differences-2026-11-11.md`](ghostty-parity-input-differences-2026-11-11.md).
