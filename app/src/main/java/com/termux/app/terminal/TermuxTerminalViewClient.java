@@ -51,6 +51,7 @@ import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
+import com.termux.terminal.GhosttyKeys;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalLinks;
@@ -660,6 +661,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
             if (action.type == TerminalBindingConfig.ActionType.SEND_KEY) {
                 TerminalSession session = mHost.currentSession();
+                // The Fast engine's library encoder writes the key itself; Standard goes on to the Java one.
+                if (session != null && TerminalBindingKeyEncoder.sendOnLibrary(action.value, session.getEmulator()) >= 0) {
+                    handled = true;
+                    continue;
+                }
                 String encoded = session == null ? null
                     : TerminalBindingKeyEncoder.encode(action.value, session.getEmulator());
                 if (encoded == null) {
@@ -983,9 +989,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
             if (resultingKeyCode != -1) {
                 TerminalEmulator term = session.getEmulator();
-                session.write(KeyHandler.getCode(resultingKeyCode, 0, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode()));
+                // The Fast engine's library encoder takes the key; Standard writes the Java sequence.
+                boolean sent = term.usesLibraryInputEncoders() && term.sendLibraryKey(
+                    GhosttyKeys.fromAndroidKeyCode(resultingKeyCode), GhosttyKeys.ACTION_PRESS, 0, 0, 0, "", false) >= 0;
+                if (!sent)
+                    session.write(KeyHandler.getCode(resultingKeyCode, 0, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode()));
             } else if (resultingCodePoint != -1) {
-                session.writeCodePoint(altDown, resultingCodePoint);
+                if (TerminalBindingKeyEncoder.sendCodePointOnLibrary(session.getEmulator(), resultingCodePoint, altDown) < 0)
+                    session.writeCodePoint(altDown, resultingCodePoint);
             }
             return true;
         } else if (ctrlDown) {
