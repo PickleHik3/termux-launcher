@@ -202,3 +202,41 @@ make the tertiary request unanswered, if the C API allows it; **unverified** whe
 
 - `xtversion`: `termux-launcher(<version>) (libghostty-vt 1.0)` vs `ghostty 1.4.0-arch1`.
 - `da1` attribute `4` (sixel); the gap in that row is only the missing `52`.
+
+## Wave 2 rerun (3635c0432)
+
+Raw file: [`results/fast-3635c0432.txt`](../../../scripts/terminal-probe/results/fast-3635c0432.txt).
+Debug x86_64 build of `3635c0432` with `-Pghostty=true` on emulator AVD `tl16`, a pane opened in
+front with `launcherctl pane open`; DA1 answered `\e[?62;4;22;52c` (Fast). "Always allow sh" was
+granted on the consent sheet before the run, so the two clipboard reads were answered without a
+sheet; the clipboard held `parity-ok`. Against the first Fast run only the former gap rows changed,
+plus rows that depend on the pane's size and cursor (the pane had 4 rows this time).
+
+| Former gap | Probe | Ghostty 1.4.0 | Fast 3635c0432 | Now |
+|---|---|---|---|---|
+| G1 | da1 | `\e[?62;22;52c` | `\e[?62;4;22;52c` | same (52 present; the 4 is intended) |
+| G1 | decrqm-dec-5522 | `\e[?5522;2$y` | `\e[?5522;2$y` | same |
+| G1 | osc52-read | `\e]52;c;\e\\` | `\e]52;c;cGFyaXR5LW9r\e\\` | same (clipboard contents; Ghostty's headless clipboard was empty) |
+| G1 | osc5522-read | `...status=OK` / `DATA:mime=Lg==` / `DONE` | `...status=OK` / `DATA:mime=Lg==;dGV4dC9wbGFpbgo=` / `DONE` | same (the listing names text/plain; Ghostty's clipboard was empty) |
+| G2 | osc7501-query | `<none>` | `<none>` | still open: OSC 7501 is a later wave |
+| G3 | dsr-996 | `\e[?997;2n` | `\e[?997;1n` | same (theme: our default terminal scheme is dark, Ghostty's default config light) |
+| G3 | mode2031-dsr996 | `\e[?997;2n` | `\e[?997;1n` | same (theme) |
+| G4 | decrqm-dec-12 | `\e[?12;1$y` | `\e[?12;2$y` | intended difference: our default cursor is a steady block (`terminal-cursor-blink-rate` 0); Ghostty's default blinks. Ghostty with a steady cursor answers as we do; claiming a blink the user does not see would be wrong |
+| G4 | decrqss-decscusr | `\eP1$r1 q\e\\` | `\eP1$r2 q\e\\` | intended difference (as above) |
+| G5 | xtgettcap-TN | `xterm-ghostty` | `\eP1+r544E=787465726D2D323536636F6C6F72\e\\` (`xterm-256color`) | intended difference: TN is the TERM the session exports (`terminal-term`, default xterm-256color) |
+| G6 | da2 | `\e[>1;10;0c` | `\e[>1;0;0c` | intended difference: the version field is Ghostty's own release number; we are not Ghostty |
+| G7 | da3 | `<none>` | `\eP!\|00000000\e\\` | still open, library limit: vt-1.0.0 always answers DA3 (the C wrapper always installs its DA trampoline, c/terminal.zig:872, and the host callback is not told which level was asked) |
+
+Unsolicited mode 2031 reports on a theme flip are covered by JVM tests
+(`GhosttyCoreTest.testColorSchemeFlipReportsOnceUnderMode2031`), not by the probe.
+
+### Clipboard reads on Fast
+
+Reads (OSC 52 `?`, OSC 5522 read) ask on a sheet per request, naming the pty's foreground
+program: Deny, Allow once, Allow for this session, Always allow <program>. A 5522 listing-only read
+and a read that fetches the user's own paste event need no consent; "Let programs read the
+clipboard" off refuses without asking. The library's reply is synchronous, so the shim answers it
+"denied" with the bytes muted and hands the raw request to the app; after the decision a throwaway
+libghostty-vt terminal is fed the same request and its reply bytes are written to the pty, so the
+answer is byte-for-byte what the library writes. Only text/plain is served (pictures on the
+clipboard are not offered on Fast).
