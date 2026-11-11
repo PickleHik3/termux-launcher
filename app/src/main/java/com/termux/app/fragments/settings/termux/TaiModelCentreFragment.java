@@ -271,6 +271,42 @@ public class TaiModelCentreFragment extends Fragment
         ModelAvailability.get(context).addListener(loadedListener);
         fetchLoadedModel(context);
         fetchBenchmarkSpeeds(context);
+        requestGpuProbe(context);
+    }
+
+    /**
+     * The GPU probe runs in {@code :tai_runtime} as it starts; while this phone has none on file, the
+     * page starts the runtime for it, on a thread of its own (the wait can be seconds), and reloads
+     * the Functions rows when the facts land. Nothing happens once the facts are known.
+     */
+    private void requestGpuProbe(@NonNull Context context) {
+        Context app = context.getApplicationContext();
+        TaiPlatformCaps caps = TaiPlatformCaps.cached(app);
+        if (caps.probed || !caps.anyLocalBackend()) return;
+        Thread thread = new Thread(() -> {
+            boolean probed;
+            try {
+                probed = TaiPlatformCaps.probeInRuntime(app).probed;
+            } catch (RuntimeException e) {
+                probed = false;
+            }
+            if (!probed) return;
+            handler.post(() -> {
+                Context now = getContext();
+                if (isAdded() && now != null) loadFunctions(now);
+            });
+        }, "tai-centre-gpu-probe");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * Whether "Check the GPU" is offered: only once the probe has run (an unprobed phone reads
+     * {@code UNKNOWN} too, and that is not a GPU waiting for a check), the GPU path is still
+     * {@code UNKNOWN} after any verdict, and the GPU is offered at all.
+     */
+    static boolean offersGpuCheck(boolean probed, @NonNull TaiTierPolicy.Env env) {
+        return probed && env.gpuPath == TaiPlatformCaps.GpuPath.UNKNOWN && TaiTierPolicy.gpuOffered(env);
     }
 
     @Override
@@ -363,6 +399,9 @@ public class TaiModelCentreFragment extends Fragment
         Map<String, TaiModelSpec> installed = installedAll;
         int generation = ++functionsGeneration;
         executor.execute(() -> {
+            // Read before the models' env: probed facts, once read, stay for the process, so an env
+            // read after a "probed" answer never carries the unprobed UNKNOWN.
+            boolean gpuProbed = TaiPlatformCaps.cached(app).probed;
             TaiFunctionModels models = TaiFunctionModels.forContext(app);
             TaiFeaturePlans plans = TaiFeaturePlans.forContext(app, models);
             TaiFunctionRows.Planner planner = plans::plan;
@@ -372,7 +411,7 @@ public class TaiModelCentreFragment extends Fragment
             List<TaiFunctionRows.FunctionRow> rows = withCheckOffers(app, plans,
                 TaiFunctionRows.functionRows(models, planner, labels, level));
             TaiFunction gpuCheck = null;
-            if (models.env().gpuPath == TaiPlatformCaps.GpuPath.UNKNOWN && TaiTierPolicy.gpuOffered(models.env())) {
+            if (offersGpuCheck(gpuProbed, models.env())) {
                 try {
                     for (TaiFunction feature : TaiFeatureCheckRunner.featuresInUse(plans)) {
                         if (feature.usesChatModel()) {

@@ -1,12 +1,12 @@
 package com.termux.ai;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.BuildConfig;
 
@@ -14,8 +14,12 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -35,8 +39,9 @@ import java.util.regex.Pattern;
  * load has no automatic CPU fallback. Detection needs no GL context: the Vulkan vendorID first,
  * then {@code ro.hardware.egl}, then {@code Build.SOC_MANUFACTURER} / {@code SOC_MODEL} through a
  * small table here. {@link #classify} is pure and takes the raw facts, so it is unit-tested; the
- * probe that gathers them runs once off the main thread, and the facts are cached in the TAI
- * preferences per app build.
+ * probe that gathers them runs once per app build in {@code :tai_runtime}, off its main thread, as
+ * that process starts ({@code TaiRuntimeService}); the app process never touches the drivers. The
+ * facts are cached in a file both processes read ({@link #PROBE_FILE}).
  */
 public final class TaiPlatformCaps {
     private static final String TAG = "TaiPlatformCaps";
@@ -344,12 +349,21 @@ public final class TaiPlatformCaps {
 
     // ------------------------------------------------------------------- probe, cache and access
 
-    private static final String KEY_CACHE_BUILD = "tai_gpu_probe_build";
-    private static final String KEY_CACHE_FACTS = "tai_gpu_probe_facts";
-    private static final String KEY_PROBE_INFLIGHT = "tai_gpu_probe_inflight";
+    /**
+     * The probe's cache: one small file both processes read ({@code :tai_runtime} writes it, the app
+     * reads it), like the GPU verdict. It holds either the facts for one app build or the in-flight
+     * marker for one; preferences are not coherent across processes, so they are not used.
+     */
+    static final String PROBE_FILE = "tai/gpu-probe.json";
+    private static final String JSON_BUILD = "build";
+    private static final String JSON_FACTS = "facts";
+    private static final String JSON_INFLIGHT = "inflight";
     private static final Object PROBE_LOCK = new Object();
+    /** How long an "unprobed" read of the file stands before the file is read again (the runtime may write it any time). */
+    static final long PROBE_READ_TTL_MS = 5_000L;
 
     @Nullable private static volatile TaiPlatformCaps sProbed;
+    private static final ProbeFileReader sProbeReader = new ProbeFileReader(PROBE_READ_TTL_MS);
 
     /**
      * The probe's verdict, or an "unknown" answer (GPU {@code UNKNOWN}) until a probe has run in this
@@ -362,8 +376,9 @@ public final class TaiPlatformCaps {
     }
 
     /**
-     * {@link #cached()}, after reading the preferences cache when this process has not yet: cheap, and
-     * still never starts a probe. Falls back to the unprobed answer.
+     * {@link #cached()}, after reading the probe's cache file when this process holds no facts yet
+     * (at most once per {@link #PROBE_READ_TTL_MS} while there are none): cheap, and still never
+     * starts a probe. Falls back to the unprobed answer.
      */
     @NonNull
     public static TaiPlatformCaps cached(@NonNull Context context) {
@@ -377,15 +392,63 @@ public final class TaiPlatformCaps {
         return probed != null ? probed : fromDevice(Facts.unprobed(), false);
     }
 
+    /**
+     * The probe's own answer for this build: probed facts are kept for the life of the process; an
+     * unprobed answer is not, and the cache file is read again once {@link #PROBE_READ_TTL_MS} has
+     * passed, so a probe {@code :tai_runtime} finishes later is picked up.
+     */
     @NonNull
     static TaiPlatformCaps rawCached(@NonNull Context context) {
         TaiPlatformCaps probed = sProbed;
         if (probed != null) return probed;
-        Facts stored = storedFacts(prefs(context));
+        long now = System.nanoTime() / 1_000_000L;
+        Facts stored = sProbeReader.due(now) ? sProbeReader.read(probeStore(context), cacheBuild(), now) : null;
         if (stored == null) return fromDevice(Facts.unprobed(), false);
         TaiPlatformCaps caps = fromDevice(stored, true);
         sProbed = caps;
         return caps;
+    }
+
+    /** Makes the next {@link #rawCached(Context)} read the cache file, after a probe was asked for. */
+    static void forgetUnprobedRead() {
+        sProbeReader.forget();
+    }
+
+    /**
+     * Reads the cache file for the app process, at most once per TTL while it holds no facts: the
+     * miss is remembered, a hit is the caller's to keep. Pure apart from the store, so tests drive it.
+     */
+    static final class ProbeFileReader {
+        private final long ttlMs;
+        private boolean missed;
+        private long missedAtMs;
+
+        ProbeFileReader(long ttlMs) {
+            this.ttlMs = ttlMs;
+        }
+
+        /** Whether a read now would look at the file (no miss within the TTL). */
+        synchronized boolean due(long nowMs) {
+            return !missed || nowMs - missedAtMs >= ttlMs;
+        }
+
+        /** The stored facts for {@code build}, or {@code null} (remembered as a miss) when there are none. */
+        @Nullable
+        synchronized Facts read(@NonNull TaiGpuVerdict.Store store, @NonNull String build, long nowMs) {
+            if (!due(nowMs)) return null;
+            Facts facts = decodeFacts(store.read(), build);
+            if (facts == null) {
+                missed = true;
+                missedAtMs = nowMs;
+            } else {
+                missed = false;
+            }
+            return facts;
+        }
+
+        synchronized void forget() {
+            missed = false;
+        }
     }
 
     // The verdict file is written by either process: a read stays good for a few seconds, then the file is read again.
@@ -444,30 +507,79 @@ public final class TaiPlatformCaps {
         synchronized (PROBE_LOCK) {
             TaiPlatformCaps known = sProbed;
             if (known != null) return known;
-            SharedPreferences prefs = prefs(context);
-            Facts facts = storedFacts(prefs);
-            if (facts == null) {
-                String build = cacheBuild();
-                boolean crashedBefore = build.equals(prefs.getString(KEY_PROBE_INFLIGHT, null));
-                if (crashedBefore) {
-                    Log.w(TAG, "the GPU probe crashed the process last time; treating OpenCL as absent");
-                    facts = collectFacts(false);
-                } else {
-                    // commit(), not apply(): the marker must be on disk before a driver can take the process down.
-                    prefs.edit().putString(KEY_PROBE_INFLIGHT, build).commit();
-                    facts = collectFacts(true);
-                    prefs.edit().remove(KEY_PROBE_INFLIGHT).commit();
-                }
-                try {
-                    prefs.edit().putString(KEY_CACHE_BUILD, build).putString(KEY_CACHE_FACTS, facts.toJson().toString()).apply();
-                } catch (JSONException e) {
-                    Log.w(TAG, "could not cache the GPU probe", e);
-                }
-            }
+            Facts facts = probeFacts(probeStore(context), cacheBuild(), TaiPlatformCaps::collectFacts);
             TaiPlatformCaps caps = fromDevice(facts, true);
             sProbed = caps;
             return caps;
         }
+    }
+
+    /** Gathers the facts; {@code runNative} false skips the drivers (a probe that crashed before). */
+    interface FactsCollector {
+        @NonNull
+        Facts collect(boolean runNative);
+    }
+
+    /**
+     * The probe's cache logic, pure apart from {@code store} and {@code collector}: the stored facts
+     * for {@code build} when there are some; else, when the in-flight marker for {@code build} is
+     * stored, the process died in the drivers last time, so the facts are gathered without them
+     * (OpenCL absent); else the marker is written (and synced) before the drivers are touched, and
+     * the facts replace it.
+     */
+    @NonNull
+    static Facts probeFacts(@NonNull TaiGpuVerdict.Store store, @NonNull String build, @NonNull FactsCollector collector) {
+        String stored = store.read();
+        Facts facts = decodeFacts(stored, build);
+        if (facts != null) return facts;
+        if (isInflight(stored, build)) {
+            Log.w(TAG, "the GPU probe crashed the process last time; treating OpenCL as absent");
+            facts = collector.collect(false);
+        } else {
+            store.write(encodeInflight(build));
+            facts = collector.collect(true);
+        }
+        store.write(encodeFacts(build, facts));
+        return facts;
+    }
+
+    /**
+     * Has {@code :tai_runtime} run the probe, from the app process: binds the runtime service (which
+     * probes as it starts), waits for its answer and lets the binding go. Blocking: call it off the
+     * main thread. Does nothing when the facts are already known, and never runs the native probe in
+     * this process; inside {@code :tai_runtime} it is {@link #probe} itself. Returns the caps after.
+     */
+    @NonNull
+    public static TaiPlatformCaps probeInRuntime(@NonNull Context context) {
+        Context app = context.getApplicationContext();
+        if (TaiManager.isTaiRuntimeProcess(app)) return withVerdict(probe(app), app);
+        if (rawCached(app).probed) return cached(app);
+        synchronized (RUNTIME_PROBE_LOCK) {
+            forgetUnprobedRead();
+            if (rawCached(app).probed) return cached(app);
+            TaiRuntimeServiceClient client = new TaiRuntimeServiceClient(app);
+            try {
+                JSONObject reply = client.request(TaiRuntimeIpc.OP_GPU_PROBE, "{}", RUNTIME_PROBE_TIMEOUT_MS);
+                if (!reply.optBoolean("probed", false)) Log.w(TAG, "the runtime did not probe the GPU: " + reply);
+            } catch (JSONException | RuntimeException e) {
+                Log.w(TAG, "could not ask the runtime to probe the GPU", e);
+            } finally {
+                client.close();
+            }
+            forgetUnprobedRead();
+            return cached(app);
+        }
+    }
+
+    private static final Object RUNTIME_PROBE_LOCK = new Object();
+    /** Process start, the library load and two driver queries; well under this on any phone seen. */
+    private static final long RUNTIME_PROBE_TIMEOUT_MS = 20_000L;
+
+    /** The reply to {@link TaiRuntimeIpc#OP_GPU_PROBE}: whether the facts are known, and the path they give. */
+    @NonNull
+    static JSONObject probeReply(@NonNull TaiPlatformCaps caps) throws JSONException {
+        return new JSONObject().put("ok", true).put("probed", caps.probed).put("gpuPath", caps.gpuPath.name())
+            .put("gpuName", caps.gpuName);
     }
 
     /** Runs {@link #probe} on a background thread; {@code onDone} (may be {@code null}) runs there after it. */
@@ -543,10 +655,97 @@ public final class TaiPlatformCaps {
         }
     }
 
+    // ------------------------------------------------------------------------- the cache file
+
+    /** The cached facts for {@code build}: {@code {"build": ..., "facts": {...}}}. */
+    @NonNull
+    static String encodeFacts(@NonNull String build, @NonNull Facts facts) {
+        try {
+            return new JSONObject().put(JSON_BUILD, build).put(JSON_FACTS, facts.toJson()).toString();
+        } catch (JSONException e) {
+            // JSONObject only refuses non-finite numbers, and the facts hold none.
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** The in-flight marker for {@code build}: the probe is in the drivers now. */
+    @NonNull
+    static String encodeInflight(@NonNull String build) {
+        try {
+            return new JSONObject().put(JSON_BUILD, build).put(JSON_INFLIGHT, true).toString();
+        } catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** The facts stored for {@code build}; {@code null} for nothing, another build, a marker or a damaged file. */
     @Nullable
-    private static Facts storedFacts(@NonNull SharedPreferences prefs) {
-        if (!cacheBuild().equals(prefs.getString(KEY_CACHE_BUILD, null))) return null;
-        return Facts.fromJson(prefs.getString(KEY_CACHE_FACTS, null));
+    static Facts decodeFacts(@Nullable String stored, @NonNull String build) {
+        JSONObject json = parse(stored);
+        if (json == null || !build.equals(json.optString(JSON_BUILD, null))) return null;
+        JSONObject facts = json.optJSONObject(JSON_FACTS);
+        return facts == null ? null : Facts.fromJson(facts.toString());
+    }
+
+    /** Whether the in-flight marker for {@code build} is stored: a probe of this build died in the drivers. */
+    static boolean isInflight(@Nullable String stored, @NonNull String build) {
+        JSONObject json = parse(stored);
+        return json != null && build.equals(json.optString(JSON_BUILD, null)) && json.optBoolean(JSON_INFLIGHT, false);
+    }
+
+    @Nullable
+    private static JSONObject parse(@Nullable String stored) {
+        if (stored == null || stored.trim().isEmpty()) return null;
+        try {
+            return new JSONObject(stored);
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    /**
+     * The cache file under the app's files directory. A write goes to a temporary file, is synced and
+     * then renamed over the old one, so a reader in the other process sees the old or the new
+     * content, never half of one, and the in-flight marker is on disk before a driver can take the
+     * process down.
+     */
+    @NonNull
+    static TaiGpuVerdict.Store probeStore(@NonNull Context context) {
+        final File file = new File(context.getApplicationContext().getFilesDir(), PROBE_FILE);
+        return new TaiGpuVerdict.Store() {
+            @Nullable
+            @Override
+            public String read() {
+                try {
+                    if (!file.isFile()) return null;
+                    return new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+                } catch (IOException | RuntimeException e) {
+                    return null;
+                }
+            }
+
+            @Override
+            public void write(@Nullable String value) {
+                try {
+                    if (value == null) {
+                        //noinspection ResultOfMethodCallIgnored
+                        file.delete();
+                        return;
+                    }
+                    File dir = file.getParentFile();
+                    if (dir != null && !dir.isDirectory()) //noinspection ResultOfMethodCallIgnored
+                        dir.mkdirs();
+                    File temp = new File(file.getPath() + ".tmp");
+                    try (FileOutputStream out = new FileOutputStream(temp)) {
+                        out.write(value.getBytes(StandardCharsets.UTF_8));
+                        out.getFD().sync();
+                    }
+                    if (!temp.renameTo(file)) throw new IOException("could not rename " + temp);
+                } catch (IOException | RuntimeException e) {
+                    Log.w(TAG, "could not write the GPU probe cache", e);
+                }
+            }
+        };
     }
 
     /** The cache key: versionCode alone is shared with upstream Termux and never moves, so the name goes with it. */
@@ -555,8 +754,11 @@ public final class TaiPlatformCaps {
         return BuildConfig.VERSION_CODE + ":" + BuildConfig.VERSION_NAME;
     }
 
-    @NonNull
-    private static SharedPreferences prefs(@NonNull Context context) {
-        return context.getApplicationContext().getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE);
+    /** Forgets this process's probe answer and file read; tests only. */
+    @VisibleForTesting
+    static void resetForTesting() {
+        sProbed = null;
+        sProbeReader.forget();
+        sVerdict = null;
     }
 }

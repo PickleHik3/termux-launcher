@@ -18,6 +18,12 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **GPU probe runs in :tai_runtime (11-11, fix/tai-gpu-probe-runtime).** Pass: after a fresh
+  install or update, opening Settings › Model Centre starts `:tai_runtime` (`ps -A | grep tai_runtime`),
+  `files/tai/gpu-probe.json` appears with `"build"` = this build and `"facts"` (no `"inflight"`),
+  the launcher process never logs `TaiGpuProbe`, pong (Adreno) preselects the GPU again, and
+  "Check the GPU" shows only on a phone whose probed path is unknown (emulator: swiftshader/OTHER).
+  Emulator, then pong.
 - **Choose a key opens on its grid (11-11, fix/keyboard-settings).** Pong reported the sheet
   empty below the search field with Gboard up at once. Pass: Settings › Keyboard › Terminal extra
   keys › + opens with chips, key grid and Cancel / confirm visible and the keyboard down; tapping

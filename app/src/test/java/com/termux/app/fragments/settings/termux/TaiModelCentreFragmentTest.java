@@ -155,4 +155,23 @@ public class TaiModelCentreFragmentTest {
         assertEquals(TaiModelCentreAdapter.TYPE_HEADER, adapter.getItemViewType(0));
         assertEquals(TaiModelCentreAdapter.TYPE_EMPTY, adapter.getItemViewType(2));
     }
+
+    private static com.termux.ai.TaiTierPolicy.Env env(com.termux.ai.TaiPlatformCaps.GpuPath path) {
+        return new com.termux.ai.TaiTierPolicy.Env(com.termux.ai.TaiDeviceTier.TIER_2, 12L << 30,
+            Build.VERSION_CODES.VANILLA_ICE_CREAM, true, true, path, true);
+    }
+
+    @Test
+    public void theGpuCheckIsNotOfferedBeforeTheProbeHasRun() {
+        // An unprobed phone reads UNKNOWN too; that is not a GPU waiting for a check.
+        assertFalse(TaiModelCentreFragment.offersGpuCheck(false, env(com.termux.ai.TaiPlatformCaps.GpuPath.UNKNOWN)));
+    }
+
+    @Test
+    public void theGpuCheckIsOfferedForAProbedUnknownGpuOnly() {
+        assertTrue(TaiModelCentreFragment.offersGpuCheck(true, env(com.termux.ai.TaiPlatformCaps.GpuPath.UNKNOWN)));
+        assertFalse(TaiModelCentreFragment.offersGpuCheck(true, env(com.termux.ai.TaiPlatformCaps.GpuPath.YES)));
+        assertFalse(TaiModelCentreFragment.offersGpuCheck(true, env(com.termux.ai.TaiPlatformCaps.GpuPath.CPU_FIRST)));
+        assertFalse(TaiModelCentreFragment.offersGpuCheck(true, env(com.termux.ai.TaiPlatformCaps.GpuPath.NO)));
+    }
 }
