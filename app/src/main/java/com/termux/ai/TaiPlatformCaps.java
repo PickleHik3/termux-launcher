@@ -224,7 +224,7 @@ public final class TaiPlatformCaps {
             case ADRENO:
                 // LiteRT-LM's own binary warns about this compiler on the Adreno 8xx series.
                 if (isWarnedAdrenoCompiler(facts)) {
-                    return new GpuVerdict(family, GpuPath.UNKNOWN,
+                    return new GpuVerdict(family, GpuPath.CPU_FIRST,
                         "This GPU driver is known to give wrong answers; update the phone's software");
                 }
                 return new GpuVerdict(family, GpuPath.YES, "Adreno GPU.");
