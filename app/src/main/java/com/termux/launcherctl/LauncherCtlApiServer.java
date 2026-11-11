@@ -789,7 +789,7 @@ public class LauncherCtlApiServer {
             } else if ("POST".equals(request.method) && "/v1/ai/images/generations".equals(request.path)) {
                 return imageGenerations(context, request);
             } else if ("POST".equals(request.method) && "/v1/ai/images/cancel".equals(request.path)) {
-                return maybeTextResponse(request, "image-cancel", TaiManager.getInstance(context).cancelImage());
+                return maybeTextResponse(request, "image-cancel", TaiManager.getInstance(context).images().cancelImage());
             }
 
             JSONObject notFound = jsonError("not_found", "Unknown endpoint");
@@ -917,7 +917,7 @@ public class LauncherCtlApiServer {
     private HttpResponse imageGenerations(Context context, HttpRequest request) throws JSONException {
         String body = request.body == null || request.body.trim().isEmpty() ? "{}" : request.body;
         TaiManager manager = TaiManager.getInstance(context);
-        JSONObject refusal = manager.checkImageRequest(body);
+        JSONObject refusal = manager.images().checkImageRequest(body);
         if (refusal != null) return jsonResponse(refusal);
         boolean stream = new JSONObject(body).optBoolean("stream", false);
         if (stream && "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
@@ -925,7 +925,7 @@ public class LauncherCtlApiServer {
         }
         if (stream) return sseResponse(output -> writeImageSseStream(manager, body, output));
         try {
-            return jsonResponse(manager.generateImage(body, percent -> { }));
+            return jsonResponse(manager.images().generateImage(body, percent -> { }));
         } catch (IOException e) {
             return jsonResponse(jsonError("internal_error", e.getMessage() == null ? "" : e.getMessage()));
         }
@@ -933,7 +933,7 @@ public class LauncherCtlApiServer {
 
     private void writeImageSseStream(TaiManager manager, String body, OutputStream output) throws IOException {
         try {
-            JSONObject result = manager.generateImage(body, percent -> {
+            JSONObject result = manager.images().generateImage(body, percent -> {
                 try {
                     writeSseEvent(output, new JSONObject().put("type", "image_generation.progress")
                         .put("progress", percent).toString());
@@ -956,7 +956,7 @@ public class LauncherCtlApiServer {
     /** The lines {@code tai image} reads: {@code progress N}, then {@code done PATH} and {@code info JSON}, or {@code error TEXT}. */
     private void writeImageTextStream(TaiManager manager, String body, OutputStream output) throws IOException {
         try {
-            JSONObject result = manager.generateImage(body, percent -> writeTextLine(output, TaiCliFormatter.imageProgressLine(percent)));
+            JSONObject result = manager.images().generateImage(body, percent -> writeTextLine(output, TaiCliFormatter.imageProgressLine(percent)));
             writeTextLine(output, result.has("error") ? TaiCliFormatter.imageErrorLine(result)
                 : TaiCliFormatter.imageDoneLines(result));
         } catch (JSONException e) {

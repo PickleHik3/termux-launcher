@@ -34,7 +34,7 @@ import android.app.Application;
 import org.robolectric.annotation.Config;
 
 /**
- * {@link TaiManager#generateImage} end to end with the native engine stood in: validation, admission,
+ * {@link TaiImages#generateImage} end to end with the native engine stood in: validation, admission,
  * progress, the PNG handed back inline or moved to the requested path, and the discard on a dropped client.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -73,7 +73,7 @@ public class TaiImageGenerationFlowTest {
     public void aRegisteredModelComesBackAsBase64AndTheIpcFileIsGone() throws Exception {
         store.upsertUserModel(imageModel("sd15-test", sdPackage("sd15-test").getAbsolutePath()));
         List<Integer> progress = new ArrayList<>();
-        JSONObject response = manager.generateImage(new JSONObject().put("model", "sd15-test").put("prompt", "a fox").toString(),
+        JSONObject response = manager.images().generateImage(new JSONObject().put("model", "sd15-test").put("prompt", "a fox").toString(),
             progress::add);
         String b64 = response.getJSONArray("data").getJSONObject(0).getString("b64_json");
         assertEquals("fake-png-bytes", new String(Base64.getDecoder().decode(b64), StandardCharsets.UTF_8));
@@ -93,7 +93,7 @@ public class TaiImageGenerationFlowTest {
     public void anOutputPathReceivesTheFileAndNoBase64Comes() throws Exception {
         File out = new File(temp.getRoot(), "shots/fox.png");
         store.upsertUserModel(imageModel("sd15-test", sdPackage("sd15-test").getAbsolutePath()));
-        JSONObject response = manager.generateImage(new JSONObject().put("model", "sd15-test").put("prompt", "a fox")
+        JSONObject response = manager.images().generateImage(new JSONObject().put("model", "sd15-test").put("prompt", "a fox")
             .put("output", out.getAbsolutePath()).toString(), p -> { });
         JSONObject item = response.getJSONArray("data").getJSONObject(0);
         assertFalse(item.has("b64_json"));
@@ -104,7 +104,7 @@ public class TaiImageGenerationFlowTest {
     @Test
     public void aModelPathRunsWithoutRegistration() throws Exception {
         File dir = sdPackage("loose");
-        JSONObject response = manager.generateImage(new JSONObject().put("model_path", dir.getAbsolutePath())
+        JSONObject response = manager.images().generateImage(new JSONObject().put("model_path", dir.getAbsolutePath())
             .put("prompt", "a fox").put("model_type", "taiyi").toString(), p -> { });
         assertTrue(response.has("data"));
         assertEquals(TaiDiffusionPackage.TYPE_TAIYI, runtime.lastParams.type);
@@ -114,7 +114,7 @@ public class TaiImageGenerationFlowTest {
 
     @Test
     public void aModelPathOutsideTheAllowedRootsIsForbidden() throws Exception {
-        JSONObject response = manager.generateImage(new JSONObject().put("model_path", "/proc/self").put("prompt", "p").toString(), p -> { });
+        JSONObject response = manager.images().generateImage(new JSONObject().put("model_path", "/proc/self").put("prompt", "p").toString(), p -> { });
         assertEquals(403, response.getInt("_statusCode"));
         assertEquals("media_access_denied", response.getJSONObject("error").getString("code"));
         assertEquals(0, runtime.runs);
@@ -126,7 +126,7 @@ public class TaiImageGenerationFlowTest {
         assertTrue(new File(dir, "tokenizer.mtok").delete());
         Files.write(new File(dir, "vocab.json").toPath(), new byte[] {1});
         Files.write(new File(dir, "merges.txt").toPath(), new byte[] {1});
-        JSONObject response = manager.generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p").toString(), p -> { });
+        JSONObject response = manager.images().generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p").toString(), p -> { });
         assertEquals(400, response.getInt("_statusCode"));
         assertEquals("tokenizer_mtok_missing", response.getJSONObject("error").getString("code"));
         assertEquals(0, runtime.runs);
@@ -135,7 +135,7 @@ public class TaiImageGenerationFlowTest {
     @Test
     public void aChatOrSpeechSizedRequestForAnSdModelIsRefusedOnSize() throws Exception {
         store.upsertUserModel(imageModel("sd15-test", sdPackage("sd15-test").getAbsolutePath()));
-        JSONObject response = manager.generateImage(new JSONObject().put("model", "sd15-test").put("prompt", "p")
+        JSONObject response = manager.images().generateImage(new JSONObject().put("model", "sd15-test").put("prompt", "p")
             .put("size", "1024x1024").toString(), p -> { });
         assertEquals("invalid_size", response.getJSONObject("error").getString("code"));
         assertEquals(0, runtime.runs);
@@ -144,7 +144,7 @@ public class TaiImageGenerationFlowTest {
     @Test
     public void aForcedMemoryModeIsPassedThrough() throws Exception {
         File dir = sdPackage("loose");
-        manager.generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p")
+        manager.images().generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p")
             .put("memory_mode", 0).put("backend", "cpu").put("seed", 7).put("steps", 5).toString(), p -> { });
         assertEquals(0, runtime.lastParams.memoryMode);
         assertEquals("cpu", runtime.lastParams.backend);
@@ -155,12 +155,12 @@ public class TaiImageGenerationFlowTest {
     @Test
     public void sanaGetsItsDefaultGuidanceAndSizeRules() throws Exception {
         File dir = sanaPackage("sana-loose");
-        manager.generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p")
+        manager.images().generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p")
             .put("size", "768x512").toString(), p -> { });
         assertEquals(TaiDiffusionPackage.TYPE_SANA, runtime.lastParams.type);
         assertEquals(768, runtime.lastParams.width);
         assertEquals(TaiImageRequest.DEFAULT_SANA_CFG, runtime.lastParams.cfgScale, 0f);
-        JSONObject bad = manager.generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p")
+        JSONObject bad = manager.images().generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p")
             .put("size", "700x512").toString(), p -> { });
         assertEquals("invalid_size", bad.getJSONObject("error").getString("code"));
     }
@@ -169,7 +169,7 @@ public class TaiImageGenerationFlowTest {
     public void aClientThatGoesAwayCancelsAndTheImageIsDiscarded() throws Exception {
         File dir = sdPackage("loose");
         try {
-            manager.generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p").toString(), percent -> {
+            manager.images().generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p").toString(), percent -> {
                 throw new IOException("client gone");
             });
             fail("the IOException must surface");
@@ -184,15 +184,15 @@ public class TaiImageGenerationFlowTest {
     public void aRuntimeErrorPassesThroughAsTheResponse() throws Exception {
         runtime.fail = true;
         File dir = sdPackage("loose");
-        JSONObject response = manager.generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p").toString(), p -> { });
+        JSONObject response = manager.images().generateImage(new JSONObject().put("model_path", dir.getAbsolutePath()).put("prompt", "p").toString(), p -> { });
         assertEquals(409, response.getInt("_statusCode"));
         assertEquals("image_generation_active", response.getJSONObject("error").getString("code"));
     }
 
     @Test
     public void cancelReportsWhetherAnythingWasRunning() throws Exception {
-        assertFalse(manager.cancelImage().getBoolean("cancelled"));
-        assertTrue(manager.cancelImage().getBoolean("ok"));
+        assertFalse(manager.images().cancelImage().getBoolean("cancelled"));
+        assertTrue(manager.images().cancelImage().getBoolean("ok"));
     }
 
     private File sdPackage(String name) throws Exception {

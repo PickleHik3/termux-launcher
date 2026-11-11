@@ -546,7 +546,7 @@ public final class TaiRuntimeService extends Service {
             case TaiRuntimeIpc.OP_TTS_STATE:
                 return manager.speech().speechState();
             case TaiRuntimeIpc.OP_IMAGE_CANCEL:
-                return manager.cancelImage();
+                return manager.images().cancelImage();
             default:
                 return error(400, "bad_runtime_operation", "Unknown On-device AI runtime operation: " + operation);
         }
@@ -573,7 +573,7 @@ public final class TaiRuntimeService extends Service {
         if (TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)) {
             manager.speech().synthesizeSpeechToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation)) {
-            manager.generateImageToEvents(body, sink);
+            manager.images().generateImageToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) {
             manager.benchRun(body, sink);
         } else if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
