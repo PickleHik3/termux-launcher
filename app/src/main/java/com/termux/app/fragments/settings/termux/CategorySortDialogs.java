@@ -30,6 +30,7 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.termux.app.material.M3;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFeaturePlans;
@@ -123,9 +124,7 @@ final class CategorySortDialogs {
     @Nullable
     private static TaiModelSpec specFor(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
         if (plan.model == null || plan.remote) return null;
-        TaiModelStore store = new TaiModelStore(context);
-        TaiModelSpec spec = store.getDownloadedReadableModels().get(plan.model);
-        return spec != null ? spec : store.getInstalledUserModels().get(plan.model);
+        return ModelAvailability.get(context).models().get(plan.model);
     }
 
     /**

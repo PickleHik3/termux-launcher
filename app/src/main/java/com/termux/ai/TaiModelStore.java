@@ -67,6 +67,12 @@ public final class TaiModelStore {
         migrateLegacyPreferences();
     }
 
+    /** The application context this store reads under; Model availability is looked up through it. */
+    @NonNull
+    public Context context() {
+        return appContext;
+    }
+
     private void migrateLegacyPreferences() {
         if (preferences.getBoolean(KEY_MIGRATED, false)) return;
         SharedPreferences legacy = appContext.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE);
@@ -118,6 +124,7 @@ public final class TaiModelStore {
     public synchronized void setCapabilityOverride(@NonNull String modelId, @NonNull Set<String> capabilities) {
         LinkedHashSet<String> caps = new LinkedHashSet<>(capabilities);
         preferences.edit().putString(KEY_CAPS_PREFIX + modelId, TextUtils.join(",", caps)).commit();
+        ModelAvailability.modelsChanged();
     }
 
     /** How a multimodal model is advertised: split / combined / both. Defaults to split. */
@@ -248,7 +255,10 @@ public final class TaiModelStore {
             } catch (JSONException ignored) {
             }
         }
-        if (removed > 0) preferences.edit().putString(KEY_USER_MODELS, array.toString()).commit();
+        if (removed > 0) {
+            preferences.edit().putString(KEY_USER_MODELS, array.toString()).commit();
+            ModelAvailability.modelsChanged();
+        }
         return removed;
     }
 
@@ -260,6 +270,7 @@ public final class TaiModelStore {
             array.put(model.toJson());
         }
         preferences.edit().putString(KEY_USER_MODELS, array.toString()).commit();
+        ModelAvailability.modelsChanged();
     }
 
     public synchronized boolean deleteUserModel(@NonNull String modelId) {
@@ -310,6 +321,7 @@ public final class TaiModelStore {
         // shared by both processes) and is keyed by modelId regardless of backend, so this is safe
         // and a no-op to call even when the deleted model never used it.
         MnnTaiRuntime.clearMmapCache(appContext, modelId);
+        ModelAvailability.modelsChanged();
         return DeleteResult.deleted(removed != null);
     }
 
@@ -323,18 +335,23 @@ public final class TaiModelStore {
         JSONArray current = getDownloads();
         JSONArray next = new JSONArray();
         boolean replaced = false;
+        // Workers write a record at every megabyte; only a new record or a status change moves what
+        // is available.
+        boolean statusMoved = true;
         for (int i = 0; i < current.length(); i++) {
             JSONObject item = current.optJSONObject(i);
             if (item == null) continue;
             if (id.equals(item.optString("id", ""))) {
                 next.put(transfer);
                 replaced = true;
+                statusMoved = !item.optString("status", "").equals(transfer.optString("status", ""));
             } else {
                 next.put(item);
             }
         }
         if (!replaced) next.put(transfer);
         preferences.edit().putString(KEY_DOWNLOADS, next.toString()).commit();
+        if (statusMoved) ModelAvailability.modelsChanged();
     }
 
     /** The record with this transfer id, or null. */
@@ -394,6 +411,7 @@ public final class TaiModelStore {
             if (item != null && !modelId.equals(item.optString("modelId", ""))) kept.put(item);
         }
         preferences.edit().putString(KEY_DOWNLOADS, kept.toString()).commit();
+        ModelAvailability.modelsChanged();
     }
 
     public synchronized void updateDownloadStatus(@NonNull String transferId, @NonNull String status, @NonNull String error) {
@@ -410,6 +428,7 @@ public final class TaiModelStore {
             break;
         }
         preferences.edit().putString(KEY_DOWNLOADS, current.toString()).commit();
+        ModelAvailability.modelsChanged();
     }
 
     @NonNull

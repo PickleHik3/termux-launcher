@@ -48,8 +48,7 @@ public final class TaiSpeechModels {
      *  (the registry wins on a shared id, so a model mid re-download keeps its installed path). */
     @NonNull
     public static List<TaiModelSpec> installed(@NonNull TaiModelStore store) {
-        LinkedHashMap<String, TaiModelSpec> models = new LinkedHashMap<>(store.getDownloadedReadableModels());
-        models.putAll(store.getInstalledUserModels());
+        Map<String, TaiModelSpec> models = ModelAvailability.get(store.context()).models();
         List<TaiModelSpec> speech = new ArrayList<>();
         for (TaiModelSpec spec : models.values()) {
             if (isSpeechModel(spec)) speech.add(spec);

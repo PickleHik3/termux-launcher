@@ -2160,9 +2160,7 @@ public final class TaiManager {
         TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
         TaiRuntimePresence.Snapshot presence = TaiRuntimePresence.read(appContext);
         boolean mnnSupported = device.mnnSupported;
-        LinkedHashMap<String, TaiModelSpec> availableModels = new LinkedHashMap<>();
-        availableModels.putAll(modelStore.getDownloadedReadableModels());
-        availableModels.putAll(modelStore.getInstalledUserModels());
+        Map<String, TaiModelSpec> availableModels = ModelAvailability.get(appContext).models();
         for (TaiModelSpec stored : availableModels.values()) {
             if ((TaiModelSpec.BACKEND_MNN_LLM.equals(stored.backend)
                 || TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(stored.backend)) && !mnnSupported) continue;

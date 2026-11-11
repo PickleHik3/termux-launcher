@@ -25,6 +25,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.BuildConfig;
 import com.termux.R;
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.MnnTaiRuntime;
 import com.termux.ai.TaiBenchGuardRules;
 import com.termux.ai.TaiBenchStats;
@@ -336,9 +337,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             TaiFeaturePlans plans = TaiFeaturePlans.forContext(app);
             List<TaiFunction> inUse = TaiFeatureCheckRunner.featuresInUse(plans);
             if (inUse.isEmpty()) return rows;
-            TaiModelStore store = new TaiModelStore(app);
-            Map<String, TaiModelSpec> installed = new LinkedHashMap<>(store.getDownloadedReadableModels());
-            installed.putAll(store.getInstalledUserModels());
+            Map<String, TaiModelSpec> installed = ModelAvailability.get(app).models();
             TaiFunctionLabels labels = new TaiFunctionLabels(app, installed);
             List<JSONObject> latest = TaiFeatureCheckStore.latest(TaiFeatureCheckStore.in(app.getFilesDir()).records());
             for (TaiFunction feature : inUse) {

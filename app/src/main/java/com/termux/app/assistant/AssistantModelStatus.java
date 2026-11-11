@@ -7,6 +7,7 @@ import android.os.Looper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiModelRegistry;
 
 import java.util.Objects;
@@ -126,20 +127,20 @@ public final class AssistantModelStatus {
         }
     }
 
-    /** Where the status reads from; the real one is {@link AssistantModelSource}. */
+    /** Where the status reads from; the real one is {@link AssistantModelSource}, over Model availability. */
     public interface Source {
         @NonNull String defaultModelId();
 
-        boolean runtimeLoaded();
+        @NonNull ModelAvailability.State stateOf(@NonNull String modelId);
 
-        boolean runtimeLoading();
-
-        /** The model the runtime has loaded or is loading, or null. */
-        @Nullable String runtimeModelId();
-
-        boolean isDownloaded(@NonNull String modelId);
-
+        /** The model's newest download record, as far as the percent needs it, or null. */
         @Nullable Download download(@NonNull String modelId);
+
+        /** Calls {@code onChange} when the state may have changed; returns the call that stops it. */
+        @NonNull
+        default Runnable subscribe(@NonNull Runnable onChange) {
+            return () -> { };
+        }
     }
 
     public interface Observer {
@@ -190,6 +191,7 @@ public final class AssistantModelStatus {
     @Nullable private ScheduledExecutorService poller;
     @Nullable private ScheduledFuture<?> pollTask;
     @Nullable private Snapshot last;
+    @Nullable private Runnable unsubscribe;
 
     AssistantModelStatus(@NonNull Source source, @NonNull Actions actions, @NonNull Executor notifier,
                          @NonNull Executor actionExecutor) {
@@ -234,36 +236,31 @@ public final class AssistantModelStatus {
         return new Snapshot(new Entry(defaultId, def), new Entry(MODEL_E2B, e2b), new Entry(MODEL_E4B, e4b));
     }
 
+    /** One model under its text-only or scoped id; Model availability decides. */
+    static boolean sameModel(@NonNull String a, @NonNull String b) {
+        return ModelAvailability.sameModel(a, b);
+    }
+
+    /** Maps Model availability's state of a model to what the page shows. */
     @NonNull
     static State stateOf(@NonNull Source source, @NonNull String modelId) {
-        String running = source.runtimeModelId();
-        boolean isRuntimeModel = running != null && sameModel(running, modelId);
-        if (source.runtimeLoaded() && isRuntimeModel) return new State(Kind.READY, -1);
-        // The runtime's file does not always say which model it is loading; the default is the one
-        // a load or an answer starts, so it takes the unnamed case.
-        boolean loadingThis = source.runtimeLoading()
-            && (isRuntimeModel || running == null && sameModel(source.defaultModelId(), modelId));
-        if (loadingThis) return new State(Kind.LOADING, -1);
-        Download download = source.download(modelId);
-        if (download != null && download.inProgress) {
-            int percent = download.totalBytes > 0
-                ? (int) Math.max(0L, Math.min(100L, download.bytesRead * 100L / download.totalBytes))
-                : -1;
-            return new State(Kind.DOWNLOADING, percent);
+        switch (source.stateOf(modelId)) {
+            case LOADED:
+                return new State(Kind.READY, -1);
+            case LOADING:
+                return new State(Kind.LOADING, -1);
+            case DOWNLOADING: {
+                Download download = source.download(modelId);
+                int percent = download != null && download.totalBytes > 0
+                    ? (int) Math.max(0L, Math.min(100L, download.bytesRead * 100L / download.totalBytes))
+                    : -1;
+                return new State(Kind.DOWNLOADING, percent);
+            }
+            case ON_PHONE:
+                return new State(Kind.DOWNLOADED, -1);
+            default:
+                return new State(Kind.NOT_DOWNLOADED, -1);
         }
-        if (source.isDownloaded(modelId)) return new State(Kind.DOWNLOADED, -1);
-        return new State(Kind.NOT_DOWNLOADED, -1);
-    }
-
-    /** The runtime reports the text-only or vision-scoped id of the same file; they are one model. */
-    static boolean sameModel(@NonNull String a, @NonNull String b) {
-        return stripScope(a).equals(stripScope(b));
-    }
-
-    private static String stripScope(String id) {
-        if (id.endsWith("-vision")) return id.substring(0, id.length() - "-vision".length());
-        if (id.endsWith("-audio")) return id.substring(0, id.length() - "-audio".length());
-        return id;
     }
 
     // ----------------------------------------------------------------------------------- polling
@@ -285,6 +282,15 @@ public final class AssistantModelStatus {
                 });
                 last = null;
                 pollTask = poller.scheduleWithFixedDelay(this::pollOnce, 0L, POLL_INTERVAL_MS, TimeUnit.MILLISECONDS);
+                // Model availability says when to read again; the poll stays as the backstop and for
+                // download progress between its events.
+                final ScheduledExecutorService running = poller;
+                unsubscribe = source.subscribe(() -> {
+                    try {
+                        running.execute(this::pollOnce);
+                    } catch (java.util.concurrent.RejectedExecutionException ignored) {
+                    }
+                });
             } else {
                 // A new observer is told the current state without waiting for a change.
                 Snapshot known = last;
@@ -306,6 +312,8 @@ public final class AssistantModelStatus {
 
     private void stopPolling() {
         synchronized (pollLock) {
+            if (unsubscribe != null) unsubscribe.run();
+            unsubscribe = null;
             if (pollTask != null) pollTask.cancel(false);
             if (poller != null) poller.shutdownNow();
             pollTask = null;

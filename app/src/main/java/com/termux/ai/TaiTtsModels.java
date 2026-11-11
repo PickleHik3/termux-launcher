@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The speech-output models on the phone and which one speaks. Everything goes by the
@@ -25,8 +26,7 @@ public final class TaiTtsModels {
     /** Every readable speech-output model, downloads first then the registry (which wins on a shared id). */
     @NonNull
     public static List<TaiModelSpec> installed(@NonNull TaiModelStore store) {
-        LinkedHashMap<String, TaiModelSpec> models = new LinkedHashMap<>(store.getDownloadedReadableModels());
-        models.putAll(store.getInstalledUserModels());
+        Map<String, TaiModelSpec> models = ModelAvailability.get(store.context()).models();
         List<TaiModelSpec> tts = new ArrayList<>();
         for (TaiModelSpec spec : models.values()) {
             if (isTtsModel(spec)) tts.add(spec);
