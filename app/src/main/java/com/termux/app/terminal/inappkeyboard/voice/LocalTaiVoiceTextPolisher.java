@@ -292,7 +292,6 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
                     .priority(FeatureRequest.Priority.INTERACTIVE)
                     .timeoutMs(timeoutMs)
                     .answerGuard(answer -> rejectsAnswer(text, context, answer)));
-            // A guarded answer keeps its text and is judged below, by the same rules as before.
             String code = response.errorCode;
             if (code != null && !"refusal_or_answer".equals(code)) {
                 String failureMessage = response.errorMessage == null ? "" : response.errorMessage;
@@ -301,23 +300,31 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
                 Logger.logWarn(LOG_TAG, "polish failed: " + code + ": " + failureMessage);
                 return Result.fallback(text, code);
             }
-            String answer = response.text.isEmpty() ? null : response.text;
-            String content = VoicePolishRules.withoutEcho(context, text,
-                VoicePolishRules.withoutRepeatedEarlier(context, text, answer));
-            if (answer != null && content == null) return Result.fallback(text, "context_echo");
-            String accepted = VoicePolishRules.accept(text, content, level);
-            if (accepted != null) return Result.polished(accepted);
-            // Kept apart in the log: a refusal or an answer is the model misbehaving, not an empty reply.
-            boolean guarded = content != null && !content.trim().isEmpty()
-                && VoicePolishRules.looksLikeRefusalOrAnswer(text, content);
-            return Result.fallback(text, guarded ? "refusal_or_answer" : "unusable_output");
+            return judge(text, context, level, code, response.text);
         } catch (JSONException | RuntimeException e) {
             return Result.fallback(text, "exception");
         }
     }
 
+    /**
+     * What a finished request comes to. The guard's verdict ({@code refusal_or_answer}) ends it; any
+     * other answer is accepted by {@link VoicePolishRules#accept} or falls back as unusable.
+     */
+    @NonNull
+    static Result judge(@NonNull String text, @NonNull String context, @Nullable String level,
+                        @Nullable String errorCode, @NonNull String reply) {
+        if ("refusal_or_answer".equals(errorCode)) return Result.fallback(text, "refusal_or_answer");
+        String answer = reply.isEmpty() ? null : reply;
+        String content = VoicePolishRules.withoutEcho(context, text,
+            VoicePolishRules.withoutRepeatedEarlier(context, text, answer));
+        if (answer != null && content == null) return Result.fallback(text, "context_echo");
+        String accepted = VoicePolishRules.accept(text, content, level);
+        if (accepted != null) return Result.polished(accepted);
+        return Result.fallback(text, "unusable_output");
+    }
+
     /** The refusal guard: today's check, on the answer as {@link #polish} judges it (echo removed). */
-    private static boolean rejectsAnswer(@NonNull String text, @NonNull String context, @NonNull String answer) {
+    static boolean rejectsAnswer(@NonNull String text, @NonNull String context, @NonNull String answer) {
         String content = VoicePolishRules.withoutEcho(context, text,
             VoicePolishRules.withoutRepeatedEarlier(context, text, answer));
         return content != null && !content.trim().isEmpty() && VoicePolishRules.looksLikeRefusalOrAnswer(text, content);
