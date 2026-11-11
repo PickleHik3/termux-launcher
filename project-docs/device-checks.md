@@ -18,39 +18,17 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
-- **Quick switch with the built-in keyboard up (11-10, fix/home-gestures 6d26e6add).** The
-  keyboard now asks the back swipe for its two side strips only. Emulator: in the drawer with the
-  keyboard up, `dumpsys window | grep mSystemGestureExclusion` shows two 78 px strips, and a
-  sideways swipe starting on the keyboard's bottom pixel row (y 2337, inside the old exclusion)
-  now switches to the previous app (it did nothing before); the edge-column swipe on the keyboard
-  still types instead of going Back. The developer's own failure (a swipe on the pill itself) did
-  not reproduce on the emulator, whose keyboard rests 1 px into the handle band. Owed · pong:
-  drawer open, built-in keyboard up, swipe right along the pill: the previous app comes up; the
-  same with the keyboard up on the Workspace and in the palette; a swipe in from the screen side
-  over the keyboard's edge keys still types, not Back.
 - **A Display page with no display takes plain swipes (11-10, fix/home-gestures a1fac567a).**
-  Policy unit test only. Owed · emulator or pong: on the Display page with nothing running
-  ("No display is running"), a sideways swipe across the middle pages to the neighbour, both
-  ways; Start display, then the same swipe goes to the display (the page is left only by its
-  border); stop the display, and the plain swipe pages again.
-
-- **A category sort survives a second tap (11-10, #195).** Robolectric test only. Owed · pong or
-  emulator: Settings › Dock › Drawer › Category sorting: start a sort, tap the row again
-  mid-run: the progress notification stays, the run finishes and posts its result.
-- **Voice settings fixes (11-10, #232).** Unit tests for the picker only. Owed · pong: Settings ›
-  On-device AI › Voice input at font scale 1.5: the Speech engine segments read "Android system"
-  and "On-device" whole on one line; at 1.0 every two-segment pill looks as before. With Base GPU
-  in use, Runs on reads "Built for the GPU: uses less battery and CPU" (another model: the old
-  line). Model centre › Functions › Voice typing: Base GPU's line is its GPU advice, not "Made for
-  bigger phones". Installed › KittenTTS ⋯ › Voice settings opens Read aloud.
-- **Live dock reorder and drawer-to-dock pins (11-10, feat/dock-live-reorder-155, #155).** The
-  emulator saw a dock app lifted and held: the row parted and the drop landed in the slot; a rest
-  on an icon swelled it and made a folder. Owed · emulator or pong: the same in Floating and in
-  Docked, and with the in-app keyboard up (the row parts by whole columns, the still tiles keep
-  theirs); on a full page an app carried in from Home slides the page's last icon off and it is
-  the next page's first after the drop; an app carried out of the drawer past its top edge and
-  let go over the row is pinned at that slot and Home gets nothing; a drag that leaves the row
-  closes the gap, and a cancel leaves no icon offset, faded or enlarged.
+  FAILED on pong 11-11: swiping onto the Display page started the display by itself, and after
+  the developer stopped it the page could not be left by a plain swipe. Being fixed; the check
+  stays owed: on the Display page with nothing running, a sideways swipe pages to the neighbour
+  both ways, arriving does not start anything; Start display, then the swipe goes to the display;
+  stop it, and the plain swipe pages again.
+- **Live dock reorder and drawer-to-dock pins (11-10, feat/dock-live-reorder-155, #155).**
+  Pong 11-11: reorder in the dock works; the developer found the part too slow (about a second),
+  the pick-up needing an exactly sideways move, the edge page turn too quick, no way to turn the
+  page with a second finger, and a drawer pick-up that neither closes the drawer nor lands on Home
+  or the dock. Being reworked; the device check is re-owed with the rework.
 - **Card looks survive a relaunch and a kill mid-edit (11-10, fix/card-looks-session).** Unit tests
   only. Owed · emulator: in the Appearance editor take a card on Custom to a Look, change the theme
   (the editor relaunches), then Undo: the card is back on its Custom with the values from before
