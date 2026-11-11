@@ -37,6 +37,11 @@ model's state: missing, downloading, on the phone, loading, loaded, remote ready
   models change, and it tells its listeners. Screens keep no caches of their own.
 - It works out which model serves a Feature through `TaiFunctionModels.resolve`. When a request
   names no model, the fallback is request handling and belongs to Feature request.
+- When Automatic's tier rule picks nothing for a Feature but a chat model is on the phone, Automatic
+  uses an installed one (the smallest that fits). Before, the "Default model" row said "Not set"
+  on a low-tier phone while requests used the installed model anyway. Now the row, the Assistant,
+  `tai models` and the endpoint give one answer. A model that fails its RAM preflight still fails
+  (decided 2026-11-11, after an emulator check).
 - The settings label "Default assistant model" becomes **Default model**. The preference key
   `tai_role_default_assistant` stays.
 
