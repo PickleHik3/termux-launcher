@@ -65,4 +65,18 @@ public final class LauncherCategorySortChoice {
         boolean advises = tier1 || (model != null && ramAdvisesAgainst.test(model));
         return new LauncherCategorySortChoice(model, explicit, advises);
     }
+
+    /** The accelerator an explicit run uses: the stored pick when there is one, else Automatic's. */
+    @NonNull
+    public static String accelerator(@Nullable String storedPick, @NonNull String automatic) {
+        return storedPick == null || storedPick.trim().isEmpty() ? automatic : storedPick.trim();
+    }
+
+    /**
+     * The on-device row can run: the model is installed and nothing blocks it for good. A RAM warning
+     * alone never disables it (the row says it is slow here instead).
+     */
+    public static boolean onDeviceRunnable(boolean modelInstalled, boolean hardBlock, boolean ramWarning) {
+        return modelInstalled && !hardBlock;
+    }
 }

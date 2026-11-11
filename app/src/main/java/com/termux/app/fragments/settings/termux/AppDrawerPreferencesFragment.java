@@ -175,7 +175,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
                 Context current = getContext();
                 if (current == null) return;
                 CategorySortDialogs.showChooser(current, preview,
-                    () -> startSort(current, preview.onDevicePlan),
+                    () -> startSort(current, preview.onDevicePlan, true),
                     // The old model choice is an entry to the function's picker sheet.
                     () -> TaiFunctionPickerSheet.show(this, TaiFunction.APP_CATEGORIES),
                     () -> updateRefreshSummary(current));
@@ -191,18 +191,20 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
     private void startRefresh(@NonNull Context context) {
         appListExecutor.execute(() -> {
             LauncherCategorySortPlan plan = CategorySortDialogs.resolvePlan(context);
-            boolean runnable = plan.hasModel() && CategorySortDialogs.unavailableReason(context, plan) == null;
+            // A model the RAM advises against waits for the chooser: only a tap there may load it.
+            boolean runnable = plan.hasModel() && CategorySortDialogs.unavailableReason(context, plan) == null
+                && (plan.remote || !CategorySortDialogs.ramAdvisesAgainst(context, plan.model));
             handler.post(() -> {
                 if (!isAdded()) return;
                 Context current = getContext();
                 if (current == null) return;
-                if (runnable) startSort(current, plan);
+                if (runnable) startSort(current, plan, false);
                 else openChooser(current);
             });
         });
     }
 
-    private void startSort(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
+    private void startSort(@NonNull Context context, @NonNull LauncherCategorySortPlan plan, boolean userAsked) {
         if (!plan.hasModel()) {
             openChooser(context);
             return;
@@ -210,6 +212,10 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         Intent intent = new Intent(context, LauncherCategorySortService.class);
         intent.setAction(LauncherCategorySortService.ACTION_SORT);
         intent.putExtra(LauncherCategorySortService.EXTRA_MODEL_ID, plan.model);
+        if (userAsked && !plan.remote) {
+            intent.putExtra(LauncherCategorySortService.EXTRA_USER_ASKED, true);
+            intent.putExtra(LauncherCategorySortService.EXTRA_ACCELERATOR, plan.accelerator);
+        }
         ContextCompat.startForegroundService(context, intent);
         updateRefreshSummary(context);
         handler.removeCallbacks(refreshRunnable);

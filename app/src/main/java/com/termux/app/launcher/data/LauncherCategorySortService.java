@@ -59,6 +59,13 @@ public final class LauncherCategorySortService extends Service {
     public static final String ACTION_SORT = "com.termux.app.launcher.action.SORT_CATEGORIES";
     /** The local model id, or {@code remote/<id>} for the remote provider: app sorting's plan. */
     public static final String EXTRA_MODEL_ID = "model_id";
+    /**
+     * The user tapped the chooser's on-device row: the model loads as {@code tai load} does (no
+     * feature named), so the automatic-load RAM preflight does not refuse it. Absent for a refresh.
+     */
+    public static final String EXTRA_USER_ASKED = "user_asked";
+    /** {@code cpu} or {@code gpu} for an explicit load; absent lets the settings decide. */
+    public static final String EXTRA_ACCELERATOR = "accelerator";
 
     private static final String CHANNEL_ID = "termux_launcher_category_sort";
     /**
@@ -180,9 +187,11 @@ public final class LauncherCategorySortService extends Service {
 
         update(s -> Snapshot.IDLE.withRunning(true));
         String modelId = intent.getStringExtra(EXTRA_MODEL_ID);
+        boolean userAsked = intent.getBooleanExtra(EXTRA_USER_ASKED, false);
+        String accelerator = intent.getStringExtra(EXTRA_ACCELERATOR);
         executor.execute(() -> {
             try {
-                runSort(modelId);
+                runSort(modelId, userAsked, accelerator);
             } catch (Throwable t) {
                 String error = t.getMessage() == null ? t.toString() : t.getMessage();
                 update(s -> s.withErrorMessage(error).withOutcome(
@@ -215,7 +224,7 @@ public final class LauncherCategorySortService extends Service {
         super.onDestroy();
     }
 
-    private void runSort(@Nullable String modelId) throws Exception {
+    private void runSort(@Nullable String modelId, boolean userAsked, @Nullable String accelerator) throws Exception {
         LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(this);
         List<LauncherAppEntry> catalogue = provider.getAllAppsBlocking();
         // Excludes x11:linux (every Linux app's shared package) as well as work/private twins; see
@@ -260,7 +269,7 @@ public final class LauncherCategorySortService extends Service {
         // phase the user can see.
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_LOADING_MODEL));
         updateProgressNotification(true);
-        String loadFailure = loadModel(manager, modelId);
+        String loadFailure = loadModel(manager, modelId, userAsked, accelerator);
         if (loadFailure != null) {
             // Every app would retry the same load on its own and fail the same way; under memory
             // pressure that is a reload per app. One clear stop instead.
@@ -396,6 +405,24 @@ public final class LauncherCategorySortService extends Service {
     }
 
     /**
+     * The load request. A feature's load is automatic and the RAM preflight can refuse it; a load
+     * naming no feature is the user asking ({@code TaiManager.loadModelHere}), which is what a tap on
+     * the chooser's on-device row is, so then the function is left out and the accelerator named.
+     */
+    @NonNull
+    static JSONObject loadRequest(@NonNull String modelId, boolean userAsked, @Nullable String accelerator)
+            throws org.json.JSONException {
+        JSONObject request = new JSONObject();
+        request.put("model", modelId);
+        if (!userAsked) {
+            request.put(TaiCallerRequests.FUNCTION, TaiFunction.APP_CATEGORIES.id());
+        } else if (accelerator != null && !accelerator.trim().isEmpty()) {
+            request.put("accelerator", accelerator.trim());
+        }
+        return request;
+    }
+
+    /**
      * Loads the model up front, unless the model is the remote provider's (nothing to load, and the
      * runtime process stays asleep). The load names the feature, so it follows app sorting's plan
      * (its accelerator, speculative decoding and 1024 window), and a resident model whose window
@@ -406,13 +433,12 @@ public final class LauncherCategorySortService extends Service {
      *     memory, a missing file), so a failure here ends the run.
      */
     @Nullable
-    private String loadModel(@NonNull TaiManager manager, @Nullable String modelId) {
+    private String loadModel(@NonNull TaiManager manager, @Nullable String modelId, boolean userAsked,
+                             @Nullable String accelerator) {
         if (modelId == null || modelId.trim().isEmpty()) return null;
         if (TaiCallerRequests.isRemoteModel(modelId)) return null;
         try {
-            JSONObject request = new JSONObject();
-            request.put("model", modelId);
-            request.put(TaiCallerRequests.FUNCTION, TaiFunction.APP_CATEGORIES.id());
+            JSONObject request = loadRequest(modelId, userAsked, accelerator);
             JSONObject result = manager.loadModel(request.toString());
             if (result.optBoolean("ok", false)) return null;
             String message = result.optString("message", "").trim();
