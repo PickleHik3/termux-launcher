@@ -181,10 +181,10 @@ final class KeyRouteTable {
         boolean modes = state.modes();
         for (Key k : KEYS) {
             if (modes && !k.sensitive) continue;
-            for (Mod m : HARDWARE_MODS) rows.add(hardware(k, m));
+            for (Mod m : HARDWARE_MODS) rows.add(hardware(k, m, state));
             if (isRepeatKey(k)) for (Mod m : SMALL_MODS) rows.add(repeat(k, m));
             if (isReleaseKey(k)) for (Mod m : SMALL_MODS) rows.add(release(k, m));
-            if (isExtraKey(k)) for (Mod m : EXTRA_KEY_MODS) rows.add(extraKey(k, m));
+            if (isExtraKey(k)) for (Mod m : EXTRA_KEY_MODS) rows.add(extraKey(k, m, state));
             if (isScrollKey(k)) for (Mod m : EXTRA_KEY_MODS) rows.add(handleKeyCode(k, m));
         }
         if (!modes) {
@@ -264,7 +264,7 @@ final class KeyRouteTable {
         return (k.forcedMeta & KeyEvent.META_CAPS_LOCK_ON) != 0 ? GhosttyKeys.MOD_CAPS_LOCK : 0;
     }
 
-    private static Row hardware(Key k, Mod m) {
+    private static Row hardware(Key k, Mod m, State state) {
         int meta = m.meta | k.forcedMeta;
         KeyEvent event = hwEvent(KeyEvent.ACTION_DOWN, k, meta, 0);
         boolean shiftHeld = (meta & SHIFT_META) != 0;
@@ -274,8 +274,10 @@ final class KeyRouteTable {
             rig.view.onKeyDown(k.code, hwEvent(KeyEvent.ACTION_DOWN, k, meta, 0));
             rig.sticky(false, false, false);
         };
+        // Shift+Page Up scrolls the scrollback instead of typing, unless the program asked for kitty keys.
+        boolean scrolls = k.name.equals("PageUp") && shiftHeld && state.kitty == 0;
         return new Row("hardware key", k.name, m.name, step,
-            list(expectedFromEvent(event, k, GhosttyKeys.ACTION_PRESS, mods, shiftHeld)));
+            scrolls ? new ArrayList<>() : list(expectedFromEvent(event, k, GhosttyKeys.ACTION_PRESS, mods, shiftHeld)));
     }
 
     private static Row repeat(Key k, Mod m) {
@@ -308,11 +310,12 @@ final class KeyRouteTable {
         return new KeyEvent(0, 0, KeyEvent.ACTION_UP, k.code, 0, meta);
     }
 
-    private static Row extraKey(Key k, Mod m) {
+    private static Row extraKey(Key k, Mod m, State state) {
         KeyEvent event = extraEvent(k, m.meta);
         Step step = rig -> rig.view.onKeyDown(k.code, extraEvent(k, m.meta));
+        boolean scrolls = k.name.equals("PageUp") && m.shift() && state.kitty == 0;
         return new Row("extra-keys button", k.name, m.name, step,
-            list(expectedFromEvent(event, k, GhosttyKeys.ACTION_PRESS, m.ghostty, m.shift())));
+            scrolls ? new ArrayList<>() : list(expectedFromEvent(event, k, GhosttyKeys.ACTION_PRESS, m.ghostty, m.shift())));
     }
 
     // ---- alternate scroll and other handleKeyCode callers --------------------------------------
