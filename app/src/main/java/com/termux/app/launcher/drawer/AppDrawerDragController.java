@@ -122,9 +122,16 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         boolean started = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
             ? source.startDragAndDrop(clip, shadow, drop, 0)
             : source.startDrag(clip, shadow, drop, 0);
-        if (!started) cleanup();
-        else host.onDragStateChanged(true);
-        return started;
+        if (!started) {
+            cleanup();
+            return false;
+        }
+        host.onDragStateChanged(true);
+        // Launcher3's way: an app picked up goes to Home at once, which closes the drawer and
+        // shows Home and its dock under the finger. Where Home cannot take it, the drag stays the
+        // drawer's (its folders), and leaving through the top edge tries again.
+        handOverToHome();
+        return true;
     }
 
     /**
