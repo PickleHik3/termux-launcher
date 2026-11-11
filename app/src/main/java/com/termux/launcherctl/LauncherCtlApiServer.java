@@ -12,6 +12,7 @@ import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
 import com.termux.ai.TaiEventLog;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiSpeech;
 import com.termux.ai.TaiSettings;
 import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
@@ -780,11 +781,11 @@ public class LauncherCtlApiServer {
                 return audioTranscriptions(context, request);
             } else if ("POST".equals(request.method) && "/v1/audio/speech".equals(request.path)) {
                 String body = request.body == null || request.body.trim().isEmpty() ? "{}" : request.body;
-                return audioSpeech(context, body, TaiManager.apiSpeechCharacterLimit());
+                return audioSpeech(context, body, TaiSpeech.apiSpeechCharacterLimit());
             } else if ("POST".equals(request.method) && "/v1/ai/speak".equals(request.path)) {
                 return aiSpeak(context, request);
             } else if ("POST".equals(request.method) && "/v1/ai/speak/stop".equals(request.path)) {
-                return maybeTextResponse(request, "speak-stop", TaiManager.getInstance(context).stopSpeaking());
+                return maybeTextResponse(request, "speak-stop", TaiManager.getInstance(context).speech().stopSpeaking());
             } else if ("POST".equals(request.method) && "/v1/ai/images/generations".equals(request.path)) {
                 return imageGenerations(context, request);
             } else if ("POST".equals(request.method) && "/v1/ai/images/cancel".equals(request.path)) {
@@ -844,18 +845,18 @@ public class LauncherCtlApiServer {
      */
     private HttpResponse audioSpeech(Context context, String body, int maxChars) throws JSONException {
         TaiManager manager = TaiManager.getInstance(context);
-        JSONObject refusal = manager.checkSpeechRequest(body, maxChars);
+        JSONObject refusal = manager.speech().checkSpeechRequest(body, maxChars);
         if (refusal != null) return jsonResponse(refusal);
         Map<String, String> headers = new HashMap<>();
         headers.put("Cache-Control", "no-cache");
         headers.put("X-Tai-Sample-Rate", "24000");
-        if ("pcm".equals(TaiManager.speechResponseFormat(body))) {
-            JSONObject warm = manager.ttsWarm(body);
+        if ("pcm".equals(TaiSpeech.speechResponseFormat(body))) {
+            JSONObject warm = manager.speech().ttsWarm(body);
             if (isSpeechFailure(warm)) return jsonResponse(speechFailure(warm));
             headers.put("X-Accel-Buffering", "no");
             return new HttpResponse(200, "audio/pcm", output -> {
                 try {
-                    manager.synthesizeSpeech(body, maxChars, (pcm, sampleRate) -> {
+                    manager.speech().synthesizeSpeech(body, maxChars, (pcm, sampleRate) -> {
                         output.write(pcm);
                         output.flush();
                     });
@@ -875,7 +876,7 @@ public class LauncherCtlApiServer {
         final int[] rate = {24000};
         JSONObject result;
         try (FileOutputStream sink = new FileOutputStream(collected)) {
-            result = manager.synthesizeSpeech(body, maxChars, (bytes, sampleRate) -> {
+            result = manager.speech().synthesizeSpeech(body, maxChars, (bytes, sampleRate) -> {
                 rate[0] = sampleRate;
                 sink.write(bytes);
             });
@@ -891,10 +892,10 @@ public class LauncherCtlApiServer {
             return jsonResponse(speechFailure(result));
         }
         long dataBytes = collected.length();
-        headers.put("Content-Length", Long.toString(TaiManager.wavHeader(0, rate[0]).length + dataBytes));
+        headers.put("Content-Length", Long.toString(TaiSpeech.wavHeader(0, rate[0]).length + dataBytes));
         return new HttpResponse(200, "audio/wav", output -> {
             try (InputStream in = new java.io.FileInputStream(collected)) {
-                output.write(TaiManager.wavHeader((int) Math.min(Integer.MAX_VALUE, dataBytes), rate[0]));
+                output.write(TaiSpeech.wavHeader((int) Math.min(Integer.MAX_VALUE, dataBytes), rate[0]));
                 byte[] buffer = new byte[64 * 1024];
                 int read;
                 while ((read = in.read(buffer)) != -1) output.write(buffer, 0, read);
@@ -979,9 +980,9 @@ public class LauncherCtlApiServer {
     private HttpResponse aiSpeak(Context context, HttpRequest request) throws JSONException {
         JSONObject body = speakBody(request);
         if (body.has("response_format")) {
-            return audioSpeech(context, body.toString(), TaiManager.speakCharacterLimit());
+            return audioSpeech(context, body.toString(), TaiSpeech.speakCharacterLimit());
         }
-        JSONObject result = TaiManager.getInstance(context).speak(body.toString());
+        JSONObject result = TaiManager.getInstance(context).speech().speak(body.toString());
         if (isSpeechFailure(result) && "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
             JSONObject nested = result.optJSONObject("error");
             if (nested != null) {
@@ -1078,7 +1079,7 @@ public class LauncherCtlApiServer {
         }
         JSONObject result;
         try {
-            result = TaiManager.getInstance(context).transcribe(taiRequest.toString());
+            result = TaiManager.getInstance(context).speech().transcribe(taiRequest.toString());
         } finally {
             // The runtime process deletes the upload once it has read it; this covers every early exit.
             deleteQuietly(upload);

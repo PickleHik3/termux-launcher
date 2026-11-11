@@ -364,7 +364,7 @@ public final class TaiFeatureCheckRunner {
         } else if (run.feature == TaiFunction.EMBEDDINGS) {
             result = manager.embeddings(featureBody(run).put("input", new JSONArray().put("warm up")).toString());
         } else {
-            result = manager.ttsWarm(featureBody(run).toString());
+            result = manager.speech().ttsWarm(featureBody(run).toString());
         }
         m.loadMs = (System.nanoTime() - started) / 1_000_000L;
         String code = errorCode(result);
@@ -560,7 +560,7 @@ public final class TaiFeatureCheckRunner {
         AtomicLong firstSound = new AtomicLong(-1L);
         JSONObject result;
         try {
-            result = manager.synthesizeSpeech(featureBody(run).put("input", READ_SENTENCE).toString(),
+            result = manager.speech().synthesizeSpeech(featureBody(run).put("input", READ_SENTENCE).toString(),
                 READ_SENTENCE.length(), (pcm, sampleRate) -> {
                     if (pcm.length > 0) firstSound.compareAndSet(-1L, (System.nanoTime() - started) / 1_000_000L);
                 });

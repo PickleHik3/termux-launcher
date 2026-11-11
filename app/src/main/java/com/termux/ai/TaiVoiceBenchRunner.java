@@ -19,7 +19,7 @@ import java.util.UUID;
 
 /**
  * Runs the voice benchmark ({@link TaiVoiceBench}) in the app process, through the same speech
- * requests voice input sends ({@link TaiManager#sttWarm}, {@link TaiManager#transcribe}), each
+ * requests voice input sends ({@link TaiSpeech#sttWarm}, {@link TaiSpeech#transcribe}), each
  * naming the processor it runs on. Its events have the bench harness's shape, so the Run screen,
  * Stop, "Skip the wait" and the hold on leaving all work unchanged; the bench's guard
  * ({@link TaiBenchConditionsGuard}) keeps the phone safe between steps (battery, heat, the
@@ -504,7 +504,7 @@ public final class TaiVoiceBenchRunner {
         @NonNull
         @Override
         public JSONObject loadCold(@NonNull String modelId, @NonNull String accelerator) throws JSONException {
-            return manager.sttWarm(new JSONObject().put("model", modelId).put("accelerator", accelerator)
+            return manager.speech().sttWarm(new JSONObject().put("model", modelId).put("accelerator", accelerator)
                 .put(TaiManager.STT_COLD_LOAD, true).toString());
         }
 
@@ -533,7 +533,7 @@ public final class TaiVoiceBenchRunner {
             }
             try {
                 // English clips: the language is named so a multilingual graph does not spend time detecting it.
-                return manager.transcribe(new JSONObject().put("model", modelId).put("accelerator", accelerator)
+                return manager.speech().transcribe(new JSONObject().put("model", modelId).put("accelerator", accelerator)
                     .put("file", file.getAbsolutePath()).put("language", "en").toString());
             } finally {
                 // The runtime deletes it once read; a request that never reached it leaves it here.

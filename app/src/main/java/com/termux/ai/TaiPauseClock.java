@@ -4,7 +4,7 @@ package com.termux.ai;
  * How long something has spent paused, so a deadline can leave the pauses out. Speech the user
  * paused (Read aloud's Pause, or a notification taking the audio for a moment) is still a request
  * in flight, and the waits on it — {@link TaiTtsPlayer#awaitDone} in the runtime, the IPC wait on
- * {@link TaiManager#speak} in the app — would otherwise fail it after a long enough pause.
+ * {@link TaiSpeech#speak} in the app — would otherwise fail it after a long enough pause.
  *
  * <p>A waiter notes {@link #totalPausedMs} when it starts and moves its deadline out by however
  * much the total has grown since; the total includes a pause still under way, so a deadline keeps
