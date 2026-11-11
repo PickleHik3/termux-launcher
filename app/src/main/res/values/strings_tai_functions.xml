@@ -74,6 +74,8 @@
     <string name="tai_fn_plan_offer">Use %1$s: %2$s× faster on this phone</string>
     <string name="tai_fn_gpu_wrong">Answers look wrong? Use the CPU</string>
     <string name="tai_fn_gpu_retry">Try the GPU again</string>
+    <string name="tai_fn_gpu_check">Check the GPU</string>
+    <string name="tai_fn_gpu_check_summary">It may run models 3 to 4 times faster than the CPU. The check takes a few minutes.</string>
     <string name="tai_fn_get_action">Get</string>
     <string name="tai_fn_get_starting">Starting…</string>
     <string name="tai_fn_get_started">Downloading</string>
