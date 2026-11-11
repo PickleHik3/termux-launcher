@@ -35,6 +35,7 @@ public class ModelAvailabilityTest {
         TaiFunctionModels.Resolution resolution = local(null);
         TaiDownloadHub.Snapshot download;
         Runnable onEvent;
+        Runnable onProgress;
         int stops;
 
         @NonNull @Override public Map<String, TaiModelSpec> readModels() { reads++; return new LinkedHashMap<>(models); }
@@ -44,7 +45,7 @@ public class ModelAvailabilityTest {
         @Override public boolean remoteConfigured() { return remoteConfigured; }
         @NonNull @Override public String defaultModelId() { return defaultId; }
         @Nullable @Override public TaiDownloadHub.Snapshot download(@NonNull String id) { return download; }
-        @NonNull @Override public Runnable watch(@NonNull Runnable e) { onEvent = e; return () -> { stops++; onEvent = null; }; }
+        @NonNull @Override public Runnable watch(@NonNull Runnable e, @NonNull Runnable p) { onEvent = e; onProgress = p; return () -> { stops++; onEvent = null; }; }
     }
 
     private FakeBackend backend;
@@ -252,6 +253,27 @@ public class ModelAvailabilityTest {
         backend.onEvent.run();   // coalesced while one is waiting
         runPosted();
         assertEquals(2, heard);
+    }
+
+    @Test
+    public void progressTicksReachListenersAtMostOncePerSecondButChangesAlwaysDo() {
+        availability.addListener(() -> heard++);
+        backend.onProgress.run();
+        runPosted();
+        assertEquals(1, heard);
+        now += 200;
+        backend.onProgress.run();
+        now += 200;
+        backend.onProgress.run();
+        runPosted();
+        assertEquals("ticks inside a second are dropped", 1, heard);
+        backend.onEvent.run();
+        runPosted();
+        assertEquals("a state change is immediate", 2, heard);
+        now += ModelAvailability.PROGRESS_INTERVAL_MS;
+        backend.onProgress.run();
+        runPosted();
+        assertEquals(3, heard);
     }
 
     @Test

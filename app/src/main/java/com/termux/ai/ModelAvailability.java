@@ -91,12 +91,17 @@ public final class ModelAvailability {
         /** The newest download record for the model, or null. */
         @Nullable TaiDownloadHub.Snapshot download(@NonNull String modelId);
 
-        /** Starts calling {@code onEvent} on download events and presence broadcasts; returns the stop. */
-        @NonNull Runnable watch(@NonNull Runnable onEvent);
+        /**
+         * Starts calling {@code onChange} when a download starts, finishes, fails or is cancelled and on
+         * presence broadcasts, and {@code onProgress} for a download's byte ticks; returns the stop.
+         */
+        @NonNull Runnable watch(@NonNull Runnable onChange, @NonNull Runnable onProgress);
     }
 
     /** The list is re-read after this long even without a notification. */
     static final long BACKSTOP_MS = 5_000L;
+    /** Listeners hear a download's progress ticks no more often than this. */
+    static final long PROGRESS_INTERVAL_MS = 1_000L;
 
     private static volatile ModelAvailability instance;
 
@@ -111,6 +116,7 @@ public final class ModelAvailability {
     private long generation;
     @Nullable private Runnable stopWatching;
     private boolean dispatchPending;
+    private long lastProgressAt = Long.MIN_VALUE;
     private final Runnable dispatch = this::dispatchNow;
 
     ModelAvailability(@NonNull Backend backend, @NonNull Executor mainThread,
@@ -283,7 +289,7 @@ public final class ModelAvailability {
     public void addListener(@NonNull Listener listener) {
         synchronized (lock) {
             if (!listeners.addIfAbsent(listener)) return;
-            if (stopWatching == null) stopWatching = backend.watch(this::scheduleDispatch);
+            if (stopWatching == null) stopWatching = backend.watch(this::scheduleDispatch, this::progressTick);
         }
     }
 
@@ -302,6 +308,16 @@ public final class ModelAvailability {
             stopWatching = null;
         }
         if (stop != null) stop.run();
+    }
+
+    /** Progress-only events reach the listeners at most once a second; screens that draw a bar use the hub. */
+    private void progressTick() {
+        long now = clock.getAsLong();
+        synchronized (lock) {
+            if (lastProgressAt != Long.MIN_VALUE && now - lastProgressAt < PROGRESS_INTERVAL_MS) return;
+            lastProgressAt = now;
+        }
+        scheduleDispatch();
     }
 
     private void scheduleDispatch() {
@@ -376,9 +392,20 @@ public final class ModelAvailability {
 
             @NonNull
             @Override
-            public Runnable watch(@NonNull Runnable onEvent) {
+            public Runnable watch(@NonNull Runnable onEvent, @NonNull Runnable onProgress) {
                 TaiDownloadHub hub = TaiDownloadHub.get(app);
-                TaiDownloadHub.Listener downloads = snapshots -> onEvent.run();
+                final String[] lastStatuses = {null};
+                TaiDownloadHub.Listener downloads = snapshots -> {
+                    StringBuilder statuses = new StringBuilder();
+                    for (TaiDownloadHub.Snapshot item : snapshots) {
+                        statuses.append(item.id).append(':').append(item.status).append(';');
+                    }
+                    String now = statuses.toString();
+                    boolean moved = !now.equals(lastStatuses[0]);
+                    lastStatuses[0] = now;
+                    if (moved) onEvent.run();
+                    else onProgress.run();
+                };
                 hub.addListener(downloads);
                 BroadcastReceiver receiver = new BroadcastReceiver() {
                     @Override
