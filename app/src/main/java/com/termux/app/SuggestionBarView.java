@@ -6615,9 +6615,10 @@ public final class SuggestionBarView extends GridLayout
                 && !drawerPickup.claimContext(pressTarget, drawerPickupEntry)) return true;
             showContextPopup.run();
             Haptics.tick(SuggestionBarView.this, android.view.HapticFeedbackConstants.LONG_PRESS);
-            // The finger now slides onto the menu or picks the icon up; a rail's scrolling host
-            // must not take that slide for a scroll.
-            ViewParent host = getParent();
+            // The finger now slides onto the menu or picks the icon up; no parent of the icon
+            // (a rail's scrolling host, the drawer's list and its pull-to-close) may take that
+            // slide for its own. Asked from the icon's own parent, so the whole chain hears it.
+            ViewParent host = pressTarget.getParent();
             if (host != null) host.requestDisallowInterceptTouchEvent(true);
             LongPressPickupState state = activeLongPressPickupState;
             if (state == null || state.sourceView != pressTarget) {
