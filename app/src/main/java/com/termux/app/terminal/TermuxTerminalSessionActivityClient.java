@@ -645,6 +645,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (mClipboardConsent == null) {
             mClipboardConsent = new ClipboardReadConsent(new ClipboardReadConsent.Ui() {
                 private boolean mSheetOpen;
+                /** The card this policy showed; closing closes it and no other. */
+                @Nullable private android.view.View mSheetCard;
 
                 @Override public boolean isReadSettingOn() {
                     com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
@@ -688,16 +690,20 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     mSheetOpen = true;
                     boolean shown = sheet.show(title, body, false, null, () -> {
                         mSheetOpen = false;
+                        mSheetCard = null;
                         callback.onDismissed();
                     });
                     if (!shown) mSheetOpen = false;
+                    else if (mSheetOpen) mSheetCard = sheet.topCard();
                     return shown;
                 }
 
                 @Override public void closeSheet() {
                     if (!mSheetOpen) return;
                     mSheetOpen = false;
-                    mHost.sheetController().dismiss();
+                    android.view.View card = mSheetCard;
+                    mSheetCard = null;
+                    mHost.sheetController().dismiss(card);
                 }
             }, new ClipboardReadGrants(
                 com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(mContext, false)));
