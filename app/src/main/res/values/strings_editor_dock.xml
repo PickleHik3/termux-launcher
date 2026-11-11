@@ -4,6 +4,7 @@
     <string name="editor_dock_row_style">Style</string>
     <string name="editor_dock_row_bars">Bars</string>
     <string name="editor_dock_row_type">Dock type</string>
+    <string name="editor_row_all_pages">All pages</string>
     <string name="editor_dock_row_options">Show/hide</string>
     <string name="editor_dock_appearance">Appearance</string>
 
