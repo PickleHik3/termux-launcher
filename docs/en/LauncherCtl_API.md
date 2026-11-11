@@ -853,7 +853,7 @@ A load that Android closes the runtime for (a `tai_runtime_crashed` error with `
  "compare": false, "eagle": false, "force": false, "stream": true}
 ```
 
-- `models` — an array of ids (or a single `model`); omitted, the default assistant model. Each must be an installed chat model (`404 model_not_found`, `404 model_file_missing`, `400 capability_not_supported`).
+- `models` — an array of ids (or a single `model`); omitted, the Default model. Each must be an installed chat model (`404 model_not_found`, `404 model_file_missing`, `400 capability_not_supported`).
 - `preset` — `quick` (each test once) or `standard` (twice, the median kept; the default). Anything else is `400 bad_preset`.
 - `processors` — `cpu`, `gpu` or both; omitted, the processor an automatic load would pick.
 - `compare` — run both processors where the model and phone support them, each as its own entry.

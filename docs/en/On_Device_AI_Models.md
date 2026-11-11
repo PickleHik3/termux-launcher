@@ -144,7 +144,7 @@ embeddinggemma-2-text-270m
 embeddinggemma-300m
 ```
 
-An imported model keeps the name you gave it. `gemma-4-e2b-it-litert-lm` is the default assistant
+An imported model keeps the name you gave it. `gemma-4-e2b-it-litert-lm` is the Default model
 on Tier 2 phones and `gemma-4-e4b-it-litert-lm` on Tier 3.
 
 ## How loading works
@@ -227,7 +227,7 @@ requests are refused with `benchmark_running`; speech is not blocked but will di
 From a shell:
 
 ```sh
-tai benchmark                                    # the default assistant, standard preset
+tai benchmark                                    # the Default model, standard preset
 tai benchmark gemma-4-e2b-it-litert-lm --preset quick
 tai benchmark MODEL --compare                    # CPU and GPU, each as its own entry
 tai benchmark --results                          # the leaderboard
