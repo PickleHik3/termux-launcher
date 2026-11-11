@@ -41,8 +41,7 @@ android {
     // As in terminal-emulator: a unit test that builds a TerminalBuffer would otherwise die on
     // SystemClock, which the buffer only reads to time its bitmap sweeps.
     testOptions {
-        unitTests.returnDefaultValues = true
-    }
+        unitTests.returnDefaultValues = true    }
 
     publishing {
         multipleVariants {

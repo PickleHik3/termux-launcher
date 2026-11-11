@@ -4867,6 +4867,10 @@ public final class TerminalView extends View {
     }
 
     private boolean hideTextSelectionCursors() {
+        // Nothing is selected until a controller exists; building one only to hear "no" would
+        // load the selection handles' drawables on the first keystroke.
+        if (mTextSelectionCursorController == null)
+            return false;
         return getTextSelectionCursorController().hide();
     }
 
