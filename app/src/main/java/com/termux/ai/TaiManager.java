@@ -1426,7 +1426,7 @@ public final class TaiManager {
             // the dice, and the check questions have one right answer. One-shot: every prompt gets
             // a fresh conversation, or LiteRT-LM would answer each one with the earlier phases'
             // passages and replies still in context (a check answered as the previous question).
-            return localRuntime().chat(spec(entry).id, TaiChatRequest.oneShot(TaiBenchSuite.SYSTEM_PROMPT, userPrompt),
+            return localRuntime().generate(spec(entry).id, TaiChatRequest.oneShot(TaiBenchSuite.SYSTEM_PROMPT, userPrompt),
                 options(entry, maxTokens, true), callback);
         }
 
@@ -1800,7 +1800,7 @@ public final class TaiManager {
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) return openAiError(loadError);
 
-        JSONObject chat = localRuntime().chat(modelId, chatRequest.request, options);
+        JSONObject chat = TaiRuntime.generate(localRuntime(), modelId, chatRequest.request, options);
         if (!chat.optBoolean("ok", false)) {
             return openAiError(chat);
         }
@@ -1866,7 +1866,7 @@ public final class TaiManager {
         JSONObject loadError = ensureModelLoadedForGeneration(spec, options);
         if (loadError != null) return openAiError(loadError);
 
-        JSONObject completion = localRuntime().complete(modelId, prompt, options);
+        JSONObject completion = TaiRuntime.generate(localRuntime(), modelId, TaiChatRequest.completion(prompt), options);
         if (!completion.optBoolean("ok", false)) {
             return openAiError(completion);
         }
@@ -1970,7 +1970,7 @@ public final class TaiManager {
         AtomicReference<IOException> ioError = new AtomicReference<>();
         AtomicReference<Boolean> emittedToolCalls = new AtomicReference<>(false);
         OpenAiStopSequences.StreamMatcher stopMatcher = new OpenAiStopSequences.StreamMatcher(stopSequences);
-        JSONObject chat = localRuntime().chat(modelId, chatRequest.request, options, new TaiGenerationCallback() {
+        JSONObject chat = localRuntime().generate(modelId, chatRequest.request, options, new TaiGenerationCallback() {
             @Override
             public void onToken(@NonNull String text) {
                 if (text.isEmpty() || ioError.get() != null) return;
@@ -2101,7 +2101,7 @@ public final class TaiManager {
         long created = System.currentTimeMillis() / 1000L;
         AtomicReference<IOException> ioError = new AtomicReference<>();
         OpenAiStopSequences.StreamMatcher stopMatcher = new OpenAiStopSequences.StreamMatcher(stopSequences);
-        JSONObject completion = localRuntime().complete(modelId, prompt, options, new TaiGenerationCallback() {
+        JSONObject completion = localRuntime().generate(modelId, TaiChatRequest.completion(prompt), options, new TaiGenerationCallback() {
             @Override
             public void onToken(@NonNull String text) {
                 if (text.isEmpty() || ioError.get() != null) return;
@@ -3284,7 +3284,7 @@ public final class TaiManager {
         try {
             TaiRuntimeOptions canary = options.withGenerationOverrides(TaiGpuVerdict.CANARY_MAX_TOKENS, null, null, 0.0,
                 null, null, null, null, null, Boolean.FALSE, Boolean.FALSE);
-            JSONObject reply = localRuntime().chat(spec.id, "", TaiGpuVerdict.CANARY_PROMPT, canary);
+            JSONObject reply = TaiRuntime.generate(localRuntime(), spec.id, TaiChatRequest.simple("", TaiGpuVerdict.CANARY_PROMPT), canary);
             passed = reply.optBoolean("ok", false) && TaiGpuVerdict.canaryPasses(reply.optString("response", ""));
         } catch (JSONException | RuntimeException e) {
             passed = false;

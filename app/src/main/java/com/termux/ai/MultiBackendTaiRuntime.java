@@ -238,12 +238,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
 
     // Native generation is long-running. Do not hold any router lock while it runs, otherwise
     // cancel/unload cannot reach the active backend until generation has already finished.
-    @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).chat(id, system, user, options); }
-    @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).chat(id, system, user, options, callback); }
-    @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).chat(id, request, options); }
-    @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).chat(id, request, options, callback); }
-    @NonNull @Override public JSONObject complete(@NonNull String id, @NonNull String prompt, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).complete(id, prompt, options); }
-    @NonNull @Override public JSONObject complete(@NonNull String id, @NonNull String prompt, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).complete(id, prompt, options, callback); }
+    @NonNull @Override public JSONObject generate(@NonNull String id, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options, @Nullable TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).generate(id, request, options, callback); }
 
     @NonNull
     public JSONObject embed(@NonNull String modelId, @NonNull String input) throws JSONException {
@@ -276,11 +271,6 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     // Each embedding runtime serializes embed() and close() on its own monitor, so a running batch
     // finishes before unload() can close it. No router lock here: status and cancel never queue
     // behind an embedding batch.
-    @NonNull
-    public JSONObject embed(@NonNull TaiModelSpec model, @NonNull List<String> inputs, int dimensions) throws JSONException {
-        return embed(model, inputs, dimensions, LiteRtEmbeddingRuntime.INPUT_TYPE_DOCUMENT, null);
-    }
-
     /**
      * @param inputType {@code "query"} or {@code "document"}; the task prefix EmbeddingGemma expects
      *                  (dawn embedding brief item 1). Other embedding families ignore it.
