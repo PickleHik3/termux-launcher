@@ -942,55 +942,10 @@ public final class TaiManager {
         if (refusal != null) return refusal;
         if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
-        // A load that names its feature reuses its model when the runtime holds it with a window as large as
-        // the plan's. One that names none (tai load, the Model Centre's Load) still reloads, as it always did.
-        if (TaiCallerRequests.featureOf(request) != null && !request.optBoolean("clearCache", false)) {
-            JSONObject reused = reuseForFeature(spec, options);
-            if (reused != null) return reused;
-        }
-        // The reset hook (tai load --fresh, or clearCache on the load routes directly): thrown away
-        // before the load itself picks the fingerprinted directory, so the model always rebuilds
-        // its converted-weight cache from scratch instead of trusting whatever is on disk.
-        if (request.optBoolean("clearCache", false) && TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
-            MnnTaiRuntime.clearMmapCache(appContext, spec.id);
-        }
-        if (hasInjectedRuntimeOverride()) {
-            JSONObject result = localRuntime().load(spec, options);
-            return result;
-        }
-        // A resident model the load cannot replace keeps serving as it is, as a generation's own load
-        // treats it (ensureModelLoadedForGeneration): the caller gets it, reused, rather than a refusal
-        // that reads as no model at all. A fresh load (clearCache) asked for a rebuild and is refused.
-        boolean fresh = request.optBoolean("clearCache", false);
-        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
-        if (preflight.blocked) {
-            if (!fresh && localRuntime().isModelLoaded(spec.id)) return residentAsIs(spec);
-            // Only a refusal that says something about the accelerator belongs in its history. Free
-            // memory running short is a moment, a missing or unreadable file is the download not
-            // being done yet, and a known failure is the record itself: writing any of them down
-            // locked the GPU out for good (a load tried mid-download left "failed on gpu: Download
-            // or import this model" behind, and automatic loads were refused from then on).
-            if (TaiRuntimeHistory.isAcceleratorVerdict(preflight.errorCode)) {
-                TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
-                    preflight.effectiveAccelerator, preflight.message);
-            }
-            return preflight.blockingError(preflightStatusCode(preflight));
-        }
         // tai load and the Model Centre's Load name no feature: the user asking, which a memory stop's
         // cooldown does not hold back. A feature's load (dictation cleanup's warm-up) is automatic.
-        LoadDecision decision = decideLoad(spec, options, preflight, TaiCallerRequests.featureOf(request) == null);
-        if (decision.refusal != null) {
-            return !fresh && localRuntime().isModelLoaded(spec.id) ? residentAsIs(spec) : decision.refusal;
-        }
-        JSONObject result = loadWithCanary(spec, decision.options);
-        result.put("preflight", preflight.toJson());
-        decision.describe(result);
-        recordRuntimeResult(spec, preflight, result);
-        if (result.optBoolean("ok", false)) {
-            markLoadedAsking(spec, options);
-            markUsedByFeature(spec, options);
-        }
-        return result;
+        return makeResident(spec, options, true, request.optBoolean("clearCache", false),
+            TaiCallerRequests.featureOf(request) == null);
     }
 
     @NonNull
@@ -3370,40 +3325,84 @@ public final class TaiManager {
 
     @Nullable
     private JSONObject ensureModelLoadedForGeneration(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
-        String modelId = spec.id;
+        JSONObject result = makeResident(spec, options, false, false, false);
+        return result == null || result.optBoolean("ok", false) ? null : result;
+    }
+
+    /**
+     * The one decision on making a chat model resident, for an explicit load ({@code explicit}: tai load,
+     * the Model Centre, a feature's load route) and for a generation's own load. {@code fresh} is the
+     * reset hook (clearCache): the resident is rebuilt, never kept in place of a refusal.
+     * {@code userAsking} is a load no feature named, which a memory stop's cooldown does not hold back.
+     * <p>
+     * Answers as an explicit load does: the resident state marked {@code reused}, or the load's result,
+     * or a refusal. A generation ({@code !explicit}) gets {@code null} where the resident serves or kept
+     * serving, and otherwise the same result; its caller reads {@code ok}. The two differ on purpose in
+     * four places: a generation reuses a resident whenever it serves (a load only for a named feature
+     * and not fresh); only a generation obeys the auto-load setting; the preflight is asked for a
+     * generation or a load; and only an explicit load writes an accelerator refusal into the history.
+     */
+    @Nullable
+    private JSONObject makeResident(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options,
+                                    boolean explicit, boolean fresh, boolean userAsking) throws JSONException {
         // Resident: used as it is, unless a feature asks for a larger window than it was loaded with
         // (decision 5) - then it reloads once at the feature's window, and stays if that cannot happen.
-        boolean resident = localRuntime().isModelLoaded(modelId);
-        if (resident && residentServes(spec, options)) {
+        boolean resident = localRuntime().isModelLoaded(spec.id);
+        // A resident the load cannot replace keeps serving as it is, rather than a refusal that reads as
+        // no model at all; a fresh load asked for a rebuild and is refused.
+        boolean keeps = resident && !fresh;
+        if (resident && residentServes(spec, options)
+                && (!explicit || (!userAsking && !fresh && options.feature != null))) {
             markUsedByFeature(spec, options);
-            return null;
+            return residentAnswer(explicit, spec);
+        }
+        // The reset hook (tai load --fresh, or clearCache on the load routes directly): thrown away
+        // before the load itself picks the fingerprinted directory, so the model always rebuilds
+        // its converted-weight cache from scratch instead of trusting whatever is on disk.
+        if (fresh && TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+            MnnTaiRuntime.clearMmapCache(appContext, spec.id);
         }
         if (hasInjectedRuntimeOverride()) {
-            JSONObject load = localRuntime().load(spec, options);
-            if (!load.optBoolean("ok", false)) return load;
-            return null;
+            return localRuntime().load(spec, options);
         }
-        if (!settings.isOpenAiAutoLoadEnabled()) {
-            if (resident) return null;
+        if (!explicit && !settings.isOpenAiAutoLoadEnabled()) {
+            if (resident) return residentAnswer(explicit, spec);
             JSONObject data = error(409, "model_not_loaded",
                 "Model is not loaded. Load it explicitly with tai load or from On-device AI settings.");
             data.put("autoLoadEnabled", false);
             return data;
         }
-        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, true);
+        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, !explicit);
         if (preflight.blocked) {
-            return resident ? null : preflight.blockingError(preflightStatusCode(preflight));
+            if (keeps) return residentAnswer(explicit, spec);
+            // Only a refusal that says something about the accelerator belongs in its history. Free
+            // memory running short is a moment, a missing or unreadable file is the download not
+            // being done yet, and a known failure is the record itself: writing any of them down
+            // locked the GPU out for good (a load tried mid-download left "failed on gpu: Download
+            // or import this model" behind, and automatic loads were refused from then on).
+            if (explicit && TaiRuntimeHistory.isAcceleratorVerdict(preflight.errorCode)) {
+                TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
+                    preflight.effectiveAccelerator, preflight.message);
+            }
+            return preflight.blockingError(preflightStatusCode(preflight));
         }
-        LoadDecision decision = decideLoad(spec, options, preflight, false);
-        if (decision.refusal != null) return resident ? null : decision.refusal;
-        JSONObject load = loadWithCanary(spec, decision.options);
-        load.put("preflight", preflight.toJson());
-        decision.describe(load);
-        recordRuntimeResult(spec, preflight, load);
-        if (!load.optBoolean("ok", false)) return load;
-        markLoadedAsking(spec, options);
-        markUsedByFeature(spec, options);
-        return null;
+        LoadDecision decision = decideLoad(spec, options, preflight, explicit && userAsking);
+        if (decision.refusal != null) return keeps ? residentAnswer(explicit, spec) : decision.refusal;
+        JSONObject result = loadWithCanary(spec, decision.options);
+        result.put("preflight", preflight.toJson());
+        decision.describe(result);
+        recordRuntimeResult(spec, preflight, result);
+        if (result.optBoolean("ok", false)) {
+            markLoadedAsking(spec, options);
+            markUsedByFeature(spec, options);
+        }
+        return result;
+    }
+
+    /** What serving as it is answers: the state marked reused to an explicit load, nothing to a generation. */
+    @Nullable
+    private JSONObject residentAnswer(boolean explicit, @NonNull TaiModelSpec spec) throws JSONException {
+        return explicit ? residentAsIs(spec) : null;
     }
 
     /** The canary runs at most once per process, whatever it finds. */
@@ -4284,6 +4283,8 @@ public final class TaiManager {
     /**
      * The plan of the feature a request names: the one the Feature request resolved and sent, when
      * there is one; else, outside the runtime process, resolved here. {@code null} for a request that names no feature.
+     * The fallback is for the load and keep-warm routes called in this process with a feature named and
+     * no plan attached (the feature check runner's load); no chat or completion reaches it.
      */
     @Nullable
     private TaiFeaturePlan featurePlan(@NonNull JSONObject request) {
@@ -4317,18 +4318,6 @@ public final class TaiManager {
     /** Records which feature used the resident chat model, for its groups and the next window check. */
     private void markUsedByFeature(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) {
         residency().markUsedBy(TaiResidency.Kind.CHAT, spec.id, TaiFunction.fromId(options.feature));
-    }
-
-    /**
-     * An explicit load for a feature whose model the runtime already holds well enough: the state as it
-     * is, marked {@code reused}, instead of a reload that costs seconds and a second memory peak.
-     * {@code null} when the load should go ahead.
-     */
-    @Nullable
-    private JSONObject reuseForFeature(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
-        if (options.feature == null || !localRuntime().isModelLoaded(spec.id) || !residentServes(spec, options)) return null;
-        markUsedByFeature(spec, options);
-        return residentAsIs(spec);
     }
 
     /**
