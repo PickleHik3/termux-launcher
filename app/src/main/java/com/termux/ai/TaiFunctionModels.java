@@ -384,6 +384,22 @@ public final class TaiFunctionModels {
                 return new Resolution(null, null, Source.FALLBACK, link.without, chain, false);
             }
         }
+        // Neither the tier rule nor the chain names a model, and the feature has no without-model choice:
+        // Automatic uses an installed chat model, the smallest one that can serve it (ties by id).
+        if (function.usesChatModel() && function.withoutModel == TaiTierPolicy.WithoutModel.NONE
+            && TaiTierPolicy.platformAllows(env, function)) {
+            ModelInfo smallest = null;
+            for (ModelInfo info : models.values()) {
+                if (!backendRuns(info) || !canServe(function, info)) continue;
+                if (smallest == null || info.sizeBytes < smallest.sizeBytes
+                    || (info.sizeBytes == smallest.sizeBytes && info.id.compareTo(smallest.id) < 0)) {
+                    smallest = info;
+                }
+            }
+            if (smallest != null) {
+                return withModel(function, smallest, TaiTierPolicy.defaultAccelerator(env), Source.AUTOMATIC, chain);
+            }
+        }
         return new Resolution(null, null, Source.NONE, function.withoutModel, chain, false);
     }
 
