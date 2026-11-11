@@ -6896,7 +6896,9 @@ public final class SuggestionBarView extends GridLayout
         inputs.canAddToHome = addToHomeListener != null && addToHomeListener.canAddToHome();
         inputs.canMoveToCategory = categoryChoiceHandler != null;
         inputs.canAddToFolder = categoryChoiceHandler != null && !linuxApp
-            && !drawerFoldersFor(entry).isEmpty();
+            && configRepository != null
+            && com.termux.app.launcher.folder.DrawerFolderChoices.showsAddToFolder(
+                allApps, configRepository.loadSnapshot().folders.values(), entry.appRef);
         if (folderSource) {
             inputs.customIcon = folderApp != null
                 && getIconResolver().loadOverride(folderApp.iconOverride) != null;
@@ -7684,7 +7686,6 @@ public final class SuggestionBarView extends GridLayout
      */
     private void showAddToFolderPopup(@NonNull LauncherAppEntry entry, @NonNull View anchor) {
         List<PinnedFolderItem> folders = drawerFoldersFor(entry);
-        if (folders.isEmpty()) return;
         dismissContextPopups();
         LinearLayout shell = menuRows.newShell();
 
@@ -7708,9 +7709,72 @@ public final class SuggestionBarView extends GridLayout
             }), () -> {}));
         }
 
+        if (!newFolderSecondApps(entry).isEmpty()) {
+            rows.add(new MenuRow(menuRows.addActionRow(shell,
+                getContext().getString(R.string.app_menu_new_folder_with), tintBase, () -> {
+                    dismissCategoryPickerPopup();
+                    showSecondAppPopup(entry, anchor);
+                }), () -> {}));
+        }
+
         int rowWidth = MenuRowWidths.normalize(rows);
         MenuRowWidths.constrainHeader(header, rowWidth);
         categoryPickerMenu.show(MenuSpec.of(shell, tintBase).rows(rows).build(), anchor);
+    }
+
+    @NonNull
+    private List<LauncherAppEntry> newFolderSecondApps(@NonNull LauncherAppEntry entry) {
+        if (configRepository == null || allApps == null) return java.util.Collections.emptyList();
+        List<LauncherAppEntry> second = com.termux.app.launcher.folder.DrawerFolderChoices.secondApps(
+            allApps, configRepository.loadSnapshot().folders.values(), entry.appRef);
+        List<LauncherAppEntry> android = new ArrayList<>(second.size());
+        for (LauncherAppEntry e : second) {
+            if (!com.termux.app.x11.X11Apps.isLinuxApp(e.appRef)) android.add(e);
+        }
+        return android;
+    }
+
+    /** The second app of a new folder: a plain scrolling list of the drawer's free apps. */
+    private void showSecondAppPopup(@NonNull LauncherAppEntry first, @NonNull View anchor) {
+        List<LauncherAppEntry> candidates = newFolderSecondApps(first);
+        if (candidates.isEmpty()) return;
+        LinearLayout shell = menuRows.newShell();
+
+        TextView header = new TextView(getContext());
+        header.setText(R.string.app_menu_pick_second_app);
+        header.setTextColor(resolveLauncherTextColor());
+        header.setTextSize(12f);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(8), dp(6), dp(8), dp(7));
+        shell.addView(header, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int tintBase = inheritedTintColor & 0x00FFFFFF;
+        LinearLayout list = new LinearLayout(getContext());
+        list.setOrientation(LinearLayout.VERTICAL);
+        List<MenuRow> rows = new ArrayList<>();
+        for (LauncherAppEntry second : candidates) {
+            String stableId = second.appRef.stableId();
+            rows.add(new MenuRow(menuRows.addActionRow(list, second.label, tintBase, () -> {
+                dismissCategoryPickerPopup();
+                createDrawerFolderFromMenu(first, stableId);
+            }), () -> {}));
+        }
+        int rowWidth = MenuRowWidths.normalize(rows);
+        MenuRowWidths.constrainHeader(header, rowWidth);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(getContext());
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(list);
+        shell.addView(scroll, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(Math.min(candidates.size(), 7) * 36)));
+        categoryPickerMenu.show(MenuSpec.of(shell, tintBase).rows(rows).build(), anchor);
+    }
+
+    private void createDrawerFolderFromMenu(@NonNull LauncherAppEntry first,
+                                            @NonNull String secondStableId) {
+        if (configRepository == null) return;
+        createDrawerFolder(configRepository.loadSnapshot().revision, first, secondStableId);
     }
 
     private void addDrawerAppToFolderFromMenu(@NonNull String folderId,
