@@ -2,14 +2,13 @@ package com.termux.app.terminal.io;
 
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -293,17 +292,11 @@ public final class ExtraKeyActionPicker {
         confirmParams.setMarginStart(pad(12));
         bar.addView(confirm, confirmParams);
         root.addView(bar);
-        root.setOnApplyWindowInsetsListener((v, insets) -> {
-            int bottom;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                bottom = insets.getInsets(
-                    WindowInsets.Type.systemBars() | WindowInsets.Type.ime()).bottom;
-            } else {
-                bottom = insets.getSystemWindowInsetBottom();
-            }
-            v.setPadding(pad(16), 0, pad(16), bottom);
-            return insets;
-        });
+        // The sheet already lifts its content above the navigation bar and the keyboard; padding
+        // the column for them again left the grid no height once the keyboard was up.
+        // The column takes the first focus, so the sheet opens on the grid and the keyboard only
+        // comes up when the search field is tapped.
+        root.setFocusableInTouchMode(true);
 
         adapter.onSelect = choice -> {
             selected = choice;
@@ -329,6 +322,10 @@ public final class ExtraKeyActionPicker {
         refreshConfirm.run();
 
         dialog.setContentView(root);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+        }
         View sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
         if (sheet != null) {
             ViewGroup.LayoutParams params = sheet.getLayoutParams();

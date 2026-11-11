@@ -72,9 +72,9 @@ from `~/.termux/colors.properties`. See
 ### Keyboard
 
 "Layouts, size, typing, voice and look": **On-screen keyboard** (**Built-in**, **Android** or
-**Off**) and **Voice input**; the built-in keyboard's **Layouts**, **Size and position** and
-**Typing and feedback** pages; **Appearance** and **Keyboard theme**; **Terminal extra keys**; and
-**Hardware keyboard** in a group of its own. See [Keyboard](Keyboard.md),
+**Off**) and **Voice input**; **Keyboard & extra keys**, with the built-in keyboard's **Layouts**,
+**Size and position** and **Typing and feedback** pages, **Terminal extra keys** and **Uppercase key
+labels**; **Appearance** and **Keyboard theme**; and **Hardware keyboard** in a group of its own. See [Keyboard](Keyboard.md),
 [Extra keys](Extra_Keys.md) and [Voice input](Voice_Input.md).
 
 ### Notifications

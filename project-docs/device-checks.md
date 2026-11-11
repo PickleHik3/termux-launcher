@@ -18,6 +18,15 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- **Choose a key opens on its grid (11-11, fix/keyboard-settings).** Pong reported the sheet
+  empty below the search field with Gboard up at once. Pass: Settings › Keyboard › Terminal extra
+  keys › + opens with chips, key grid and Cancel / confirm visible and the keyboard down; tapping
+  search raises Gboard and the grid and buttons stay above it; light, dark, font 1.5. Emulator
+  (Gboard) confirmed 11-11; pong is owed because the keyboard never auto-opened on the emulator.
+- **Keyboard & extra keys section (11-11, fix/keyboard-settings).** Pass: Settings › Keyboard shows
+  Terminal extra keys and Uppercase key labels under "Keyboard & extra keys", no separate Terminal
+  extra keys section or filter chip, both rows still work with Android chosen as the keyboard, and
+  the Uppercase setting kept its value across the update. Pong.
 - **A Display page with no display takes plain swipes (11-10 a1fac567a; 11-11 fix/display-idle-swipe).**
   FAILED on pong 11-11: the page could not be left by a plain swipe (every Display page's border
   zone owned its content, which refused the body swipe; it now owns it only while a display

@@ -77,12 +77,14 @@ public class SettingsFragmentAliasesTest {
     @Test
     public void keyboardGainsItsLook() {
         PreferenceScreen keyboard = screen(launch(KeyboardPreferencesFragment.class));
-        // The hardware keyboard has its own group; the extra keys group holds extra keys only.
+        // The hardware keyboard has its own group; the extra keys sit with the built-in keyboard.
         androidx.preference.PreferenceGroup hardware = keyboard.findPreference("keyboard_hardware");
         assertNotNull(hardware.findPreference("keyboard_sub_hardware"));
-        androidx.preference.PreferenceGroup extraKeys = keyboard.findPreference("keyboard_terminal_hardware");
-        assertEquals(2, extraKeys.getPreferenceCount());
-        assertNull(extraKeys.findPreference("keyboard_sub_hardware"));
+        assertNull(keyboard.findPreference("keyboard_terminal_hardware"));
+        androidx.preference.PreferenceGroup builtIn = keyboard.findPreference("keyboard_built_in");
+        assertNotNull(builtIn.findPreference("edit_extra_keys_row"));
+        assertNotNull(builtIn.findPreference("extra_keys_text_all_caps"));
+        assertNull(builtIn.findPreference("keyboard_sub_hardware"));
         assertNotNull(keyboard.findPreference("keyboard_input_method"));
         assertEquals(KeyboardLayoutPreferencesFragment.class.getName(),
             keyboard.findPreference("keyboard_sub_layout").getFragment());

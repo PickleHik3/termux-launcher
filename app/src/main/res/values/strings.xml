@@ -328,7 +328,6 @@
     <string name="settings_extra_keys_picker_actions">App actions</string>
     <string name="settings_edit_extra_keys_title">Terminal extra keys</string>
     <string name="settings_edit_extra_keys_summary">Keys and swipe actions</string>
-    <string name="settings_terminal_key_row_header">Terminal extra keys</string>
     <string name="settings_extra_keys_all_caps_title">Uppercase key labels</string>
     <string name="settings_extra_keys_all_caps_summary">Show ESC, TAB and other labels in capitals</string>
     <string name="settings_use_as_title">Launcher mode</string>
