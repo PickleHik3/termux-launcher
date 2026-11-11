@@ -32,8 +32,10 @@ import java.util.function.LongSupplier;
  * The child process may be exited forcefully by using the {@link #finishIfRunning()} method.
  * <p>
  * NOTE: The terminal session may outlive the EmulatorView, so be careful with callbacks!
+ * <p>
+ * Not final only so that tests can stand in for the shell side with a capturing subclass.
  */
-public final class TerminalSession extends TerminalOutput {
+public class TerminalSession extends TerminalOutput {
 
     /** Per-session instrumentation seam; returning true consumes native resizing in tests. */
     public interface SizeUpdateObserver {

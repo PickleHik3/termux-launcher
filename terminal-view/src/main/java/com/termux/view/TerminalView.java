@@ -846,6 +846,13 @@ public final class TerminalView extends View {
         mEmulator = emulator;
     }
 
+    /** Type into a session whose emulator is already there, for tests of the key routes. */
+    @androidx.annotation.VisibleForTesting
+    void setSessionForTest(TerminalSession session) {
+        mTermSession = session;
+        mEmulator = session.getEmulator();
+    }
+
     /** Focus as a program sees it: this view's own focus while its window has focus too. */
     private void reportFocus() {
         boolean focused = hasFocus() && hasWindowFocus();

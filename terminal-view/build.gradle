@@ -59,6 +59,16 @@ dependencies {
     testImplementation "org.robolectric:robolectric:4.13"
 }
 
+// With -Pghostty=true the tests of the key routes drive the real library: the host build made by
+// terminal-emulator (see there) is handed to them the same way. Without it those tests return early.
+if ((project.findProperty('ghostty') ?: 'false').toString() == 'true') {
+    def ghosttyHostLib = project(':terminal-emulator').layout.buildDirectory.dir('ghostty/host').get().asFile
+    tasks.withType(Test).configureEach {
+        dependsOn ':terminal-emulator:buildGhosttyHost'
+        systemProperty 'termux.ghostty.libDir', new File(ghosttyHostLib, 'host').absolutePath
+    }
+}
+
 task sourceJar(type: Jar) {
     from android.sourceSets.main.java.srcDirs
     archiveClassifier = "sources"
