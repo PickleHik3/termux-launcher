@@ -1355,7 +1355,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     /**
      * How long a dragged widget rests in an edge band before the page turns under it. The dock's
-     * row turns its pages under a carried icon after the same rest ({@code DockDropPolicy}).
+     * row waits twice as long under a carried icon ({@code DockDropPolicy.EDGE_HOLD_MS}).
      */
     public static final long EDGE_FLIP_DELAY_MS = 350L;
     /** How wide that band is, measured in from the pane's leading and trailing edges. */

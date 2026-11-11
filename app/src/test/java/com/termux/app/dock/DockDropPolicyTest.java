@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.launcher.widget.WidgetPaneController;
+
 import org.junit.Test;
 
 /** Where an icon carried onto the dock's row lands, and what the row does around it. */
@@ -122,8 +124,9 @@ public class DockDropPolicyTest {
     }
 
     @Test
-    public void theHoldAndBandAreHomes() {
-        assertEquals(350L, DockDropPolicy.EDGE_HOLD_MS);
+    public void theRowHoldsTwiceAsLongAsHomeOnItsBand() {
+        assertEquals(700L, DockDropPolicy.EDGE_HOLD_MS);
+        assertEquals(350L, WidgetPaneController.EDGE_FLIP_DELAY_MS);
         assertEquals(24, DockDropPolicy.EDGE_BAND_DP);
     }
 

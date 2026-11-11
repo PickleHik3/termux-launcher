@@ -18,9 +18,10 @@ public final class DockDropPolicy {
 
     /**
      * How long a carried icon rests in the band at either end of the row before the row turns a
-     * page: Home's own edge hold.
+     * page, and again before each turn after it: twice Home's edge hold, since the row's ends sit
+     * where an icon is put at the end of a page, so a turn has to be meant.
      */
-    public static final long EDGE_HOLD_MS = WidgetPaneController.EDGE_FLIP_DELAY_MS;
+    public static final long EDGE_HOLD_MS = 2L * WidgetPaneController.EDGE_FLIP_DELAY_MS;
     /** That band's width, measured in from each end of the row: Home's edge band. */
     public static final int EDGE_BAND_DP = WidgetPaneController.EDGE_BAND_DP;
 
