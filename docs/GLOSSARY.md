@@ -844,10 +844,11 @@ _Avoid_: origin, source (the catalog's `source` column is where the file is fetc
 
 ### Local AI
 
-**Default assistant model**:
-The model On-device AI answers with when a program does not name one, chosen in the launcher's AI settings.
-_Avoid_: default model, current model, loaded model (a model can be the default without being
-loaded)
+**Default model**:
+The model On-device AI answers with when a program, or the Assistant page, names none, chosen in the
+launcher's AI settings. In code it is the `tai_role_default_assistant` role (ADR 0027).
+_Avoid_: default assistant model (its old name), current model, loaded model (a model can be the
+default without being loaded)
 
 **Feature** (AI feature):
 A launcher task that uses a model: the assistant, cleanup, app sorting, Dawn search, Dawn chat, voice
@@ -871,6 +872,13 @@ Features that work together and stay loaded together while in use: voice typing 
 search and Dawn chat, a spoken Dawn conversation.
 _Avoid_: session, bundle
 
+**Feature request**:
+The one way a Feature asks for an answer: it names the Feature, the messages and where the answer
+goes, and gets back events (Waiting, Loading, Text, Done, Error) and a handle that cancels that
+request alone. It follows the Feature load plan, chooses on-device or remote and loads the model.
+Launcherctl's chat routes, the Assistant page and Cleanup all go through it (ADR 0027).
+_Avoid_: chat call, request pipeline, transport
+
 **GPU verdict**:
 Whether the phone's GPU gives fast, correct answers. It starts from a rule by GPU family and becomes a
 measurement once the self-test or a feature check has run on the GPU; "Try GPU again" clears it.
@@ -888,6 +896,12 @@ terminal panes of its own, notifications, progress, clipboard and the device com
 is the client for everything but AI, and `tai` is the client for the model routes. Both read
 `~/.launcherctl/endpoint` and `~/.launcherctl/token`. See `docs/en/LauncherCtl_API.md`.
 _Avoid_: the API server, the launcher daemon
+
+**Model availability**:
+Which models are on this phone and, for a Feature, which model serves it and that model's state:
+missing, downloading, on the phone, loading, loaded, remote ready, remote not set up. Every screen
+that shows a model's state reads it here (ADR 0027).
+_Avoid_: model presence (presence means loaded in the runtime), installed models, model status
 
 **On-device AI**:
 The launcher's on-device AI: the models it holds and the local endpoint programs in the terminal
