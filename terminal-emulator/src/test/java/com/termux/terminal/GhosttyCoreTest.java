@@ -275,4 +275,63 @@ public class GhosttyCoreTest extends TerminalTestCase {
             TerminalEmulator.setXtVersion(null);
         }
     }
+
+    private static void setScheme(String background) {
+        java.util.Properties props = new java.util.Properties();
+        if (background != null) props.setProperty("background", background);
+        TerminalColors.COLOR_SCHEME.updateWith(props);
+    }
+
+    public void testColorSchemeQueryAnswersDark() {
+        if (!ghostty(5, 3)) return;
+        enterString("\033[?996n");
+        assertEquals("\033[?997;1n", mOutput.getOutputAndClear());
+    }
+
+    public void testColorSchemeQueryAnswersLight() {
+        try {
+            if (System.getProperty(GhosttyNative.TEST_LIBRARY_DIR_PROPERTY) == null) return;
+            setScheme("#ffffff");
+            if (!ghostty(5, 3)) return;
+            enterString("\033[?996n");
+            assertEquals("\033[?997;2n", mOutput.getOutputAndClear());
+        } finally {
+            setScheme(null);
+        }
+    }
+
+    public void testColorSchemeFlipReportsOnceUnderMode2031() {
+        try {
+            if (!ghostty(5, 3)) return;
+            enterString("\033[?2031h");
+            mOutput.getOutputAndClear();
+            setScheme("#ffffff");
+            mTerminal.resetColorsToScheme();
+            assertEquals("\033[?997;2n", mOutput.getOutputAndClear());
+            mTerminal.resetColorsToScheme();
+            assertEquals("a reset that keeps the class is silent", "", mOutput.getOutputAndClear());
+            setScheme("#eeeeee");
+            mTerminal.resetColorsToScheme();
+            assertEquals("", mOutput.getOutputAndClear());
+            setScheme(null);
+            mTerminal.resetColorsToScheme();
+            assertEquals("\033[?997;1n", mOutput.getOutputAndClear());
+        } finally {
+            setScheme(null);
+        }
+    }
+
+    public void testColorSchemeFlipIsSilentWithMode2031Reset() {
+        try {
+            if (!ghostty(5, 3)) return;
+            setScheme("#ffffff");
+            mTerminal.resetColorsToScheme();
+            assertEquals("", mOutput.getOutputAndClear());
+            enterString("\033[?996n");
+            assertEquals("the stored scheme still answers queries", "\033[?997;2n", mOutput.getOutputAndClear());
+        } finally {
+            setScheme(null);
+        }
+    }
+
 }

@@ -172,6 +172,11 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         if (mHandle != 0) GhosttyNative.nativeReset(mHandle);
     }
 
+    /** Set the scheme for DSR 996; returns the 2031 report to write when it flipped under that mode, else null. */
+    byte[] setColorScheme(boolean dark) {
+        return mHandle != 0 ? GhosttyNative.nativeSetColorScheme(mHandle, dark) : null;
+    }
+
     /** End a render hold (mode 2026) the program has not ended; the next sync takes a fresh frame. */
     void endHold() {
         if (mHandle != 0) GhosttyNative.nativeEndHold(mHandle);

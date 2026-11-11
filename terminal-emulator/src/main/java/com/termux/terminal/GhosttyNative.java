@@ -230,6 +230,12 @@ final class GhosttyNative {
 
     static native void nativeReset(long handle);
 
+    /**
+     * Store the colour scheme DSR 996 answers with. Returns the mode 2031 report bytes when the
+     * scheme changed while that mode is set, else null.
+     */
+    static native byte[] nativeSetColorScheme(long handle, boolean dark);
+
     /** End a render hold that outlived its timeout, as if the program had reset mode 2026. */
     static native void nativeEndHold(long handle);
 

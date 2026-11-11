@@ -1616,6 +1616,7 @@ public final class TerminalEmulator {
             GhosttyCore.historyLimit(mMainBuffer.mTotalRows, mColumns));
         if (core == null) return false;
         mGhostty = core;
+        core.setColorScheme(isDefaultBackgroundDark());
         mGhosttyLinks = new GhosttyLinks(mHyperlinks, new GhosttyLinks.UsedIds() {
             @Override
             public void markUsed(boolean[] used) {
@@ -5586,6 +5587,8 @@ public final class TerminalEmulator {
      * while mode 2031 is set. A color change that keeps the class is silent.
      */
     private void notifyColorPreferenceIfChanged() {
+        if (mGhostty != null)
+            return; // the Fast core owns DSR 996 and mode 2031
         if (!isDecsetInternalBitSet(DECSET_BIT_COLOR_PREFERENCE_NOTIFICATIONS))
             return;
         boolean dark = isDefaultBackgroundDark();
@@ -5602,6 +5605,11 @@ public final class TerminalEmulator {
     public void resetColorsToScheme() {
         mColors.reset();
         mSession.onColorsChanged();
+        if (mGhostty != null) {
+            byte[] report = mGhostty.setColorScheme(isDefaultBackgroundDark());
+            if (report != null) mSession.write(report, 0, report.length);
+            return;
+        }
         notifyColorPreferenceIfChanged();
     }
 

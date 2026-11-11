@@ -120,6 +120,7 @@ typedef struct {
     jmethodID on_reply;
     jmethodID on_clipboard;
     jmethodID on_event;
+    bool dark;  // the colour scheme DSR 996 answers with; set from Java, read in on_color_scheme
     uint8_t* xtversion;  // our XTVERSION name, owned here for the terminal's life
     size_t xtversion_len;
     uint16_t cols, rows;
@@ -289,6 +290,15 @@ static GhosttyString on_xtversion(GhosttyTerminal t, void* ud) {
     GhosttyString s = {.ptr = NULL, .len = 0};
     if (c != NULL && c->xtversion != NULL) { s.ptr = c->xtversion; s.len = c->xtversion_len; }
     return s;
+}
+
+// DSR 996: answer from the scheme Java last stored. No JNI call here.
+static bool on_color_scheme(GhosttyTerminal t, void* ud, GhosttyColorScheme* out) {
+    (void) t;
+    Core* c = (Core*) ud;
+    if (c == NULL) return false;
+    *out = c->dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT;
+    return true;
 }
 
 // DA1: what we always said (VT220, ANSI colour) and, only while sixel works on this core, 4. The
@@ -502,6 +512,7 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*) on_title);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*) on_pwd);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*) on_xtversion);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_COLOR_SCHEME, (const void*) on_color_scheme);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*) on_device_attributes);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SIZE, (const void*) on_size);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*) on_clipboard_write);
@@ -758,6 +769,29 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeReset(JNIEnv
     sx_reset(c);
     pin_top(c);
 }
+
+// Store the colour scheme; when it changed and mode 2031 is set, return the report the program asked
+// for (CSI ? 997 ; 1|2 n), else null.
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetColorScheme(JNIEnv* env, jclass cls, jlong h, jboolean dark) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL) return NULL;
+    bool d = dark ? true : false;
+    if (d == c->dark) return NULL;
+    c->dark = d;
+    GhosttyTerminalModeConfig cfg = {.mode = GHOSTTY_MODE_REPORT_COLOR_SCHEME, .value = false};
+    if (ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_MODE, &cfg) != GHOSTTY_SUCCESS || !cfg.value)
+        return NULL;
+    uint8_t buf[32];
+    size_t n = 0;
+    if (ghostty_color_scheme_report_encode(d ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT, buf, sizeof(buf), &n) != GHOSTTY_SUCCESS || n == 0)
+        return NULL;
+    jbyteArray arr = (*env)->NewByteArray(env, (jsize) n);
+    if (arr == NULL) { clear_exception(env); return NULL; }
+    (*env)->SetByteArrayRegion(env, arr, 0, (jsize) n, (const jbyte*) buf);
+    return arr;
+}
+
 
 // End a render hold that ran past Java's timeout: reset mode 2026 as the program would have. Setting
 // the mode from here never calls on_render_hold, so the hold is marked over here too; the next sync
