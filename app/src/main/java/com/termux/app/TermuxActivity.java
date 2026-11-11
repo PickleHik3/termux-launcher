@@ -29862,7 +29862,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.AgentStatus.State agentState = observeWindowAgents(window, now);
         for (TerminalSession shell : mPaneController.shellsOf(window)) syncPaneAttention(shell);
         int phases = observeWindowPhases(window, seen, now);
-        return buildWindowItem(session, index, foregroundPids, mPaneController.windowName(window))
+        com.termux.app.terminal.TerminalWindowBar.WindowItem built =
+            buildWindowItem(session, index, foregroundPids, mPaneController.windowName(window));
+        return built
             .withBusy(progress != null || (phases & PHASE_WORKING) != 0)
             .withAttention(isWindowAwaitingUser(window) || (phases & PHASE_ATTENTION) != 0)
             .withDone((phases & PHASE_DONE) != 0,
@@ -29873,7 +29875,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : progress.getProgressValue(),
                 progress != null && progress.getProgressState()
                     == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR)
-            .withAgentState(agentState);
+            .withAgentState(agentState)
+            .withStatus(windowProgramStatus(window, built.label));
+    }
+
+    /**
+     * What a program in {@code window} reports about itself, from the most urgent record across its
+     * panes; null when none has anything but idle.
+     */
+    @Nullable
+    private com.termux.app.terminal.TerminalWindowBar.WindowItem.Status windowProgramStatus(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window,
+            @NonNull String windowLabel) {
+        java.util.List<TerminalSession> shells = mPaneController.shellsOf(window);
+        java.util.ArrayList<com.termux.terminal.ProgramStatus> perPane =
+            new java.util.ArrayList<>(shells.size());
+        for (TerminalSession shell : shells) {
+            TerminalEmulator emulator = shell.getEmulator();
+            perPane.add(emulator == null ? null : emulator.getProgramStatus().mostUrgent());
+        }
+        int pick = com.termux.app.terminal.ProgramStatusLabel.pickMostUrgent(perPane);
+        if (pick < 0) return null;
+        com.termux.terminal.ProgramStatus record = perPane.get(pick);
+        String app = shells.get(pick).getEmulator().getProgramStatus().resolvedApp(record);
+        String title = com.termux.app.terminal.TerminalWindowBar.titleOf(windowLabel);
+        return com.termux.app.terminal.ProgramStatusLabel.statusFor(record, app, title);
     }
 
     private static final int PHASE_WORKING = 1;

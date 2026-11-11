@@ -145,6 +145,39 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         /** Whether this is a Home float's chip while the float is minimised (#91). */
         public final boolean minimised;
 
+        /**
+         * What a program in this window reports about itself, rolled up over its panes, or null
+         * when none does (or only idle). While set, the pill shows its text in place of the title.
+         */
+        @Nullable public final Status status;
+
+        /** A program's own status as the pill shows it. */
+        public static final class Status {
+            public enum Kind { WORKING, BLOCKED, DONE, ERROR }
+
+            @NonNull public final Kind kind;
+            /** The whole pill text, such as "claude needs input 40%". */
+            @NonNull public final String text;
+
+            public Status(@NonNull Kind kind, @NonNull String text) {
+                this.kind = kind;
+                this.text = text;
+            }
+
+            @Override
+            public boolean equals(@Nullable Object other) {
+                if (this == other) return true;
+                if (!(other instanceof Status)) return false;
+                Status that = (Status) other;
+                return kind == that.kind && text.equals(that.text);
+            }
+
+            @Override
+            public int hashCode() {
+                return 31 * kind.hashCode() + text.hashCode();
+            }
+        }
+
         public static final int NO_PERCENTAGE = -1;
         /** A minimised float's chip, as an alpha: reduced emphasis against an open window's. */
         public static final float MINIMISED_ALPHA = 0.75f;
@@ -200,6 +233,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                           boolean attention, int progress, boolean progressError, boolean done,
                           boolean doneFailed, @Nullable AgentStatus.State agentState,
                           @Nullable Bitmap icon, boolean minimised) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, doneFailed,
+                agentState, icon, minimised, null);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed, @Nullable AgentStatus.State agentState,
+                          @Nullable Bitmap icon, boolean minimised, @Nullable Status status) {
+            this.status = status;
             this.minimised = minimised;
             this.label = label;
             this.spokenLabel = spokenLabel;
@@ -222,14 +264,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withBusy(boolean busy) {
             return busy == this.busy ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
             return attention == this.attention ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         @NonNull
@@ -242,7 +284,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withDone(boolean done, boolean failed) {
             return done == this.done && failed == this.doneFailed ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    failed, agentState, icon, minimised);
+                    failed, agentState, icon, minimised, status);
         }
 
         /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
@@ -250,7 +292,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withProgress(int progress, boolean progressError) {
             return progress == this.progress && progressError == this.progressError ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         /** The rolled-up agent reading for this window's panes; null leaves it to the shell. */
@@ -258,7 +300,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withAgentState(@Nullable AgentStatus.State agentState) {
             return agentState == this.agentState ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         /**
@@ -270,7 +312,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withIcon(@Nullable Bitmap icon) {
             return icon == this.icon ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         /**
@@ -281,7 +323,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withHomeFloat(int page, @NonNull String spokenMark) {
             return new WindowItem(label + HomeFloatPolicy.chipPageMark(page),
                 spokenLabel + ", " + spokenMark, busy, attention, progress, progressError, done,
-                doneFailed, agentState, icon, minimised);
+                doneFailed, agentState, icon, minimised, status);
         }
 
         /**
@@ -293,7 +335,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withMinimised(boolean minimised) {
             return minimised == this.minimised ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
+        }
+
+        /** A program's own status; null leaves the pill to the title and the shell's marks. */
+        @NonNull
+        public WindowItem withStatus(@Nullable Status status) {
+            return java.util.Objects.equals(status, this.status) ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         /** The alpha this chip rests at: dimmed while it is a minimised float's. */
@@ -307,7 +357,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 && doneFailed == other.doneFailed
                 && progress == other.progress && progressError == other.progressError
                 && agentState == other.agentState && icon == other.icon
-                && minimised == other.minimised;
+                && minimised == other.minimised
+                && java.util.Objects.equals(status, other.status);
         }
 
         /**
@@ -344,6 +395,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             hash = 31 * hash + progress;
             hash = 31 * hash + (progressError ? 1 : 0);
             hash = 31 * hash + (agentState == null ? 0 : agentState.hashCode());
+            hash = 31 * hash + (status == null ? 0 : status.hashCode());
             return hash;
         }
     }
@@ -1402,6 +1454,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             // re-inflate the whole pill row and kill the selection slide.
             String agent = agentStateWord(getContext(), item.agentState);
             if (agent != null) description += " · " + agent + ".";
+            if (item.status != null) description += " · " + item.status.text + ".";
             mTabs.getChildAt(i).setContentDescription(description);
         }
     }
@@ -1420,7 +1473,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             Object shown = child.getTag(R.id.terminal_window_tab_state);
             if (!force && shown instanceof WindowItem && ((WindowItem) shown).sameActivity(item)
                 && ((WindowItem) shown).label.equals(item.label)) continue;
-            if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)) {
+            if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)
+                || !java.util.Objects.equals(((WindowItem) shown).status, item.status)) {
                 setTitle((TextView) child, item);
             }
             MinimisedDotDrawable.wear((TextView) child, item.minimised);
@@ -1432,7 +1486,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * The pill's text: the window's title, and nothing else. Every indicator the label used to
+     * The pill's text: the window's title, and nothing else, except that a program's own status
+     * ({@link WindowItem#status}) replaces the title while it has one. Every indicator the label used to
      * spend characters on — the process glyph, the ring, the bell, the tick, the agent's reading — is
      * drawn by {@link ChipWatermarkDrawable} behind and around the title instead, so nine
      * characters of a directory are nine characters of a directory.
@@ -1442,6 +1497,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     @NonNull
     private CharSequence tabText(@NonNull WindowItem item) {
+        if (item.status != null) return item.status.text;
         String title = titleOf(item.label);
         return TerminalLabelSymbolSpans.apply(
             com.termux.shared.termux.font.NerdFontSpans.span(getContext(), title), mSymbolMaps);
@@ -1455,7 +1511,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /** The label without the process glyph the factories put in front of it. */
     @NonNull
-    static String titleOf(@NonNull String label) {
+    public static String titleOf(@NonNull String label) {
         int glyphEnd = leadingGlyphEnd(label);
         if (glyphEnd == 0) return label;
         return glyphEnd < label.length() ? label.substring(glyphEnd + 1) : "";
@@ -1482,6 +1538,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     @NonNull
     static ChipWatermarkDrawable.Mark markFor(@NonNull WindowItem item) {
+        if (item.status != null) {
+            switch (item.status.kind) {
+                case BLOCKED: return ChipWatermarkDrawable.Mark.ATTENTION;
+                case ERROR: return ChipWatermarkDrawable.Mark.FAILED;
+                case DONE: return ChipWatermarkDrawable.Mark.DONE;
+                default: return ChipWatermarkDrawable.Mark.NONE;
+            }
+        }
         if (item.agentState != null) {
             if (item.agentState == AgentStatus.State.BLOCKED) {
                 return ChipWatermarkDrawable.Mark.ATTENTION;
