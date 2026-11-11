@@ -39,6 +39,10 @@ public final class TaiRuntimeServiceClient {
     private static final int INLINE_BODY_LIMIT_BYTES = 512 * 1024;
     /** Sentinel placed on a streaming request's queue to mark the end of the stream. */
     private static final Object STREAM_END = new Object();
+    /** Placed on a generation's queue when the runtime says it waits behind another (ADR 0027 §4). */
+    private static final Object GENERATION_WAITING = new Object();
+    /** Placed on a generation's queue when the runtime says its turn has come. */
+    private static final Object GENERATION_STARTED = new Object();
 
     /**
      * Where the runtime's replies are handled, shared by every client in the process. Replies
@@ -155,15 +159,99 @@ public final class TaiRuntimeServiceClient {
 
     public void stream(@NonNull String operation, @Nullable String body, @NonNull TaiManager.OpenAiStreamSink sink)
         throws JSONException, IOException {
-        PendingRequest request = send(operation, body, true, sink);
+        drain(send(operation, body, true, sink), sink);
+    }
+
+    /**
+     * Sends a chat or completion generation with its id and priority (ADR 0027 §4); the caller
+     * then waits for it with {@link #drainGeneration} (a stream) or {@link #awaitGeneration}.
+     * Whether it waits behind another generation and when it starts arrive on the same queue as
+     * its chunks, in the order the runtime sent them.
+     */
+    @NonNull
+    PendingRequest startGeneration(@NonNull String operation, @NonNull String body, @NonNull String generationId,
+                                   @NonNull TaiRuntimeLink.Priority priority) throws JSONException {
+        Bundle extras = new Bundle();
+        extras.putString(TaiRuntimeIpc.KEY_GENERATION_ID, generationId);
+        extras.putString(TaiRuntimeIpc.KEY_PRIORITY, priority.wireName());
+        return send(operation, body, true, null, extras);
+    }
+
+    /** A streaming generation's chunks to {@code sink} on this thread, as {@link #stream} does. */
+    void drainGeneration(@NonNull PendingRequest request, @NonNull TaiRuntimeLink.GenerationSink sink)
+        throws JSONException, IOException {
+        drain(request, sink);
+    }
+
+    /**
+     * A non-streaming generation's answer, as {@link #request(String, String, long)} returns it:
+     * the same deadline, and the same release of an abandoned momentary load when it passes. The
+     * queue signals reach {@code sink} on this thread while it waits.
+     */
+    @NonNull
+    JSONObject awaitGeneration(@NonNull PendingRequest request, @NonNull TaiRuntimeLink.GenerationSink sink,
+                               long timeoutMs, @NonNull String body) throws JSONException {
         BlockingQueue<Object> events = request.events;
+        long deadline = android.os.SystemClock.elapsedRealtime() + timeoutMs;
+        try {
+            while (events != null) {
+                long left = deadline - android.os.SystemClock.elapsedRealtime();
+                Object item = left <= 0L ? null : events.poll(left, TimeUnit.MILLISECONDS);
+                if (item == null) {
+                    pending.remove(request.requestId);
+                    releaseAbandonedMomentaryLoad(request.operation, body);
+                    return runtimeUnavailable("tai_runtime_timeout", "On-device AI runtime service timed out.");
+                }
+                if (item == STREAM_END) break;
+                if (item == GENERATION_WAITING) sink.onWaiting();
+                else if (item == GENERATION_STARTED) sink.onStarted();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            pending.remove(request.requestId);
+            releaseAbandonedMomentaryLoad(request.operation, body);
+            return runtimeUnavailable("tai_runtime_interrupted", "On-device AI runtime request interrupted.");
+        }
+        if (request.result == null) return runtimeUnavailable("tai_runtime_unavailable", "On-device AI runtime service did not return a result.");
+        return request.result;
+    }
+
+    /**
+     * Cancels one generation by id, without waiting for the answer: the runtime takes it out of its
+     * queue or stops it if it is running, and does nothing for an id it does not hold. Sent only
+     * while bound: a runtime that is not running has nothing of this client's to cancel, and is
+     * not started for it.
+     */
+    void cancelGeneration(@NonNull String generationId) {
+        synchronized (connectionLock) {
+            if (service == null) return;
+        }
+        Bundle extras = new Bundle();
+        extras.putString(TaiRuntimeIpc.KEY_GENERATION_ID, generationId);
+        try {
+            send(TaiRuntimeIpc.OP_CANCEL, "{}", false, null, extras);
+        } catch (JSONException | RuntimeException ignored) {
+        }
+    }
+
+    private void drain(@NonNull PendingRequest request, @NonNull TaiManager.OpenAiStreamSink sink)
+        throws JSONException, IOException {
+        BlockingQueue<Object> events = request.events;
+        TaiRuntimeLink.GenerationSink signals = sink instanceof TaiRuntimeLink.GenerationSink
+            ? (TaiRuntimeLink.GenerationSink) sink : null;
         // Drain stream events on this (background) caller thread. The IPC reply Handler runs on the
         // shared reply looper and only enqueues events here, so the SSE socket writes happen on the
         // caller's thread and one slow client never holds up another request's replies.
         try {
             Object item;
             while (events != null && (item = events.take()) != STREAM_END) {
-                sink.onEvent((JSONObject) item);
+                if (item == GENERATION_WAITING) {
+                    if (signals != null) signals.onWaiting();
+                } else if (item == GENERATION_STARTED) {
+                    if (signals != null) signals.onStarted();
+                } else {
+                    sink.onEvent((JSONObject) item);
+                }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -189,6 +277,17 @@ public final class TaiRuntimeServiceClient {
         boolean stream,
         @Nullable TaiManager.OpenAiStreamSink sink
     ) throws JSONException {
+        return send(operation, body, stream, sink, null);
+    }
+
+    @NonNull
+    private PendingRequest send(
+        @NonNull String operation,
+        @Nullable String body,
+        boolean stream,
+        @Nullable TaiManager.OpenAiStreamSink sink,
+        @Nullable Bundle extras
+    ) throws JSONException {
         if (ensureConnected() == null) {
             PendingRequest failed = new PendingRequest(UUID.randomUUID().toString(), operation, stream, sink);
             failed.finish(runtimeUnavailable("tai_runtime_unavailable", "On-device AI runtime service is not connected."));
@@ -212,6 +311,7 @@ public final class TaiRuntimeServiceClient {
         data.putString(TaiRuntimeIpc.KEY_OPERATION, operation);
         if (transportBody.inlineBody != null) data.putString(TaiRuntimeIpc.KEY_BODY, transportBody.inlineBody);
         if (transportBody.bodyFile != null) data.putString(TaiRuntimeIpc.KEY_BODY_FILE, transportBody.bodyFile);
+        if (extras != null) data.putAll(extras);
         message.setData(data);
         // Registered and sent under the connection lock, so the runtime's idle-exit notice
         // (onIdleExitRequested) either finds this request pending and leaves the binding alone, or
@@ -449,6 +549,15 @@ public final class TaiRuntimeServiceClient {
                     if (request.events != null) request.events.offer(new JSONObject(event));
                     return;
                 }
+                if (message.what == TaiRuntimeIpc.MSG_GENERATION_STATE) {
+                    // In order with the chunks, for the consumer thread to pass on.
+                    String state = data.getString(TaiRuntimeIpc.KEY_STATE, "");
+                    if (request.events != null) {
+                        if (TaiRuntimeIpc.STATE_WAITING.equals(state)) request.events.offer(GENERATION_WAITING);
+                        else if (TaiRuntimeIpc.STATE_STARTED.equals(state)) request.events.offer(GENERATION_STARTED);
+                    }
+                    return;
+                }
                 if (message.what == TaiRuntimeIpc.MSG_STREAM_DONE) {
                     pending.remove(requestId);
                     request.finish(null);
@@ -533,7 +642,7 @@ public final class TaiRuntimeServiceClient {
         }
     }
 
-    private static final class PendingRequest {
+    static final class PendingRequest {
         final String requestId;
         /** The {@link TaiRuntimeIpc} operation, named in the error when the runtime dies under it. */
         final String operation;

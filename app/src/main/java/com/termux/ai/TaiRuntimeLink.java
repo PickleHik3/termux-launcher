@@ -3,6 +3,7 @@ package com.termux.ai;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -142,12 +143,20 @@ interface TaiRuntimeLink {
     @NonNull
     JSONObject status() throws JSONException;
 
-    /**
-     * The runtime's state and resident table: a JSON object with {@code runtime} (or {@code state})
-     * and {@code residents}, or {@code null} when the runtime could not be reached.
-     */
-    @Nullable
-    JSONObject runtimeStatus();
+    /** The runtime's state and its resident table, read together (one round trip over IPC). */
+    final class RuntimeSnapshot {
+        @NonNull final TaiRuntimeState state;
+        @NonNull final JSONArray residents;
+
+        RuntimeSnapshot(@NonNull TaiRuntimeState state, @NonNull JSONArray residents) {
+            this.state = state;
+            this.residents = residents;
+        }
+    }
+
+    /** The runtime's state and resident table; an unreachable runtime reads as nothing loaded and no residents. */
+    @NonNull
+    RuntimeSnapshot runtimeStatus();
 
     /** The runtime's state alone; an unreachable runtime reads as nothing loaded. */
     @NonNull
