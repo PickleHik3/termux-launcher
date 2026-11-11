@@ -175,7 +175,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
                 Context current = getContext();
                 if (current == null) return;
                 CategorySortDialogs.showChooser(current, preview,
-                    () -> startSort(current, preview.plan),
+                    () -> startSort(current, preview.onDevicePlan),
                     // The old model choice is an entry to the function's picker sheet.
                     () -> TaiFunctionPickerSheet.show(this, TaiFunction.APP_CATEGORIES),
                     () -> updateRefreshSummary(current));

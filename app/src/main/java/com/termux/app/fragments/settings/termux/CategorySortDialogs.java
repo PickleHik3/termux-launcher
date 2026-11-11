@@ -32,6 +32,9 @@ import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiDeviceCapabilities;
+import com.termux.ai.TaiDeviceTier;
+import com.termux.ai.TaiFunctionModels;
+import com.termux.ai.TaiTierPolicy;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiModelSpec;
@@ -41,6 +44,7 @@ import com.termux.app.launcher.data.LauncherCategoryCatalogue;
 import com.termux.app.launcher.data.LauncherCategoryPasteImporter;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
 import com.termux.app.launcher.data.LauncherCategoryPendingApps;
+import com.termux.app.launcher.data.LauncherCategorySortChoice;
 import com.termux.app.launcher.data.LauncherCategorySortPlan;
 import com.termux.app.launcher.data.LauncherCategorySortPrompt;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -97,14 +101,24 @@ final class CategorySortDialogs {
         @Nullable final TaiModelSpec model;
         /** Why the on-device row is disabled, or null when it can run. */
         @Nullable final String unavailable;
+        /**
+         * What the on-device row runs: {@link #plan}, or on Tier 1 (background sorting off) the
+         * smallest installed chat model, offered only to an explicit tap here.
+         */
+        @NonNull final LauncherCategorySortPlan onDevicePlan;
+        /** The tier or the RAM advises against an on-device run: copy row first, with notes. */
+        final boolean advisesAgainstOnDevice;
 
         Preview(@NonNull List<LauncherCategorySortPrompt.AppEntry> apps, int pending,
-                @NonNull LauncherCategorySortPlan plan, @Nullable TaiModelSpec model, @Nullable String unavailable) {
+                @NonNull LauncherCategorySortPlan plan, @Nullable TaiModelSpec model, @Nullable String unavailable,
+                @NonNull LauncherCategorySortPlan onDevicePlan, boolean advisesAgainstOnDevice) {
             this.apps = apps;
             this.pending = pending;
             this.plan = plan;
             this.model = model;
             this.unavailable = unavailable;
+            this.onDevicePlan = onDevicePlan;
+            this.advisesAgainstOnDevice = advisesAgainstOnDevice;
         }
     }
 
@@ -117,7 +131,27 @@ final class CategorySortDialogs {
         LauncherCategorySortPlan plan = resolvePlan(context);
         List<LauncherAppEntry> catalogue = LauncherAppDataProvider.getInstance(context).getAllAppsBlocking();
         int pending = LauncherCategoryPendingApps.pending(catalogue, LauncherCategoryPendingApps.placement(context)).size();
-        return new Preview(appEntries(catalogue), pending, plan, specFor(context, plan), unavailableReason(context, plan));
+        TaiFunctionModels models = TaiFunctionModels.forContext(context);
+        TaiTierPolicy.Env env = models.env();
+        LauncherCategorySortChoice choice = LauncherCategorySortChoice.decide(
+            env.tier == TaiDeviceTier.TIER_1, plan.model, plan.remote,
+            models.candidates(TaiFunction.APP_CATEGORIES), id -> ramAdvisesAgainst(context, id));
+        LauncherCategorySortPlan onDevicePlan = plan;
+        if (choice.explicit && choice.onDeviceModel != null) {
+            TaiModelSpec spec = ModelAvailability.get(context).models().get(choice.onDeviceModel);
+            String accelerator = env.noGpu() ? TaiTierPolicy.ACCEL_CPU : TaiTierPolicy.defaultAccelerator(env);
+            onDevicePlan = LauncherCategorySortPlan.explicit(choice.onDeviceModel, accelerator,
+                spec != null && TaiTierPolicy.warnsBackground(env, spec.sizeBytes));
+        }
+        return new Preview(appEntries(catalogue), pending, plan, specFor(context, onDevicePlan),
+            unavailableReason(context, onDevicePlan), onDevicePlan, choice.advisesAgainstOnDevice);
+    }
+
+    /** The RAM check says this installed model will not fit cleanly (the check {@link #unavailableReason} uses). */
+    private static boolean ramAdvisesAgainst(@NonNull Context context, @NonNull String modelId) {
+        TaiModelSpec spec = ModelAvailability.get(context).models().get(modelId);
+        if (spec == null) return false;
+        return TaiDeviceCapabilities.detect(context).checkModelCapability(spec).warning != null;
     }
 
     /** The installed spec for a local plan's model, or null (and always null for a remote plan). */
@@ -182,7 +216,7 @@ final class CategorySortDialogs {
                             @Nullable Runnable onChangeModel,
                             @Nullable Runnable onPasteApplied) {
         List<LauncherCategorySortPrompt.AppEntry> apps = preview.apps;
-        LauncherCategorySortPlan plan = preview.plan;
+        LauncherCategorySortPlan plan = preview.onDevicePlan;
         TaiModelSpec model = preview.model;
         String unavailable = preview.unavailable;
         boolean onDeviceEnabled = unavailable == null && plan.hasModel();
@@ -207,6 +241,7 @@ final class CategorySortDialogs {
                 ? R.string.tai_callers_category_remote_summary
                 : R.string.settings_app_drawer_category_sort_on_device_summary, modelName)
             : unavailable;
+        boolean advises = preview.advisesAgainstOnDevice;
         // What the sort will really load with: the plan's accelerator, the one the load is told; and
         // only the apps it will really ask about.
         String onDeviceNote = onDeviceEnabled
@@ -216,6 +251,10 @@ final class CategorySortDialogs {
         // A large model may make Android close cached background apps (tai-device-tiers spec section 4.4).
         if (onDeviceNote != null && plan.warnBackground) {
             onDeviceNote += "\n" + context.getString(R.string.tai_warn_background_apps);
+        }
+        if (onDeviceNote != null && advises) {
+            onDeviceNote = context.getString(R.string.settings_app_drawer_category_sort_on_device_slow)
+                + "\n" + onDeviceNote;
         }
         // The row's one way forward, when it has one: the Model centre when there is no model to
         // run. A device that cannot run the model gets none.
@@ -231,7 +270,7 @@ final class CategorySortDialogs {
                 TaiModelCentreFragment.open(activityOf(context), TaiModelCentreFragment.SEGMENT_GET);
             };
         }
-        container.addView(buildRow(context,
+        View onDeviceRow = buildRow(context,
             R.drawable.ic_symbol_smart_toy,
             context.getString(R.string.settings_app_drawer_category_sort_on_device),
             onDeviceSummary,
@@ -241,7 +280,25 @@ final class CategorySortDialogs {
                 dialog.dismiss();
                 onDeviceChosen.run();
             },
-            suggestion, link, onSuggestion));
+            suggestion, link, onSuggestion);
+
+        String pasteSummary = context.getString(R.string.settings_app_drawer_category_sort_paste_summary);
+        if (advises) {
+            pasteSummary = context.getString(R.string.settings_app_drawer_category_sort_paste_suggested)
+                + "\n" + pasteSummary;
+        }
+        View pasteRow = buildRow(context,
+            R.drawable.ic_symbol_content_copy,
+            context.getString(R.string.settings_app_drawer_category_sort_paste),
+            pasteSummary,
+            context.getString(R.string.settings_app_drawer_category_sort_paste_warning),
+            true,
+            () -> {
+                dialog.dismiss();
+                startPasteRoute(context, apps, onPasteApplied);
+            });
+        if (advises) container.addView(pasteRow);
+        container.addView(onDeviceRow);
 
         if (onChangeModel != null) {
             container.addView(buildRow(context,
@@ -256,16 +313,7 @@ final class CategorySortDialogs {
                 }));
         }
 
-        container.addView(buildRow(context,
-            R.drawable.ic_symbol_content_copy,
-            context.getString(R.string.settings_app_drawer_category_sort_paste),
-            context.getString(R.string.settings_app_drawer_category_sort_paste_summary),
-            context.getString(R.string.settings_app_drawer_category_sort_paste_warning),
-            true,
-            () -> {
-                dialog.dismiss();
-                startPasteRoute(context, apps, onPasteApplied);
-            }));
+        if (!advises) container.addView(pasteRow);
 
         dialog.show();
     }
