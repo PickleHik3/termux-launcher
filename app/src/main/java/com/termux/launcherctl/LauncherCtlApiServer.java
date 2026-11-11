@@ -717,7 +717,7 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "keep-warm", TaiManager.getInstance(context).keepWarmRuntime(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/benchmark".equals(request.path)) {
                 // LiteRT-LM's own benchmark(): tai benchmark --native, kept for comparing numbers.
-                return maybeTextResponse(request, "benchmark", TaiManager.getInstance(context).benchmark(request.body));
+                return maybeTextResponse(request, "benchmark", TaiManager.getInstance(context).benchHost().benchmark(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/run".equals(request.path)) {
                 // Bench v1. With stream:true the harness's events go out as they happen — SSE, or
                 // one plain line per phase when the CLI asks for text; otherwise the run's summary.
@@ -728,11 +728,11 @@ public class LauncherCtlApiServer {
                     }
                     return sseResponse(output -> writeBenchStream(context, request.body, output));
                 }
-                return maybeTextResponse(request, "benchmark-run", manager.benchRunCollect(request.body));
+                return maybeTextResponse(request, "benchmark-run", manager.benchHost().benchRunCollect(request.body));
             } else if ("GET".equals(request.method) && "/v1/ai/benchmarks".equals(request.path)) {
-                return maybeTextResponse(request, "benchmarks", TaiManager.getInstance(context).benchmarks());
+                return maybeTextResponse(request, "benchmarks", TaiManager.getInstance(context).benchHost().benchmarks());
             } else if ("DELETE".equals(request.method) && "/v1/ai/benchmarks".equals(request.path)) {
-                return maybeTextResponse(request, "benchmarks-clear", TaiManager.getInstance(context).clearBenchmarks(request.body));
+                return maybeTextResponse(request, "benchmarks-clear", TaiManager.getInstance(context).benchHost().clearBenchmarks(request.body));
             } else if ("DELETE".equals(request.method) && "/v1/ai/runtime/history".equals(request.path)) {
                 return maybeTextResponse(request, "history-clear", TaiManager.getInstance(context).clearRuntimeHistory());
             } else if ("GET".equals(request.method) && "/v1/ai/logs".equals(request.path)) {
@@ -749,7 +749,7 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "cancel", TaiManager.getInstance(context).cancelRuntime());
             } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/skip-wait".equals(request.path)) {
                 // "Skip the wait" (spec Screen 5): ends the active bench's cool-down at once.
-                return maybeTextResponse(request, "skip-wait", TaiManager.getInstance(context).skipBenchCooldown());
+                return maybeTextResponse(request, "skip-wait", TaiManager.getInstance(context).benchHost().skipBenchCooldown());
             } else if ("GET".equals(request.method) && "/v1/models".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).openAiModels());
             } else if ("GET".equals(request.method) && isModelRetrievePath(request.path)) {
@@ -4410,7 +4410,7 @@ public class LauncherCtlApiServer {
     /** Bench v1 events as SSE, one {@code data:} line per event, ended by {@code [DONE]}. */
     private void writeBenchStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).benchRun(body, new TaiManager.OpenAiStreamSink() {
+            TaiManager.getInstance(context).benchHost().benchRun(body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     writeSseEvent(output, event.toString());
@@ -4430,7 +4430,7 @@ public class LauncherCtlApiServer {
     /** The same events as the lines {@code tai benchmark} shows; token events are not printed. */
     private void writeBenchTextStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).benchRun(body, new TaiManager.OpenAiStreamSink() {
+            TaiManager.getInstance(context).benchHost().benchRun(body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     String line = TaiCliFormatter.formatBenchEvent(event);

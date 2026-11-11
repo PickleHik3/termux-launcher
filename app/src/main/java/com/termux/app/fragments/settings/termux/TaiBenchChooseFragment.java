@@ -248,7 +248,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             Set<String> benchmarked;
             Set<String> crashedModels;
             try {
-                JSONObject benchmarks = TaiManager.getInstance(app).benchmarks();
+                JSONObject benchmarks = TaiManager.getInstance(app).benchHost().benchmarks();
                 benchmarked = TaiBenchLeaderboard.bestSpeedByModel(benchmarks).keySet();
                 crashedModels = TaiBenchChoice.crashedModels(benchmarks, TaiBenchSuite.BENCH_VERSION);
             } catch (JSONException | RuntimeException e) {
@@ -290,7 +290,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             Set<String> benchmarked = new LinkedHashSet<>();
             Set<String> crashedModels;
             try {
-                JSONObject benchmarks = TaiManager.getInstance(app).benchmarks();
+                JSONObject benchmarks = TaiManager.getInstance(app).benchHost().benchmarks();
                 TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks, TaiBenchHomeFragment.versions(), true);
                 for (TaiBenchLeaderboard.Row row : board.ranked) benchmarked.add(row.modelId);
                 for (TaiBenchLeaderboard.Row row : board.broken) if (!row.crashed) benchmarked.add(row.modelId);
@@ -771,7 +771,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         executor.execute(() -> {
             double best = 0.0;
             try {
-                best = TaiBenchLeaderboard.read(TaiManager.getInstance(app).benchmarks(), TaiBenchHomeFragment.versions()).bestTps();
+                best = TaiBenchLeaderboard.read(TaiManager.getInstance(app).benchHost().benchmarks(), TaiBenchHomeFragment.versions()).bestTps();
             } catch (JSONException | RuntimeException ignored) {
             }
             double finalBest = best;

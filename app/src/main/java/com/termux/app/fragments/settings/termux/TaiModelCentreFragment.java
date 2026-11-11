@@ -423,7 +423,7 @@ public class TaiModelCentreFragment extends Fragment
         executor.execute(() -> {
             JSONObject benchmarks;
             try {
-                benchmarks = TaiManager.getInstance(app).benchmarks();
+                benchmarks = TaiManager.getInstance(app).benchHost().benchmarks();
             } catch (JSONException | RuntimeException e) {
                 benchmarks = null;
             }

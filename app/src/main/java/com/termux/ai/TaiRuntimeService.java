@@ -514,9 +514,9 @@ public final class TaiRuntimeService extends Service {
             case TaiRuntimeIpc.OP_CANCEL:
                 return manager.cancelRuntime();
             case TaiRuntimeIpc.OP_BENCH_SKIP_WAIT:
-                return manager.skipBenchCooldown();
+                return manager.benchHost().skipBenchCooldown();
             case TaiRuntimeIpc.OP_BENCH_HOLD:
-                return manager.holdBench(body);
+                return manager.benchHost().holdBench(body);
             case TaiRuntimeIpc.OP_OPENAI_CHAT:
                 return manager.runtimeHost().generateHere(TaiRuntimeLink.Kind.CHAT, body);
             case TaiRuntimeIpc.OP_OPENAI_COMPLETION:
@@ -528,7 +528,7 @@ public final class TaiRuntimeService extends Service {
             case TaiRuntimeIpc.OP_PREFLIGHT:
                 return manager.preflight(body);
             case TaiRuntimeIpc.OP_BENCHMARK:
-                return manager.benchmark(body);
+                return manager.benchHost().benchmark(body);
             case TaiRuntimeIpc.OP_TRANSCRIBE:
                 return manager.speech().transcribe(body);
             case TaiRuntimeIpc.OP_STT_WARM:
@@ -575,7 +575,7 @@ public final class TaiRuntimeService extends Service {
         } else if (TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation)) {
             manager.images().generateImageToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) {
-            manager.benchRun(body, sink);
+            manager.benchHost().benchRun(body, sink);
         } else if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
             manager.runtimeHost().streamHere(TaiRuntimeLink.Kind.CHAT, body, sink);
         } else {
