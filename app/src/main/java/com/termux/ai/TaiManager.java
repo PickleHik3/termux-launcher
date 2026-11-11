@@ -80,6 +80,7 @@ public final class TaiManager {
     @Nullable private InProcessTaiRuntimeLink inProcessLink;
     @Nullable private MessengerTaiRuntimeLink messengerLink;
     @Nullable private volatile TaiRuntimeLink linkForTesting;
+    @Nullable private FeatureRequest featureRequest;
     private final RuntimeHost runtimeHost = new RuntimeHost();
     /** Total device RAM, detected once; {@code -1} until first use, {@code 0} when unknown. */
     private volatile long deviceMemoryBytes = -1L;
@@ -227,45 +228,19 @@ public final class TaiManager {
         runtimeLink().cancel(generationId);
     }
 
-    @NonNull
-    private JSONObject generateThroughLink(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body,
-                                           @NonNull TaiRuntimeLink.Priority priority, long timeoutMs) throws JSONException {
-        TaiRuntimeLink.GenerationRequest request = new TaiRuntimeLink.GenerationRequest(kind, false, body, priority, null, timeoutMs);
-        JSONObject result;
-        try {
-            result = runtimeLink().generate(request, NO_SIGNALS).await();
-        } catch (IOException e) {
-            // A non-streaming generation writes to no sink; nothing here does I/O of the caller's.
-            throw new IllegalStateException(e);
-        }
-        return result != null ? result : error(500, "tai_runtime_unavailable", "On-device AI runtime did not return a result.");
-    }
-
-    private void streamThroughLink(@NonNull TaiRuntimeLink.Kind kind, @NonNull String body, @NonNull OpenAiStreamSink sink,
-                                   @NonNull TaiRuntimeLink.Priority priority, @Nullable String generationId)
+    private void streamThrough(@NonNull FeatureRequest.Kind kind, @NonNull String body, @NonNull OpenAiStreamSink sink,
+                               @NonNull TaiRuntimeLink.Priority priority, @Nullable String generationId)
         throws JSONException, IOException {
-        TaiRuntimeLink.GenerationRequest request = new TaiRuntimeLink.GenerationRequest(kind, true, body, priority, generationId, 0L);
-        runtimeLink().generate(request, generationSink(sink)).await();
-    }
-
-    /** A sink that hears nothing but chunks: every caller before ADR 0027's events. */
-    private static final TaiRuntimeLink.GenerationSink NO_SIGNALS = new TaiRuntimeLink.GenerationSink() {
-    };
-
-    @NonNull
-    private static TaiRuntimeLink.GenerationSink generationSink(@NonNull OpenAiStreamSink sink) {
-        if (sink instanceof TaiRuntimeLink.GenerationSink) return (TaiRuntimeLink.GenerationSink) sink;
-        return new TaiRuntimeLink.GenerationSink() {
-            @Override
-            public void onEvent(@NonNull JSONObject event) throws IOException {
-                sink.onEvent(event);
-            }
-
-            @Override
-            public void onDone() throws IOException {
+        FeatureRequest.Call call = FeatureRequest.Call.http(kind, body).stream(true)
+            .priority(FeatureRequest.Priority.of(priority)).id(generationId);
+        // The edge writes each chunk as it came and ends with done: today's OpenAI bytes.
+        featureRequest().start(call, event -> {
+            if (event.type == FeatureRequest.Event.Type.DONE) {
                 sink.onDone();
+            } else if (event.openAi != null) {
+                sink.onEvent(event.openAi);
             }
-        };
+        }).await();
     }
 
     /** The work each seam operation does where the runtime is; see {@link InProcessTaiRuntimeLink.Host}. */
@@ -375,15 +350,30 @@ public final class TaiManager {
     @NonNull
     private String delegatedRuntimeBody(@NonNull String body, boolean chatRoute) throws JSONException {
         JSONObject request = parseBody(body);
-        request.remove(INTERNAL_MODEL_SPEC);
-        request.remove(INTERNAL_RUNTIME_OPTIONS);
-        request.remove(INTERNAL_FEATURE_PLAN);
+        stripInternalKeys(request);
         // The request's feature loads by its plan, resolved here where the picks live.
         TaiFunction feature = TaiCallerRequests.featureFor(request, chatRoute);
         TaiFeaturePlan plan = feature == null ? null : TaiFeaturePlans.forContext(appContext).plan(feature);
         if (plan != null && plan.where == TaiFeaturePlan.Where.ON_DEVICE && !namesModel(request)) {
             request.put("model", plan.requestModel());
         }
+        return runtimeBodyFor(request, plan);
+    }
+
+    /** Removes what only this app's process may put in a request for the runtime: the model's spec, its options and the plan. */
+    static void stripInternalKeys(@NonNull JSONObject request) {
+        request.remove(INTERNAL_MODEL_SPEC);
+        request.remove(INTERNAL_RUNTIME_OPTIONS);
+        request.remove(INTERNAL_FEATURE_PLAN);
+    }
+
+    /**
+     * The body the runtime receives for {@code request}, whose model the caller has already chosen (the
+     * Default model when it names none): the model resolved here, where the picks live, with its spec and
+     * options, and the plan when it is on-device. Shared by {@link FeatureRequest} and the load routes.
+     */
+    @NonNull
+    String runtimeBodyFor(@NonNull JSONObject request, @Nullable TaiFeaturePlan plan) throws JSONException {
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(modelId);
         if (spec != null) {
@@ -395,24 +385,28 @@ public final class TaiManager {
         return request.toString();
     }
 
-    /**
-     * App process, chat routes: a request that names no model and whose feature (the one it names, else
-     * the assistant) runs on the remote provider asks for the provider's model, so the remote routing
-     * that follows sees it. A local plan's model is filled in with the rest of the plan by {@link
-     * #delegatedRuntimeBody(String, boolean)}. Anything else is left as it is.
-     */
+    /** The plan a Feature loads by, resolved here where the picks live. */
     @NonNull
-    private String withRemoteFeatureModel(@NonNull String body) {
-        if (runtimeProcess) return body;
-        try {
-            JSONObject request = parseBody(body);
-            if (namesModel(request)) return body;
-            TaiFunction feature = TaiCallerRequests.featureFor(request, true);
-            if (feature == null) return body;
-            TaiFeaturePlan plan = TaiFeaturePlans.forContext(appContext).plan(feature);
-            return plan.isRemote() ? request.put("model", plan.requestModel()).toString() : body;
-        } catch (JSONException | RuntimeException e) {
-            return body;
+    TaiFeaturePlan featurePlanFor(@NonNull TaiFunction feature) {
+        return TaiFeaturePlans.forContext(appContext).plan(feature);
+    }
+
+    /** The Default model: what a request that names none and has no plan model runs. */
+    @NonNull
+    String defaultAssistantModelId() {
+        return settings.getDefaultAssistantModel();
+    }
+
+    boolean isRuntimeProcess() {
+        return runtimeProcess;
+    }
+
+    /** The Feature request this manager's chat entry points go through. */
+    @NonNull
+    FeatureRequest featureRequest() {
+        synchronized (runtimeHost) {
+            if (featureRequest == null) featureRequest = new FeatureRequest(FeatureRequest.productionBackend(this, appContext));
+            return featureRequest;
         }
     }
 
@@ -1970,14 +1964,8 @@ public final class TaiManager {
     @NonNull
     JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs, @NonNull TaiRuntimeLink.Priority priority)
         throws JSONException {
-        body = withRemoteFeatureModel(body);
-        // A remote/<id> model goes to the remote provider here, in the app process: the :tai_runtime
-        // process is never woken for it (remote provider design, section 4.2).
-        if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
-            return new TaiRemoteProvider(appContext).chatCompletions(
-                TaiCallerRequests.remoteBody(parseBody(body)), timeoutMs);
-        }
-        return generateThroughLink(TaiRuntimeLink.Kind.CHAT, body, priority, timeoutMs);
+        return featureRequest().reply(FeatureRequest.Call.http(FeatureRequest.Kind.CHAT, body)
+            .stream(false).timeoutMs(timeoutMs).priority(FeatureRequest.Priority.of(priority)));
     }
 
     /** A chat completion where the runtime is. */
@@ -2065,7 +2053,7 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject openAiCompletions(@NonNull String body) throws JSONException {
-        return generateThroughLink(TaiRuntimeLink.Kind.COMPLETION, body, TaiRuntimeLink.Priority.NORMAL, DEFAULT_CHAT_TIMEOUT_MS);
+        return featureRequest().reply(FeatureRequest.Call.http(FeatureRequest.Kind.COMPLETION, body).stream(false));
     }
 
     /** A completion where the runtime is. */
@@ -2138,13 +2126,7 @@ public final class TaiManager {
     void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink,
                                      @NonNull TaiRuntimeLink.Priority priority, @Nullable String generationId)
         throws JSONException, IOException {
-        body = withRemoteFeatureModel(body);
-        if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
-            new TaiRemoteProvider(appContext).stream(
-                TaiCallerRequests.remoteBody(parseBody(body)), DEFAULT_CHAT_TIMEOUT_MS, sink);
-            return;
-        }
-        streamThroughLink(TaiRuntimeLink.Kind.CHAT, body, sink, priority, generationId);
+        streamThrough(FeatureRequest.Kind.CHAT, body, sink, priority, generationId);
     }
 
     /** A streamed chat completion where the runtime is. */
@@ -2298,7 +2280,7 @@ public final class TaiManager {
     }
 
     public void openAiCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
-        streamThroughLink(TaiRuntimeLink.Kind.COMPLETION, body, sink, TaiRuntimeLink.Priority.NORMAL, null);
+        streamThrough(FeatureRequest.Kind.COMPLETION, body, sink, TaiRuntimeLink.Priority.NORMAL, null);
     }
 
     /** A streamed completion where the runtime is. */
@@ -4343,7 +4325,7 @@ public final class TaiManager {
 
     @NonNull
     private TaiRuntimeOptions runtimeOptionsFromRequest(@NonNull JSONObject request, @NonNull TaiModelSpec spec) {
-        JSONObject suppliedOptions = runtimeProcess ? request.optJSONObject(INTERNAL_RUNTIME_OPTIONS) : null;
+        JSONObject suppliedOptions = request.optJSONObject(INTERNAL_RUNTIME_OPTIONS);
         TaiRuntimeOptions options = suppliedOptions == null
             ? settings.getRuntimeOptions(spec)
             : TaiRuntimeOptions.fromJson(suppliedOptions);
@@ -4380,12 +4362,13 @@ public final class TaiManager {
     }
 
     /**
-     * The plan of the feature a request names: the one the app process resolved, in the runtime
-     * process; resolved here otherwise. {@code null} for a request that names no feature.
+     * The plan of the feature a request names: the one the Feature request resolved and sent, when
+     * there is one; else, outside the runtime process, resolved here. {@code null} for a request that names no feature.
      */
     @Nullable
     private TaiFeaturePlan featurePlan(@NonNull JSONObject request) {
-        if (runtimeProcess) return TaiFeaturePlan.fromJson(request.optJSONObject(INTERNAL_FEATURE_PLAN));
+        JSONObject supplied = request.optJSONObject(INTERNAL_FEATURE_PLAN);
+        if (supplied != null || runtimeProcess) return TaiFeaturePlan.fromJson(supplied);
         TaiFunction feature = TaiCallerRequests.featureOf(request);
         return feature == null ? null : TaiFeaturePlans.forContext(appContext).plan(feature);
     }
@@ -4546,7 +4529,7 @@ public final class TaiManager {
 
     @Nullable
     private TaiModelSpec resolveModel(@NonNull JSONObject request, @Nullable String modelId) {
-        JSONObject serialized = runtimeProcess ? request.optJSONObject(INTERNAL_MODEL_SPEC) : null;
+        JSONObject serialized = request.optJSONObject(INTERNAL_MODEL_SPEC);
         if (serialized != null) {
             try {
                 TaiModelSpec supplied = TaiModelSpec.fromJson(serialized);

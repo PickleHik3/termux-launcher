@@ -190,6 +190,16 @@ public final class TaiRemoteClient {
      */
     @NonNull
     public JSONObject chatCompletions(@NonNull String body, long timeoutMs) throws JSONException {
+        return chatCompletions(body, timeoutMs, new Cancel());
+    }
+
+    /**
+     * As {@link #chatCompletions(String, long)}, stoppable: {@link Cancel#cancel} disconnects the
+     * request in flight, ends a 429 wait at once and makes the answer a {@code generation_cancelled} error.
+     */
+    @NonNull
+    public JSONObject chatCompletions(@NonNull String body, long timeoutMs, @NonNull Cancel cancel) throws JSONException {
+        if (cancel.isCancelled()) return TaiManager.openAiError(cancelledSource());
         UrlVerdict verdict = checkUrl(baseUrl);
         if (!verdict.allowed()) return TaiManager.openAiError(source(400, "remote_url_refused", urlRefusal(baseUrl, verdict)));
         JSONObject outgoing;
@@ -201,7 +211,8 @@ public final class TaiRemoteClient {
         outgoing.remove("stream");
         long started = System.currentTimeMillis();
         try {
-            Reply reply = sendWithRetries(outgoing, timeoutMs);
+            Reply reply = sendWithRetries(outgoing, timeoutMs, cancel);
+            if (cancel.isCancelled()) return TaiManager.openAiError(cancelledSource());
             logExchange("POST", "chat/completions", reply.status, System.currentTimeMillis() - started);
             if (reply.status >= 200 && reply.status < 300) {
                 try {
@@ -214,6 +225,7 @@ public final class TaiRemoteClient {
                 errorMessage(reply.status, reply.body)));
         } catch (IOException e) {
             logExchange("POST", "chat/completions", 0, System.currentTimeMillis() - started);
+            if (cancel.isCancelled()) return TaiManager.openAiError(cancelledSource());
             return TaiManager.openAiError(transportError(e));
         }
     }
@@ -225,6 +237,16 @@ public final class TaiRemoteClient {
      */
     public void chatCompletionsStream(@NonNull String body, long timeoutMs, @NonNull TaiManager.OpenAiStreamSink sink)
         throws JSONException, IOException {
+        chatCompletionsStream(body, timeoutMs, sink, new Cancel());
+    }
+
+    /** As above, stoppable like {@link #chatCompletions(String, long, Cancel)}; a cancel ends with one error event and done. */
+    public void chatCompletionsStream(@NonNull String body, long timeoutMs, @NonNull TaiManager.OpenAiStreamSink sink,
+                                      @NonNull Cancel cancel) throws JSONException, IOException {
+        if (cancel.isCancelled()) {
+            emitError(sink, cancelledSource());
+            return;
+        }
         UrlVerdict verdict = checkUrl(baseUrl);
         if (!verdict.allowed()) {
             emitError(sink, source(400, "remote_url_refused", urlRefusal(baseUrl, verdict)));
@@ -245,11 +267,16 @@ public final class TaiRemoteClient {
             int rateLimitRetries = 0;
             while (true) {
                 connection = open("POST", endpoint(baseUrl, "chat/completions"), timeoutMs);
+                if (!cancel.attach(connection)) {
+                    emitError(sink, cancelledSource());
+                    return;
+                }
                 write(connection, outgoing.toString());
                 int status = connection.getResponseCode();
                 if (status >= 200 && status < 300) break;
                 String retryAfter = connection.getHeaderField("Retry-After");
                 String errorBody = readAll(connection.getErrorStream());
+                cancel.detach(connection);
                 connection.disconnect();
                 connection = null;
                 JSONObject retry = bodyRetries < MAX_BODY_RETRIES ? retryBody(outgoing, status, errorBody) : null;
@@ -260,9 +287,13 @@ public final class TaiRemoteClient {
                 }
                 long wait = rateLimitWaitMs(status, retryAfter, errorBody, rateLimitRetries,
                     timeoutMs - (System.currentTimeMillis() - started), System.currentTimeMillis());
-                if (wait >= 0 && pause(DEFAULT_SLEEPER, wait)) {
+                if (wait >= 0 && pause(cancel.sleeper(), wait, cancel)) {
                     rateLimitRetries++;
                     continue;
+                }
+                if (cancel.isCancelled()) {
+                    emitError(sink, cancelledSource());
+                    return;
                 }
                 logExchange("POST", "chat/completions (stream)", status, System.currentTimeMillis() - started);
                 emitError(sink, source(status, errorCode(status, errorBody), errorMessage(status, errorBody)));
@@ -278,11 +309,15 @@ public final class TaiRemoteClient {
                 String rest = reader.finish();
                 if (rest != null && deliver(rest, sink)) return;
             }
+            if (cancel.isCancelled()) {
+                emitError(sink, cancelledSource());
+                return;
+            }
             logExchange("POST", "chat/completions (stream)", 200, System.currentTimeMillis() - started);
             sink.onDone();
         } catch (IOException e) {
             logExchange("POST", "chat/completions (stream)", 0, System.currentTimeMillis() - started);
-            emitError(sink, transportError(e));
+            emitError(sink, cancel.isCancelled() ? cancelledSource() : transportError(e));
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -735,8 +770,14 @@ public final class TaiRemoteClient {
 
     @NonNull
     private Reply sendWithRetries(@NonNull JSONObject outgoing, long timeoutMs) throws IOException, JSONException {
+        return sendWithRetries(outgoing, timeoutMs, new Cancel());
+    }
+
+    @NonNull
+    private Reply sendWithRetries(@NonNull JSONObject outgoing, long timeoutMs, @NonNull Cancel cancel) throws IOException, JSONException {
         String url = endpoint(baseUrl, "chat/completions");
-        return exchange(outgoing, timeoutMs, body -> send("POST", url, body, timeoutMs), DEFAULT_SLEEPER);
+        return exchange(outgoing, timeoutMs, body -> send("POST", url, body, timeoutMs, cancel), cancel.sleeper(),
+            System::currentTimeMillis, cancel);
     }
 
     /**
@@ -756,6 +797,14 @@ public final class TaiRemoteClient {
     @NonNull
     static Reply exchange(@NonNull JSONObject outgoing, long timeoutMs, @NonNull Transport transport,
                           @NonNull Sleeper sleeper, @NonNull LongSupplier clock) throws IOException, JSONException {
+        return exchange(outgoing, timeoutMs, transport, sleeper, clock, null);
+    }
+
+    /** As above; a wait that ends because {@code cancel} was cancelled leaves the thread's interrupt flag alone. */
+    @NonNull
+    static Reply exchange(@NonNull JSONObject outgoing, long timeoutMs, @NonNull Transport transport,
+                          @NonNull Sleeper sleeper, @NonNull LongSupplier clock, @Nullable Cancel cancel)
+        throws IOException, JSONException {
         long started = clock.getAsLong();
         JSONObject body = outgoing;
         Reply reply = transport.post(body.toString());
@@ -769,7 +818,7 @@ public final class TaiRemoteClient {
             } else {
                 long wait = rateLimitWaitMs(reply.status, reply.retryAfter, reply.body, rateLimitRetries,
                     timeoutMs - (clock.getAsLong() - started), System.currentTimeMillis());
-                if (wait < 0 || !pause(sleeper, wait)) return reply;
+                if (wait < 0 || !pause(sleeper, wait, cancel)) return reply;
                 rateLimitRetries++;
             }
             reply = transport.post(body.toString());
@@ -777,25 +826,33 @@ public final class TaiRemoteClient {
     }
 
     /** False when the wait was interrupted: the request is being abandoned, so do not ask again. */
-    private static boolean pause(@NonNull Sleeper sleeper, long ms) {
+    private static boolean pause(@NonNull Sleeper sleeper, long ms, @Nullable Cancel cancel) {
         try {
             sleeper.sleep(ms);
             return true;
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            if (cancel == null || !cancel.isCancelled()) Thread.currentThread().interrupt();
             return false;
         }
     }
 
     @NonNull
     private Reply send(@NonNull String method, @NonNull String url, @Nullable String body, long timeoutMs) throws IOException {
+        return send(method, url, body, timeoutMs, new Cancel());
+    }
+
+    @NonNull
+    private Reply send(@NonNull String method, @NonNull String url, @Nullable String body, long timeoutMs,
+                       @NonNull Cancel cancel) throws IOException {
         HttpURLConnection connection = open(method, url, timeoutMs);
         try {
+            if (!cancel.attach(connection)) throw new IOException("cancelled");
             if (body != null) write(connection, body);
             int status = connection.getResponseCode();
             InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
             return new Reply(status, readAll(stream), connection.getHeaderField("Retry-After"));
         } finally {
+            cancel.detach(connection);
             connection.disconnect();
         }
     }
@@ -833,6 +890,80 @@ public final class TaiRemoteClient {
             while ((read = input.read(chunk)) != -1) buffer.write(chunk, 0, read);
             return buffer.toString(StandardCharsets.UTF_8.name());
         }
+    }
+
+    // ---------------------------------------------------------------- cancelling
+
+    /**
+     * Stops one remote request from another thread. {@link #cancel} disconnects the connection in
+     * flight and wakes a 429 wait; the request then ends as a {@code generation_cancelled} error.
+     * One token per request; a cancelled token stays cancelled.
+     */
+    public static final class Cancel {
+        private final Object lock = new Object();
+        private boolean cancelled;
+        @Nullable private HttpURLConnection live;
+        private final Sleeper sleeper = this::sleep;
+
+        public void cancel() {
+            HttpURLConnection connection;
+            synchronized (lock) {
+                if (cancelled) return;
+                cancelled = true;
+                connection = live;
+                live = null;
+                lock.notifyAll();
+            }
+            if (connection != null) connection.disconnect();
+        }
+
+        public boolean isCancelled() {
+            synchronized (lock) {
+                return cancelled;
+            }
+        }
+
+        /** Registers the connection to disconnect on cancel; {@code false} (and disconnected) when already cancelled. */
+        boolean attach(@NonNull HttpURLConnection connection) {
+            synchronized (lock) {
+                if (!cancelled) {
+                    live = connection;
+                    return true;
+                }
+            }
+            connection.disconnect();
+            return false;
+        }
+
+        void detach(@NonNull HttpURLConnection connection) {
+            synchronized (lock) {
+                if (live == connection) live = null;
+            }
+        }
+
+        /** A wait that ends at once, by {@link InterruptedException}, when cancelled. */
+        @NonNull
+        Sleeper sleeper() {
+            return sleeper;
+        }
+
+        private void sleep(long ms) throws InterruptedException {
+            long deadline = System.nanoTime() + ms * 1_000_000L;
+            synchronized (lock) {
+                while (!cancelled) {
+                    long left = (deadline - System.nanoTime()) / 1_000_000L;
+                    if (left <= 0) return;
+                    lock.wait(left);
+                }
+            }
+            throw new InterruptedException("cancelled");
+        }
+    }
+
+    /** What a cancelled request ends with, shaped as the runtime's own cancel ({@link InProcessTaiRuntimeLink#cancelledWhileWaiting}). */
+    @NonNull
+    static JSONObject cancelledSource() throws JSONException {
+        return source(499, "generation_cancelled", "The generation was cancelled.");
     }
 
     // ---------------------------------------------------------------- errors and logs
