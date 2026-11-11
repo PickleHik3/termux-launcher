@@ -457,7 +457,7 @@ public final class TaiCliFormatter {
             JSONObject roles = settings.optJSONObject("roles");
             if (roles != null) {
                 out.append("\nRoles\n");
-                appendValue(out, "Default assistant", roles.optString(TaiModelRegistry.ROLE_DEFAULT_ASSISTANT, ""));
+                appendValue(out, "Default model", roles.optString(TaiModelRegistry.ROLE_DEFAULT_ASSISTANT, ""));
             }
             out.append("\nSettings\n");
             appendValue(out, "Idle unload", settings.optInt("idleUnloadMinutes", 0) + " min");
@@ -511,7 +511,7 @@ public final class TaiCliFormatter {
         JSONObject roles = data.optJSONObject("roles");
         if (roles != null) {
             out.append("\nRoles\n");
-            appendValue(out, "Default assistant", roles.optString(TaiModelRegistry.ROLE_DEFAULT_ASSISTANT, ""));
+            appendValue(out, "Default model", roles.optString(TaiModelRegistry.ROLE_DEFAULT_ASSISTANT, ""));
         }
 
         JSONArray models = data.optJSONArray("models");

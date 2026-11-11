@@ -68,7 +68,7 @@ The **Functions** segment has one row per launcher feature:
 
 | Function | What it does |
 | --- | --- |
-| **Assistant and endpoint** | The default chat model, for the endpoint and the apps that use it |
+| **Default model** | The chat model for the Assistant page, Dawn chat and any program that names no model |
 | **Voice typing** | Turns speech into text for [voice input](Voice_Input.md) |
 | **Tidy dictation** | Cleans up a dictation once you stop |
 | **Read aloud** | Speaks text for [text to speech](Text_To_Speech.md) |
@@ -95,7 +95,7 @@ The launcher puts the phone in a tier by its RAM. Swap and "virtual RAM" do not 
 
 | | Tier 1 (6 GB or less) | Tier 2 (8 to 12 GB) | Tier 3 (16 GB or more) |
 | --- | --- | --- | --- |
-| Assistant and endpoint | none | Gemma 4 E2B | Gemma 4 E4B (E2B when there is no GPU path) |
+| Default model | none | Gemma 4 E2B | Gemma 4 E4B (E2B when there is no GPU path) |
 | Voice typing | Whisper Base | Whisper Small | Whisper Small |
 | Tidy dictation | Raw text | Gemma 4 E2B | Gemma 4 E2B |
 | Read aloud | KittenTTS Nano 0.8 | KittenTTS Nano 0.8 | KittenTTS Nano 0.8 |

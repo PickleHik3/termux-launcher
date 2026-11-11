@@ -19,6 +19,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiFeaturePlan;
 import com.termux.ai.TaiFunction;
@@ -143,9 +144,7 @@ public final class TaiFunctionPickerSheet {
     private Loaded read(@NonNull Context app) {
         Loaded loaded = new Loaded();
         TaiFunctionModels models = TaiFunctionModels.forContext(app);
-        TaiModelStore store = new TaiModelStore(app);
-        Map<String, TaiModelSpec> installed = new LinkedHashMap<>(store.getDownloadedReadableModels());
-        installed.putAll(store.getInstalledUserModels());
+        Map<String, TaiModelSpec> installed = ModelAvailability.get(app).models();
         loaded.labels = new TaiFunctionLabels(app, installed);
         TaiFunctionModels.Remote remote = remoteOf(app);
         List<TaiFunctionRows.CatalogItem> catalogue = catalogue();

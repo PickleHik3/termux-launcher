@@ -124,8 +124,7 @@ public final class TaiSettings {
         }
         if (new TaiModelRegistry().getModel(modelId) != null) return modelId;
         TaiModelStore store = new TaiModelStore(appContext);
-        if (store.getInstalledUserModels().containsKey(modelId)
-            || store.getDownloadedReadableModels().containsKey(modelId)
+        if (ModelAvailability.get(appContext).isOnPhone(modelId)
             || store.onDiskModelSpec(modelId) != null) {
             return modelId;
         }

@@ -227,7 +227,7 @@ public final class TaiManager {
         return runtime;
     }
 
-    private static boolean isTaiRuntimeProcess(@NonNull Context context) {
+    static boolean isTaiRuntimeProcess(@NonNull Context context) {
         String processName = ProcessUtils.getAppProcessNameForPid(context, Process.myPid());
         return processName != null && processName.endsWith(TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
     }
@@ -2160,9 +2160,7 @@ public final class TaiManager {
         TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
         TaiRuntimePresence.Snapshot presence = TaiRuntimePresence.read(appContext);
         boolean mnnSupported = device.mnnSupported;
-        LinkedHashMap<String, TaiModelSpec> availableModels = new LinkedHashMap<>();
-        availableModels.putAll(modelStore.getDownloadedReadableModels());
-        availableModels.putAll(modelStore.getInstalledUserModels());
+        Map<String, TaiModelSpec> availableModels = ModelAvailability.get(appContext).models();
         for (TaiModelSpec stored : availableModels.values()) {
             if ((TaiModelSpec.BACKEND_MNN_LLM.equals(stored.backend)
                 || TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(stored.backend)) && !mnnSupported) continue;

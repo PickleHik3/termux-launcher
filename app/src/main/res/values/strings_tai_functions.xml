@@ -7,7 +7,7 @@
     <string name="tai_fn_segments_desc">Show what each function uses, the installed models, or models to get</string>
 
     <!-- Function names. -->
-    <string name="tai_fn_name_assistant">Assistant and endpoint</string>
+    <string name="tai_fn_name_assistant">Default model</string>
     <string name="tai_fn_name_voice_typing">Voice typing</string>
     <string name="tai_fn_name_tidy_dictation">Tidy dictation</string>
     <string name="tai_fn_name_read_aloud">Read aloud</string>

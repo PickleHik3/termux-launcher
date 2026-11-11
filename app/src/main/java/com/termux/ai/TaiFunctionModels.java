@@ -224,7 +224,6 @@ public final class TaiFunctionModels {
     public static TaiFunctionModels forContext(@NonNull Context context) {
         final Context app = context.getApplicationContext();
         final TaiSettings settings = new TaiSettings(app);
-        final TaiModelStore models = new TaiModelStore(app);
         Store store = new Store() {
             @NonNull
             @Override
@@ -251,19 +250,15 @@ public final class TaiFunctionModels {
                 return TaiFunction.TIDY_DICTATION.modelKey.equals(key);
             }
         };
-        // Read once per instance: the store parses its records and inspects every model package on
-        // each read (about 0.7 s on a phone with two dozen models), and a screen build resolves every
-        // function and plans each one several times. An instance is made per screen build or request,
-        // so what is installed cannot change under it in a way it should see.
+        // The on-phone list is Model availability's. Inspecting every package costs about 0.7 s on a
+        // phone with two dozen models, and inside :tai_runtime Model availability reads it fresh on
+        // every call, so this instance (made per screen build or request) still reads it once.
         final Map<String, ModelInfo>[] cached = new Map[1];
         Installed installed = () -> {
             synchronized (cached) {
                 if (cached[0] != null) return cached[0];
-                // Downloads and imports, as the speech and voice-output models read them.
-                LinkedHashMap<String, TaiModelSpec> specs = new LinkedHashMap<>(models.getDownloadedReadableModels());
-                specs.putAll(models.getInstalledUserModels());
                 Map<String, ModelInfo> out = new LinkedHashMap<>();
-                for (TaiModelSpec spec : specs.values()) out.put(spec.id, ModelInfo.of(spec));
+                for (TaiModelSpec spec : ModelAvailability.get(app).models().values()) out.put(spec.id, ModelInfo.of(spec));
                 cached[0] = Collections.unmodifiableMap(out);
                 return cached[0];
             }

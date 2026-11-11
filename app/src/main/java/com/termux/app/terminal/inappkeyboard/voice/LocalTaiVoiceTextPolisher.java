@@ -5,6 +5,7 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiCallerRequests;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiFeaturePlan;
@@ -152,10 +153,7 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
      */
     @NonNull
     public static Map<String, TaiModelSpec> installedChatModels(@NonNull Context context) {
-        TaiModelStore store = new TaiModelStore(context);
-        Map<String, TaiModelSpec> all = new LinkedHashMap<>();
-        all.putAll(store.getDownloadedReadableModels());
-        all.putAll(store.getInstalledUserModels());
+        Map<String, TaiModelSpec> all = ModelAvailability.get(context).models();
         boolean mnnSupported = TaiDeviceCapabilities.detect(context).mnnSupported;
         Map<String, TaiModelSpec> chatModels = new LinkedHashMap<>();
         for (Map.Entry<String, TaiModelSpec> entry : all.entrySet()) {

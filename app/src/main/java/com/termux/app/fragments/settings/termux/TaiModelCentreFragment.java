@@ -31,7 +31,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDownloadEngine;
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiDownloadHub;
+import com.termux.ai.TaiRuntimePresence;
 import com.termux.ai.TaiDownloadQueue;
 import com.termux.ai.TaiFeatureCheckRunner;
 import com.termux.ai.TaiFeatureCheckStore;
@@ -165,6 +167,11 @@ public class TaiModelCentreFragment extends Fragment
     @Nullable private String defaultId;
     @Nullable private String voiceId;
     @Nullable private String loadedId;
+    /** Model availability tells us the runtime loaded or unloaded something: the "In use" pill follows. */
+    private final ModelAvailability.Listener loadedListener = () -> {
+        Context current = getContext();
+        if (current != null) fetchLoadedModel(current, true);
+    };
     /** Best ranked writing speed per model id, for the quiet speed pill; refreshed on {@link #onStart}. */
     @NonNull private Map<String, Double> benchmarkSpeeds = Collections.emptyMap();
     private int parallel = TaiDownloadQueue.DEFAULT_PARALLEL;
@@ -258,6 +265,7 @@ public class TaiModelCentreFragment extends Fragment
         loadInstalled(context);
         rebuild();
         TaiDownloadHub.get(context).addListener(this);
+        ModelAvailability.get(context).addListener(loadedListener);
         fetchLoadedModel(context);
         fetchBenchmarkSpeeds(context);
     }
@@ -272,6 +280,7 @@ public class TaiModelCentreFragment extends Fragment
     public void onStop() {
         Context context = getContext();
         if (context != null) TaiDownloadHub.get(context).removeListener(this);
+        if (context != null) ModelAvailability.get(context).removeListener(loadedListener);
         super.onStop();
     }
 
@@ -382,25 +391,27 @@ public class TaiModelCentreFragment extends Fragment
         });
     }
 
-    /** The runtime status is a blocking IPC; read it off the main thread for the "In use" pill. */
+    /**
+     * The model the runtime holds for the "In use" pill, from Model availability's presence read (the
+     * runtime publishes it; no IPC wakes the runtime). Read off the main thread, like the file it is.
+     */
     private void fetchLoadedModel(@NonNull Context context) {
+        fetchLoadedModel(context, false);
+    }
+
+    private void fetchLoadedModel(@NonNull Context context, boolean onlyIfChanged) {
         if (executor.isShutdown()) return;
         Context app = context.getApplicationContext();
         executor.execute(() -> {
-            String id = null;
-            try {
-                JSONObject runtime = TaiManager.getInstance(app).runtimeStatus().optJSONObject("runtime");
-                if (runtime != null && (runtime.optBoolean("loaded", false) || "loading".equals(runtime.optString("state", "")))) {
-                    String loaded = runtime.optString("loadedModelId", "");
-                    id = loaded.isEmpty() ? null : loaded;
-                }
-            } catch (JSONException | RuntimeException ignored) {
-            }
+            TaiRuntimePresence.Snapshot presence = ModelAvailability.get(app).presence();
+            String id = (presence.loaded || presence.loading) && presence.modelId != null
+                && !presence.modelId.isEmpty() ? presence.modelId : null;
             String finalId = id;
             handler.post(() -> {
                 if (!isAdded()) return;
+                boolean changed = !java.util.Objects.equals(loadedId, finalId);
                 loadedId = finalId;
-                rebuild();
+                if (changed || !onlyIfChanged) rebuild();
             });
         });
     }

@@ -1,10 +1,6 @@
 package com.termux.app.statusbar;
 
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -15,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiRuntimePresence;
 import com.termux.ai.TaiSettings;
 
@@ -73,12 +70,8 @@ public final class AiIndicatorController {
         }
     };
 
-    private final BroadcastReceiver presenceReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context receiverContext, Intent intent) {
-            refreshSnapshot();
-        }
-    };
+    /** Model availability hears the runtime's presence broadcast; the glyph re-reads on it. */
+    private final ModelAvailability.Listener presenceListener = this::refreshSnapshot;
 
     public AiIndicatorController(@NonNull StatusBarWidgetView widget,
                                  @NonNull MaterialDotSeparatorView dot) {
@@ -95,12 +88,7 @@ public final class AiIndicatorController {
     public void start() {
         if (started) return;
         started = true;
-        IntentFilter filter = new IntentFilter(TaiRuntimePresence.ACTION_PRESENCE_CHANGED);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(presenceReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            context.registerReceiver(presenceReceiver, filter);
-        }
+        ModelAvailability.get(context).addListener(presenceListener);
         refreshSnapshot();
         render(System.currentTimeMillis());
         handler.removeCallbacks(tick);
@@ -111,10 +99,7 @@ public final class AiIndicatorController {
         if (!started) return;
         started = false;
         handler.removeCallbacks(tick);
-        try {
-            context.unregisterReceiver(presenceReceiver);
-        } catch (IllegalArgumentException ignored) {
-        }
+        ModelAvailability.get(context).removeListener(presenceListener);
     }
 
     /** Re-runs the visibility rule, e.g. after the other status widgets were toggled. */
@@ -125,7 +110,7 @@ public final class AiIndicatorController {
     private void refreshSnapshot() {
         lastSnapshotReadMs = System.currentTimeMillis();
         reader.execute(() -> {
-            TaiRuntimePresence.Snapshot next = TaiRuntimePresence.read(context);
+            TaiRuntimePresence.Snapshot next = ModelAvailability.get(context).presence();
             long window = TimeUnit.MINUTES.toMillis(
                 new TaiSettings(context).getIdleUnloadMinutes());
             handler.post(() -> {

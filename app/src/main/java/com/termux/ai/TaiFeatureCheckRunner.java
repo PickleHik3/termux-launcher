@@ -210,9 +210,7 @@ public final class TaiFeatureCheckRunner {
     @NonNull
     private List<Planned> plan(@NonNull List<TaiFunction> features) {
         TaiFeaturePlans plans = TaiFeaturePlans.forContext(app);
-        TaiModelStore models = new TaiModelStore(app);
-        Map<String, TaiModelSpec> installed = new LinkedHashMap<>(models.getDownloadedReadableModels());
-        installed.putAll(models.getInstalledUserModels());
+        Map<String, TaiModelSpec> installed = ModelAvailability.get(app).models();
         TaiPlatformCaps.GpuPath path = plans.models().env().gpuPath;
         TaiGpuVerdict.State verdict = new TaiEvidenceFiles(app).gpuVerdict();
         boolean gpuUsable = TaiFeatureCheck.gpuUsable(path, verdict);
