@@ -5,7 +5,6 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.BuildConfig;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -21,8 +20,9 @@ import java.util.Locale;
  * {@link State#FAILED}. {@link TaiPlatformCaps} reads the verdict: Verified counts as {@code YES},
  * Failed as {@code CPU_FIRST}, so {@link TaiTierPolicy#defaultAccelerator} follows.
  *
- * <p>The verdict is keyed by the GPU driver string and the app version, so a driver or app update
- * runs the canary again. The picker's "Answers look wrong?" and "Try the GPU again" call
+ * <p>The verdict is keyed by the GPU name and driver string, so a driver update runs the canary
+ * again and an app update does not. (Files written before that carry {@code name|driver|version};
+ * {@link #decode} reads such an entry as a match when the name and driver agree.) The picker's "Answers look wrong?" and "Try the GPU again" call
  * {@link #markFailed(Context)} and {@link #clear(Context)}.
  *
  * <p>Storage is one small file read by both processes (the app and {@code :tai_runtime}); the
@@ -56,11 +56,10 @@ public final class TaiGpuVerdict {
         return reply.toUpperCase(Locale.ROOT).contains(CANARY_EXPECTED);
     }
 
-    /** The key a verdict is stored under: GPU name and driver with the app version. */
+    /** The key a verdict is stored under: GPU name and driver. */
     @NonNull
-    public static String key(@Nullable String gpuName, @Nullable String gpuDriver, @Nullable String appBuild) {
-        return (gpuName == null ? "" : gpuName.trim()) + "|" + (gpuDriver == null ? "" : gpuDriver.trim())
-            + "|" + (appBuild == null ? "" : appBuild.trim());
+    public static String key(@Nullable String gpuName, @Nullable String gpuDriver) {
+        return (gpuName == null ? "" : gpuName.trim()) + "|" + (gpuDriver == null ? "" : gpuDriver.trim());
     }
 
     @NonNull
@@ -70,14 +69,15 @@ public final class TaiGpuVerdict {
 
     /**
      * The state stored for {@code key}: {@code UNKNOWN} when nothing is stored or it was stored for
-     * another driver or app version. A {@code CANARY_RUNNING} marker that no canary of this process
+     * another driver. An old three-part key
+     * ({@code name|driver|appVersion}) matches on its name and driver. A {@code CANARY_RUNNING} marker that no canary of this process
      * owns means the process died during the canary, so it reads as {@code FAILED}.
      */
     @NonNull
     static State decode(@Nullable String stored, @NonNull String key, boolean canaryRunningHere) {
         if (stored == null) return State.UNKNOWN;
         int tab = stored.indexOf('\t');
-        if (tab <= 0 || !stored.substring(tab + 1).equals(key)) return State.UNKNOWN;
+        if (tab <= 0 || !keyMatches(stored.substring(tab + 1), key)) return State.UNKNOWN;
         State state;
         try {
             state = State.valueOf(stored.substring(0, tab));
@@ -86,6 +86,10 @@ public final class TaiGpuVerdict {
         }
         if (state == State.CANARY_RUNNING) return canaryRunningHere ? State.UNKNOWN : State.FAILED;
         return state;
+    }
+
+    private static boolean keyMatches(@NonNull String storedKey, @NonNull String key) {
+        return storedKey.equals(key) || storedKey.startsWith(key + "|");
     }
 
     /** The GPU path a verdict gives: {@code NO} stays; Verified is {@code YES}; Failed is {@code CPU_FIRST}. */
@@ -150,7 +154,7 @@ public final class TaiGpuVerdict {
         };
     }
 
-    /** The state stored for this phone's GPU and this build, read through {@code store}. */
+    /** The state stored for this phone's GPU, read through {@code store}. */
     @NonNull
     static State current(@NonNull Store store, @NonNull String key) {
         return decode(store.read(), key, sCanaryRunningHere);
@@ -164,7 +168,7 @@ public final class TaiGpuVerdict {
 
     @NonNull
     static String keyFor(@NonNull TaiPlatformCaps caps) {
-        return key(caps.gpuName, caps.gpuDriver, BuildConfig.VERSION_NAME);
+        return key(caps.gpuName, caps.gpuDriver);
     }
 
     /** Records the GPU as failed ("Answers look wrong?"). */
