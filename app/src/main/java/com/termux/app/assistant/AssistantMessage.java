@@ -3,6 +3,8 @@ package com.termux.app.assistant;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Locale;
+
 /** One message of a chat, as stored. */
 public final class AssistantMessage {
     public static final String ROLE_USER = "user";
@@ -50,5 +52,37 @@ public final class AssistantMessage {
 
     public boolean isUser() {
         return ROLE_USER.equals(role);
+    }
+
+    /** Maps a Feature request error code to the code the page words. Never null. */
+    @NonNull
+    public static String errorFor(@Nullable String raw) {
+        String code = raw == null ? "" : raw.toLowerCase(Locale.ROOT);
+        switch (code) {
+            case "tai_runtime_crashed":
+            case "tai_runtime_unavailable":
+            case "tai_runtime_send_failed":
+            case "tai_runtime_transport_failed":
+            case "tai_runtime_stream_failed":
+            case "tai_runtime_interrupted":
+                return ERROR_RUNTIME_DIED;
+            case "tai_runtime_timeout":
+                return ERROR_TIMEOUT;
+            case "model_not_installed":
+            case "model_not_found":
+            case "model_file_missing":
+                return ERROR_MODEL_NOT_DOWNLOADED;
+            case "model_not_loaded":
+                return ERROR_MODEL_NOT_LOADED;
+            case "insufficient_memory":
+            case "low_available_memory":
+            case "available_memory_unknown":
+            case "out_of_memory":
+                return ERROR_NOT_ENOUGH_MEMORY;
+            default:
+                return code.contains("memory") ? ERROR_NOT_ENOUGH_MEMORY
+                    : code.contains("timeout") ? ERROR_TIMEOUT
+                    : ERROR_OTHER;
+        }
     }
 }

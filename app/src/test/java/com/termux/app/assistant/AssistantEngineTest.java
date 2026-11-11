@@ -10,6 +10,8 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.test.core.app.ApplicationProvider;
 
+import com.termux.ai.FeatureRequest;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
@@ -33,22 +35,38 @@ import org.robolectric.annotation.Config;
 public class AssistantEngineTest {
     private static final class FakeTransport implements ChatTransport {
         interface Script {
-            void run(String body, Sink sink) throws Exception;
+            void run(String body, FeatureRequest.Sink sink) throws Exception;
+        }
+
+        final class FakeCall implements Call {
+            int cancels;
+            FeatureRequest.Sink sink;
+
+            @Override
+            public void cancel() {
+                cancels++;
+                totalCancels++;
+            }
+
+            @Override
+            public void await() throws Exception {
+                script.run(bodies.get(bodies.size() - 1), sink);
+            }
         }
 
         Script script;
         final List<String> bodies = new ArrayList<>();
-        int cancels;
+        final List<FakeCall> calls = new ArrayList<>();
+        int totalCancels;
 
+        @NonNull
         @Override
-        public void stream(@NonNull String body, @NonNull Sink sink) throws Exception {
+        public Call start(@NonNull String body, @NonNull FeatureRequest.Sink sink) {
             bodies.add(body);
-            script.run(body, sink);
-        }
-
-        @Override
-        public void cancel() {
-            cancels++;
+            FakeCall call = new FakeCall();
+            call.sink = sink;
+            calls.add(call);
+            return call;
         }
     }
 
@@ -89,13 +107,12 @@ public class AssistantEngineTest {
         file.delete();
     }
 
-    private static JSONObject delta(String text) throws Exception {
-        return new JSONObject("{\"choices\":[{\"delta\":{\"content\":" + JSONObject.quote(text)
-            + "},\"finish_reason\":null}]}");
+    private static FeatureRequest.Event delta(String text) {
+        return FeatureRequest.Event.text(text);
     }
 
-    private static JSONObject finish() throws Exception {
-        return new JSONObject("{\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}");
+    private static FeatureRequest.Event finish() {
+        return FeatureRequest.Event.text("", "stop");
     }
 
     private AssistantMessage last(long chat) {
@@ -109,7 +126,7 @@ public class AssistantEngineTest {
             sink.onEvent(delta("Hel"));
             sink.onEvent(delta("lo"));
             sink.onEvent(finish());
-            sink.onDone();
+            sink.onEvent(FeatureRequest.Event.done());
         };
         long chat = store.createChat(1);
         assertTrue(engine.send(chat, "  hi there  "));
@@ -202,8 +219,8 @@ public class AssistantEngineTest {
     public void errorEventKeepsPartialTextAndCode() throws Exception {
         transport.script = (body, sink) -> {
             sink.onEvent(delta("part"));
-            sink.onEvent(new JSONObject("{\"error\":{\"code\":\"tai_runtime_crashed\",\"message\":\"gone\"}}"));
-            sink.onDone();
+            sink.onEvent(FeatureRequest.Event.error("tai_runtime_crashed", "gone"));
+            sink.onEvent(FeatureRequest.Event.done());
         };
         long chat = store.createChat(1);
         engine.send(chat, "q");
@@ -216,9 +233,8 @@ public class AssistantEngineTest {
     @Test
     public void modelNotDownloadedError() throws Exception {
         transport.script = (body, sink) -> {
-            sink.onEvent(new JSONObject("{\"ok\":false,\"code\":\"model_not_installed\","
-                + "\"error\":{\"code\":\"model_not_installed\"}}"));
-            sink.onDone();
+            sink.onEvent(FeatureRequest.Event.error("model_not_installed", null));
+            sink.onEvent(FeatureRequest.Event.done());
         };
         long chat = store.createChat(1);
         engine.send(chat, "q");
@@ -245,7 +261,7 @@ public class AssistantEngineTest {
     public void emptyAnswerIsAnError() throws Exception {
         transport.script = (body, sink) -> {
             sink.onEvent(finish());
-            sink.onDone();
+            sink.onEvent(FeatureRequest.Event.done());
         };
         long chat = store.createChat(1);
         engine.send(chat, "q");
@@ -272,18 +288,19 @@ public class AssistantEngineTest {
         assertEquals(AssistantMessage.STATE_STOPPED, m.state);
         assertEquals("half way", m.text);
         assertNull(m.errorCode);
-        assertEquals(1, transport.cancels);
+        assertEquals(1, transport.totalCancels);
     }
 
     @Test
-    public void stopBeforeTheRuntimeAnswersDoesNotCancelTheRuntime() throws Exception {
+    public void stopCancelsOnlyItsOwnCall() throws Exception {
         transport.script = (body, sink) -> {
             engine.stop();
-            // The runtime's first event arrives late: the cancel goes out then, once.
+            assertEquals(1, transport.calls.get(0).cancels);
+            // A text event that arrives late ends the read; the cancel is not sent twice.
             try {
                 sink.onEvent(delta("x"));
             } catch (IOException e) {
-                assertEquals(1, transport.cancels);
+                assertEquals(1, transport.calls.get(0).cancels);
                 throw e;
             }
         };
@@ -291,7 +308,7 @@ public class AssistantEngineTest {
         engine.send(chat, "q");
         assertEquals(AssistantMessage.STATE_STOPPED, last(chat).state);
         assertEquals("", last(chat).text);
-        assertEquals(1, transport.cancels);
+        assertEquals(1, transport.totalCancels);
     }
 
     @Test
@@ -312,7 +329,7 @@ public class AssistantEngineTest {
     public void retryRerunsTheLastAnswerForItsUserMessage() throws Exception {
         transport.script = (body, sink) -> {
             sink.onEvent(delta("bad"));
-            sink.onEvent(new JSONObject("{\"error\":{\"code\":\"tai_runtime_timeout\"}}"));
+            sink.onEvent(FeatureRequest.Event.error("tai_runtime_timeout", null));
         };
         long chat = store.createChat(1);
         engine.send(chat, "ask");
@@ -414,5 +431,47 @@ public class AssistantEngineTest {
         assertTrue(transport.bodies.get(1).contains("second"));
         assertEquals(AssistantMessage.STATE_COMPLETE, last(a).state);
         assertEquals(AssistantMessage.STATE_COMPLETE, last(b).state);
+    }
+
+    @Test
+    public void stopWhileWaitingCancelsTheCall() throws Exception {
+        transport.script = (body, sink) -> {
+            sink.onEvent(FeatureRequest.Event.waiting());
+            assertEquals(AssistantEngine.AnswerPhase.WAITING, engine.answerPhase());
+            engine.stop();
+            assertEquals(AssistantEngine.AnswerPhase.NONE, engine.answerPhase());
+            assertEquals(1, transport.calls.get(0).cancels);
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        assertEquals(AssistantMessage.STATE_STOPPED, last(chat).state);
+        assertEquals(1, transport.totalCancels);
+    }
+
+    @Test
+    public void phaseFollowsTheEvents() throws Exception {
+        final List<AssistantEngine.AnswerPhase> seen = new ArrayList<>();
+        transport.script = (body, sink) -> {
+            seen.add(engine.answerPhase());
+            sink.onEvent(FeatureRequest.Event.waiting());
+            seen.add(engine.answerPhase());
+            sink.onEvent(FeatureRequest.Event.loading());
+            seen.add(engine.answerPhase());
+            sink.onEvent(delta(""));
+            seen.add(engine.answerPhase());
+            sink.onEvent(delta("text"));
+            seen.add(engine.answerPhase());
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        List<AssistantEngine.AnswerPhase> expected = new ArrayList<>();
+        expected.add(AssistantEngine.AnswerPhase.NONE);
+        expected.add(AssistantEngine.AnswerPhase.WAITING);
+        expected.add(AssistantEngine.AnswerPhase.LOADING);
+        expected.add(AssistantEngine.AnswerPhase.STARTED);
+        expected.add(AssistantEngine.AnswerPhase.STARTED);
+        assertEquals(expected, seen);
+        assertEquals(AssistantEngine.AnswerPhase.NONE, engine.answerPhase());
+        assertEquals("text", last(chat).text);
     }
 }

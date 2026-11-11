@@ -23,9 +23,12 @@ public final class AssistantModelPresenter {
     }
 
     @NonNull
-    public static Stage stage(boolean generating, boolean liveTextEmpty, @NonNull AssistantModelStatus.Kind kind) {
+    public static Stage stage(boolean generating, boolean liveTextEmpty, @NonNull AssistantModelStatus.Kind kind,
+                              @NonNull AssistantEngine.AnswerPhase phase) {
         if (!generating) return Stage.NONE;
         if (!liveTextEmpty) return Stage.RESPONDING;
+        if (phase == AssistantEngine.AnswerPhase.LOADING) return Stage.LOADING_MODEL;
+        if (phase == AssistantEngine.AnswerPhase.STARTED) return Stage.THINKING;
         return kind == AssistantModelStatus.Kind.READY ? Stage.THINKING : Stage.LOADING_MODEL;
     }
 

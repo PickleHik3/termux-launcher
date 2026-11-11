@@ -82,6 +82,28 @@ public final class FeatureRequest {
             this.openAi = openAi;
         }
 
+        @NonNull public static Event waiting() { return signal(Type.WAITING); }
+
+        @NonNull public static Event loading() { return signal(Type.LOADING); }
+
+        @NonNull public static Event done() { return signal(Type.DONE); }
+
+        @NonNull
+        public static Event text(@NonNull String text) {
+            return new Event(Type.TEXT, text, "", null, null, null, null, null);
+        }
+
+        /** A TEXT with a finish reason. */
+        @NonNull
+        public static Event text(@NonNull String text, @Nullable String finishReason) {
+            return new Event(Type.TEXT, text, "", finishReason, null, null, null, null);
+        }
+
+        @NonNull
+        public static Event error(@Nullable String code, @Nullable String message) {
+            return new Event(Type.ERROR, "", "", null, null, code, message, null);
+        }
+
         @NonNull
         static Event signal(@NonNull Type type) {
             return new Event(type, "", "", null, null, null, null, null);
