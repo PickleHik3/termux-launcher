@@ -1504,10 +1504,6 @@ public final class PaneWallLayout extends ViewGroup
     private boolean goToCell(int pageId, boolean animate, float velocityPxPerSec) {
         int to = indexOfCell(pageId);
         if (to < 0) return false;
-        DspGap.watch("goToCell");
-        DspGap.logCaller("cross-start from=" + mCurrent + "#" + mCurrentId + " to=#" + pageId
-            + " steps=" + (to - indexOfCell(mCurrentId)) + " animate=" + animate + " offset="
-            + mOffsetPx + " v=" + velocityPxPerSec);
         interruptDrag();
         // The wall is about to move: a keyboard still settling from a swipe lands first, and a
         // status bar fold under a finger goes back.
@@ -1551,7 +1547,6 @@ public final class PaneWallLayout extends ViewGroup
      */
     public void standOff(int side) {
         if (side == 0 || getWidth() <= 0) return;
-        DspGap.logCaller("stand-off side=" + side + " current=" + mCurrent);
         stopSlide();
         stopNudge();
         // The far jump's slide this stops is over: the page now stands off on its own.
@@ -1587,9 +1582,6 @@ public final class PaneWallLayout extends ViewGroup
             // A keyboard still settling from a swipe lands before the wall moves.
             settleKeyboardRevealNow();
             settleStatusFoldNow();
-            DspGap.watch("beginDrag");
-            DspGap.log("drag-start page=" + mCurrent + "#" + mCurrentId + " plank=" + plank
-                + " offset=" + mOffsetPx + " transition=" + mTransition);
             mDragging = true;
             mDragHeading = 0;
             stopSlide();
@@ -2986,13 +2978,6 @@ public final class PaneWallLayout extends ViewGroup
      */
     private void syncPageLayer(@NonNull View page) {
         boolean dimmed = page == mSinkPage && mSinkLayered;
-        int dspWant = mTiltPages.contains(page) || dimmed || mPosedPages.contains(page)
-            ? View.LAYER_TYPE_HARDWARE : View.LAYER_TYPE_NONE;
-        if (page.getLayerType() != dspWant) {
-            DspGap.logCaller("page-layer " + page.getClass().getSimpleName() + " "
-                + page.getLayerType() + "->" + dspWant + " surfacePage="
-                + (page instanceof SurfacePage));
-        }
         if (mTiltPages.contains(page) || dimmed || mPosedPages.contains(page)) {
             page.setLayerType(View.LAYER_TYPE_HARDWARE, dimmed ? mSinkPaint : null);
         } else {
@@ -3210,7 +3195,6 @@ public final class PaneWallLayout extends ViewGroup
         View page = mPageViews.get(place);
         if (!(page instanceof SurfacePage) || !isLaid(place)) return;
         mStillPlaces.add(place);
-        DspGap.log("wall-hold-still place=" + place + " tx=" + page.getTranslationX());
         ((SurfacePage) page).holdStill(() -> onStillReady(place));
     }
 
@@ -3220,8 +3204,6 @@ public final class PaneWallLayout extends ViewGroup
      * plank's angle — so it snaps in where it would have been.
      */
     private void onStillReady(@NonNull PaneWallPage place) {
-        DspGap.log("wall-still-ready place=" + place + " asked=" + mStillPlaces.contains(place)
-            + " offset=" + mOffsetPx);
         if (!mStillPlaces.contains(place)) return;
         View page = mPageViews.get(place);
         if (page == null || !canTransform(place, page)) return;
@@ -3241,7 +3223,6 @@ public final class PaneWallLayout extends ViewGroup
      */
     private void releaseStills() {
         if (mStillPlaces.isEmpty()) return;
-        DspGap.logCaller("wall-release-stills " + mStillPlaces);
         List<PaneWallPage> places = new ArrayList<>(mStillPlaces);
         mStillPlaces.clear();
         for (PaneWallPage place : places) {
@@ -3269,8 +3250,6 @@ public final class PaneWallLayout extends ViewGroup
             return;
         }
         stopSlide();
-        DspGap.log("slide-start offset=" + mOffsetPx + " v=" + velocityPxPerSec + " jumpFrom="
-            + mJumpFromId + " current=" + mCurrent + " transition=" + mTransition);
         holdStillForSlide();
         // General › Animation speed: a slower or faster spring, read once per slide.
         final SettleSpring spring = SettleSpring.page(mOffsetPx, velocityPxPerSec,
@@ -3444,18 +3423,6 @@ public final class PaneWallLayout extends ViewGroup
         }
         placeInnerNeighbours(width);
         syncDrawingOrder(width);
-        if (mOffsetPx != 0f || mNudgePage != null || DspGap.watching()) {
-            for (Map.Entry<PaneWallPage, View> e : mPageViews.entrySet()) {
-                View v = e.getValue();
-                if (v.getVisibility() != VISIBLE || !(Math.abs(slideOf(v)[0]) < Math.max(1, width))) continue;
-                DspGap.log("pose " + e.getKey() + "#" + boundPageId(e.getKey()) + " offset="
-                    + mOffsetPx + " slide=" + slideOf(v)[0] + " tx=" + v.getTranslationX()
-                    + " a=" + v.getAlpha() + " s=" + v.getScaleX() + " ry=" + v.getRotationY()
-                    + " L=" + v.getLayerType() + " idx=" + indexOfChild(v) + " swap="
-                    + mSwapLow + "/" + mSwapHigh
-                    + (v instanceof SurfacePage ? " still=" + ((SurfacePage) v).isStill() : ""));
-            }
-        }
         // The planks' angles are a function of where the pages stand, so the drag, the spring
         // back and the carry-out all read the same number and they are flat wherever they rest —
         // plus the held side's press, while the page is sunk. After every page has moved, since
@@ -3513,10 +3480,6 @@ public final class PaneWallLayout extends ViewGroup
             }
         } else {
             boolean wasOnScreen = view.getVisibility() == VISIBLE;
-            if (wasOnScreen != onScreen && view instanceof SurfacePage) {
-                DspGap.logCaller("place-page surface page " + (onScreen ? "VISIBLE" : "INVISIBLE")
-                    + " x=" + x);
-            }
             view.setVisibility(onScreen ? VISIBLE : INVISIBLE);
             // A page coming back was skipped by every layout pass while it was parked, so
             // the frame may have moved under it: it is laid out again before it is drawn.
@@ -3655,7 +3618,6 @@ public final class PaneWallLayout extends ViewGroup
             }
         }
         if (low == mSwapLow && high == mSwapHigh) return;
-        DspGap.log("draw-order swap " + mSwapLow + "/" + mSwapHigh + " -> " + low + "/" + high);
         mSwapLow = low;
         mSwapHigh = high;
         setChildrenDrawingOrderEnabled(low >= 0);
