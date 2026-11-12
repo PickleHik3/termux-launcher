@@ -304,6 +304,27 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             // After the display's own callback, which hands the surface to X first.
             mDisplay.getHolder().addCallback(mStillSurfaceCallback);
             com.termux.app.wall.DspGap.setTarget(this, this::dspgapState);
+            // DSPGAP round 2: redraw-needed and every change of the display view's bounds.
+            mDisplay.getHolder().addCallback(new android.view.SurfaceHolder.Callback2() {
+                @Override public void surfaceRedrawNeeded(@NonNull android.view.SurfaceHolder holder) {
+                    com.termux.app.wall.DspGap.log("surface-redraw-needed "
+                        + holder.getSurfaceFrame().toShortString() + " state=" + mStill.state());
+                }
+
+                @Override public void surfaceCreated(@NonNull android.view.SurfaceHolder holder) {}
+
+                @Override public void surfaceChanged(@NonNull android.view.SurfaceHolder holder,
+                                                     int format, int width, int height) {}
+
+                @Override public void surfaceDestroyed(@NonNull android.view.SurfaceHolder holder) {}
+            });
+            mDisplay.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                if (l == ol && t == ot && r == or && b == ob) return;
+                com.termux.app.wall.DspGap.log("display-layout " + l + "," + t + "," + r + "," + b
+                    + " <- " + ol + "," + ot + "," + or + "," + ob + " held="
+                    + mFrozenWidth + "x" + mFrozenHeight + " stillHeld="
+                    + mStill.holdsSurfaceSize());
+            });
         }
         // The display is not registered as the pane's content on purpose: that clearance keeps a
         // terminal's text out of the arcs, but an X screen wants to fill the frame to its rim,
@@ -958,6 +979,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         super.onAttachedToWindow();
         getViewTreeObserver().addOnGlobalLayoutListener(mDspLayout);
         com.termux.app.wall.DspGap.log("frame-attached");
+        com.termux.app.wall.DspGap.armWindow(this);
         // A place can be added to the wall while the wall is resting on another one.
         syncPageOnScreen();
     }
@@ -986,6 +1008,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * lets it go, not the hold's own release.
      */
     public void beginHostResize() {
+        com.termux.app.wall.DspGap.logCaller("host-resize begin held=" + mFrozenWidth + "x" + mFrozenHeight);
         if (mDisplay == null) return;
         beginHostResize(mDisplay.getWidth(), mDisplay.getHeight());
     }
@@ -1003,6 +1026,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /** The frame has its final height: the display takes it, in one resize. */
     public void finishHostResize() {
+        com.termux.app.wall.DspGap.logCaller("host-resize finish held=" + mFrozenWidth + "x" + mFrozenHeight);
         dropNextLayoutHold();
         if (mFrozenWidth < 0) return;
         mFrozenWidth = -1;
@@ -1035,6 +1059,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * over ({@link #beginHostResize()}).
      */
     public void holdHostSizeOverNextLayout() {
+        com.termux.app.wall.DspGap.logCaller("host-hold next-layout held=" + mFrozenWidth + "x" + mFrozenHeight);
         if (mDisplay == null) return;
         holdHostSizeOverNextLayout(mDisplay.getWidth(), mDisplay.getHeight());
     }
@@ -1156,7 +1181,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        if (com.termux.app.wall.DspGap.watching()) com.termux.app.wall.DspGap.log("frame-onLayout changed=" + changed + " "
+        if (changed || com.termux.app.wall.DspGap.watching()) com.termux.app.wall.DspGap.log("frame-onLayout changed=" + changed + " "
             + left + "," + top + "," + right + "," + bottom);
         if (mFrozenWidth > 0 && mDisplay != null) {
             // Where the frame put it, but at its frozen size and hanging from the bottom edge:
