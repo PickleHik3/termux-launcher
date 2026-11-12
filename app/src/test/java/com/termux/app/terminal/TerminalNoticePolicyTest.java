@@ -63,7 +63,7 @@ public class TerminalNoticePolicyTest {
     }
 
     @Test
-    public void unfocusedMessageIsHeldBackOnlyWhileItsPaneIsInFront() {
+    public void unfocusedMessageIsHeldBackOnlyWhileTheTerminalPageIsShowing() {
         String occasion = occasionOf("o=unfocused;Build finished");
         assertFalse(TerminalNoticePolicy.occasionAllows(occasion, true, true));
         assertTrue(TerminalNoticePolicy.occasionAllows(occasion, true, false));

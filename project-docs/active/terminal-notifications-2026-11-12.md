@@ -12,10 +12,12 @@ is visible. Tap routing to a session already exists (`ShellNotifications.tapInte
 
 ## Decisions
 
-1. **When.** A notice posts to Android only when it is unseen: the launcher is off screen, or that pane is
-   not the one in front. When it is seen, the in-app notice and the window pill are enough. OSC 99's
-   `occasion` may narrow this (`invisible` = only when the launcher is off screen) but `always` cannot
-   widen it.
+1. **When.** A notice posts to Android only when it is unseen: the launcher is off screen, or another
+   page is showing (Home, Assistant, Display, a focused Home float). While the launcher is visible and
+   the Terminal page is showing, nothing posts for any pane, even one not in front: the in-app notice
+   and the window pill are enough (decided 2026-11-12). OSC 99's `occasion` may narrow this
+   (`invisible` = only when the launcher is off screen; `unfocused` = the same unseen test) but
+   `always` cannot widen it.
 2. **Channels.** One "Terminal" channel group with six channels:
 
    | Channel | Source | Importance |
@@ -35,8 +37,9 @@ is visible. Tap routing to a session already exists (`ShellNotifications.tapInte
    unseen notice, under a Terminal group summary. When the kind changes, the notification moves to that
    kind's channel; if that channel is off, nothing shows for it (lower kinds do not stand in). An OSC 99
    id replaces the earlier message with the same id in that window; OSC 99 `close` cancels it.
-5. **Clearing.** A notification is cancelled when its pane comes to front, when the state it reported
-   ends (blocked → working), or when its session closes.
+5. **Clearing.** A notification is cancelled when its pane comes to front or the Terminal page comes to
+   front showing its window, when the state it reported ends (blocked → working), or when its session
+   closes.
 6. **Tap** opens the launcher on that window and pane; a closed session falls back to the Terminal page.
 7. **Wording.** Title: the program and its state ("claude needs input"), falling back to the window name.
    Text: the program's own message. Sub-text: the window. Lock screen: kind only, no message text

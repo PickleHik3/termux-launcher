@@ -122,6 +122,11 @@ public final class TerminalNoticeRecords {
     }
 
     /** The pane was seen or closed: its bell may notify again. Also drops marks of collected panes. */
+    /** The window was seen: its next bell may notify again. */
+    public void clearBell(@NonNull String windowKey) {
+        mBells.remove(windowKey);
+    }
+
     public void clearBellFor(@Nullable Object pane) {
         for (Iterator<WeakReference<Object>> it = mBells.values().iterator(); it.hasNext(); ) {
             Object owner = it.next().get();

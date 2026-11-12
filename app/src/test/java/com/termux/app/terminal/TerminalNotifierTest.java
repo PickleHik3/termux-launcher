@@ -29,6 +29,8 @@ public class TerminalNotifierTest {
 
     private final Object paneA = new Object();
     private final Object paneB = new Object();
+    /** A second pane in paneA's window. */
+    private final Object paneA2 = new Object();
 
     private boolean visible;
     private Object front;
@@ -51,7 +53,7 @@ public class TerminalNotifierTest {
             @Override public boolean isLauncherVisible() { return visible; }
             @Nullable @Override public Object frontPane() { return front; }
             @NonNull @Override public String windowKey(@NonNull Object pane) {
-                return pane == paneA ? "wa" : "wb";
+                return pane == paneA || pane == paneA2 ? "wa" : "wb";
             }
             @Nullable @Override public String windowLabel(@NonNull Object pane) {
                 return pane == paneA ? "[1] build" : "[2] logs";
@@ -130,11 +132,39 @@ public class TerminalNotifierTest {
     }
 
     @Test
-    public void visibleWithAnotherPaneInFrontStillPosts() {
+    public void terminalPageShowingPostsNothingEvenForAPaneNotInFront() {
         visible = true;
         front = paneB;
+        assertFalse(notifier.message(paneA, "x", "y"));
+        assertFalse(notifier.kitty(paneA, msg("", "x", "y", KittyNotification.URGENCY_CRITICAL)));
+        notifier.bell(paneA);
+        assertTrue(posted.isEmpty());
+        assertEquals(0, records.size());
+    }
+
+    @Test
+    public void visibleOnAnotherPagePosts() {
+        // Home, the Assistant, the Display or a focused Home float: no pane is in front.
+        visible = true;
+        front = null;
         assertTrue(notifier.message(paneA, "x", "y"));
         assertEquals(1, posted.size());
+    }
+
+    @Test
+    public void theTerminalPageShowingAWindowClearsItsNotificationWhicheverPaneSentIt() {
+        notifier.bell(paneA2);
+        assertEquals(1, posted.size());
+        visible = true;
+        front = paneA;
+        notifier.frontMaybeChanged();
+        assertEquals(java.util.Arrays.asList("wa"), cancelled);
+        assertEquals(0, records.size());
+        // The window was seen, so its next bell may notify again.
+        visible = false;
+        front = null;
+        notifier.bell(paneA2);
+        assertEquals(2, posted.size());
     }
 
     @Test

@@ -29,7 +29,10 @@ public final class TerminalNotifier {
     public interface Env {
         boolean isLauncherVisible();
 
-        /** The pane in front (launcher visible, terminal showing at rest, current pane), else null. */
+        /**
+         * The pane in front while the launcher is visible and the Terminal page is showing at rest,
+         * else null. Non-null is also what "the Terminal page is showing" means to the policy.
+         */
         @Nullable
         Object frontPane();
 
@@ -129,11 +132,17 @@ public final class TerminalNotifier {
         if (current != null && id.equals(current.messageId)) cancel(key);
     }
 
-    /** Call when the pane in front may have changed: what it had up is now seen. */
+    /**
+     * Call when the pane in front may have changed: the Terminal page showing a window is the
+     * user seeing it, so that window's notification and the front pane's are taken down.
+     */
     public void frontMaybeChanged() {
         Object front = mEnv.frontPane();
         if (front == null) return;
+        String key = mEnv.windowKey(front);
+        cancel(key);
         cancelRecordsOf(front);
+        mRecords.clearBell(key);
         mRecords.clearBellFor(front);
     }
 
@@ -174,7 +183,7 @@ public final class TerminalNotifier {
         if (!mPoster.canPost()) return false;
         String key = mEnv.windowKey(pane);
         TerminalNoticePolicy.Decision decision = TerminalNoticePolicy.decide(kind,
-            mEnv.isLauncherVisible(), mEnv.frontPane() == pane, awayOnly, mRecords.get(key),
+            mEnv.isLauncherVisible(), mEnv.frontPane() != null, awayOnly, mRecords.get(key),
             messageId, mRecords.bellSpent(key));
         if (decision.action == TerminalNoticePolicy.Action.NOTHING) return false;
 

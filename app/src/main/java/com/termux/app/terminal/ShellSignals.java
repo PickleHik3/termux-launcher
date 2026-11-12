@@ -142,8 +142,9 @@ public final class ShellSignals {
     public boolean notify(@NonNull TerminalSession session, @NonNull KittyNotification notification) {
         mHost.noteShellAttention(session);
         boolean visible = mHost.isVisible();
-        boolean inFront = visible && mHost.isTerminalShowing() && session == mHost.currentSession();
-        if (!TerminalNoticePolicy.occasionAllows(notification.getOccasion(), visible, inFront)) return false;
+        boolean terminalShowing = visible && mHost.isTerminalShowing();
+        if (!TerminalNoticePolicy.occasionAllows(notification.getOccasion(), visible, terminalShowing))
+            return false;
         if (mNotifier.kitty(session, notification)) return true;
         // Nothing reached the shade (seen, or notifications are off for the launcher), so the
         // message still gets the in-app notice rather than being lost.
