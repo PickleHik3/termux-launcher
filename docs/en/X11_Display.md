@@ -204,7 +204,7 @@ passes them on. This is not yet device-verified.
 launcher while you are on the display window, until you leave it or switch the setting off:
 
 - a field taking focus brings the keyboard up, tap or no tap;
-- a field losing focus puts it away 150 ms later, unless another field takes focus first, so
+- a field losing focus puts it away 300 ms later, unless another field takes focus first, so
   moving from one field to the next leaves the keyboard where it is;
 - a tap over a text cursor only brings the keyboard back if a field has focus, so tapping a
   terminal or the text of a page no longer opens it;
@@ -213,7 +213,7 @@ launcher while you are on the display window, until you leave it or switch the s
 Until the first focus signal of a visit, and always without fcitx5, the pointer's shape decides as
 above. A keyboard you opened yourself, and a keyboard you switched off, win over focus as they do
 over taps. Under `adb logcat -s X11TextFocus` every decision names the signal behind it:
-`focus in -> show`, `focus out -> hide in 150 ms`, `hide cancelled: focus in`,
+`focus in -> show`, `focus out -> hide in 300 ms`, `hide cancelled: focus in`,
 `tap over xterm ignored: no focus`.
 
 This section is for the Termux edition. On the Nix edition the helper is not started yet; see
