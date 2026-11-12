@@ -6,7 +6,7 @@ checkout of `termux/termux-x11` (at the commit pinned in `x11-server/UPSTREAM.md
 
 Almost nothing needs to change in the X server core to run it inside the launcher. Add a patch
 here only for something that genuinely has to, and say in its header why the Java side could not
-do it instead. Three things are here:
+do it instead. Four things are here:
 
 - `0001-look-up-the-host-class-as-LorieHost.patch` — a rename on the JNI surface, which names a
   host class the launcher does not have.
@@ -17,6 +17,9 @@ do it instead. Three things are here:
   from the core "cursor" font, which otherwise reach 0002 with no name at all. The names are the
   shapes of `X11/cursorfont.h`, the same ones libXcursor uses, so `xterm` means a text caret
   whether or not a theme is installed.
+- `0004-offer-clipboard-pictures-to-x-clients.patch` — offers a picture on the Android clipboard
+  to X clients as its own type and `image/png`. The server is the selection owner, so only it can
+  list those targets and answer them; the host sends the bytes only when a client asks.
 
 A patch belongs in lorie's own sources. The sixteen freedesktop trees under
 `lorie/src/main/cpp/` are submodules that termux-x11's CMake patches itself at configure time, so
@@ -25,7 +28,8 @@ a hunk of ours in one of them is a second uncontrolled edit, re-fetched away on 
 dix.
 
 Order matters: 0002 extends the same `nativeInit` block 0001 renames, so it applies only after it,
-and 0003 edits the file 0002 has just added to.
+and 0003 edits the file 0002 has just added to. 0004 extends the event enum, `nativeInit` and the
+event loops after all three.
 
 A patch that adds a JNI call also needs its Java method in the same commit — the native side
 resolves methods with `FindMethodOrDie`, which kills the process when one is missing.

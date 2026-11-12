@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.ClipboardManager;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Matrix;
@@ -12,6 +13,7 @@ import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
+import android.net.Uri;
 import android.opengl.GLES20;
 import android.os.Build;
 import android.os.Handler;
@@ -43,7 +45,11 @@ import androidx.core.math.MathUtils;
 import com.termux.x11.input.InputStub;
 import com.termux.x11.utils.SamsungDexUtils;
 
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.PatternSyntaxException;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -682,6 +688,67 @@ public class LorieView extends SurfaceView implements InputStub {
             Log.d("CLIP", "sending clipboard contents: " + text);
     }
 
+    /**
+     * Reads and converts clipboard pictures for X, one at a time. Its thread ends when idle, so
+     * a launcher that never pastes a picture into X never keeps one.
+     */
+    private static final ThreadPoolExecutor CLIPBOARD_IMAGE_EXECUTOR = new ThreadPoolExecutor(
+            1, 1, 10, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
+            r -> new Thread(r, "X11ClipboardImage"));
+    static { CLIPBOARD_IMAGE_EXECUTOR.allowCoreThreadTimeOut(true); }
+
+    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
+
+    /**
+     * An X client asked for the clipboard picture as {@code target} (called from native, on the
+     * main thread). The picture is read, and converted to PNG when that is what was asked and it
+     * is something else, off the main thread; the bytes are sent and dropped, never kept. The
+     * requester blocks on the answer, so every path answers, with no bytes when there is no
+     * picture to give.
+     */
+    @Keep void requestClipboardImage(String target) {
+        if (!connected() || target == null)
+            return;
+        ClipData clip = clipboardSyncEnabled ? clipboard.getPrimaryClip() : null;
+        String imageType = ClipboardImageTargets.imageType(mimeTypesOf(clip == null ? null : clip.getDescription()));
+        Uri uri = ClipboardImageTargets.offers(imageType, target) ? firstUriOf(clip) : null;
+        if (uri == null) {
+            sendClipboardImage(mNativeContext, target, new byte[0]);
+            return;
+        }
+        ContentResolver resolver = getContext().getContentResolver();
+        CLIPBOARD_IMAGE_EXECUTOR.execute(() -> {
+            byte[] bytes = ClipboardImageTargets.bytesFor(resolver, uri, imageType, target);
+            // Written on the main thread, as every other event is: the socket is one stream.
+            MAIN_HANDLER.post(() -> {
+                if (connected())
+                    sendClipboardImage(mNativeContext, target, bytes);
+            });
+        });
+    }
+
+    @Nullable
+    private static String[] mimeTypesOf(@Nullable ClipDescription desc) {
+        if (desc == null)
+            return null;
+        String[] types = new String[desc.getMimeTypeCount()];
+        for (int i = 0; i < types.length; i++)
+            types[i] = desc.getMimeType(i);
+        return types;
+    }
+
+    @Nullable
+    private static Uri firstUriOf(@Nullable ClipData clip) {
+        if (clip == null)
+            return null;
+        for (int i = 0; i < clip.getItemCount(); i++) {
+            Uri uri = clip.getItemAt(i).getUri();
+            if (uri != null)
+                return uri;
+        }
+        return null;
+    }
+
     public void handleClipboardChange() {
         checkForClipboardChange();
     }
@@ -695,15 +762,21 @@ public class LorieView extends SurfaceView implements InputStub {
         // Below API 26 the clipboard carries no timestamp, so every change looks like a new one.
         long timestamp = desc == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O ? lastClipboardTimestamp + 1 : desc.getTimestamp();
         // Anything carrying text is offered to X. Upstream demands exactly one MIME type, which
-        // silently drops every copy from a browser (text/plain plus text/html).
-        if (clipboardSyncEnabled && desc != null &&
-                lastClipboardTimestamp < timestamp &&
-                (desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) ||
-                        desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML))) {
-            lastClipboardTimestamp = timestamp;
+        // silently drops every copy from a browser (text/plain plus text/html). A picture is
+        // offered too, as its own type and PNG; text alone keeps upstream's announce.
+        if (!clipboardSyncEnabled || desc == null || lastClipboardTimestamp >= timestamp)
+            return;
+        String[] types = mimeTypesOf(desc);
+        boolean hasText = ClipboardImageTargets.hasText(types);
+        List<String> imageTargets = ClipboardImageTargets.targetsFor(ClipboardImageTargets.imageType(types));
+        if (!hasText && imageTargets.isEmpty())
+            return;
+        lastClipboardTimestamp = timestamp;
+        if (imageTargets.isEmpty())
             sendClipboardAnnounce(mNativeContext);
-            Log.d("CLIP", "sending clipboard announce");
-        }
+        else
+            sendClipboardAnnounceTargets(mNativeContext, hasText, ClipboardImageTargets.announceList(imageTargets));
+        Log.d("CLIP", "sending clipboard announce" + (imageTargets.isEmpty() ? "" : " with " + imageTargets));
     }
 
     @Override
@@ -799,6 +872,9 @@ public class LorieView extends SurfaceView implements InputStub {
     @FastNative private native void setClipboardSyncEnabled(long ptr, boolean enabled, boolean ignored);
     @FastNative private native void sendClipboardAnnounce(long ptr);
     @FastNative private native void sendClipboardEvent(long ptr, byte[] text);
+    @FastNative private native void sendClipboardAnnounceTargets(long ptr, boolean hasText, String imageTargets);
+    // Plain native: it writes a whole picture and may block on the socket (see UPSTREAM.md).
+    private native void sendClipboardImage(long ptr, String target, byte[] data);
     @FastNative private native void sendWindowChange(long ptr, int width, int height, int framerate, String name);
     @FastNative private native void setViewport(long ptr, int x, int y, int width, int height, int expectedWidth, int expectedHeight, int hiddenBottom);
     @FastNative private native void setRendererZoom(long ptr, int percent);

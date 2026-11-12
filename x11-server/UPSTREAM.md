@@ -152,6 +152,25 @@ screen is to own the server. See `project-docs/reference/launcher/pane-wall-x11-
   resources; its strings, styles, layouts, icons and the accessibility-service config belong to
   the app it was.
 
+- **`ci/x11-patch/0004-offer-clipboard-pictures-to-x-clients.patch`** and its Java half let a
+  picture on the Android clipboard (a copied screenshot) paste into X programs. Upstream's bridge
+  is text only. `LorieView.checkForClipboardChange` now also announces a clip that holds a picture
+  (`ClipboardImageTargets`, new: the clip's own image type, then `image/png`; a wildcard type is
+  offered as PNG only) through the new `sendClipboardAnnounceTargets`, saying whether text is
+  there too; a clip with text and no picture still goes through upstream's `sendClipboardAnnounce`,
+  so text paste is unchanged. The server lists the text targets in TARGETS only when the clip has
+  text. When an X client asks for an image target the server calls the new `@Keep
+  requestClipboardImage(String)` (resolved with `FindMethodOrDie`), which reads the picture off
+  the main thread — copied when its own type was asked, decoded and re-encoded otherwise — and
+  answers through the new `sendClipboardImage`, an empty array being a refusal. The bytes are
+  never kept on either side after the answer, and are capped at 32 MiB
+  (`ClipboardImageTargets.MAX_BYTES`, `LORIE_CLIPBOARD_IMAGE_MAX`); a picture over 64 MiB decoded
+  is not converted. `sendClipboardImage` is a plain native, not `@FastNative`: it writes the whole
+  picture on the main thread (the socket is one stream every other event is written to) and may
+  block. A nightly merge must carry `requestClipboardImage`, `sendClipboardAnnounceTargets` and
+  `sendClipboardImage` forward with the patch, or the first view dies in `nativeInit` or
+  `RegisterNatives`.
+
 ## `loader/`
 
 Upstream's `shell-loader`, vendored the same way: the few kilobytes of dex that

@@ -1,0 +1,627 @@
+Offer a picture on the Android clipboard to X clients.
+
+Upstream's clipboard bridge is text only: the server takes the CLIPBOARD selection when the host
+announces a clip, lists STRING, TEXT and UTF8_STRING in TARGETS, and answers a request with the
+text the host sends. A screenshot copied on the phone could not be pasted into an X program. The
+Java side cannot do this alone: the selection owner is the server itself (lorie's
+`lorieOwnSelection`), and only the owner can name targets and fill the requestor's property.
+Running `xclip` inside the session as a second owner was the alternative, and would hold the
+picture in a client for as long as it owned the selection.
+
+So the owner learns picture targets. `lorie.h` gains three events sharing one payload struct:
+
+- `EVENT_CLIPBOARD_ANNOUNCE_TARGETS` (host to server): whether the clip has text, then the image
+  targets one per line (the clip's own type and `image/png`, chosen by `LorieView`). The server
+  interns them (at most `LORIE_CLIPBOARD_IMAGE_TARGETS_MAX`) and takes the selection as the plain
+  announce does. TARGETS lists the text targets only when the clip has text, then the image
+  targets; a text request on a clip with no text is refused. Upstream's `EVENT_CLIPBOARD_ANNOUNCE`
+  is unchanged and still means "text, no picture", so text paste is exactly as before.
+- `EVENT_CLIPBOARD_IMAGE_REQUEST` (server to host): an X client asked for an image target. The
+  request is queued, and asked of the host once per target however many clients wait on it.
+  `activity.cpp` calls `LorieView.requestClipboardImage(String)`, resolved in `nativeInit` with
+  `FindMethodOrDie`.
+- `EVENT_CLIPBOARD_IMAGE_SEND` (host to server): the target answered, then the picture's bytes;
+  no bytes is a refusal. Every request waiting on that target is answered from them — the
+  property typed as the target, format 8 — and the bytes are freed at once: a picture is never
+  cached, unlike upstream's text. Answers over `LORIE_CLIPBOARD_IMAGE_MAX` (32 MiB) are read off
+  the socket and dropped, and their requesters refused.
+
+No INCR: INCR exists for an owner whose ChangeProperty would pass the maximum request size, and
+this owner is the server, which writes the property directly; the requestor reads it with one
+GetProperty, whose reply length has no such limit.
+
+A requester must never be left waiting. Waiting requests are refused when the next announce
+arrives, when the host disconnects, when there is no host to ask, and when the answer cannot be
+written; a request whose client has gone in the meantime is dropped without writing to it.
+
+The picture is the one payload larger than a socket buffer, so both ends move it with
+read/write loops (`lorieReadFully`, `lorieWriteFully`) instead of upstream's single call. The host
+writes it from `sendClipboardImage`, a JNI method registered here, in 16 KiB pieces copied out of
+the Java array, on the main thread like every other write to the connection (the socket is one
+stream; a second writer would interleave). `LorieView` must declare it as a plain native, not
+`@FastNative`, since it can block.
+
+Applies after 0001-0003; it extends the event enum, the `nativeInit` block and the event loops
+those patches touch. `LorieView` must carry `@Keep requestClipboardImage(String)`,
+`sendClipboardAnnounceTargets` and `sendClipboardImage`, or the process dies on the first view, so
+the Java half ships in the same commit as this patch and the prebuilts built from it.
+
+See x11-server/UPSTREAM.md.
+
+diff --git a/lorie/src/main/cpp/lorie/activity.cpp b/lorie/src/main/cpp/lorie/activity.cpp
+--- a/lorie/src/main/cpp/lorie/activity.cpp
++++ b/lorie/src/main/cpp/lorie/activity.cpp
+@@ -26,6 +26,28 @@
+ 
+ bool lorieDebugEnabled = false;
+ 
++// The clipboard picture is the one payload larger than a socket buffer: write all of it, waiting
++// out a full buffer, so the event stream never loses its place.
++static bool lorieWriteFully(int fd, const void *buf, size_t size) {
++    auto *p = (const uint8_t*) buf;
++    while (size) {
++        ssize_t n = write(fd, p, size);
++        if (n < 0 && errno == EINTR)
++            continue;
++        if (n < 0 && errno == EAGAIN) {
++            struct pollfd pfd = { .fd = fd, .events = POLLOUT };
++            if (poll(&pfd, 1, 1000) <= 0)
++                return false;
++            continue;
++        }
++        if (n <= 0)
++            return false;
++        p += n;
++        size -= (size_t) n;
++    }
++    return true;
++}
++
+ // Timestamp of the last real input reaching the X session, from any source. Read/written only
+ // from the Android main thread via JNI.
+ static volatile int64_t lastInputTimestampMs = 0;
+@@ -38,7 +60,7 @@
+ 
+ static struct {
+     jclass self;
+-    jmethodID clientConnectedStateChanged, resetIme, onCursorNameChanged;
++    jmethodID clientConnectedStateChanged, resetIme, onCursorNameChanged, requestClipboardImage;
+ } MainActivity = {nullptr};
+ 
+ static struct {
+@@ -145,6 +167,7 @@
+         MainActivity.clientConnectedStateChanged = FindMethodOrDie(env, MainActivity.self, "clientConnectedStateChanged", "()V", JNI_FALSE);
+         MainActivity.resetIme = FindMethodOrDie(env, env->GetObjectClass(thiz), "resetIme", "()V", JNI_FALSE);
+         MainActivity.onCursorNameChanged = FindMethodOrDie(env, env->GetObjectClass(thiz), "onCursorNameChanged", "(Ljava/lang/String;)V", JNI_FALSE);
++        MainActivity.requestClipboardImage = FindMethodOrDie(env, env->GetObjectClass(thiz), "requestClipboardImage", "(Ljava/lang/String;)V", JNI_FALSE);
+     }
+ 
+     return (jlong) (intptr_t) new (malloc(sizeof(LorieViewResources))) LorieViewResources(env, thiz);
+@@ -279,6 +302,26 @@
+                     env->DeleteLocalRef(str);
+                     break;
+                 }
++                case EVENT_CLIPBOARD_IMAGE_REQUEST: {
++                    char target[LORIE_CLIPBOARD_TARGET_MAX + 1] = {0};
++                    // The server clamps the name; clamp again and drain any excess so a bogus
++                    // count can neither overflow the buffer nor desync the stream.
++                    uint32_t count = e.clipboardImage.nameSize > LORIE_CLIPBOARD_TARGET_MAX ? LORIE_CLIPBOARD_TARGET_MAX : e.clipboardImage.nameSize;
++                    uint32_t extra = e.clipboardImage.nameSize - count;
++                    if (count)
++                        read(connFd, target, count);
++                    for (char drop; extra && read(connFd, &drop, 1) == 1; extra--);
++                    // A MIME name is ASCII; anything else would be invalid modified UTF-8.
++                    for (uint32_t i = 0; i < count; i++)
++                        if (target[i] < 0x20 || target[i] > 0x7e)
++                            target[i] = '?';
++                    jstring str = env->NewStringUTF(target);
++                    env->CallVoidMethod(thiz, MainActivity.requestClipboardImage, str);
++                    if (env->ExceptionCheck())
++                        env->ExceptionClear();
++                    env->DeleteLocalRef(str);
++                    break;
++                }
+                 case EVENT_SYNC_REPLY: {
+                     jmethodID id = env->GetMethodID(env->GetObjectClass(thiz), "onSyncReply", "(I)V");
+                     env->CallVoidMethod(thiz, id, (jint) e.sync.serial);
+@@ -477,6 +520,44 @@
+                     env->ReleaseByteArrayElements(text, str, JNI_ABORT);
+                 }
+             }},
++            {"sendClipboardAnnounceTargets", "(JZLjava/lang/String;)V", (void *) +[](JNIEnv *env, __unused jobject thiz, jlong ptr, jboolean hasText, jstring jtargets) {
++                auto* r = (LorieViewResources*) ptr;
++                if (!r || r->connFd == -1 || !jtargets)
++                    return;
++                const char *targets = env->GetStringUTFChars(jtargets, nullptr);
++                if (!targets)
++                    return;
++                size_t len = strnlen(targets, LORIE_CLIPBOARD_IMAGE_TARGETS_MAX * (LORIE_CLIPBOARD_TARGET_MAX + 1));
++                sendEvent(r, .clipboardImage = { .t = EVENT_CLIPBOARD_ANNOUNCE_TARGETS, .hasText = (uint8_t) (hasText ? 1 : 0), .nameSize = (uint32_t) len });
++                lorieWriteFully(r->connFd, targets, len);
++                env->ReleaseStringUTFChars(jtargets, targets);
++            }},
++            // A plain native, not @FastNative: it writes up to LORIE_CLIPBOARD_IMAGE_MAX bytes and
++            // may block on the socket, which a @FastNative thread must never do (see UPSTREAM.md).
++            {"sendClipboardImage", "(JLjava/lang/String;[B)V", (void *) +[](JNIEnv *env, __unused jobject thiz, jlong ptr, jstring jtarget, jbyteArray data) {
++                auto* r = (LorieViewResources*) ptr;
++                if (!r || r->connFd == -1 || !jtarget)
++                    return;
++                const char *target = env->GetStringUTFChars(jtarget, nullptr);
++                if (!target)
++                    return;
++                size_t nameSize = strnlen(target, LORIE_CLIPBOARD_TARGET_MAX);
++                jsize length = data ? env->GetArrayLength(data) : 0;
++                if (length < 0 || length > LORIE_CLIPBOARD_IMAGE_MAX)
++                    length = 0; // a refusal, so the requester is still answered
++                sendEvent(r, .clipboardImage = { .t = EVENT_CLIPBOARD_IMAGE_SEND, .nameSize = (uint32_t) nameSize, .dataSize = (uint32_t) length });
++                bool ok = lorieWriteFully(r->connFd, target, nameSize);
++                env->ReleaseStringUTFChars(jtarget, target);
++                // Copied out a chunk at a time: no second whole copy of the picture, and no
++                // critical section held across a blocking write.
++                jbyte chunk[16 * 1024];
++                for (jsize offset = 0; ok && offset < length; ) {
++                    jsize n = length - offset < (jsize) sizeof(chunk) ? length - offset : (jsize) sizeof(chunk);
++                    env->GetByteArrayRegion(data, offset, n, chunk);
++                    ok = lorieWriteFully(r->connFd, chunk, (size_t) n);
++                    offset += n;
++                }
++            }},
+             {"sendWindowChange", "(JIIILjava/lang/String;)V", (void *) +[](__unused JNIEnv* env, __unused jobject cls, jlong ptr, jint width, jint height, jint framerate, jstring jname) {
+                 auto* r = (LorieViewResources*) ptr;
+                 if (r && r->connFd != -1) {
+diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/clipboard.c
+--- a/lorie/src/main/cpp/lorie/clipboard.c
++++ b/lorie/src/main/cpp/lorie/clipboard.c
+@@ -26,6 +26,7 @@
+ #include <X11/Xatom.h>
+ #include <windowstr.h>
+ #include <selection.h>
++#include <dixstruct.h>
+ #include <propertyst.h>
+ #include <xacestr.h>
+ 
+@@ -200,6 +201,15 @@
+     struct LorieDataTarget* next;
+ } *lorieDataTargetHead;
+ 
++/* What the Android clipboard holds, as its last announce said: text (the only thing upstream
++ * knows), and up to LORIE_CLIPBOARD_IMAGE_TARGETS_MAX picture targets ("image/png", the clip's own
++ * type). A picture is never cached: each request for one is answered from the bytes Java sends
++ * for it, which are freed as soon as they are in the requestor's property. */
++static Bool announcedText = TRUE;
++static Atom announcedImages[LORIE_CLIPBOARD_IMAGE_TARGETS_MAX];
++static int announcedImageCount = 0;
++static struct LorieDataTarget *lorieImageTargetHead;
++
+ void lorieEnableClipboardSync(Bool enable) {
+     clipboardEnabled = enable;
+ }
+@@ -296,6 +306,136 @@
+ 
+ /* functions related to clipboard announcing and sending */
+ 
++static Bool lorieIsAnnouncedImage(Atom target) {
++    for (int i = 0; i < announcedImageCount; i++)
++        if (announcedImages[i] == target)
++            return TRUE;
++
++    return FALSE;
++}
++
++/* A picture request outlives the request that made it (Java reads and maybe converts the
++ * picture first), so its client may be gone by the answer. */
++static Bool lorieClientAlive(ClientPtr client) {
++    return client && client->index > 0 && client->index < currentMaxClients &&
++           clients[client->index] == client && !client->clientGone;
++}
++
++static void lorieRefuseSelection(struct LorieDataTarget* ldt) {
++    xEvent event;
++
++    if (!lorieClientAlive(ldt->client))
++        return;
++
++    memset(&event, 0, sizeof(xEvent));
++    event.u.u.type = SelectionNotify;
++    event.u.selectionNotify.time = ldt->time;
++    event.u.selectionNotify.requestor = ldt->requestor;
++    event.u.selectionNotify.selection = ldt->selection;
++    event.u.selectionNotify.target = ldt->target;
++    event.u.selectionNotify.property = None;
++    WriteEventsToClient(ldt->client, 1, &event);
++}
++
++static int lorieQueueImageRequest(ClientPtr client, Atom selection, Atom target, Atom property, Window requestor, CARD32 time) {
++    struct LorieDataTarget* ldt;
++    Bool asked = FALSE;
++
++    for (ldt = lorieImageTargetHead; ldt != NULL; ldt = ldt->next)
++        if (ldt->target == target)
++            asked = TRUE;
++
++    ldt = calloc(1, sizeof(struct LorieDataTarget));
++    if (ldt == NULL)
++        return BadAlloc;
++
++    /* Asked once per target: one answer satisfies everyone waiting on it. */
++    if (!asked && !lorieRequestClipboardImage(NameForAtom(target))) {
++        free(ldt);
++        return BadMatch;
++    }
++
++    ldt->client = client;
++    ldt->selection = selection;
++    ldt->target = target;
++    ldt->property = property;
++    ldt->requestor = requestor;
++    ldt->time = time;
++    ldt->next = lorieImageTargetHead;
++    lorieImageTargetHead = ldt;
++
++    log(DEBUG, "Requesting clipboard picture %s from client", NameForAtom(target));
++    return Success;
++}
++
++static int lorieWriteImageSelection(struct LorieDataTarget* ldt, const void* data, size_t size) {
++    WindowPtr pWin;
++    Atom realProperty = ldt->property != None ? ldt->property : ldt->target;
++    xEvent event;
++    int rc;
++
++    if (!lorieClientAlive(ldt->client))
++        return Success;
++
++    if (size == 0)
++        return BadMatch;
++
++    rc = dixLookupWindow(&pWin, ldt->requestor, ldt->client, DixSetAttrAccess);
++    if (rc != Success)
++        return rc;
++
++    /* The property's type is the target itself, as ICCCM asks of MIME targets. No INCR: the
++     * owner is the server, which writes the property directly, so the request size limit that
++     * INCR exists for never applies, and the requestor reads it with one GetProperty. */
++    rc = dixChangeWindowProperty(serverClient, pWin, realProperty, ldt->target, 8,
++                                 PropModeReplace, (unsigned long) size, (void*) data, TRUE);
++    if (rc != Success)
++        return rc;
++
++    memset(&event, 0, sizeof(xEvent));
++    event.u.u.type = SelectionNotify;
++    event.u.selectionNotify.time = ldt->time;
++    event.u.selectionNotify.requestor = ldt->requestor;
++    event.u.selectionNotify.selection = ldt->selection;
++    event.u.selectionNotify.target = ldt->target;
++    event.u.selectionNotify.property = ldt->property;
++    WriteEventsToClient(ldt->client, 1, &event);
++    return Success;
++}
++
++void lorieDropClipboardImageRequests(void) {
++    while (lorieImageTargetHead != NULL) {
++        struct LorieDataTarget* next = lorieImageTargetHead->next;
++        lorieRefuseSelection(lorieImageTargetHead);
++        free(lorieImageTargetHead);
++        lorieImageTargetHead = next;
++    }
++}
++
++void lorieHandleClipboardImageData(const char* target, const void* data, size_t size) {
++    Atom atom = MakeAtom(target, strlen(target), FALSE);
++    struct LorieDataTarget **link = &lorieImageTargetHead;
++
++    log(DEBUG, "Got clipboard picture %s (%zu bytes), sending to X11 clients", target, size);
++
++    if (atom == None)
++        return;
++
++    while (*link != NULL) {
++        struct LorieDataTarget* ldt = *link;
++        if (ldt->target != atom) {
++            link = &ldt->next;
++            continue;
++        }
++
++        if (lorieWriteImageSelection(ldt, data, size) != Success)
++            lorieRefuseSelection(ldt);
++
++        *link = ldt->next;
++        free(ldt);
++    }
++}
++
+ static int lorieConvertSelection(ClientPtr client, Atom selection, Atom target, Atom property, Window requestor, CARD32 time, const char* data) {
+     Selection *pSel;
+     WindowPtr pWin;
+@@ -332,13 +472,22 @@
+     /* FIXME: MULTIPLE target */
+ 
+     if (target == xaTARGETS) {
+-        Atom targets[] = { xaTARGETS, xaTIMESTAMP,
+-                           xaSTRING, xaTEXT, xaUTF8_STRING };
++        Atom targets[5 + LORIE_CLIPBOARD_IMAGE_TARGETS_MAX];
++        int count = 0;
++
++        targets[count++] = xaTARGETS;
++        targets[count++] = xaTIMESTAMP;
++        if (announcedText) {
++            targets[count++] = xaSTRING;
++            targets[count++] = xaTEXT;
++            targets[count++] = xaUTF8_STRING;
++        }
++        for (int i = 0; i < announcedImageCount; i++)
++            targets[count++] = announcedImages[i];
+ 
+         rc = dixChangeWindowProperty(serverClient, pWin, realProperty,
+                                      XA_ATOM, 32, PropModeReplace,
+-                                     sizeof(targets)/sizeof(targets[0]),
+-                                     targets, TRUE);
++                                     count, targets, TRUE);
+         if (rc != Success)
+             return rc;
+     } else if (target == xaTIMESTAMP) {
+@@ -348,6 +497,8 @@
+                                      TRUE);
+         if (rc != Success)
+             return rc;
++    } else if (lorieIsAnnouncedImage(target)) {
++        return lorieQueueImageRequest(client, selection, target, property, requestor, time);
+     } else {
+         if (data == NULL) {
+             struct LorieDataTarget* ldt;
+@@ -356,6 +507,10 @@
+                 (target != xaUTF8_STRING))
+                 return BadMatch;
+ 
++            /* A picture with no text beside it offers no text targets. */
++            if (!announcedText)
++                return BadMatch;
++
+             ldt = calloc(1, sizeof(struct LorieDataTarget));
+             if (ldt == NULL)
+                 return BadAlloc;
+@@ -509,7 +664,33 @@
+     return Success;
+ }
+ 
+-void lorieHandleClipboardAnnounce(void) {
++static void lorieTakeClipboard(void);
++
++void lorieHandleClipboardAnnounceTargets(Bool hasText, const char* imageTargets) {
++    const char* name = imageTargets;
++
++    /* Whatever a waiting requester asked for belongs to the clip that was there before. */
++    lorieDropClipboardImageRequests();
++
++    announcedText = hasText;
++    announcedImageCount = 0;
++    while (name && *name && announcedImageCount < LORIE_CLIPBOARD_IMAGE_TARGETS_MAX) {
++        const char* end = strchr(name, '\n');
++        size_t len = end ? (size_t) (end - name) : strlen(name);
++        if (len > 0 && len <= LORIE_CLIPBOARD_TARGET_MAX) {
++            Atom atom = MakeAtom(name, len, TRUE);
++            if (atom != None && !lorieIsAnnouncedImage(atom))
++                announcedImages[announcedImageCount++] = atom;
++        }
++        if (!end)
++            break;
++        name = end + 1;
++    }
++
++    lorieTakeClipboard();
++}
++
++static void lorieTakeClipboard(void) {
+     // The data has changed in some way, so whatever is in our cache is now stale
+     free((void*) cachedData);
+     cachedData = NULL;
+@@ -523,6 +704,11 @@
+         log(ERROR, "Could not set CLIPBOARD selection");
+ }
+ 
++/* The text-only announce upstream has always sent. */
++void lorieHandleClipboardAnnounce(void) {
++    lorieHandleClipboardAnnounceTargets(TRUE, NULL);
++}
++
+ void lorieHandleClipboardData(const char* data) {
+     struct LorieDataTarget* next;
+ 
+diff --git a/lorie/src/main/cpp/lorie/cmdentrypoint.cpp b/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
+--- a/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
++++ b/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
+@@ -257,6 +257,39 @@
+     return TRUE;
+ }
+ 
++// The clipboard picture payloads are far larger than a socket buffer, so one read() may return
++// short; these keep the stream in step whatever the kernel hands back.
++static bool lorieReadFully(int fd, void *buf, size_t size) {
++    auto *p = (uint8_t*) buf;
++    while (size) {
++        ssize_t n = read(fd, p, size);
++        if (n < 0 && errno == EINTR)
++            continue;
++        if (n <= 0)
++            return false;
++        p += n;
++        size -= (size_t) n;
++    }
++    return true;
++}
++
++static bool lorieSkipFully(int fd, size_t size) {
++    uint8_t scratch[4096];
++    while (size) {
++        size_t chunk = size < sizeof(scratch) ? size : sizeof(scratch);
++        if (!lorieReadFully(fd, scratch, chunk))
++            return false;
++        size -= chunk;
++    }
++    return true;
++}
++
++// One picture answer, handed from the input thread to the X server thread in one allocation.
++struct LorieClipboardImageAnswer {
++    char target[LORIE_CLIPBOARD_TARGET_MAX + 1];
++    size_t size;
++};
++
+ void handleLorieEvents(int fd, __unused int ready, __unused void *ignored) {
+     ValuatorMask mask;
+     lorieEvent e = {0};
+@@ -268,6 +301,12 @@
+         close(fd);
+         conn_fd = -1;
+         lorieEnableClipboardSync(FALSE);
++        // Nobody is left to answer a picture request, so refuse the waiting ones now.
++        QueueWorkProc(+[](__unused ClientPtr pClient, __unused void *closure) -> Bool {
++            lorieDropClipboardImageRequests();
++            return TRUE;
++        }, nullptr, nullptr);
++        lorieWakeServer();
+         while ((buf = LorieBufferList_first(&registeredBuffers)))
+             LorieBuffer_removeFromList(buf);
+         return;
+@@ -412,6 +451,68 @@
+                 lorieWakeServer();
+                 break;
+             }
++            case EVENT_CLIPBOARD_ANNOUNCE_TARGETS: {
++                // [hasText][image targets, one per line][0]. A list longer than any real one is
++                // read and dropped, and the clip is announced with its text alone.
++                uint32_t size = e.clipboardImage.nameSize;
++                uint32_t keep = size <= LORIE_CLIPBOARD_IMAGE_TARGETS_MAX * (LORIE_CLIPBOARD_TARGET_MAX + 1) ? size : 0;
++                char *closure = (char*) calloc(1, keep + 2);
++                if (!closure) {
++                    lorieSkipFully(fd, size);
++                    break;
++                }
++                if (!lorieReadFully(fd, closure + 1, keep) || !lorieSkipFully(fd, size - keep)) {
++                    free(closure);
++                    break;
++                }
++                closure[0] = e.clipboardImage.hasText ? 1 : 0;
++                QueueWorkProc(+[](__unused ClientPtr pClient, void *closure) -> Bool {
++                    // This must be done only on X server thread.
++                    auto *c = (char*) closure;
++                    lorieHandleClipboardAnnounceTargets(c[0] ? TRUE : FALSE, c + 1);
++                    free(c);
++                    return TRUE;
++                }, nullptr, closure);
++                lorieWakeServer();
++                break;
++            }
++            case EVENT_CLIPBOARD_IMAGE_SEND: {
++                uint32_t nameSize = e.clipboardImage.nameSize, dataSize = e.clipboardImage.dataSize;
++                if (nameSize > LORIE_CLIPBOARD_TARGET_MAX) {
++                    // No target this long was ever asked for, so nobody waits on it.
++                    lorieSkipFully(fd, (size_t) nameSize + dataSize);
++                    break;
++                }
++                // A picture over the cap, or one there is no memory for, still answers its
++                // requesters: with a refusal.
++                size_t keep = dataSize <= LORIE_CLIPBOARD_IMAGE_MAX ? dataSize : 0;
++                auto *answer = (LorieClipboardImageAnswer*) malloc(sizeof(LorieClipboardImageAnswer) + keep);
++                if (!answer && keep) {
++                    keep = 0;
++                    answer = (LorieClipboardImageAnswer*) malloc(sizeof(LorieClipboardImageAnswer));
++                }
++                if (!answer) {
++                    lorieSkipFully(fd, (size_t) nameSize + dataSize);
++                    break;
++                }
++                memset(answer->target, 0, sizeof(answer->target));
++                answer->size = keep;
++                if (!lorieReadFully(fd, answer->target, nameSize)
++                        || !lorieReadFully(fd, answer + 1, keep)
++                        || !lorieSkipFully(fd, dataSize - keep)) {
++                    free(answer);
++                    break;
++                }
++                QueueWorkProc(+[](__unused ClientPtr pClient, void *closure) -> Bool {
++                    // This must be done only on X server thread.
++                    auto *a = (LorieClipboardImageAnswer*) closure;
++                    lorieHandleClipboardImageData(a->target, a + 1, a->size);
++                    free(a);
++                    return TRUE;
++                }, nullptr, answer);
++                lorieWakeServer();
++                break;
++            }
+             case EVENT_RENDERER_WAKEUP_COND: {
+                 int wakeupFd = ancil_recv_fd(fd);
+                 if (wakeupFd >= 0)
+@@ -479,6 +580,17 @@
+     }
+ }
+ 
++Bool lorieRequestClipboardImage(const char* target) {
++    if (conn_fd == -1 || !target)
++        return FALSE;
++    size_t len = strnlen(target, LORIE_CLIPBOARD_TARGET_MAX);
++    lorieEvent e = { .clipboardImage = { .t = EVENT_CLIPBOARD_IMAGE_REQUEST, .nameSize = (uint32_t) len } };
++    write(conn_fd, &e, sizeof(e));
++    if (len)
++        write(conn_fd, target, len);
++    return TRUE;
++}
++
+ void lorieSendSyncReply(uint32_t serial) {
+     if (conn_fd != -1) {
+         lorieEvent e = { .sync = { .t = EVENT_SYNC_REPLY, .serial = serial } };
+diff --git a/lorie/src/main/cpp/lorie/lorie.h b/lorie/src/main/cpp/lorie/lorie.h
+--- a/lorie/src/main/cpp/lorie/lorie.h
++++ b/lorie/src/main/cpp/lorie/lorie.h
+@@ -21,6 +21,13 @@
+ // The names come from the Xcursor spec ("xterm", "left_ptr", "bottom_left_corner"),
+ // but a client can name a cursor anything, so both sides clamp to this.
+ #define LORIE_CURSOR_NAME_MAX 64
++// Longest clipboard target name ("image/png") on the wire, without the terminating zero, and how
++// many image targets one announce may name. Both sides clamp to these.
++#define LORIE_CLIPBOARD_TARGET_MAX 128
++#define LORIE_CLIPBOARD_IMAGE_TARGETS_MAX 4
++// Most picture bytes one clipboard answer may carry. LorieView caps at the same number; a larger
++// answer is read off the socket and dropped, and the requester is refused.
++#define LORIE_CLIPBOARD_IMAGE_MAX (32 * 1024 * 1024)
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -36,6 +43,10 @@
+ void lorieRequestClipboard(void);
+ void lorieHandleClipboardAnnounce(void);
+ void lorieHandleClipboardData(const char* data);
++void lorieHandleClipboardAnnounceTargets(Bool hasText, const char* imageTargets);
++Bool lorieRequestClipboardImage(const char* target);
++void lorieHandleClipboardImageData(const char* target, const void* data, size_t size);
++void lorieDropClipboardImageRequests(void);
+ void lorieSetStylusEnabled(Bool enabled);
+ void lorieSyncLockKeysState(uint8_t state);
+ void lorieWakeServer(void);
+@@ -120,6 +131,9 @@
+     EVENT_SYNC,
+     EVENT_SYNC_REPLY,
+     EVENT_CURSOR_NAME_CHANGED,
++    EVENT_CLIPBOARD_ANNOUNCE_TARGETS,
++    EVENT_CLIPBOARD_IMAGE_REQUEST,
++    EVENT_CLIPBOARD_IMAGE_SEND,
+ } eventType;
+ 
+ typedef union {
+@@ -175,6 +189,16 @@
+         uint8_t t;
+         uint32_t count;
+     } cursorName;
++    // EVENT_CLIPBOARD_ANNOUNCE_TARGETS: hasText, then nameSize bytes of image targets, one per
++    // line. EVENT_CLIPBOARD_IMAGE_REQUEST: nameSize bytes of the target asked for.
++    // EVENT_CLIPBOARD_IMAGE_SEND: nameSize bytes of the target answered, then dataSize bytes of
++    // the picture; dataSize 0 is a refusal.
++    struct {
++        uint8_t t;
++        uint8_t hasText;
++        uint32_t nameSize;
++        uint32_t dataSize;
++    } clipboardImage;
+     struct {
+         uint8_t t;
+         uint8_t state; // bit0 = Caps Lock, bit1 = Num Lock, bit2 = Scroll Lock
