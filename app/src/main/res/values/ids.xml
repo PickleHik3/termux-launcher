@@ -17,7 +17,6 @@
     <item name="x11_gpu_detail" type="id" />
     <item name="x11_gpu_radio" type="id" />
     <item name="x11_gpu_pill" type="id" />
-    <item name="x11_gpu_rows" type="id" />
 
     <!-- The benchmark screens (Home, Choose, Run, Result), built in code: their lists and the
          views a row binds by id. -->

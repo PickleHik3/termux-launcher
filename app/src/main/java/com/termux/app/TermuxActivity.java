@@ -28382,6 +28382,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull java.util.List<com.termux.app.x11.X11WindowList.Window> windows, int active) {
         mDisplayWindows = windows;
         mDisplayActiveWindow = active;
+        if (mX11Display != null) {
+            int front = com.termux.app.x11.DisplayWindowName.frontIndex(windows.size(), active);
+            mX11Display.setFrontWindowClass(front < 0 ? null : windows.get(front).wmClass);
+        }
         // A stop in progress is waiting for exactly this: the last app closing itself.
         if (mDisplayStop != null) mDisplayStop.onWindowsChanged(windows.size());
         noteTemporaryDisplayWindows(windows.size());

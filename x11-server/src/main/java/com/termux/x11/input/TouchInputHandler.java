@@ -32,6 +32,8 @@ import android.view.View;
 import android.view.ViewConfiguration;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.math.MathUtils;
 
@@ -469,13 +471,35 @@ public class TouchInputHandler {
         }
     }
 
+    // Launcher: the touch mode of the app in front, when it has its own; null follows the preference.
+    @Nullable private String mTouchModeOverride;
+
+    /** Launcher: the mode in force, the front app's override if valid, else the preference. */
+    private String effectiveTouchMode(Prefs p) {
+        String o = mTouchModeOverride;
+        return ("1".equals(o) || "2".equals(o) || "3".equals(o)) ? o : p.touchMode.get();
+    }
+
+    /**
+     * Launcher: set (or clear, with null) the touch mode of the app in front and re-apply only
+     * what depends on it: the input mode and touchpad scaling.
+     */
+    public void setTouchModeOverride(@Nullable String mode, @NonNull Prefs p) {
+        mTouchModeOverride = mode;
+        String effective = effectiveTouchMode(p);
+        setInputMode(Integer.parseInt(effective));
+        mInjector.scaleTouchpad = p.scaleTouchpad.get() &&
+                "1".equals(effective) &&
+                !"native".equals(p.displayResolutionMode.get());
+    }
+
     public void reloadPreferences(Prefs p) {
-        setInputMode(Integer.parseInt(p.touchMode.get()));
+        setInputMode(Integer.parseInt(effectiveTouchMode(p)));
         mInjector.tapToMove = p.tapToMove.get();
         mInjector.preferScancodes = p.preferScancodes.get();
         mInjector.pointerCapture = p.pointerCapture.get();
         mInjector.scaleTouchpad = p.scaleTouchpad.get() &&
-                "1".equals(p.touchMode.get()) &&
+                "1".equals(effectiveTouchMode(p)) &&
                 !"native".equals(p.displayResolutionMode.get());
         mInjector.capturedPointerSpeedFactor = ((float) p.capturedPointerSpeedFactor.get())/100;
         mInjector.dexMetaKeyCapture = p.dexMetaKeyCapture.get();
