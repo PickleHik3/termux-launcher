@@ -44,6 +44,7 @@ crossing begin and land, every PTY resize (the existing `TermGeom` line joins it
 shown or dropped, a hold taken or released, a reflow frost started, a keyboard pre-roll, a
 pre-size. `launcherctl motion-log dump` prints the buffer; `launcherctl motion-log clear` empties
 it. Zero cost at rest when off (one boolean check per event; no allocation).
+While the wall is off its rest, each position pass adds one `page-pose` line per page on screen: `kind page effect slide progress tx scale alpha rotY`, plus `still` for a surface page.
 
 Copy: title "Motion log", description "Records page changes and resizes for bug reports."
 

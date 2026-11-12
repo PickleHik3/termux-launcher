@@ -50,6 +50,22 @@ public final class MotionLog {
         record(SystemClock.uptimeMillis(), event, kv);
     }
 
+    /**
+     * The {@code kv} of a {@code page-pose} line: one per page on screen during a crossing, for a
+     * transition review. {@code still} is left out for a page that has no still.
+     */
+    @NonNull
+    public static String poseKv(@NonNull String kind, int pageId, @NonNull String effect,
+            float slidePx, int width, float translationX, float scale, float alpha,
+            float rotationY, @Nullable Boolean still) {
+        float progress = width <= 0 ? 0f : slidePx / width;
+        String line = String.format(java.util.Locale.ROOT,
+            "kind=%s page=%d effect=%s slide=%.1f progress=%.3f tx=%.1f scale=%.3f alpha=%.3f"
+                + " rotY=%.2f", kind, pageId, effect, slidePx, progress, translationX, scale,
+            alpha, rotationY);
+        return still == null ? line : line + " still=" + still;
+    }
+
     static void record(long uptimeMs, @NonNull String event, @Nullable String kv) {
         String line = "t=" + uptimeMs + " " + event
             + (kv == null || kv.isEmpty() ? "" : " " + kv);
