@@ -171,9 +171,9 @@ things) and the display server passes that name on. Only the name seen in the mo
 counts, so a pointer crossing a text field on its way somewhere else opens nothing. An app that
 never asks for a text cursor, or a session with no cursor theme installed, cannot be recognised
 this way; the keyboard key, the display's Back button and the signal below all still work.
-GTK and Qt apps pick up the Adwaita theme that ships with them; core X apps such as xterm only
-use it with `XCURSOR_THEME=Adwaita` in their environment (or a `default` cursor theme that
-inherits it).
+GTK and Qt apps pick up the Adwaita theme that ships with them. Apps opened from the drawer get
+the Adwaita cursors when they are installed, and a `default` cursor theme of your own wins. Apps
+you start from a terminal still need `XCURSOR_THEME=Adwaita` in their environment.
 
 **Your input method's own focus.** Exact, and on by itself once fcitx5 is installed. fcitx5 knows
 when a text field takes focus and when it loses it, whether you tapped, pressed Tab, or a dialog

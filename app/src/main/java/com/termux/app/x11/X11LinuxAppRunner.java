@@ -844,7 +844,8 @@ public final class X11LinuxAppRunner {
 
     /**
      * The shell line that runs the app: the display, the GPU environment, fcitx5's when it is
-     * there ({@link #inputMethodBlock}), the home directory,
+     * there ({@link #inputMethodBlock}), the cursor theme lines of a prefix app
+     * ({@link #cursorBlock}), the home directory,
      * then the app's command — its own, or a {@code proot-distro login} around it when the app is
      * installed in a container. The touch environment goes in first so a GPU profile still has the
      * last word over anything it sets. Pure, so the composition is tested.
@@ -879,7 +880,7 @@ public final class X11LinuxAppRunner {
         for (String line : env) script.append("export ").append(line).append('\n');
         // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
         // apps keep the cursor guess until that follow-up is verified on a phone.
-        if (app.container.isPrefix()) script.append(inputMethodBlock(display));
+        if (app.container.isPrefix()) script.append(cursorBlock()).append(inputMethodBlock(display));
         script.append("cd \"$HOME\"\n");
         if (awaitWindowManager != null) script.append(awaitWindowManager);
         // An Electron app under a virgl profile also draws in software (#162): its own GPU path
@@ -889,6 +890,33 @@ public final class X11LinuxAppRunner {
         script.append("exec ").append(noSandbox ? app.commandWith(extraArgs) : app.command())
             .append('\n');
         return script.toString();
+    }
+
+    /**
+     * The lines that give a prefix app a cursor theme: where an Xcursor lookup searches, and a
+     * theme when the user has none. Toolkits that do their own lookup (Rust and gpui apps) search
+     * {@code /usr/share/icons}, which the prefix does not have. Used in {@link #script} for
+     * prefix apps only: a desktop chooses its own theme and a container's {@code /usr/share/icons}
+     * is already the default path. The prefix path has no quotes or spaces, so it sits as plain
+     * text inside the double-quoted word. {@code core} leaves the cursor to the X server's own
+     * font, the same as finding no theme. Shell builtins and {@code [} only, no variable left
+     * set beyond the two exports. Pure, so the text is tested.
+     */
+    @NonNull
+    static String cursorBlock() {
+        String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        String icons = prefix + "/share/icons";
+        return "export XCURSOR_PATH=\"${XCURSOR_PATH:-$HOME/.local/share/icons:$HOME/.icons:"
+            + icons + ":" + prefix + "/share/pixmaps}\"\n"
+            + "if [ -z \"${XCURSOR_THEME:-}\" ] && [ ! -d \"$HOME/.local/share/icons/default\" ]"
+            + " && [ ! -d \"$HOME/.icons/default\" ]"
+            + " && [ ! -d " + ProotDistro.singleQuote(icons + "/default") + " ]; then\n"
+            + "if [ -d " + ProotDistro.singleQuote(icons + "/Adwaita/cursors") + " ]; then\n"
+            + "export XCURSOR_THEME=Adwaita\n"
+            + "else\n"
+            + "export XCURSOR_THEME=core\n"
+            + "fi\n"
+            + "fi\n";
     }
 
     /**
