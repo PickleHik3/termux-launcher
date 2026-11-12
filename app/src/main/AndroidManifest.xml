@@ -335,6 +335,12 @@
             android:name=".app.terminal.ShellNotifications$DismissReceiver"
             android:exported="false" />
 
+        <!-- A reply typed into a terminal notification. Not exported: only that notification's own
+             reply action reaches it. -->
+        <receiver
+            android:name=".app.terminal.ShellNotifications$ReplyReceiver"
+            android:exported="false" />
+
         <!-- The Linux media notification's buttons. Not exported: only that notification's own
              pending intents reach it. -->
         <receiver

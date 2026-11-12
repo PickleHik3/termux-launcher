@@ -64,7 +64,26 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
                 com.termux.app.surfaces.EditorDoor.SETTINGS_TERMINAL);
             return true;
         });
+        androidx.preference.Preference notifications = findPreference("terminal_notifications");
+        if (notifications != null) notifications.setOnPreferenceClickListener(row -> {
+            openNotificationSettings(context);
+            return true;
+        });
         SettingsLayoutUtils.applyScreenLayout(this);
+    }
+
+    /** The app's own notification settings, where each kind has its channel. */
+    private static void openNotificationSettings(Context context) {
+        android.content.Intent intent = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+            ? new android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.getPackageName())
+            : new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:" + context.getPackageName()));
+        try {
+            context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (android.content.ActivityNotFoundException ignored) {
+            // No settings screen to open on this device.
+        }
     }
 
     @Override

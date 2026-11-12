@@ -37,4 +37,10 @@
         app:title="@string/settings_terminal_sub_clipboard_title"
         app:summary="@string/settings_terminal_sub_clipboard_summary"
         app:fragment="com.termux.app.fragments.settings.termux.TerminalClipboardPreferencesFragment" />
+
+    <Preference
+        app:key="terminal_notifications"
+        app:persistent="false"
+        app:title="@string/settings_terminal_notifications_title"
+        app:summary="@string/settings_terminal_notifications_summary" />
 </PreferenceScreen>

@@ -10,6 +10,8 @@ import com.termux.app.notice.AppNotice;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.terminal.KittyNotification;
+import com.termux.terminal.ProgramStatus;
+import com.termux.terminal.ProgramStatusStore;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 
@@ -54,6 +56,15 @@ public final class ShellSignals {
 
     @NonNull private final ClipboardHistory mHistory;
 
+    /** Posts the unseen events to the phone's notification shade. */
+    @NonNull private final TerminalNotifier mNotifier;
+
+    /** Reads a program's name from /proc off the main thread. */
+    private static final java.util.concurrent.ExecutorService PROGRAM_NAME_READER =
+        java.util.concurrent.Executors.newSingleThreadExecutor();
+
+    private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
+
     public ShellSignals(@NonNull Context context, @NonNull TerminalHost host, @NonNull Notices notices) {
         this(context, host, notices, ClipboardHistory.get(context));
     }
@@ -64,6 +75,55 @@ public final class ShellSignals {
         mHost = host;
         mNotices = notices;
         mHistory = history;
+        mNotifier = new TerminalNotifier(new HostEnv(), ShellNotifications.poster(context),
+            TerminalNoticeRecords.shared());
+    }
+
+    /** For tests: the notifier is supplied. */
+    ShellSignals(@NonNull Context context, @NonNull TerminalHost host, @NonNull Notices notices,
+                 @NonNull ClipboardHistory history, @NonNull TerminalNotifier notifier) {
+        mContext = context;
+        mHost = host;
+        mNotices = notices;
+        mHistory = history;
+        mNotifier = notifier;
+    }
+
+    /** What the notifier asks of the launcher, answered from the host. */
+    private final class HostEnv implements TerminalNotifier.Env {
+        @Override public boolean isLauncherVisible() {
+            return mHost.isVisible();
+        }
+
+        @Nullable @Override public Object frontPane() {
+            return mHost.isVisible() && mHost.isTerminalShowing() ? mHost.currentSession() : null;
+        }
+
+        @NonNull @Override public String windowKey(@NonNull Object pane) {
+            TerminalSession session = (TerminalSession) pane;
+            TerminalPaneController panes = mHost.paneController();
+            TerminalPaneController.Window window = panes == null ? null : panes.windowOf(session);
+            return window != null ? "w" + window.id : "s" + session.mHandle;
+        }
+
+        @Nullable @Override public String windowLabel(@NonNull Object pane) {
+            return mNotices.describe((TerminalSession) pane);
+        }
+
+        @NonNull @Override public String paneHandle(@NonNull Object pane) {
+            return ((TerminalSession) pane).mHandle;
+        }
+
+        @Override public int foregroundProcessGroup(@NonNull Object pane) {
+            return ((TerminalSession) pane).getForegroundProcessGroup();
+        }
+
+        @Override public void resolveProgramName(int pgid, @NonNull TerminalNotifier.NameCallback done) {
+            PROGRAM_NAME_READER.execute(() -> {
+                String name = TerminalSession.programNameOf(pgid);
+                MAIN.post(() -> done.onName(name));
+            });
+        }
     }
 
     // --- Notifications ---
@@ -82,17 +142,49 @@ public final class ShellSignals {
     public boolean notify(@NonNull TerminalSession session, @NonNull KittyNotification notification) {
         mHost.noteShellAttention(session);
         boolean visible = mHost.isVisible();
-        boolean inFront = session == mHost.currentSession();
-        if (!ShellNotifications.shouldShow(notification, visible, inFront)) return false;
-        if (ShellNotifications.post(mContext, session, notification, visible, inFront) != null) return true;
-        // Nothing reached the shade — notifications are turned off for the launcher — so the
-        // message still gets the older in-app notice rather than being lost.
+        boolean terminalShowing = visible && mHost.isTerminalShowing();
+        if (!TerminalNoticePolicy.occasionAllows(notification.getOccasion(), visible, terminalShowing))
+            return false;
+        if (mNotifier.kitty(session, notification)) return true;
+        // Nothing reached the shade (seen, or notifications are off for the launcher), so the
+        // message still gets the in-app notice rather than being lost.
         return visible && notice(session, notification.getTitle(), notification.getBody());
     }
 
     /** Take down the message the program named, if it is still up. */
     public void notifyClose(@NonNull TerminalSession session, @NonNull String id) {
-        ShellNotifications.close(mContext, session, id);
+        mNotifier.kittyClose(session, id);
+    }
+
+    /**
+     * OSC 9 or OSC 777: the shade when the pane is unseen, and the in-app notice as before.
+     * Returns true when an in-app notice was raised.
+     */
+    public boolean terminalMessage(@NonNull TerminalSession session, @Nullable String title,
+                                   @Nullable String body) {
+        mNotifier.message(session, title, body);
+        return notice(session, title, body);
+    }
+
+    /** The bell rang in {@code session}. */
+    public void bell(@NonNull TerminalSession session) {
+        mNotifier.bell(session);
+    }
+
+    /** A program's status moved: blocked, error and done reach the shade when unseen. */
+    public void programStatus(@NonNull TerminalSession session, @NonNull java.util.List<ProgramStatus> raised,
+                              @NonNull ProgramStatusStore store) {
+        mNotifier.programStatus(session, raised, store);
+    }
+
+    /** The pane in front or the launcher's visibility may have changed: what it had up is seen. */
+    public void frontMaybeChanged() {
+        mNotifier.frontMaybeChanged();
+    }
+
+    /** A shell ended: its notification goes with it. */
+    public void sessionFinished(@NonNull TerminalSession session) {
+        mNotifier.paneGone(session);
     }
 
     /**

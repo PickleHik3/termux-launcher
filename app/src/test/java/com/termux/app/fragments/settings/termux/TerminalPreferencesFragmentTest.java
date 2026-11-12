@@ -53,7 +53,7 @@ public class TerminalPreferencesFragmentTest {
         TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();
         String[] rows = {"terminal_layout_editor", "terminal_sub_windows", "status_bar",
-            "terminal_sub_text", "terminal_sub_clipboard"};
+            "terminal_sub_text", "terminal_sub_clipboard", "terminal_notifications"};
         assertEquals(rows.length, screen.getPreferenceCount());
         for (int i = 0; i < rows.length; i++) assertEquals(rows[i], screen.getPreference(i).getKey());
         assertEquals(StatusBarPreferencesFragment.class.getName(),
