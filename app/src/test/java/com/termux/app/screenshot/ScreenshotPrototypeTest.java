@@ -78,6 +78,29 @@ public class ScreenshotPrototypeTest {
         controller.pause().stop().destroy();
     }
 
+    /** One Linux app's page, opened on top of the Apps list with a made-up app. */
+    private void linuxAppPage(String qualifiers, String name) {
+        RuntimeEnvironment.setQualifiers(qualifiers);
+        ActivityController<SettingsActivity> controller = Robolectric.buildActivity(SettingsActivity.class,
+            SettingsActivity.createFragmentIntent(RuntimeEnvironment.getApplication(),
+                com.termux.app.fragments.settings.termux.X11AppsPreferencesFragment.class,
+                com.termux.R.string.settings_x11_apps_title)).create().start().resume().visible();
+        SettingsActivity activity = controller.get();
+        activity.getSupportFragmentManager().executePendingTransactions();
+        android.os.Bundle args = new android.os.Bundle();
+        args.putString(com.termux.app.fragments.settings.termux.X11AppPreferencesFragment.ARG_ID, "firefox");
+        args.putString(com.termux.app.fragments.settings.termux.X11AppPreferencesFragment.ARG_NAME, "Firefox");
+        activity.openScreen(com.termux.app.fragments.settings.termux.X11AppPreferencesFragment.class,
+            com.termux.R.string.settings_x11_apps_title, args);
+        activity.getSupportFragmentManager().executePendingTransactions();
+        settle();
+        shoot(activity.getWindow().getDecorView(), name);
+        controller.pause().stop().destroy();
+    }
+
+    @Test @Config(sdk = Build.VERSION_CODES.P, application = Application.class) public void linuxAppPageLight() { linuxAppPage(String.format(PHONE, "notnight"), "linux_app_page_light"); }
+    @Test @Config(sdk = Build.VERSION_CODES.P, application = Application.class) public void linuxAppPageDark() { linuxAppPage(String.format(PHONE, "night"), "linux_app_page_dark"); }
+
     @Test @Config(sdk = Build.VERSION_CODES.P, application = Application.class) public void settingsOnePaneLight() { settings(String.format(PHONE, "notnight"), "settings_onepane_light"); }
     @Test @Config(sdk = Build.VERSION_CODES.P, application = Application.class) public void settingsOnePaneDark() { settings(String.format(PHONE, "night"), "settings_onepane_dark"); }
     @Test @Config(sdk = Build.VERSION_CODES.P, application = Application.class) public void settingsTwoPaneLight() { settings(String.format(TABLET, "notnight"), "settings_twopane_light"); }
