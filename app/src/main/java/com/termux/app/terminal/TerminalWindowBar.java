@@ -667,6 +667,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
+     * Whether the selected chip's window is on screen on {@code page}: on the Workspace and the
+     * Display it is; on Home and the Assistant the chip stands for a window to go to.
+     */
+    public static boolean selectedChipOnScreen(@Nullable com.termux.app.wall.PaneWallPage page) {
+        return page == com.termux.app.wall.PaneWallPage.TERMINAL
+            || page == com.termux.app.wall.PaneWallPage.DISPLAY;
+    }
+
+    /**
      * Whether a tap on the selected chip offers its ×: on the Workspace, where that window is on
      * screen. On Home the same chip stands for the window in front of the row, which a tap brings
      * on screen instead (the selected chip could not be reached from Home at all, #90).

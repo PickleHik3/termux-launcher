@@ -24313,6 +24313,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     GeometryScheduler.ResizePolicy.NOW);
             }
             if (seamLanding.barTravelled()) syncPlaceBar();
+            // Every landing, a jump with the house key included: the selected chip is a window to
+            // close only where that window is on screen.
+            com.termux.app.terminal.TerminalWindowBar landedBar = findViewById(R.id.terminal_window_bar);
+            if (landedBar != null) landedBar.setSelectedChipOffersClose(
+                com.termux.app.terminal.TerminalWindowBar.selectedChipOnScreen(page));
             Trace.endSection();
             // The hold is over: one geometry pass gives the content the room the place it landed
             // on leaves it, which is the terminal's one resize for the whole slide. A slide that
@@ -25450,7 +25455,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // without split panes there are no windows to open, on either half.
             bar.setCreateButtonShown(workspace && isSplitPanesEnabled());
             // Seen from Home the selected chip is a window to go to, not one to close.
-            bar.setSelectedChipOffersClose(workspace);
+            bar.setSelectedChipOffersClose(
+                com.termux.app.terminal.TerminalWindowBar.selectedChipOnScreen(currentWallPage()));
         }
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
             findViewById(R.id.terminal_status_window_column);
