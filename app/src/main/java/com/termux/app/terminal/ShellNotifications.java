@@ -124,9 +124,6 @@ public final class ShellNotifications {
     /** Shells that have sent a message, so a dismissal can be reported back to the right one. */
     private static final Map<String, WeakReference<TerminalSession>> sSenders = new HashMap<>();
 
-    /** Numbers the messages a program did not name, so two of them do not replace each other. */
-    private static int sUnnamedCount;
-
     private ShellNotifications() {
     }
 
@@ -138,79 +135,6 @@ public final class ShellNotifications {
             return false;
         }
         return NotificationManagerCompat.from(context).areNotificationsEnabled();
-    }
-
-    /**
-     * Show one message. Superseded by {@link #poster}; the wiring step removes it with {@link #close}.
-     *
-     * @param terminalVisible whether the launcher is on screen at all
-     * @param senderInFront whether the pane that sent it is the one the user is looking at
-     * @return the shade key it was posted under, or null when it was not shown
-     */
-    @Nullable
-    public static String post(@NonNull Context context, @NonNull TerminalSession session,
-                              @NonNull KittyNotification notification,
-                              boolean terminalVisible, boolean senderInFront) {
-        if (!TerminalNoticePolicy.occasionAllows(notification.getOccasion(), terminalVisible, senderInFront))
-            return null;
-        Context app = context.getApplicationContext();
-        if (!canPost(app)) return null;
-
-        String tag = tagFor(session, notification.getId());
-        boolean urgent = notification.getUrgency() == KittyNotification.URGENCY_CRITICAL;
-        ensureChannels(app);
-
-        String title = notification.getTitle().trim();
-        String body = notification.getBody().trim();
-        if (title.isEmpty()) {
-            // A message with only a body still needs a headline, and its own words beat ours.
-            title = body;
-            body = "";
-        }
-        if (title.isEmpty()) return null;
-
-        NotificationCompat.Builder builder =
-            new NotificationCompat.Builder(app, urgent ? CHANNEL_ID_URGENT : CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_service_notification)
-                .setColor(0xFF607D8B)
-                .setContentTitle(title)
-                .setAutoCancel(true)
-                .setOnlyAlertOnce(true)
-                .setPriority(priorityFor(notification.getUrgency()))
-                .setContentIntent(tapIntent(app, session, notification, tag))
-                .setDeleteIntent(dismissIntent(app, session, notification, tag));
-        if (!body.isEmpty()) {
-            builder.setContentText(body);
-            builder.setStyle(new NotificationCompat.BigTextStyle().bigText(body));
-        }
-        // A button press takes the same road as a tap (see tapIntent) with its number added, so it
-        // is reported to the pane exactly like an activation, and only when a=report was asked.
-        // Android allows MAX_ACTIONS actions; the rest are dropped. An empty label is not shown but
-        // keeps its number, since kitty reports buttons by position.
-        List<String> buttons = notification.getButtons();
-        int shown = 0;
-        for (int i = 0; i < buttons.size() && shown < MAX_ACTIONS; i++) {
-            String label = buttons.get(i).trim();
-            if (label.isEmpty()) continue;
-            builder.addAction(0, label, buttonIntent(app, session, notification, tag, i + 1));
-            shown++;
-        }
-        if (notification.getUrgency() == KittyNotification.URGENCY_LOW) builder.setSilent(true);
-        int timeout = notification.getTimeoutMillis();
-        if (timeout > 0) builder.setTimeoutAfter(timeout);
-        if (timeout == KittyNotification.TIMEOUT_NEVER) builder.setOngoing(false);
-
-        NotificationManager manager = app.getSystemService(NotificationManager.class);
-        if (manager == null) return null;
-        remember(session);
-        manager.notify(tag, NOTIFICATION_ID, builder.build());
-        return tag;
-    }
-
-    /** Take down the message the program named, without telling it anything. */
-    public static void close(@NonNull Context context, @NonNull TerminalSession session,
-                             @NonNull String name) {
-        cancel(context, tagFor(session, name));
     }
 
     /** Take a message out of the shade by its key. */
@@ -232,16 +156,6 @@ public final class ShellNotifications {
         }
     }
 
-    /**
-     * A message's key in the shade. The program's own name for it is part of the key, so sending
-     * the same name twice replaces the message instead of stacking another one up.
-     */
-    @NonNull
-    private static synchronized String tagFor(@NonNull TerminalSession session, @NonNull String name) {
-        if (name.isEmpty()) return session.mHandle + "/#" + (++sUnnamedCount);
-        return session.mHandle + "/" + name;
-    }
-
     private static synchronized void remember(@NonNull TerminalSession session) {
         sSenders.put(session.mHandle, new WeakReference<>(session));
         // Shells that have gone are of no use to a later dismissal.
@@ -253,47 +167,6 @@ public final class ShellNotifications {
         if (handle == null) return null;
         WeakReference<TerminalSession> reference = sSenders.get(handle);
         return reference == null ? null : reference.get();
-    }
-
-    @NonNull
-    private static PendingIntent tapIntent(@NonNull Context context, @NonNull TerminalSession session,
-                                           @NonNull KittyNotification notification, @NonNull String tag) {
-        // The request code keeps one message's intent from replacing another's; the intent itself
-        // stays a plain "open the launcher" one so nothing else has to know about this action.
-        Intent intent = TermuxActivity.newInstance(context)
-            .putExtra(EXTRA_SESSION_HANDLE, session.mHandle)
-            .putExtra(EXTRA_NOTIFICATION_NAME, notification.getId())
-            .putExtra(EXTRA_NOTIFICATION_FOCUS, notification.isFocusOnActivate())
-            .putExtra(EXTRA_NOTIFICATION_TAG, tag);
-        return PendingIntent.getActivity(context, tag.hashCode(), intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
-    }
-
-    @NonNull
-    private static PendingIntent buttonIntent(@NonNull Context context, @NonNull TerminalSession session,
-                                              @NonNull KittyNotification notification, @NonNull String tag,
-                                              int number) {
-        // Same target as the tap, distinguished by its request code and the button's number.
-        // https://sw.kovidgoyal.net/kitty/desktop-notifications/ numbers buttons from 1.
-        Intent intent = TermuxActivity.newInstance(context)
-            .putExtra(EXTRA_SESSION_HANDLE, session.mHandle)
-            .putExtra(EXTRA_NOTIFICATION_NAME, notification.getId())
-            .putExtra(EXTRA_NOTIFICATION_FOCUS, notification.isFocusOnActivate())
-            .putExtra(EXTRA_NOTIFICATION_TAG, tag)
-            .putExtra(EXTRA_NOTIFICATION_BUTTON, number);
-        return PendingIntent.getActivity(context, tag.hashCode() ^ (0x100 + number), intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
-    }
-
-    @NonNull
-    private static PendingIntent dismissIntent(@NonNull Context context, @NonNull TerminalSession session,
-                                               @NonNull KittyNotification notification, @NonNull String tag) {
-        Intent intent = new Intent(context, DismissReceiver.class)
-            .setAction(ACTION_DISMISSED)
-            .putExtra(EXTRA_SESSION_HANDLE, session.mHandle)
-            .putExtra(EXTRA_NOTIFICATION_NAME, notification.getId());
-        return PendingIntent.getBroadcast(context, tag.hashCode() ^ 1, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
     }
 
     private static int immutableFlag() {

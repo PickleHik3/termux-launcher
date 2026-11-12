@@ -1046,6 +1046,7 @@
     <string name="terminal_notification_reply">Reply</string>
     <string name="terminal_notification_reply_label">Reply to %1$s</string>
     <string name="notice_reply_not_sent">Not sent: %1$s is no longer waiting</string>
+    <string name="notice_reply_not_sent_unknown">Not sent: the program is no longer waiting</string>
     <string name="notice_reply_copy">Tap to copy your reply</string>
     <string name="action_open_settings">Settings</string>
     <string name="action_wallpaper_style">Appearance</string>

@@ -456,6 +456,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean mPendingNotificationTapFocus;
 
+    /** A reply that was not typed because its program stopped waiting, and that program's name. */
+    @Nullable private String mPendingUnsentReply;
+    @Nullable private String mPendingUnsentProgram;
+
     /** The pressed button's 1-based number, or 0 for a tap on the message itself. */
     private int mPendingNotificationTapButton;
 
@@ -477,6 +481,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_FOCUS, true);
         mPendingNotificationTapButton = Math.max(0, intent.getIntExtra(
             com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_BUTTON, 0));
+        mPendingUnsentReply = intent.getStringExtra(
+            com.termux.app.terminal.ShellNotifications.EXTRA_UNSENT_REPLY);
+        mPendingUnsentProgram = intent.getStringExtra(
+            com.termux.app.terminal.ShellNotifications.EXTRA_UNSENT_PROGRAM);
         // The same intent is re-delivered after process death, and the message is long gone by
         // then, so the extras are cleared as soon as they are read.
         intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_SESSION_HANDLE);
@@ -484,6 +492,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_FOCUS);
         intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_TAG);
         intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_BUTTON);
+        intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_UNSENT_REPLY);
+        intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_UNSENT_PROGRAM);
         deliverPendingShellNotificationTap();
     }
 
@@ -500,15 +510,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPendingNotificationTapButton = 0;
         mPendingNotificationTapSession = null;
         mPendingNotificationTapName = null;
+        final String unsentReply = mPendingUnsentReply;
+        final String unsentProgram = mPendingUnsentProgram;
+        mPendingUnsentReply = null;
+        mPendingUnsentProgram = null;
         final TerminalSession session = mTermuxService.getTerminalSessionForHandle(handle);
-        if (session == null) return;
         Runnable go = () -> {
-            if (focus) activateSessionInPanes(session);
-            if (name != null && !name.isEmpty()) session.notificationActivated(name, button);
+            // A session that has closed falls back to the Terminal page.
+            if (session == null) terminalHost().goToWallPage("terminal");
+            else if (focus) {
+                activateSessionInPanes(session);
+                terminalHost().goToWallPage("terminal");
+            }
+            if (session != null && name != null && !name.isEmpty())
+                session.notificationActivated(name, button);
+            if (unsentReply != null && !unsentReply.isEmpty()) showUnsentReplyNotice(unsentProgram, unsentReply);
         };
         View root = findViewById(android.R.id.content);
         if (root != null) root.post(go);
         else go.run();
+    }
+
+    /** The typed reply was held back; the notice says why and a tap copies the text. */
+    private void showUnsentReplyNotice(@Nullable String program, @NonNull String text) {
+        String title = program == null || program.isEmpty()
+            ? getString(R.string.notice_reply_not_sent_unknown)
+            : getString(R.string.notice_reply_not_sent, program);
+        com.termux.app.notice.AppNotice.shell(this, title, getString(R.string.notice_reply_copy),
+            "" /* nf-fa-bell */, true,
+            () -> com.termux.shared.interact.ShareUtils.copyTextToClipboard(this, text));
     }
 
     private boolean dismissHelpOverlay() {

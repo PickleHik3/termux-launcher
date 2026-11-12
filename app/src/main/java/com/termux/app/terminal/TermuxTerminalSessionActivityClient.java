@@ -457,6 +457,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // because the shell exited instead of asking nicely with `keyboard.show`.
         TerminalActionDispatcher.getInstance().onSessionFinished(finishedSession);
         mProgramStatusAlerts.forget(finishedSession);
+        mSignals.sessionFinished(finishedSession);
         if (mClipboardConsent != null) mClipboardConsent.onSessionFinished(finishedSession);
         // Before anything below drops its pane: the host reads its status and whether it is the
         // shell on screen.
@@ -650,6 +651,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     /** The front pane or the launcher's visibility may have changed: queued clipboard reads may be due. */
     public void onFrontPaneMaybeChanged() {
         if (mClipboardConsent != null) mClipboardConsent.onFrontMaybeChanged();
+        mSignals.frontMaybeChanged();
     }
 
     @NonNull
@@ -739,6 +741,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // Marked before the visibility and behaviour gates: the pill is not a sound, and a bell that
         // rang while the launcher was in the background is exactly the one the user needs to find.
         mHost.noteShellAttention(session);
+        mSignals.bell(session);
         if (!mHost.isVisible())
             return;
         // Whatever the bell behaviour, ignore included: the tear is the pane's, not a sound.
@@ -767,7 +770,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     @Override
     public void onNotification(@NonNull TerminalSession session, String title, String body) {
-        mSignals.notice(session, title, body);
+        mSignals.terminalMessage(session, title, body);
     }
 
     /**
@@ -781,6 +784,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mHost.scheduleWindowBarRefresh();
         TerminalEmulator current = session.getEmulator();
         if (current != null) mProgramStatusAlerts.retainCurrent(session, current.getProgramStatus());
+        if (current != null) mSignals.programStatus(session, raised, current.getProgramStatus());
         if (raised.isEmpty()) return;
         boolean inFront = mHost.isVisible() && mHost.isTerminalShowing()
             && session == mHost.currentSession();

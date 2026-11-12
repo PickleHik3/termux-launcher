@@ -1,6 +1,6 @@
 # Terminal notifications on Android (2026-11-12)
 
-Decided with the developer on 2026-11-12. Not built.
+Decided with the developer on 2026-11-12. Built on feat/terminal-notifications (unmerged).
 
 ## Today
 
