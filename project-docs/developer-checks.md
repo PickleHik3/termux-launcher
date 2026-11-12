@@ -10,6 +10,11 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Ghostty parity: Fast engine input (2026-11-12)
+- 2026-11-12 · feat/ghostty-parity · Keys on Fast now come from libghostty's encoders. By hand in a shell, vim or neovim, and Claude Code: type with the in-app keyboard and with Gboard, use the extra-keys row with sticky Ctrl and Alt, hold a key to repeat. Passes when nothing you type daily prints stray characters or loses a modifier. Known changes to judge, as Ghostty does them: Shift+Enter sends `\e[27;2;13~` and Alt+Tab sends `\e^I` in normal mode; the full table is `project-docs/reference/terminal/ghostty-parity-input-differences-2026-11-11.md`. If something breaks, `setprop debug.tl.terminal_input java` and a new pane restores the old bytes · pong.
+- 2026-11-12 · feat/ghostty-parity · Touch as mouse on Fast: in a mouse-aware program (htop, neovim with mouse on, tmux) tap, drag a selection or a split border, and scroll with two fingers. Passes when clicks land on the cell under the finger and drags and scrolls track it. A one-finger swipe in drag-reporting modes scrolls instead of dragging; that is the view's older behaviour, not this change · pong.
+- 2026-11-12 · feat/ghostty-parity · Hardware keyboard on Fast: modifiers, function keys, numpad, key release in a kitty-keyboard program, dead keys and AltGr on a non-US layout. None of these ran on a device · pong with a keyboard attached.
+
 ## Dock carry feel (2026-11-11, #155 rework)
 - 2026-11-11 · fix/dock-carry-feel · By hand on pong, Docked and Floating, keyboard down and up:
   a dock icon carried over another place parts the row about 0.2 s after it settles; resting on an

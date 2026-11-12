@@ -820,6 +820,9 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
         public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;
 
+        /** The names of the programs the user chose to always let read the clipboard (a string set). */
+        public static final String KEY_TERMINAL_CLIPBOARD_READ_ALWAYS = "terminal_clipboard_read_always";
+
         /**
          * Whether copy drops a line's trailing spaces and tabs and trailing blank lines, and a
          * single-line paste drops its trailing whitespace and newline.

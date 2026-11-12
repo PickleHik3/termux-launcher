@@ -3,6 +3,7 @@ package com.termux.terminal;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -28,6 +29,15 @@ public interface TerminalSessionClient {
      */
     default String onReadTextFromClipboard(@NonNull TerminalSession session) {
         return null;
+    }
+
+    /**
+     * A clipboard read on the Fast engine (OSC 52 {@code ?} or an OSC 5522 read): answer it with
+     * {@link ClipboardReadRequest#allow} or {@link ClipboardReadRequest#deny}, now or later. The
+     * default allows it with {@link #onReadTextFromClipboard}.
+     */
+    default void onClipboardReadRequest(@NonNull TerminalSession session, @NonNull ClipboardReadRequest request) {
+        request.allow(onReadTextFromClipboard(session));
     }
 
     /**
@@ -71,6 +81,14 @@ public interface TerminalSessionClient {
     default void onKittyNotification(@NonNull TerminalSession session,
                                      @NonNull KittyNotification notification) {
         onNotification(session, notification.getTitle(), notification.getBody());
+    }
+
+    /**
+     * The OSC 7501 program-status records changed. {@code raised} holds the records that entered
+     * blocked, done or error in this turn, one per id; empty when only the picture changed.
+     * Once per turn of output, not once per report.
+     */
+    default void onProgramStatusChanged(@NonNull TerminalSession session, @NonNull List<ProgramStatus> raised) {
     }
 
     /** The program asked for the notification it named earlier to be taken down. */

@@ -1327,6 +1327,25 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED, value, false);
     }
 
+    /** The program names always allowed to read the clipboard; a fresh set. */
+    @NonNull
+    public java.util.Set<String> getClipboardReadAlways() {
+        java.util.Set<String> stored = SharedPreferenceUtils.getStringSet(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_CLIPBOARD_READ_ALWAYS, null);
+        return stored == null ? new java.util.HashSet<>() : new java.util.HashSet<>(stored);
+    }
+
+    public void addClipboardReadAlways(@NonNull String programName) {
+        java.util.Set<String> names = getClipboardReadAlways();
+        if (names.add(programName))
+            SharedPreferenceUtils.setStringSet(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CLIPBOARD_READ_ALWAYS, names, false);
+    }
+
+    public void clearClipboardReadAlways() {
+        SharedPreferenceUtils.setStringSet(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CLIPBOARD_READ_ALWAYS,
+            new java.util.HashSet<>(), false);
+    }
+
     public boolean isClipboardCleanupEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_CLIPBOARD_CLEANUP, TERMUX_APP.DEFAULT_TERMINAL_CLIPBOARD_CLEANUP);

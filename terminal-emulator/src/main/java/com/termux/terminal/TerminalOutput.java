@@ -1,6 +1,9 @@
 package com.termux.terminal;
 
+import androidx.annotation.NonNull;
+
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,6 +27,14 @@ public abstract class TerminalOutput {
     public abstract void write(byte[] data, int offset, int count);
 
     /**
+     * The TERM value the session exports, which the Fast engine answers an XTGETTCAP TN query
+     * with; null when there is none.
+     */
+    public String getTerminfoName() {
+        return null;
+    }
+
+    /**
      * Notify the terminal client that the terminal title has changed.
      */
     public abstract void titleChanged(String oldTitle, String newTitle);
@@ -45,6 +56,15 @@ public abstract class TerminalOutput {
      */
     public String onReadTextFromClipboard() {
         return null;
+    }
+
+    /**
+     * The Fast engine's clipboard read ({@code OSC 52 ?} or an {@code OSC 5522} read), to be
+     * answered once through {@code request}, now or later. The default answers with
+     * {@link #onReadTextFromClipboard()} at once.
+     */
+    public void onClipboardReadRequest(@NonNull ClipboardReadRequest request) {
+        request.allow(onReadTextFromClipboard());
     }
 
     /**
@@ -91,6 +111,14 @@ public abstract class TerminalOutput {
      */
     public void onKittyNotification(KittyNotification notification) {
         onNotification(notification.getTitle(), notification.getBody());
+    }
+
+    /**
+     * The OSC 7501 program-status records changed during one turn of output (or at process exit or
+     * when seen). {@code raised} holds the records that entered blocked, done or error in the turn,
+     * one per id; it is empty when only the picture changed. Called once per turn, never per report.
+     */
+    public void onProgramStatusChanged(@NonNull List<ProgramStatus> raised) {
     }
 
     /** Take down the notification the program named, if it is still up. */

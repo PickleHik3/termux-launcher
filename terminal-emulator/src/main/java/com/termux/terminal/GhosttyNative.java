@@ -112,6 +112,18 @@ final class GhosttyNative {
     static final int EVENT_NOTIFICATION = 3;
     /** OSC 99: {@code first} is everything after {@code 99;}. */
     static final int EVENT_KITTY_NOTIFICATION = 4;
+    /**
+     * A clipboard read (OSC 52 {@code ?} or OSC 5522 read): {@code first} is the whole string after
+     * {@code ESC ]} (such as {@code 52;c;?}); {@code a} has bit 0 set for a listing-only 5522
+     * request, bit 1 when a listing was asked for, bit 2 when the string ended with ST (not BEL).
+     */
+    static final int EVENT_CLIPBOARD_READ = 5;
+    /**
+     * OSC 7501 program status, one validated report: {@code a} is the state (0 idle, 1 working, 2 done,
+     * 3 blocked, 4 error, 5 clear) | (kind (0 none, 1 permission, 2 question, 3 auth) << 8), {@code b}
+     * the progress or -1, {@code first} is id, NUL, app and {@code second} is title, NUL, message.
+     */
+    static final int EVENT_PROGRAM_STATUS = 6;
 
     /** OSC 133 steps in {@link #EVENT_PROMPT}. */
     static final int SEMANTIC_PROMPT_START = 1;
@@ -223,12 +235,53 @@ final class GhosttyNative {
     /** Parse {@code length} bytes from {@code offset} in one go. */
     static native void nativeWrite(long handle, byte[] data, int offset, int length);
 
+    /**
+     * The bytes for one key event, encoded from the terminal's live modes (cursor keys, keypad, kitty
+     * flags of the active screen). {@code key}, {@code action} and {@code mods} are the library's
+     * GhosttyKey, GhosttyKeyAction and GhosttyMods values (see {@link GhosttyKeys}); {@code utf8} is
+     * the text the key produced or null, and holds no C0 control character. Length 0 means nothing
+     * to send; null means the encoder failed.
+     */
+    static native byte[] nativeEncodeKey(long handle, int key, int action, int mods, int consumedMods,
+                                         int unshiftedCodePoint, byte[] utf8OrNull, boolean composing);
+
+    /**
+     * The bytes for one mouse event under the terminal's live tracking and format modes. {@code action}
+     * is 0 press, 1 release, 2 motion; {@code button} is the library's GhosttyMouseButton, 0 for none;
+     * {@code x}, {@code y} are pixels from the top-left of a {@code screenWidth} x {@code screenHeight}
+     * area of {@code cellWidth} x {@code cellHeight} cells. Length 0 means nothing to send; null
+     * means the encoder failed.
+     */
+    static native byte[] nativeEncodeMouse(long handle, int action, int button, int mods, float x, float y,
+                                           int screenWidth, int screenHeight, int cellWidth, int cellHeight,
+                                           boolean anyButtonPressed);
+
+    /** {@code CSI I} for focus gained, {@code CSI O} for lost, as the library writes them. */
+    static native byte[] nativeEncodeFocus(boolean gained);
+
     /** The most rows of history the primary screen keeps; Ghostty prunes in whole pages. */
     static native void nativeSetHistoryLimit(long handle, int rows);
 
     static native void nativeResize(long handle, int columns, int rows, int cellWidthPixels, int cellHeightPixels);
 
     static native void nativeReset(long handle);
+
+    /**
+     * Store the colour scheme DSR 996 answers with. Returns the mode 2031 report bytes when the
+     * scheme changed while that mode is set, else null.
+     */
+    static native byte[] nativeSetColorScheme(long handle, boolean dark);
+
+    /** Set the TERM name XTGETTCAP TN answers with (1 to 128 bytes). */
+    static native void nativeSetTerminfoName(long handle, byte[] name);
+
+    /**
+     * The bytes the library writes to answer the clipboard read {@code request} (the string after
+     * {@code ESC ]}), given the app's decision: denied, or allowed with {@code text} (null for an
+     * empty clipboard). Touches no core, so it may be called at any time from any thread; null when
+     * nothing is written.
+     */
+    static native byte[] nativeEncodeClipboardReply(byte[] request, boolean st, boolean allowed, byte[] text);
 
     /** End a render hold that outlived its timeout, as if the program had reset mode 2026. */
     static native void nativeEndHold(long handle);

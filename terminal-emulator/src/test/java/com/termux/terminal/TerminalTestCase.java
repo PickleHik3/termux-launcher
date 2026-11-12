@@ -24,6 +24,32 @@ public abstract class TerminalTestCase extends TestCase {
 		/** What an OSC 52 read query ({@code ESC ] 52 ; c ; ?}) should answer with; null answers empty. */
 		public String clipboardContents = null;
 		public int bellsRung = 0;
+		/** When set, Fast-engine clipboard reads are kept in {@link #clipboardReadRequests} instead of answered. */
+		public boolean captureClipboardReads = false;
+		public final List<ClipboardReadRequest> clipboardReadRequests = new ArrayList<>();
+
+		@Override
+		public void onClipboardReadRequest(ClipboardReadRequest request) {
+			if (captureClipboardReads) clipboardReadRequests.add(request);
+			else super.onClipboardReadRequest(request);
+		}
+
+		/** One entry per {@link #onProgramStatusChanged} call: the raised records it carried. */
+		public final List<List<ProgramStatus>> programStatusChanges = new ArrayList<>();
+
+		@Override
+		public void onProgramStatusChanged(List<ProgramStatus> raised) {
+			programStatusChanges.add(new ArrayList<>(raised));
+		}
+
+		/** What {@link #getTerminfoName()} returns; null means none. */
+		public String terminfoName = null;
+
+		@Override
+		public String getTerminfoName() {
+			return terminfoName;
+		}
+
 		public int colorsChanged = 0;
 		public final List<String[]> notifications = new ArrayList<>();
 

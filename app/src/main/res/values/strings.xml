@@ -120,6 +120,9 @@
     <string name="settings_clipboard_header">Clipboard</string>
     <string name="settings_osc52_clipboard_read_title">Let programs read the clipboard</string>
     <string name="settings_osc52_clipboard_read_summary">Programs in the terminal can paste what you copied.</string>
+    <string name="settings_clipboard_read_reset_title">Reset clipboard permissions</string>
+    <string name="settings_clipboard_read_reset_summary">Programs you always allowed will ask again.</string>
+    <string name="msg_clipboard_permissions_reset">Clipboard permissions reset</string>
     <string name="settings_clipboard_cleanup_title">Clean up clipboard text</string>
     <string name="settings_clipboard_cleanup_summary">Trim trailing spaces and single-line paste newlines.</string>
     <string name="settings_sessions_panes_header">Sessions and panes</string>
@@ -991,6 +994,13 @@
     <string name="action_kill_process">Kill process (%d)</string>
     <string name="title_confirm_kill_process">Really kill this session?</string>
 
+    <string name="clipboard_read_title">%1$s wants to read the clipboard</string>
+    <string name="clipboard_read_title_unnamed">A program wants to read the clipboard</string>
+    <string name="clipboard_read_deny">Deny</string>
+    <string name="clipboard_read_once">Allow once</string>
+    <string name="clipboard_read_session">Allow for this session</string>
+    <string name="clipboard_read_always">Always allow %1$s</string>
+
     <string name="action_set_background_image">Set wallpaper</string>
     <string name="action_apply">Apply</string>
     <string name="action_enable_background_image">Show wallpaper</string>
@@ -1009,6 +1019,9 @@
     <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
     <string name="notice_tap_to_open">tap to open</string>
     <string name="notice_shell_wants_attention">%1$s wants attention</string>
+    <string name="notice_program_needs_input">%1$s needs input</string>
+    <string name="notice_program_done">%1$s is done</string>
+    <string name="notice_program_error">%1$s stopped with an error</string>
     <string name="notice_keyboard_turned_off">Keyboard off. The keyboard key turns it back on.</string>
     <string name="notice_keyboard_turned_on">Keyboard on</string>
     <string name="shell_notification_channel">Terminal messages</string>

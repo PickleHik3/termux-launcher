@@ -110,12 +110,54 @@ public final class ShellSignals {
             : (where == null || where.isEmpty() ? null
                 : mContext.getString(R.string.notice_shell_wants_attention, where));
         String detail = body == null ? "" : body.trim();
+        return raiseShellNotice(session, headline, detail);
+    }
+
+    /**
+     * An in-app notice for a program's own status report, shown while the launcher is on screen and
+     * the same way {@link #notice} shows one. Unlike it, the window is not marked: the pill reads
+     * the program's status itself, and a bell mark would outlive the record. True when raised.
+     */
+    public boolean statusNotice(@NonNull TerminalSession session, @Nullable String headline,
+                                @Nullable String detail) {
+        if (!mHost.isVisible())
+            return false;
+        return raiseStatusNotice(session, headline == null ? null : headline.trim(),
+            detail == null ? "" : detail.trim());
+    }
+
+    /** The "[n] name" tag the notices use for {@code session}, or null when it has none. */
+    @Nullable
+    public String sessionTag(@NonNull TerminalSession session) {
+        return mNotices.describe(session);
+    }
+
+    private boolean raiseShellNotice(@NonNull TerminalSession session, @Nullable String headline,
+                                     @NonNull String detail) {
+        return raiseShellNotice(headline, detail,
+            session == mHost.currentSession() ? null : () -> mNotices.bringToFront(session));
+    }
+
+    /**
+     * A status notice is raised only when its pane is not on screen, which includes its pane being
+     * the current one while Home is showing: a tap always brings the pane and the terminal in.
+     */
+    private boolean raiseStatusNotice(@NonNull TerminalSession session, @Nullable String headline,
+                                      @NonNull String detail) {
+        return raiseShellNotice(headline, detail, () -> {
+            if (session != mHost.currentSession()) mNotices.bringToFront(session);
+            mHost.goToWallPage("terminal");
+        });
+    }
+
+    private boolean raiseShellNotice(@Nullable String headline, @NonNull String detail,
+                                     @Nullable Runnable onTap) {
+        if (headline != null && headline.isEmpty()) headline = null;
         if (headline == null && detail.isEmpty())
             return false;
         AppNotice.shell(mContext, headline == null ? detail : headline,
             headline == null || detail.isEmpty() ? null : detail,
-            "" /* nf-fa-bell */, true,
-            session == mHost.currentSession() ? null : () -> mNotices.bringToFront(session));
+            "" /* nf-fa-bell */, true, onTap);
         return true;
     }
 

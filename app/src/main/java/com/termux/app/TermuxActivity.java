@@ -25198,6 +25198,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
                         if (wall != null && !wall.isMoving() && wall.offsetPx() == 0f)
                             settlePlaceChrome(placeOf(page));
+                        // At rest with no settle to follow: clipboard reads waiting for the
+                        // terminal may be due.
+                        if (wall != null && !wall.isMoving()
+                            && mTermuxTerminalSessionActivityClient != null)
+                            mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
                     });
                 }
             });
@@ -25255,6 +25260,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } finally {
             Trace.endSection();
         }
+        // The wall is at rest here: clipboard reads that waited for the terminal may be due.
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
     }
 
     private void doRunWallPageSettle(
@@ -29854,7 +29862,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.AgentStatus.State agentState = observeWindowAgents(window, now);
         for (TerminalSession shell : mPaneController.shellsOf(window)) syncPaneAttention(shell);
         int phases = observeWindowPhases(window, seen, now);
-        return buildWindowItem(session, index, foregroundPids, mPaneController.windowName(window))
+        com.termux.app.terminal.TerminalWindowBar.WindowItem built =
+            buildWindowItem(session, index, foregroundPids, mPaneController.windowName(window));
+        return built
             .withBusy(progress != null || (phases & PHASE_WORKING) != 0)
             .withAttention(isWindowAwaitingUser(window) || (phases & PHASE_ATTENTION) != 0)
             .withDone((phases & PHASE_DONE) != 0,
@@ -29865,7 +29875,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : progress.getProgressValue(),
                 progress != null && progress.getProgressState()
                     == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR)
-            .withAgentState(agentState);
+            .withAgentState(agentState)
+            .withStatus(windowProgramStatus(window, built.label));
+    }
+
+    /** What a program in {@code window} reports about itself; null when none has anything but idle. */
+    @Nullable
+    private com.termux.app.terminal.TerminalWindowBar.WindowItem.Status windowProgramStatus(
+            @NonNull com.termux.app.terminal.TerminalPaneController.Window window,
+            @NonNull String windowLabel) {
+        java.util.List<TerminalSession> shells = mPaneController.shellsOf(window);
+        java.util.ArrayList<com.termux.terminal.ProgramStatusStore> stores =
+            new java.util.ArrayList<>(shells.size());
+        for (TerminalSession shell : shells) {
+            TerminalEmulator emulator = shell.getEmulator();
+            stores.add(emulator == null ? null : emulator.getProgramStatus());
+        }
+        return com.termux.app.terminal.ProgramStatusLabel.forWindow(stores, windowLabel);
     }
 
     private static final int PHASE_WORKING = 1;
@@ -32344,11 +32370,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onActivePaneChanged() {
             adoptActivePane();
+            if (mTermuxTerminalSessionActivityClient != null)
+                mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
             refreshTerminalWindowBar();
         }
 
         @Override public void onActivePaneMoved() {
             adoptActivePane();
+            if (mTermuxTerminalSessionActivityClient != null)
+                mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
             // Another pane of the same window: the bar's glass, clock, widgets and place row read
             // nothing the active pane moves, only its window chips do.
             refreshTerminalWindowBarChips();
@@ -32745,6 +32775,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean isTerminalPlaceOnScreen() {
             return mPaneWallController == null || mPaneWallController.isTerminalOnScreen();
+        }
+
+        @Override public boolean isTerminalShowing() {
+            return mPaneWallController != null && mPaneWallController.isTerminalShowing();
         }
 
         @Override public void showTerminalActionHint(@NonNull String toolName) {

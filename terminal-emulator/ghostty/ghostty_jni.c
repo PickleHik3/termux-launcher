@@ -69,13 +69,15 @@ typedef struct {
 } LinkBuf;
 
 // Events handed to Java during a write (GhosttyNative.EVENT_*), in the order they happened.
-enum { EVENT_PROMPT = 1, EVENT_PROGRESS = 2, EVENT_NOTIFICATION = 3, EVENT_KITTY_NOTIFICATION = 4 };
+enum { EVENT_PROMPT = 1, EVENT_PROGRESS = 2, EVENT_NOTIFICATION = 3, EVENT_KITTY_NOTIFICATION = 4,
+       EVENT_CLIPBOARD_READ = 5, EVENT_PROGRAM_STATUS = 6 };
 // EVENT_PROMPT's second value when the shell reported no exit code.
 #define NO_EXIT_CODE INT32_MIN
 
 // The OSC strings the sniffer keeps (99 and 66), at most this many bytes after "NN;"; a longer one
 // is dropped whole, like the Java core drops an OSC past MAX_STRING_SEQUENCE_LENGTH.
 #define OSC_CAP (16 * 1024)
+#define CLIP_DENY_CAP 1024
 
 // ST_FLAGS bits.
 enum {
@@ -120,6 +122,7 @@ typedef struct {
     jmethodID on_reply;
     jmethodID on_clipboard;
     jmethodID on_event;
+    bool dark;  // the colour scheme DSR 996 answers with; set from Java, read in on_color_scheme
     uint8_t* xtversion;  // our XTVERSION name, owned here for the terminal's life
     size_t xtversion_len;
     uint16_t cols, rows;
@@ -151,6 +154,15 @@ typedef struct {
     size_t text_len;
     // An OSC 9;4 report held until the sniffer has seen its string (see on_progress).
     bool progress_pending;
+    // A clipboard read (OSC 52 "?" or OSC 5522 read) the library asked about (on_clipboard_read):
+    // clip_mute drops its own reply bytes while the denial is given, clip_pending tells osc_end to
+    // hand the request to Java, clip_flags is that event's first value (bit 0 listing-only, bit 1 list).
+    bool clip_mute, clip_pending;
+    int clip_flags;
+    // The library's own denial bytes, kept while clip_mute drops them, so that a request the sniffer
+    // could not keep whole (over OSC_CAP) is still answered with them from osc_end.
+    uint8_t clip_deny[CLIP_DENY_CAP];
+    size_t clip_deny_len;
     int progress_state, progress_value;
     // The snapshot Java reads, from the last capture(): a sync outside a render hold, or the
     // start of one. While held, syncs leave it and the render state as the hold found them.
@@ -162,6 +174,19 @@ typedef struct {
     bool snap_visible;
     int snap_mouse;  // the OSC 22 pointer shape
     struct KittyState* kitty;  // kitty graphics, set up by nativeKittySetup; see the end of this file
+    // The library's input encoders (see nativeEncodeKey / nativeEncodeMouse), made with the terminal.
+    GhosttyKeyEncoder key_enc;
+    GhosttyKeyEvent key_ev;
+    GhosttyMouseEncoder mouse_enc;
+    GhosttyMouseEvent mouse_ev;
+    // The mouse tracking/format mode bits the mouse encoder was last configured from; see
+    // nativeEncodeMouse. mouse_sig_known is false until the first call.
+    uint32_t mouse_sig;
+    bool mouse_sig_known;
+    // The size the mouse encoder was last given. Setting a size forgets the last cell as well, so it
+    // is set only when one of these changed.
+    uint32_t mouse_size[4];
+    bool mouse_size_known;
 } Core;
 
 static void kitty_free(Core* c);
@@ -211,6 +236,13 @@ static void clear_exception(JNIEnv* env) {
 static void on_write_pty(GhosttyTerminal t, void* ud, const uint8_t* data, size_t len) {
     (void) t;
     Core* c = ud;
+    if (c != NULL && c->clip_mute) {
+        if (len <= CLIP_DENY_CAP - c->clip_deny_len) {
+            memcpy(c->clip_deny + c->clip_deny_len, data, len);
+            c->clip_deny_len += len;
+        }
+        return;
+    }
     if (c == NULL || c->env == NULL || c->sink == NULL || len == 0 || len > (1u << 24)) return;
     JNIEnv* env = c->env;
     jbyteArray arr = (*env)->NewByteArray(env, (jsize) len);
@@ -281,6 +313,28 @@ static void on_clipboard_write(GhosttyTerminal t, void* ud, const GhosttyClipboa
     if (w != NULL && w->reply != NULL) w->reply(w, &reply);
 }
 
+// Clipboard reads (OSC 52 "?", OSC 5522 read) are answered later, after the app decides, so the
+// library is told "denied" here with its own reply bytes muted, and the request goes to Java from
+// osc_end (the sniffer holds the raw string). Parsing runs on the main thread: nothing here waits.
+// When the sniffer cannot keep the string the library's denial goes through as it is.
+static void on_clipboard_read(GhosttyTerminal t, void* ud, const GhosttyClipboardRead* read) {
+    (void) t;
+    Core* c = ud;
+    if (read == NULL || read->reply == NULL) return;
+    GhosttyClipboardReadReply reply = GHOSTTY_INIT_SIZED(GhosttyClipboardReadReply);
+    reply.result = GHOSTTY_CLIPBOARD_READ_RESULT_DENIED;
+    if (c == NULL || !c->osc_active || c->osc_skip || c->osc_overflow) {
+        read->reply(read, &reply);
+        return;
+    }
+    c->clip_flags = (read->mimes_len == 0 ? 1 : 0) | (read->list ? 2 : 0);
+    c->clip_mute = true;
+    c->clip_deny_len = 0;
+    read->reply(read, &reply);
+    c->clip_mute = false;
+    c->clip_pending = true;
+}
+
 // XTVERSION: answer with the name Java gave at creation. The bytes live in Core until core_free,
 // longer than the callback requires; no JNI call here, since callbacks fire inside vt_write.
 static GhosttyString on_xtversion(GhosttyTerminal t, void* ud) {
@@ -291,7 +345,16 @@ static GhosttyString on_xtversion(GhosttyTerminal t, void* ud) {
     return s;
 }
 
-// DA1: what we always said (VT220, ANSI colour) and, only while sixel works on this core, 4. The
+// DSR 996: answer from the scheme Java last stored. No JNI call here.
+static bool on_color_scheme(GhosttyTerminal t, void* ud, GhosttyColorScheme* out) {
+    (void) t;
+    Core* c = (Core*) ud;
+    if (c == NULL) return false;
+    *out = c->dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT;
+    return true;
+}
+
+// DA1: what we always said (VT220, ANSI colour, clipboard) and, only while sixel works on this core, 4. The
 // secondary and tertiary answers stay the library's defaults. No JNI call here.
 static bool on_device_attributes(GhosttyTerminal t, void* ud, GhosttyDeviceAttributes* out) {
     (void) t;
@@ -300,6 +363,7 @@ static bool on_device_attributes(GhosttyTerminal t, void* ud, GhosttyDeviceAttri
     size_t n = 0;
     if (c != NULL && sx_enabled(c)) out->primary.features[n++] = GHOSTTY_DA_FEATURE_SIXEL;
     out->primary.features[n++] = GHOSTTY_DA_FEATURE_ANSI_COLOR;
+    out->primary.features[n++] = GHOSTTY_DA_FEATURE_CLIPBOARD;
     out->primary.num_features = n;
     out->secondary.device_type = GHOSTTY_DA_DEVICE_TYPE_VT220;
     return true;
@@ -361,6 +425,29 @@ static void on_desktop_notification(GhosttyTerminal t, void* ud, const GhosttyTe
                n->title.len, n->body.ptr != NULL ? n->body.ptr : (const uint8_t*) "", n->body.len);
 }
 
+// OSC 7501 program status: one validated report. The library's strings are valid only during this
+// call; send_event's byte_array copies them, which is the copy this contract asks for. a = state |
+// (kind << 8), b = progress (-1 none), first = id + NUL + app, second = title + NUL + message. NUL is
+// a safe separator: the library refuses C0 controls in decoded title and message, and id and app
+// are limited to a charset without it.
+static void on_program_status(GhosttyTerminal t, void* ud, const GhosttyTerminalProgramStatus* s) {
+    (void) t;
+    if (s == NULL) return;
+    // The library caps these (id 128, app 32, decoded title 192, message 2048); the buffers hold more.
+    uint8_t first[512], second[4096];
+    size_t id_len = s->id.ptr != NULL ? s->id.len : 0, app_len = s->app.ptr != NULL ? s->app.len : 0;
+    size_t title_len = s->title.ptr != NULL ? s->title.len : 0, msg_len = s->message.ptr != NULL ? s->message.len : 0;
+    if (id_len + 1 + app_len > sizeof first || title_len + 1 + msg_len > sizeof second) return;
+    if (id_len) memcpy(first, s->id.ptr, id_len);
+    first[id_len] = 0;
+    if (app_len) memcpy(first + id_len + 1, s->app.ptr, app_len);
+    if (title_len) memcpy(second, s->title.ptr, title_len);
+    second[title_len] = 0;
+    if (msg_len) memcpy(second + title_len + 1, s->message.ptr, msg_len);
+    send_event(ud, EVENT_PROGRAM_STATUS, (int) s->state | ((int) s->kind << 8), (int) s->progress,
+               first, id_len + 1 + app_len, second, title_len + 1 + msg_len);
+}
+
 static void core_free(Core* c, JNIEnv* env) {
     if (c == NULL) return;
     kitty_free(c);
@@ -369,6 +456,10 @@ static void core_free(Core* c, JNIEnv* env) {
     if (c->row_cells) ghostty_render_state_row_cells_free(c->row_cells);
     if (c->row_iter) ghostty_render_state_row_iterator_free(c->row_iter);
     if (c->render) ghostty_render_state_free(c->render);
+    if (c->key_enc) ghostty_key_encoder_free(c->key_enc);
+    if (c->key_ev) ghostty_key_event_free(c->key_ev);
+    if (c->mouse_enc) ghostty_mouse_encoder_free(c->mouse_enc);
+    if (c->mouse_ev) ghostty_mouse_event_free(c->mouse_ev);
     if (c->term) ghostty_terminal_free(c->term);
     if (c->sink != NULL && env != NULL) (*env)->DeleteGlobalRef(env, c->sink);
     free(c->xtversion);
@@ -479,10 +570,17 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     if (ghostty_terminal_new(NULL, &c->term, (uint16_t) cols, (uint16_t) rows) != GHOSTTY_SUCCESS
         || ghostty_render_state_new(NULL, &c->render) != GHOSTTY_SUCCESS
         || ghostty_render_state_row_iterator_new(NULL, &c->row_iter) != GHOSTTY_SUCCESS
-        || ghostty_render_state_row_cells_new(NULL, &c->row_cells) != GHOSTTY_SUCCESS) {
+        || ghostty_render_state_row_cells_new(NULL, &c->row_cells) != GHOSTTY_SUCCESS
+        || ghostty_key_encoder_new(NULL, &c->key_enc) != GHOSTTY_SUCCESS
+        || ghostty_key_event_new(NULL, &c->key_ev) != GHOSTTY_SUCCESS
+        || ghostty_mouse_encoder_new(NULL, &c->mouse_enc) != GHOSTTY_SUCCESS
+        || ghostty_mouse_event_new(NULL, &c->mouse_ev) != GHOSTTY_SUCCESS) {
         core_free(c, env);
         return 0;
     }
+    // First-party Ghostty drops motion inside one cell; the encoder keeps the last cell for that.
+    bool track_cell = true;
+    ghostty_mouse_encoder_set(c->mouse_enc, GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL, &track_cell);
     GhosttyPoint origin = {.tag = GHOSTTY_POINT_TAG_ACTIVE, .value = {.coordinate = {.x = 0, .y = 0}}};
     if (ghostty_terminal_grid_ref_track(c->term, origin, &c->top) != GHOSTTY_SUCCESS
         || ghostty_terminal_grid_ref_track(c->term, origin, &c->bottom) != GHOSTTY_SUCCESS
@@ -502,13 +600,16 @@ JNIEXPORT jlong JNICALL Java_com_termux_terminal_GhosttyNative_nativeCreate(
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*) on_title);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*) on_pwd);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_XTVERSION, (const void*) on_xtversion);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_COLOR_SCHEME, (const void*) on_color_scheme);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, (const void*) on_device_attributes);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SIZE, (const void*) on_size);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*) on_clipboard_write);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ, (const void*) on_clipboard_read);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_RENDER_HOLD, (const void*) on_render_hold);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT, (const void*) on_semantic_prompt);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT, (const void*) on_progress);
     ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, (const void*) on_desktop_notification);
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_PROGRAM_STATUS, (const void*) on_program_status);
     // History only has to hold what the next sync copies into the Java transcript; Java picks the
     // row limit (GhosttyCore.historyLimit). Bytes are unlimited so a styled burst cannot prune rows
     // the next sync still needs.
@@ -573,7 +674,8 @@ static void osc_append(Core* c, const uint8_t* p, size_t n) {
         c->osc_head[c->osc_head_len++] = *p++;
         n--;
         if (c->osc_head_len == 3 && memcmp(c->osc_head, "99;", 3) != 0 && memcmp(c->osc_head, "66;", 3) != 0
-            && memcmp(c->osc_head, "9;4", 3) != 0) {
+            && memcmp(c->osc_head, "9;4", 3) != 0 && memcmp(c->osc_head, "52;", 3) != 0
+            && memcmp(c->osc_head, "552", 3) != 0) {
             c->osc_skip = true;
             return;
         }
@@ -608,9 +710,37 @@ static void osc_end(Core* c, GhosttyTerminalStringEnd end) {
     bool kept = c->osc_active && !c->osc_skip && !c->osc_overflow && c->osc_head_len == 3
         && end != GHOSTTY_TERMINAL_STRING_END_CANCELLED;
     c->osc_active = false;
+    if (c->clip_pending) {
+        c->clip_pending = false;
+        if (kept) {
+            // The request string whole ("52;c;?"), and whether it ended with ST (bit 2).
+            size_t n = 3 + c->osc_body_len;
+            uint8_t* raw = malloc(n);
+            if (raw != NULL) {
+                memcpy(raw, c->osc_head, 3);
+                if (c->osc_body_len > 0) memcpy(raw + 3, c->osc_body, c->osc_body_len);
+                send_event(c, EVENT_CLIPBOARD_READ,
+                           c->clip_flags | (end != GHOSTTY_TERMINAL_STRING_END_BEL ? 4 : 0), 0, raw, n, NULL, 0);
+                free(raw);
+            }
+        }
+        // Not kept (over OSC_CAP, or cancelled): the library's own denial, held back in
+        // on_clipboard_read, is written now, so a request over 16 KiB never goes unanswered.
+        if (!kept && c->clip_deny_len > 0) {
+            size_t n = c->clip_deny_len;
+            c->clip_deny_len = 0;
+            on_write_pty(c->term, c, c->clip_deny, n);
+        }
+        send_progress(c, false);
+        return;
+    }
     if (!kept) {
         send_progress(c, false);
         return;
+    }
+    if (memcmp(c->osc_head, "52;", 3) == 0 || memcmp(c->osc_head, "552", 3) == 0) {
+        send_progress(c, false);
+        return; // Writes and anything else about the clipboard: the library handles them.
     }
     if (memcmp(c->osc_head, "9;4", 3) == 0)
         send_progress(c, c->osc_body_len == 2 && memcmp(c->osc_body, ";1", 2) == 0);
@@ -759,6 +889,152 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeReset(JNIEnv
     pin_top(c);
 }
 
+// Store the colour scheme; when it changed and mode 2031 is set, return the report the program asked
+// for (CSI ? 997 ; 1|2 n), else null.
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetColorScheme(JNIEnv* env, jclass cls, jlong h, jboolean dark) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL) return NULL;
+    bool d = dark ? true : false;
+    if (d == c->dark) return NULL;
+    c->dark = d;
+    GhosttyTerminalModeConfig cfg = {.mode = GHOSTTY_MODE_REPORT_COLOR_SCHEME, .value = false};
+    if (ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_MODE, &cfg) != GHOSTTY_SUCCESS || !cfg.value)
+        return NULL;
+    uint8_t buf[32];
+    size_t n = 0;
+    if (ghostty_color_scheme_report_encode(d ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT, buf, sizeof(buf), &n) != GHOSTTY_SUCCESS || n == 0)
+        return NULL;
+    jbyteArray arr = (*env)->NewByteArray(env, (jsize) n);
+    if (arr == NULL) { clear_exception(env); return NULL; }
+    (*env)->SetByteArrayRegion(env, arr, 0, (jsize) n, (const jbyte*) buf);
+    return arr;
+}
+
+// The TERM the session exports, for XTGETTCAP TN. The library copies it (128 bytes at most; longer
+// is refused and the old name stays). Empty clears it.
+JNIEXPORT void JNICALL Java_com_termux_terminal_GhosttyNative_nativeSetTerminfoName(JNIEnv* env, jclass cls, jlong h, jbyteArray name) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || name == NULL) return;
+    jsize n = (*env)->GetArrayLength(env, name);
+    if (n <= 0 || n > 128) return;
+    uint8_t buf[128];
+    (*env)->GetByteArrayRegion(env, name, 0, n, (jbyte*) buf);
+    GhosttyString s = {.ptr = buf, .len = (size_t) n};
+    ghostty_terminal_set(c->term, GHOSTTY_TERMINAL_OPT_TERMINFO_NAME, &s);
+}
+
+// What a clipboard read answers with, as the library writes it: a throwaway terminal is fed the
+// request string and its CLIPBOARD_READ callback replies as the app decided. Touches no Core, so
+// it may run long after the core moved on, from any thread.
+#define CLIP_OUT_CAP (16u * 1024 * 1024)
+typedef struct {
+    uint8_t* out;
+    size_t len, cap;
+    bool allowed;
+    const uint8_t* text;
+    size_t text_len;
+    bool has_text;
+} ClipEnc;
+
+static void clip_enc_write(GhosttyTerminal t, void* ud, const uint8_t* data, size_t len) {
+    (void) t;
+    ClipEnc* e = ud;
+    if (e == NULL || len == 0 || e->len + len > CLIP_OUT_CAP) return;
+    if (e->len + len > e->cap) {
+        size_t cap = e->cap == 0 ? 256 : e->cap;
+        while (cap < e->len + len) cap *= 2;
+        uint8_t* p = realloc(e->out, cap);
+        if (p == NULL) return;
+        e->out = p;
+        e->cap = cap;
+    }
+    memcpy(e->out + e->len, data, len);
+    e->len += len;
+}
+
+static bool clip_is_text_mime(const GhosttyString* m) {
+    static const char want[] = "text/plain";
+    if (m->len < 10) return false;
+    for (size_t i = 0; i < 10; i++) {
+        char ch = (char) m->ptr[i];
+        if (ch >= 'A' && ch <= 'Z') ch = (char) (ch + 32);
+        if (ch != want[i]) return false;
+    }
+    return m->len == 10 || m->ptr[10] == ';';
+}
+
+static void clip_enc_read(GhosttyTerminal t, void* ud, const GhosttyClipboardRead* read) {
+    (void) t;
+    ClipEnc* e = ud;
+    GhosttyClipboardReadReply reply = GHOSTTY_INIT_SIZED(GhosttyClipboardReadReply);
+    if (e == NULL || !e->allowed) {
+        reply.result = GHOSTTY_CLIPBOARD_READ_RESULT_DENIED;
+        read->reply(read, &reply);
+        return;
+    }
+    size_t n = 0;
+    GhosttyClipboardContent* items = NULL;
+    if (read->mimes_len > 0) items = calloc(read->mimes_len, sizeof(GhosttyClipboardContent));
+    if (read->mimes_len > 0 && items == NULL) {
+        reply.result = GHOSTTY_CLIPBOARD_READ_RESULT_IO_ERROR;
+        read->reply(read, &reply);
+        return;
+    }
+    for (size_t i = 0; i < read->mimes_len; i++) {
+        if (!clip_is_text_mime(&read->mimes[i])) continue;
+        items[n].mime = read->mimes[i];
+        items[n].data.ptr = e->text;
+        items[n].data.len = e->text_len;
+        n++;
+    }
+    static const GhosttyString avail = {.ptr = (const uint8_t*) "text/plain", .len = 10};
+    reply.result = GHOSTTY_CLIPBOARD_READ_RESULT_SUCCESS;
+    reply.contents = items;
+    reply.contents_len = n;
+    if (read->list && e->has_text) {
+        reply.available = &avail;
+        reply.available_len = 1;
+    }
+    read->reply(read, &reply);
+    free(items);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeEncodeClipboardReply(
+    JNIEnv* env, jclass cls, jbyteArray request, jboolean st, jboolean allowed, jbyteArray text) {
+    (void) cls;
+    if (request == NULL) return NULL;
+    jsize rn = (*env)->GetArrayLength(env, request);
+    jsize tn = text != NULL ? (*env)->GetArrayLength(env, text) : 0;
+    if (rn < 0 || rn > (1 << 24) || tn < 0 || tn > (1 << 24)) return NULL;
+    uint8_t* in = malloc((size_t) rn + 4);
+    uint8_t* tx = malloc((size_t) tn + 1);
+    if (in == NULL || tx == NULL) { free(in); free(tx); return NULL; }
+    in[0] = 0x1b;
+    in[1] = ']';
+    if (rn > 0) (*env)->GetByteArrayRegion(env, request, 0, rn, (jbyte*) (in + 2));
+    size_t n = 2 + (size_t) rn;
+    if (st) { in[n++] = 0x1b; in[n++] = '\\'; } else { in[n++] = 0x07; }
+    if (tn > 0) (*env)->GetByteArrayRegion(env, text, 0, tn, (jbyte*) tx);
+    ClipEnc e = {.out = NULL, .len = 0, .cap = 0, .allowed = allowed ? true : false, .text = tx,
+                 .text_len = (size_t) tn, .has_text = text != NULL};
+    jbyteArray result = NULL;
+    GhosttyTerminal term = NULL;
+    if (ghostty_terminal_new(NULL, &term, 8, 1) == GHOSTTY_SUCCESS) {
+        ghostty_terminal_set(term, GHOSTTY_TERMINAL_OPT_USERDATA, &e);
+        ghostty_terminal_set(term, GHOSTTY_TERMINAL_OPT_WRITE_PTY, (const void*) clip_enc_write);
+        ghostty_terminal_set(term, GHOSTTY_TERMINAL_OPT_CLIPBOARD_READ, (const void*) clip_enc_read);
+        ghostty_terminal_vt_write(term, in, n);
+        ghostty_terminal_free(term);
+        if (e.len > 0) result = byte_array(env, e.out, e.len);
+    }
+    free(e.out);
+    free(in);
+    free(tx);
+    return result;
+}
+
 // End a render hold that ran past Java's timeout: reset mode 2026 as the program would have. Setting
 // the mode from here never calls on_render_hold, so the hold is marked over here too; the next sync
 // takes a fresh snapshot.
@@ -780,6 +1056,142 @@ static int read_modes(Core* c) {
             bits |= MODE_BITS[i].bit;
     }
     return bits;
+}
+
+// The library's input encoders. Like every entry point they run on the session's thread (the main
+// thread, the one that calls nativeWrite), so the encoders and the terminal they read are never
+// touched from two threads at once.
+
+// Bytes of an encoder's output: a 128-byte stack buffer first, a heap one of the size the library
+// reports when that was too small. Returns a new byte[] (empty for no output), NULL on an error.
+typedef GhosttyResult (*EncodeFn)(Core* c, uint8_t* buf, size_t len, size_t* written);
+
+static GhosttyResult key_encode_fn(Core* c, uint8_t* buf, size_t len, size_t* written) {
+    return ghostty_key_encoder_encode(c->key_enc, c->key_ev, buf, len, written);
+}
+
+static GhosttyResult mouse_encode_fn(Core* c, uint8_t* buf, size_t len, size_t* written) {
+    return ghostty_mouse_encoder_encode(c->mouse_enc, c->mouse_ev, buf, len, written);
+}
+
+static jbyteArray encode_to_array(JNIEnv* env, Core* c, EncodeFn fn) {
+    uint8_t stack[128];
+    uint8_t* buf = stack;
+    size_t written = 0;
+    GhosttyResult r = fn(c, stack, sizeof(stack), &written);
+    uint8_t* heap = NULL;
+    if (r == GHOSTTY_OUT_OF_SPACE && written > 0) {
+        heap = malloc(written);
+        if (heap == NULL) return NULL;
+        buf = heap;
+        size_t need = written;
+        r = fn(c, heap, need, &written);
+    }
+    jbyteArray out = NULL;
+    if (r == GHOSTTY_SUCCESS) {
+        out = (*env)->NewByteArray(env, (jsize) written);
+        if (out != NULL && written > 0) (*env)->SetByteArrayRegion(env, out, 0, (jsize) written, (const jbyte*) buf);
+    }
+    free(heap);
+    return out;
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeEncodeKey(
+    JNIEnv* env, jclass cls, jlong h, jint key, jint action, jint mods, jint consumed_mods,
+    jint unshifted, jbyteArray utf8, jboolean composing) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || c->key_enc == NULL || c->key_ev == NULL) return NULL;
+    if (ghostty_key_encoder_set_from_terminal(c->key_enc, c->term) != GHOSTTY_SUCCESS) return NULL;
+    uint8_t text_stack[64];
+    uint8_t* text = text_stack;
+    uint8_t* text_heap = NULL;
+    size_t text_len = 0;
+    if (utf8 != NULL) {
+        jsize n = (*env)->GetArrayLength(env, utf8);
+        if (n > (jsize) sizeof(text_stack)) {
+            text_heap = malloc((size_t) n);
+            if (text_heap == NULL) return NULL;
+            text = text_heap;
+        }
+        if (n > 0) (*env)->GetByteArrayRegion(env, utf8, 0, n, (jbyte*) text);
+        text_len = (size_t) (n > 0 ? n : 0);
+    }
+    GhosttyString str = {.ptr = text_len > 0 ? text : NULL, .len = text_len};
+    ghostty_key_event_set_action(c->key_ev, (GhosttyKeyAction) action);
+    ghostty_key_event_set_key(c->key_ev, (GhosttyKey) key);
+    ghostty_key_event_set_mods(c->key_ev, (GhosttyMods) mods);
+    ghostty_key_event_set_consumed_mods(c->key_ev, (GhosttyMods) consumed_mods);
+    ghostty_key_event_set_composing(c->key_ev, composing != JNI_FALSE);
+    ghostty_key_event_set_unshifted_codepoint(c->key_ev, (uint32_t) unshifted);
+    ghostty_key_event_set_utf8(c->key_ev, str);
+    jbyteArray out = encode_to_array(env, c, key_encode_fn);
+    // The event keeps the pointer, not a copy of the text.
+    GhosttyString none = {.ptr = NULL, .len = 0};
+    ghostty_key_event_set_utf8(c->key_ev, none);
+    free(text_heap);
+    return out;
+}
+
+// The mouse tracking and format modes the encoder is configured from, as one number.
+static uint32_t mouse_signature(Core* c) {
+    static const int modes[] = {9, 1000, 1002, 1003, 1005, 1006, 1015, 1016};
+    uint32_t sig = 0;
+    for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); i++) {
+        GhosttyTerminalModeConfig cfg = {.mode = ghostty_mode_new((uint16_t) modes[i], false), .value = false};
+        if (ghostty_terminal_get(c->term, GHOSTTY_TERMINAL_DATA_MODE, &cfg) == GHOSTTY_SUCCESS && cfg.value)
+            sig |= 1u << i;
+    }
+    return sig;
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeEncodeMouse(
+    JNIEnv* env, jclass cls, jlong h, jint action, jint button, jint mods, jfloat x, jfloat y,
+    jint screen_w, jint screen_h, jint cell_w, jint cell_h, jboolean any_pressed) {
+    (void) cls;
+    Core* c = core_of(h);
+    if (c == NULL || c->mouse_enc == NULL || c->mouse_ev == NULL) return NULL;
+    if (screen_w < 1 || screen_h < 1 || cell_w < 1 || cell_h < 1) return NULL;
+    // set_from_terminal (like setting a size, event or format) also forgets the last cell the motion
+    // de-dup compares with, so it runs only when a tracking or format mode changed since it last ran.
+    uint32_t sig = mouse_signature(c);
+    if (!c->mouse_sig_known || sig != c->mouse_sig) {
+        if (ghostty_mouse_encoder_set_from_terminal(c->mouse_enc, c->term) != GHOSTTY_SUCCESS) return NULL;
+        c->mouse_sig = sig;
+        c->mouse_sig_known = true;
+    }
+    uint32_t dims[4] = {(uint32_t) screen_w, (uint32_t) screen_h, (uint32_t) cell_w, (uint32_t) cell_h};
+    if (!c->mouse_size_known || memcmp(dims, c->mouse_size, sizeof(dims)) != 0) {
+        GhosttyMouseEncoderSize size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
+        size.screen_width = dims[0];
+        size.screen_height = dims[1];
+        size.cell_width = dims[2];
+        size.cell_height = dims[3];
+        if (ghostty_mouse_encoder_set(c->mouse_enc, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size) != GHOSTTY_SUCCESS) return NULL;
+        memcpy(c->mouse_size, dims, sizeof(dims));
+        c->mouse_size_known = true;
+    }
+    bool pressed = any_pressed != JNI_FALSE;
+    ghostty_mouse_encoder_set(c->mouse_enc, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed);
+    ghostty_mouse_event_set_action(c->mouse_ev, (GhosttyMouseAction) action);
+    if (button == 0) ghostty_mouse_event_clear_button(c->mouse_ev);
+    else ghostty_mouse_event_set_button(c->mouse_ev, (GhosttyMouseButton) button);
+    ghostty_mouse_event_set_mods(c->mouse_ev, (GhosttyMods) mods);
+    GhosttyMousePosition pos = {.x = x, .y = y};
+    ghostty_mouse_event_set_position(c->mouse_ev, pos);
+    return encode_to_array(env, c, mouse_encode_fn);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_termux_terminal_GhosttyNative_nativeEncodeFocus(
+    JNIEnv* env, jclass cls, jboolean gained) {
+    (void) cls;
+    uint8_t buf[16];
+    size_t written = 0;
+    if (ghostty_focus_encode(gained ? GHOSTTY_FOCUS_GAINED : GHOSTTY_FOCUS_LOST, buf, sizeof(buf), &written)
+        != GHOSTTY_SUCCESS) return NULL;
+    jbyteArray out = (*env)->NewByteArray(env, (jsize) written);
+    if (out != NULL && written > 0) (*env)->SetByteArrayRegion(env, out, 0, (jsize) written, (const jbyte*) buf);
+    return out;
 }
 
 // Copy one render-state row (the iterator's current row) into cells/extra. Returns the number of

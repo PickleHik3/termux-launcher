@@ -561,6 +561,35 @@ public final class TerminalSheetController
     }
 
     /**
+     * Closes one specific card, wherever it sits. On top it is {@link #dismiss()}; under another
+     * card it is removed and the cards above stay open and showing. Its onDismiss runs once. Does
+     * nothing when the card is not in the stack, so a caller holding a card that already closed
+     * cannot take down another.
+     *
+     * @return whether the card was in the stack
+     */
+    public boolean dismiss(@Nullable View card) {
+        if (card == null) return false;
+        int index = -1;
+        for (int i = 0; i < mStack.size(); i++) {
+            if (mStack.get(i).card == card) { index = i; break; }
+        }
+        if (index < 0) return false;
+        if (index == mStack.size() - 1) {
+            dismiss();
+            return true;
+        }
+        Sheet sheet = mStack.remove(index);
+        animateOut(sheet.card, sheet.foot, sheet.leading, sheet.scrim);
+        // A card is hidden only while the one above it covers it; recount without the removed one.
+        for (int i = 0; i < mStack.size() - 1; i++)
+            mStack.get(i).card.setVisibility(mStack.get(i + 1).coversPrevious ? View.GONE : View.VISIBLE);
+        if (sheet.onDismiss != null) sheet.onDismiss.run();
+        applyBackdropMaterial();
+        return true;
+    }
+
+    /**
      * Drops the {@code count} oldest cards and leaves everything above them alone.
      *
      * <p>For a menu whose row opens a card of its own: the menu has to go, but the card the row just

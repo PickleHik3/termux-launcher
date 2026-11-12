@@ -268,11 +268,92 @@ public class GhosttyCoreTest extends TerminalTestCase {
             if (!ghostty(10, 3)) return;
             // Ghostty draws kitty images, so programs matching "ghostty" may pick them.
             assertEnteringStringGivesResponse("\033[>q", "\033P>|termux-launcher(x.y) (libghostty-vt 1.0)\033\\");
-            // DA1 claims sixel, which this core now draws (GhosttySixelTest), and still no more.
+            // DA1 claims sixel, which this core now draws (GhosttySixelTest), and the clipboard (52).
             enterString("\033[c");
-            assertEquals("\033[?62;4;22c", mOutput.getOutputAndClear());
+            assertEquals("\033[?62;4;22;52c", mOutput.getOutputAndClear());
         } finally {
             TerminalEmulator.setXtVersion(null);
         }
+    }
+
+    private static void setScheme(String background) {
+        java.util.Properties props = new java.util.Properties();
+        if (background != null) props.setProperty("background", background);
+        TerminalColors.COLOR_SCHEME.updateWith(props);
+    }
+
+    public void testColorSchemeQueryAnswersDark() {
+        if (!ghostty(5, 3)) return;
+        enterString("\033[?996n");
+        assertEquals("\033[?997;1n", mOutput.getOutputAndClear());
+    }
+
+    public void testColorSchemeQueryAnswersLight() {
+        try {
+            if (System.getProperty(GhosttyNative.TEST_LIBRARY_DIR_PROPERTY) == null) return;
+            setScheme("#ffffff");
+            if (!ghostty(5, 3)) return;
+            enterString("\033[?996n");
+            assertEquals("\033[?997;2n", mOutput.getOutputAndClear());
+        } finally {
+            setScheme(null);
+        }
+    }
+
+    public void testColorSchemeFlipReportsOnceUnderMode2031() {
+        try {
+            if (!ghostty(5, 3)) return;
+            enterString("\033[?2031h");
+            mOutput.getOutputAndClear();
+            setScheme("#ffffff");
+            mTerminal.resetColorsToScheme();
+            assertEquals("\033[?997;2n", mOutput.getOutputAndClear());
+            mTerminal.resetColorsToScheme();
+            assertEquals("a reset that keeps the class is silent", "", mOutput.getOutputAndClear());
+            setScheme("#eeeeee");
+            mTerminal.resetColorsToScheme();
+            assertEquals("", mOutput.getOutputAndClear());
+            setScheme(null);
+            mTerminal.resetColorsToScheme();
+            assertEquals("\033[?997;1n", mOutput.getOutputAndClear());
+        } finally {
+            setScheme(null);
+        }
+    }
+
+    public void testColorSchemeFlipIsSilentWithMode2031Reset() {
+        try {
+            if (!ghostty(5, 3)) return;
+            setScheme("#ffffff");
+            mTerminal.resetColorsToScheme();
+            assertEquals("", mOutput.getOutputAndClear());
+            enterString("\033[?996n");
+            assertEquals("the stored scheme still answers queries", "\033[?997;2n", mOutput.getOutputAndClear());
+        } finally {
+            setScheme(null);
+        }
+    }
+
+    public void testTerminfoNameAnswersXtgettcapTn() {
+        if (System.getProperty(GhosttyNative.TEST_LIBRARY_DIR_PROPERTY) == null) return;
+        withTerminalSized(5, 3);
+        mOutput.terminfoName = "xterm-kitty";
+        assertTrue(mTerminal.useGhosttyCore());
+        enterString("\033P+q544E\033\\");
+        assertEquals("\033P1+r544E=" + hex("xterm-kitty") + "\033\\", mOutput.getOutputAndClear());
+        enterString("\033c\033P+q544E\033\\");
+        assertEquals("the name survives RIS", "\033P1+r544E=" + hex("xterm-kitty") + "\033\\", mOutput.getOutputAndClear());
+    }
+
+    public void testNoTerminfoNameGivesNoTnAnswer() {
+        if (!ghostty(5, 3)) return;
+        enterString("\033P+q544E\033\\");
+        assertFalse(mOutput.getOutputAndClear().contains("544E="));
+    }
+
+    private static String hex(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : s.getBytes(StandardCharsets.UTF_8)) sb.append(String.format("%02X", b));
+        return sb.toString();
     }
 }
