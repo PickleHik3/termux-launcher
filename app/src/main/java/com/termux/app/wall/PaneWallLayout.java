@@ -1207,6 +1207,20 @@ public final class PaneWallLayout extends ViewGroup
         return mSliding || mOffsetPx != 0f ? mJumpFromId : NO_PAGE;
     }
 
+    /**
+     * The index of the cell a far jump left, while its slide is under way, else -1: with
+     * {@link #jumpSide} what the slide shows beside the arriving cell.
+     */
+    int jumpLeftCellIndex() {
+        int jumpFrom = jumpFromId();
+        return jumpFrom == NO_PAGE ? -1 : indexOfCell(jumpFrom);
+    }
+
+    /** Where a far jump's left page stands from the arriving cell, in widths: -1 or +1. */
+    int jumpSide() {
+        return mJumpSide;
+    }
+
     /** Drops a far jump's stand-off: the slide it belonged to is over or no longer its own. */
     private void clearJump() {
         mJumpFromId = NO_PAGE;

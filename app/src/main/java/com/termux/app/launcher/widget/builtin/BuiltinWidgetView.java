@@ -242,6 +242,20 @@ public abstract class BuiltinWidgetView extends FrameLayout
     private final android.graphics.Rect inkRect = new android.graphics.Rect();
     private final int[] inkLocation = new int[2];
     private final int[] inkRootLocation = new int[2];
+    /** The laid-out origin and size the ink was last asked at; see {@link #remeasureIfMoved}. */
+    private final int[] inkAsked = new int[4];
+    private boolean inkAskedSet;
+    private final int[] inkNow = new int[2];
+    private final int[] inkNowRoot = new int[2];
+    private boolean inkSettlePending;
+    private final android.view.ViewTreeObserver.OnPreDrawListener inkSettle = () -> {
+        inkSettlePending = false;
+        android.view.ViewTreeObserver observer = getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnPreDrawListener(inkSettleSelf());
+        remeasureIfMoved();
+        return true;
+    };
+    private android.view.ViewTreeObserver.OnPreDrawListener inkSettleSelf() { return inkSettle; }
     /** A restyle the dress asked for inside a layout pass, built after it. */
     private final Runnable restyle = () -> { if (this.built) rebuild(); };
     @NonNull private BuiltinWidgetSpan span = BuiltinWidgetSpan.ONE_BY_ONE;
@@ -459,6 +473,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
         // Moved on its grid without a new size: what is behind it is new. A memoised ask when it
         // is not; a re-dress of the card's fill and rim only, never a rebuild.
         if (changed) remeasureInk();
+        else remeasureIfMoved();
     }
 
     private void setZoom(float next) {
@@ -870,6 +885,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
                 inkRootLocation);
             inkRect.set(inkLocation[0], inkLocation[1], inkLocation[0] + getWidth(),
                 inkLocation[1] + getHeight());
+            noteInkAsked();
             int body = glassWorn && wornLook != null
                 ? com.termux.app.chrome.OnGlass.composite(lift, wornLook.paneGlassTintColor())
                 : style.card;
@@ -908,6 +924,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
                 inkRootLocation);
             inkRect.set(inkLocation[0], inkLocation[1], inkLocation[0] + getWidth(),
                 inkLocation[1] + getHeight());
+            noteInkAsked();
             int wallpaper = ink.widgetWallpaper(inkRect);
             boolean pale = base.dark;
             double text = com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT;
@@ -947,6 +964,26 @@ public abstract class BuiltinWidgetView extends FrameLayout
      * Re-asks the band for where the widget is laid out now, and re-dresses the card if it moved;
      * a Bare widget whose inks moved with it is built again in them.
      */
+    private void noteInkAsked() {
+        inkAsked[0] = inkLocation[0];
+        inkAsked[1] = inkLocation[1];
+        inkAsked[2] = getWidth();
+        inkAsked[3] = getHeight();
+        inkAskedSet = true;
+    }
+
+    /**
+     * Re-asks only when the laid-out origin is not the one last asked at: a widget attached again
+     * with its own frame unchanged, under ancestors that settle after it, is judged on the wallpaper
+     * where it stands. Never for a slide or a transform (the laid-out origin ignores them).
+     */
+    private void remeasureIfMoved() {
+        if (!inkAskedSet || preview || getWidth() <= 0 || getHeight() <= 0) return;
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, inkNow, inkNowRoot);
+        if (inkNow[0] != inkAsked[0] || inkNow[1] != inkAsked[1]
+            || getWidth() != inkAsked[2] || getHeight() != inkAsked[3]) remeasureInk();
+    }
+
     private void remeasureInk() {
         BuiltinWidgetStyle before = style;
         if (measureInk()) applyChrome();
@@ -1099,9 +1136,17 @@ public abstract class BuiltinWidgetView extends FrameLayout
         super.onAttachedToWindow();
         if (!preview) startInternal();
         if (syncGlassRegistration()) restyled();
+        if (!preview && !inkSettlePending) {
+            inkSettlePending = true;
+            getViewTreeObserver().addOnPreDrawListener(inkSettle);
+        }
     }
 
     @Override @CallSuper protected void onDetachedFromWindow() {
+        if (inkSettlePending) {
+            inkSettlePending = false;
+            getViewTreeObserver().removeOnPreDrawListener(inkSettle);
+        }
         stopInternal();
         if (slab != null && slab.livePicture() != null) {
             com.termux.app.terminal.PaneGlassBackdropView glass = slab;

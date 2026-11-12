@@ -399,9 +399,10 @@ public final class CrossingController {
         // The Workspace's page is the display's place while the display window is in front of it,
         // so the chrome travels to and from the state that place rests in.
         // The cells' kinds around the current cell, so a slide between two cells of a kind's
-        // pages and the one beside reads the arriving cell's dress (ADR 0016 section 3).
+        // pages and the one beside reads the arriving cell's dress (ADR 0016 section 3). A far
+        // jump reads the page it left beside the arriving one, as its slide shows it.
         java.util.List<com.termux.app.wall.PaneWallPage> pages =
-            mHost.placesOf(mHost.paneWallController().cellKinds());
+            mHost.placesOf(mHost.paneWallController().slideCellKinds());
         int cellAt = mHost.paneWallController().currentCellIndex();
         // The committed place is named so its keyboard, going away, is put away over the first
         // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
