@@ -167,4 +167,14 @@ public class X11DisplayServerStateTest {
         X11DisplayServerState.setDisplayEnvWanted(false);
         assertNull(displayForNewSession());
     }
+
+    /**
+     * A terminal opened while the display runs gets {@code DISPLAY} unless the user turned
+     * Connect new shells off: an X app started from it otherwise runs with no window at all.
+     */
+    @Test
+    public void connectNewShells_isOnByDefault() {
+        assertTrue(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.DEFAULT_X11_SET_DISPLAY_ENV);
+    }
 }
