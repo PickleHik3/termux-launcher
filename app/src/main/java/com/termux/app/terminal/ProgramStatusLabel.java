@@ -4,7 +4,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.terminal.ProgramStatus;
+import com.termux.terminal.ProgramStatusStore;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -44,6 +46,24 @@ public final class ProgramStatusLabel {
             case DONE: return 1;
             default: return 0;
         }
+    }
+
+    /**
+     * The pill's reading for a window from its panes' status stores (null for a pane without one):
+     * the most urgent record across them, named by its own store, else the window's title from
+     * {@code windowLabel}. Null when no pane has anything but idle.
+     */
+    @Nullable
+    public static TerminalWindowBar.WindowItem.Status forWindow(
+        @NonNull List<ProgramStatusStore> perPaneStores, @NonNull String windowLabel) {
+        List<ProgramStatus> perPane = new ArrayList<>(perPaneStores.size());
+        for (ProgramStatusStore store : perPaneStores)
+            perPane.add(store == null ? null : store.mostUrgent());
+        int pick = pickMostUrgent(perPane);
+        if (pick < 0) return null;
+        ProgramStatus record = perPane.get(pick);
+        String app = perPaneStores.get(pick).resolvedApp(record);
+        return statusFor(record, app, TerminalWindowBar.titleOf(windowLabel));
     }
 
     /** The pill's reading of {@code record}, or null for an idle one. */

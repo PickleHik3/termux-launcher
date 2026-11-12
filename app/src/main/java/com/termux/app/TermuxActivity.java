@@ -29879,27 +29879,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withStatus(windowProgramStatus(window, built.label));
     }
 
-    /**
-     * What a program in {@code window} reports about itself, from the most urgent record across its
-     * panes; null when none has anything but idle.
-     */
+    /** What a program in {@code window} reports about itself; null when none has anything but idle. */
     @Nullable
     private com.termux.app.terminal.TerminalWindowBar.WindowItem.Status windowProgramStatus(
             @NonNull com.termux.app.terminal.TerminalPaneController.Window window,
             @NonNull String windowLabel) {
         java.util.List<TerminalSession> shells = mPaneController.shellsOf(window);
-        java.util.ArrayList<com.termux.terminal.ProgramStatus> perPane =
+        java.util.ArrayList<com.termux.terminal.ProgramStatusStore> stores =
             new java.util.ArrayList<>(shells.size());
         for (TerminalSession shell : shells) {
             TerminalEmulator emulator = shell.getEmulator();
-            perPane.add(emulator == null ? null : emulator.getProgramStatus().mostUrgent());
+            stores.add(emulator == null ? null : emulator.getProgramStatus());
         }
-        int pick = com.termux.app.terminal.ProgramStatusLabel.pickMostUrgent(perPane);
-        if (pick < 0) return null;
-        com.termux.terminal.ProgramStatus record = perPane.get(pick);
-        String app = shells.get(pick).getEmulator().getProgramStatus().resolvedApp(record);
-        String title = com.termux.app.terminal.TerminalWindowBar.titleOf(windowLabel);
-        return com.termux.app.terminal.ProgramStatusLabel.statusFor(record, app, title);
+        return com.termux.app.terminal.ProgramStatusLabel.forWindow(stores, windowLabel);
     }
 
     private static final int PHASE_WORKING = 1;

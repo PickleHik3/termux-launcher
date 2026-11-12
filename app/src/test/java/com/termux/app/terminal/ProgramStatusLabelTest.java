@@ -110,4 +110,23 @@ public class ProgramStatusLabelTest {
         Collections.reverse(panes);
         assertEquals(0, ProgramStatusLabel.pickMostUrgent(panes));
     }
+
+    @Test
+    public void aWindowShowsItsMostUrgentPaneNamedByThatPanesStore() {
+        ProgramStatusStore quiet = new ProgramStatusStore();
+        quiet.apply(WORKING, 0, -1, "q", "make", "", "");
+        ProgramStatusStore loud = new ProgramStatusStore();
+        loud.apply(BLOCKED, 0, -1, "l", "claude", "", "");
+        TerminalWindowBar.WindowItem.Status status =
+            ProgramStatusLabel.forWindow(Arrays.asList(quiet, null, loud), "win");
+        assertEquals("claude needs input", status.text);
+    }
+
+    @Test
+    public void aWindowWithOnlyIdlePanesShowsNoStatus() {
+        ProgramStatusStore idle = new ProgramStatusStore();
+        idle.apply(IDLE, 0, -1, "i", "sh", "", "");
+        assertNull(ProgramStatusLabel.forWindow(Arrays.asList(idle, null), "win"));
+        assertNull(ProgramStatusLabel.forWindow(Collections.<ProgramStatusStore>emptyList(), "win"));
+    }
 }
