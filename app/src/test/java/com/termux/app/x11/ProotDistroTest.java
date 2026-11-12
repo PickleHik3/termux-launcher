@@ -305,7 +305,8 @@ public class ProotDistroTest {
         assertNotNull(debian);
         assertEquals("proot-distro login debian -u amal --shared-x11"
                 + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
-                + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS} -- /bin/sh -c 'gimp'",
+                + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS}"
+                + " " + String.join(" ", ProotDistro.FORWARDED_SCALE_ENV) + " -- /bin/sh -c 'gimp'",
             ProotDistro.loginCommand(debian, "gimp"));
         // Nothing of the host's environment crosses, so what a prefix app gets exported is
         // passed in by hand instead.

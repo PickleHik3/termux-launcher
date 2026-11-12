@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * What one Linux app may set differently from the display: its touch mode and its scale. Absent
+ * What one Linux app may set differently from the display: its touch mode, scale and GPU profile. Absent
  * means follow the display's setting. The values are the global preference's own: touch modes
  * match the {@code touchMode} pref, scales are the strings the display's scale picker offers.
  *
@@ -35,6 +35,7 @@ public final class X11AppSettings {
 
     private static final String KEY_TOUCH_MODE = "touch_mode";
     private static final String KEY_SCALE = "scale";
+    private static final String KEY_GPU = "gpu";
 
     private X11AppSettings() {}
 
@@ -46,29 +47,46 @@ public final class X11AppSettings {
         return value != null && SCALES.contains(value);
     }
 
+    /**
+     * A per-app GPU profile id: any profile but software, which keeps its own switch
+     * ({@link X11GpuProfileStore#drawsInSoftware}) so choices made before this existed still read.
+     */
+    public static boolean isGpuProfile(@Nullable String value) {
+        X11GpuProbe.Profile profile = X11GpuProbe.Profile.of(value);
+        return profile != null && profile != X11GpuProbe.Profile.SOFTWARE;
+    }
+
     /** One app's overrides; a null field follows the display. Immutable. */
     public static final class Overrides {
         @Nullable public final String touchMode;
         @Nullable public final String scale;
+        /** A GPU profile id that replaces the display's pick for this app; null follows it. */
+        @Nullable public final String gpu;
 
         public Overrides(@Nullable String touchMode, @Nullable String scale) {
+            this(touchMode, scale, null);
+        }
+
+        public Overrides(@Nullable String touchMode, @Nullable String scale, @Nullable String gpu) {
             this.touchMode = isTouchMode(touchMode) ? touchMode : null;
             this.scale = isScale(scale) ? scale : null;
+            this.gpu = isGpuProfile(gpu) ? gpu : null;
         }
 
         public boolean isEmpty() {
-            return touchMode == null && scale == null;
+            return touchMode == null && scale == null && gpu == null;
         }
 
         @Override public boolean equals(Object o) {
             if (this == o) return true;
             if (!(o instanceof Overrides)) return false;
             Overrides other = (Overrides) o;
-            return Objects.equals(touchMode, other.touchMode) && Objects.equals(scale, other.scale);
+            return Objects.equals(touchMode, other.touchMode) && Objects.equals(scale, other.scale)
+                && Objects.equals(gpu, other.gpu);
         }
 
         @Override public int hashCode() {
-            return Objects.hash(touchMode, scale);
+            return Objects.hash(touchMode, scale, gpu);
         }
     }
 
@@ -85,7 +103,8 @@ public final class X11AppSettings {
                 JSONObject entry = root.optJSONObject(id);
                 if (entry == null || id.isEmpty()) continue;
                 Overrides overrides = new Overrides(
-                    entry.optString(KEY_TOUCH_MODE, null), entry.optString(KEY_SCALE, null));
+                    entry.optString(KEY_TOUCH_MODE, null), entry.optString(KEY_SCALE, null),
+                    entry.optString(KEY_GPU, null));
                 if (!overrides.isEmpty()) out.put(id, overrides);
             }
         } catch (JSONException | RuntimeException e) {
@@ -106,6 +125,7 @@ public final class X11AppSettings {
                 JSONObject item = new JSONObject();
                 if (value.touchMode != null) item.put(KEY_TOUCH_MODE, value.touchMode);
                 if (value.scale != null) item.put(KEY_SCALE, value.scale);
+                if (value.gpu != null) item.put(KEY_GPU, value.gpu);
                 root.put(entry.getKey(), item);
             }
         } catch (JSONException ignored) {

@@ -10,21 +10,22 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The environment and Xft DPI that make a toolkit draw one app at a scale. For the launch path to
- * call later; not wired yet.
+ * The environment that makes a toolkit draw one app at its own scale. Display-wide {@code Xft.dpi}
+ * is the display's and is never changed per app.
+ *
+ * <p>GTK takes whole numbers only for widgets, so the integer part goes in {@code GDK_SCALE} and
+ * the rest is text size ({@code GDK_DPI_SCALE}): 1.5 is 1 and 1.5, never 2 and 0.75, which would
+ * draw every widget twice as large and only shrink the text. Qt takes the factor as it is.
  */
 public final class X11AppScaleEnv {
 
     /** Follow the display: no variables, no DPI. */
-    public static final X11AppScaleEnv FOLLOW = new X11AppScaleEnv(Collections.emptyMap(), 0);
+    public static final X11AppScaleEnv FOLLOW = new X11AppScaleEnv(Collections.emptyMap());
 
     @NonNull public final Map<String, String> env;
-    /** {@code Xft.dpi} for the app, 0 when it follows the display. */
-    public final int xftDpi;
 
-    private X11AppScaleEnv(@NonNull Map<String, String> env, int xftDpi) {
+    private X11AppScaleEnv(@NonNull Map<String, String> env) {
         this.env = env;
-        this.xftDpi = xftDpi;
     }
 
     /** {@code scale} is one of {@link X11AppSettings#SCALES}; null or anything else follows. */
@@ -38,7 +39,10 @@ public final class X11AppScaleEnv {
         env.put("GDK_SCALE", String.valueOf(gdk));
         env.put("GDK_DPI_SCALE", format(dpiScale));
         env.put("QT_SCALE_FACTOR", format(s));
-        return new X11AppScaleEnv(Collections.unmodifiableMap(env), s.multiply(BigDecimal.valueOf(96)).intValue());
+        // Qt 5 only honours the factor with its automatic detection off; Qt 6 scales by default.
+        env.put("QT_AUTO_SCREEN_SCALE_FACTOR", "0");
+        env.put("QT_ENABLE_HIGHDPI_SCALING", "1");
+        return new X11AppScaleEnv(Collections.unmodifiableMap(env));
     }
 
     @NonNull

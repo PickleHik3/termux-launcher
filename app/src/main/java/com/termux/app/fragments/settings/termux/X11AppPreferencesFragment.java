@@ -23,17 +23,25 @@ import com.termux.app.x11.X11GpuProfileStore;
 import com.termux.x11.LoriePreferences;
 import com.termux.x11.Prefs;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /**
  * One Linux app's page under Apps: graphics, touch mode, scale and whether the drawer lists it.
  * Each row is Follow display setting or an override kept in {@link X11AppSettingsStore}. The app
  * comes in the arguments ({@link #ARG_ID}, {@link #ARG_NAME}); a page opened without an id has
- * nothing to show and goes back.
+ * nothing to show and goes back. A whole desktop ({@link #ARG_DESKTOP}) follows the display's
+ * graphics and scale, so its page has neither row.
  */
 @Keep
 public final class X11AppPreferencesFragment extends MaterialPreferenceFragment {
 
     public static final String ARG_ID = "x11_app_id";
     public static final String ARG_NAME = "x11_app_name";
+    /** True when the app is a whole desktop session. */
+    public static final String ARG_DESKTOP = "x11_app_desktop";
 
     static final String KEY_GRAPHICS = "x11_app_graphics";
     static final String KEY_TOUCH = "x11_app_touch_mode";
@@ -45,6 +53,11 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
     static final String HIDE = "hide";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    /** Replaces the device probe in tests. */
+    @Nullable X11GpuProbe.Result probeForTest;
+    /** The profiles the Graphics row offers beyond software; every one until the probe answers. */
+    @NonNull private List<X11GpuProbe.Profile> offered = allProfiles();
     @Nullable private String appId;
     @Nullable private X11AppSettingsStore store;
 
@@ -69,16 +82,60 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         }
         store = new X11AppSettingsStore(context);
 
-        screen.addPreference(row(context, KEY_GRAPHICS, R.string.settings_x11_app_graphics_title,
-            R.array.settings_x11_app_graphics_entries, R.array.settings_x11_app_graphics_values));
+        boolean desktop = args != null && args.getBoolean(ARG_DESKTOP, false);
+        if (!desktop) {
+            screen.addPreference(row(context, KEY_GRAPHICS, R.string.settings_x11_app_graphics_title,
+                R.array.settings_x11_app_graphics_entries, R.array.settings_x11_app_graphics_values));
+        }
         screen.addPreference(row(context, KEY_TOUCH, R.string.settings_x11_app_touch_title,
             R.array.settings_x11_app_touch_entries, R.array.settings_x11_app_touch_values));
-        screen.addPreference(row(context, KEY_SCALE, R.string.settings_x11_app_scale_title,
-            R.array.settings_x11_app_scale_entries, R.array.settings_x11_app_scale_values));
+        if (!desktop) {
+            screen.addPreference(row(context, KEY_SCALE, R.string.settings_x11_app_scale_title,
+                R.array.settings_x11_app_scale_entries, R.array.settings_x11_app_scale_values));
+        }
         screen.addPreference(row(context, KEY_DRAWER, R.string.settings_x11_app_drawer_title,
             R.array.settings_x11_app_drawer_entries, R.array.settings_x11_app_drawer_values));
         refreshRows();
         SettingsLayoutUtils.applyScreenLayout(this);
+        if (!desktop) loadProfiles(context);
+    }
+
+    @NonNull
+    private static List<X11GpuProbe.Profile> allProfiles() {
+        List<X11GpuProbe.Profile> all = new ArrayList<>();
+        for (X11GpuProbe.Profile profile : X11GpuProbe.Profile.values()) {
+            if (profile != X11GpuProbe.Profile.SOFTWARE) all.add(profile);
+        }
+        return all;
+    }
+
+    /** The profiles that fit this phone, as the display's own picker lists them; off the main thread. */
+    private void loadProfiles(@NonNull Context context) {
+        Context app = context.getApplicationContext();
+        if (executor.isShutdown()) return;
+        executor.execute(() -> {
+            List<X11GpuProbe.Profile> fitting = new ArrayList<>();
+            try {
+                X11GpuProbe.Result override = probeForTest;
+                X11GpuProbe.Result gpu = override != null ? override : X11GpuProbe.probe(app);
+                for (X11GpuProbe.Recommendation r : gpu.ranked) {
+                    if (r.profile != X11GpuProbe.Profile.SOFTWARE) fitting.add(r.profile);
+                }
+            } catch (RuntimeException e) {
+                return;
+            }
+            handler.post(() -> {
+                if (!isAdded()) return;
+                offered = fitting;
+                refreshRows();
+            });
+        });
+    }
+
+    @Override
+    public void onDestroy() {
+        executor.shutdownNow();
+        super.onDestroy();
     }
 
     @NonNull
@@ -115,7 +172,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         if (kept == null || id == null || context == null) return;
         boolean follow = FOLLOW.equals(value);
         switch (key) {
-            case KEY_GRAPHICS: kept.setDrawsInSoftware(id, SOFTWARE.equals(value)); break;
+            case KEY_GRAPHICS:
+                kept.setDrawsInSoftware(id, SOFTWARE.equals(value));
+                kept.setGpuProfile(id, follow || SOFTWARE.equals(value) ? null : value);
+                break;
             case KEY_TOUCH: kept.setTouchMode(id, follow ? null : value); break;
             case KEY_SCALE: kept.setScale(id, follow ? null : value); break;
             case KEY_DRAWER: kept.setHiddenInDrawer(id, HIDE.equals(value)); break;
@@ -139,12 +199,16 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         String touch = kept.touchMode(id);
         String scale = kept.scale(id);
         boolean software = kept.drawsInSoftware(id);
+        String profile = kept.gpuProfile(id);
         boolean hidden = kept.hiddenInDrawer(id);
 
         ListPreference graphics = screen.findPreference(KEY_GRAPHICS);
         if (graphics != null) {
-            graphics.setValue(software ? SOFTWARE : FOLLOW);
-            graphics.setSummary(software ? graphics.getEntry() : followWith(context, displayGraphics(context)));
+            String current = software ? SOFTWARE : profile != null ? profile : FOLLOW;
+            setGraphicsEntries(context, graphics, profile);
+            graphics.setValue(current);
+            graphics.setSummary(FOLLOW.equals(current) ? followWith(context, displayGraphics(context))
+                : graphics.getEntry());
         }
         ListPreference touchRow = screen.findPreference(KEY_TOUCH);
         if (touchRow != null) {
@@ -163,6 +227,28 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
             drawer.setValue(hidden ? HIDE : FOLLOW);
             drawer.setSummary(drawer.getEntry());
         }
+    }
+
+    /** Follow, software, then each offered profile, and the app's own pick even if the phone no longer fits it. */
+    private void setGraphicsEntries(@NonNull Context context, @NonNull ListPreference row,
+                                    @Nullable String kept) {
+        List<X11GpuProbe.Profile> shown = new ArrayList<>(offered);
+        X11GpuProbe.Profile own = X11GpuProbe.Profile.of(kept);
+        if (own != null && !shown.contains(own)) shown.add(own);
+        int size = 2 + shown.size();
+        CharSequence[] entries = new CharSequence[size];
+        CharSequence[] values = new CharSequence[size];
+        entries[0] = context.getString(R.string.settings_x11_app_follow);
+        values[0] = FOLLOW;
+        entries[1] = context.getString(R.string.settings_x11_app_graphics_software);
+        values[1] = SOFTWARE;
+        for (int i = 0; i < shown.size(); i++) {
+            entries[2 + i] = GraphicsAccelerationFragment.profileName(context, shown.get(i));
+            values[2 + i] = shown.get(i).id;
+        }
+        if (java.util.Arrays.equals(values, row.getEntryValues())) return;
+        row.setEntries(entries);
+        row.setEntryValues(values);
     }
 
     @NonNull

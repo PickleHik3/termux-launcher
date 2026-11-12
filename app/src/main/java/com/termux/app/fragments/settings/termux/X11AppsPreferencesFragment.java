@@ -130,6 +130,7 @@ public final class X11AppsPreferencesFragment extends MaterialPreferenceFragment
             row.setFragment(X11AppPreferencesFragment.class.getName());
             row.getExtras().putString(X11AppPreferencesFragment.ARG_ID, app.id);
             row.getExtras().putString(X11AppPreferencesFragment.ARG_NAME, app.name);
+            row.getExtras().putBoolean(X11AppPreferencesFragment.ARG_DESKTOP, app.session);
             row.setSummary(tag(context, kept.differsFromDisplay(app.id)));
             screen.addPreference(row);
         }

@@ -66,6 +66,20 @@ public class X11AppSettingsStoreTest {
         assertTrue(store.appsWithOverrides().isEmpty());
     }
 
+    @Test public void gpuProfileIsKeptBesideTheOtherOverrides() {
+        X11AppSettingsStore store = new X11AppSettingsStore(context);
+        store.setScale(APP, "2");
+        store.setGpuProfile(APP, "virgl");
+        assertEquals("virgl", new X11AppSettingsStore(context).gpuProfile(APP));
+        assertEquals("2", store.scale(APP));
+        store.setGpuProfile(APP, "software");
+        assertNull(store.gpuProfile(APP));
+        store.setGpuProfile(APP, "nonsense");
+        assertNull(store.gpuProfile(APP));
+        store.setScale(APP, null);
+        assertTrue(store.appsWithOverrides().isEmpty());
+    }
+
     @Test public void softwareDelegatesToTheGpuStore() {
         X11AppSettingsStore store = new X11AppSettingsStore(context);
         store.setDrawsInSoftware(APP, true);
