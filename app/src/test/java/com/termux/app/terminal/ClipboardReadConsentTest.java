@@ -19,7 +19,9 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** The consent policy against fakes: no views, no native requests. */
@@ -58,7 +60,21 @@ public class ClipboardReadConsentTest {
         @Override public boolean isReadSettingOn() { return settingOn; }
         @Override public boolean isTerminalShowing() { return visible; }
         @Override public Object frontSession() { return front; }
-        @Override public String programName(Object session) { return names.get(session); }
+        /** When set, names wait in {@link #pendingNames} until the test hands them over. */
+        boolean deferNames;
+        final List<Runnable> pendingNames = new ArrayList<>();
+
+        @Override public void resolveProgramName(Object session, ClipboardReadConsent.NameCallback done) {
+            String name = names.get(session); // taken now, like the process group
+            if (deferNames) pendingNames.add(() -> done.onName(name));
+            else done.onName(name);
+        }
+
+        void deliverNames() {
+            List<Runnable> due = new ArrayList<>(pendingNames);
+            pendingNames.clear();
+            for (Runnable r : due) r.run();
+        }
         @Override public String readClipboard() { return clipboard; }
         @Override public boolean showSheet(String programName, ClipboardReadConsent.Callback cb) {
             sheets++;
@@ -293,5 +309,139 @@ public class ClipboardReadConsentTest {
         consent.onRequest(a, r);
         assertEquals(1, ui.sheets);
         assertTrue(ui.sheetOpen);
+    }
+
+    @Test
+    public void anotherProgramsRequestDoesNotShareTheOpenSheetsAnswer() {
+        FakeRequest fromVim = new FakeRequest(false, false);
+        consent.onRequest(a, fromVim);
+        assertEquals("vim", ui.sheetName);
+        // vim exits and cat takes the foreground while vim's sheet is still up.
+        ui.names.put(a, "cat");
+        FakeRequest fromCat = new FakeRequest(false, false);
+        consent.onRequest(a, fromCat);
+        ui.callback.onChoice(ClipboardReadConsent.Choice.ONCE);
+        assertEquals("allow:clip", fromVim.answer);
+        assertNull(fromCat.answer);
+        assertEquals(2, ui.sheets);
+        assertEquals("cat", ui.sheetName);
+        ui.callback.onChoice(ClipboardReadConsent.Choice.DENY);
+        assertEquals("deny", fromCat.answer);
+    }
+
+    @Test
+    public void queuedRequestsFromTwoProgramsGetASheetEach() {
+        ui.visible = false;
+        FakeRequest fromVim = new FakeRequest(false, false);
+        consent.onRequest(a, fromVim);
+        ui.names.put(a, "cat");
+        FakeRequest fromCat = new FakeRequest(false, false);
+        consent.onRequest(a, fromCat);
+        ui.visible = true;
+        consent.onFrontMaybeChanged();
+        assertEquals(1, ui.sheets);
+        assertEquals("vim", ui.sheetName);
+        ui.callback.onChoice(ClipboardReadConsent.Choice.SESSION);
+        assertEquals("allow:clip", fromVim.answer);
+        assertNull(fromCat.answer);
+        assertEquals("cat", ui.sheetName);
+        assertFalse(grants.isSessionGranted(a, "cat"));
+    }
+
+    @Test
+    public void requestsFromAnUnnamedProgramAreAskedOneAtATime() {
+        ui.names.remove(a);
+        FakeRequest first = new FakeRequest(false, false);
+        FakeRequest second = new FakeRequest(false, false);
+        consent.onRequest(a, first);
+        consent.onRequest(a, second);
+        assertEquals(1, ui.sheets);
+        ui.callback.onChoice(ClipboardReadConsent.Choice.ONCE);
+        assertEquals("allow:clip", first.answer);
+        assertNull(second.answer);
+        assertEquals(2, ui.sheets);
+    }
+
+    @Test
+    public void aSessionPastItsLimitIsDeniedAtOnce() {
+        ui.visible = false;
+        List<FakeRequest> waiting = new ArrayList<>();
+        for (int i = 0; i < ClipboardReadConsent.MAX_WAITING_PER_SESSION; i++) {
+            FakeRequest r = new FakeRequest(false, false);
+            consent.onRequest(a, r);
+            waiting.add(r);
+        }
+        FakeRequest over = new FakeRequest(false, false);
+        consent.onRequest(a, over);
+        assertEquals("deny", over.answer);
+        for (FakeRequest r : waiting) assertNull(r.answer);
+        // Another session still has room.
+        FakeRequest other = new FakeRequest(false, false);
+        consent.onRequest(b, other);
+        assertNull(other.answer);
+    }
+
+    @Test
+    public void theOpenSheetCountsTowardsItsSessionsLimit() {
+        for (int i = 0; i < ClipboardReadConsent.MAX_WAITING_PER_SESSION; i++)
+            consent.onRequest(a, new FakeRequest(false, false));
+        assertTrue(ui.sheetOpen);
+        FakeRequest over = new FakeRequest(false, false);
+        consent.onRequest(a, over);
+        assertEquals("deny", over.answer);
+    }
+
+    @Test
+    public void allSessionsTogetherAreBounded() {
+        ui.visible = false;
+        int perSession = ClipboardReadConsent.MAX_WAITING_PER_SESSION;
+        int sessions = ClipboardReadConsent.MAX_WAITING / perSession;
+        for (int s = 0; s < sessions; s++) {
+            Object session = new Object();
+            for (int i = 0; i < perSession; i++) consent.onRequest(session, new FakeRequest(false, false));
+        }
+        FakeRequest over = new FakeRequest(false, false);
+        consent.onRequest(new Object(), over);
+        assertEquals("deny", over.answer);
+        FakeRequest pasted = new FakeRequest(true, false);
+        consent.onRequest(new Object(), pasted);
+        assertEquals("deny", pasted.answer);
+    }
+
+    @Test
+    public void aRequestWaitsForItsProgramsNameBeforeAnySheet() {
+        ui.deferNames = true;
+        FakeRequest r = new FakeRequest(false, false);
+        consent.onRequest(a, r);
+        assertEquals(0, ui.sheets);
+        assertNull(r.answer);
+        ui.deliverNames();
+        assertEquals(1, ui.sheets);
+        assertEquals("vim", ui.sheetName);
+    }
+
+    @Test
+    public void aNameArrivingAfterTheSessionEndedDoesNothing() {
+        ui.deferNames = true;
+        grants.allowAlways("vim");
+        FakeRequest r = new FakeRequest(false, false);
+        consent.onRequest(a, r);
+        consent.onSessionFinished(a);
+        assertEquals("deny", r.answer);
+        ui.deliverNames();
+        assertEquals(1, r.answers);
+        assertEquals(0, ui.sheets);
+    }
+
+    @Test
+    public void aGrantAppliesOnceTheNameArrives() {
+        ui.deferNames = true;
+        grants.allowAlways("vim");
+        FakeRequest r = new FakeRequest(false, false);
+        consent.onRequest(a, r);
+        assertNull(r.answer);
+        ui.deliverNames();
+        assertEquals("allow:clip", r.answer);
+        assertEquals(0, ui.sheets);
     }
 }

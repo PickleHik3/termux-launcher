@@ -72,6 +72,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
 
+    /** Reads the name of a program asking for the clipboard from /proc, off the main thread. */
+    private static final java.util.concurrent.ExecutorService PROGRAM_NAME_READER =
+        java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "termux-clipboard-program");
+            thread.setDaemon(true);
+            return thread;
+        });
+
     private boolean mTerminalScreenUpdatePending;
     /** Sessions with a coalesced screen-update posted but not yet drawn (one entry per pane). */
     private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
@@ -666,8 +674,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     return mHost.currentSession();
                 }
 
-                @Nullable @Override public String programName(@NonNull Object session) {
-                    return ((TerminalSession) session).getForegroundProgramName();
+                @Override public void resolveProgramName(@NonNull Object session,
+                                                         @NonNull ClipboardReadConsent.NameCallback done) {
+                    // The process group is taken now, so the name belongs to the program that
+                    // asked; /proc is read off the main thread.
+                    final int pgid = ((TerminalSession) session).getForegroundProcessGroup();
+                    if (pgid <= 0) {
+                        done.onName(null);
+                        return;
+                    }
+                    PROGRAM_NAME_READER.execute(() -> {
+                        final String name = TerminalSession.programNameOf(pgid);
+                        mUiHandler.post(() -> done.onName(name));
+                    });
                 }
 
                 @Nullable @Override public String readClipboard() {

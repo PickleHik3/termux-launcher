@@ -495,19 +495,31 @@ public class TerminalSession extends TerminalOutput {
     }
 
     /**
-     * The name of the program in the foreground of this session's pty (tcgetpgrp, then
-     * /proc/pgid/comm), or null when the session is not running or the name cannot be read.
+     * The process group in the foreground of this session's pty (tcgetpgrp, no file I/O), or -1
+     * when the session is not running or it cannot be read. {@link #programNameOf} names it.
      */
-    @androidx.annotation.Nullable
-    public String getForegroundProgramName() {
+    public int getForegroundProcessGroup() {
         final int fd;
         synchronized (this) {
-            if (mShellPid == -1) return null;
+            if (mShellPid == -1) return -1;
             fd = mTerminalFileDescriptor;
         }
         try {
             final int pgid = JNI.getForegroundProcessGroup(fd);
-            if (pgid <= 0) return null;
+            return pgid > 0 ? pgid : -1;
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /**
+     * The name of process {@code pgid} from /proc/pgid/comm, or null when it cannot be read.
+     * File I/O: call it off the main thread.
+     */
+    @androidx.annotation.Nullable
+    public static String programNameOf(int pgid) {
+        if (pgid <= 0) return null;
+        try {
             final byte[] raw = java.nio.file.Files.readAllBytes(new File("/proc/" + pgid + "/comm").toPath());
             final String name = new String(raw, StandardCharsets.UTF_8).trim();
             return name.isEmpty() ? null : name;

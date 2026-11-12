@@ -13,11 +13,21 @@ import java.util.Map;
  * clipboard and the state of the launcher come through {@link Ui}, and the request through
  * {@link Request}, so the policy runs on the JVM. Main thread only.
  *
- * <p>A request that needs consent waits in a queue per session until that pane is in front and the
- * terminal is showing; then one sheet asks, and every request of that session waiting on it
- * gets the same answer. Only one sheet is open at a time.
+ * <p>A request that needs consent waits in a queue per session until its program's name is known,
+ * that pane is in front and the terminal is showing; then one sheet asks for that program, and
+ * every request of the same session and the same program waiting on it gets the same answer.
+ * Another program's requests wait for their own sheet, and a request whose program could not be
+ * named is asked alone. Only one sheet is open at a time.
+ *
+ * <p>Waiting requests are bounded: at most {@link #MAX_WAITING_PER_SESSION} per session and
+ * {@link #MAX_WAITING} in all; a request past either limit is denied at once.
  */
 public final class ClipboardReadConsent {
+
+    /** The most requests one session may have waiting, counting those on its open sheet. */
+    static final int MAX_WAITING_PER_SESSION = 8;
+    /** The most requests waiting across every session. */
+    static final int MAX_WAITING = 32;
 
     /** The parts of a read request the policy uses. */
     public interface Request {
@@ -36,6 +46,11 @@ public final class ClipboardReadConsent {
         void onDismissed();
     }
 
+    /** Where a program's name arrives, on the main thread. */
+    public interface NameCallback {
+        void onName(@Nullable String programName);
+    }
+
     public interface Ui {
         /** Whether "Let programs read the clipboard" is on. */
         boolean isReadSettingOn();
@@ -43,8 +58,12 @@ public final class ClipboardReadConsent {
         boolean isTerminalShowing();
         /** The session of the pane in front, or null. */
         @Nullable Object frontSession();
-        /** The foreground program of the session's pty, or null when it cannot be read. */
-        @Nullable String programName(@NonNull Object session);
+        /**
+         * Finds the foreground program of the session's pty as it is now and hands its name (null
+         * when it cannot be read) to {@code done} on the main thread, now or later. The name is
+         * read without file I/O on the calling thread.
+         */
+        void resolveProgramName(@NonNull Object session, @NonNull NameCallback done);
         /** The clipboard's text, or null when it holds none. */
         @Nullable String readClipboard();
         /** Opens the consent sheet; false when it cannot be shown now. */
@@ -55,13 +74,32 @@ public final class ClipboardReadConsent {
 
     private static final class Entry {
         final Request request;
-        @Nullable final String name;
         final boolean needsConsent;
+        @Nullable String name;
+        boolean resolved;
+        boolean answered;
 
-        Entry(Request request, @Nullable String name, boolean needsConsent) {
+        Entry(Request request, boolean needsConsent) {
             this.request = request;
-            this.name = name;
             this.needsConsent = needsConsent;
+            this.resolved = !needsConsent;
+        }
+
+        void allow(@Nullable String text) {
+            if (answered) return;
+            answered = true;
+            request.allow(text);
+        }
+
+        void deny() {
+            if (answered) return;
+            answered = true;
+            request.deny();
+        }
+
+        /** Whether this request may share a sheet with {@code other}: both from one named program. */
+        boolean sameProgram(@NonNull Entry other) {
+            return name != null && name.equals(other.name);
         }
     }
 
@@ -84,14 +122,26 @@ public final class ClipboardReadConsent {
             request.deny();
             return;
         }
+        if (waitingFor(session) >= MAX_WAITING_PER_SESSION || waitingTotal() >= MAX_WAITING) {
+            request.deny();
+            return;
+        }
         boolean needsConsent = !pasted && !request.isListingOnly();
-        String name = needsConsent ? mUi.programName(session) : null;
+        final Entry entry = new Entry(request, needsConsent);
         List<Entry> queue = mQueues.get(session);
         if (queue == null) {
             queue = new ArrayList<>();
             mQueues.put(session, queue);
         }
-        queue.add(new Entry(request, name, needsConsent));
+        queue.add(entry);
+        if (needsConsent) {
+            mUi.resolveProgramName(session, name -> {
+                if (entry.answered || entry.resolved) return;
+                entry.name = name;
+                entry.resolved = true;
+                pump();
+            });
+        }
         pump();
     }
 
@@ -103,15 +153,28 @@ public final class ClipboardReadConsent {
     /** The session ended: its waiting requests are denied, its sheet closed, its grants forgotten. */
     public void onSessionFinished(@NonNull Object session) {
         List<Entry> queue = mQueues.remove(session);
-        if (queue != null) for (Entry entry : queue) entry.request.deny();
+        if (queue != null) for (Entry entry : queue) entry.deny();
         if (mSheetSession == session) {
             List<Entry> waiting = mSheetWaiting;
             clearSheet();
-            if (waiting != null) for (Entry entry : waiting) entry.request.deny();
+            if (waiting != null) for (Entry entry : waiting) entry.deny();
             mUi.closeSheet();
         }
         mGrants.forgetSession(session);
         pump();
+    }
+
+    private int waitingFor(@NonNull Object session) {
+        List<Entry> queue = mQueues.get(session);
+        int n = queue == null ? 0 : queue.size();
+        if (mSheetSession == session && mSheetWaiting != null) n += mSheetWaiting.size();
+        return n;
+    }
+
+    private int waitingTotal() {
+        int n = mSheetWaiting == null ? 0 : mSheetWaiting.size();
+        for (List<Entry> queue : mQueues.values()) n += queue.size();
+        return n;
     }
 
     private boolean isGranted(@NonNull Object session, @NonNull Entry entry) {
@@ -134,33 +197,44 @@ public final class ClipboardReadConsent {
         if (queue == null || queue.isEmpty()) return;
         List<Entry> taken = new ArrayList<>(queue);
         queue.clear();
-        List<Entry> asking = new ArrayList<>();
+        boolean sheetUpHere = mSheetSession == front && mSheetWaiting != null;
+        boolean sheetUpElsewhere = mSheetSession != null && !sheetUpHere;
+        Entry sheetFirst = null;
+        List<Entry> asking = null;
         String clipboard = null;
         boolean read = false;
         for (Entry entry : taken) {
-            if (isGranted(front, entry)) {
+            if (entry.answered) continue;
+            if (!entry.resolved) {
+                // Its program is not known yet: it waits.
+                queue.add(entry);
+            } else if (isGranted(front, entry)) {
                 if (!read) {
                     clipboard = mUi.readClipboard();
                     read = true;
                 }
-                entry.request.allow(clipboard);
-            } else {
+                entry.allow(clipboard);
+            } else if (sheetUpHere) {
+                // This session's sheet is up: only requests from its program share its answer.
+                if (mSheetName != null && mSheetName.equals(entry.name)) mSheetWaiting.add(entry);
+                else queue.add(entry);
+            } else if (sheetUpElsewhere) {
+                // Another session's sheet is up: wait for it to close.
+                queue.add(entry);
+            } else if (sheetFirst == null) {
+                sheetFirst = entry;
+                asking = new ArrayList<>();
                 asking.add(entry);
+            } else if (entry.sameProgram(sheetFirst)) {
+                asking.add(entry);
+            } else {
+                // Another program: it gets a sheet of its own after this one.
+                queue.add(entry);
             }
         }
-        if (asking.isEmpty()) return;
-        if (mSheetSession == front && mSheetWaiting != null) {
-            // Same session, sheet already up: these get its answer.
-            mSheetWaiting.addAll(asking);
-            return;
-        }
-        if (mSheetSession != null) {
-            // Another session's sheet is up: wait for it to close.
-            queue.addAll(asking);
-            return;
-        }
+        if (asking == null) return;
         mSheetSession = front;
-        mSheetName = asking.get(0).name;
+        mSheetName = sheetFirst.name;
         mSheetWaiting = asking;
         final Object sheetSession = front;
         final List<Entry> sheetWaiting = asking;
@@ -177,7 +251,7 @@ public final class ClipboardReadConsent {
         });
         if (!shown && mSheetWaiting == sheetWaiting) {
             clearSheet();
-            queue.addAll(asking);
+            queue.addAll(0, asking);
         }
     }
 
@@ -185,14 +259,14 @@ public final class ClipboardReadConsent {
         String name = mSheetName;
         clearSheet();
         if (choice == Choice.DENY) {
-            for (Entry entry : waiting) entry.request.deny();
+            for (Entry entry : waiting) entry.deny();
         } else {
             if (name != null) {
                 if (choice == Choice.SESSION) mGrants.allowForSession(session, name);
                 else if (choice == Choice.ALWAYS) mGrants.allowAlways(name);
             }
             String clipboard = mUi.readClipboard();
-            for (Entry entry : waiting) entry.request.allow(clipboard);
+            for (Entry entry : waiting) entry.allow(clipboard);
         }
         mUi.closeSheet();
         pump();
