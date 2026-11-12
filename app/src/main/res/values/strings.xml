@@ -587,6 +587,10 @@
     <string name="settings_x11_app_touch_trackpad">Trackpad</string>
     <string name="settings_x11_app_touch_touch">Touch</string>
     <string name="settings_x11_app_touch_direct">Direct</string>
+    <string name="settings_x11_paste_shortcut_title">Paste shortcut</string>
+    <string name="settings_x11_paste_shortcut_summary">The keys the paste key presses. Terminals usually paste with Ctrl+Shift+V.</string>
+    <string name="settings_x11_paste_ctrl_v">Ctrl+V</string>
+    <string name="settings_x11_paste_ctrl_shift_v">Ctrl+Shift+V</string>
     <string name="settings_x11_app_scale_title">Scale</string>
     <string name="settings_x11_app_scale_summary">%1$s. Takes effect the next time the app opens.</string>
     <string name="settings_x11_app_drawer_title">Show in app drawer</string>

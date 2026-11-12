@@ -80,6 +80,40 @@ public class X11KeyboardBridgeTest {
     }
 
     @Test
+    public void pasteIsCtrlShiftVWhenTheFrontAppAsksForIt() {
+        RecordingSink sink = new RecordingSink();
+        X11KeyboardBridge.over(() -> sink, () -> true)
+            .interceptKeyValue(KeyValue.getKeyByName("paste"), false, false, false);
+        assertEquals(Arrays.asList("clip",
+            "down " + KeyEvent.KEYCODE_CTRL_LEFT,
+            "down " + KeyEvent.KEYCODE_SHIFT_LEFT,
+            "down " + KeyEvent.KEYCODE_V,
+            "up " + KeyEvent.KEYCODE_V,
+            "up " + KeyEvent.KEYCODE_SHIFT_LEFT,
+            "up " + KeyEvent.KEYCODE_CTRL_LEFT), sink.events);
+    }
+
+    @Test
+    public void aHeldShiftStillMakesPasteCtrlShiftVWhateverTheShortcut() {
+        RecordingSink plain = new RecordingSink();
+        RecordingSink shifted = new RecordingSink();
+        X11KeyboardBridge.over(() -> plain, () -> false)
+            .interceptKeyValue(KeyValue.getKeyByName("paste"), false, false, true);
+        X11KeyboardBridge.over(() -> shifted, () -> true)
+            .interceptKeyValue(KeyValue.getKeyByName("paste"), false, false, true);
+        assertEquals(shifted.events, plain.events);
+        assertTrue(plain.events.contains("down " + KeyEvent.KEYCODE_SHIFT_LEFT));
+    }
+
+    @Test
+    public void copyAndCutIgnoreThePasteShortcut() {
+        RecordingSink sink = new RecordingSink();
+        X11KeyboardBridge.over(() -> sink, () -> true)
+            .interceptKeyValue(KeyValue.getKeyByName("copy"), false, false, false);
+        assertEquals(chord(KeyEvent.KEYCODE_C), sink.events);
+    }
+
+    @Test
     public void aHeldModifierRidesAlongWithTheChord() {
         RecordingSink sink = new RecordingSink();
         // Shift+copy is Ctrl+Shift+C, which is what an X terminal emulator copies with.

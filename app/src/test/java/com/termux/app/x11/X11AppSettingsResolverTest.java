@@ -1,7 +1,9 @@
 package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -24,6 +26,19 @@ public class X11AppSettingsResolverTest {
         assertEquals("2", X11AppSettingsResolver.effectiveTouchMode("2", null));
         assertEquals("2", X11AppSettingsResolver.effectiveTouchMode("2", "9"));
         assertEquals("weird", X11AppSettingsResolver.effectiveTouchMode("weird", ""));
+    }
+
+    @Test public void pasteShortcutFollowsTheDisplayUnlessTheAppOverrides() {
+        assertFalse(X11AppSettingsResolver.pasteWithShift("ctrl_v", null, false));
+        assertTrue(X11AppSettingsResolver.pasteWithShift("ctrl_shift_v", null, false));
+        assertTrue(X11AppSettingsResolver.pasteWithShift("ctrl_v", "ctrl_shift_v", false));
+        assertFalse(X11AppSettingsResolver.pasteWithShift("ctrl_shift_v", "ctrl_v", false));
+        assertFalse(X11AppSettingsResolver.pasteWithShift("ctrl_v", "bogus", false));
+    }
+
+    @Test public void aRunningDesktopMakesPasteFollowTheDisplay() {
+        assertFalse(X11AppSettingsResolver.pasteWithShift("ctrl_v", "ctrl_shift_v", true));
+        assertTrue(X11AppSettingsResolver.pasteWithShift("ctrl_shift_v", "ctrl_v", true));
     }
 
     @Test public void windowClassFindsTheApp() {

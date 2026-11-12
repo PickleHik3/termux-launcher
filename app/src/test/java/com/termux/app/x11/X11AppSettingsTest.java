@@ -12,6 +12,15 @@ import java.util.Map;
 
 public class X11AppSettingsTest {
 
+    @Test public void pasteShortcutRoundTripsAndDropsGarbage() {
+        Map<String, X11AppSettings.Overrides> in = new LinkedHashMap<>();
+        in.put("a", new X11AppSettings.Overrides(null, null, null, "ctrl_shift_v"));
+        in.put("b", new X11AppSettings.Overrides(null, null, null, "bogus"));
+        Map<String, X11AppSettings.Overrides> out = X11AppSettings.parse(X11AppSettings.encode(in));
+        assertEquals(1, out.size());
+        assertEquals("ctrl_shift_v", out.get("a").pasteShortcut);
+    }
+
     @Test public void roundTrips() {
         Map<String, X11AppSettings.Overrides> in = new LinkedHashMap<>();
         in.put("firefox.desktop", new X11AppSettings.Overrides("2", "1.5"));

@@ -29,11 +29,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * One Linux app's page under Apps: graphics, touch mode, scale and whether the drawer lists it.
+ * One Linux app's page under Apps: graphics, touch mode, scale, paste shortcut and whether the drawer lists it.
  * Each row is Follow display setting or an override kept in {@link X11AppSettingsStore}. The app
  * comes in the arguments ({@link #ARG_ID}, {@link #ARG_NAME}); a page opened without an id has
  * nothing to show and goes back. A whole desktop ({@link #ARG_DESKTOP}) follows the display's
- * graphics and scale, so its page has neither row.
+ * graphics, scale and paste shortcut, so its page has none of those rows.
  */
 @Keep
 public final class X11AppPreferencesFragment extends MaterialPreferenceFragment {
@@ -46,6 +46,7 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
     static final String KEY_GRAPHICS = "x11_app_graphics";
     static final String KEY_TOUCH = "x11_app_touch_mode";
     static final String KEY_SCALE = "x11_app_scale";
+    static final String KEY_PASTE = "x11_app_paste_shortcut";
     static final String KEY_DRAWER = "x11_app_drawer";
 
     static final String FOLLOW = "follow";
@@ -92,6 +93,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         if (!desktop) {
             screen.addPreference(row(context, KEY_SCALE, R.string.settings_x11_app_scale_title,
                 R.array.settings_x11_app_scale_entries, R.array.settings_x11_app_scale_values));
+        }
+        if (!desktop) {
+            screen.addPreference(row(context, KEY_PASTE, R.string.settings_x11_paste_shortcut_title,
+                R.array.settings_x11_app_paste_entries, R.array.settings_x11_app_paste_values));
         }
         screen.addPreference(row(context, KEY_DRAWER, R.string.settings_x11_app_drawer_title,
             R.array.settings_x11_app_drawer_entries, R.array.settings_x11_app_drawer_values));
@@ -178,6 +183,7 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
                 break;
             case KEY_TOUCH: kept.setTouchMode(id, follow ? null : value); break;
             case KEY_SCALE: kept.setScale(id, follow ? null : value); break;
+            case KEY_PASTE: kept.setPasteShortcut(id, follow ? null : value); break;
             case KEY_DRAWER: kept.setHiddenInDrawer(id, HIDE.equals(value)); break;
             default: return;
         }
@@ -221,6 +227,14 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
             scaleRow.setValue(scale == null ? FOLLOW : scale);
             scaleRow.setSummary(context.getString(R.string.settings_x11_app_scale_summary,
                 scaleRow.getEntry()));
+        }
+        ListPreference pasteRow = screen.findPreference(KEY_PASTE);
+        if (pasteRow != null) {
+            String paste = kept.pasteShortcut(id);
+            pasteRow.setValue(paste == null ? FOLLOW : paste);
+            pasteRow.setSummary(paste == null
+                ? followWith(context, pasteName(context, kept.globalPasteShortcut()))
+                : pasteRow.getEntry());
         }
         ListPreference drawer = screen.findPreference(KEY_DRAWER);
         if (drawer != null) {
@@ -275,6 +289,12 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    @NonNull
+    private static String pasteName(@NonNull Context context, @NonNull String shortcut) {
+        return context.getString(X11AppSettings.PASTE_CTRL_SHIFT_V.equals(shortcut)
+            ? R.string.settings_x11_paste_ctrl_shift_v : R.string.settings_x11_paste_ctrl_v);
     }
 
     @Nullable

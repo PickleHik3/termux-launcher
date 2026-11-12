@@ -30,6 +30,13 @@ import juloo.keyboard2.KeyValue;
 public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValueInterceptor {
 
     @NonNull private final Sinks sinks;
+    @NonNull private final PasteShortcut paste;
+
+    /** Which chord the paste key presses; asked each time, as the front app may change it. */
+    public interface PasteShortcut {
+        /** True for Ctrl+Shift+V, false for Ctrl+V. */
+        boolean withShift();
+    }
 
     /** Everything the bridge does to the display. */
     public interface Sink {
@@ -59,8 +66,13 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
         @Nullable LorieView displayView();
     }
 
-    public X11KeyboardBridge(@NonNull Supplier display) {
-        this.sinks = () -> {
+    public X11KeyboardBridge(@NonNull Supplier display, @NonNull PasteShortcut paste) {
+        this(viewSinks(display), paste);
+    }
+
+    @NonNull
+    private static Sinks viewSinks(@NonNull Supplier display) {
+        return () -> {
             LorieView view = display.displayView();
             return view == null ? null : new ViewSink(view);
         };
@@ -69,11 +81,17 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
     /** For the test that reads the chords back; production goes through the view. */
     @NonNull
     static X11KeyboardBridge over(@NonNull Sinks sinks) {
-        return new X11KeyboardBridge(sinks);
+        return new X11KeyboardBridge(sinks, () -> false);
     }
 
-    private X11KeyboardBridge(@NonNull Sinks sinks) {
+    @NonNull
+    static X11KeyboardBridge over(@NonNull Sinks sinks, @NonNull PasteShortcut paste) {
+        return new X11KeyboardBridge(sinks, paste);
+    }
+
+    private X11KeyboardBridge(@NonNull Sinks sinks, @NonNull PasteShortcut paste) {
         this.sinks = sinks;
+        this.paste = paste;
     }
 
     /** X owns every ordinary chord; the Workspace's own Ctrl+Alt route stays as it is. */
@@ -170,7 +188,8 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
                 // X pastes its own selection, so it has to be told what Android holds now — a
                 // copy made in another app is otherwise a paste of whatever X had last.
                 view.refreshClipboard();
-                return sendModified(view, KeyEvent.KEYCODE_V, true, alt, shift);
+                // A held Shift rides along either way, so Shift+paste is always Ctrl+Shift+V.
+                return sendModified(view, KeyEvent.KEYCODE_V, true, alt, shift || paste.withShift());
             case SELECT_ALL:
                 return sendModified(view, KeyEvent.KEYCODE_A, true, alt, shift);
             case UNDO:
