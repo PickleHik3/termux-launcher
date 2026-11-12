@@ -102,7 +102,8 @@ public final class ShellNotifications {
     public static String post(@NonNull Context context, @NonNull TerminalSession session,
                               @NonNull KittyNotification notification,
                               boolean terminalVisible, boolean senderInFront) {
-        if (!shouldShow(notification, terminalVisible, senderInFront)) return null;
+        if (!TerminalNoticePolicy.occasionAllows(notification.getOccasion(), terminalVisible, senderInFront))
+            return null;
         Context app = context.getApplicationContext();
         if (!canPost(app)) return null;
 
@@ -169,22 +170,6 @@ public final class ShellNotifications {
         NotificationManager manager =
             context.getApplicationContext().getSystemService(NotificationManager.class);
         if (manager != null) manager.cancel(tag, NOTIFICATION_ID);
-    }
-
-    /**
-     * The occasion a program asked for: some messages are only worth showing when the user is not
-     * already looking at the pane that sent them.
-     */
-    public static boolean shouldShow(@NonNull KittyNotification notification,
-                                     boolean terminalVisible, boolean senderInFront) {
-        switch (notification.getOccasion()) {
-            case KittyNotification.OCCASION_INVISIBLE:
-                return !terminalVisible;
-            case KittyNotification.OCCASION_UNFOCUSED:
-                return !terminalVisible || !senderInFront;
-            default:
-                return true;
-        }
     }
 
     private static int priorityFor(int urgency) {

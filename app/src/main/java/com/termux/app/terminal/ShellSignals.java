@@ -83,7 +83,7 @@ public final class ShellSignals {
         mHost.noteShellAttention(session);
         boolean visible = mHost.isVisible();
         boolean inFront = session == mHost.currentSession();
-        if (!ShellNotifications.shouldShow(notification, visible, inFront)) return false;
+        if (!TerminalNoticePolicy.occasionAllows(notification.getOccasion(), visible, inFront)) return false;
         if (ShellNotifications.post(mContext, session, notification, visible, inFront) != null) return true;
         // Nothing reached the shade — notifications are turned off for the launcher — so the
         // message still gets the older in-app notice rather than being lost.
