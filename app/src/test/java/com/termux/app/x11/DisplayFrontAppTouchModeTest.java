@@ -34,6 +34,24 @@ public class DisplayFrontAppTouchModeTest {
         assertNull(DisplayFrontAppTouchMode.decide(apps, "Firefox", store::get, true));
     }
 
+    @Test public void pasteShortcutOverrideIsGivenForTheFrontApp() {
+        store.put("firefox.desktop", "ctrl_shift_v");
+        assertEquals("ctrl_shift_v",
+            DisplayFrontAppTouchMode.decidePasteShortcut(apps, "Firefox", store::get, false));
+        assertNull(DisplayFrontAppTouchMode.decidePasteShortcut(apps, "Gimp", store::get, false));
+        assertNull(DisplayFrontAppTouchMode.decidePasteShortcut(apps, "Nothing", store::get, false));
+    }
+
+    @Test public void aRunningDesktopIgnoresPasteShortcutOverrides() {
+        store.put("firefox.desktop", "ctrl_shift_v");
+        assertNull(DisplayFrontAppTouchMode.decidePasteShortcut(apps, "Firefox", store::get, true));
+    }
+
+    @Test public void invalidStoredPasteShortcutFollowsDisplay() {
+        store.put("firefox.desktop", "alt_v");
+        assertNull(DisplayFrontAppTouchMode.decidePasteShortcut(apps, "Firefox", store::get, false));
+    }
+
     @Test public void appWithoutOverrideFollowsDisplay() {
         store.put("firefox.desktop", "3");
         assertNull(DisplayFrontAppTouchMode.decide(apps, "Gimp", store::get, false));

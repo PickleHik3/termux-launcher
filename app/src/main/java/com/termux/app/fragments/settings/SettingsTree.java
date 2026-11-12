@@ -423,7 +423,7 @@ public final class SettingsTree {
             case "X11DisplayPreferencesFragment":
                 switch (key) {
                     case "touchMode": case "x11_android_keyboard": case "x11_keyboard_follows_text":
-                    case "clipboardEnable":
+                    case "clipboardEnable": case "x11_paste_shortcut":
                         return "X11DisplayInputPreferencesFragment";
                     case "displayResolutionMode": case "displayScale": case "displayResolutionExact":
                     case "displayResolutionCustom": case "displayFilteringMode": case "x11_display_dpi":

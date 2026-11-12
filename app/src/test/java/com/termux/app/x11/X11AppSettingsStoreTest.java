@@ -80,6 +80,24 @@ public class X11AppSettingsStoreTest {
         assertTrue(store.appsWithOverrides().isEmpty());
     }
 
+    @Test public void pasteShortcutIsKeptBesideTheOtherOverridesAndFollowsByDefault() {
+        X11AppSettingsStore store = new X11AppSettingsStore(context);
+        assertEquals("ctrl_v", store.globalPasteShortcut());
+        store.setGlobalPasteShortcut("ctrl_shift_v");
+        assertEquals("ctrl_shift_v", new X11AppSettingsStore(context).globalPasteShortcut());
+        store.setGlobalPasteShortcut("nonsense");
+        assertEquals("ctrl_v", store.globalPasteShortcut());
+
+        store.setTouchMode(APP, "2");
+        store.setPasteShortcut(APP, "ctrl_shift_v");
+        store.setScale(APP, "2");
+        assertEquals("ctrl_shift_v", new X11AppSettingsStore(context).pasteShortcut(APP));
+        assertEquals("2", store.touchMode(APP));
+        store.setPasteShortcut(APP, "bogus");
+        assertNull(store.pasteShortcut(APP));
+        assertEquals("2", store.scale(APP));
+    }
+
     @Test public void softwareDelegatesToTheGpuStore() {
         X11AppSettingsStore store = new X11AppSettingsStore(context);
         store.setDrawsInSoftware(APP, true);

@@ -25694,7 +25694,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
                     ? null : mPaneWallController.displayWindow();
                 return frame == null ? null : frame.display();
-            });
+            }, () -> mX11Display != null && mX11Display.pasteWithShift());
         }
         return mX11KeyboardBridge;
     }

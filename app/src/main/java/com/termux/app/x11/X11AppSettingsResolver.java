@@ -16,6 +16,17 @@ public final class X11AppSettingsResolver {
         return X11AppSettings.isTouchMode(override) ? override : global;
     }
 
+    /**
+     * Whether the paste key adds Shift (Ctrl+Shift+V). A valid {@code override} wins over
+     * {@code global}, except while a desktop session runs: its apps follow the display.
+     */
+    public static boolean pasteWithShift(@NonNull String global, @Nullable String override,
+                                         boolean desktopRunning) {
+        String effective = !desktopRunning && X11AppSettings.isPasteShortcut(override)
+            ? override : global;
+        return X11AppSettings.PASTE_CTRL_SHIFT_V.equals(effective);
+    }
+
     /** The id of the app that drew a window of {@code wmClass}, or null for none. */
     @Nullable
     public static String appIdForWindowClass(@NonNull List<LinuxAppCatalog.LinuxApp> apps,

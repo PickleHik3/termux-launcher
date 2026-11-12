@@ -14,8 +14,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Function;
 
 /**
- * Which touch mode the display uses while a Linux app's window is in front: that app's own
- * override, or none (the display's global mode). Matching a window class to an app needs the app
+ * Which touch mode and paste shortcut the display uses while a Linux app's window is in front:
+ * that app's own overrides, or none (the display's global setting). Matching a window class to an app needs the app
  * catalogue, which is file work, so it runs on one background thread and its answer is posted
  * back to the main thread; an answer for a window that is no longer in front is dropped.
  *
@@ -23,9 +23,22 @@ import java.util.function.Function;
  */
 final class DisplayFrontAppTouchMode {
 
-    /** Receives the override for the front window; null follows the display's mode. */
+    /** Receives the overrides for the front window; null follows the display's setting. */
     interface Callback {
         void onTouchModeOverride(@Nullable String mode);
+
+        void onPasteShortcutOverride(@Nullable String shortcut);
+    }
+
+    /** What one front window overrides; both null for none. */
+    private static final class Overrides {
+        @Nullable final String touchMode;
+        @Nullable final String pasteShortcut;
+
+        Overrides(@Nullable String touchMode, @Nullable String pasteShortcut) {
+            this.touchMode = touchMode;
+            this.pasteShortcut = pasteShortcut;
+        }
     }
 
     @NonNull private final Context context;
@@ -61,6 +74,19 @@ final class DisplayFrontAppTouchMode {
         return X11AppSettings.isTouchMode(mode) ? mode : null;
     }
 
+    /** Like {@link #decide} for the paste shortcut. */
+    @Nullable
+    static String decidePasteShortcut(@NonNull List<LinuxAppCatalog.LinuxApp> apps,
+                                      @Nullable String wmClass,
+                                      @NonNull Function<String, String> overrideOf,
+                                      boolean desktopRunning) {
+        if (desktopRunning) return null;
+        String appId = X11AppSettingsResolver.appIdForWindowClass(apps, wmClass);
+        if (appId == null) return null;
+        String shortcut = overrideOf.apply(appId);
+        return X11AppSettings.isPasteShortcut(shortcut) ? shortcut : null;
+    }
+
     /** The window in front changed (or went away: null or empty). An unchanged class is skipped. */
     void onFrontWindowClass(@Nullable String wmClass) {
         String cls = wmClass == null || wmClass.trim().isEmpty() ? null : wmClass;
@@ -89,6 +115,7 @@ final class DisplayFrontAppTouchMode {
         final String cls = frontClass;
         if (cls == null) {
             callback.onTouchModeOverride(null);
+            callback.onPasteShortcutOverride(null);
             return;
         }
         ExecutorService ex = executor;
@@ -102,16 +129,17 @@ final class DisplayFrontAppTouchMode {
         }
         try {
             ex.execute(() -> {
-                String mode;
+                Overrides found;
                 try {
-                    mode = lookup(cls, rescan);
+                    found = lookup(cls, rescan);
                 } catch (RuntimeException e) {
-                    mode = null;
+                    found = new Overrides(null, null);
                 }
-                final String result = mode;
+                final Overrides result = found;
                 main.post(() -> {
                     if (released || mine != generation) return;
-                    callback.onTouchModeOverride(result);
+                    callback.onTouchModeOverride(result.touchMode);
+                    callback.onPasteShortcutOverride(result.pasteShortcut);
                 });
             });
         } catch (RejectedExecutionException ignored) {
@@ -120,12 +148,14 @@ final class DisplayFrontAppTouchMode {
     }
 
     /** Worker thread. */
-    @Nullable
-    private String lookup(@NonNull String cls, boolean rescan) {
+    @NonNull
+    private Overrides lookup(@NonNull String cls, boolean rescan) {
         X11AppSettingsStore s = store;
         if (s == null) store = s = new X11AppSettingsStore(context);
         List<LinuxAppCatalog.LinuxApp> list = apps;
         if (list == null || rescan) apps = list = LinuxAppCatalog.scan(LinuxAppCatalog.roots());
-        return decide(list, cls, s::touchMode, X11LinuxAppRunner.isDesktopRunning());
+        boolean desktop = X11LinuxAppRunner.isDesktopRunning();
+        return new Overrides(decide(list, cls, s::touchMode, desktop),
+            decidePasteShortcut(list, cls, s::pasteShortcut, desktop));
     }
 }

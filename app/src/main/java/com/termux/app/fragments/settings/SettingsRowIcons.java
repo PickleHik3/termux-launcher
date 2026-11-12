@@ -125,7 +125,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_build, "x11_sub_troubleshooting", "tai_advanced");
         key(R.drawable.ic_ms_keyboard_double_arrow_up, "x11_keyboard_follows_text");
         key(R.drawable.ic_ms_layers, "x11_keyboard_over_display");
-        key(R.drawable.ic_ms_content_paste, "clipboardEnable", "terminal_osc52_clipboard_read_enabled",
+        key(R.drawable.ic_ms_content_paste, "clipboardEnable", "x11_paste_shortcut", "terminal_osc52_clipboard_read_enabled",
             "terminal_sub_clipboard");
         key(R.drawable.ic_ms_aspect_ratio, "displayResolutionMode", "app_launcher_home_icon_scale");
         key(R.drawable.ic_ms_zoom_in, "displayScale");

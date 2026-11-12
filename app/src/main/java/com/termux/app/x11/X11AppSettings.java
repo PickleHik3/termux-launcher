@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * What one Linux app may set differently from the display: its touch mode, scale and GPU profile. Absent
+ * What one Linux app may set differently from the display: its touch mode, scale, GPU profile and paste shortcut. Absent
  * means follow the display's setting. The values are the global preference's own: touch modes
  * match the {@code touchMode} pref, scales are the strings the display's scale picker offers.
  *
@@ -36,11 +36,21 @@ public final class X11AppSettings {
     private static final String KEY_TOUCH_MODE = "touch_mode";
     private static final String KEY_SCALE = "scale";
     private static final String KEY_GPU = "gpu";
+    private static final String KEY_PASTE = "paste";
+
+    /** The paste key presses Ctrl+V. */
+    public static final String PASTE_CTRL_V = "ctrl_v";
+    /** The paste key presses Ctrl+Shift+V, which terminal-style apps paste with. */
+    public static final String PASTE_CTRL_SHIFT_V = "ctrl_shift_v";
 
     private X11AppSettings() {}
 
     public static boolean isTouchMode(@Nullable String value) {
         return TOUCH_TRACKPAD.equals(value) || TOUCH_TOUCH.equals(value) || TOUCH_DIRECT.equals(value);
+    }
+
+    public static boolean isPasteShortcut(@Nullable String value) {
+        return PASTE_CTRL_V.equals(value) || PASTE_CTRL_SHIFT_V.equals(value);
     }
 
     public static boolean isScale(@Nullable String value) {
@@ -67,14 +77,24 @@ public final class X11AppSettings {
             this(touchMode, scale, null);
         }
 
+        /** A paste shortcut that replaces the display's for this app; null follows it. */
+        @Nullable public final String pasteShortcut;
+
         public Overrides(@Nullable String touchMode, @Nullable String scale, @Nullable String gpu) {
+            this(touchMode, scale, gpu, null);
+        }
+
+        public Overrides(@Nullable String touchMode, @Nullable String scale, @Nullable String gpu,
+                         @Nullable String pasteShortcut) {
+            this.pasteShortcut = isPasteShortcut(pasteShortcut) ? pasteShortcut : null;
             this.touchMode = isTouchMode(touchMode) ? touchMode : null;
             this.scale = isScale(scale) ? scale : null;
             this.gpu = isGpuProfile(gpu) ? gpu : null;
         }
 
         public boolean isEmpty() {
-            return touchMode == null && scale == null && gpu == null;
+            return touchMode == null && scale == null && gpu == null
+                && pasteShortcut == null;
         }
 
         @Override public boolean equals(Object o) {
@@ -82,11 +102,12 @@ public final class X11AppSettings {
             if (!(o instanceof Overrides)) return false;
             Overrides other = (Overrides) o;
             return Objects.equals(touchMode, other.touchMode) && Objects.equals(scale, other.scale)
-                && Objects.equals(gpu, other.gpu);
+                && Objects.equals(gpu, other.gpu)
+                && Objects.equals(pasteShortcut, other.pasteShortcut);
         }
 
         @Override public int hashCode() {
-            return Objects.hash(touchMode, scale, gpu);
+            return Objects.hash(touchMode, scale, gpu, pasteShortcut);
         }
     }
 
@@ -104,7 +125,7 @@ public final class X11AppSettings {
                 if (entry == null || id.isEmpty()) continue;
                 Overrides overrides = new Overrides(
                     entry.optString(KEY_TOUCH_MODE, null), entry.optString(KEY_SCALE, null),
-                    entry.optString(KEY_GPU, null));
+                    entry.optString(KEY_GPU, null), entry.optString(KEY_PASTE, null));
                 if (!overrides.isEmpty()) out.put(id, overrides);
             }
         } catch (JSONException | RuntimeException e) {
@@ -126,6 +147,7 @@ public final class X11AppSettings {
                 if (value.touchMode != null) item.put(KEY_TOUCH_MODE, value.touchMode);
                 if (value.scale != null) item.put(KEY_SCALE, value.scale);
                 if (value.gpu != null) item.put(KEY_GPU, value.gpu);
+                if (value.pasteShortcut != null) item.put(KEY_PASTE, value.pasteShortcut);
                 root.put(entry.getKey(), item);
             }
         } catch (JSONException ignored) {

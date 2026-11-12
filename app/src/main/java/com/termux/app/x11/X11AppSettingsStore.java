@@ -25,6 +25,8 @@ import java.util.TreeSet;
 public final class X11AppSettingsStore {
 
     private static final String PREFS_KEY_V1 = "x11_app_settings_v1";
+    /** The display's own paste shortcut; the settings page and the keyboard both read it here. */
+    public static final String PREFS_KEY_PASTE_SHORTCUT = "x11_paste_shortcut";
 
     @NonNull private final Context context;
     @NonNull private final SharedPreferences sharedPreferences;
@@ -50,7 +52,7 @@ public final class X11AppSettingsStore {
         Map<String, X11AppSettings.Overrides> all = load();
         X11AppSettings.Overrides old = all.get(appId);
         put(all, appId, new X11AppSettings.Overrides(mode, old == null ? null : old.scale,
-            old == null ? null : old.gpu));
+            old == null ? null : old.gpu, old == null ? null : old.pasteShortcut));
     }
 
     /** The app's scale, or null to follow the display. */
@@ -65,7 +67,7 @@ public final class X11AppSettingsStore {
         Map<String, X11AppSettings.Overrides> all = load();
         X11AppSettings.Overrides old = all.get(appId);
         put(all, appId, new X11AppSettings.Overrides(old == null ? null : old.touchMode, scale,
-            old == null ? null : old.gpu));
+            old == null ? null : old.gpu, old == null ? null : old.pasteShortcut));
     }
 
     /** The app's own GPU profile id (never software, see {@link #drawsInSoftware}), or null to follow. */
@@ -80,7 +82,37 @@ public final class X11AppSettingsStore {
         Map<String, X11AppSettings.Overrides> all = load();
         X11AppSettings.Overrides old = all.get(appId);
         put(all, appId, new X11AppSettings.Overrides(old == null ? null : old.touchMode,
-            old == null ? null : old.scale, profileId));
+            old == null ? null : old.scale, profileId, old == null ? null : old.pasteShortcut));
+    }
+
+    /** The app's paste shortcut, or null to follow the display. */
+    @Nullable
+    public String pasteShortcut(@NonNull String appId) {
+        X11AppSettings.Overrides o = load().get(appId);
+        return o == null ? null : o.pasteShortcut;
+    }
+
+    /** Null or an unknown shortcut clears the override. */
+    public void setPasteShortcut(@NonNull String appId, @Nullable String shortcut) {
+        Map<String, X11AppSettings.Overrides> all = load();
+        X11AppSettings.Overrides old = all.get(appId);
+        put(all, appId, new X11AppSettings.Overrides(old == null ? null : old.touchMode,
+            old == null ? null : old.scale, old == null ? null : old.gpu, shortcut));
+    }
+
+    /** The display's paste shortcut; Ctrl+V until the user changes it. */
+    @NonNull
+    public String globalPasteShortcut() {
+        String value = sharedPreferences.getString(PREFS_KEY_PASTE_SHORTCUT, null);
+        return X11AppSettings.isPasteShortcut(value) ? value : X11AppSettings.PASTE_CTRL_V;
+    }
+
+    public void setGlobalPasteShortcut(@Nullable String shortcut) {
+        if (X11AppSettings.isPasteShortcut(shortcut)) {
+            sharedPreferences.edit().putString(PREFS_KEY_PASTE_SHORTCUT, shortcut).apply();
+        } else {
+            sharedPreferences.edit().remove(PREFS_KEY_PASTE_SHORTCUT).apply();
+        }
     }
 
     public boolean drawsInSoftware(@NonNull String appId) {
