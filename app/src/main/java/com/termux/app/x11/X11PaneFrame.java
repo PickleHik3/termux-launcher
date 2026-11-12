@@ -204,13 +204,23 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private final Runnable mSwapBackstop = this::finishSwap;
     private final Runnable mExpireStill = this::expireStill;
     private int mSwapFramesLeft;
-    private final Runnable mCoverBackstop = this::finishCover;
+    private final Runnable mCoverBackstop = () -> {
+        com.termux.app.wall.DspGap.log("cover-backstop fired state=" + mStill.state());
+        finishCover();
+    };
+    // DSPGAP (temporary): when the last holdStill asked for a copy, and the layout watcher.
+    private long mDspHoldMs;
+    private final android.view.ViewTreeObserver.OnGlobalLayoutListener mDspLayout = () -> {
+        if (com.termux.app.wall.DspGap.watching()) com.termux.app.wall.DspGap.log("global-layout " + com.termux.app.wall.DspGap.hintEstimate(this));
+    };
     /** Bumped by every cover and every cancel: a commit callback of an older one does nothing. */
     private int mCoverToken;
     private int mCoverFramesLeft;
     private final android.view.Choreographer.FrameCallback mCoverFrame =
         new android.view.Choreographer.FrameCallback() {
             @Override public void doFrame(long frameTimeNanos) {
+                com.termux.app.wall.DspGap.log("cover-frame doFrame vsync=" + (frameTimeNanos / 1_000_000L)
+                    + " left=" + mCoverFramesLeft);
                 if (--mCoverFramesLeft > 0) {
                     android.view.Choreographer.getInstance().postFrameCallback(this);
                 } else {
@@ -221,6 +231,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private final android.view.Choreographer.FrameCallback mSwapFrame =
         new android.view.Choreographer.FrameCallback() {
             @Override public void doFrame(long frameTimeNanos) {
+                com.termux.app.wall.DspGap.log("swap-frame doFrame vsync=" + (frameTimeNanos / 1_000_000L)
+                    + " left=" + mSwapFramesLeft);
                 if (--mSwapFramesLeft > 0) {
                     android.view.Choreographer.getInstance().postFrameCallback(this);
                 } else {
@@ -231,14 +243,20 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     /** Told the surface is back, so the stand-in can wait out the frames X takes to fill it. */
     private final android.view.SurfaceHolder.Callback mStillSurfaceCallback =
         new android.view.SurfaceHolder.Callback() {
-            @Override public void surfaceCreated(@NonNull android.view.SurfaceHolder holder) {}
+            @Override public void surfaceCreated(@NonNull android.view.SurfaceHolder holder) {
+                com.termux.app.wall.DspGap.log("surface-created state=" + mStill.state());
+            }
 
             @Override public void surfaceChanged(@NonNull android.view.SurfaceHolder holder,
                                                  int format, int width, int height) {
+                com.termux.app.wall.DspGap.log("surface-changed fmt=" + format + " " + width + "x" + height
+                    + " state=" + mStill.state());
                 if (mStill.state() == SurfaceStandIn.State.RESTORING) startSwapFrames();
             }
 
-            @Override public void surfaceDestroyed(@NonNull android.view.SurfaceHolder holder) {}
+            @Override public void surfaceDestroyed(@NonNull android.view.SurfaceHolder holder) {
+                com.termux.app.wall.DspGap.log("surface-destroyed state=" + mStill.state());
+            }
         };
 
     public X11PaneFrame(Context context) {
@@ -280,6 +298,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
             // After the display's own callback, which hands the surface to X first.
             mDisplay.getHolder().addCallback(mStillSurfaceCallback);
+            com.termux.app.wall.DspGap.setTarget(this, this::dspgapState);
         }
         // The display is not registered as the pane's content on purpose: that clearance keeps a
         // terminal's text out of the arcs, but an X screen wants to fill the frame to its rim,
@@ -744,6 +763,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * leaves a dead screen on the home screen.
      */
     public void applyRunning(boolean running) {
+        if (running != mRunning) com.termux.app.wall.DspGap.logCaller("apply-running " + mRunning + "->" + running);
         mRunning = running;
         // The power glyph turns to the error colour while a display is running, as a close does.
         if (mControls != null) mControls.setActionAlert(ACTION_POWER, running);
@@ -896,7 +916,14 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      * holding no screen-sized buffer.</p>
      */
     private void applyDisplaySurfaceVisibility() {
-        if (mDisplay != null) mDisplay.setVisibility(displaySurfaceVisibility());
+        if (mDisplay != null) {
+            int old = mDisplay.getVisibility();
+            int next = displaySurfaceVisibility();
+            com.termux.app.wall.DspGap.logCaller("surface-visibility " + old + "->" + next
+                + (old == next ? " (same)" : " CHANGED") + " state=" + mStill.state()
+                + " running=" + mRunning + " onScreen=" + mPageOnScreen);
+            mDisplay.setVisibility(next);
+        }
     }
 
     /**
@@ -915,12 +942,16 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Override
     protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
+        com.termux.app.wall.DspGap.logCaller("frame-onVisibilityChanged view=" + changedView.getClass().getSimpleName()
+            + " vis=" + visibility + " shown=" + isShown());
         syncPageOnScreen();
     }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        getViewTreeObserver().addOnGlobalLayoutListener(mDspLayout);
+        com.termux.app.wall.DspGap.log("frame-attached");
         // A place can be added to the wall while the wall is resting on another one.
         syncPageOnScreen();
     }
@@ -929,6 +960,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         // Before the wall has placed the frame there is nothing to hide from.
         boolean onScreen = !isAttachedToWindow() || isShown();
         if (mPageOnScreen == onScreen) return;
+        com.termux.app.wall.DspGap.logCaller("page-on-screen " + mPageOnScreen + "->" + onScreen);
         mPageOnScreen = onScreen;
         applyDisplaySurfaceVisibility();
     }
@@ -1079,6 +1111,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        if (com.termux.app.wall.DspGap.watching()) com.termux.app.wall.DspGap.log("frame-onLayout changed=" + changed + " "
+            + left + "," + top + "," + right + "," + bottom);
         if (mFrozenWidth > 0 && mDisplay != null) {
             // Where the frame put it, but at its frozen size and hanging from the bottom edge:
             // the picture stays exactly where it was on screen while the bar moves over it.
@@ -1105,6 +1139,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                               @Nullable android.graphics.drawable.Drawable icon,
                               @NonNull String name) {
         if (mPageStill == null) return;
+        com.termux.app.wall.DspGap.logCaller("page-still SHOW picture=" + (picture != null) + " wasVis="
+            + mPageStill.getVisibility());
         mPageStill.set(picture, icon, name);
         mPageStill.setVisibility(VISIBLE);
         if (mEmptyState != null) mEmptyState.setVisibility(GONE);
@@ -1113,6 +1149,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     /** The display is live on the bound page: its still goes. */
     public void hidePageStill() {
         if (mPageStill == null) return;
+        if (mPageStill.getVisibility() == VISIBLE) com.termux.app.wall.DspGap.logCaller("page-still HIDE");
         mPageStill.setVisibility(INVISIBLE);
         mPageStill.set(null, null, "");
         if (mEmptyState != null && !mRunning) mEmptyState.setVisibility(VISIBLE);
@@ -1183,8 +1220,13 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         LorieView display = mDisplay;
         int width = display == null ? 0 : display.getWidth();
         int height = display == null ? 0 : display.getHeight();
+        SurfaceStandIn.State dspBefore = mStill.state();
         SurfaceStandIn.Begin begin = mStill.begin(mRunning, isSurfaceLive(), width, height,
             android.os.SystemClock.uptimeMillis());
+        mDspHoldMs = android.os.SystemClock.uptimeMillis();
+        com.termux.app.wall.DspGap.watch("holdStill");
+        com.termux.app.wall.DspGap.logCaller("hold-still begin=" + begin + " " + dspBefore + "->" + mStill.state()
+            + " live=" + isSurfaceLive() + " " + width + "x" + height);
         switch (begin) {
             case COPY:
                 mOnStill = onReady;
@@ -1205,6 +1247,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             case KEEP:
                 if (mStill.isStill()) {
                     // Taken back mid-swap: the stand-in is still up, and the surface goes down.
+                    com.termux.app.wall.DspGap.log("hold-still KEEP mid-swap: surface down at once");
                     cancelSwap();
                     applyDisplaySurfaceVisibility();
                     onReady.run();
@@ -1226,6 +1269,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Override
     public void releaseStill() {
         mOnStill = null;
+        com.termux.app.wall.DspGap.logCaller("release-still state=" + mStill.state());
         switch (mStill.rest(mRunning && mPageOnScreen)) {
             case SWAP:
                 // The surface first, beneath the stand-in; the stand-in once X has drawn into it,
@@ -1290,6 +1334,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             }
         }
         final android.graphics.Bitmap destination = target;
+        com.termux.app.wall.DspGap.log("copy-request gen=" + generation + " epoch=" + epoch);
         try {
             android.view.PixelCopy.request(mDisplay, destination,
                 result -> onCopied(generation, epoch, destination,
@@ -1304,9 +1349,20 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private void onCopied(int generation, int epoch, @Nullable android.graphics.Bitmap bitmap,
                           boolean success) {
         boolean usable = success && bitmap != null && !bitmap.isRecycled();
+        SurfaceStandIn.State dspBefore = mStill.state();
         SurfaceStandIn.Copied copied = mStill.copied(generation, epoch, usable,
             usable ? bitmap.getWidth() : 0, usable ? bitmap.getHeight() : 0,
             android.os.SystemClock.uptimeMillis());
+        String dspPixels = "";
+        if (usable) {
+            int w = bitmap.getWidth(), h = bitmap.getHeight();
+            dspPixels = " px(center)=#" + Integer.toHexString(bitmap.getPixel(w / 2, h / 2))
+                + " px(4,4)=#" + Integer.toHexString(bitmap.getPixel(Math.min(4, w - 1),
+                Math.min(4, h - 1))) + " hasAlpha=" + bitmap.hasAlpha();
+        }
+        com.termux.app.wall.DspGap.log("copy-landed success=" + success + " copied=" + copied + " " + dspBefore
+            + "->" + mStill.state() + " afterHoldMs="
+            + (android.os.SystemClock.uptimeMillis() - mDspHoldMs) + dspPixels);
         if (copied == SurfaceStandIn.Copied.DROP) {
             if (bitmap != null && bitmap != mStillBitmap) bitmap.recycle();
             // The motion goes on as it began; nothing will be up to tell the wall about.
@@ -1333,6 +1389,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         if (mStandIn == null || mStillBitmap == null) return;
         cancelSwap();
         mStillHandler.removeCallbacks(mExpireStill);
+        com.termux.app.wall.DspGap.logCaller("standin SHOW wasVis=" + mStandIn.getVisibility() + " state="
+            + mStill.state() + " alpha=" + mStandIn.getAlpha());
         mStandIn.setBitmap(mStillBitmap);
         mStandIn.setVisibility(VISIBLE);
         applyDisplaySurfaceVisibility();
@@ -1341,6 +1399,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     /** The stand-in goes; its copy is kept a while for the next arrival, unless it was dropped. */
     private void hideStandIn() {
         cancelSwap();
+        com.termux.app.wall.DspGap.logCaller("standin HIDE state=" + mStill.state());
         if (mStandIn != null) {
             mStandIn.setVisibility(INVISIBLE);
             mStandIn.setBitmap(null);
@@ -1353,11 +1412,13 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         android.view.Choreographer choreographer = android.view.Choreographer.getInstance();
         choreographer.removeFrameCallback(mSwapFrame);
         mSwapFramesLeft = SurfaceStandIn.SWAP_FRAMES;
+        com.termux.app.wall.DspGap.log("swap-frames start");
         choreographer.postFrameCallback(mSwapFrame);
     }
 
     /** The surface drew, or the backstop ran out: the stand-in comes down. */
     private void finishSwap() {
+        com.termux.app.wall.DspGap.logCaller("finish-swap state=" + mStill.state());
         if (mStill.swapped()) hideStandIn();
         else cancelSwap();
     }
@@ -1370,12 +1431,19 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private void startCover() {
         cancelCover();
         final int token = mCoverToken;
+        com.termux.app.wall.DspGap.logCaller("cover-start token=" + token + " attached=" + isAttachedToWindow()
+            + " sdk=" + android.os.Build.VERSION.SDK_INT);
         mStillHandler.postDelayed(mCoverBackstop, SurfaceStandIn.COVER_BACKSTOP_MS);
         if (android.os.Build.VERSION.SDK_INT >= 29 && isAttachedToWindow()) {
-            getViewTreeObserver().registerFrameCommitCallback(() ->
+            getViewTreeObserver().registerFrameCommitCallback(() -> {
+                com.termux.app.wall.DspGap.log("cover-commit callback token=" + token + " thread="
+                    + Thread.currentThread().getName());
                 mStillHandler.post(() -> {
+                    com.termux.app.wall.DspGap.log("cover-commit posted token=" + token + " current=" + mCoverToken
+                        + (token == mCoverToken ? " -> 1 frame" : " STALE"));
                     if (token == mCoverToken) postCoverFrames(1);
-                }));
+                });
+            });
         } else {
             postCoverFrames(SurfaceStandIn.COVER_FALLBACK_FRAMES);
         }
@@ -1391,7 +1459,12 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     /** A frame with the stand-in has reached the screen, or the backstop ran out. */
     private void finishCover() {
         cancelCover();
-        if (!mStill.covered()) return;
+        SurfaceStandIn.State dspBefore = mStill.state();
+        boolean dspCovered = mStill.covered();
+        com.termux.app.wall.DspGap.logCaller("cover-finish covered=" + dspCovered + " " + dspBefore + "->"
+            + mStill.state() + " onStill=" + (mOnStill != null) + " afterHoldMs="
+            + (android.os.SystemClock.uptimeMillis() - mDspHoldMs));
+        if (!dspCovered) return;
         applyDisplaySurfaceVisibility();
         Runnable ready = mOnStill;
         mOnStill = null;
@@ -1432,6 +1505,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /** Nothing stands in and nothing is kept: the page left the wall or the window. */
     private void resetStill() {
+        com.termux.app.wall.DspGap.logCaller("reset-still state=" + mStill.state());
         mOnStill = null;
         cancelSwap();
         mStill.reset();
@@ -1441,6 +1515,32 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         }
         recycleStill();
         applyDisplaySurfaceVisibility();
+    }
+
+    /** DSPGAP (temporary): the frame's state in one line, for the per-frame watch. */
+    @NonNull
+    private String dspgapState() {
+        StringBuilder out = new StringBuilder();
+        out.append("state=").append(mStill.state());
+        LorieView display = mDisplay;
+        if (display != null) {
+            int[] at = new int[2];
+            display.getLocationInWindow(at);
+            android.view.Surface surface = display.getHolder().getSurface();
+            out.append(" disp=v").append(display.getVisibility())
+                .append(" a").append(display.getAlpha())
+                .append(" win=").append(at[0]).append(',').append(at[1])
+                .append(" surf=").append(surface != null && surface.isValid());
+        }
+        if (mStandIn != null) {
+            out.append(" standin=v").append(mStandIn.getVisibility())
+                .append(" bmp=").append(mStandIn.mBitmap != null);
+        }
+        if (mPageStill != null) out.append(" pageStill=v").append(mPageStill.getVisibility());
+        out.append(" run=").append(mRunning).append(" onScr=").append(mPageOnScreen)
+            .append(" anc=").append(com.termux.app.wall.DspGap.ancestry(this))
+            .append(' ').append(com.termux.app.wall.DspGap.hintEstimate(this));
+        return out.toString();
     }
 
     /**
@@ -1468,6 +1568,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         @Override
         protected void onDraw(@NonNull android.graphics.Canvas canvas) {
             android.graphics.Bitmap bitmap = mBitmap;
+            if (com.termux.app.wall.DspGap.watching()) {
+                com.termux.app.wall.DspGap.log("standin onDraw bmp=" + (bitmap != null) + " recycled="
+                    + (bitmap != null && bitmap.isRecycled()) + " hwAccel="
+                    + canvas.isHardwareAccelerated() + " " + getWidth() + "x" + getHeight());
+            }
             if (bitmap == null || bitmap.isRecycled()) return;
             mBounds.set(0, 0, getWidth(), getHeight());
             canvas.drawBitmap(bitmap, null, mBounds, mPaint);
@@ -1682,6 +1787,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     @Override
     protected void onDetachedFromWindow() {
+        getViewTreeObserver().removeOnGlobalLayoutListener(mDspLayout);
+        com.termux.app.wall.DspGap.log("frame-detached");
         super.onDetachedFromWindow();
         cancelHold();
         // A frame taken off the window lets go of the display rather than leave it frozen.
