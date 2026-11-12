@@ -43,6 +43,20 @@ public final class PageTopInsets {
     }
 
     /**
+     * Whether the wall is at rest for {@link #canvasReachesUnderBar}: still, at offset 0, and on
+     * the page the chrome is committed to. The wall's last offset callback of a landing comes
+     * before the page is committed, so a wall standing still on Home while the chrome is still
+     * committed to the Workspace is not at rest there: reading it so dropped Home's top inset to
+     * 0 for one layout pass as Home landed.
+     *
+     * @param wallPage the kind of the page whose cell the wall is on
+     */
+    public static boolean wallAtRestOn(@NonNull PaneWallPage committed, boolean wallMoving,
+                                       float wallOffsetPx, @Nullable PaneWallPage wallPage) {
+        return !wallMoving && wallOffsetPx == 0f && wallPage == committed;
+    }
+
+    /**
      * How far the canvas reaches up under the top edge's stack: the status bar's band while it
      * reaches ({@link #canvasReachesUnderBar}) and the bar stands on the top edge of the layout on
      * screen, and 0 otherwise. Every other band on the top edge keeps its room.

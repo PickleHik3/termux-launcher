@@ -78,6 +78,22 @@ public class PageTopInsetsTest {
     }
 
     @Test
+    public void landingOnHomeFromTheWorkspaceKeepsTheReachUntilHomeIsCommitted() {
+        // The wall's last offset callback of a landing: still, at 0, on Home, while the chrome
+        // is still committed to the Workspace. Read as at rest there, Home's top inset flipped
+        // to 0 for one layout pass (widgets a bar band low) and back once Home was committed.
+        boolean landing = PageTopInsets.wallAtRestOn(WINDOW, false, 0f, HOME);
+        assertFalse("not at rest on the Workspace while the wall stands on Home", landing);
+        assertTrue(PageTopInsets.canvasReachesUnderBar(WINDOW, landing));
+        assertTrue("committed to Home", PageTopInsets.canvasReachesUnderBar(HOME,
+            PageTopInsets.wallAtRestOn(HOME, false, 0f, HOME)));
+        assertTrue("at rest on the Workspace itself",
+            PageTopInsets.wallAtRestOn(WINDOW, false, 0f, WINDOW));
+        assertFalse("moving", PageTopInsets.wallAtRestOn(WINDOW, true, 0f, WINDOW));
+        assertFalse("off its rest", PageTopInsets.wallAtRestOn(WINDOW, false, 12f, WINDOW));
+    }
+
+    @Test
     public void aHomePageStartsAtItsOwnInsetAndAWindowAtTheWorkspaces() {
         assertEquals(0, PageTopInsets.pageTopInsetPx(HOME, BAR, 0));
         assertEquals(BAR, PageTopInsets.pageTopInsetPx(HOME, 0, BAR));
