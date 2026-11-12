@@ -281,8 +281,8 @@ public class DisplayTextFocusPolicyTest {
         assertEquals("not yet", List.of("show"), keyboard.calls);
         assertEquals(State.AUTO_OPEN, policy.state());
         assertEquals(DisplayTextFocusPolicy.HIDE_GRACE_MS, scheduler.delayMs);
-        assertEquals(150L, DisplayTextFocusPolicy.HIDE_GRACE_MS);
-        assertTrue(trace.contains("focus out -> hide in 150 ms"));
+        assertEquals(300L, DisplayTextFocusPolicy.HIDE_GRACE_MS);
+        assertTrue(trace.contains("focus out -> hide in 300 ms"));
 
         scheduler.expire();
         assertEquals(State.CLOSED, policy.state());

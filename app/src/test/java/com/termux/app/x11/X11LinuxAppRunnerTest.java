@@ -42,7 +42,8 @@ public class X11LinuxAppRunnerTest {
 
         assertEquals("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n"
-            + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.inputMethodBlock(":1")
+            + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.cursorBlock()
+            + X11LinuxAppRunner.inputMethodBlock(":1")
             + "cd \"$HOME\"\n"
             + "exec firefox --new-window\n", script);
     }
@@ -82,6 +83,37 @@ public class X11LinuxAppRunnerTest {
             .contains("IM_MODULE"));
         assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
             Collections.emptyList(), null).contains("IM_MODULE"));
+    }
+
+    @Test public void aPrefixAppGetsTheCursorLinesBeforeTheInputMethod() {
+        String script = X11LinuxAppRunner.script(app("herdr"), ":1", Collections.emptyList());
+        String block = X11LinuxAppRunner.cursorBlock();
+        assertTrue(script.contains(block));
+        assertTrue(script.indexOf(block)
+            < script.indexOf(X11LinuxAppRunner.inputMethodBlock(":1")));
+    }
+
+    @Test public void aContainerAppAndADesktopAreNotGivenTheCursorLines() {
+        ProotDistro.Container debian =
+            new ProotDistro.Container("debian", temp.getRoot(), "", "");
+        LinuxAppCatalog.LinuxApp inDebian = new LinuxAppCatalog.LinuxApp(debian, "gedit",
+            "gedit", "gedit", "", "", "", false);
+        assertFalse(X11LinuxAppRunner.script(inDebian, ":1", Collections.emptyList())
+            .contains("XCURSOR"));
+        assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
+            Collections.emptyList(), null).contains("XCURSOR"));
+    }
+
+    @Test public void theCursorBlockKeepsWhatIsSetAndOnlyFillsAnEmptyTheme() {
+        String block = X11LinuxAppRunner.cursorBlock();
+        String prefix = com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        assertTrue(block.contains("export XCURSOR_PATH=\"${XCURSOR_PATH:-"));
+        assertTrue(block.contains(prefix + "/share/icons:" + prefix + "/share/pixmaps}"));
+        assertTrue(block.contains("-z \"${XCURSOR_THEME:-}\""));
+        assertTrue(block.contains("'" + prefix + "/share/icons/default'"));
+        assertTrue(block.contains("'" + prefix + "/share/icons/Adwaita/cursors'"));
+        assertTrue(block.contains("export XCURSOR_THEME=Adwaita\n"));
+        assertTrue(block.contains("export XCURSOR_THEME=core\n"));
     }
 
     @Test public void noScriptStartsASoundServerOfItsOwn() {

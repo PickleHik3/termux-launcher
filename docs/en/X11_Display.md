@@ -171,9 +171,9 @@ things) and the display server passes that name on. Only the name seen in the mo
 counts, so a pointer crossing a text field on its way somewhere else opens nothing. An app that
 never asks for a text cursor, or a session with no cursor theme installed, cannot be recognised
 this way; the keyboard key, the display's Back button and the signal below all still work.
-GTK and Qt apps pick up the Adwaita theme that ships with them; core X apps such as xterm only
-use it with `XCURSOR_THEME=Adwaita` in their environment (or a `default` cursor theme that
-inherits it).
+GTK and Qt apps pick up the Adwaita theme that ships with them. Apps opened from the drawer get
+the Adwaita cursors when they are installed, and a `default` cursor theme of your own wins. Apps
+you start from a terminal still need `XCURSOR_THEME=Adwaita` in their environment.
 
 **Your input method's own focus.** Exact, and on by itself once fcitx5 is installed. fcitx5 knows
 when a text field takes focus and when it loses it, whether you tapped, pressed Tab, or a dialog
@@ -204,7 +204,7 @@ passes them on. This is not yet device-verified.
 launcher while you are on the display window, until you leave it or switch the setting off:
 
 - a field taking focus brings the keyboard up, tap or no tap;
-- a field losing focus puts it away 150 ms later, unless another field takes focus first, so
+- a field losing focus puts it away 300 ms later, unless another field takes focus first, so
   moving from one field to the next leaves the keyboard where it is;
 - a tap over a text cursor only brings the keyboard back if a field has focus, so tapping a
   terminal or the text of a page no longer opens it;
@@ -213,7 +213,7 @@ launcher while you are on the display window, until you leave it or switch the s
 Until the first focus signal of a visit, and always without fcitx5, the pointer's shape decides as
 above. A keyboard you opened yourself, and a keyboard you switched off, win over focus as they do
 over taps. Under `adb logcat -s X11TextFocus` every decision names the signal behind it:
-`focus in -> show`, `focus out -> hide in 150 ms`, `hide cancelled: focus in`,
+`focus in -> show`, `focus out -> hide in 300 ms`, `hide cancelled: focus in`,
 `tap over xterm ignored: no focus`.
 
 This section is for the Termux edition. On the Nix edition the helper is not started yet; see

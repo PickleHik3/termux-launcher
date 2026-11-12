@@ -209,10 +209,13 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_X11_DISPLAY_AUTOSTART = false;
 
-        /** Put {@code DISPLAY} into new shells while a display is running. Off, as Termux:X11 never did it. */
+        /**
+         * Put {@code DISPLAY} into new shells while a display is running. On: an X app started
+         * from a launcher terminal finds the display rather than running with no window.
+         */
         public static final String KEY_X11_SET_DISPLAY_ENV = "x11_set_display_env";
 
-        public static final boolean DEFAULT_X11_SET_DISPLAY_ENV = false;
+        public static final boolean DEFAULT_X11_SET_DISPLAY_ENV = true;
 
         /** The X screen's dots per inch when the launcher starts the server; 0 leaves it to the server. */
         public static final String KEY_X11_DISPLAY_DPI = "x11_display_dpi";
