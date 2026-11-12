@@ -117,6 +117,9 @@ public final class SurfaceStandIn {
     private int mCachedWidth;
     private int mCachedHeight;
     private long mCachedAtMs;
+    /** The live surface's size when its copy was asked for; see {@link #holdsSurfaceSize}. */
+    private int mHeldWidth;
+    private int mHeldHeight;
 
     /**
      * A motion that moves the page begins.
@@ -149,6 +152,8 @@ public final class SurfaceStandIn {
         if (width <= 0 || height <= 0) return Begin.NOTHING;
         if (surfaceLive) {
             mGeneration++;
+            mHeldWidth = width;
+            mHeldHeight = height;
             mState = State.COPYING;
             return Begin.COPY;
         }
@@ -313,6 +318,27 @@ public final class SurfaceStandIn {
      */
     public boolean isStill() {
         return mState == State.SHOWN || mState == State.FLAT;
+    }
+
+    /**
+     * Whether the live surface must keep the size it had when the motion began
+     * ({@link #heldWidth} by {@link #heldHeight}): from the copy's request until the surface is
+     * down. A surface resized then — the keyboard leaving as the wall jumps — has no buffer until
+     * X draws one at the new size, and for those frames the window shows the bare wallpaper
+     * through its hole, before the stand-in's first frame reaches the screen to cover it.
+     */
+    public boolean holdsSurfaceSize() {
+        return mState == State.COPYING || mState == State.COVERING;
+    }
+
+    /** The width {@link #holdsSurfaceSize} keeps the surface at. */
+    public int heldWidth() {
+        return mHeldWidth;
+    }
+
+    /** The height {@link #holdsSurfaceSize} keeps the surface at. */
+    public int heldHeight() {
+        return mHeldHeight;
     }
 
     /** Whether the stand-in view is up, over the surface or in its place. */

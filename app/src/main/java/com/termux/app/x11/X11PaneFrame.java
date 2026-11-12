@@ -181,6 +181,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private boolean mEnabled = true;
     /** The display's size while the frame around it animates; unset when it follows the frame. */
     private int mFrozenWidth = -1, mFrozenHeight = -1;
+    /**
+     * The last layout held the display at the still's size while the frame's differed; letting go
+     * then asks for a new pass, so the display takes the frame's size.
+     */
+    private boolean mStillSizeHeldAtLayout;
     /** Lets go of a {@link #holdHostSizeOverNextLayout} hold; null while there is none. */
     @Nullable private Runnable mNextLayoutRelease;
     /** Watches for the frame's new height under that hold; null along with it. */
@@ -772,6 +777,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         if (running) return;
         // No picture of a display that is gone is worth keeping; one standing in goes at rest.
         if (mStill.drop()) recycleStill();
+        followFrameAfterStill();
         // Nothing to scale once the display is gone.
         if (mRail != null) mRail.dismiss();
         applyEmptyState();
@@ -1004,6 +1010,13 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         requestLayout();
     }
 
+    /** The still's record, for the tests to walk it through a motion without a surface. */
+    @VisibleForTesting
+    @NonNull
+    SurfaceStandIn still() {
+        return mStill;
+    }
+
     /** True while the display keeps a size of its own rather than following the frame. */
     @VisibleForTesting
     boolean isHostSizeHeld() {
@@ -1086,9 +1099,9 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Override
     protected void measureChildWithMargins(View child, int parentWidthMeasureSpec, int widthUsed,
                                            int parentHeightMeasureSpec, int heightUsed) {
-        if (mFrozenWidth > 0 && child.getId() == R.id.x11_display_view) {
-            child.measure(MeasureSpec.makeMeasureSpec(mFrozenWidth, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(mFrozenHeight, MeasureSpec.EXACTLY));
+        if (heldDisplayWidth() > 0 && child.getId() == R.id.x11_display_view) {
+            child.measure(MeasureSpec.makeMeasureSpec(heldDisplayWidth(), MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(heldDisplayHeight(), MeasureSpec.EXACTLY));
             return;
         }
         super.measureChildWithMargins(child, parentWidthMeasureSpec, widthUsed,
@@ -1100,11 +1113,43 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         // A frame measured other than exactly re-measures its match-parent children directly,
         // past measureChildWithMargins; the wall measures its pages exactly, so this is a guard.
-        if (mFrozenWidth > 0 && mDisplay != null
-            && (mDisplay.getMeasuredWidth() != mFrozenWidth
-                || mDisplay.getMeasuredHeight() != mFrozenHeight)) {
-            mDisplay.measure(MeasureSpec.makeMeasureSpec(mFrozenWidth, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(mFrozenHeight, MeasureSpec.EXACTLY));
+        if (heldDisplayWidth() > 0 && mDisplay != null
+            && (mDisplay.getMeasuredWidth() != heldDisplayWidth()
+                || mDisplay.getMeasuredHeight() != heldDisplayHeight())) {
+            mDisplay.measure(MeasureSpec.makeMeasureSpec(heldDisplayWidth(), MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(heldDisplayHeight(), MeasureSpec.EXACTLY));
+        }
+    }
+
+    /**
+     * The width the display is held at, or -1 where it follows the frame: a host resize's hold
+     * first, else the still's ({@link SurfaceStandIn#holdsSurfaceSize}), which keeps the live
+     * surface's buffer as it is while the stand-in goes up over it.
+     */
+    private int heldDisplayWidth() {
+        if (mFrozenWidth > 0) return mFrozenWidth;
+        return mStill.holdsSurfaceSize() ? mStill.heldWidth() : -1;
+    }
+
+    /** The height that goes with {@link #heldDisplayWidth()}. */
+    private int heldDisplayHeight() {
+        if (mFrozenWidth > 0) return mFrozenHeight;
+        return mStill.holdsSurfaceSize() ? mStill.heldHeight() : -1;
+    }
+
+    /** Whether only the still holds the display's size, so the stand-in fills the frame instead. */
+    private boolean isSizeHeldForStill() {
+        return mFrozenWidth <= 0 && mStill.holdsSurfaceSize();
+    }
+
+    /**
+     * The still let go of the display's size (the surface went down, or the motion ended before it
+     * did): the display takes the frame's size again in the next pass.
+     */
+    private void followFrameAfterStill() {
+        if (mStillSizeHeldAtLayout && !mStill.holdsSurfaceSize()) {
+            mStillSizeHeldAtLayout = false;
+            requestLayout();
         }
     }
 
@@ -1121,8 +1166,13 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             mDisplay.layout(l, b - mFrozenHeight, l + mFrozenWidth, b);
         }
         // The stand-in sits exactly where the surface does, frozen or not. It is only ever made
-        // INVISIBLE, never GONE, so showing it costs no layout mid-motion.
-        if (mStandIn != null && mDisplay != null) {
+        // INVISIBLE, never GONE, so showing it costs no layout mid-motion. While only the still
+        // holds the surface's size it fills the frame (where it was laid), stretching the copy, so
+        // the room the frame gained has a picture over it rather than a hole.
+        mStillSizeHeldAtLayout = isSizeHeldForStill()
+            && (right - left - getPaddingLeft() - getPaddingRight() != mStill.heldWidth()
+                || bottom - top - getPaddingTop() - getPaddingBottom() != mStill.heldHeight());
+        if (mStandIn != null && mDisplay != null && !mStillSizeHeldAtLayout) {
             mStandIn.layout(mDisplay.getLeft(), mDisplay.getTop(), mDisplay.getRight(),
                 mDisplay.getBottom());
         }
@@ -1288,6 +1338,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             default:
                 break;
         }
+        followFrameAfterStill();
     }
 
     @Override
@@ -1367,6 +1418,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             if (bitmap != null && bitmap != mStillBitmap) bitmap.recycle();
             // The motion goes on as it began; nothing will be up to tell the wall about.
             if (mStill.state() != SurfaceStandIn.State.COPYING) mOnStill = null;
+            followFrameAfterStill();
             return;
         }
         // The one copy kept from here.
@@ -1466,6 +1518,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             + (android.os.SystemClock.uptimeMillis() - mDspHoldMs));
         if (!dspCovered) return;
         applyDisplaySurfaceVisibility();
+        // The surface is down: the display may take the frame's size again.
+        followFrameAfterStill();
         Runnable ready = mOnStill;
         mOnStill = null;
         if (ready != null) ready.run();
@@ -1515,6 +1569,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         }
         recycleStill();
         applyDisplaySurfaceVisibility();
+        followFrameAfterStill();
     }
 
     /** DSPGAP (temporary): the frame's state in one line, for the per-frame watch. */
