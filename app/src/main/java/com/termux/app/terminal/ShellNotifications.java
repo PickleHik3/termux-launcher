@@ -321,6 +321,21 @@ public final class ShellNotifications {
     }
 
     /** Takes a window's notification down, and the summary with the last one. */
+    /** Shows the window's notification again exactly as it is; false when it is not up. */
+    static boolean repostUnchanged(@NonNull Context context, @NonNull String windowKey) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        if (manager == null) return false;
+        String tag = TAG_PREFIX + windowKey;
+        for (StatusBarNotification active : manager.getActiveNotifications()) {
+            if (tag.equals(active.getTag()) && active.getId() == NOTIFICATION_ID) {
+                manager.notify(tag, NOTIFICATION_ID, active.getNotification());
+                return true;
+            }
+        }
+        return false;
+    }
+
     static void takeDown(@NonNull Context context, @NonNull String windowKey, int remaining) {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager == null) return;
@@ -516,8 +531,14 @@ public final class ShellNotifications {
             android.os.Bundle results = RemoteInput.getResultsFromIntent(intent);
             CharSequence typed = results == null ? null : results.getCharSequence(REPLY_KEY);
             String windowKey = intent.getStringExtra(EXTRA_WINDOW_KEY);
-            if (typed == null || windowKey == null) return;
+            if (windowKey == null) return;
             Context app = context.getApplicationContext();
+            // Nothing typed: nothing is sent, and the notification is shown again as it was, which
+            // is what stops the shade's reply spinner.
+            if (typed == null || TerminalReplyGuard.replyText(typed.toString()).isEmpty()) {
+                repostUnchanged(app, windowKey);
+                return;
+            }
             String handle = intent.getStringExtra(EXTRA_SESSION_HANDLE);
             String tag = intent.getStringExtra(EXTRA_NOTIFICATION_TAG);
             int capturedPgid = intent.getIntExtra(EXTRA_REPLY_PGID, 0);
