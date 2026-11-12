@@ -72,7 +72,8 @@ public final class ProgramStatusLabel {
         @NonNull ProgramStatus record, @Nullable String resolvedApp, @NonNull String windowTitle) {
         TerminalWindowBar.WindowItem.Status.Kind kind = kindOf(record.state);
         if (kind == null) return null;
-        return new TerminalWindowBar.WindowItem.Status(kind, text(record, resolvedApp, windowTitle));
+        return new TerminalWindowBar.WindowItem.Status(kind, text(record, resolvedApp, windowTitle),
+            pillText(record, resolvedApp, windowTitle));
     }
 
     @Nullable
@@ -98,6 +99,20 @@ public final class ProgramStatusLabel {
             || record.state == ProgramStatus.State.BLOCKED;
         if (percent && record.progress >= 0) out.append(' ').append(record.progress).append('%');
         return out.toString();
+    }
+
+    /**
+     * What the pill shows: the name, plus " NN%" for working and blocked records that carry a
+     * percentage. The state is the pill's colour, so the word is left to the spoken reading.
+     */
+    @NonNull
+    public static String pillText(@NonNull ProgramStatus record, @Nullable String resolvedApp,
+                                  @NonNull String windowTitle) {
+        String name = cleanName(firstNonEmpty(resolvedApp, record.title, windowTitle));
+        boolean percent = record.state == ProgramStatus.State.WORKING
+            || record.state == ProgramStatus.State.BLOCKED;
+        if (!percent || record.progress < 0) return name;
+        return name.isEmpty() ? record.progress + "%" : name + " " + record.progress + "%";
     }
 
     /** The lower-case word that follows a name. */

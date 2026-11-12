@@ -156,12 +156,19 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             public enum Kind { WORKING, BLOCKED, DONE, ERROR }
 
             @NonNull public final Kind kind;
-            /** The whole pill text, such as "claude needs input 40%". */
+            /** The whole reading, such as "claude needs input 40%": what the pill is read out as. */
             @NonNull public final String text;
+            /** What the pill shows, such as "claude 40%": the colour says the rest. */
+            @NonNull public final String pill;
 
             public Status(@NonNull Kind kind, @NonNull String text) {
+                this(kind, text, text);
+            }
+
+            public Status(@NonNull Kind kind, @NonNull String text, @NonNull String pill) {
                 this.kind = kind;
                 this.text = text;
+                this.pill = pill.isEmpty() ? text : pill;
             }
 
             @Override
@@ -169,12 +176,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 if (this == other) return true;
                 if (!(other instanceof Status)) return false;
                 Status that = (Status) other;
-                return kind == that.kind && text.equals(that.text);
+                return kind == that.kind && text.equals(that.text) && pill.equals(that.pill);
             }
 
             @Override
             public int hashCode() {
-                return 31 * kind.hashCode() + text.hashCode();
+                return 31 * (31 * kind.hashCode() + text.hashCode()) + pill.hashCode();
             }
         }
 
@@ -1497,7 +1504,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     @NonNull
     private CharSequence tabText(@NonNull WindowItem item) {
-        if (item.status != null) return item.status.text;
+        if (item.status != null) return item.status.pill;
         String title = titleOf(item.label);
         return TerminalLabelSymbolSpans.apply(
             com.termux.shared.termux.font.NerdFontSpans.span(getContext(), title), mSymbolMaps);
@@ -1505,7 +1512,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /** The pill's text, and the width that text may take. */
     private void setTitle(@NonNull TextView tab, @NonNull WindowItem item) {
-        // A program's status ("demo working 40%") is a name plus a word that must stay whole.
+        // A program's status ("demo 40%") is a name the pill's colour reads out; it stays whole.
         tab.setMaxWidth(dp(item.status != null ? STATUS_CHIP_MAX_DP
             : WHOLE_NAMES.contains(titleOf(item.label)) ? WIDE_CHIP_MAX_DP : 104));
         tab.setText(tabText(item));

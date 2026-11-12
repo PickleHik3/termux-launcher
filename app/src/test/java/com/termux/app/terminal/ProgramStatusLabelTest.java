@@ -33,6 +33,19 @@ public class ProgramStatusLabelTest {
     }
 
     @Test
+    public void thePillShowsTheNameAndLeavesTheStateToItsColour() {
+        assertEquals("claude-code", ProgramStatusLabel.pillText(record(DONE, -1, "", "claude-code", ""), "claude-code", "w"));
+        assertEquals("claude-code", ProgramStatusLabel.pillText(record(ERROR, 40, "", "claude-code", ""), "claude-code", "w"));
+        assertEquals("a 40%", ProgramStatusLabel.pillText(record(WORKING, 40, "", "a", ""), "a", "w"));
+        assertEquals("a 0%", ProgramStatusLabel.pillText(record(BLOCKED, 0, "", "a", ""), "a", "w"));
+        TerminalWindowBar.WindowItem.Status status =
+            ProgramStatusLabel.statusFor(record(DONE, -1, "", "claude", ""), "claude", "w");
+        assertEquals("claude", status.pill);
+        // Read out whole, so the state is never only a colour.
+        assertEquals("claude done", status.text);
+    }
+
+    @Test
     public void percentOnlyOnWorkingAndBlocked() {
         assertEquals("a working 40%", ProgramStatusLabel.text(record(WORKING, 40, "", "a", ""), "a", "w"));
         assertEquals("a needs input 0%", ProgramStatusLabel.text(record(BLOCKED, 0, "", "a", ""), "a", "w"));
