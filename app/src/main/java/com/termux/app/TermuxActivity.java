@@ -2361,7 +2361,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
         Trace.beginSection("Touch.dispatch");
-        com.termux.app.wall.DspGap.windowTouch(ev);
         try {
             // A display that comes up after the user has started doing something does not pull
             // them over to it (Start in = Display).

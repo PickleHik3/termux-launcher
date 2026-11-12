@@ -76,8 +76,6 @@ public final class DspGap {
         sFrameIndex = 0;
         sWhy = why;
         log("watch-start why=" + why + " {" + probe() + "}");
-        sLastWindow = "";
-        logWindowIfChanged();
         if (!sPosted) {
             sPosted = true;
             Choreographer.getInstance().postFrameCallback(FRAME);
@@ -142,7 +140,6 @@ public final class DspGap {
             long lateUs = SystemClock.uptimeMillis() * 1000L - frameTimeNanos / 1000L;
             log("frame #" + index + " why=" + sWhy + " vsync=" + (frameTimeNanos / 1_000_000L)
                 + " late=" + (lateUs / 1000L) + "ms {" + probe() + "}");
-            logWindowIfChanged();
             WeakReference<View> ref = sTarget;
             View target = ref == null ? null : ref.get();
             if (Build.VERSION.SDK_INT >= 29 && target != null && target.isAttachedToWindow()) {
@@ -157,114 +154,4 @@ public final class DspGap {
             }
         }
     };
-
-    // ---- The touch-down flash (second round) --------------------------------------------------
-
-    /** The window's keyboard-side views, by name, for the window probe and their layout lines. */
-    private static final int[] WINDOW_IDS = {
-        com.termux.R.id.place_extra_keys_host,
-        com.termux.R.id.accessory_keyboard_column,
-        com.termux.R.id.inapp_keyboard_container,
-        com.termux.R.id.inapp_keyboard_view_host,
-        com.termux.R.id.accessory_under_keyboard_stack,
-    };
-    private static final String[] WINDOW_NAMES = {
-        "extraKeys", "kbColumn", "kbContainer", "kbViewHost", "underKbStack",
-    };
-    @Nullable private static WeakReference<View> sRoot;
-    @NonNull private static String sLastWindow = "";
-
-    /**
-     * Every touch the activity receives: an ACTION_DOWN while the Display page is the one on
-     * screen starts a watch, and while watching each down, up and cancel is logged.
-     */
-    public static void windowTouch(@NonNull android.view.MotionEvent ev) {
-        int action = ev.getActionMasked();
-        if (action == android.view.MotionEvent.ACTION_DOWN && displayOnScreen()) {
-            watch("touch-down");
-        }
-        if (!watching()) return;
-        if (action == android.view.MotionEvent.ACTION_DOWN
-            || action == android.view.MotionEvent.ACTION_UP
-            || action == android.view.MotionEvent.ACTION_CANCEL
-            || action == android.view.MotionEvent.ACTION_POINTER_DOWN
-            || action == android.view.MotionEvent.ACTION_POINTER_UP) {
-            log("touch " + android.view.MotionEvent.actionToString(action) + " x="
-                + (int) ev.getRawX() + " y=" + (int) ev.getRawY() + " evt="
-                + ev.getEventTime() + " down=" + ev.getDownTime());
-        }
-    }
-
-    /** The Display page is shown and stands where it rests (not slid off). */
-    private static boolean displayOnScreen() {
-        WeakReference<View> ref = sTarget;
-        View target = ref == null ? null : ref.get();
-        if (target == null || !target.isAttachedToWindow() || !target.isShown()) return false;
-        int[] at = new int[2];
-        target.getLocationOnScreen(at);
-        return Math.abs(at[0] - target.getLeft()) < Math.max(1, target.getWidth() / 4);
-    }
-
-    /** The window's root, for the probe; the keyboard-side views' layout changes are logged. */
-    public static void armWindow(@NonNull View anyInWindow) {
-        View root = anyInWindow.getRootView();
-        if (root == null) return;
-        WeakReference<View> old = sRoot;
-        if (old != null && old.get() == root) return;
-        sRoot = new WeakReference<>(root);
-        for (int i = 0; i < WINDOW_IDS.length; i++) {
-            View v = root.findViewById(WINDOW_IDS[i]);
-            if (v == null) continue;
-            final String name = WINDOW_NAMES[i];
-            v.addOnLayoutChangeListener((view, l, t, r, b, ol, ot, or, ob) -> {
-                if (!watching()) return;
-                if (l == ol && t == ot && r == or && b == ob) return;
-                log("view-layout " + name + " " + l + "," + t + "," + r + "," + b + " <- " + ol
-                    + "," + ot + "," + or + "," + ob + " vis=" + view.getVisibility());
-            });
-        }
-    }
-
-    /** The window probe: insets and the keyboard-side views, logged when it changed. */
-    private static void logWindowIfChanged() {
-        String now = windowState();
-        if (now.equals(sLastWindow)) return;
-        sLastWindow = now;
-        log("win-probe {" + now + "}");
-    }
-
-    @NonNull
-    private static String windowState() {
-        WeakReference<View> ref = sRoot;
-        View root = ref == null ? null : ref.get();
-        if (root == null) return "no-root";
-        StringBuilder out = new StringBuilder();
-        android.view.WindowInsets insets = root.getRootWindowInsets();
-        if (insets == null) {
-            out.append("insets=null");
-        } else if (Build.VERSION.SDK_INT >= 30) {
-            android.graphics.Insets ime = insets.getInsets(android.view.WindowInsets.Type.ime());
-            android.graphics.Insets nav =
-                insets.getInsets(android.view.WindowInsets.Type.navigationBars());
-            out.append("ime=").append(insets.isVisible(android.view.WindowInsets.Type.ime())
-                ? "shown" : "hidden").append(" imeB=").append(ime.bottom)
-                .append(" navB=").append(nav.bottom);
-        } else {
-            out.append("sysB=").append(insets.getSystemWindowInsetBottom());
-        }
-        int[] at = new int[2];
-        for (int i = 0; i < WINDOW_IDS.length; i++) {
-            View v = root.findViewById(WINDOW_IDS[i]);
-            out.append(' ').append(WINDOW_NAMES[i]).append('=');
-            if (v == null) {
-                out.append("none");
-                continue;
-            }
-            v.getLocationInWindow(at);
-            out.append('v').append(v.getVisibility()).append(v.isShown() ? "s" : "")
-                .append('@').append(at[1]).append('+').append(v.getHeight());
-            if (v.getTranslationY() != 0f) out.append(" ty").append(v.getTranslationY());
-        }
-        return out.toString();
-    }
 }
