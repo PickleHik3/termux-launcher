@@ -49,7 +49,8 @@ public final class X11AppSettingsStore {
     public void setTouchMode(@NonNull String appId, @Nullable String mode) {
         Map<String, X11AppSettings.Overrides> all = load();
         X11AppSettings.Overrides old = all.get(appId);
-        put(all, appId, new X11AppSettings.Overrides(mode, old == null ? null : old.scale));
+        put(all, appId, new X11AppSettings.Overrides(mode, old == null ? null : old.scale,
+            old == null ? null : old.gpu));
     }
 
     /** The app's scale, or null to follow the display. */
@@ -63,7 +64,23 @@ public final class X11AppSettingsStore {
     public void setScale(@NonNull String appId, @Nullable String scale) {
         Map<String, X11AppSettings.Overrides> all = load();
         X11AppSettings.Overrides old = all.get(appId);
-        put(all, appId, new X11AppSettings.Overrides(old == null ? null : old.touchMode, scale));
+        put(all, appId, new X11AppSettings.Overrides(old == null ? null : old.touchMode, scale,
+            old == null ? null : old.gpu));
+    }
+
+    /** The app's own GPU profile id (never software, see {@link #drawsInSoftware}), or null to follow. */
+    @Nullable
+    public String gpuProfile(@NonNull String appId) {
+        X11AppSettings.Overrides o = load().get(appId);
+        return o == null ? null : o.gpu;
+    }
+
+    /** Null, an unknown id or software clears it. */
+    public void setGpuProfile(@NonNull String appId, @Nullable String profileId) {
+        Map<String, X11AppSettings.Overrides> all = load();
+        X11AppSettings.Overrides old = all.get(appId);
+        put(all, appId, new X11AppSettings.Overrides(old == null ? null : old.touchMode,
+            old == null ? null : old.scale, profileId));
     }
 
     public boolean drawsInSoftware(@NonNull String appId) {

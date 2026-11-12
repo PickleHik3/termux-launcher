@@ -48,11 +48,13 @@ final class DisplayFrontAppTouchMode {
     /**
      * The decision: the override for a window of {@code wmClass}, given the catalogue's apps and
      * a lookup of an app's stored override; null for an empty class, an unknown app, or an app
-     * with no valid override.
+     * with no valid override, and for every window while a desktop session runs
+     * ({@code desktopRunning}): its apps follow the display whatever is in front.
      */
     @Nullable
     static String decide(@NonNull List<LinuxAppCatalog.LinuxApp> apps, @Nullable String wmClass,
-                         @NonNull Function<String, String> overrideOf) {
+                         @NonNull Function<String, String> overrideOf, boolean desktopRunning) {
+        if (desktopRunning) return null;
         String appId = X11AppSettingsResolver.appIdForWindowClass(apps, wmClass);
         if (appId == null) return null;
         String mode = overrideOf.apply(appId);
@@ -124,6 +126,6 @@ final class DisplayFrontAppTouchMode {
         if (s == null) store = s = new X11AppSettingsStore(context);
         List<LinuxAppCatalog.LinuxApp> list = apps;
         if (list == null || rescan) apps = list = LinuxAppCatalog.scan(LinuxAppCatalog.roots());
-        return decide(list, cls, s::touchMode);
+        return decide(list, cls, s::touchMode, X11LinuxAppRunner.isDesktopRunning());
     }
 }

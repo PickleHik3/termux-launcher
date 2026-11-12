@@ -102,6 +102,31 @@ public class X11AppPreferencesFragmentTest {
     }
 
     @Test
+    public void graphicsOffersProfilesAndTheyReplaceSoftware() {
+        X11AppPreferencesFragment page = launch(forApp());
+        ListPreference row = page.findPreference(X11AppPreferencesFragment.KEY_GRAPHICS);
+        assertTrue(java.util.Arrays.asList(row.getEntryValues()).contains("virgl"));
+        pick(page, X11AppPreferencesFragment.KEY_GRAPHICS, X11AppPreferencesFragment.SOFTWARE);
+        pick(page, X11AppPreferencesFragment.KEY_GRAPHICS, "virgl");
+        assertEquals("virgl", store.gpuProfile(ID));
+        assertFalse(store.drawsInSoftware(ID));
+        assertEquals("virgl", row.getValue());
+        pick(page, X11AppPreferencesFragment.KEY_GRAPHICS, X11AppPreferencesFragment.FOLLOW);
+        assertNull(store.gpuProfile(ID));
+    }
+
+    @Test
+    public void aDesktopPageHasNeitherGraphicsNorScale() {
+        Bundle args = forApp();
+        args.putBoolean(X11AppPreferencesFragment.ARG_DESKTOP, true);
+        X11AppPreferencesFragment page = launch(args);
+        assertNull(page.findPreference(X11AppPreferencesFragment.KEY_GRAPHICS));
+        assertNull(page.findPreference(X11AppPreferencesFragment.KEY_SCALE));
+        assertNotNull(page.findPreference(X11AppPreferencesFragment.KEY_TOUCH));
+        assertNotNull(page.findPreference(X11AppPreferencesFragment.KEY_DRAWER));
+    }
+
+    @Test
     public void touchModeWritesAndFollowClears() {
         X11AppPreferencesFragment page = launch(forApp());
         pick(page, X11AppPreferencesFragment.KEY_TOUCH, "3");

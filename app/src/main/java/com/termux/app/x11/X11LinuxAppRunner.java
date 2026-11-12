@@ -179,10 +179,38 @@ public final class X11LinuxAppRunner {
     @NonNull private final List<QueuedScript> queued = new java.util.ArrayList<>();
     @NonNull private final Handler handler = new Handler(Looper.getMainLooper());
     @NonNull private final X11ElectronSandboxStore sandboxStore;
+    @NonNull private final X11AppSettingsStore appSettings;
     @NonNull private final X11GpuProfileStore profileStore;
     @Nullable private LinuxAppCatalog.LinuxApp pending;
     /** The desktop holding the display, from the moment its script starts until it exits. */
     @Nullable private LinuxAppCatalog.LinuxApp runningSession;
+    /** Mirrors {@link #runningSession} != null for readers off the main thread (the front-window touch lookup). */
+    private static volatile boolean sDesktopRunning;
+
+    /** Whether a desktop session is running on the display: per-app settings stay out of it. */
+    public static boolean isDesktopRunning() {
+        return sDesktopRunning;
+    }
+
+    /**
+     * Sets the running desktop, and when that changes whether one runs, tells the display to
+     * re-read its preferences: the per-app touch mode applies again the moment the desktop ends.
+     */
+    private void setRunningSession(@Nullable LinuxAppCatalog.LinuxApp app) {
+        runningSession = app;
+        boolean running = app != null;
+        if (running == sDesktopRunning) return;
+        sDesktopRunning = running;
+        try {
+            android.content.Intent intent = new android.content.Intent(
+                com.termux.x11.LoriePreferences.ACTION_PREFERENCES_CHANGED);
+            intent.putExtra("key", "x11_desktop_session");
+            intent.setPackage(context.getPackageName());
+            context.sendBroadcast(intent);
+        } catch (RuntimeException ignored) {
+            // No broadcast, no refresh until the next window change; never a failed launch.
+        }
+    }
     /** The desktop waiting for {@link #runningSession} to be stopped so it can have the display. */
     @Nullable private LinuxAppCatalog.LinuxApp takeOver;
     /** Whether this server start has already been looked at for a missing window manager. */
@@ -204,6 +232,7 @@ public final class X11LinuxAppRunner {
         this.context = context.getApplicationContext();
         this.host = host;
         this.sandboxStore = new X11ElectronSandboxStore(this.context);
+        this.appSettings = new X11AppSettingsStore(this.context);
         this.profileStore = new X11GpuProfileStore(this.context);
     }
 
@@ -452,7 +481,7 @@ public final class X11LinuxAppRunner {
         queued.clear();
         // A desktop on the display outlives this runner — the display does too — but nothing here
         // will hear of its exit any more, so the bookkeeping goes rather than growing stale.
-        runningSession = null;
+        setRunningSession(null);
         takeOver = null;
         // Cancels giveUp and any quick-fail watch left over from a launch this runner will never
         // hear the result of.
@@ -483,7 +512,7 @@ public final class X11LinuxAppRunner {
         boolean started = runScript(stopSessionScript(), exitCode -> {
             LinuxAppCatalog.LinuxApp next = takeOver;
             takeOver = null;
-            runningSession = null;
+            setRunningSession(null);
             if (next != null) run(next);
         });
         if (started) return;
@@ -499,7 +528,7 @@ public final class X11LinuxAppRunner {
     private void onSessionExited(@NonNull LinuxAppCatalog.LinuxApp app, int exitCode,
                                  @Nullable String windowManagerRestart) {
         if (runningSession != app) return;
-        runningSession = null;
+        setRunningSession(null);
         Logger.logInfo(LOG_TAG, "Desktop " + app.id + " ended with " + exitCode);
         // D1: the manager that stood down comes back — unless another desktop is on its way in,
         // which would only have to stand it down again.
@@ -526,9 +555,13 @@ public final class X11LinuxAppRunner {
             // desktop has ever heard of, so the whole retry stays out of a session's way.
             boolean noSandbox = !app.session && shouldStartWithNoSandbox(app);
             String display = X11DisplayHostController.displayName();
-            GpuChoice gpu = installedEnv(X11GpuProbe.probe(context), profileStore.pick(),
-                profileStore.drawsInSoftware(app.id));
-            List<String> env = gpu.env;
+            // The app's own graphics and scale (a desktop has neither: it follows the display).
+            GpuChoice gpu = installedEnv(X11GpuProbe.probe(context),
+                X11AppLaunchEnv.gpuPick(app.session, profileStore.pick(),
+                    appSettings.gpuProfile(app.id)),
+                X11AppLaunchEnv.drawsInSoftware(app.session, profileStore.drawsInSoftware(app.id)));
+            List<String> env = new java.util.ArrayList<>(gpu.env);
+            env.addAll(X11AppLaunchEnv.scaleLines(app.session, appSettings.scale(app.id)));
             // Reading the setting and looking for the binary are both file work, so they happen
             // here beside the probe rather than on the main thread when the desktop ends.
             String configured = app.session || displayJustStarted ? configuredWindowManager() : "";
@@ -668,7 +701,7 @@ public final class X11LinuxAppRunner {
                 resolve(isQuickFailure(exitCode));
             });
             if (started) {
-                if (app.session) runningSession = app;
+                if (app.session) setRunningSession(app);
                 handler.postDelayed(timeout, QUICK_FAIL_MS);
                 return;
             }

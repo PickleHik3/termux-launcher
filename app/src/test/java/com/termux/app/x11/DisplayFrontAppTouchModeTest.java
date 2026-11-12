@@ -26,33 +26,38 @@ public class DisplayFrontAppTouchModeTest {
 
     @Test public void appWithOverrideGivesIt() {
         store.put("firefox.desktop", "3");
-        assertEquals("3", DisplayFrontAppTouchMode.decide(apps, "Firefox", store::get));
+        assertEquals("3", DisplayFrontAppTouchMode.decide(apps, "Firefox", store::get, false));
+    }
+
+    @Test public void aRunningDesktopIgnoresEveryAppOverride() {
+        store.put("firefox.desktop", "3");
+        assertNull(DisplayFrontAppTouchMode.decide(apps, "Firefox", store::get, true));
     }
 
     @Test public void appWithoutOverrideFollowsDisplay() {
         store.put("firefox.desktop", "3");
-        assertNull(DisplayFrontAppTouchMode.decide(apps, "Gimp", store::get));
+        assertNull(DisplayFrontAppTouchMode.decide(apps, "Gimp", store::get, false));
     }
 
     @Test public void invalidStoredModeFollowsDisplay() {
         store.put("gimp.desktop", "9");
-        assertNull(DisplayFrontAppTouchMode.decide(apps, "Gimp", store::get));
+        assertNull(DisplayFrontAppTouchMode.decide(apps, "Gimp", store::get, false));
     }
 
     @Test public void unknownClassFollowsDisplay() {
         store.put("firefox.desktop", "2");
-        assertNull(DisplayFrontAppTouchMode.decide(apps, "Nothing", store::get));
+        assertNull(DisplayFrontAppTouchMode.decide(apps, "Nothing", store::get, false));
     }
 
     @Test public void emptyClassFollowsDisplay() {
         store.put("firefox.desktop", "2");
-        assertNull(DisplayFrontAppTouchMode.decide(apps, "", store::get));
-        assertNull(DisplayFrontAppTouchMode.decide(apps, null, store::get));
-        assertNull(DisplayFrontAppTouchMode.decide(Collections.emptyList(), "Firefox", store::get));
+        assertNull(DisplayFrontAppTouchMode.decide(apps, "", store::get, false));
+        assertNull(DisplayFrontAppTouchMode.decide(apps, null, store::get, false));
+        assertNull(DisplayFrontAppTouchMode.decide(Collections.emptyList(), "Firefox", store::get, false));
     }
 
     @Test public void containerAppIdIsLookedUpWhole() {
         store.put("arch:inkscape.desktop", "2");
-        assertEquals("2", DisplayFrontAppTouchMode.decide(apps, "Inkscape", store::get));
+        assertEquals("2", DisplayFrontAppTouchMode.decide(apps, "Inkscape", store::get, false));
     }
 }
