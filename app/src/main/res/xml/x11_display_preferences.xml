@@ -23,10 +23,10 @@
             app:summary="@string/settings_x11_gpu_entry_summary"
             app:fragment="com.termux.app.fragments.settings.termux.GraphicsAccelerationFragment" />
         <Preference
-            app:key="x11_hidden_apps"
-            app:title="@string/settings_x11_hidden_apps_title"
-            app:summary="@string/settings_x11_hidden_apps_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.HiddenAppsPreferencesFragment" />
+            app:key="x11_apps"
+            app:title="@string/settings_x11_apps_title"
+            app:summary="@string/settings_x11_apps_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11AppsPreferencesFragment" />
     </PreferenceCategory>
 
     <!-- The launcher's sound server and media controls (project-docs/active/launcher-sound-2026-10-25.md).

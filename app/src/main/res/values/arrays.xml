@@ -445,4 +445,50 @@
         <item>crt_material</item>
         <item>tft</item>
     </string-array>
+    <string-array name="settings_x11_app_graphics_entries">
+        <item>@string/settings_x11_app_follow</item>
+        <item>@string/settings_x11_app_graphics_software</item>
+    </string-array>
+    <string-array name="settings_x11_app_graphics_values">
+        <item>follow</item>
+        <item>software</item>
+    </string-array>
+    <string-array name="settings_x11_app_touch_entries">
+        <item>@string/settings_x11_app_follow</item>
+        <item>@string/settings_x11_app_touch_trackpad</item>
+        <item>@string/settings_x11_app_touch_touch</item>
+        <item>@string/settings_x11_app_touch_direct</item>
+    </string-array>
+    <string-array name="settings_x11_app_touch_values">
+        <item>follow</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </string-array>
+    <string-array name="settings_x11_app_scale_entries">
+        <item>@string/settings_x11_app_follow</item>
+        <item>1×</item>
+        <item>1.25×</item>
+        <item>1.5×</item>
+        <item>2×</item>
+        <item>2.5×</item>
+        <item>3×</item>
+    </string-array>
+    <string-array name="settings_x11_app_scale_values">
+        <item>follow</item>
+        <item>1</item>
+        <item>1.25</item>
+        <item>1.5</item>
+        <item>2</item>
+        <item>2.5</item>
+        <item>3</item>
+    </string-array>
+    <string-array name="settings_x11_app_drawer_entries">
+        <item>@string/settings_x11_app_follow</item>
+        <item>@string/settings_x11_app_drawer_hide</item>
+    </string-array>
+    <string-array name="settings_x11_app_drawer_values">
+        <item>follow</item>
+        <item>hide</item>
+    </string-array>
 </resources>
