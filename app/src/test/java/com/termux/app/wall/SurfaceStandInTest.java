@@ -23,6 +23,7 @@ public class SurfaceStandInTest {
         assertEquals(SurfaceStandIn.Begin.COPY, still.begin(true, true, W, H, nowMs));
         assertEquals(SurfaceStandIn.Copied.SHOW, still.copied(still.copyGeneration(),
             still.copyEpoch(), true, W, H, nowMs));
+        assertTrue(still.covered());
     }
 
     /** The same, then at rest on screen and swapped back: the copy is kept, nothing stands in. */
@@ -39,9 +40,70 @@ public class SurfaceStandInTest {
         assertFalse(still.isStandInShown());
         assertEquals(SurfaceStandIn.Copied.SHOW, still.copied(still.copyGeneration(),
             still.copyEpoch(), true, W, H, 16L));
-        assertTrue("the stand-in is up: the surface goes down and the page takes a layer",
-            still.isStill());
         assertTrue(still.isStandInShown());
+        assertFalse("the surface is still up and the page still flat", still.isStill());
+        assertTrue(still.covered());
+        assertTrue("the stand-in is covering: the surface goes down and the page takes a layer",
+            still.isStill());
+    }
+
+    private void landCopy(long nowMs) {
+        assertEquals(SurfaceStandIn.Begin.COPY, still.begin(true, true, W, H, nowMs));
+        assertEquals(SurfaceStandIn.Copied.SHOW, still.copied(still.copyGeneration(),
+            still.copyEpoch(), true, W, H, nowMs));
+    }
+
+    @Test
+    public void theStandInIsShownBeforeTheSurfaceGoesDown() {
+        landCopy(0L);
+        assertEquals(SurfaceStandIn.State.COVERING, still.state());
+        assertTrue(still.isStandInShown());
+        assertFalse(still.isStill());
+    }
+
+    @Test
+    public void coveredASecondTimeOrAfterRestDoesNothing() {
+        landCopy(0L);
+        assertTrue(still.covered());
+        assertFalse(still.covered());
+        assertEquals(SurfaceStandIn.State.SHOWN, still.state());
+        assertEquals(SurfaceStandIn.Rest.REMOVE, still.rest(false));
+        assertFalse("a late callback after rest is a no-op", still.covered());
+        assertEquals(SurfaceStandIn.State.IDLE, still.state());
+    }
+
+    @Test
+    public void restWhileCoveringTakesTheStandInDownAndKeepsTheCopy() {
+        landCopy(0L);
+        assertEquals(SurfaceStandIn.Rest.REMOVE, still.rest(true));
+        assertEquals(SurfaceStandIn.State.IDLE, still.state());
+        assertTrue(still.hasCache());
+        assertFalse(still.isStandInShown());
+    }
+
+    @Test
+    public void aMotionBeginningWhileCoveringKeepsItAndStaysNotStill() {
+        landCopy(0L);
+        assertEquals(SurfaceStandIn.Begin.KEEP, still.begin(true, true, W, H, 10L));
+        assertEquals(SurfaceStandIn.State.COVERING, still.state());
+        assertFalse(still.isStill());
+    }
+
+    @Test
+    public void dropWhileCoveringLeavesTheStandInUpUntilRest() {
+        landCopy(0L);
+        assertFalse(still.drop());
+        assertEquals(SurfaceStandIn.State.COVERING, still.state());
+        assertTrue(still.isStandInShown());
+    }
+
+    @Test
+    public void theBackstopIsTheSameCallAndMovesToShownOnce() {
+        // No frame callback ran: the backstop calls covered() all the same.
+        landCopy(0L);
+        assertTrue(still.covered());
+        assertEquals(SurfaceStandIn.State.SHOWN, still.state());
+        assertFalse(still.covered());
     }
 
     @Test

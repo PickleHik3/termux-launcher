@@ -3428,8 +3428,41 @@ public final class PaneWallLayout extends ViewGroup
         // plus the held side's press, while the page is sunk. After every page has moved, since
         // each leans toward the weight on the page the finger held.
         applyPlanks();
+        if (com.termux.app.chrome.MotionLog.enabled && (mOffsetPx != 0f || mNudgePage != null)) {
+            logPagePoses(width);
+        }
         invalidateGrabberIfMoved();
         if (mListener != null) mListener.onWallOffsetChanged(mOffsetPx);
+    }
+
+    /**
+     * One {@code page-pose} line per page on screen, read from the views as they now stand, for a
+     * transition review. Called only with the motion log on and the wall off its rest.
+     */
+    private void logPagePoses(int width) {
+        for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
+            View view = entry.getValue();
+            if (!poseOnScreen(view, width)) continue;
+            PaneWallPage kind = entry.getKey();
+            boolean surface = view instanceof SurfacePage;
+            com.termux.app.chrome.MotionLog.log("page-pose", com.termux.app.chrome.MotionLog.poseKv(
+                kind.name(), boundPageId(kind), WallPageTransition.effectFor(mTransition, surface).name(),
+                slideOf(view)[0], width, view.getTranslationX(), view.getScaleX(), view.getAlpha(),
+                view.getRotationY(), surface ? ((SurfacePage) view).isStill() : null));
+        }
+        for (PageCardView card : mCards.values()) {
+            if (!poseOnScreen(card, width)) continue;
+            com.termux.app.chrome.MotionLog.log("page-pose", com.termux.app.chrome.MotionLog.poseKv(
+                card.kind().name(), card.pageId(),
+                WallPageTransition.effectFor(mTransition, false).name(),
+                slideOf(card)[0], width, card.getTranslationX(), card.getScaleX(), card.getAlpha(),
+                card.getRotationY(), null));
+        }
+    }
+
+    private boolean poseOnScreen(@NonNull View view, int width) {
+        return view.getVisibility() == VISIBLE && view.getAlpha() > 0f
+            && (width <= 0 || Math.abs(slideOf(view)[0]) < width);
     }
 
     /** One page's view at {@code x}: drawn while on screen, parked as its kind parks otherwise. */

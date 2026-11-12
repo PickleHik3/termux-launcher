@@ -204,6 +204,20 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private final Runnable mSwapBackstop = this::finishSwap;
     private final Runnable mExpireStill = this::expireStill;
     private int mSwapFramesLeft;
+    private final Runnable mCoverBackstop = this::finishCover;
+    /** Bumped by every cover and every cancel: a commit callback of an older one does nothing. */
+    private int mCoverToken;
+    private int mCoverFramesLeft;
+    private final android.view.Choreographer.FrameCallback mCoverFrame =
+        new android.view.Choreographer.FrameCallback() {
+            @Override public void doFrame(long frameTimeNanos) {
+                if (--mCoverFramesLeft > 0) {
+                    android.view.Choreographer.getInstance().postFrameCallback(this);
+                } else {
+                    finishCover();
+                }
+            }
+        };
     private final android.view.Choreographer.FrameCallback mSwapFrame =
         new android.view.Choreographer.FrameCallback() {
             @Override public void doFrame(long frameTimeNanos) {
@@ -1303,16 +1317,18 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         if (mStillBitmap != null && mStillBitmap != bitmap) mStillBitmap.recycle();
         mStillBitmap = bitmap;
         if (copied == SurfaceStandIn.Copied.SHOW) {
+            // The wall hears of it from finishCover, once the surface is down.
             showStandIn();
-            Runnable ready = mOnStill;
-            mOnStill = null;
-            if (ready != null) ready.run();
+            startCover();
         } else {
             scheduleStillExpiry();
         }
     }
 
-    /** The stand-in up first, then the surface down: one frame, the same picture either way. */
+    /**
+     * The stand-in goes up; the surface follows the state: down at once only where it was not
+     * live (a reused copy), and kept up while a copy covers it.
+     */
     private void showStandIn() {
         if (mStandIn == null || mStillBitmap == null) return;
         cancelSwap();
@@ -1346,7 +1362,52 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         else cancelSwap();
     }
 
+    /**
+     * The surface stays up until a frame with the stand-in has been committed, then one more
+     * frame so the buffer lands before the surface's hide; the backstop goes down whatever
+     * happens. Where commit callbacks do not exist, a couple of frames stand in for them.
+     */
+    private void startCover() {
+        cancelCover();
+        final int token = mCoverToken;
+        mStillHandler.postDelayed(mCoverBackstop, SurfaceStandIn.COVER_BACKSTOP_MS);
+        if (android.os.Build.VERSION.SDK_INT >= 29 && isAttachedToWindow()) {
+            getViewTreeObserver().registerFrameCommitCallback(() ->
+                mStillHandler.post(() -> {
+                    if (token == mCoverToken) postCoverFrames(1);
+                }));
+        } else {
+            postCoverFrames(SurfaceStandIn.COVER_FALLBACK_FRAMES);
+        }
+    }
+
+    private void postCoverFrames(int frames) {
+        mCoverFramesLeft = frames;
+        android.view.Choreographer choreographer = android.view.Choreographer.getInstance();
+        choreographer.removeFrameCallback(mCoverFrame);
+        choreographer.postFrameCallback(mCoverFrame);
+    }
+
+    /** A frame with the stand-in has reached the screen, or the backstop ran out. */
+    private void finishCover() {
+        cancelCover();
+        if (!mStill.covered()) return;
+        applyDisplaySurfaceVisibility();
+        Runnable ready = mOnStill;
+        mOnStill = null;
+        if (ready != null) ready.run();
+    }
+
+    /** A commit callback already registered cannot be taken back; the token makes it a no-op. */
+    private void cancelCover() {
+        mCoverToken++;
+        mStillHandler.removeCallbacks(mCoverBackstop);
+        android.view.Choreographer.getInstance().removeFrameCallback(mCoverFrame);
+        mCoverFramesLeft = 0;
+    }
+
     private void cancelSwap() {
+        cancelCover();
         mStillHandler.removeCallbacks(mSwapBackstop);
         android.view.Choreographer.getInstance().removeFrameCallback(mSwapFrame);
         mSwapFramesLeft = 0;

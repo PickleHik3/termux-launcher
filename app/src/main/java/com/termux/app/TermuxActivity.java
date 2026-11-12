@@ -16217,11 +16217,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean canvasReachesUnderBarNow() {
         com.termux.app.wall.PaneWallLayout wall =
             mPaneWallController == null ? null : mPaneWallController.wall();
-        // At rest on the committed page only: the wall's last offset callback of a landing comes
-        // before the page is committed, and reading that as "at rest on the Workspace" dropped
-        // Home's top inset to 0 for one layout pass as Home landed.
-        boolean atRest = wall == null || (!wall.isMoving() && wall.offsetPx() == 0f
-            && wall.currentPage() == mLastWallPage);
+        boolean atRest = wall == null || com.termux.app.place.PageTopInsets.wallAtRestOn(
+            mLastWallPage, wall.isMoving(), wall.offsetPx(), wall.currentPage());
         return com.termux.app.place.PageTopInsets.canvasReachesUnderBar(mLastWallPage, atRest);
     }
 

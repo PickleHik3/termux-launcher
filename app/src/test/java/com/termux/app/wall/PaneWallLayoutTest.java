@@ -266,6 +266,27 @@ public class PaneWallLayoutTest {
         assertTrue("a page sliding in has to be drawing", display.getVisibility() == View.VISIBLE);
     }
 
+    @Test
+    public void anOffRestWallLogsEachPagePoseAndARestingWallLogsNone() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        com.termux.app.chrome.MotionLog.setEnabled(true);
+        com.termux.app.chrome.MotionLog.clear();
+        try {
+            wall.beginDrag();
+            wall.dragTo(-200f);
+            List<String> moving = com.termux.app.chrome.MotionLog.dump();
+            assertTrue(moving.toString(), moving.stream().anyMatch(l -> l.contains(" page-pose ")));
+            com.termux.app.chrome.MotionLog.clear();
+            wall.dragTo(0f);
+            for (String l : com.termux.app.chrome.MotionLog.dump()) {
+                assertFalse(l, l.contains(" page-pose "));
+            }
+        } finally {
+            com.termux.app.chrome.MotionLog.setEnabled(false);
+            com.termux.app.chrome.MotionLog.clear();
+        }
+    }
+
     /**
      * A slide between two places does not draw the third. It used to be kept drawing for the whole
      * motion, so every page change paid for the widget grid and the display beside the two pages

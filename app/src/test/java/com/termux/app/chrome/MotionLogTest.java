@@ -1,6 +1,7 @@
 package com.termux.app.chrome;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.After;
@@ -82,5 +83,28 @@ public class MotionLogTest {
     public void callersNamesTheFramesAboveTheCaller() {
         String frames = MotionLog.callers(3);
         assertTrue(frames, frames.contains("callersNamesTheFramesAboveTheCaller") || !frames.isEmpty());
+    }
+
+    @Test
+    public void poseKvNamesADisplayPageWithItsStill() {
+        assertEquals("kind=DISPLAY page=7 effect=DEPTH slide=-540.0 progress=-0.500 tx=-120.3"
+                + " scale=0.850 alpha=1.000 rotY=12.50 still=true",
+            MotionLog.poseKv("DISPLAY", 7, "DEPTH", -540f, 1080, -120.25f, 0.85f, 1f, 12.5f, true));
+    }
+
+    @Test
+    public void poseKvLeavesTheStillOutWhenThePageHasNone() {
+        String kv = MotionLog.poseKv("TERMINAL", 1, "SLIDE", 0f, 0, 0f, 1f, 1f, 0f, null);
+        assertEquals("kind=TERMINAL page=1 effect=SLIDE slide=0.0 progress=0.000 tx=0.0"
+            + " scale=1.000 alpha=1.000 rotY=0.00", kv);
+        assertFalse(kv.contains("still="));
+    }
+
+    @Test
+    public void aPosePassReadsAsAMotionLine() {
+        MotionLog.record(42, "page-pose",
+            MotionLog.poseKv("TERMINAL", 1, "SLIDE", 10f, 100, 10f, 1f, 1f, 0f, null));
+        assertEquals("t=42 page-pose kind=TERMINAL page=1 effect=SLIDE slide=10.0 progress=0.100"
+            + " tx=10.0 scale=1.000 alpha=1.000 rotY=0.00", MotionLog.dump().get(0));
     }
 }
