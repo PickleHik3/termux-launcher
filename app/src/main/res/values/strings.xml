@@ -3331,6 +3331,37 @@
     <string name="help_fix_support_summary">The full documentation and the support page go further than help does.</string>
     <string name="help_fix_support_action">Open Settings, under General, for Diagnostics and for About &amp; help, where to ask.</string>
     <string name="help_fix_support_aliases">support, bug, report, diagnostics, logs, contact</string>
+    <string name="help_fix_process_limit_title">Linux apps or shells stop on their own</string>
+    <string name="help_fix_process_limit_summary">Android stops an app\'s background programs once it runs too many.</string>
+    <string name="help_fix_process_limit_action">Lift Android\'s limit, then start your shells and Linux apps again.</string>
+    <string name="help_fix_process_limit_step1">On Android 14 or later, open Developer options and turn on Disable child process restrictions.</string>
+    <string name="help_fix_process_limit_step2">On Android 12 or 13, run the commands in the full documentation from a computer.</string>
+    <string name="help_fix_process_limit_step3">Or set up Shizuku in Settings, then tap Fix on the notice.</string>
+    <string name="help_fix_process_limit_aliases">stopped, killed, closed by itself, signal 9, desktop quits, xfce closes, process limit, phantom processes, child process restrictions</string>
+
+    <!-- The process-limit notice (ProcessLimitNoticeView) and its row in Diagnostics. -->
+    <string name="process_limit_title">Android stopped your Linux apps</string>
+    <string name="process_limit_body">Android limits how many programs the launcher keeps running, so lift the limit to keep your shells and desktops open.</string>
+    <string name="process_limit_working_body">Lifting the limit…</string>
+    <string name="process_limit_fixed_title">Your Linux apps can keep running</string>
+    <string name="process_limit_fixed_body">Android no longer stops them for running too many programs.</string>
+    <string name="process_limit_failed_body">The limit is still on; the guide shows other ways to lift it.</string>
+    <string name="process_limit_action_fix">Fix</string>
+    <string name="process_limit_action_how_to_fix">How to fix</string>
+    <string name="process_limit_action_diagnostics">Diagnostics</string>
+    <string name="process_limit_action_dismiss">Dismiss</string>
+    <string name="process_limit_action_undo">Undo</string>
+    <string name="process_limit_action_done">Done</string>
+    <string name="settings_process_limit_title">Process limit</string>
+    <string name="settings_process_limit_default">Android default · Tap for how to lift it</string>
+    <string name="settings_process_limit_off">Off</string>
+    <string name="settings_process_limit_off_restore">Off · Tap to restore Android default</string>
+    <string name="settings_process_limit_checking">Checking…</string>
+    <string name="settings_process_limit_restore_title">Restore Android default?</string>
+    <string name="settings_process_limit_restore_message">Android will again stop the launcher\'s programs once it runs too many.</string>
+    <string name="settings_process_limit_restore_action">Restore</string>
+    <string name="settings_process_limit_restored">Android default restored</string>
+    <string name="settings_process_limit_restore_failed">Could not restore Android default</string>
 
     <!-- Help centre: glossary. -->
     <string name="help_term_place_title">Place</string>

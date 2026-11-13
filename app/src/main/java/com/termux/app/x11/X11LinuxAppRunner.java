@@ -530,6 +530,9 @@ public final class X11LinuxAppRunner {
         if (runningSession != app) return;
         setRunningSession(null);
         Logger.logInfo(LOG_TAG, "Desktop " + app.id + " ended with " + exitCode);
+        // Killed by Android's process limit, most likely, unless a take-over's stop sent it.
+        com.termux.app.processlimit.ProcessLimitNotice.get(context).onChildKilled(
+            com.termux.app.processlimit.ProcessLimitPolicy.isKillExit(exitCode), takeOver != null);
         // D1: the manager that stood down comes back — unless another desktop is on its way in,
         // which would only have to stand it down again.
         if (windowManagerRestart == null || takeOver != null) return;

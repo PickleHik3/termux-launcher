@@ -1208,6 +1208,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private static final long KILLED_SHELL_NOTICE_DELAY_MS = 600L;
 
     private void showKilledShellNotice(@NonNull TerminalSession session) {
+        // Ahead of the quiet window: the notice in Settings and the sheets is its own, and the
+        // pane stays only for a signal nobody here sent (KilledShellNotice.keepsPane).
+        com.termux.app.processlimit.ProcessLimitNotice.get(mContext).onChildKilled(
+            com.termux.app.processlimit.ProcessLimitPolicy.isKillSignal(-session.getExitStatus()), false);
         long now = android.os.SystemClock.uptimeMillis();
         if (now - mLastKilledShellNoticeAt < KilledShellNotice.QUIET_MS) return;
         mLastKilledShellNoticeAt = now;

@@ -346,6 +346,38 @@ More in [The Linux display](X11_Display.md).
 - **The tile is blank.** The app's icon is in a format the launcher cannot read. PNG and SVG icons
   are used; anything else gets the default tile.
 
+## Linux apps or shells stop on their own
+
+Android 12 and later stop an app's background programs once all apps together run more than 32
+of them (Android calls them phantom processes). A desktop session with its helpers is enough: the
+display closes, the desktop quits, and terminal panes end with `[Process completed (signal 9)]`.
+The launcher notices such a stop and shows **Android stopped your Linux apps** at the top of
+Settings and on the long-press sheets of Home and the Workspace, until the limit is lifted or you
+dismiss it. Lift the limit one of these ways, then start your shells and apps again:
+
+- **Android 14 or later:** open **Developer options** and turn on **Disable child process
+  restrictions**.
+- **Android 12 or 13:** from a computer with `adb`, run:
+
+  ```sh
+  adb shell "/system/bin/device_config set_sync_disabled_for_tests persistent"
+  adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
+  adb shell settings put global settings_enable_monitor_phantom_procs false
+  ```
+
+  The first line keeps Android from putting the limit back at its next configuration update.
+- **Any version, with [Shizuku](Shizuku.md):** set Shizuku up for the launcher, then tap **Fix** on
+  the notice. The launcher runs the same commands and checks the limit afterwards.
+
+**Settings → General → Diagnostics → Process limit** shows whether the limit is on. With Shizuku
+connected and the limit off, tap it to restore Android's default, which undoes all three commands:
+
+```sh
+adb shell "/system/bin/device_config delete activity_manager max_phantom_processes"
+adb shell settings delete global settings_enable_monitor_phantom_procs
+adb shell "/system/bin/device_config set_sync_disabled_for_tests none"
+```
+
 ## Collect useful diagnostics
 
 Open **Settings → General → Diagnostics**:

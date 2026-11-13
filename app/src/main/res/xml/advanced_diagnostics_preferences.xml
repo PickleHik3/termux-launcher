@@ -20,6 +20,9 @@
     <PreferenceCategory app:title="@string/settings_diagnostics_checks_header">
         <Preference app:key="privileged_backend_smoke_test"
             app:title="@string/settings_test_backend_title" app:summary="@string/settings_test_backend_summary" />
+        <!-- Android's limit on the launcher's programs; the summary is set from code. -->
+        <Preference app:key="process_limit" app:persistent="false"
+            app:title="@string/settings_process_limit_title" />
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/settings_diagnostic_actions_header">
         <Preference app:key="copy_diagnostics" app:title="@string/settings_copy_diagnostics_title" app:summary="@string/settings_copy_diagnostics_summary" />

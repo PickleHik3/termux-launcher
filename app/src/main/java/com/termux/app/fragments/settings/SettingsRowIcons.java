@@ -71,6 +71,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_extension, "plugin_error_notifications_enabled");
         key(R.drawable.ic_ms_bug_report, "crash_report_notifications_enabled");
         key(R.drawable.ic_ms_science, "privileged_backend_smoke_test");
+        key(R.drawable.ic_ms_memory, "process_limit");
         key(R.drawable.ic_ms_content_copy, "copy_diagnostics", "gui_apps_copy");
         key(R.drawable.ic_ms_ios_share, "export_logs");
         key(R.drawable.ic_ms_delete_sweep, "clear_logs");
