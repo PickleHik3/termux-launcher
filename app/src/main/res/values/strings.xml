@@ -148,6 +148,8 @@
     <string name="settings_cpu_usage_title">CPU usage</string>
     <string name="settings_memory_usage_title">Memory usage</string>
     <string name="settings_memory_usage_summary"></string>
+    <string name="settings_battery_title">Battery</string>
+    <string name="settings_battery_summary">Show how much charge is left.</string>
     <string name="settings_status_media_title">Media</string>
     <string name="settings_status_media_summary">Show what\'s playing in the status bar.</string>
     <string name="settings_weather_title">Weather</string>
@@ -1256,6 +1258,7 @@
                 <string name="termux_sessions_indicator_empty_content_description">No sessions</string>
                 <string name="termux_status_widget_cpu_content_description">CPU usage</string>
                 <string name="termux_status_widget_ram_content_description">Memory usage</string>
+                <string name="termux_status_widget_battery_content_description">Battery</string>
                 <string name="termux_status_widget_weather_content_description">Weather</string>
                 <string name="termux_status_widget_ai_content_description">AI model loaded</string>
                 <string name="termux_status_widget_mouse_content_description">Mouse mode on</string>

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -53,6 +54,19 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
     }
 
     /**
+     * Dresses this widget as the battery reading: its tier (the tertiary role) and a drawn battery
+     * in the icon's box instead of a glyph. Returns the picture to set the reading on; repeat calls
+     * return the same one.
+     */
+    @NonNull
+    BatteryIconDrawable dressAsBattery() {
+        setColorRole(ColorRole.TERTIARY);
+        if (mBatteryIcon == null) mBatteryIcon = new BatteryIconDrawable();
+        setIconDrawable(mBatteryIcon);
+        return mBatteryIcon;
+    }
+
+    /**
      * The role colour a tier is written in, from {@code context}'s theme (the launcher's scheme
      * chrome included): the seed every reading's measured ink is toned from.
      */
@@ -74,6 +88,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
     }
 
     private final GaugeIcon mIcon;
+    @Nullable private BatteryIconDrawable mBatteryIcon;
     private final TextView mGlyph;
     @Nullable private LottieAnimationView mAnimation;
     private final TextView mValue;
@@ -169,6 +184,17 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         mIcon.setImageResource(drawableRes);
         mIcon.setVisibility(VISIBLE);
         mGlyph.setVisibility(GONE);
+        hideAnimation();
+    }
+
+    /**
+     * A drawn picture shown before the value, in the icon's box. It takes the widget's icon ink as
+     * its tint. Only on a change, so the repeat calls of a refresh pass cost nothing.
+     */
+    public void setIconDrawable(@NonNull Drawable drawable) {
+        if (mIcon.getDrawable() != drawable) mIcon.setImageDrawable(drawable);
+        if (mIcon.getVisibility() != VISIBLE) mIcon.setVisibility(VISIBLE);
+        if (mGlyph.getVisibility() != GONE) mGlyph.setVisibility(GONE);
         hideAnimation();
     }
 

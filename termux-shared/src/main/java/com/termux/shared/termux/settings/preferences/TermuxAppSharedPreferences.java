@@ -1019,6 +1019,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_RAM, value, false);
     }
 
+    public boolean isStatusWidgetBatteryEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_BATTERY, TERMUX_APP.DEFAULT_STATUS_WIDGET_BATTERY);
+    }
+
+    public void setStatusWidgetBatteryEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_BATTERY, value, false);
+    }
+
     public boolean isStatusWidgetMediaEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_MEDIA, TERMUX_APP.DEFAULT_STATUS_WIDGET_MEDIA);

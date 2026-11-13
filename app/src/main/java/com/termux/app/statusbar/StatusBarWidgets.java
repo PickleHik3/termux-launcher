@@ -72,7 +72,9 @@ final class StatusBarWidgets {
         if (shown)
             mark.setValue(com.termux.app.statusbar.StatusNotificationsMark.label(count));
         boolean anyStatBefore = mHost.preferences() != null && (mHost.preferences().isStatusWidgetCpuEnabled()
-            || mHost.preferences().isStatusWidgetRamEnabled() || mHost.preferences().isStatusWidgetWeatherEnabled());
+            || mHost.preferences().isStatusWidgetRamEnabled()
+            || mHost.preferences().isStatusWidgetBatteryEnabled()
+            || mHost.preferences().isStatusWidgetWeatherEnabled());
         int visibility = shown ? View.VISIBLE : View.GONE;
         boolean changed = mark.getVisibility() != visibility;
         mark.setVisibility(visibility);
@@ -86,12 +88,14 @@ final class StatusBarWidgets {
     /** The status widgets and their dots, in the order the row lays them out. */
     private static final int[] STATUS_INK_WIDGET_IDS = {
         R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
+        R.id.terminal_status_widget_battery,
         R.id.terminal_status_widget_weather, R.id.terminal_status_widget_notifications,
         R.id.terminal_status_widget_ai, R.id.terminal_status_widget_mouse,
     };
 
     private static final int[] STATUS_INK_DOT_IDS = {
         R.id.terminal_status_dot_cpu_ram, R.id.terminal_status_dot_ram_weather,
+        R.id.terminal_status_dot_battery_weather,
         R.id.terminal_status_dot_notifications, R.id.terminal_status_dot_ai,
         R.id.terminal_status_dot_mouse,
     };
@@ -183,7 +187,68 @@ final class StatusBarWidgets {
         return com.termux.app.statusbar.StatusBarWidgetView.seedFor(mHost.context(), role);
     }
 
-    // ---- Trailing status widgets (CPU / RAM / weather) + their anchored detail cards ----
+    // ---- The battery chip: a drawn battery and the percentage, read from the sticky broadcast ----
+
+    /** The picture the battery widget draws; null until the widget has been dressed. */
+    @Nullable private com.termux.app.statusbar.BatteryIconDrawable mBatteryIcon;
+    @Nullable private com.termux.app.statusbar.BatteryChipController mBattery;
+    /** Whether the window is started: the battery is listened to only while it is. */
+    private boolean mBatteryWindowStarted;
+
+    /** The window came to the front or left it; the battery listens only while it is in front. */
+    void setBatteryWindowStarted(boolean started) {
+        if (mBatteryWindowStarted == started) return;
+        mBatteryWindowStarted = started;
+        com.termux.app.statusbar.StatusBarWidgetView battery =
+            mHost.findViewById(R.id.terminal_status_widget_battery);
+        boolean on = mHost.preferences() != null && mHost.preferences().isStatusWidgetBatteryEnabled();
+        if (battery != null) syncBatteryChip(on);
+    }
+
+    /**
+     * Listens to the battery while the switch is on and the window is started, and puts the
+     * latest reading on the chip (the unknown chip, "--" and an empty outline, before the first).
+     */
+    private void syncBatteryChip(boolean on) {
+        if (mBattery == null) {
+            if (!on) return;
+            mBattery = new com.termux.app.statusbar.BatteryChipController(mHost.context(),
+                this::showBattery);
+        }
+        mBattery.setListening(on && mBatteryWindowStarted);
+        if (on) showBattery(mBattery.latest());
+    }
+
+    private void showBattery(@NonNull com.termux.app.statusbar.BatteryChipState state) {
+        com.termux.app.statusbar.StatusBarWidgetView battery =
+            mHost.findViewById(R.id.terminal_status_widget_battery);
+        if (battery == null || mBatteryIcon == null) return;
+        mBatteryIcon.setState(state);
+        battery.setValue(state.text());
+    }
+
+    /** The theme's error colour, as the rest of the chrome reads it (the scheme chrome included). */
+    private int batteryErrorColor() {
+        android.content.Context context = mHost.context();
+        int fallback = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorError,
+            androidx.core.content.ContextCompat.getColor(context, R.color.termux_error));
+        return MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorError, fallback);
+    }
+
+    /** Opens Android's battery screen; nothing happens where the phone has none. */
+    private void openBatteryUsage() {
+        android.content.Context context = mHost.context();
+        android.content.Intent intent =
+            new android.content.Intent(android.content.Intent.ACTION_POWER_USAGE_SUMMARY);
+        try {
+            if (intent.resolveActivity(context.getPackageManager()) == null) return;
+            context.startActivity(intent);
+        } catch (RuntimeException ignored) {
+            // No battery screen to open, or it refused: the chip is a glance, not a promise.
+        }
+    }
+
+    // ---- Trailing status widgets (CPU / RAM / battery / weather) + their anchored detail cards ----
 
     /** Apply widget visibility from preferences, wire taps once, and drive the data controllers. */
     void updateStatusWidgets() {
@@ -194,6 +259,10 @@ final class StatusBarWidgets {
             mHost.findViewById(R.id.terminal_status_dot_cpu_ram);
         com.termux.app.statusbar.MaterialDotSeparatorView ramWeatherDot =
             mHost.findViewById(R.id.terminal_status_dot_ram_weather);
+        com.termux.app.statusbar.StatusBarWidgetView battery =
+            mHost.findViewById(R.id.terminal_status_widget_battery);
+        com.termux.app.statusbar.MaterialDotSeparatorView batteryWeatherDot =
+            mHost.findViewById(R.id.terminal_status_dot_battery_weather);
         // The CPU reading needs privileged access; without it the widget hides rather than show a
         // dash, and comes back through mPrivilegedAvailabilityListener. The backend itself is
         // brought up (and retried) by refreshPrivilegedBackendIfNeeded() on every resume.
@@ -201,6 +270,7 @@ final class StatusBarWidgets {
             mHost.preferences() != null && mHost.preferences().isStatusWidgetCpuEnabled(),
             PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
         boolean ramOn = mHost.preferences() != null && mHost.preferences().isStatusWidgetRamEnabled();
+        boolean batteryOn = mHost.preferences() != null && mHost.preferences().isStatusWidgetBatteryEnabled();
         boolean weatherOn = mHost.preferences() != null && mHost.preferences().isStatusWidgetWeatherEnabled();
         View widgetSlot = mHost.findViewById(R.id.terminal_top_widget_area);
         if (widgetSlot instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
@@ -230,6 +300,16 @@ final class StatusBarWidgets {
                 ram.setOnClickListener(v -> mHost.toggleStatsCard(v));
             }
         }
+        if (battery != null) {
+            battery.setVisibility(batteryOn ? View.VISIBLE : View.GONE);
+            mBatteryIcon = battery.dressAsBattery();
+            mBatteryIcon.setErrorColor(batteryErrorColor());
+            if (battery.getTag() == null) {
+                battery.setTag("wired");
+                battery.setOnClickListener(v -> openBatteryUsage());
+            }
+        }
+        syncBatteryChip(batteryOn);
         if (weather != null) {
             weather.setVisibility(weatherOn ? View.VISIBLE : View.GONE);
             weather.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
@@ -244,7 +324,7 @@ final class StatusBarWidgets {
 
         if (cpuRamDot != null) {
             boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
-                .cpuRamDotVisible(cpuOn, ramOn, weatherOn);
+                .cpuRamDotVisible(cpuOn, ramOn, batteryOn, weatherOn);
             cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
             // The dot takes the tier it leads into: RAM, or the weather when RAM is off. Both are
             // secondary now, so AI alone carries the tertiary role.
@@ -253,9 +333,16 @@ final class StatusBarWidgets {
         }
         if (ramWeatherDot != null) {
             boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
-                .ramWeatherDotVisible(ramOn, weatherOn);
+                .ramWeatherDotVisible(ramOn, batteryOn, weatherOn);
             ramWeatherDot.setVisibility(show ? View.VISIBLE : View.GONE);
             ramWeatherDot.setColorRole(
+                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
+        }
+        if (batteryWeatherDot != null) {
+            boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
+                .batteryWeatherDotVisible(batteryOn, weatherOn);
+            batteryWeatherDot.setVisibility(show ? View.VISIBLE : View.GONE);
+            batteryWeatherDot.setColorRole(
                 com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
         }
 
