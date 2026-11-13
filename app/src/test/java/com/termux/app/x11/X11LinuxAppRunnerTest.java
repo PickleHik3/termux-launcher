@@ -198,10 +198,20 @@ public class X11LinuxAppRunnerTest {
 
     @Test public void aProfilesServerIsStartedOnceAndDetachedBeforeTheApp() {
         assertEquals("", X11LinuxAppRunner.gpuServerBlock(null));
-        assertEquals("if ! pgrep -f 'virgl_test_server_android' >/dev/null 2>&1; then\n"
+        assertEquals("if ! pgrep -f '^([^ ]*/)?virgl_test_server_android( |$)' >/dev/null 2>&1; then\n"
             + "(virgl_test_server_android --angle-gl >/dev/null 2>&1 &)\n"
             + "sleep 1\n"
             + "fi\n", X11LinuxAppRunner.gpuServerBlock("virgl_test_server_android --angle-gl"));
+    }
+
+    @Test public void theServerCheckDoesNotFindTheScriptThatRunsIt() {
+        // The block runs as `bash -c <script>`; pgrep -f sees that shell's command line.
+        String block = X11LinuxAppRunner.gpuServerBlock("virgl_test_server_android");
+        java.util.regex.Pattern running = java.util.regex.Pattern.compile(
+            X11LinuxAppRunner.serverPattern("virgl_test_server_android"));
+        assertFalse(running.matcher("bash -c " + block).find());
+        assertTrue(running.matcher("virgl_test_server_android --angle-gl").find());
+        assertTrue(running.matcher("/data/data/com.termux/files/usr/bin/virgl_test_server_android").find());
     }
 
     @Test public void aPickThatIsNotInstalledDrawsInSoftwareAndSaysSo() {
