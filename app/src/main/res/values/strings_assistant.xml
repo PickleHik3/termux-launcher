@@ -24,6 +24,11 @@
     <string name="assistant_working">Working on it</string>
     <string name="assistant_waiting">Waiting for the model</string>
     <string name="assistant_stopped">Stopped</string>
+    <string name="assistant_speed_tps">%1$s tok/s</string>
+    <string name="assistant_speed_seconds">%1$s s</string>
+    <string name="assistant_speed_both">%1$s · %2$s</string>
+    <string name="assistant_speed_desc_both">%1$s tokens per second, %2$s seconds</string>
+    <string name="assistant_speed_desc_time">%1$s seconds</string>
     <string name="assistant_copy">Copy</string>
     <string name="assistant_share">Share</string>
     <string name="assistant_try_again">Try again</string>

@@ -87,6 +87,11 @@ public final class AssistantEngine {
         final AtomicBoolean cancelSent = new AtomicBoolean();
         long lastPersistMs;
         long lastNotifyMs;
+        /** Request start (model load excluded), first token and the runtime's token count; -1 when unknown. */
+        volatile long startMs = -1L;
+        volatile long firstTokenMs = -1L;
+        volatile int outputTokens = -1;
+        volatile boolean loading;
 
         Generation(long chatId, @Nullable String userText, long retryMessageId) {
             this.chatId = chatId;
@@ -322,6 +327,7 @@ public final class AssistantEngine {
             return;
         }
         try {
+            g.startMs = clock.getAsLong();
             ChatTransport.Call call = transport.start(body, event -> onEvent(g, event));
             g.call = call;
             // A Stop that came before the request existed.
@@ -349,11 +355,20 @@ public final class AssistantEngine {
     }
 
     private void onEvent(Generation g, FeatureRequest.Event event) throws IOException {
+        if (g.loading && event.type != FeatureRequest.Event.Type.LOADING) {
+            // The model is up: its load time is not the answer's.
+            g.loading = false;
+            g.startMs = clock.getAsLong();
+        }
+        if (event.usage != null && event.usage.has("completion_tokens")) {
+            g.outputTokens = Math.max(0, event.usage.optInt("completion_tokens", 0));
+        }
         switch (event.type) {
             case WAITING:
                 setPhase(g, AnswerPhase.WAITING);
                 return;
             case LOADING:
+                g.loading = true;
                 setPhase(g, AnswerPhase.LOADING);
                 return;
             case ERROR:
@@ -373,7 +388,10 @@ public final class AssistantEngine {
             throw new IOException("stopped");
         }
         if (event.finishReason != null) g.finishSeen = true;
-        if (!event.text.isEmpty()) appendDelta(g, event.text);
+        if (!event.text.isEmpty()) {
+            if (g.firstTokenMs < 0L) g.firstTokenMs = clock.getAsLong();
+            appendDelta(g, event.text);
+        }
     }
 
     private void setPhase(Generation g, AnswerPhase phase) {
@@ -418,7 +436,18 @@ public final class AssistantEngine {
             g.done = true;
             text = g.text.toString();
         }
-        store.updateMessage(g.messageId, text, state, errorCode, clock.getAsLong());
+        long now = clock.getAsLong();
+        Long duration = null;
+        Long ttft = null;
+        Integer tokens = null;
+        boolean answered = AssistantMessage.STATE_COMPLETE.equals(state)
+            || (AssistantMessage.STATE_STOPPED.equals(state) && !text.isEmpty());
+        if (answered && g.startMs >= 0L && g.firstTokenMs >= g.startMs) {
+            duration = now - g.startMs;
+            ttft = g.firstTokenMs - g.startMs;
+            if (g.outputTokens >= 0) tokens = g.outputTokens;
+        }
+        store.updateMessage(g.messageId, text, state, errorCode, now, duration, ttft, tokens);
         clear(g);
         notifyMessage(g.chatId, g.messageId);
         notifyChats();
@@ -438,7 +467,8 @@ public final class AssistantEngine {
             messages.put(new JSONObject().put("role", sent.role).put("content", sent.text));
         }
         // No "model": Feature request picks the Assistant's model.
-        return new JSONObject().put("messages", messages).put("stream", true).toString();
+        return new JSONObject().put("messages", messages).put("stream", true)
+            .put("stream_options", new JSONObject().put("include_usage", true)).toString();
     }
 
     private void notifyMessage(long chatId, long messageId) {

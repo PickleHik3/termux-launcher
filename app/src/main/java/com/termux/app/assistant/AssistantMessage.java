@@ -38,9 +38,24 @@ public final class AssistantMessage {
     @NonNull public final String state;
     @Nullable public final String errorCode;
     public final long createdMs;
+    /** How long the answer took, from the start of the request (model load excluded); null when not measured. */
+    @Nullable public final Long durationMs;
+    /** Start of the request to the first token, in ms; null when not measured. */
+    @Nullable public final Long ttftMs;
+    /** Tokens the runtime counted in the answer; null when it sent no count. */
+    @Nullable public final Integer outputTokens;
 
     public AssistantMessage(long id, long chatId, @NonNull String role, @NonNull String text,
                             @NonNull String state, @Nullable String errorCode, long createdMs) {
+        this(id, chatId, role, text, state, errorCode, createdMs, null, null, null);
+    }
+
+    public AssistantMessage(long id, long chatId, @NonNull String role, @NonNull String text,
+                            @NonNull String state, @Nullable String errorCode, long createdMs,
+                            @Nullable Long durationMs, @Nullable Long ttftMs, @Nullable Integer outputTokens) {
+        this.durationMs = durationMs;
+        this.ttftMs = ttftMs;
+        this.outputTokens = outputTokens;
         this.id = id;
         this.chatId = chatId;
         this.role = role;

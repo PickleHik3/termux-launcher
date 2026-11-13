@@ -474,4 +474,119 @@ public class AssistantEngineTest {
         assertEquals(AssistantEngine.AnswerPhase.NONE, engine.answerPhase());
         assertEquals("text", last(chat).text);
     }
+
+    private static FeatureRequest.Event usage(int completionTokens) throws Exception {
+        java.lang.reflect.Method of = FeatureRequest.Event.class.getDeclaredMethod("of", JSONObject.class);
+        of.setAccessible(true);
+        return (FeatureRequest.Event) of.invoke(null, new JSONObject()
+            .put("choices", new JSONArray())
+            .put("usage", new JSONObject().put("completion_tokens", completionTokens)));
+    }
+
+    @Test
+    public void bodyAsksForUsage() throws Exception {
+        transport.script = (body, sink) -> sink.onEvent(delta("ok"));
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        JSONObject options = new JSONObject(transport.bodies.get(0)).getJSONObject("stream_options");
+        assertTrue(options.getBoolean("include_usage"));
+    }
+
+    @Test
+    public void completeAnswerStampsDurationFirstTokenAndTokens() throws Exception {
+        transport.script = (body, sink) -> {
+            clock.addAndGet(500);
+            sink.onEvent(delta("a"));
+            clock.addAndGet(3000);
+            sink.onEvent(delta("b"));
+            sink.onEvent(finish());
+            sink.onEvent(usage(51));
+            clock.addAndGet(600);
+            sink.onEvent(FeatureRequest.Event.done());
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        AssistantMessage m = last(chat);
+        assertEquals(Long.valueOf(4100), m.durationMs);
+        assertEquals(Long.valueOf(500), m.ttftMs);
+        assertEquals(Integer.valueOf(51), m.outputTokens);
+    }
+
+    @Test
+    public void modelLoadTimeIsNotCounted() throws Exception {
+        transport.script = (body, sink) -> {
+            sink.onEvent(FeatureRequest.Event.waiting());
+            sink.onEvent(FeatureRequest.Event.loading());
+            clock.addAndGet(20000);
+            sink.onEvent(FeatureRequest.Event.loading());
+            clock.addAndGet(10000);
+            sink.onEvent(delta("a"));
+            clock.addAndGet(1000);
+            sink.onEvent(finish());
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        AssistantMessage m = last(chat);
+        assertEquals(Long.valueOf(1000), m.durationMs);
+        assertEquals(Long.valueOf(0), m.ttftMs);
+        assertNull(m.outputTokens);
+    }
+
+    @Test
+    public void stoppedWithTextKeepsTimeAndNoTokens() throws Exception {
+        transport.script = (body, sink) -> {
+            clock.addAndGet(200);
+            sink.onEvent(delta("part"));
+            clock.addAndGet(800);
+            engine.stop();
+            sink.onEvent(delta("more"));
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        AssistantMessage m = last(chat);
+        assertEquals(AssistantMessage.STATE_STOPPED, m.state);
+        assertEquals(Long.valueOf(1000), m.durationMs);
+        assertNull(m.outputTokens);
+    }
+
+    @Test
+    public void errorAndEmptyAnswersCarryNothing() throws Exception {
+        transport.script = (body, sink) -> {
+            sink.onEvent(delta("bad"));
+            sink.onEvent(FeatureRequest.Event.error("tai_runtime_timeout", null));
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        assertNull(last(chat).durationMs);
+        assertNull(last(chat).ttftMs);
+        transport.script = (body, sink) -> sink.onEvent(finish());
+        long chat2 = store.createChat(1);
+        engine.send(chat2, "q");
+        assertEquals(AssistantMessage.ERROR_EMPTY_ANSWER, last(chat2).errorCode);
+        assertNull(last(chat2).durationMs);
+    }
+
+    @Test
+    public void retryReplacesTheOldNumbers() throws Exception {
+        transport.script = (body, sink) -> {
+            clock.addAndGet(100);
+            sink.onEvent(delta("a"));
+            clock.addAndGet(900);
+            sink.onEvent(usage(10));
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        AssistantMessage first = last(chat);
+        assertEquals(Long.valueOf(1000), first.durationMs);
+        transport.script = (body, sink) -> {
+            clock.addAndGet(50);
+            sink.onEvent(delta("b"));
+            clock.addAndGet(250);
+        };
+        assertTrue(engine.retry(first.id));
+        AssistantMessage second = last(chat);
+        assertEquals(Long.valueOf(300), second.durationMs);
+        assertEquals(Long.valueOf(50), second.ttftMs);
+        assertNull(second.outputTokens);
+    }
 }
