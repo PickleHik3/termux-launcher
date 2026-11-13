@@ -75,6 +75,22 @@ public final class X11LinuxAppRunner {
     static final String SESSION_PID_PATH =
         TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-session.pid";
 
+    /**
+     * Where a desktop's output goes, truncated at every start. A file rather than the launcher's
+     * pipes: a daemon the desktop leaves behind inherits it, and a pipe held that way would keep
+     * the host from ever reporting that the desktop ended. Also the log to read when one misbehaves.
+     */
+    @VisibleForTesting
+    static final String SESSION_LOG_PATH =
+        TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-session.log";
+
+    /**
+     * Exported by the session's shell as its own pid, and so found in {@code /proc/<pid>/environ}
+     * of the desktop it becomes: what tells our session from a stranger that reused the pid.
+     */
+    @VisibleForTesting
+    static final String SESSION_MARKER_VAR = "TERMUX_X11_SESSION_PID";
+
     /** The directory a session is given as {@code XDG_RUNTIME_DIR}, under its own world's tmp. */
     private static final String RUNTIME_DIR_NAME = "termux-x11-runtime";
 
@@ -356,6 +372,7 @@ public final class X11LinuxAppRunner {
     public void onDisplayRunningChanged(boolean running) {
         if (!running) {
             bareStartChecked = false;
+            endDesktopWithDisplay();
             return;
         }
         if (pending == null) {
@@ -370,6 +387,21 @@ public final class X11LinuxAppRunner {
         // be there yet, and a desktop must wait for it rather than race it.
         launch(app, true);
         startWithOnce(app.session);
+    }
+
+    /**
+     * A desktop dies with the display it ran on, and its script's exit may never be reported (a
+     * daemon it left behind can hold the script's output open). The bookkeeping ends here: the
+     * desktop is no longer the running one, and the pid file it left names nothing. The user
+     * stopped the display, so this is not a kill to tell them about. The script's own exit, if it
+     * comes later, is stale and {@link #onSessionExited} ignores it.
+     */
+    private void endDesktopWithDisplay() {
+        if (runningSession == null) return;
+        Logger.logInfo(LOG_TAG, "Display stopped; " + runningSession.id + " ended with it");
+        setRunningSession(null);
+        takeOver = null;
+        EXECUTOR.execute(() -> new java.io.File(SESSION_PID_PATH).delete());
     }
 
     /**
@@ -1029,6 +1061,9 @@ public final class X11LinuxAppRunner {
         script.append("mkdir -p ")
             .append(ProotDistro.singleQuote(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH))
             .append('\n');
+        // From here the desktop talks to a file, not to the host's pipes (see SESSION_LOG_PATH).
+        script.append("exec > ").append(ProotDistro.singleQuote(SESSION_LOG_PATH)).append(" 2>&1\n");
+        script.append("export ").append(SESSION_MARKER_VAR).append("=$$\n");
         script.append("echo $$ > ").append(ProotDistro.singleQuote(SESSION_PID_PATH)).append('\n');
         String body = sessionBody(app);
         if (app.container.isPrefix()) script.append(body);
@@ -1095,6 +1130,10 @@ public final class X11LinuxAppRunner {
         return "pid=$(cat " + pidFile + " 2>/dev/null)\n"
             + "rm -f " + pidFile + "\n"
             + "[ -n \"$pid\" ] || exit 0\n"
+            // A pid file outlives its desktop; the pid may now be anyone's. Only a process that
+            // carries this session's marker (its own pid, exported before it exec'd) is ours.
+            + "tr '\\0' '\\n' < \"/proc/$pid/environ\" 2>/dev/null"
+            + " | grep -qx \"" + SESSION_MARKER_VAR + "=$pid\" || exit 0\n"
             + "kill \"$pid\" 2>/dev/null\n"
             + "n=0\n"
             + "while [ \"$n\" -lt 40 ] && kill -0 \"$pid\" 2>/dev/null; do\n"
