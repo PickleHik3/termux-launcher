@@ -87,7 +87,7 @@ public final class AssistantEngine {
         final AtomicBoolean cancelSent = new AtomicBoolean();
         long lastPersistMs;
         long lastNotifyMs;
-        /** Request start (model load excluded), first token and the runtime's token count; -1 when unknown. */
+        /** Request start (queue wait and model load excluded), first token and the runtime's token count; -1 when unknown. */
         volatile long startMs = -1L;
         volatile long firstTokenMs = -1L;
         volatile int outputTokens = -1;
@@ -356,7 +356,7 @@ public final class AssistantEngine {
 
     private void onEvent(Generation g, FeatureRequest.Event event) throws IOException {
         if (g.loading && event.type != FeatureRequest.Event.Type.LOADING) {
-            // The model is up: its load time is not the answer's.
+            // The model is up and the queue is clear: load and wait time are not the answer's.
             g.loading = false;
             g.startMs = clock.getAsLong();
         }
@@ -365,6 +365,7 @@ public final class AssistantEngine {
         }
         switch (event.type) {
             case WAITING:
+                g.loading = true;
                 setPhase(g, AnswerPhase.WAITING);
                 return;
             case LOADING:
