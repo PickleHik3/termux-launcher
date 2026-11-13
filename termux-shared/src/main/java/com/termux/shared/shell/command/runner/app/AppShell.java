@@ -42,6 +42,25 @@ public final class AppShell {
 
     private static final String LOG_TAG = "AppShell";
 
+    /** How long to wait for output after the process exited, before reporting the exit anyway. */
+    static final long GOBBLER_JOIN_TIMEOUT_MS = 2000;
+
+    /**
+     * Joins the threads against one shared deadline.
+     *
+     * @return true when every thread finished in time.
+     */
+    static boolean joinWithin(long timeoutMs, Thread... threads) throws InterruptedException {
+        long deadline = System.nanoTime() + timeoutMs * 1_000_000L;
+        boolean allDone = true;
+        for (Thread t : threads) {
+            long remainingMs = (deadline - System.nanoTime()) / 1_000_000L;
+            if (remainingMs > 0) t.join(remainingMs);
+            if (t.isAlive()) allDone = false;
+        }
+        return allDone;
+    }
+
     private AppShell(@NonNull final Process process, @NonNull final ExecutionCommand executionCommand, final AppShellClient appShellClient) {
         this.mProcess = process;
         this.mExecutionCommand = executionCommand;
@@ -195,8 +214,10 @@ public final class AppShell {
         } catch (IOException e) {
             // might be closed already
         }
-        STDOUT.join();
-        STDERR.join();
+        // A daemon left behind by the command can keep the pipes open for ever, so
+        // the wait is bounded; the exit is reported with whatever was read so far.
+        if (!joinWithin(GOBBLER_JOIN_TIMEOUT_MS, STDOUT, STDERR))
+            Logger.logDebug(LOG_TAG, "The \"" + mExecutionCommand.getCommandIdAndLabelLogString() + "\" AppShell with pid " + mExecutionCommand.mPid + " exited but its output was still open after " + GOBBLER_JOIN_TIMEOUT_MS + "ms");
         mProcess.destroy();
         // Process result
         if (exitCode == 0)
