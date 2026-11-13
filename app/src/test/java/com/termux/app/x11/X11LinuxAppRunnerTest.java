@@ -299,11 +299,11 @@ public class X11LinuxAppRunnerTest {
         assertTrue(script.startsWith("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
             + X11LinuxAppRunner.inputMethodBlock(":1") + X11LinuxAppRunner.menuDirsBlock()
             + "cd \"$HOME\"\n"));
-        // Then the three things only a desktop needs, the directory made before it is used.
+        // Then what only a desktop needs. The runtime directory stays the shells' own, so a
+        // socket kept there (herdr-core's) is the same one inside the desktop and outside it.
+        assertFalse(script.contains("XDG_RUNTIME_DIR"));
         assertTrue(script.contains(
-            "export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/termux-x11-runtime\"\n"
-            + "mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n"
-            + "export XDG_SESSION_TYPE=x11\n"
+            "export XDG_SESSION_TYPE=x11\n"
             + "export XDG_CURRENT_DESKTOP='XFCE'\n"));
         assertTrue("the desktop is what the shell becomes", script.endsWith("exec startxfce4\n"));
         // An app's own script exports none of it.

@@ -1090,8 +1090,9 @@ public final class X11LinuxAppRunner {
      * What a desktop is started with, in its own world — the prefix's or a container's. Three
      * things, none of which anything else in Termux sets:
      * <ul>
-     *   <li>{@code XDG_RUNTIME_DIR}, made before it is used. Nothing in a Termux prefix or in a
-     *       container sets one, and a desktop's own pieces expect it to be there.</li>
+     *   <li>{@code XDG_RUNTIME_DIR} for a container's desktop, made before it is used: nothing in
+     *       a container sets one, and a desktop's own pieces expect it. A prefix desktop is left
+     *       with its shells' value, so their sockets (herdr-core's) are found from both.</li>
      *   <li>{@code XDG_SESSION_TYPE}, and {@code XDG_CURRENT_DESKTOP} from the session file's own
      *       {@code DesktopNames} when it named any — which is what the key is for.</li>
      *   <li>a session bus, but only for a desktop that starts none itself
@@ -1103,9 +1104,14 @@ public final class X11LinuxAppRunner {
     @NonNull
     static String sessionBody(@NonNull LinuxAppCatalog.LinuxApp app) {
         StringBuilder body = new StringBuilder();
-        body.append("export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/").append(RUNTIME_DIR_NAME)
-            .append("\"\n");
-        body.append("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n");
+        // A prefix desktop keeps the runtime directory its shells have (none, in Termux): tools
+        // that keep a socket there, such as herdr-core, then find the same one inside the
+        // desktop as outside it. A container has no shells of ours to agree with.
+        if (!app.container.isPrefix()) {
+            body.append("export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/").append(RUNTIME_DIR_NAME)
+                .append("\"\n");
+            body.append("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n");
+        }
         body.append("export XDG_SESSION_TYPE=x11\n");
         if (!app.desktopNames.isEmpty()) {
             body.append("export XDG_CURRENT_DESKTOP=")
