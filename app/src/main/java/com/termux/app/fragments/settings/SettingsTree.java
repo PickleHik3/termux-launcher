@@ -401,6 +401,7 @@ public final class SettingsTree {
                     case "terminal_clipboard_read_reset":
                         return "TerminalClipboardPreferencesFragment";
                     case "top_pane_clock_am_pm": case "status_widget_cpu": case "status_widget_ram":
+                    case "status_widget_battery":
                     case "status_widget_media": case "status_widget_weather":
                     case "status_widget_weather_fahrenheit": case "status_widget_weather_location":
                         return "StatusBarPreferencesFragment";

@@ -6395,6 +6395,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         return prefs.isStatusWidgetNotificationsEnabled();
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_MEDIA:
                         return prefs.isStatusWidgetMediaEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_BATTERY:
+                        return prefs.isStatusWidgetBatteryEnabled();
                     default:
                         return false;
                 }
@@ -6425,6 +6427,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         break;
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_MEDIA:
                         prefs.setStatusWidgetMediaEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_BATTERY:
+                        prefs.setStatusWidgetBatteryEnabled(on);
                         break;
                     default:
                         return;
