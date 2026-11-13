@@ -28,7 +28,7 @@ import java.util.Set;
 public final class AssistantChatStore {
     private static final String LOG_TAG = "AssistantChatStore";
     static final String DB_NAME = "assistant_chats.db";
-    static final int DB_VERSION = 1;
+    static final int DB_VERSION = 2;
     /** Longest chat title, ellipsis included. */
     public static final int TITLE_MAX_CHARS = 60;
 
@@ -85,9 +85,15 @@ public final class AssistantChatStore {
                     + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                     + "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE, "
                     + "role TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, "
-                    + "error_code TEXT, created_ms INTEGER NOT NULL)");
+                    + "error_code TEXT, created_ms INTEGER NOT NULL, "
+                    + "duration_ms INTEGER, ttft_ms INTEGER, output_tokens INTEGER)");
                 opened.execSQL("CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id, id)");
                 opened.execSQL("CREATE INDEX IF NOT EXISTS chats_updated ON chats(updated_ms)");
+                opened.setVersion(DB_VERSION);
+            } else if (opened.getVersion() < 2) {
+                opened.execSQL("ALTER TABLE messages ADD COLUMN duration_ms INTEGER");
+                opened.execSQL("ALTER TABLE messages ADD COLUMN ttft_ms INTEGER");
+                opened.execSQL("ALTER TABLE messages ADD COLUMN output_tokens INTEGER");
                 opened.setVersion(DB_VERSION);
             }
             ContentValues stopped = new ContentValues();
@@ -173,7 +179,7 @@ public final class AssistantChatStore {
         SQLiteDatabase database = getDb();
         if (database == null) return out;
         try (Cursor c = database.rawQuery(
-            "SELECT id, chat_id, role, text, state, error_code, created_ms FROM messages "
+            "SELECT id, chat_id, role, text, state, error_code, created_ms, duration_ms, ttft_ms, output_tokens FROM messages "
                 + "WHERE chat_id = ? ORDER BY id", new String[]{String.valueOf(chatId)})) {
             while (c.moveToNext()) out.add(readMessage(c));
         }
@@ -186,7 +192,7 @@ public final class AssistantChatStore {
         SQLiteDatabase database = getDb();
         if (database == null) return null;
         try (Cursor c = database.rawQuery(
-            "SELECT id, chat_id, role, text, state, error_code, created_ms FROM messages "
+            "SELECT id, chat_id, role, text, state, error_code, created_ms, duration_ms, ttft_ms, output_tokens FROM messages "
                 + "WHERE state = ? ORDER BY id LIMIT 1", new String[]{AssistantMessage.STATE_WAITING})) {
             return c.moveToFirst() ? readMessage(c) : null;
         }
@@ -197,7 +203,7 @@ public final class AssistantChatStore {
         SQLiteDatabase database = getDb();
         if (database == null) return null;
         try (Cursor c = database.rawQuery(
-            "SELECT id, chat_id, role, text, state, error_code, created_ms FROM messages WHERE id = ?",
+            "SELECT id, chat_id, role, text, state, error_code, created_ms, duration_ms, ttft_ms, output_tokens FROM messages WHERE id = ?",
             new String[]{String.valueOf(messageId)})) {
             return c.moveToFirst() ? readMessage(c) : null;
         }
@@ -248,6 +254,35 @@ public final class AssistantChatStore {
         return true;
     }
 
+    /**
+     * Like {@link #updateMessage(long, String, String, String, long)}, and sets the answer's speed
+     * numbers too (null clears them).
+     */
+    public synchronized boolean updateMessage(long messageId, @NonNull String text,
+                                              @NonNull String state, @Nullable String errorCode,
+                                              long nowMs, @Nullable Long durationMs,
+                                              @Nullable Long ttftMs, @Nullable Integer outputTokens) {
+        SQLiteDatabase database = getDb();
+        if (database == null) return false;
+        ContentValues values = new ContentValues();
+        values.put("text", text);
+        values.put("state", state);
+        if (errorCode == null) values.putNull("error_code");
+        else values.put("error_code", errorCode);
+        if (durationMs == null) values.putNull("duration_ms");
+        else values.put("duration_ms", durationMs);
+        if (ttftMs == null) values.putNull("ttft_ms");
+        else values.put("ttft_ms", ttftMs);
+        if (outputTokens == null) values.putNull("output_tokens");
+        else values.put("output_tokens", outputTokens);
+        if (database.update("messages", values, "id = ?", new String[]{String.valueOf(messageId)}) == 0) {
+            return false;
+        }
+        database.execSQL("UPDATE chats SET updated_ms = ? WHERE id = "
+            + "(SELECT chat_id FROM messages WHERE id = ?)", new Object[]{nowMs, messageId});
+        return true;
+    }
+
     /** Removes a chat and its messages. */
     public synchronized void deleteChat(long chatId) {
         SQLiteDatabase database = getDb();
@@ -286,6 +321,8 @@ public final class AssistantChatStore {
     @NonNull
     private static AssistantMessage readMessage(@NonNull Cursor c) {
         return new AssistantMessage(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3),
-            c.getString(4), c.isNull(5) ? null : c.getString(5), c.getLong(6));
+            c.getString(4), c.isNull(5) ? null : c.getString(5), c.getLong(6),
+            c.isNull(7) ? null : c.getLong(7), c.isNull(8) ? null : c.getLong(8),
+            c.isNull(9) ? null : c.getInt(9));
     }
 }

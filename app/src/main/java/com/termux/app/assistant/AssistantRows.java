@@ -44,9 +44,22 @@ public final class AssistantRows {
         /** An error row offers "Use Gemma E2B" (memory, E2B on the phone). */
         public final boolean offerE2b;
         @NonNull public final String key;
+        /** The answer's speed numbers; {@code durationMs} 0 for none, {@code tokens} -1 for no count. */
+        public final long durationMs;
+        public final long ttftMs;
+        public final int tokens;
 
         Row(@NonNull Type type, long messageId, @NonNull String text, boolean streaming, boolean stopped,
             boolean copyShare, boolean retry, @Nullable ErrorKind error, boolean offerE2b, @NonNull String key) {
+            this(type, messageId, text, streaming, stopped, copyShare, retry, error, offerE2b, key, 0L, 0L, -1);
+        }
+
+        Row(@NonNull Type type, long messageId, @NonNull String text, boolean streaming, boolean stopped,
+            boolean copyShare, boolean retry, @Nullable ErrorKind error, boolean offerE2b, @NonNull String key,
+            long durationMs, long ttftMs, int tokens) {
+            this.durationMs = durationMs;
+            this.ttftMs = ttftMs;
+            this.tokens = tokens;
             this.type = type;
             this.messageId = messageId;
             this.text = text;
@@ -65,7 +78,8 @@ public final class AssistantRows {
             Row r = (Row) o;
             return type == r.type && messageId == r.messageId && text.equals(r.text)
                 && streaming == r.streaming && stopped == r.stopped && copyShare == r.copyShare
-                && retry == r.retry && error == r.error && offerE2b == r.offerE2b && key.equals(r.key);
+                && retry == r.retry && error == r.error && offerE2b == r.offerE2b && key.equals(r.key)
+                && durationMs == r.durationMs && ttftMs == r.ttftMs && tokens == r.tokens;
         }
 
         @Override
@@ -127,7 +141,8 @@ public final class AssistantRows {
                     }
                     break;
                 case AssistantMessage.STATE_STOPPED:
-                    rows.add(new Row(Type.ANSWER, m.id, text, false, true, !text.isEmpty(), newest, null, false, key));
+                    rows.add(new Row(Type.ANSWER, m.id, text, false, true, !text.isEmpty(), newest, null, false, key,
+                        speedDuration(m, text), speedTtft(m, text), speedTokens(m)));
                     break;
                 case AssistantMessage.STATE_ERROR:
                     if (!text.isEmpty()) {
@@ -141,7 +156,8 @@ public final class AssistantRows {
                     rows.add(new Row(Type.WAITING, m.id, "", false, false, false, false, null, false, "q" + m.id));
                     break;
                 default:
-                    rows.add(new Row(Type.ANSWER, m.id, text, false, false, !text.isEmpty(), newest, null, false, key));
+                    rows.add(new Row(Type.ANSWER, m.id, text, false, false, !text.isEmpty(), newest, null, false, key,
+                        speedDuration(m, text), speedTtft(m, text), speedTokens(m)));
                     break;
             }
         }
@@ -152,6 +168,18 @@ public final class AssistantRows {
             rows.add(new Row(Type.WORKING, 0, "", true, false, false, false, null, false, "sw"));
         }
         return rows;
+    }
+
+    private static long speedDuration(@NonNull AssistantMessage m, @NonNull String text) {
+        return m.durationMs != null && m.ttftMs != null && !text.isEmpty() ? Math.max(1L, m.durationMs) : 0L;
+    }
+
+    private static long speedTtft(@NonNull AssistantMessage m, @NonNull String text) {
+        return speedDuration(m, text) > 0L ? m.ttftMs : 0L;
+    }
+
+    private static int speedTokens(@NonNull AssistantMessage m) {
+        return m.outputTokens != null ? m.outputTokens : -1;
     }
 
     @NonNull

@@ -254,6 +254,7 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
         private final ImageButton copy;
         private final ImageButton share;
         private final ImageButton retry;
+        private final TextView speed;
         private final Actions actions;
         private AssistantRows.Row row;
 
@@ -300,6 +301,10 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
             actionsRow.addView(copy, new LinearLayout.LayoutParams(size, size));
             actionsRow.addView(share, new LinearLayout.LayoutParams(size, size));
             actionsRow.addView(retry, new LinearLayout.LayoutParams(size, size));
+            speed = AssistantUi.text(context);
+            speed.setPaddingRelative(AssistantUi.dp(context, 8), 0, 0, 0);
+            actionsRow.addView(speed, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
             LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
             ap.setMarginStart(-AssistantUi.dp(context, 6));
@@ -315,6 +320,25 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
             });
         }
 
+        private void bindSpeed(@NonNull AssistantRows.Row r) {
+            Context c = speed.getContext();
+            String time = AssistantSpeed.time(r.durationMs);
+            String seconds = AssistantSpeed.isClock(r.durationMs) ? time
+                : c.getString(R.string.assistant_speed_seconds, time);
+            int tps = AssistantSpeed.tokensPerSecond(r.durationMs, r.ttftMs, r.tokens);
+            if (tps > 0) {
+                String tpsText = String.format(java.util.Locale.getDefault(), "%d", tps);
+                speed.setText(c.getString(R.string.assistant_speed_both,
+                    c.getString(R.string.assistant_speed_tps, tpsText), seconds));
+                speed.setContentDescription(c.getString(R.string.assistant_speed_desc_both, tpsText,
+                    AssistantSpeed.spokenSeconds(r.durationMs)));
+            } else {
+                speed.setText(seconds);
+                speed.setContentDescription(c.getString(R.string.assistant_speed_desc_time,
+                    AssistantSpeed.spokenSeconds(r.durationMs)));
+            }
+        }
+
         @Override
         void bind(@NonNull AssistantRows.Row r, @NonNull AssistantUi.Palette p) {
             row = r;
@@ -324,13 +348,17 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
                 AssistantMarkdownViews.bind(column, AssistantMarkdown.parse(r.text), p,
                     code -> actions.copy(code));
             }
-            boolean any = !r.streaming && (r.stopped || r.copyShare || r.retry);
+            boolean hasSpeed = !r.streaming && r.durationMs > 0L;
+            boolean any = !r.streaming && (r.stopped || r.copyShare || r.retry || hasSpeed);
             AssistantUi.setVisible(actionsRow, any);
             AssistantUi.meta(stopped, p.onSurfaceVariant);
             AssistantUi.setVisible(stopped, r.stopped);
             AssistantUi.setVisible(copy, r.copyShare);
             AssistantUi.setVisible(share, r.copyShare);
             AssistantUi.setVisible(retry, r.retry);
+            AssistantUi.meta(speed, p.onSurfaceVariant);
+            AssistantUi.setVisible(speed, hasSpeed);
+            if (hasSpeed) bindSpeed(r);
             AssistantUi.tint(copy, p.onSurfaceVariant);
             AssistantUi.tint(share, p.onSurfaceVariant);
             AssistantUi.tint(retry, p.onSurfaceVariant);

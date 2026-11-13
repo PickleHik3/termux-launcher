@@ -187,4 +187,18 @@ public class AssistantRowsTest {
         for (int i = 0; i < n; i++) b.append(c);
         return b.toString();
     }
+
+    @Test
+    public void aFinishedAnswerCarriesItsSpeedNumbersAndOldOnesCarryNone() {
+        AssistantMessage timed = new AssistantMessage(2, 1, AssistantMessage.ROLE_ASSISTANT, "a",
+            AssistantMessage.STATE_COMPLETE, null, 2, 4100L, 500L, 51);
+        List<AssistantRows.Row> rows = build(Arrays.asList(user(1, "q"), timed), -1, new AssistantRows.Context());
+        assertEquals(4100L, rows.get(1).durationMs);
+        assertEquals(500L, rows.get(1).ttftMs);
+        assertEquals(51, rows.get(1).tokens);
+        rows = build(Arrays.asList(user(1, "q"), answer(2, "a", AssistantMessage.STATE_COMPLETE, null)), -1,
+            new AssistantRows.Context());
+        assertEquals(0L, rows.get(1).durationMs);
+        assertEquals(-1, rows.get(1).tokens);
+    }
 }
