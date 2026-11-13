@@ -59,7 +59,7 @@ public class ViewUtils {
      * @param view The {@link View} inside the window whose {@link Rect} to get.
      * @param statusBarHeight The status bar height received by {@link View.OnApplyWindowInsetsListener}.
      * @return Returns {@link Rect[]} if view is visible where Rect[0] will contain window
-     * {@link Rect} and Rect[1] will contain view {@link Rect}. This will be {@code null}
+     * {@link Rect} and Rect[1] will contain view {@link Rect}, both in screen coordinates. This will be {@code null}
      * if view is not visible.
      */
     @Nullable
@@ -73,62 +73,56 @@ public class ViewUtils {
         view.getWindowVisibleDisplayFrame(windowRect);
         // If there is actionbar, get his height
         int actionBarHeight = 0;
-        boolean isInMultiWindowMode = false;
         Context context = view.getContext();
         if (context instanceof AppCompatActivity) {
             ActionBar actionBar = ((AppCompatActivity) context).getSupportActionBar();
             if (actionBar != null)
                 actionBarHeight = actionBar.getHeight();
-            isInMultiWindowMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) && ((AppCompatActivity) context).isInMultiWindowMode();
         } else if (context instanceof Activity) {
             android.app.ActionBar actionBar = ((Activity) context).getActionBar();
             if (actionBar != null)
                 actionBarHeight = actionBar.getHeight();
-            isInMultiWindowMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) && ((Activity) context).isInMultiWindowMode();
         }
         int displayOrientation = getDisplayOrientation(context);
-        // windowAvailableRect - takes into account actionbar and statusbar height
-        Rect windowAvailableRect;
-        windowAvailableRect = new Rect(windowRect.left, windowRect.top + actionBarHeight, windowRect.right, windowRect.bottom);
-        // viewRect - holds position of the view in window
-        // (methods as getGlobalVisibleRect, getHitRect, getDrawingRect can return different result,
-        // when partialy visible)
-        Rect viewRect;
-        final int[] viewsLocationInWindow = new int[2];
-        view.getLocationInWindow(viewsLocationInWindow);
-        int viewLeft = viewsLocationInWindow[0];
-        int viewTop = viewsLocationInWindow[1];
+        // The view's position on the screen, the same space getWindowVisibleDisplayFrame reports
+        // in. (methods as getGlobalVisibleRect, getHitRect, getDrawingRect can return different
+        // result, when partialy visible)
+        final int[] viewsLocationOnScreen = new int[2];
+        view.getLocationOnScreen(viewsLocationOnScreen);
         if (view_utils_logging_enabled) {
             Logger.logVerbose(LOG_TAG, "getWindowAndViewRects:");
-            Logger.logVerbose(LOG_TAG, "windowRect: " + toRectString(windowRect) + ", windowAvailableRect: " + toRectString(windowAvailableRect));
-            Logger.logVerbose(LOG_TAG, "viewsLocationInWindow: " + toPointString(new Point(viewLeft, viewTop)));
-            Logger.logVerbose(LOG_TAG, "activitySize: " + toPointString(getDisplaySize(context, true)) + ", displaySize: " + toPointString(getDisplaySize(context, false)) + ", displayOrientation=" + displayOrientation);
+            Logger.logVerbose(LOG_TAG, "windowRect: " + toRectString(windowRect));
+            Logger.logVerbose(LOG_TAG, "viewsLocationOnScreen: " + toPointString(new Point(viewsLocationOnScreen[0], viewsLocationOnScreen[1])));
+            Logger.logVerbose(LOG_TAG, "activitySize: " + toPointString(getDisplaySize(context, true)) + ", displaySize: " + toPointString(getDisplaySize(context, false)) + ", displayOrientation=" + displayOrientation + ", statusBarHeight=" + statusBarHeight);
         }
-        if (isInMultiWindowMode) {
-            if (displayOrientation == Configuration.ORIENTATION_PORTRAIT) {
-                // The windowRect.top of the window at the of split screen mode should start right
-                // below the status bar
-                if (statusBarHeight != windowRect.top) {
-                    if (view_utils_logging_enabled)
-                        Logger.logVerbose(LOG_TAG, "Window top does not equal statusBarHeight " + statusBarHeight + " in multi-window portrait mode. Window is possibly bottom app in split screen mode. Adding windowRect.top " + windowRect.top + " to viewTop.");
-                    viewTop += windowRect.top;
-                } else {
-                    if (view_utils_logging_enabled)
-                        Logger.logVerbose(LOG_TAG, "windowRect.top equals statusBarHeight " + statusBarHeight + " in multi-window portrait mode. Window is possibly top app in split screen mode.");
-                }
-            } else if (displayOrientation == Configuration.ORIENTATION_LANDSCAPE) {
-                // If window is on the right in landscape mode of split screen, the viewLeft actually
-                // starts at windowRect.left instead of 0 returned by getLocationInWindow
-                viewLeft += windowRect.left;
-            }
-        }
-        int viewRight = viewLeft + view.getWidth();
-        int viewBottom = viewTop + view.getHeight();
-        viewRect = new Rect(viewLeft, viewTop, viewRight, viewBottom);
-        if (displayOrientation == Configuration.ORIENTATION_LANDSCAPE && viewRight > windowAvailableRect.right) {
-            if (view_utils_logging_enabled)
-                Logger.logVerbose(LOG_TAG, "viewRight " + viewRight + " is greater than windowAvailableRect.right " + windowAvailableRect.right + " in landscape mode. Setting windowAvailableRect.right to viewRight since it may not include navbar height.");
-            windowAvailableRect.right = viewRight;
+        return buildWindowAndViewRects(windowRect, actionBarHeight, viewsLocationOnScreen[0],
+            viewsLocationOnScreen[1], view.getWidth(), view.getHeight(),
+            displayOrientation == Configuration.ORIENTATION_LANDSCAPE);
+    }
+
+    /**
+     * Pure part of {@link #getWindowAndViewRects(View, int)}. Both inputs and both results are in
+     * screen coordinates, so the comparison holds wherever the window sits (full screen, left or
+     * right half, top or bottom half, freeform).
+     *
+     * @param windowRect The visible display frame of the window, in screen coordinates.
+     * @param actionBarHeight The height of the action bar, 0 if none.
+     * @param viewLeft The left of the view on the screen.
+     * @param viewTop The top of the view on the screen.
+     * @param landscape Whether the display is in landscape.
+     * @return Rect[0] is the area available to content, Rect[1] the view, both on screen.
+     */
+    @NonNull
+    static Rect[] buildWindowAndViewRects(@NonNull Rect windowRect, int actionBarHeight,
+                                          int viewLeft, int viewTop, int viewWidth,
+                                          int viewHeight, boolean landscape) {
+        // windowAvailableRect - takes into account actionbar and statusbar height
+        Rect windowAvailableRect = new Rect(windowRect.left, windowRect.top + actionBarHeight,
+            windowRect.right, windowRect.bottom);
+        Rect viewRect = new Rect(viewLeft, viewTop, viewLeft + viewWidth, viewTop + viewHeight);
+        if (landscape && viewRect.right > windowAvailableRect.right) {
+            // The visible frame may not include the navbar's width
+            windowAvailableRect.right = viewRect.right;
         }
         return new Rect[] { windowAvailableRect, viewRect };
     }
