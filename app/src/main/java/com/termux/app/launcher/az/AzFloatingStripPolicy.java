@@ -171,6 +171,20 @@ public final class AzFloatingStripPolicy {
     }
 
     /**
+     * The room the band may take, in the same (screen) space as {@code bar}: along the bar its own
+     * span, across it the window's extent starting at the window's on-screen origin.
+     */
+    @NonNull
+    public static AzScrubGesture.Bounds canvasBounds(boolean barOnSide,
+                                                     @NonNull AzScrubGesture.Bounds bar,
+                                                     float windowLeft, float windowTop,
+                                                     float windowWidth, float windowHeight) {
+        return barOnSide
+            ? new AzScrubGesture.Bounds(windowLeft, bar.top, windowLeft + windowWidth, bar.bottom)
+            : new AzScrubGesture.Bounds(bar.left, windowTop, bar.right, windowTop + windowHeight);
+    }
+
+    /**
      * The run the band has to lay its icons out in, clear of the bar and of the canvas's margins.
      *
      * <p>Off a top or bottom bar the band runs across the canvas, so the run is the canvas's width.
