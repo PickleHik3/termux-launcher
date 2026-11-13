@@ -395,8 +395,34 @@ public class GuiAppsSetupTest {
         assertEquals(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL),
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, AppEdition.TERMUX));
         assertEquals("pkg install -y x11-repo && pkg install -y "
-                + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio firefox pcmanfm mousepad xfce4-terminal" + X11_MARKER,
+                + "xkeyboard-config dbus openbox fcitx5 fcitx5-gtk3 fcitx5-qt pulseaudio firefox pcmanfm mousepad xfce4-terminal "
+                + "xfce4 xfdesktop xfce4-pulseaudio-plugin pavucontrol xfce4-whiskermenu-plugin tumbler "
+                + "thunar-archive-plugin xarchiver xfce4-screenshooter xfce4-clipman-plugin ristretto "
+                + "papirus-icon-theme" + X11_MARKER,
             GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, AppEdition.TERMUX));
+    }
+
+    @Test public void aTickedDesktopInstallsTheWholeXfceSetOnTheTermuxRoute() {
+        String ticked = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
+            EnumSet.of(StarterApp.DESKTOP), AppEdition.TERMUX);
+        for (String name : GuiAppsSetup.DESKTOP_TERMUX_PACKAGES) {
+            assertTrue(name, ticked.contains(" " + name));
+        }
+        assertTrue(ticked.contains(" xfdesktop"));
+        String unticked = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
+            GuiAppsSetup.defaultStarters(), AppEdition.TERMUX);
+        assertFalse(unticked.contains("xfce4 "));
+        assertFalse(unticked.contains("xfdesktop"));
+        assertFalse(unticked.contains("papirus"));
+        assertEquals("XFCE", GuiAppsSetup.starterAppName(Route.X11_REPO, Distro.DEBIAN,
+            StarterApp.DESKTOP));
+    }
+
+    @Test public void vajNeverInstallsTheDesktopEvenWhenTicked() {
+        String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
+            EnumSet.of(StarterApp.DESKTOP), AppEdition.VAJ);
+        assertFalse(command.contains("xfce4"));
+        assertFalse(command.contains("xfdesktop"));
     }
 
     @Test public void anUnknownStoredChoiceFallsBackToTheRecommendedOne() {
