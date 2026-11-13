@@ -30,16 +30,23 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
  * SPLIT,    any           -> as DOCKED                only the keys part
  * FLOATING, always        -> NONE   opacity ignored  the card is the panel, Home included
  * DOCKED,   overlay, Display  -> GLASS  opacity applies  see-through over the live display,
- *                                                         frosted where the compositor can blur
+ *           display under the whole bed                   frosted where the compositor can blur
+ * DOCKED,   overlay, Display  -> GLASS  opacity applies  the wallpaper glass, as in resize mode
+ *           rows over the keyboard
  * DOCKED,   resizing, Display -> GLASS  opacity applies  the wallpaper glass, as on the Terminal
  * </pre>
  *
  * <p>A Display page is the second exception to the overlay rule. In both modes the keyboard wears
- * the Keyboard card's Display-pages look (Opacity, Tint, Frost). The mode decides what that glass
- * is drawn over: in overlay mode the bed lies over the live display, so its glass crops no
- * wallpaper, the display shows through, and the frost is a blur layer under the bed
- * ({@link DisplayKeyboardBlurPolicy}); in resize mode the bed lies beside the display, over the
- * wallpaper, and wears the ordinary wallpaper glass.
+ * the Keyboard card's Display-pages look (Opacity, Tint, Frost). What lies behind the bed decides
+ * how that glass is drawn. In overlay mode with the display under the whole bed, the glass crops
+ * no wallpaper, the display shows through, and the frost is a blur layer under the bed
+ * ({@link DisplayKeyboardBlurPolicy}). Where the bed lies partly or wholly over the wallpaper it
+ * wears the ordinary wallpaper glass, one material from its top to its bottom and shared with the
+ * dock's rows above it: in resize mode, and in overlay mode while rows stand over the keyboard,
+ * since those take their room below the display at rest and the keyboard's lower strip then lies
+ * in front of that room. See-through there, the bed would show the display above the display's
+ * bottom edge and the wallpaper below it, and the frost, clipped to the display, would stop at
+ * that edge too: two materials in one keyboard.
  *
  * <p>Pure, so the answer can be read and tested without a window: the activity only applies it.
  */
@@ -76,13 +83,15 @@ public final class KeyboardMaterialPolicy {
 
     /**
      * Whether the host's glass is the Display page's: see-through over the live display, with no
-     * wallpaper frame of its own. Only in overlay mode, where the bed lies over the display; in
-     * resize mode it lies beside it, over the wallpaper, and wears the wallpaper glass. Only the
-     * docked and split keyboard; a floating card stays the solid panel it is everywhere.
+     * wallpaper frame of its own. Only in overlay mode with the display behind the whole bed
+     * ({@code displayUnderWholeBed}, {@code KeyboardOverlayPolicy.contentUnderWholeBed}); in
+     * resize mode, or with rows standing over the keyboard, the bed lies at least partly over the
+     * wallpaper and wears the wallpaper glass from top to bottom. Only the docked and split
+     * keyboard; a floating card stays the solid panel it is everywhere.
      */
     public static boolean seesThroughToDisplay(@NonNull KeyboardForm form, boolean overlays,
-                                               boolean display) {
-        return display && overlays
+                                               boolean display, boolean displayUnderWholeBed) {
+        return display && overlays && displayUnderWholeBed
             && hostMaterial(form, true, false, true) == Material.GLASS;
     }
 

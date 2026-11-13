@@ -18,6 +18,7 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- 2026-11-13 · feat/display-rest-rows-outside · Display rows below the display. A Display page in keyboard Overlay mode, extra keys row on and a status bar along the bottom, Docked and Floating Style, portrait and landscape (the split landscape keyboard too). Keyboard down: the extra keys and the bottom status bar stand below the display, nothing over it; keyboard up: the display keeps its size (`xdpyinfo | grep dimensions` in X, same up and down), the keyboard lies over it with the extra keys riding on top, and the bed and the extra keys read as one piece of the keyboard's glass from top to bottom, no see-through strip or frost edge where the display ends (light, dark, black, Material You, and a scheme theme). With nothing along the bottom (extra keys and status bar off or on a side) the bed still shows the live display frosted behind it. Resize mode, Terminal and Home keyboards unchanged; crossing Terminal ⇄ Display with the keyboard up lands without a jump · Surface tablet, by the developer.
 - 2026-11-12 · feat/display-paste-shortcut (85c0b37fb) · Paste shortcut per app. In herdr-gui on the Display, the keyboard's paste key and the clipboard panel paste with Ctrl+V by default; set Settings › Linux apps › Apps › herdr-gui › Paste shortcut to Ctrl+Shift+V and both paste there while another app still gets Ctrl+V; Settings › Display input › Paste shortcut changes every app left on Follow; a desktop session has no per-app row. Passes when: text lands in herdr-gui from the paste key, the panel and a held-Shift paste · pong.
 - 2026-11-12 · feat/display-image-clipboard (4e0ec755a) · Pictures paste into Linux apps. Copy a screenshot on Android, paste into an X app that takes images (herdr-gui, GIMP or `xclip -selection clipboard -t TARGETS -o` then `-t image/png -o > a.png`). Passes when: TARGETS lists image/png, the pasted picture matches, text paste still works afterwards, a 20 MB+ picture pastes without the display freezing for more than a moment, and the display opens with no crash on arm64 (libXlorie was rebuilt by hand; the native CI workflow has not run on it) · pong.
 - 2026-11-12 · fix/home-chip-tap (fdd5d3138) · Window chip tap from Home. On Terminal 1 press the house key (lands on Home 1, Home 2 between), then tap Terminal 1's chip in the status bar. Passes when: the wall goes to Terminal 1 instead of expanding the chip; on Terminal and Display pages a tap on the selected chip still expands it · pong.
@@ -452,11 +453,8 @@ unfixed findings were listed for the developer to file as issues, not kept here.
   still up. Rotate with it up. Open and close the keyboard twenty times, leave the page and come
   back, HOME and back: no stuck blur band with the keyboard down, `dumpsys SurfaceFlinger
   --list | grep -c 'Keyboard frost'` at most 1. Typing lands in X; display taps above the
-  keyboard still reach X. In overlay mode the display runs to the screen's bottom (or the
-  Floating card's bottom inset) under the keyboard and the strip under the pill, and its size
-  (`xdpyinfo | grep dimensions` in X) is the same with the keyboard up and down; the extra keys
-  lie over its foot with the keyboard down. Resize mode: the display still ends above the
-  keyboard. Crossing Terminal ⇄ Display with the keyboard up lands without a jump. With the
+  keyboard still reach X. Overlay-mode sizing and the bed's material with rows along the
+  bottom: see the 11-13 item. Resize mode: the display still ends above the keyboard. Crossing Terminal ⇄ Display with the keyboard up lands without a jump. With the
   Appearance editor open over a Display page the frost sits exactly under the scaled keyboard in
   the preview (no patch elsewhere), follows it through peek/half/full, and stays right on Done. Terminal and Home keyboards unchanged (Terminal overlay solid) ·
   pong (API 34+, blur supported), plus an API 30 emulator for the see-through fallback.

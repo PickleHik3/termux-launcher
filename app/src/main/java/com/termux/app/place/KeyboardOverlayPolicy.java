@@ -57,19 +57,25 @@ public final class KeyboardOverlayPolicy {
         return overlays(keyboardPlace(committed, displayWindowInFront), layout);
     }
 
+    /** Read once: {@code Element.values()} copies its array on every call. */
+    private static final Element[] ELEMENTS = Element.values();
+
     /**
-     * Whether the content reaches under the whole accessory stack and the margin below it, down
-     * to the screen's bottom: a Display page in overlay mode. The keyboard there lies over the
-     * live display, so the display runs on under the keyboard and the strip under the pill rather
-     * than stopping where the stack's rest rows begin; the frost under the bed then has display
-     * behind all of it. Keyboard up or down alike, so the display's size, and the X screen's,
-     * never changes as the keyboard comes and goes: the extra keys and a bottom status bar lie
-     * over the display's foot too. Resize mode is the stored choice not to, and Home has its own
-     * rule (the dock floats over the grid).
+     * Whether the content behind an overlaying keyboard's bed runs under the whole of it, top to
+     * bottom: true while no band stands over the keyboard along the bottom. The bands over it
+     * take their room at rest, below the content, and the keyboard rises from the top of them, so
+     * the strip of bed in front of their rest room has the wallpaper behind it, not the content.
+     * Bands standing under the keyboard stay under its bed and leave the content reaching it.
+     * Allocates nothing: asked on every keyboard material pass.
      */
-    public static boolean contentUnderStack(@NonNull PaneWallPage place,
-                                            @NonNull PlaceLayout layout) {
-        return place == PaneWallPage.DISPLAY && layout.keyboardMode == KeyboardMode.OVERLAY;
+    public static boolean contentUnderWholeBed(@NonNull PlaceLayout layout) {
+        for (Element element : ELEMENTS) {
+            if (EdgeStackPolicy.claimsBand(layout, element)
+                && EdgeStackPolicy.edgeOf(layout, element) == PlaceLayout.Edge.BOTTOM
+                && !EdgeStackPolicy.standsUnderKeyboard(layout, element))
+                return false;
+        }
+        return true;
     }
 
     /**

@@ -256,19 +256,39 @@ public class StackLayoutTest {
     }
 
     @Test
-    public void aDisplayPageInOverlayModeKeepsTheWholeHeightKeyboardUpOrDown() {
-        for (boolean keyboardShown : new boolean[] {true, false}) {
-            StackLayout.Input in = window(keyboardShown);
-            in.keyboardOverlays = true;
-            in.contentUnderStack = true;
-            in.systemImeTakePx = 25;
-            StackLayout.Result r = run(in);
-            assertEquals(r.stackHeightPx + r.bottomMarginPx, r.contentOverlapPx);
-            assertEquals("the display runs on to the screen's bottom", 0,
-                r.contentReservationPx);
-            assertEquals("Home's band and IME reach stay Home's", 0, r.homeGridDockReservePx);
-            assertEquals(0, r.homeImeReachPx);
-        }
+    public void aDisplayPageInOverlayModeKeepsItsRowsBelowItAndOneSizeKeyboardUpOrDown() {
+        StackLayout.Input down = window(false);
+        down.keyboardOverlays = true;
+        down.statusBandPx = 33;
+        StackLayout.Result rest = run(down);
+        assertEquals("the extra keys and a bottom status bar take their room below the display",
+            rest.dockContentHeightPx + rest.bottomMarginPx, rest.contentReservationPx);
+        assertEquals("nothing in the stack lies over the display at rest", 0,
+            rest.contentOverlapPx);
+        StackLayout.Input up = window(true);
+        up.keyboardOverlays = true;
+        up.statusBandPx = 33;
+        StackLayout.Result open = run(up);
+        assertEquals("the keyboard lies over the display, which keeps its size",
+            rest.contentReservationPx, open.contentReservationPx);
+        assertEquals(KEYBOARD, open.contentOverlapPx);
+    }
+
+    @Test
+    public void aDisplayPagesRestReservationIsThePassItLaysOutKeyboardUpOrDown() {
+        // The travel's rest reservation (CrossingController) and the pass agree, so a crossing
+        // onto a Display page in overlay mode lands without a jump.
+        StackLayout.RestInput in = rest(committedTo(PageRef.TERMINAL, 0f),
+            PageRef.of(com.termux.app.wall.PaneWallPage.DISPLAY));
+        in.keyboardOverlays = true;
+        StackLayout.Input down = window(false);
+        down.keyboardOverlays = true;
+        assertEquals(run(down).contentReservationPx, StackLayout.restReservationPx(in));
+        in.keyboardShown = true;
+        StackLayout.Input up = window(true);
+        up.keyboardOverlays = true;
+        assertEquals(run(up).contentReservationPx, StackLayout.restReservationPx(in));
+        assertTrue("the rows take their room", StackLayout.restReservationPx(in) > 0);
     }
 
     @Test
