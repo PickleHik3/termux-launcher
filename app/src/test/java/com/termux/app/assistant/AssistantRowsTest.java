@@ -201,4 +201,63 @@ public class AssistantRowsTest {
         assertEquals(0L, rows.get(1).durationMs);
         assertEquals(-1, rows.get(1).tokens);
     }
+
+    private static AssistantMessage thinker(long id, String text, String state, String thinking, Long ms) {
+        return new AssistantMessage(id, 1, AssistantMessage.ROLE_ASSISTANT, text, state, null, id,
+            null, null, null, thinking, ms);
+    }
+
+    @Test
+    public void thinkingWithoutAnswerYetIsLiveOnAnAnswerRow() {
+        AssistantRows.Context ctx = new AssistantRows.Context();
+        ctx.generatingId = 2;
+        List<AssistantRows.Row> rows = build(Arrays.asList(user(1, "q"),
+            thinker(2, "", AssistantMessage.STATE_STREAMING, "hmm", null)), -1, ctx);
+        AssistantRows.Row r = rows.get(1);
+        assertEquals(AssistantRows.Type.ANSWER, r.type);
+        assertTrue(r.thinkingLive);
+        assertTrue(r.hasThinking());
+        assertEquals("", r.text);
+    }
+
+    @Test
+    public void thinkingEndsWhenTheAnswerTextArrives() {
+        AssistantRows.Context ctx = new AssistantRows.Context();
+        ctx.generatingId = 2;
+        ctx.liveText = "hi";
+        List<AssistantRows.Row> rows = build(Arrays.asList(user(1, "q"),
+            thinker(2, "", AssistantMessage.STATE_STREAMING, "hmm", 4100L)), -1, ctx);
+        assertFalse(rows.get(1).thinkingLive);
+        assertEquals(4100L, rows.get(1).thinkingMs);
+    }
+
+    @Test
+    public void aStreamingAnswerWithNoThinkingStillShowsWorking() {
+        AssistantRows.Context ctx = new AssistantRows.Context();
+        ctx.generatingId = 2;
+        List<AssistantRows.Row> rows = build(Arrays.asList(user(1, "q"),
+            thinker(2, "", AssistantMessage.STATE_STREAMING, null, null)), -1, ctx);
+        assertEquals(AssistantRows.Type.WORKING, rows.get(1).type);
+    }
+
+    @Test
+    public void aFinishedAnswerCarriesItsThinkingAndRowsDifferWhenItChanges() {
+        List<AssistantRows.Row> a = build(Arrays.asList(user(1, "q"),
+            thinker(2, "x", AssistantMessage.STATE_COMPLETE, "hmm", 4100L)), -1, new AssistantRows.Context());
+        List<AssistantRows.Row> b = build(Arrays.asList(user(1, "q"),
+            thinker(2, "x", AssistantMessage.STATE_COMPLETE, "hmm more", 4100L)), -1, new AssistantRows.Context());
+        assertEquals("hmm", a.get(1).thinking);
+        assertFalse(a.get(1).thinkingLive);
+        assertFalse(a.get(1).equals(b.get(1)));
+    }
+
+    @Test
+    public void aReasoningOnlyErrorAnswerShowsTheRowAndTheError() {
+        AssistantMessage m = new AssistantMessage(2, 1, AssistantMessage.ROLE_ASSISTANT, "",
+            AssistantMessage.STATE_ERROR, AssistantMessage.ERROR_EMPTY_ANSWER, 2, null, null, null, "hmm", 900L);
+        List<AssistantRows.Row> rows = build(Arrays.asList(user(1, "q"), m), -1, new AssistantRows.Context());
+        assertEquals(AssistantRows.Type.ANSWER, rows.get(1).type);
+        assertEquals(AssistantRows.Type.ERROR, rows.get(2).type);
+        assertTrue(rows.get(1).hasThinking());
+    }
 }

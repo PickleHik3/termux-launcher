@@ -29,6 +29,11 @@
     <string name="assistant_speed_both">%1$s · %2$s</string>
     <string name="assistant_speed_desc_both">%1$s tokens per second, %2$s seconds</string>
     <string name="assistant_speed_desc_time">%1$s seconds</string>
+    <string name="assistant_thinking_live">Thinking…</string>
+    <string name="assistant_thought">Thought</string>
+    <string name="assistant_thought_for">Thought for %1$s</string>
+    <string name="assistant_thinking_show">Show thinking</string>
+    <string name="assistant_thinking_hide">Hide thinking</string>
     <string name="assistant_copy">Copy</string>
     <string name="assistant_share">Share</string>
     <string name="assistant_try_again">Try again</string>

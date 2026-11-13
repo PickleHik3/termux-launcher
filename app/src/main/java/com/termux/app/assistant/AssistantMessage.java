@@ -50,9 +50,23 @@ public final class AssistantMessage {
         this(id, chatId, role, text, state, errorCode, createdMs, null, null, null);
     }
 
+    /** What the model thought before answering; null when it did not think. */
+    @Nullable public final String thinking;
+    /** How long it thought, in ms; null while it still does or when it did not. */
+    @Nullable public final Long thinkingMs;
+
     public AssistantMessage(long id, long chatId, @NonNull String role, @NonNull String text,
                             @NonNull String state, @Nullable String errorCode, long createdMs,
                             @Nullable Long durationMs, @Nullable Long ttftMs, @Nullable Integer outputTokens) {
+        this(id, chatId, role, text, state, errorCode, createdMs, durationMs, ttftMs, outputTokens, null, null);
+    }
+
+    public AssistantMessage(long id, long chatId, @NonNull String role, @NonNull String text,
+                            @NonNull String state, @Nullable String errorCode, long createdMs,
+                            @Nullable Long durationMs, @Nullable Long ttftMs, @Nullable Integer outputTokens,
+                            @Nullable String thinking, @Nullable Long thinkingMs) {
+        this.thinking = thinking;
+        this.thinkingMs = thinkingMs;
         this.durationMs = durationMs;
         this.ttftMs = ttftMs;
         this.outputTokens = outputTokens;
