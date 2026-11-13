@@ -20,7 +20,9 @@ import com.termux.R;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The thread's rows (sheet 01): your message, an answer with its actions, the status lines, the
@@ -48,6 +50,8 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
     private final Actions actions;
     private AssistantUi.Palette palette;
     private List<AssistantRows.Row> rows = new ArrayList<>();
+    /** Answers whose thinking is open; not saved, so a chat opens with every one closed. */
+    private final Set<Long> expandedThinking = new HashSet<>();
 
     AssistantThreadAdapter(@NonNull Actions actions, @NonNull AssistantUi.Palette palette) {
         this.actions = actions;
@@ -104,7 +108,7 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
         AssistantRows.Type type = AssistantRows.Type.values()[viewType];
         switch (type) {
             case USER: return new UserHolder(context);
-            case ANSWER: return new AnswerHolder(context, actions);
+            case ANSWER: return new AnswerHolder(context, actions, expandedThinking);
             case WORKING: return new StatusHolder(context, false);
             case WAITING: return new StatusHolder(context, true);
             case ERROR: return new ErrorHolder(context, actions);
@@ -256,13 +260,59 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
         private final ImageButton retry;
         private final TextView speed;
         private final Actions actions;
+        private final Set<Long> expanded;
+        private final LinearLayout thinkingHeader;
+        private final ImageView thinkingChevron;
+        private final TextView thinkingLabel;
+        private final LinearLayout thinkingBody;
+        private final View thinkingRule;
+        private final TextView thinkingText;
+        private String boundThinking = "";
         private AssistantRows.Row row;
 
-        AnswerHolder(@NonNull Context context, @NonNull Actions actions) {
+        AnswerHolder(@NonNull Context context, @NonNull Actions actions, @NonNull Set<Long> expanded) {
             super(new LinearLayout(context));
             this.actions = actions;
+            this.expanded = expanded;
             LinearLayout root = (LinearLayout) itemView;
             root.setOrientation(LinearLayout.VERTICAL);
+            thinkingHeader = new LinearLayout(context);
+            thinkingHeader.setOrientation(LinearLayout.HORIZONTAL);
+            thinkingHeader.setGravity(Gravity.CENTER_VERTICAL);
+            thinkingHeader.setMinimumHeight(AssistantUi.dp(context, 40));
+            thinkingHeader.setPaddingRelative(0, 0, AssistantUi.dp(context, 12), 0);
+            thinkingHeader.setBackground(AssistantUi.rippleBackground(context));
+            thinkingChevron = new ImageView(context);
+            thinkingChevron.setImageResource(R.drawable.ic_assistant_chevron);
+            thinkingChevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(AssistantUi.dp(context, 18),
+                AssistantUi.dp(context, 18));
+            cp.setMarginEnd(AssistantUi.dp(context, 4));
+            thinkingHeader.addView(thinkingChevron, cp);
+            thinkingLabel = AssistantUi.text(context);
+            thinkingHeader.addView(thinkingLabel, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            root.addView(thinkingHeader, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            thinkingBody = new CappedColumn(context);
+            thinkingBody.setOrientation(LinearLayout.HORIZONTAL);
+            thinkingRule = new View(context);
+            thinkingBody.addView(thinkingRule, new LinearLayout.LayoutParams(AssistantUi.dp(context, 2),
+                ViewGroup.LayoutParams.MATCH_PARENT));
+            thinkingText = AssistantUi.text(context);
+            thinkingText.setPaddingRelative(AssistantUi.dp(context, 10), 0, 0, 0);
+            thinkingBody.addView(thinkingText, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+            bp.setMarginStart(AssistantUi.dp(context, 12));
+            bp.bottomMargin = AssistantUi.dp(context, 8);
+            root.addView(thinkingBody, bp);
+            thinkingHeader.setOnClickListener(v -> {
+                if (row == null) return;
+                if (!expanded.remove(row.messageId)) expanded.add(row.messageId);
+                applyThinkingOpen(row);
+            });
             column = new CappedColumn(context);
             column.setOrientation(LinearLayout.VERTICAL);
             int bh = AssistantUi.dp(context, 14);
@@ -320,6 +370,44 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
             });
         }
 
+        private void bindThinking(@NonNull AssistantRows.Row r, @NonNull AssistantUi.Palette p) {
+            Context c = thinkingLabel.getContext();
+            AssistantUi.setVisible(thinkingHeader, r.hasThinking());
+            if (!r.hasThinking()) {
+                AssistantUi.setVisible(thinkingBody, false);
+                boundThinking = "";
+                return;
+            }
+            AssistantUi.meta(thinkingLabel, p.onSurfaceVariant);
+            thinkingChevron.setColorFilter(p.onSurfaceVariant);
+            thinkingLabel.setText(thinkingLabel(c, r));
+            AssistantUi.bodySmall(thinkingText, p.onSurfaceVariant);
+            thinkingRule.setBackgroundColor(p.outlineVariant);
+            applyThinkingOpen(r);
+        }
+
+        /** Shows or hides the thinking text as the adapter's set says; the text is set only while open. */
+        private void applyThinkingOpen(@NonNull AssistantRows.Row r) {
+            Context c = thinkingLabel.getContext();
+            boolean open = expanded.contains(r.messageId);
+            thinkingChevron.setRotation(open ? 0f : -90f);
+            thinkingHeader.setContentDescription(c.getString(open ? R.string.assistant_thinking_hide
+                : R.string.assistant_thinking_show));
+            AssistantUi.setVisible(thinkingBody, open);
+            if (open && !r.thinking.equals(boundThinking)) {
+                boundThinking = r.thinking;
+                thinkingText.setText(r.thinking);
+            }
+        }
+
+        private static String thinkingLabel(@NonNull Context c, @NonNull AssistantRows.Row r) {
+            if (r.thinkingLive) return c.getString(R.string.assistant_thinking_live);
+            // The time was lost (the process died mid-thought).
+            if (r.thinkingMs < 0L) return c.getString(R.string.assistant_thought);
+            return c.getString(R.string.assistant_thought_for, AssistantSpeed.timeWithUnit(r.thinkingMs,
+                c.getString(R.string.assistant_speed_seconds)));
+        }
+
         private void bindSpeed(@NonNull AssistantRows.Row r) {
             Context c = speed.getContext();
             String time = AssistantSpeed.time(r.durationMs);
@@ -342,6 +430,7 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
         @Override
         void bind(@NonNull AssistantRows.Row r, @NonNull AssistantUi.Palette p) {
             row = r;
+            bindThinking(r, p);
             AssistantUi.setVisible(column, !r.text.isEmpty());
             bubble.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(p.surfaceHigh, 184));
             if (!r.text.isEmpty()) {

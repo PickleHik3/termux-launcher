@@ -28,7 +28,7 @@ import java.util.Set;
 public final class AssistantChatStore {
     private static final String LOG_TAG = "AssistantChatStore";
     static final String DB_NAME = "assistant_chats.db";
-    static final int DB_VERSION = 2;
+    static final int DB_VERSION = 3;
     /** Longest chat title, ellipsis included. */
     public static final int TITLE_MAX_CHARS = 60;
 
@@ -86,14 +86,20 @@ public final class AssistantChatStore {
                     + "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE, "
                     + "role TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, "
                     + "error_code TEXT, created_ms INTEGER NOT NULL, "
-                    + "duration_ms INTEGER, ttft_ms INTEGER, output_tokens INTEGER)");
+                    + "duration_ms INTEGER, ttft_ms INTEGER, output_tokens INTEGER, thinking TEXT, thinking_ms INTEGER)");
                 opened.execSQL("CREATE INDEX IF NOT EXISTS messages_chat ON messages(chat_id, id)");
                 opened.execSQL("CREATE INDEX IF NOT EXISTS chats_updated ON chats(updated_ms)");
                 opened.setVersion(DB_VERSION);
-            } else if (opened.getVersion() < 2) {
-                opened.execSQL("ALTER TABLE messages ADD COLUMN duration_ms INTEGER");
-                opened.execSQL("ALTER TABLE messages ADD COLUMN ttft_ms INTEGER");
-                opened.execSQL("ALTER TABLE messages ADD COLUMN output_tokens INTEGER");
+            } else {
+                if (opened.getVersion() < 2) {
+                    opened.execSQL("ALTER TABLE messages ADD COLUMN duration_ms INTEGER");
+                    opened.execSQL("ALTER TABLE messages ADD COLUMN ttft_ms INTEGER");
+                    opened.execSQL("ALTER TABLE messages ADD COLUMN output_tokens INTEGER");
+                }
+                if (opened.getVersion() < 3) {
+                    opened.execSQL("ALTER TABLE messages ADD COLUMN thinking TEXT");
+                    opened.execSQL("ALTER TABLE messages ADD COLUMN thinking_ms INTEGER");
+                }
                 opened.setVersion(DB_VERSION);
             }
             ContentValues stopped = new ContentValues();
@@ -179,7 +185,7 @@ public final class AssistantChatStore {
         SQLiteDatabase database = getDb();
         if (database == null) return out;
         try (Cursor c = database.rawQuery(
-            "SELECT id, chat_id, role, text, state, error_code, created_ms, duration_ms, ttft_ms, output_tokens FROM messages "
+            "SELECT id, chat_id, role, text, state, error_code, created_ms, duration_ms, ttft_ms, output_tokens, thinking, thinking_ms FROM messages "
                 + "WHERE chat_id = ? ORDER BY id", new String[]{String.valueOf(chatId)})) {
             while (c.moveToNext()) out.add(readMessage(c));
         }
@@ -192,7 +198,7 @@ public final class AssistantChatStore {
         SQLiteDatabase database = getDb();
         if (database == null) return null;
         try (Cursor c = database.rawQuery(
-            "SELECT id, chat_id, role, text, state, error_code, created_ms, duration_ms, ttft_ms, output_tokens FROM messages "
+            "SELECT id, chat_id, role, text, state, error_code, created_ms, duration_ms, ttft_ms, output_tokens, thinking, thinking_ms FROM messages "
                 + "WHERE state = ? ORDER BY id LIMIT 1", new String[]{AssistantMessage.STATE_WAITING})) {
             return c.moveToFirst() ? readMessage(c) : null;
         }
@@ -203,7 +209,7 @@ public final class AssistantChatStore {
         SQLiteDatabase database = getDb();
         if (database == null) return null;
         try (Cursor c = database.rawQuery(
-            "SELECT id, chat_id, role, text, state, error_code, created_ms, duration_ms, ttft_ms, output_tokens FROM messages WHERE id = ?",
+            "SELECT id, chat_id, role, text, state, error_code, created_ms, duration_ms, ttft_ms, output_tokens, thinking, thinking_ms FROM messages WHERE id = ?",
             new String[]{String.valueOf(messageId)})) {
             return c.moveToFirst() ? readMessage(c) : null;
         }
@@ -283,6 +289,18 @@ public final class AssistantChatStore {
         return true;
     }
 
+    /** Sets what the model thought and for how long (null clears each). */
+    public synchronized boolean setThinking(long messageId, @Nullable String thinking, @Nullable Long thinkingMs) {
+        SQLiteDatabase database = getDb();
+        if (database == null) return false;
+        ContentValues values = new ContentValues();
+        if (thinking == null || thinking.isEmpty()) values.putNull("thinking");
+        else values.put("thinking", thinking);
+        if (thinkingMs == null) values.putNull("thinking_ms");
+        else values.put("thinking_ms", thinkingMs);
+        return database.update("messages", values, "id = ?", new String[]{String.valueOf(messageId)}) > 0;
+    }
+
     /** Removes a chat and its messages. */
     public synchronized void deleteChat(long chatId) {
         SQLiteDatabase database = getDb();
@@ -323,6 +341,7 @@ public final class AssistantChatStore {
         return new AssistantMessage(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3),
             c.getString(4), c.isNull(5) ? null : c.getString(5), c.getLong(6),
             c.isNull(7) ? null : c.getLong(7), c.isNull(8) ? null : c.getLong(8),
-            c.isNull(9) ? null : c.getInt(9));
+            c.isNull(9) ? null : c.getInt(9), c.isNull(10) ? null : c.getString(10),
+            c.isNull(11) ? null : c.getLong(11));
     }
 }

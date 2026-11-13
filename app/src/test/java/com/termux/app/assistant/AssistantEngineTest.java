@@ -589,4 +589,96 @@ public class AssistantEngineTest {
         assertEquals(Long.valueOf(50), second.ttftMs);
         assertNull(second.outputTokens);
     }
+
+    private static FeatureRequest.Event thought(String reasoning) throws Exception {
+        java.lang.reflect.Method of = FeatureRequest.Event.class.getDeclaredMethod("of", JSONObject.class);
+        of.setAccessible(true);
+        return (FeatureRequest.Event) of.invoke(null, new JSONObject().put("choices", new JSONArray()
+            .put(new JSONObject().put("delta", new JSONObject().put("reasoning_content", reasoning)))));
+    }
+
+    @Test
+    public void thinkingAccumulatesAndIsStampedAtTheFirstText() throws Exception {
+        transport.script = (body, sink) -> {
+            clock.addAndGet(100);
+            sink.onEvent(thought("hm "));
+            clock.addAndGet(2000);
+            sink.onEvent(thought("ok"));
+            clock.addAndGet(1000);
+            sink.onEvent(delta("answer"));
+            clock.addAndGet(500);
+            sink.onEvent(thought(" late"));
+            sink.onEvent(finish());
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        AssistantMessage m = last(chat);
+        assertEquals("answer", m.text);
+        assertEquals("hm ok late", m.thinking);
+        assertEquals(Long.valueOf(3000), m.thinkingMs);
+        // The first thinking delta is the first token.
+        assertEquals(Long.valueOf(100), m.ttftMs);
+    }
+
+    @Test
+    public void thinkingIsSavedWhileItStreams() throws Exception {
+        long chat = store.createChat(1);
+        transport.script = (body, sink) -> {
+            sink.onEvent(thought("a"));
+            clock.addAndGet(AssistantEngine.PERSIST_INTERVAL_MS);
+            sink.onEvent(thought("b"));
+            AssistantMessage mid = last(chat);
+            assertEquals("ab", mid.thinking);
+            assertNull(mid.thinkingMs);
+            assertEquals(AssistantMessage.STATE_STREAMING, mid.state);
+            sink.onEvent(delta("x"));
+        };
+        engine.send(chat, "q");
+        assertEquals(AssistantMessage.STATE_COMPLETE, last(chat).state);
+    }
+
+    @Test
+    public void aReasoningOnlyAnswerKeepsItsThinkingAndTimeAtTheEnd() throws Exception {
+        transport.script = (body, sink) -> {
+            sink.onEvent(thought("only"));
+            clock.addAndGet(700);
+            sink.onEvent(finish());
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        AssistantMessage m = last(chat);
+        assertEquals(AssistantMessage.ERROR_EMPTY_ANSWER, m.errorCode);
+        assertEquals("only", m.thinking);
+        assertEquals(Long.valueOf(700), m.thinkingMs);
+    }
+
+    @Test
+    public void anAnswerWithoutThinkingStoresNone() throws Exception {
+        transport.script = (body, sink) -> sink.onEvent(delta("a"));
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        assertNull(last(chat).thinking);
+        assertNull(last(chat).thinkingMs);
+    }
+
+    @Test
+    public void retryClearsTheOldThinking() throws Exception {
+        transport.script = (body, sink) -> {
+            sink.onEvent(thought("first"));
+            sink.onEvent(delta("a"));
+        };
+        long chat = store.createChat(1);
+        engine.send(chat, "q");
+        AssistantMessage first = last(chat);
+        assertEquals("first", first.thinking);
+        transport.script = (body, sink) -> {
+            AssistantMessage mid = last(chat);
+            assertNull(mid.thinking);
+            assertNull(mid.thinkingMs);
+            sink.onEvent(delta("b"));
+        };
+        assertTrue(engine.retry(first.id));
+        assertNull(last(chat).thinking);
+        assertNull(last(chat).thinkingMs);
+    }
 }

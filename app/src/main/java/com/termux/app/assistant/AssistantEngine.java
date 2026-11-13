@@ -77,6 +77,12 @@ public final class AssistantEngine {
         final long retryMessageId;
         volatile long messageId;
         final StringBuilder text = new StringBuilder();
+        /** The model's thinking, as streamed; guarded by the generation like {@link #text}. */
+        final StringBuilder thinking = new StringBuilder();
+        /** First thinking delta and the first answer text after it (or the end); -1 until then. */
+        long thinkStartMs = -1L;
+        long thinkEndMs = -1L;
+        long lastThinkPersistMs;
         @Nullable String errorCode;
         boolean finishSeen;
         boolean done;
@@ -302,6 +308,7 @@ public final class AssistantEngine {
         } else {
             g.messageId = g.retryMessageId;
             store.updateMessage(g.messageId, "", AssistantMessage.STATE_STREAMING, null, now);
+            store.setThinking(g.messageId, null, null);
         }
         notifyChats();
         notifyMessage(g.chatId, g.messageId);
@@ -389,8 +396,14 @@ public final class AssistantEngine {
             throw new IOException("stopped");
         }
         if (event.finishReason != null) g.finishSeen = true;
-        if (!event.text.isEmpty()) {
+        if (!event.reasoning.isEmpty()) {
             if (g.firstTokenMs < 0L) g.firstTokenMs = clock.getAsLong();
+            appendThinking(g, event.reasoning);
+        }
+        if (!event.text.isEmpty()) {
+            long now = clock.getAsLong();
+            if (g.firstTokenMs < 0L) g.firstTokenMs = now;
+            endThinking(g, now);
             appendDelta(g, event.text);
         }
     }
@@ -423,6 +436,38 @@ public final class AssistantEngine {
         if (notify || persist) notifyMessage(g.chatId, g.messageId);
     }
 
+    private void appendThinking(Generation g, String delta) {
+        long now = clock.getAsLong();
+        String snapshot = null;
+        boolean notify;
+        synchronized (g) {
+            if (g.done) return;
+            if (g.thinkStartMs < 0L) g.thinkStartMs = now;
+            g.thinking.append(delta);
+            if (now - g.lastThinkPersistMs >= PERSIST_INTERVAL_MS) {
+                g.lastThinkPersistMs = now;
+                snapshot = g.thinking.toString();
+            }
+            notify = now - g.lastNotifyMs >= NOTIFY_INTERVAL_MS;
+            if (notify) g.lastNotifyMs = now;
+        }
+        if (snapshot != null) store.setThinking(g.messageId, snapshot, null);
+        if (notify || snapshot != null) notifyMessage(g.chatId, g.messageId);
+    }
+
+    /** The first answer text after thinking ends it: saves the thinking with its time at once. */
+    private void endThinking(Generation g, long now) {
+        String snapshot;
+        long ms;
+        synchronized (g) {
+            if (g.done || g.thinkStartMs < 0L || g.thinkEndMs >= 0L) return;
+            g.thinkEndMs = now;
+            ms = now - g.thinkStartMs;
+            snapshot = g.thinking.toString();
+        }
+        store.setThinking(g.messageId, snapshot, ms);
+    }
+
     private static String textOf(Generation g) {
         synchronized (g) {
             return g.text.toString();
@@ -432,12 +477,19 @@ public final class AssistantEngine {
     /** Ends the answer once: saves it in its final state and lets the next one start. */
     private void finish(Generation g, String state, @Nullable String errorCode) {
         String text;
+        String thinking = null;
+        Long thinkingMs = null;
+        long now = clock.getAsLong();
         synchronized (g) {
             if (g.done || g.messageId <= 0L) return;
             g.done = true;
             text = g.text.toString();
+            if (g.thinkStartMs >= 0L) {
+                if (g.thinkEndMs < 0L) g.thinkEndMs = now;
+                thinking = g.thinking.toString();
+                thinkingMs = g.thinkEndMs - g.thinkStartMs;
+            }
         }
-        long now = clock.getAsLong();
         Long duration = null;
         Long ttft = null;
         Integer tokens = null;
@@ -449,6 +501,7 @@ public final class AssistantEngine {
             if (g.outputTokens >= 0) tokens = g.outputTokens;
         }
         store.updateMessage(g.messageId, text, state, errorCode, now, duration, ttft, tokens);
+        store.setThinking(g.messageId, thinking, thinkingMs);
         clear(g);
         notifyMessage(g.chatId, g.messageId);
         notifyChats();

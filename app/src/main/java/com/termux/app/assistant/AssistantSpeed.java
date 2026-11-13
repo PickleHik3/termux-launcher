@@ -34,6 +34,13 @@ final class AssistantSpeed {
         return durationMs >= 9950L && Math.round(durationMs / 1000.0) >= 60L;
     }
 
+    /** The time with its unit: {@code secondsTemplate} (like "%1$s s") for seconds, bare 1:05 for a clock. */
+    @NonNull
+    static String timeWithUnit(long durationMs, @NonNull String secondsTemplate) {
+        String t = time(durationMs);
+        return isClock(durationMs) ? t : String.format(Locale.getDefault(), secondsTemplate, t);
+    }
+
     /** The seconds as a number for speech: 4.1, 12, 65. */
     @NonNull
     static String spokenSeconds(long durationMs) {

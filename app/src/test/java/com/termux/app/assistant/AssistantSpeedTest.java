@@ -49,4 +49,11 @@ public class AssistantSpeedTest {
         assertEquals(0, AssistantSpeed.tokensPerSecond(4100, 500, 1));
         assertEquals(0, AssistantSpeed.tokensPerSecond(4100, 500, -1));
     }
+
+    @Test
+    public void timeWithUnitWritesSecondsOrAClock() {
+        assertEquals("4.1 s", AssistantSpeed.timeWithUnit(4100, "%1$s s"));
+        assertEquals("12 s", AssistantSpeed.timeWithUnit(12000, "%1$s s"));
+        assertEquals("1:05", AssistantSpeed.timeWithUnit(65000, "%1$s s"));
+    }
 }
