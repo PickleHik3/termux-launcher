@@ -31,7 +31,9 @@ the host's `ad -s pong install <apk>` sends the APK through the device-drops rou
 
 ## What runs on pong
 
-Install on pong only when the developer asks.
+Install on pong only when the developer asks. An asked-for install may go on in the background
+while another app is in front; device testing (taps, screenshots, recordings) waits until the
+launcher is in front and the developer is not using the phone.
 
 1. **Day to day**, pong runs a **staging** or **diagnostic** build (staging plus a branch's
    temporary logging commits, which are never merged), named `<versionName>+dev.<sha>` so

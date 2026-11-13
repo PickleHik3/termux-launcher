@@ -52,7 +52,9 @@ device of record. Every other name (a place, surface, gesture, edition) is in
    (the app downloads and verifies it on first run). One committed zip cost a history rewrite.
 4. **Touching a real phone without being asked.** Ask before installing, force-stopping or
    injecting input on pong, and pass `-s <serial>` to every adb command (bare `adb` often reaches
-   the phone). A stray tap once zeroed the developer's side gap on every surface.
+   the phone). A stray tap once zeroed the developer's side gap on every surface. An install the
+   developer asked for may run in the background while they use another app (the launcher
+   restarts behind it); taps, screenshots and recordings never run while they are using the phone.
 5. **Merging `dev` into an edition branch** carelessly. Expect conflicts in `app/build.gradle`,
    `app/src/main/res/values/strings.xml` and `.github/workflows/debug_build.yml`; resolve identity,
    `versionName` and the push trigger to the edition's side, and diff `app/build.gradle` against
