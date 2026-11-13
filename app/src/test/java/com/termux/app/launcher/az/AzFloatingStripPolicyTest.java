@@ -345,4 +345,32 @@ public class AzFloatingStripPolicyTest {
                 AzFloatingStripPolicy.breathAlpha(phase) >= AzFloatingStripPolicy.BREATH_ALPHA_FLOOR);
         }
     }
+
+    @Test
+    public void canvasBoundsFullScreenSpansTheDisplay() {
+        Bounds bar = new Bounds(0f, 100f, 80f, 900f);
+        Bounds side = AzFloatingStripPolicy.canvasBounds(true, bar, 0f, 0f, 2736f, 1824f);
+        assertEquals(0f, side.left, 0f);
+        assertEquals(2736f, side.right, 0f);
+        assertEquals(100f, side.top, 0f);
+        assertEquals(900f, side.bottom, 0f);
+        Bounds row = new Bounds(10f, 1700f, 700f, 1800f);
+        Bounds r = AzFloatingStripPolicy.canvasBounds(false, row, 0f, 0f, 2736f, 1824f);
+        assertEquals(0f, r.top, 0f);
+        assertEquals(1824f, r.bottom, 0f);
+        assertEquals(10f, r.left, 0f);
+        assertEquals(700f, r.right, 0f);
+    }
+
+    @Test
+    public void canvasBoundsRightHalfShiftsTheRoom() {
+        Bounds bar = new Bounds(1368f, 100f, 1448f, 900f);
+        Bounds side = AzFloatingStripPolicy.canvasBounds(true, bar, 1368f, 0f, 1368f, 1824f);
+        assertEquals(1368f, side.left, 0f);
+        assertEquals(2736f, side.right, 0f);
+        Bounds bottomHalf = AzFloatingStripPolicy.canvasBounds(false,
+            new Bounds(0f, 1700f, 700f, 1800f), 0f, 912f, 2736f, 912f);
+        assertEquals(912f, bottomHalf.top, 0f);
+        assertEquals(1824f, bottomHalf.bottom, 0f);
+    }
 }

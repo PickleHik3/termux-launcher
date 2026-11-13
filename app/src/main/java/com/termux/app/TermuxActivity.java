@@ -12899,17 +12899,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The room the floating strip is allowed to take: the bar's own span along itself, and the
-     * whole screen across it. A column stands inside the canvas band, so its span is exactly the
-     * height the matches may use; a row spans the width the letters do, which is what the band has
-     * always been clamped to.
+     * The room the floating strip is allowed to take, in screen coordinates like the bar it is
+     * measured against: the bar's own span along itself, and the launcher's whole window across
+     * it. The window is not the display in split screen or freeform, so its origin is read from
+     * the root view on screen rather than assumed to be (0, 0).
      */
     @NonNull
     private AzScrubGesture.Bounds azStripCanvasBounds(@NonNull AzScrubGesture.Bounds bar) {
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
-        return mAzBarEdge.isOnSide()
-            ? new AzScrubGesture.Bounds(0f, bar.top, metrics.widthPixels, bar.bottom)
-            : new AzScrubGesture.Bounds(bar.left, 0f, bar.right, metrics.heightPixels);
+        View root = getWindow() != null ? getWindow().getDecorView() : null;
+        int[] origin = mAzViewLocation;
+        float width = metrics.widthPixels;
+        float height = metrics.heightPixels;
+        float originX = 0f;
+        float originY = 0f;
+        if (root != null) {
+            root.getLocationOnScreen(origin);
+            originX = origin[0];
+            originY = origin[1];
+            if (root.getWidth() > 0) width = root.getWidth();
+            if (root.getHeight() > 0) height = root.getHeight();
+        }
+        return AzFloatingStripPolicy.canvasBounds(mAzBarEdge.isOnSide(), bar, originX, originY,
+            width, height);
     }
 
     /** The bar's own rectangle on screen, whether or not it is shown. */
