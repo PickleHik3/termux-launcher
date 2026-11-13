@@ -820,10 +820,22 @@ public final class X11LinuxAppRunner {
     static String gpuServerBlock(@Nullable String server) {
         if (server == null || server.trim().isEmpty()) return "";
         String program = server.trim().split("\\s+")[0];
-        return "if ! pgrep -f " + ProotDistro.singleQuote(program) + " >/dev/null 2>&1; then\n"
+        return "if ! pgrep -f " + ProotDistro.singleQuote(serverPattern(program))
+            + " >/dev/null 2>&1; then\n"
             + "(" + server.trim() + " >/dev/null 2>&1 &)\n"
             + "sleep 1\n"
             + "fi\n";
+    }
+
+    /**
+     * The {@code pgrep -f} pattern that finds {@code program} running: its name, bare or after a
+     * directory, at the start of a command line. Anchored because the block runs inside
+     * {@code bash -c <script>}, whose command line holds the name too; a plain name matched that
+     * shell, so the server was never started and every GL app aborted in Mesa. Pure.
+     */
+    @NonNull
+    static String serverPattern(@NonNull String program) {
+        return "^([^ ]*/)?" + program.replace(".", "[.]") + "( |$)";
     }
 
     /** {@link #installedEnv(X11GpuProbe.Result, String, boolean)} on {@link X11GpuProfileStore#AUTO}. */
