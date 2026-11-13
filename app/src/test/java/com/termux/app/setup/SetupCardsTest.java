@@ -133,4 +133,75 @@ public class SetupCardsTest {
             if (SetupCards.AI.equals(card.id)) assertEquals(SetupCards.State.DONE, card.state);
         assertFalse(SetupCards.isDue(true, landed, true));
     }
+
+    private static boolean dueAtLaunch(SetupCards.Stored stored, boolean desktop, boolean ai,
+                                       boolean home, String... done) {
+        return SetupCards.isDueForLaunch(true, build(desktop, ai, home, stored, done), true, stored);
+    }
+
+    @Test
+    public void oldJsonWithoutSeenParsesAndIsNotKnown() {
+        SetupCards.Stored stored = SetupCards.Stored.parse(
+            "{\"dismissed\":[\"pinned\"],\"steps\":{\"display\":[0]}}");
+        assertFalse(stored.isSeenKnown());
+        assertTrue(stored.isDismissed("pinned"));
+        assertFalse(stored.toJson().contains("seen"));
+        assertFalse(SetupCards.isDueForLaunch(true, build(false, false, false, stored), false, stored));
+    }
+
+    @Test
+    public void migrationSeedsEveryExistingCardWithNoShow() {
+        SetupCards.Stored stored = SetupCards.Stored.parse("{\"dismissed\":[],\"steps\":{}}");
+        stored.markSeen(build(true, false, true, stored));
+        assertTrue(stored.isSeenKnown());
+        assertTrue(stored.isSeen("shizuku") && stored.isSeen("display") && stored.isSeen("home"));
+        assertFalse(stored.isSeen("ai"));
+        assertFalse(dueAtLaunch(stored, true, false, true));
+        SetupCards.Stored again = SetupCards.Stored.parse(stored.toJson());
+        assertTrue(again.isSeenKnown());
+        assertTrue(again.isSeen("home"));
+    }
+
+    @Test
+    public void freshUserIsNotDueAfterTheSheetShowedTheCards() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        assertTrue(stored.startSeen());
+        assertFalse(stored.startSeen());
+        assertTrue(dueAtLaunch(stored, true, false, false));
+        stored.markSeen(build(true, false, false, stored));
+        assertFalse(dueAtLaunch(stored, true, false, false));
+    }
+
+    @Test
+    public void aNewCardIdMakesItDueOnceThenNot() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.markSeen(build(false, false, false, stored));
+        assertFalse(dueAtLaunch(stored, false, false, false));
+        // home now exists for the first time.
+        assertTrue(dueAtLaunch(stored, false, false, true));
+        stored.markSeen(build(false, false, true, stored));
+        assertFalse(dueAtLaunch(stored, false, false, true));
+    }
+
+    @Test
+    public void aNewCardThatIsDoneOrDismissedIsNotDue() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.markSeen(build(false, false, false, stored));
+        assertFalse(dueAtLaunch(stored, false, false, true, SetupCards.HOME));
+        stored.setDismissed(SetupCards.HOME, true);
+        assertFalse(dueAtLaunch(stored, false, false, true));
+        // a new stub card (display) is not completable, so it does not bring the sheet either
+        assertFalse(dueAtLaunch(stored, true, false, false));
+    }
+
+    @Test
+    public void reopenStillWorksAndIsUnaffectedBySeen() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.markSeen(build(false, false, false, stored));
+        stored.setDismissed(SetupCards.PINNED, true);
+        stored.setDismissed(SetupCards.PINNED, false);
+        assertEquals(SetupCards.State.OPEN, build(false, false, false, stored).get(4).state);
+        assertTrue(SetupCards.openCount(build(false, false, false, stored)) > 0);
+        assertFalse(dueAtLaunch(stored, false, false, false));
+    }
 }

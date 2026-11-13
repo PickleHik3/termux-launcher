@@ -415,6 +415,11 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         if (prefs == null)
             return;
         prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
+        // A user finishing setup now starts with nothing seen, so the sheet after Finish (or the
+        // next launch, after Skip) shows every card once. Earlier users are seeded at launch.
+        SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
+        if (stored.startSeen())
+            SetupCardSystem.save(mHost.context(), stored);
         // The old tour is gone, but this stays the "has used the app before" marker the gate
         // reads, and older code paths that read it still see the tour as done (8 is its last run).
         if (prefs.getFirstBootTourCompletedVersion() < 8)
@@ -466,14 +471,27 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     // ------------------------------------------------------------------------------ card sheet
 
-    /** The cards are due: the wizard is done and a card is neither done nor dismissed. */
+    /**
+     * The cards are due at launch: the wizard is done and a card that is open and completable has
+     * never been shown in the sheet. A user who finished setup before the seen set existed gets it
+     * seeded here with every card that exists now, without showing the sheet.
+     */
     public boolean isCardSheetDue() {
         TermuxAppSharedPreferences prefs = mHost.preferences();
         if (prefs == null)
             return false;
-        return SetupCards.isDue(prefs.getSetupWizardVersion() >= SetupWizardGate.CURRENT,
-            SetupCardSystem.cards(mHost.context()),
-            !AiModelDownloads.selected(mHost.context()).isEmpty());
+        boolean wizardDone = prefs.getSetupWizardVersion() >= SetupWizardGate.CURRENT;
+        if (!wizardDone)
+            return false;
+        Context context = mHost.context();
+        List<SetupCards.Card> cards = SetupCardSystem.cards(context);
+        SetupCards.Stored stored = SetupCardSystem.stored(context);
+        if (!stored.isSeenKnown()) {
+            stored.markSeen(cards);
+            SetupCardSystem.save(context, stored);
+        }
+        return SetupCards.isDueForLaunch(true, cards,
+            !AiModelDownloads.selected(context).isEmpty(), stored);
     }
 
     /**
@@ -504,7 +522,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     /**
      * The Appearance editor is opening: a card sheet that is up steps aside for this start. No
-     * card is marked dismissed, so the sheet comes back on the next start while any is due. The
+     * card is marked dismissed; it was already marked seen when it opened, so it does not return by itself. The
      * wizard's own sheet is left alone.
      */
     public void stepAsideForEditor() {
@@ -543,7 +561,12 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
         content.addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
-        sheet.bindList(SetupCardSystem.cards(mHost.context()), false);
+        List<SetupCards.Card> shown = SetupCardSystem.cards(mHost.context());
+        // Saved now, not on close, so a process kill cannot bring the sheet back.
+        SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
+        if (stored.markSeen(shown))
+            SetupCardSystem.save(mHost.context(), stored);
+        sheet.bindList(shown, false);
         layoutCards();
         if (pageId != null)
             showPage(pageId);

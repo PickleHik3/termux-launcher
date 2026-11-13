@@ -483,8 +483,8 @@ a Linux app.
 - **Keyboard on Home**: the palette swipe (`ad swipe 540 1700 540 900 700`); a tap on free space
   closes it. `ad ui` ids: `apps_bar_row_host`, `apps_bar_plank_layer`, `accessory_row_stack`
   (dock rows and the A–Z row, which has no id of its own), `inapp_keyboard_container`.
-- **Sheets in the way**: the Setup cards sheet returns on every launcher start (Back dismisses
-  it). `set-home-activity com.termux/.app.TermuxActivity` makes it home for a check; set the
+- **Sheets in the way**: the Setup cards sheet opens at launch only for a card never shown before (Back dismisses
+  it); once shown, a card does not reopen it, so a repeat check needs Settings > General > Setup. `set-home-activity com.termux/.app.TermuxActivity` makes it home for a check; set the
   stock launcher back afterwards. After a lease wait the emulator may be stopped: `ad -s emu emu
   start` under the lease.
 - **Setup wizard and its AI card**: rerun the wizard with `am start -n com.termux/.app.TermuxActivity
