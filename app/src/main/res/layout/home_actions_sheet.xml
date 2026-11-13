@@ -61,6 +61,13 @@
             android:textColor="?attr/colorOnSurfaceVariant"
             android:visibility="gone" />
 
+        <!-- Android stopped the launcher's programs: the notice, gone while there is none. -->
+        <com.termux.app.processlimit.ProcessLimitNoticeView
+            android:id="@+id/home_actions_process_limit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/home_actions_group_page"
             android:layout_width="match_parent"

@@ -32,7 +32,7 @@ public class HelpTopicsTest {
     private static final List<String> ASSISTANT_TARGETS = Arrays.asList("status", "border",
         "keyboard_grabber", "corners");
 
-    /** The forty-nine topics of the guide, by group, in the order the guide lists them. */
+    /** The fifty topics of the guide, by group, in the order the guide lists them. */
     private static final List<String> THE_GUIDE = Arrays.asList(
         "places", "corners", "minimal", "palette", "status", "stats", "pinned_notifications",
         "dock", "az", "organize_apps", "widget", "pages",
@@ -44,7 +44,7 @@ public class HelpTopicsTest {
         "tlstore", "on_device_ai",
         "scale", "display_apps", "display_keys", "gui_apps", "touchpad",
         "fix_keyboard", "fix_dock", "fix_action", "fix_shortcuts", "fix_stats", "fix_display",
-        "fix_support");
+        "fix_process_limit", "fix_support");
 
     private static List<String> targetsOf(PaneWallPage place) {
         switch (place) {
@@ -115,7 +115,7 @@ public class HelpTopicsTest {
         assertEquals(HelpTopics.Group.DISPLAY.sectionRes, HelpTopics.Group.MISSING.sectionRes);
         assertNotEquals(HelpTopics.Group.DISPLAY.labelRes, HelpTopics.Group.MISSING.labelRes);
         assertEquals(9, HelpTopics.Group.values().length);
-        assertEquals(49, HelpTopics.all().size());
+        assertEquals(50, HelpTopics.all().size());
     }
 
     @Test public void theCatalogueIsListedGroupByGroup() {

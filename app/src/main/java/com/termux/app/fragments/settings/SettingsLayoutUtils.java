@@ -100,6 +100,7 @@ public final class SettingsLayoutUtils {
             || preference instanceof StatusActionPreference
             || preference instanceof SettingsSearchPreference
             || preference instanceof StatusCardPreference
+            || preference instanceof com.termux.app.processlimit.ProcessLimitNoticePreference
             || preference instanceof TaiOverridesPreference
             || preference instanceof TaiCatalogFilterPreference
             || preference instanceof TaiModelCentreRowPreference

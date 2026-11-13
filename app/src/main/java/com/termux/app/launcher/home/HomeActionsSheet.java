@@ -129,6 +129,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     @Nullable private Runnable afterHidden;
     @NonNull private final TextView titleView;
     @NonNull private final CharSequence homeTitle;
+    /** Android's process-limit notice, over the rows while it stands. */
+    @NonNull private final com.termux.app.processlimit.ProcessLimitNoticeView processLimitNotice;
 
     public HomeActionsSheet(@NonNull Context context, @NonNull Listener listener) {
         super(context);
@@ -141,6 +143,15 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         pageRows = findViewById(R.id.home_actions_group_page_rows);
         launcherGroup = findViewById(R.id.home_actions_group_launcher);
         launcherRows = findViewById(R.id.home_actions_group_launcher_rows);
+        processLimitNotice = findViewById(R.id.home_actions_process_limit);
+        processLimitNotice.setHost(new com.termux.app.processlimit.ProcessLimitNoticeView.Host() {
+            @Override public void onNoticeResized() {
+                if (open) settleExpandedAfterLayout();
+            }
+            @Override public void onNoticeLeaving() {
+                close();
+            }
+        });
         cardPadLeft = card.getPaddingLeft();
         cardPadRight = card.getPaddingRight();
         cardPadBottom = card.getPaddingBottom();
@@ -249,6 +260,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         source = rowsFor;
         locked = layoutLocked;
         refill();
+        processLimitNotice.refreshIfShown();
         boolean wasOpen = open;
         open = true;
         if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);
@@ -272,6 +284,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         locked = false;
         setTitle(title);
         refill();
+        processLimitNotice.refreshIfShown();
         boolean wasOpen = open;
         open = true;
         if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);

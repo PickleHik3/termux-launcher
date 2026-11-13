@@ -160,7 +160,8 @@ if you want the feature that needs it. See [Shizuku](Shizuku.md).
 
 "Logs and troubleshooting", the one place for logging: **Log level** (the launcher's),
 **Termux:API log level** (shown while Termux:API is installed), **Log keyboard input**, plugin and
-crash alerts, **Test privileged backend**, **Copy diagnostics**, **Export logs** and **Clear
+crash alerts, **Test privileged backend**, **Process limit** (whether Android stops the launcher's
+programs past its limit, and with Shizuku a way back to Android's default), **Copy diagnostics**, **Export logs** and **Clear
 logs**. Diagnostics can contain device, package and path details; review them before posting. See
 [Troubleshooting](Launcher_Troubleshooting.md).
 

@@ -582,6 +582,13 @@ public final class HelpTopics {
             .related("gui_apps", "display_apps")
             .aliases(R.string.help_fix_display_aliases)
             .doc("Launcher_Troubleshooting.md#the-linux-display-will-not-start-or-apps-cannot-reach-it"));
+        b.add(fix("fix_process_limit", R.string.help_fix_process_limit_title,
+                R.string.help_fix_process_limit_summary, R.string.help_fix_process_limit_action)
+            .steps(R.string.help_fix_process_limit_step1, R.string.help_fix_process_limit_step2,
+                R.string.help_fix_process_limit_step3)
+            .related("gui_apps", "fix_display")
+            .aliases(R.string.help_fix_process_limit_aliases)
+            .doc("Launcher_Troubleshooting.md#linux-apps-or-shells-stop-on-their-own"));
         b.add(fix("fix_support", R.string.help_fix_support_title,
                 R.string.help_fix_support_summary, R.string.help_fix_support_action)
             .aliases(R.string.help_fix_support_aliases)

@@ -18,6 +18,8 @@ import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.processlimit.ProcessLimitNotice;
+import com.termux.app.processlimit.ProcessLimitPolicy;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.android.AndroidUtils;
@@ -51,12 +53,80 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
         setPreferencesFromResource(R.xml.advanced_diagnostics_preferences, rootKey);
         configureLogLevel(context);
         bindActions(context);
+        configureProcessLimit(context);
         SettingsLayoutUtils.applyScreenLayout(this);
     }
 
     @Override public void onResume() {
         super.onResume();
         if (getActivity() != null) getActivity().setTitle(R.string.settings_destination_advanced_diagnostics);
+        Context context = getContext();
+        if (context == null) return;
+        ProcessLimitNotice notice = ProcessLimitNotice.get(context);
+        notice.addListener(processLimitListener);
+        processLimitChecking = true;
+        showProcessLimit();
+        notice.refresh();
+    }
+
+    @Override public void onPause() {
+        Context context = getContext();
+        if (context != null) ProcessLimitNotice.get(context).removeListener(processLimitListener);
+        super.onPause();
+    }
+
+    /** Whether the limit is being read again since this page came up. */
+    private boolean processLimitChecking;
+    private final ProcessLimitNotice.Listener processLimitListener = () -> {
+        processLimitChecking = false;
+        showProcessLimit();
+    };
+
+    /**
+     * The process limit's row: its state, and what a tap does. Android before 12 has no limit, so
+     * no row.
+     */
+    private void configureProcessLimit(Context context) {
+        Preference row = findPreference(ProcessLimitNotice.DIAGNOSTICS_KEY);
+        if (row == null) return;
+        if (android.os.Build.VERSION.SDK_INT < ProcessLimitPolicy.ANDROID_12) {
+            row.setVisible(false);
+            return;
+        }
+        row.setOnPreferenceClickListener(preference -> {
+            ProcessLimitPolicy.Limit limit = ProcessLimitNotice.get(context).limit();
+            if (ProcessLimitPolicy.offersRestore(limit,
+                    PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi())) {
+                new MaterialAlertDialogBuilder(context).setTitle(R.string.settings_process_limit_restore_title)
+                    .setMessage(R.string.settings_process_limit_restore_message)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.settings_process_limit_restore_action, (dialog, which) ->
+                        ProcessLimitNotice.get(context).revert(restored -> uiToast(context, restored
+                            ? R.string.settings_process_limit_restored : R.string.settings_process_limit_restore_failed)))
+                    .show();
+            } else {
+                startActivity(ProcessLimitNotice.guideIntent(context));
+            }
+            return true;
+        });
+    }
+
+    private void showProcessLimit() {
+        Preference row = findPreference(ProcessLimitNotice.DIAGNOSTICS_KEY);
+        Context context = getContext();
+        if (row == null || context == null || !row.isVisible()) return;
+        ProcessLimitPolicy.Limit limit = ProcessLimitNotice.get(context).limit();
+        CharSequence summary;
+        if (processLimitChecking || ProcessLimitNotice.get(context).card() == ProcessLimitPolicy.Card.WORKING) {
+            summary = getString(R.string.settings_process_limit_checking);
+        } else if (limit == ProcessLimitPolicy.Limit.OFF) {
+            summary = getString(ProcessLimitPolicy.offersRestore(limit,
+                    PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi())
+                ? R.string.settings_process_limit_off_restore : R.string.settings_process_limit_off);
+        } else {
+            summary = getString(R.string.settings_process_limit_default);
+        }
+        if (!android.text.TextUtils.equals(summary, row.getSummary())) row.setSummary(summary);
     }
 
     private void configureLogLevel(Context context) {
