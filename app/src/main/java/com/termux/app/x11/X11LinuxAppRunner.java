@@ -1055,7 +1055,10 @@ public final class X11LinuxAppRunner {
         for (String line : env) script.append("export ").append(line).append('\n');
         // The prefix desktop's apps are the prefix's, like a prefix app: give them fcitx5 so a
         // focused text field opens the Android keyboard. A container has neither it nor its modules.
-        if (app.container.isPrefix()) script.append(inputMethodBlock(display));
+        if (app.container.isPrefix()) {
+            script.append(inputMethodBlock(display));
+            script.append(menuDirsBlock());
+        }
         script.append("cd \"$HOME\"\n");
         if (stopWindowManager != null) script.append(stopWindowManager).append('\n');
         script.append("mkdir -p ")
@@ -1069,6 +1072,18 @@ public final class X11LinuxAppRunner {
         if (app.container.isPrefix()) script.append(body);
         else script.append("exec ").append(ProotDistro.loginCommand(app.container, body)).append('\n');
         return script.toString();
+    }
+
+    /**
+     * Puts {@code $PREFIX/local/share} ahead of the data dirs a prefix desktop reads, so its menu
+     * lists the apps the store installs there (their entries are in {@code local/share/applications},
+     * which the launcher's drawer reads too). A value the session already had is kept after it.
+     */
+    @NonNull
+    static String menuDirsBlock() {
+        String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        return "export XDG_DATA_DIRS=" + ProotDistro.singleQuote(prefix + "/local/share")
+            + ":\"${XDG_DATA_DIRS:-" + prefix + "/share}\"\n";
     }
 
     /**

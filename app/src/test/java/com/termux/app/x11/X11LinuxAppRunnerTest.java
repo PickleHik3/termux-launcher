@@ -97,6 +97,19 @@ public class X11LinuxAppRunnerTest {
         assertTrue(script.indexOf(block) < script.indexOf("cd \"$HOME\""));
     }
 
+    @Test public void aPrefixDesktopsMenuListsTheStoresAppsAndAContainerOneIsLeftAlone() {
+        // The store puts its menu entries under $PREFIX/local/share/applications.
+        String prefix = com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        assertEquals("export XDG_DATA_DIRS='" + prefix + "/local/share':\"${XDG_DATA_DIRS:-"
+            + prefix + "/share}\"\n", X11LinuxAppRunner.menuDirsBlock());
+        assertTrue(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
+            Collections.emptyList(), null).contains(X11LinuxAppRunner.menuDirsBlock()));
+        ProotDistro.Container debian =
+            new ProotDistro.Container("debian", temp.getRoot(), "", "");
+        assertFalse(X11LinuxAppRunner.sessionScript(session(debian, "xfce", "startxfce4", "XFCE"),
+            ":1", Collections.emptyList(), null).contains("XDG_DATA_DIRS"));
+    }
+
     @Test public void aPrefixAppGetsTheCursorLinesBeforeTheInputMethod() {
         String script = X11LinuxAppRunner.script(app("herdr"), ":1", Collections.emptyList());
         String block = X11LinuxAppRunner.cursorBlock();
@@ -284,7 +297,8 @@ public class X11LinuxAppRunnerTest {
 
         // Everything an app's script does, first and unchanged.
         assertTrue(script.startsWith("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
-            + X11LinuxAppRunner.inputMethodBlock(":1") + "cd \"$HOME\"\n"));
+            + X11LinuxAppRunner.inputMethodBlock(":1") + X11LinuxAppRunner.menuDirsBlock()
+            + "cd \"$HOME\"\n"));
         // Then the three things only a desktop needs, the directory made before it is used.
         assertTrue(script.contains(
             "export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/termux-x11-runtime\"\n"
