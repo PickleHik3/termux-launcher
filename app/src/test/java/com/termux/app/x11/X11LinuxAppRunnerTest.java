@@ -73,7 +73,7 @@ public class X11LinuxAppRunnerTest {
             X11CliInstaller.imBusPath(":0"));
     }
 
-    @Test public void aContainerAppAndADesktopAreNotGivenTheInputMethod() {
+    @Test public void aContainerAppAndAContainerDesktopAreNotGivenTheInputMethod() {
         // The helper's fcitx5 is the prefix's; a container has neither it nor its modules.
         ProotDistro.Container debian =
             new ProotDistro.Container("debian", temp.getRoot(), "", "");
@@ -81,8 +81,20 @@ public class X11LinuxAppRunnerTest {
             "gedit", "gedit", "", "", "", false);
         assertFalse(X11LinuxAppRunner.script(inDebian, ":1", Collections.emptyList())
             .contains("IM_MODULE"));
-        assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
-            Collections.emptyList(), null).contains("IM_MODULE"));
+        assertFalse(X11LinuxAppRunner.sessionScript(
+            session(debian, "xfce", "startxfce4", "XFCE"), ":1", Collections.emptyList(), null)
+            .contains("IM_MODULE"));
+    }
+
+    @Test public void aPrefixDesktopIsGivenTheInputMethodAfterTheEnvironment() {
+        // XFCE's apps are the prefix's, so a focused text field must reach fcitx5 and open the
+        // Android keyboard, as it does for a prefix app.
+        String script = X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"),
+            ":1", Arrays.asList("FOO=bar"), null);
+        String block = X11LinuxAppRunner.inputMethodBlock(":1");
+        assertTrue(script.contains(block));
+        assertTrue(script.indexOf(block) > script.indexOf("export FOO=bar"));
+        assertTrue(script.indexOf(block) < script.indexOf("cd \"$HOME\""));
     }
 
     @Test public void aPrefixAppGetsTheCursorLinesBeforeTheInputMethod() {
@@ -271,7 +283,8 @@ public class X11LinuxAppRunnerTest {
             ":1", Collections.emptyList(), null);
 
         // Everything an app's script does, first and unchanged.
-        assertTrue(script.startsWith("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\ncd \"$HOME\"\n"));
+        assertTrue(script.startsWith("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
+            + X11LinuxAppRunner.inputMethodBlock(":1") + "cd \"$HOME\"\n"));
         // Then the three things only a desktop needs, the directory made before it is used.
         assertTrue(script.contains(
             "export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/termux-x11-runtime\"\n"
@@ -332,7 +345,7 @@ public class X11LinuxAppRunnerTest {
             stopAt < script.indexOf("exec startxfce4"));
         // Nothing is stopped when there is no manager at all.
         assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
-            Collections.emptyList(), null).contains("kill"));
+            Collections.emptyList(), null).contains("kill \"$wm\""));
     }
 
     @Test public void theShellWritesDownThePidItIsAboutToBecome() {

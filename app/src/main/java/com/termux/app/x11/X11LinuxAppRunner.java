@@ -1018,6 +1018,9 @@ public final class X11LinuxAppRunner {
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
+        // The prefix desktop's apps are the prefix's, like a prefix app: give them fcitx5 so a
+        // focused text field opens the Android keyboard. A container has neither it nor its modules.
+        if (app.container.isPrefix()) script.append(inputMethodBlock(display));
         script.append("cd \"$HOME\"\n");
         if (stopWindowManager != null) script.append(stopWindowManager).append('\n');
         script.append("mkdir -p ")
