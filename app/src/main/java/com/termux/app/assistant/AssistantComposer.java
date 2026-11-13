@@ -177,7 +177,7 @@ final class AssistantComposer extends FrameLayout {
     void submit() {
         if (listener == null || generating) return;
         String text = text();
-        if (!text.trim().isEmpty()) listener.onSend(text);
+        if (!text.trim().isEmpty()) listener.onSend(text.trim());
     }
 
     /** Whether the field holds the focus, which is when the launcher's keyboard types into it. */
