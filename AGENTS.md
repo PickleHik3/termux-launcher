@@ -106,9 +106,10 @@ Before calling a change done, say which of these applied:
   [building.md](docs/agents/building.md).
 - Prove the change with the smallest check that shows it works, then stop: the tests you touched,
   then the module suite before handing work over. CI owns the rest.
-- If the cause of a bug is plain from the code, fix it. If not, or one fix has already missed,
-  reproduce the failing state first (a failing test, a log line, a measured value). Fixes ship
-  with a focused regression test.
+- The developer's description of what they see is the reproduction. For a small bug, when the
+  code shows a likely cause that fits it, fix it and name what to check. Build a reproduction (a
+  failing test, a log line, a measured value) only when no cause in the code fits, or one fix has
+  already missed. Fixes ship with a focused regression test.
 - Pong is the truth for layout and motion; the emulator is for throwaway shots.
 - Say what you verified and on what; anything owed goes on `project-docs/device-checks.md` or
   `developer-checks.md` in the same commit ([testing.md](docs/agents/testing.md)).
