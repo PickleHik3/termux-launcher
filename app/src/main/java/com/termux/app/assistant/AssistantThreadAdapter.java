@@ -43,6 +43,7 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
     }
 
     private static final float USER_MAX_FRACTION = 0.84f;
+    private static final float ANSWER_MAX_FRACTION = 0.92f;
 
     private final Actions actions;
     private AssistantUi.Palette palette;
@@ -113,7 +114,15 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
 
     @Override
     public void onBindViewHolder(@NonNull Holder holder, int position) {
+        holder.setGrouped(isLaterInUserGroup(rows, position));
         holder.bind(rows.get(position), palette);
+    }
+
+    /** Whether the row is a user message directly after another user message (no answer between). */
+    static boolean isLaterInUserGroup(@NonNull List<AssistantRows.Row> list, int position) {
+        return position > 0 && position < list.size()
+            && list.get(position).type == AssistantRows.Type.USER
+            && list.get(position - 1).type == AssistantRows.Type.USER;
     }
 
     abstract static class Holder extends RecyclerView.ViewHolder {
@@ -123,21 +132,30 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
+        /** Told before bind: the row is a later message of a run of user messages. */
+        void setGrouped(boolean grouped) {
+        }
+
         abstract void bind(@NonNull AssistantRows.Row row, @NonNull AssistantUi.Palette p);
     }
 
     /** Spacing: 24 between messages. */
     static final class Gap extends RecyclerView.ItemDecoration {
         private final int gapPx;
+        private final int groupedPx;
 
         Gap(int gapPx) {
             this.gapPx = gapPx;
+            this.groupedPx = Math.max(1, Math.round(2f * (float) gapPx / 24f));
         }
 
         @Override
         public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent,
                                    @NonNull RecyclerView.State state) {
-            outRect.top = parent.getChildAdapterPosition(view) == 0 ? 0 : gapPx;
+            int position = parent.getChildAdapterPosition(view);
+            boolean grouped = position > 0 && parent.getAdapter() instanceof AssistantThreadAdapter
+                && isLaterInUserGroup(((AssistantThreadAdapter) parent.getAdapter()).rows, position);
+            outRect.top = position == 0 ? 0 : grouped ? groupedPx : gapPx;
         }
     }
 
@@ -164,31 +182,64 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
 
     private static final class UserHolder extends Holder {
         private final TextView text;
+        private final GradientDrawable bubble = new GradientDrawable();
+        private final float[] radii = new float[8];
+        private final float big;
+        private final float small;
+        private boolean grouped;
 
         UserHolder(@NonNull Context context) {
             super(new FrameLayout(context));
+            big = AssistantUi.dp(context, 20);
+            small = AssistantUi.dp(context, 6);
             text = new CappedTextView(context);
             AssistantUi.body(text, 0);
-            int h = AssistantUi.dp(context, 16);
-            int v = AssistantUi.dp(context, 10);
+            int h = AssistantUi.dp(context, 14);
+            int v = AssistantUi.dp(context, 9);
             text.setPadding(h, v, h, v);
             text.setTextIsSelectable(false);
+            text.setBackground(bubble);
             ((FrameLayout) itemView).addView(text, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END));
         }
 
         @Override
+        void setGrouped(boolean grouped) {
+            this.grouped = grouped;
+        }
+
+        @Override
         void bind(@NonNull AssistantRows.Row row, @NonNull AssistantUi.Palette p) {
-            GradientDrawable bubble = new GradientDrawable();
-            float big = AssistantUi.dp(itemView, 20);
-            float small = AssistantUi.dp(itemView, 6);
-            // Top-left, top-right, bottom-right, bottom-left: 20 20 6 20.
-            bubble.setCornerRadii(new float[] {big, big, big, big, small, small, big, big});
+            // Top-left, top-right, bottom-right, bottom-left: 20 20 6 20; later in a group 20 6 6 20.
+            setRadii(radii, big, grouped ? small : big, small, big);
+            bubble.setCornerRadii(radii);
             bubble.setColor(p.primaryContainer);
-            text.setBackground(bubble);
             text.setTextColor(p.onPrimaryContainer);
             text.setText(row.text);
             text.setContentDescription(itemView.getContext().getString(R.string.assistant_you, row.text));
+        }
+    }
+
+    private static void setRadii(float[] out, float tl, float tr, float br, float bl) {
+        out[0] = tl; out[1] = tl; out[2] = tr; out[3] = tr;
+        out[4] = br; out[5] = br; out[6] = bl; out[7] = bl;
+    }
+
+    /** A bubble that wraps its content up to a fraction of the width it is offered. */
+    private static final class CappedColumn extends LinearLayout {
+        CappedColumn(Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int mode = MeasureSpec.getMode(widthMeasureSpec);
+            if (mode == MeasureSpec.UNSPECIFIED) {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                return;
+            }
+            int cap = Math.round(MeasureSpec.getSize(widthMeasureSpec) * ANSWER_MAX_FRACTION);
+            super.onMeasure(MeasureSpec.makeMeasureSpec(cap, MeasureSpec.AT_MOST), heightMeasureSpec);
         }
     }
 
@@ -196,6 +247,8 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
 
     private static final class AnswerHolder extends Holder {
         private final LinearLayout column;
+        private final GradientDrawable bubble = new GradientDrawable();
+        private final float[] radii = new float[8];
         private final LinearLayout actionsRow;
         private final TextView stopped;
         private final ImageButton copy;
@@ -209,27 +262,48 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
             this.actions = actions;
             LinearLayout root = (LinearLayout) itemView;
             root.setOrientation(LinearLayout.VERTICAL);
-            column = new LinearLayout(context);
+            column = new CappedColumn(context);
             column.setOrientation(LinearLayout.VERTICAL);
-            root.addView(column, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            int bh = AssistantUi.dp(context, 14);
+            int bv = AssistantUi.dp(context, 11);
+            column.setPadding(bh, bv, bh, bv);
+            float big = AssistantUi.dp(context, 20);
+            float small = AssistantUi.dp(context, 6);
+            // Top-left, top-right, bottom-right, bottom-left: 20 20 20 6.
+            setRadii(radii, big, big, big, small);
+            bubble.setCornerRadii(radii);
+            column.setBackground(bubble);
+            root.addView(column, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
             actionsRow = new LinearLayout(context);
             actionsRow.setOrientation(LinearLayout.HORIZONTAL);
             actionsRow.setGravity(Gravity.CENTER_VERTICAL);
             stopped = AssistantUi.text(context);
             stopped.setText(R.string.assistant_stopped);
-            stopped.setPaddingRelative(AssistantUi.dp(context, 14), 0, AssistantUi.dp(context, 6), 0);
+            stopped.setPaddingRelative(AssistantUi.dp(context, 14), 0, AssistantUi.dp(context, 2), 0);
             actionsRow.addView(stopped, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
             copy = AssistantUi.iconButton(context, R.drawable.ic_assistant_copy, R.string.assistant_copy, 0, 20f);
             share = AssistantUi.iconButton(context, R.drawable.ic_assistant_share, R.string.assistant_share, 0, 20f);
             retry = AssistantUi.iconButton(context, R.drawable.ic_assistant_refresh, R.string.assistant_try_again, 0, 20f);
-            int size = AssistantUi.dp(context, 48);
+            int size = AssistantUi.dp(context, 40);
+            int ipad = AssistantUi.dp(context, 10);
+            copy.setPadding(ipad, ipad, ipad, ipad);
+            share.setPadding(ipad, ipad, ipad, ipad);
+            retry.setPadding(ipad, ipad, ipad, ipad);
+            copy.setMinimumWidth(size);
+            copy.setMinimumHeight(size);
+            share.setMinimumWidth(size);
+            share.setMinimumHeight(size);
+            retry.setMinimumWidth(size);
+            retry.setMinimumHeight(size);
             actionsRow.addView(copy, new LinearLayout.LayoutParams(size, size));
             actionsRow.addView(share, new LinearLayout.LayoutParams(size, size));
             actionsRow.addView(retry, new LinearLayout.LayoutParams(size, size));
-            root.addView(actionsRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+            ap.setMarginStart(-AssistantUi.dp(context, 6));
+            root.addView(actionsRow, ap);
             copy.setOnClickListener(v -> {
                 if (row != null) actions.copy(row.text);
             });
@@ -245,6 +319,7 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
         void bind(@NonNull AssistantRows.Row r, @NonNull AssistantUi.Palette p) {
             row = r;
             AssistantUi.setVisible(column, !r.text.isEmpty());
+            bubble.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(p.surfaceHigh, 184));
             if (!r.text.isEmpty()) {
                 AssistantMarkdownViews.bind(column, AssistantMarkdown.parse(r.text), p,
                     code -> actions.copy(code));
