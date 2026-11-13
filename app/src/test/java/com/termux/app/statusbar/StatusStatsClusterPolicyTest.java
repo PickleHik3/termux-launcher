@@ -50,11 +50,12 @@ public class StatusStatsClusterPolicyTest {
     }
 
     @Test public void cpuRamDotHidesOnlyWhenNothingFollowsCpu() {
-        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, true, false));
-        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, true));
-        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, true, true));
-        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, false));
-        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(false, true, true));
+        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, true, false, false));
+        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, true, false));
+        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, false, true));
+        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, true, true, true));
+        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, false, false));
+        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(false, true, true, true));
     }
 
     @Test public void cpuShowsOnlyWithItsSwitchAndPrivilegedAccess() {
@@ -65,16 +66,52 @@ public class StatusStatsClusterPolicyTest {
     }
 
     @Test public void aCpuHiddenForWantOfAccessLeavesNoDotBehind() {
-        // Switch on, no access, RAM and weather on: the CPU-RAM dot goes with the CPU.
+        // Switch on, no access, RAM and weather on: the CPU dot goes with the CPU.
         boolean cpuOn = StatusStatsClusterPolicy.cpuShown(true, false);
-        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(cpuOn, true, true));
-        assertTrue(StatusStatsClusterPolicy.ramWeatherDotVisible(true, true));
+        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(cpuOn, true, false, true));
+        assertTrue(StatusStatsClusterPolicy.ramWeatherDotVisible(true, false, true));
     }
 
-    @Test public void ramWeatherDotShowsOnlyWhenBothShow() {
-        assertTrue(StatusStatsClusterPolicy.ramWeatherDotVisible(true, true));
-        assertFalse(StatusStatsClusterPolicy.ramWeatherDotVisible(true, false));
-        assertFalse(StatusStatsClusterPolicy.ramWeatherDotVisible(false, true));
-        assertFalse(StatusStatsClusterPolicy.ramWeatherDotVisible(false, false));
+    @Test public void ramDotShowsOnlyWhenRamShowsAndSomethingFollows() {
+        assertTrue(StatusStatsClusterPolicy.ramWeatherDotVisible(true, true, false));
+        assertTrue(StatusStatsClusterPolicy.ramWeatherDotVisible(true, false, true));
+        assertTrue(StatusStatsClusterPolicy.ramWeatherDotVisible(true, true, true));
+        assertFalse(StatusStatsClusterPolicy.ramWeatherDotVisible(true, false, false));
+        assertFalse(StatusStatsClusterPolicy.ramWeatherDotVisible(false, true, true));
+        assertFalse(StatusStatsClusterPolicy.ramWeatherDotVisible(false, false, false));
+    }
+
+    @Test public void batteryDotShowsOnlyWhenBothBatteryAndWeatherShow() {
+        assertTrue(StatusStatsClusterPolicy.batteryWeatherDotVisible(true, true));
+        assertFalse(StatusStatsClusterPolicy.batteryWeatherDotVisible(true, false));
+        assertFalse(StatusStatsClusterPolicy.batteryWeatherDotVisible(false, true));
+        assertFalse(StatusStatsClusterPolicy.batteryWeatherDotVisible(false, false));
+    }
+
+    /**
+     * Over every on/off combination of the four widgets, in the row's order: a dot is shown
+     * exactly when its widget shows and a later one does, so between two shown widgets there is
+     * one dot and none is doubled or left dangling at the end.
+     */
+    @Test public void everyCombinationHasOneDotBetweenNeighboursAndNoneDangling() {
+        for (int mask = 0; mask < 16; mask++) {
+            boolean cpu = (mask & 1) != 0, ram = (mask & 2) != 0;
+            boolean battery = (mask & 4) != 0, weather = (mask & 8) != 0;
+            boolean[] shown = {cpu, ram, battery, weather};
+            boolean[] dots = {
+                StatusStatsClusterPolicy.cpuRamDotVisible(cpu, ram, battery, weather),
+                StatusStatsClusterPolicy.ramWeatherDotVisible(ram, battery, weather),
+                StatusStatsClusterPolicy.batteryWeatherDotVisible(battery, weather), };
+            int widgets = 0, dotsShown = 0;
+            for (boolean w : shown) if (w) widgets++;
+            for (boolean d : dots) if (d) dotsShown++;
+            assertEquals("mask " + mask, Math.max(0, widgets - 1), dotsShown);
+            // Dot i sits after widget i: shown only after a shown widget with a later one shown.
+            for (int i = 0; i < 3; i++) {
+                boolean laterShown = false;
+                for (int n = i + 1; n < 4; n++) laterShown |= shown[n];
+                assertEquals("mask " + mask + " dot " + i, shown[i] && laterShown, dots[i]);
+            }
+        }
     }
 }

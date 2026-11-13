@@ -22,6 +22,11 @@
             app:summary="@string/settings_memory_usage_summary"
             app:defaultValue="false" />
         <SwitchPreferenceCompat
+            app:key="status_widget_battery"
+            app:title="@string/settings_battery_title"
+            app:summary="@string/settings_battery_summary"
+            app:defaultValue="false" />
+        <SwitchPreferenceCompat
             app:key="status_widget_media"
             app:title="@string/settings_status_media_title"
             app:summary="@string/settings_status_media_summary"

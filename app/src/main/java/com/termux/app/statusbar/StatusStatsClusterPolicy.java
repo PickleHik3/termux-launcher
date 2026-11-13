@@ -5,7 +5,7 @@ import androidx.annotation.NonNull;
 import com.termux.app.wall.PaneWallPage;
 
 /**
- * The CPU/RAM/weather cluster's order and centring: it keeps the row's end in its usual
+ * The CPU/RAM/battery/weather cluster's order and centring: it keeps the row's end in its usual
  * CPU · RAM · Weather order on every page since the bar is one across the wall (#90); the Widgets
  * place used to read Weather · RAM · CPU and centre in the row instead ({@link
  * #centeredReversed}). Both are place-driven, not width-driven, so a stat toggling on or off in
@@ -75,15 +75,22 @@ public final class StatusStatsClusterPolicy {
         return cpuEnabled && privilegedAvailable;
     }
 
-    /** The dot between the CPU and RAM widgets, wherever that pair sits in the row: on only when
-     *  CPU shows and something follows it (RAM, or weather standing in for a hidden RAM). */
-    public static boolean cpuRamDotVisible(boolean cpuOn, boolean ramOn, boolean weatherOn) {
-        return cpuOn && (ramOn || weatherOn);
+    /** The dot after the CPU widget, wherever the cluster sits in the row (CPU, RAM, battery,
+     *  weather): on only when CPU shows and something follows it, whichever of the three does. */
+    public static boolean cpuRamDotVisible(boolean cpuOn, boolean ramOn, boolean batteryOn,
+                                           boolean weatherOn) {
+        return cpuOn && (ramOn || batteryOn || weatherOn);
     }
 
-    /** The dot between the RAM and weather widgets, wherever that pair sits in the row: on only
-     *  when both show. */
-    public static boolean ramWeatherDotVisible(boolean ramOn, boolean weatherOn) {
-        return ramOn && weatherOn;
+    /** The dot after the RAM widget: on only when RAM shows and the battery or the weather
+     *  follows it. */
+    public static boolean ramWeatherDotVisible(boolean ramOn, boolean batteryOn,
+                                               boolean weatherOn) {
+        return ramOn && (batteryOn || weatherOn);
+    }
+
+    /** The dot after the battery widget: on only when both it and the weather show. */
+    public static boolean batteryWeatherDotVisible(boolean batteryOn, boolean weatherOn) {
+        return batteryOn && weatherOn;
     }
 }

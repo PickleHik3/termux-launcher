@@ -2325,6 +2325,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // neither onStart nor onResume calls. Without this the CPU and memory readings never
         // resumed after leaving the app and coming back.
         PrivilegedBackendManager.getInstance().addAvailabilityListener(mPrivilegedAvailabilityListener);
+        mStatusBar.setBatteryWindowStarted(true);
         mStatusBar.updateStatusWidgets();
         // onStop let go of the display's surface; nothing else re-attaches it when the wall
         // already rests on the Display place, and a display whose surface is not attached takes
@@ -10598,6 +10599,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onStop() {
         super.onStop();
+        mStatusBar.setBatteryWindowStarted(false);
         releaseKeyboardFrost();
         mSurfaceLongPress.dismiss();
         com.termux.app.terminal.TouchDownHint.detach(this);
@@ -22509,13 +22511,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (sessionsIndicator instanceof com.termux.app.statusbar.SessionsIndicatorView)
             ((com.termux.app.statusbar.SessionsIndicatorView) sessionsIndicator).setDeckLook(deck);
         for (int id : new int[]{R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
-                R.id.terminal_status_widget_weather}) {
+                R.id.terminal_status_widget_battery, R.id.terminal_status_widget_weather}) {
             View widget = findViewById(id);
             if (widget instanceof com.termux.app.statusbar.StatusBarWidgetView)
                 ((com.termux.app.statusbar.StatusBarWidgetView) widget).setDeckLook(deck);
         }
         for (int id : new int[]{R.id.terminal_status_dot_cpu_ram,
-                R.id.terminal_status_dot_ram_weather}) {
+                R.id.terminal_status_dot_ram_weather, R.id.terminal_status_dot_battery_weather}) {
             View dot = findViewById(id);
             if (dot instanceof com.termux.app.statusbar.MaterialDotSeparatorView)
                 ((com.termux.app.statusbar.MaterialDotSeparatorView) dot).setDeckLook(deck);
@@ -28797,7 +28799,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mark.setOnClickListener(v -> toggleMouseMode());
         }
         boolean anyStatBefore = mPreferences != null && (mPreferences.isStatusWidgetCpuEnabled()
-            || mPreferences.isStatusWidgetRamEnabled() || mPreferences.isStatusWidgetWeatherEnabled());
+            || mPreferences.isStatusWidgetRamEnabled() || mPreferences.isStatusWidgetBatteryEnabled()
+            || mPreferences.isStatusWidgetWeatherEnabled());
         mark.setVisibility(mFrameContent.isMouseMode() ? View.VISIBLE : View.GONE);
         dot.setVisibility(mFrameContent.isMouseMode() && anyStatBefore
             ? View.VISIBLE : View.GONE);

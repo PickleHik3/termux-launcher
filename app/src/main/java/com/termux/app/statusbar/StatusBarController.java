@@ -1339,6 +1339,11 @@ public final class StatusBarController {
         return mWidgets.statusCardStyleProvider();
     }
 
+    /** {@link StatusBarWidgets#setBatteryWindowStarted}. */
+    public void setBatteryWindowStarted(boolean started) {
+        mWidgets.setBatteryWindowStarted(started);
+    }
+
     /** {@link StatusBarWidgets#removeStatusNotificationsListener}. */
     public void removeStatusNotificationsListener() {
         mWidgets.removeStatusNotificationsListener();

@@ -338,6 +338,22 @@
                             android:visibility="gone" />
 
                         <com.termux.app.statusbar.StatusBarWidgetView
+                            android:id="@+id/terminal_status_widget_battery"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="3dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_status_widget_battery_content_description" />
+
+                        <com.termux.app.statusbar.MaterialDotSeparatorView
+                            android:id="@+id/terminal_status_dot_battery_weather"
+                            android:layout_width="3dp"
+                            android:layout_height="3dp"
+                            android:layout_gravity="center_vertical"
+                            android:layout_marginHorizontal="1dp"
+                            android:visibility="gone" />
+
+                        <com.termux.app.statusbar.StatusBarWidgetView
                             android:id="@+id/terminal_status_widget_weather"
                             android:layout_width="wrap_content"
                             android:layout_height="match_parent"
