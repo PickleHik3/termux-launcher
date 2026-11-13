@@ -459,4 +459,26 @@ public class X11LinuxAppRunnerTest {
         org.junit.Assert.assertTrue(env.toString(), env.contains("GALLIUM_DRIVER=llvmpipe"));
         org.junit.Assert.assertFalse(X11LinuxAppRunner.usesVirgl(env));
     }
+
+    @Test public void aDesktopWritesToALogFileNotTheHostsPipes() {
+        String script = X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"),
+            ":1", Collections.emptyList(), null);
+        String redirect = "exec > '" + X11LinuxAppRunner.SESSION_LOG_PATH + "' 2>&1\n";
+        int log = script.indexOf(redirect);
+        assertTrue(script, log >= 0);
+        assertTrue("before the desktop runs", log < script.indexOf("exec startxfce4"));
+    }
+
+    @Test public void theStopScriptKillsOnlyAProcessCarryingTheSessionMarker() {
+        String stop = X11LinuxAppRunner.stopSessionScript();
+        String check = "grep -qx \"" + X11LinuxAppRunner.SESSION_MARKER_VAR + "=$pid\" || exit 0\n";
+        assertTrue(stop, stop.contains(check));
+        assertTrue("the check comes before any kill", stop.indexOf(check) < stop.indexOf("kill "));
+        String script = X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"),
+            ":1", Collections.emptyList(), null);
+        assertTrue("the session exports the marker as its own pid",
+            script.contains("export " + X11LinuxAppRunner.SESSION_MARKER_VAR + "=$$\n"));
+        assertTrue("before it writes the pid file", script.indexOf(
+            "export " + X11LinuxAppRunner.SESSION_MARKER_VAR) < script.indexOf("echo $$ >"));
+    }
 }
