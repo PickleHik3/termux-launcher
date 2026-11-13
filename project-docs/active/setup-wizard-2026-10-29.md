@@ -156,8 +156,7 @@ in the code next to the table.
 ## Phase two: the card sheet
 
 After Finish, a sheet of cards for everything that takes more than one tap. A card exists only
-because a phase-one answer created it. The sheet comes back on every launcher start until every
-card is done or dismissed, and is reachable any time from Settings › General › Setup. Each card
+because a phase-one answer created it. The sheet opens by itself at launch only when a card has never been shown in it; a card shown once never reopens it, and a card id new to the user (added by an update, or a conditional card that now exists for the first time) reopens it once. It is reachable any time from Settings › General › Setup. Each card
 lists its sub-steps with ticks and has a **Dismiss** button for a user who already knows the item;
 a dismissed card can be reopened from the Setup row.
 
@@ -201,8 +200,8 @@ screen, and Done when the permission is held (re-checked on every sheet open):
 ### Dismissed cards
 
 Dismissed cards drop to a **Dismissed** list at the bottom of the sheet in minimized form (name
-plus **Reopen**), greyed, so an accidental dismiss is one tap away. The sheet keeps returning
-while any non-dismissed card is open; it stops when every card is done or dismissed.
+plus **Reopen**), greyed, so an accidental dismiss is one tap away. Opening the sheet by itself
+depends only on cards never shown before, not on whether any card is still open.
 
 ### Learn the basics card (everyone)
 
