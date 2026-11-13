@@ -491,6 +491,24 @@ public class AnchoredMenuTest {
         }
     }
 
+    @Test
+    public void toWindowCoordinatesLeavesFullScreenUnchanged() {
+        assertEquals(500, AnchoredMenuGeometry.toWindowX(500, 0));
+        assertEquals(300, AnchoredMenuGeometry.toWindowY(300, 0));
+    }
+
+    @Test
+    public void toWindowCoordinatesShiftsByRightHalfOrigin() {
+        assertEquals(132, AnchoredMenuGeometry.toWindowX(1500, 1368));
+        assertEquals(300, AnchoredMenuGeometry.toWindowY(300, 0));
+    }
+
+    @Test
+    public void toWindowCoordinatesShiftsByBottomHalfOrigin() {
+        assertEquals(88, AnchoredMenuGeometry.toWindowY(1000, 912));
+        assertEquals(500, AnchoredMenuGeometry.toWindowX(500, 0));
+    }
+
     private static final class FixedTheme implements AnchoredMenuTheme {
         @Override public int textColor() { return 0xFFEEEEEE; }
         @Override public int selectedTextColor() { return 0xFF112233; }

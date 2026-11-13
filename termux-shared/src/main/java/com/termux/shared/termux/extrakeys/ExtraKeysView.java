@@ -1811,10 +1811,17 @@ public final class ExtraKeysView extends GridLayout {
         // A touch bigger than the key so the secondary glyph and its compact chip read clearly.
         mBubbleW = Math.round(mTravelKeyW * 1.2f);
         mBubbleH = Math.round(mTravelKeyH * 1.2f);
-        int screenW = getResources().getDisplayMetrics().widthPixels;
-        int centeredX = loc[0] - (mBubbleW - mTravelKeyW) / 2;
-        mTravelKeyScreenX = Math.max(0, Math.min(centeredX, Math.max(0, screenW - mBubbleW)));
-        mTravelKeyScreenY = loc[1] - (mBubbleH - mTravelKeyH) / 2;
+        // PopupWindow.showAtLocation/update take the parent window's coordinates, which differ
+        // from the screen's in split screen, so work in the window's: origin and width of the root.
+        View windowRoot = getRootView();
+        if (windowRoot == null) windowRoot = button;
+        int[] origin = new int[2];
+        windowRoot.getLocationOnScreen(origin);
+        int windowW = windowRoot.getWidth() > 0 ? windowRoot.getWidth()
+            : getResources().getDisplayMetrics().widthPixels;
+        int centeredX = loc[0] - origin[0] - (mBubbleW - mTravelKeyW) / 2;
+        mTravelKeyScreenX = Math.max(0, Math.min(centeredX, Math.max(0, windowW - mBubbleW)));
+        mTravelKeyScreenY = loc[1] - origin[1] - (mBubbleH - mTravelKeyH) / 2;
         // Clear the row: the bubble rises a full key-height plus a little more.
         mBubbleTravelDistPx = mTravelKeyH + dpToPx(16f);
         mTravelSourceText = button.getText();

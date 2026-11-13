@@ -13,6 +13,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 
 import com.termux.R;
+import com.termux.app.launcher.popup.AnchoredMenuGeometry;
 import com.termux.app.material.M3;
 
 /**
@@ -108,7 +109,12 @@ public final class WidgetGridSizePopup {
             Math.max(pageOnScreen[0], pageOnScreen[0] + page.getWidth() - width));
         int y = clamp(Math.round(pageOnScreen[1] + tab.bottom + 4f * density), pageOnScreen[1],
             Math.max(pageOnScreen[1], pageOnScreen[1] + page.getHeight() - height));
-        popup.showAtLocation(page, Gravity.TOP | Gravity.LEFT, x, y);
+        // showAtLocation wants the parent window's coordinates, not the screen's (split screen).
+        int[] windowOrigin = new int[2];
+        page.getRootView().getLocationOnScreen(windowOrigin);
+        popup.showAtLocation(page, Gravity.TOP | Gravity.LEFT,
+            AnchoredMenuGeometry.toWindowX(x, windowOrigin[0]),
+            AnchoredMenuGeometry.toWindowY(y, windowOrigin[1]));
 
         return new WidgetGridSizePopup(popup);
     }

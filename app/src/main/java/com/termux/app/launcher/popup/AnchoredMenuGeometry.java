@@ -25,6 +25,16 @@ public final class AnchoredMenuGeometry {
     private AnchoredMenuGeometry() {
     }
 
+    /** Screen x to the host window's x, given the window's left edge on screen. */
+    public static int toWindowX(int screenX, int windowLeftOnScreen) {
+        return screenX - windowLeftOnScreen;
+    }
+
+    /** Screen y to the host window's y, given the window's top edge on screen. */
+    public static int toWindowY(int screenY, int windowTopOnScreen) {
+        return screenY - windowTopOnScreen;
+    }
+
     /** dp -> px with the host's density, rounded the same way the launcher's views round it. */
     public static int dp(float density, int value) {
         return Math.round(value * density);
