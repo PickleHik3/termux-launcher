@@ -6931,7 +6931,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean inAppKeyboardSeesThroughToDisplay() {
         return KeyboardMaterialPolicy.seesThroughToDisplay(inAppKeyboardForm(),
-            inAppKeyboardOverlays(), inAppKeyboardOnDisplay());
+            inAppKeyboardOverlays(), inAppKeyboardOnDisplay(),
+            KeyboardOverlayPolicy.contentUnderWholeBed(arrangement().layout()));
     }
 
     @NonNull
@@ -7936,8 +7937,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Display-pages look see-through, with no wallpaper frame: its Opacity and Tint over the
         // live display, and the Frost drawn by the compositor in a blur layer under the bed.
         // Neither the unified dock glass nor the joined frame's sheet stands in for it here: both
-        // would lay the wallpaper over the display.
-        if (KeyboardMaterialPolicy.seesThroughToDisplay(form, overlays, display)) {
+        // would lay the wallpaper over the display. Only while the display lies behind the whole
+        // bed: with rows over the keyboard, whose room at rest is below the display, the bed's
+        // lower strip lies over the wallpaper, and the bed wears the wallpaper glass below from
+        // top to bottom, one material with the dock's rows (KeyboardMaterialPolicy).
+        if (inAppKeyboardSeesThroughToDisplay()) {
             surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
                 state, surfaceHost, capsule, cornerRadiusPx));
             clearInAppKeyboardBackdrop();
@@ -16783,11 +16787,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         stackIn.ceilingBeforeMarginPx = accessoryStackCeilingBeforeMarginPx();
         stackIn.keyboardOverlays = keyboardOverlays;
         stackIn.dockOverlays = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
-        // The place the keyboard question is asked of, so a display window no longer in front
-        // gives the terminal its room back.
-        stackIn.contentUnderStack = KeyboardOverlayPolicy.contentUnderStack(
-            KeyboardOverlayPolicy.keyboardPlace(mLastWallPage, isDisplayWindowInFront()),
-            arrangement().layout());
         stackIn.systemImeTakePx = systemImeTakePx();
         stackIn.travelHoldsContent = mCrossing.holdsContent();
         stackIn.heldReservationPx = mCrossing.heldReservationPx();

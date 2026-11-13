@@ -64,19 +64,24 @@ public class KeyboardOverlayPolicyTest {
     }
 
     @Test
-    public void onlyADisplayPageInOverlayModeReachesUnderTheWholeStack() {
-        for (KeyboardForm form : KeyboardForm.values()) {
-            assertTrue(KeyboardOverlayPolicy.contentUnderStack(PaneWallPage.DISPLAY,
-                layout(KeyboardMode.OVERLAY, form)));
-            assertFalse("resize mode keeps the display above the keyboard",
-                KeyboardOverlayPolicy.contentUnderStack(PaneWallPage.DISPLAY,
-                    layout(KeyboardMode.RESIZE, form)));
-            for (PaneWallPage place : PaneWallPage.values()) {
-                if (place == PaneWallPage.DISPLAY) continue;
-                assertFalse(KeyboardOverlayPolicy.contentUnderStack(place,
-                    layout(KeyboardMode.OVERLAY, form)));
-            }
-        }
+    public void rowsOverTheKeyboardLeaveTheBedsLowerStripOutsideTheContent() {
+        PlaceLayout rows = layout(KeyboardMode.OVERLAY);
+        assertFalse("the extra keys and apps rows stand over the keyboard",
+            KeyboardOverlayPolicy.contentUnderWholeBed(rows));
+        // Nothing along the bottom at all: the content reaches the bed's bottom.
+        PlaceLayout bare = new PlaceLayout(Edge.TOP, RowPlacement.HIDDEN, false, Edge.TOP,
+            RowPlacement.HIDDEN, KeyboardMode.OVERLAY, KeyboardForm.DOCKED, 4, 5);
+        assertTrue(KeyboardOverlayPolicy.contentUnderWholeBed(bare));
+        // A status bar along the bottom always stands over the keyboard.
+        PlaceLayout status = bare.withSlot(Element.STATUS, Slot.on(Edge.BOTTOM, Element.STATUS));
+        assertFalse(KeyboardOverlayPolicy.contentUnderWholeBed(status));
+        // The extra keys under the keyboard stay under its bed.
+        PlaceLayout under = bare.withSlot(Element.EXTRA_KEYS,
+            new Slot(false, Edge.BOTTOM, 0, true));
+        assertTrue(KeyboardOverlayPolicy.contentUnderWholeBed(under));
+        // A column on a side is no band along the bottom.
+        PlaceLayout column = bare.withSlot(Element.EXTRA_KEYS, Slot.on(Edge.RIGHT, Element.EXTRA_KEYS));
+        assertTrue(KeyboardOverlayPolicy.contentUnderWholeBed(column));
     }
 
     // ------------------------------------------------------------------ when it applies

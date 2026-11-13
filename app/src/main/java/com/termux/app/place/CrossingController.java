@@ -1101,7 +1101,6 @@ public final class CrossingController {
         PlaceLayout placeLayout = place == mHost.lastWallPage()
             ? mHost.arrangement().layout() : snapshot.half(side).layout;
         in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, placeLayout);
-        in.contentUnderStack = KeyboardOverlayPolicy.contentUnderStack(place, placeLayout);
         // The Terminal's flush padding is part of its rest: the applied one while it is the place,
         // else the one it last rested with, so Home's terminal page and the slide back are laid
         // out at the height the landing settles at, not one padding taller.
