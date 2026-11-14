@@ -131,31 +131,33 @@ public class ExtraKeyColorRoleTest {
     }
 
     @Test
-    public void theShippedRowColoursTheThreePlaceSwitches() throws Exception {
+    public void theShippedRowsCarryNoColouredKey() throws Exception {
+        // The place switches left the shipped row for the navigation dot, and with them the colours.
+        for (String row : new String[]{
+            com.termux.shared.termux.settings.properties.TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
+            com.termux.shared.termux.settings.properties.TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_DISPLAY,
+            com.termux.shared.termux.settings.properties.TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT}) {
+            ExtraKeysInfo info = new ExtraKeysInfo(row,
+                com.termux.shared.termux.settings.properties.TermuxPropertyConstants
+                    .DEFAULT_IVALUE_EXTRA_KEYS_STYLE,
+                ExtraKeysConstants.CONTROL_CHARS_ALIASES);
+            for (ExtraKeyButton key : info.getMatrix()[0]) assertNull(key.getKey(), key.getColor());
+        }
+    }
+
+    @Test
+    public void aRowWithPlaceSwitchesStillColoursThem() throws Exception {
         ExtraKeysInfo info = new ExtraKeysInfo(
-            com.termux.shared.termux.settings.properties.TermuxPropertyConstants
-                .DEFAULT_IVALUE_EXTRA_KEYS,
+            "[[{key: 'tool:wall.widgets', color: 'primary'}, {key: 'tool:wall.terminal', color: 'secondary'},"
+                + " {key: 'tool:wall.display', color: 'tertiary'}, ESC]]",
             com.termux.shared.termux.settings.properties.TermuxPropertyConstants
                 .DEFAULT_IVALUE_EXTRA_KEYS_STYLE,
             ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         ExtraKeyButton[] row = info.getMatrix()[0];
-        for (ExtraKeyButton key : row) {
-            switch (key.getKey()) {
-                case "tool:wall.widgets":
-                    assertSame(ExtraKeyColorRole.PRIMARY, key.getColor());
-                    break;
-                case "tool:wall.terminal":
-                    assertSame(ExtraKeyColorRole.SECONDARY, key.getColor());
-                    break;
-                case "tool:wall.display":
-                    assertSame(ExtraKeyColorRole.TERTIARY, key.getColor());
-                    break;
-                default:
-                    // Everything else ships with the row's own styling.
-                    assertNull(key.getKey(), key.getColor());
-                    break;
-            }
-        }
+        assertSame(ExtraKeyColorRole.PRIMARY, row[0].getColor());
+        assertSame(ExtraKeyColorRole.SECONDARY, row[1].getColor());
+        assertSame(ExtraKeyColorRole.TERTIARY, row[2].getColor());
+        assertNull(row[3].getColor());
     }
 
     @Nullable

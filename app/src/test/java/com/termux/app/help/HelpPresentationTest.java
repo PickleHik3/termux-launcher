@@ -598,7 +598,7 @@ public class HelpPresentationTest {
     @Test public void onlyTheLaunchersOwnKeysAreLabelled() throws Exception {
         ExtraKeysInfo launcher = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
             "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES);
-        assertEquals(7, launcher.getMatrix()[0].length);
+        assertEquals(4, launcher.getMatrix()[0].length);
         for (ExtraKeyButton key : launcher.getMatrix()[0])
             assertTrue(key.getKey() + " is the launcher's own", HelpCopy.isLauncherKey(key));
         ExtraKeysInfo upstream = new ExtraKeysInfo("[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]",
