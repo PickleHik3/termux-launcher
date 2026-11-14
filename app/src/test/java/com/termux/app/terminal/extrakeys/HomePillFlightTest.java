@@ -80,6 +80,24 @@ public class HomePillFlightTest {
     }
 
     @Test
+    public void theArrayPoseIsTheRectPose() {
+        float[] pill = {800f, 1200f, 1000f, 1292f};
+        float[] docked = {0f, 1700f, 1080f, 1820f};
+        HomePillSpot.Rect from = new HomePillSpot.Rect(pill[0], pill[1], pill[2], pill[3]);
+        HomePillSpot.Rect to = new HomePillSpot.Rect(docked[0], docked[1], docked[2], docked[3]);
+        float[] expected = new float[4];
+        float[] actual = new float[4];
+        for (float p : new float[] {-1f, 0f, 0.3f, 1f, 2f}) {
+            HomePillFlight.keyboardPose(from, to, p, expected);
+            HomePillFlight.keyboardPose(pill, docked, p, actual);
+            for (int i = 0; i < 4; i++) assertEquals(expected[i], actual[i], D);
+        }
+        // The caller may pose into the pill's own array.
+        HomePillFlight.keyboardPose(pill, docked, 1f, pill);
+        assertEquals(docked[1], pill[1], D);
+    }
+
+    @Test
     public void theDurationIs280Ms() {
         assertEquals(280L, HomePillFlight.DURATION_MS);
     }

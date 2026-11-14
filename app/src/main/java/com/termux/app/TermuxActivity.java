@@ -23383,6 +23383,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mPaneWallController != null && mPaneWallController.isTerminalShowing();
     }
 
+    /**
+     * The stack's translation at keyboard reveal {@code shown} (0 down, 1 up): the keyboard's laid
+     * out height less what has come up. The one formula for the swipe's frame and for the Home
+     * pill riding it.
+     */
+    private float keyboardTravelTranslationPx(float shown) {
+        return travelKeyboardLaidOutPx() * (1f - shown);
+    }
+
     /** The keyboard's height as the stack lays it out; 0 while it is down or floating. */
     private int travelKeyboardLaidOutPx() {
         if (!isInAppKeyboardShown() || isKeyboardFloating()) return 0;
@@ -24916,7 +24925,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setKeyboardSwipeTravel(float reveal) {
         if (!mKeyboardSwipeTravel) return;
         float shown = Math.max(0f, Math.min(1f, reveal));
-        float translation = travelKeyboardLaidOutPx() * (1f - shown);
+        float translation = keyboardTravelTranslationPx(shown);
         mChromeTravelMoved = true;
         if (mCrossing.holdsContent()) {
             com.termux.view.TerminalView view = mPaneController == null ? null
@@ -24980,6 +24989,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (contentPreRolled) finishTravelContentResizeAfterLayout(gridHold);
         if (held) settleTerminalTravelDisplacement();
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        // The Home pill takes the pose of the keyboard's end, whatever progress last reached it.
+        com.termux.app.terminal.extrakeys.HomePillLayer pillLayer = mHomePillLayer;
+        if (pillLayer != null) pillLayer.keyboardDock().onKeyboardSettled();
     }
 
     /** Lands a keyboard swipe still under way, before something else moves the chrome. */
@@ -25131,6 +25143,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onKeyboardRevealProgress(float reveal) {
                     setKeyboardSwipeTravel(reveal);
+                    // The Home pill rides the same reveal (draw-only, allocation-free).
+                    com.termux.app.terminal.extrakeys.HomePillLayer pillLayer = mHomePillLayer;
+                    if (pillLayer != null && mKeyboardSwipeTravel) {
+                        pillLayer.keyboardDock().onProgress(reveal);
+                    }
                 }
                 @Override public void onKeyboardRevealEnd(boolean open) {
                     finishKeyboardSwipeTravel(open);
@@ -34586,6 +34603,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             layer.setHost(mHomePillHost);
             // A flight to the docked bar held the pill on after Home went; its end lets go.
             layer.flights().setListener(() -> mHomePill.holdForFlight(false));
+            layer.keyboardDock().setSource(mHomePillHost);
             mHomePillLayer = layer;
         }
         return mHomePillLayer;
@@ -34610,6 +34628,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final int[] mHomePillScratchB = new int[2];
     private final int[] mHomePillScratchC = new int[2];
     private final Rect mHomePillAzRect = new Rect();
+    /** The geometry pass whose extra-keys row height {@link #mHomePillRowPx} is. */
+    @Nullable private com.termux.app.place.StackLayout.Result mHomePillRowFor;
+    private int mHomePillRowPx;
 
     /** Whether a down in window coordinates lands on the visible pill or its chip. */
     private boolean homePillClaimsDown(@NonNull MotionEvent ev) {
@@ -34655,7 +34676,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * are the activity's own answers; no number is predicted here that a policy already owns.
      */
     private final class HomePillHost implements com.termux.app.terminal.io.HomePillController.Host,
-            com.termux.app.terminal.extrakeys.HomePillLayer.Host {
+            com.termux.app.terminal.extrakeys.HomePillLayer.Host,
+            com.termux.app.terminal.extrakeys.HomePillKeyboardDock.Source {
         @Override public boolean switchOn() {
             com.termux.app.terminal.io.HomePillSwitch pillSwitch = homePillSwitch();
             return pillSwitch != null && pillSwitch.isOn(currentPlaceOrientation());
@@ -34833,6 +34855,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Re-dressed as it comes back, so a theme or Look change made while it was away shows.
             if (shown) applyHomePillDress();
             layer.setPillShown(shown);
+        }
+
+        @Override public void setPillDocked(boolean docked) {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            if (layer != null) layer.keyboardDock().onDockedChanged(docked, mKeyboardSwipeTravel);
+        }
+
+        /**
+         * The docked pose's rect, in layer pixels. Horizontally the span the docked bar takes in
+         * the accessory row stack (the stack's own padding edges); as tall as the bar's row
+         * ({@link #measuredExtraKeysRowPx}); standing on the top of the accessory stack at rest
+         * with the keyboard up, which is the stack's bottom as the view stands (less its own
+         * travel) minus the height the last geometry pass gave the whole stack
+         * ({@code mAppliedStack.stackHeightPx}), so a pass not yet laid out moves nothing.
+         */
+        @Override public boolean readDockedRect(@NonNull float[] out) {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            View stack = hotView(R.id.accessory_stack_container);
+            View rows = hotView(R.id.accessory_row_stack);
+            com.termux.app.place.StackLayout.Result applied = mAppliedStack;
+            if (layer == null || stack == null || rows == null || applied == null
+                    || layer.getWidth() <= 0 || stack.getHeight() <= 0 || rows.getWidth() <= 0) {
+                return false;
+            }
+            // The row's height only moves with a geometry pass, which hands over a new result, so
+            // this is read once per pass and not per frame of a reveal.
+            if (applied != mHomePillRowFor) {
+                mHomePillRowFor = applied;
+                mHomePillRowPx = measuredExtraKeysRowPx();
+            }
+            int rowPx = mHomePillRowPx;
+            if (rowPx <= 0) return false;
+            int[] layerAt = mHomePillScratchA;
+            layer.getLocationOnScreen(layerAt);
+            int[] rowsAt = mHomePillScratchB;
+            rows.getLocationOnScreen(rowsAt);
+            float left = rowsAt[0] - layerAt[0] + rows.getPaddingLeft();
+            float right = rowsAt[0] - layerAt[0] + rows.getWidth() - rows.getPaddingRight();
+            int[] stackAt = mHomePillScratchC;
+            stack.getLocationOnScreen(stackAt);
+            float stackBottom = Math.round(stackAt[1] - stack.getTranslationY()) + stack.getHeight()
+                - layerAt[1];
+            float bottom = stackBottom - applied.stackHeightPx;
+            if (right <= left || bottom - rowPx <= 0f) return false;
+            out[0] = left;
+            out[1] = bottom - rowPx;
+            out[2] = right;
+            out[3] = bottom;
+            return true;
+        }
+
+        @Override public float stackTravelPx(float progress) {
+            return keyboardTravelTranslationPx(progress);
         }
 
         @Override public void openKeysEditor() {

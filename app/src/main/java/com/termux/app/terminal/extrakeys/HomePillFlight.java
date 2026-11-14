@@ -61,6 +61,15 @@ public final class HomePillFlight {
         out[3] = lerp(pill.bottom, docked.bottom, q);
     }
 
+    /**
+     * The same pose from plain arrays (left, top, right, bottom), for the per-frame path, which
+     * builds no {@link Rect}. {@code out} may be {@code pill}.
+     */
+    public static void keyboardPose(float[] pill, float[] docked, float p, float[] out) {
+        float q = Math.max(0f, Math.min(1f, p));
+        for (int i = 0; i < 4; i++) out[i] = lerp(pill[i], docked[i], q);
+    }
+
     private static float lerp(float a, float b, float t) {
         return a + (b - a) * t;
     }

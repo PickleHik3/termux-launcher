@@ -95,6 +95,12 @@ public final class HomePillController {
 
         void setPillShown(boolean shown);
 
+        /**
+         * The pill is docked for the in-app keyboard (shown while it is up) or floating again.
+         * Told only when it changes.
+         */
+        void setPillDocked(boolean docked);
+
         void openKeysEditor();
     }
 
@@ -113,6 +119,7 @@ public final class HomePillController {
     private int mPlacedH = -1;
     private boolean mPlacedFor;
     private boolean mShown;
+    private boolean mDocked;
     private boolean mFlightHold;
 
     public HomePillController(@NonNull Host host) {
@@ -123,12 +130,19 @@ public final class HomePillController {
         return mShown;
     }
 
-    /** Whether Home's content is open to the pill, by the facts alone (no geometry). */
+    /** The pill is docked for the keyboard (shown with it up). */
+    public boolean isDocked() {
+        return mDocked;
+    }
+
+    /**
+     * Whether Home's content is open to the pill, by the facts alone (no geometry). The in-app
+     * keyboard is not one of them: with it up the pill docks above it.
+     */
     public boolean shows() {
         if (!mHost.switchOn()) return false;
         if (mHost.settledPlace() != PaneWallPage.WIDGETS) return false;
         if (mHost.keyTarget() != ExtraKeysTarget.HOME) return false;
-        if (mHost.keyboardUp()) return false;
         if (mHost.appDrawerOpen() || mHost.paletteOpen()) return false;
         if (mHost.layoutEditorActive() || mHost.surfaceEditorActive() || mHost.appearanceOpen()) return false;
         if (mHost.overlayOpen() || mHost.minimalMode()) return false;
@@ -172,6 +186,11 @@ public final class HomePillController {
         if (placed != mShown) {
             mShown = placed;
             mHost.setPillShown(placed);
+        }
+        boolean docked = placed && mHost.keyboardUp();
+        if (docked != mDocked) {
+            mDocked = docked;
+            mHost.setPillDocked(docked);
         }
     }
 

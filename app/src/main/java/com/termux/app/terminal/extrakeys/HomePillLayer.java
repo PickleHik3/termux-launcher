@@ -34,6 +34,7 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
     private final HomePillView mPill;
     private final HomePillChip mChip;
     private final HomePillFlightPlayer mFlights;
+    private final HomePillKeyboardDock mDock;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final Runnable mHideChip = this::hideChip;
     private final float[] mSpot = new float[2];
@@ -56,6 +57,7 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
         mPill = new HomePillView(context);
         mPill.setListener(this);
         mFlights = new HomePillFlightPlayer(this, mPill);
+        mDock = new HomePillKeyboardDock(this, mPill);
         mChip = new HomePillChip(context);
         mChip.setOnEditKeys(this::onChipClicked);
         mChip.setVisibility(INVISIBLE);
@@ -81,12 +83,17 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
         return mFlights;
     }
 
+    /** The pill's ride over the in-app keyboard. */
+    @NonNull
+    public HomePillKeyboardDock keyboardDock() {
+        return mDock;
+    }
+
     /**
-     * A flight owns the pill's transform: the controller must not place it and a touch on it is
-     * passed over.
+     * A flight or the keyboard's dock owns the pill's transform: the controller must not place it.
      */
     public boolean ownsPose() {
-        return mFlights.isFlying();
+        return mFlights.isFlying() || mDock.ownsPose();
     }
 
     public void setHost(@Nullable Host host) {
@@ -115,6 +122,8 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
         if (!shown) {
             hideChip();
             mFlights.onPillHidden();
+            // Hidden, it is floating again, so it comes back at its spot.
+            mDock.reset();
         }
     }
 
@@ -224,6 +233,7 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
         mHandler.removeCallbacks(mHideChip);
         mClaimed = false;
         mFlights.finish();
+        mDock.reset();
         super.onDetachedFromWindow();
     }
 }

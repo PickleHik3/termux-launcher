@@ -64,7 +64,6 @@ public class HomePillControllerTest {
             h -> h.target = ExtraKeysTarget.TERMINAL,
             h -> h.target = ExtraKeysTarget.GLOBAL,
             h -> h.target = null,
-            h -> h.keyboardUp = true,
             h -> h.drawer = true,
             h -> h.palette = true,
             h -> h.layoutEditor = true,
@@ -128,7 +127,7 @@ public class HomePillControllerTest {
 
     @Test
     public void noKeysAreFedWhileItIsHidden() {
-        host.keyboardUp = true;
+        host.drawer = true;
         controller.refresh();
         assertEquals(0, host.setKeysCalls);
     }
@@ -208,6 +207,71 @@ public class HomePillControllerTest {
     }
 
     @Test
+    public void theKeyboardComingUpDocksThePillInsteadOfHidingIt() {
+        controller.refresh();
+        assertTrue(host.shown);
+        assertFalse(controller.isDocked());
+        host.keyboardUp = true;
+        assertTrue(controller.shows());
+        controller.refresh();
+        assertTrue("still on screen", host.shown);
+        assertTrue(controller.isShown());
+        assertTrue(controller.isDocked());
+        assertTrue(host.docked);
+        assertEquals(1, host.dockedCalls);
+        // A refresh that finds nothing new says nothing again.
+        controller.refresh();
+        assertEquals(1, host.dockedCalls);
+    }
+
+    @Test
+    public void theKeyboardGoingAwayLetsTheDockedPillGo() {
+        host.keyboardUp = true;
+        controller.refresh();
+        assertTrue(host.docked);
+        host.keyboardUp = false;
+        controller.refresh();
+        assertTrue(host.shown);
+        assertFalse(host.docked);
+        assertFalse(controller.isDocked());
+        assertEquals(2, host.dockedCalls);
+    }
+
+    @Test
+    public void aTerminalFloatFocusedOverTheKeyboardHidesItAndDocksNothing() {
+        host.keyboardUp = true;
+        host.target = ExtraKeysTarget.TERMINAL;
+        controller.refresh();
+        assertFalse(host.shown);
+        assertFalse(controller.isDocked());
+        assertFalse(host.docked);
+        assertEquals("never told it docked", 0, host.dockedCalls);
+    }
+
+    @Test
+    public void aDockedPillThatAFactHidesIsNoLongerDocked() {
+        host.keyboardUp = true;
+        controller.refresh();
+        assertTrue(host.docked);
+        host.drawer = true;
+        controller.refresh();
+        assertFalse(host.shown);
+        assertFalse(host.docked);
+        assertFalse(controller.isDocked());
+    }
+
+    @Test
+    public void aDockedPillIsNotPlacedOnItsSpot() {
+        controller.refresh();
+        int places = host.placeCalls;
+        host.keyboardUp = true;
+        host.pickedUp = true;
+        host.geo[HomePillController.GEO_STACK_TOP] = 700f;
+        controller.refresh();
+        assertEquals("the dock owns its pose", places, host.placeCalls);
+    }
+
+    @Test
     public void aFlightHoldsTheShownPillThoughHomeIsGone() {
         controller.refresh();
         assertTrue(host.shown);
@@ -275,6 +339,8 @@ public class HomePillControllerTest {
         int pillW = 200;
         int pillH = 92;
         boolean pickedUp;
+        boolean docked;
+        int dockedCalls;
 
         int setKeysCalls;
         float fedScale;
@@ -334,6 +400,10 @@ public class HomePillControllerTest {
         @Override public void setPillShown(boolean shown) {
             shownCalls++;
             this.shown = shown;
+        }
+        @Override public void setPillDocked(boolean docked) {
+            dockedCalls++;
+            this.docked = docked;
         }
         @Override public void openKeysEditor() { editorOpened++; }
     }
