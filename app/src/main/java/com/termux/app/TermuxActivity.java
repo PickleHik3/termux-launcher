@@ -1116,6 +1116,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * any page is the one the terminal reads.
      */
     @NonNull private final ExtraKeyModifiers mExtraKeyModifiers = new ExtraKeyModifiers();
+    /** Which keys the bar and the edge column show; the only caller of the bar's key-set change. */
+    @NonNull private final com.termux.app.terminal.io.ExtraKeySetController mExtraKeySetController =
+        new com.termux.app.terminal.io.ExtraKeySetController(new ExtraKeySetHost());
     /**
      * Key page 1 on its own, standing in the portable host while the place puts the keys on a
      * side or the top edge; built the first time the host needs it, restyled on every sync.
@@ -15034,7 +15037,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bar.setModifiers(mExtraKeyModifiers);
         bar.setClient(getTermuxTerminalExtraKeys(0));
         bar.setPageStyler(this::styleExtraKeysPage);
-        bar.setKeySet(extraKeysInfos());
+        mExtraKeySetController.refresh(false);
         String savedTextInput = null;
         if (savedInstanceState != null)
             savedTextInput = savedInstanceState.getString(ARG_TERMINAL_TOOLBAR_TEXT_INPUT);
@@ -15065,17 +15068,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ExtraKeysBarView bar = getTerminalToolbarViewPager();
         if (bar == null || mTerminalToolbarDefaultHeight <= 0) return;
         bar.setRowMetrics(Math.round(mTerminalToolbarDefaultHeight),
-            mProperties == null ? 1f : mProperties.getTerminalToolbarHeightScaleFactor());
+            extraKeysScale());
     }
 
-    /** The key set of every configured page, in page order. */
-    @NonNull
-    private com.termux.shared.termux.extrakeys.ExtraKeysInfo[] extraKeysInfos() {
-        int count = getExtraKeysPageCount();
-        com.termux.shared.termux.extrakeys.ExtraKeysInfo[] infos =
-            new com.termux.shared.termux.extrakeys.ExtraKeysInfo[count];
-        for (int i = 0; i < count; i++) infos[i] = getTermuxTerminalExtraKeys(i).getExtraKeysInfo();
-        return infos;
+    /** The row scale of the key set on show; Global's until a set has been applied. */
+    private float extraKeysScale() {
+        if (mExtraKeySetController.target() != null) return mExtraKeySetController.scale();
+        return mProperties == null ? 1f : mProperties.getTerminalToolbarHeightScaleFactor();
+    }
+
+    /** The rows of the key set's first page, 0 until one has been applied. */
+    private int extraKeysPageOneRows() {
+        com.termux.shared.termux.extrakeys.ExtraKeysInfo[] infos = mExtraKeySetController.pages();
+        return infos.length == 0 || infos[0] == null || infos[0].getMatrix() == null
+            ? 0 : infos[0].getMatrix().length;
     }
 
     /**
@@ -15743,13 +15749,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The keys' width in the column: the row's height turned on its side. */
     private int extraKeysColumnKeysWidthPx() {
-        int matrix = 0;
-        if (mTermuxTerminalExtraKeys != null && mTermuxTerminalExtraKeys.getExtraKeysInfo() != null) {
-            matrix = mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix().length;
-        }
         return AccessoryStackLayoutPolicy.computeTerminalToolbarHeightPx(
-            Math.round(mTerminalToolbarDefaultHeight), matrix,
-            mProperties == null ? 1f : mProperties.getTerminalToolbarHeightScaleFactor());
+            Math.round(mTerminalToolbarDefaultHeight), extraKeysPageOneRows(), extraKeysScale());
     }
 
     private boolean extraKeysColumnOnSide(@NonNull PlaceLayout layout) {
@@ -15827,7 +15828,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         keys.setVertical(vertical);
         styleExtraKeysPage(keys, 0);
-        keys.setKeys(getTermuxTerminalExtraKeys(0).getExtraKeysInfo());
+        // A column asked for before the toolbar was set up still gets the keys' set.
+        if (mExtraKeySetController.target() == null) mExtraKeySetController.refresh(false);
+        com.termux.shared.termux.extrakeys.ExtraKeysInfo[] infos = mExtraKeySetController.pages();
+        keys.setKeys(infos.length == 0 ? null : infos[0]);
         return keys;
     }
 
@@ -15980,9 +15984,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * removed a page; the page showing stays where it can.
      */
     private void rebuildTerminalToolbarPages() {
-        ExtraKeysBarView bar = getTerminalToolbarViewPager();
-        if (bar == null) return;
-        bar.setKeySet(extraKeysInfos());
+        mExtraKeySetController.reload();
     }
 
     /**
@@ -23241,13 +23243,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ExtraKeysBarView bar = getTerminalToolbarViewPager();
         if (bar != null && bar.pageCount() > 0) {
             matrix = bar.committedRows();
-        } else if (mTermuxTerminalExtraKeys != null
-                && mTermuxTerminalExtraKeys.getExtraKeysInfo() != null) {
-            matrix = mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix().length;
+        } else {
+            matrix = extraKeysPageOneRows();
         }
+        float scale = bar != null && bar.pageCount() > 0 ? bar.committedScale() : extraKeysScale();
         return AccessoryStackLayoutPolicy.computeTerminalToolbarHeightPx(
-            Math.round(mTerminalToolbarDefaultHeight), matrix,
-            mProperties.getTerminalToolbarHeightScaleFactor());
+            Math.round(mTerminalToolbarDefaultHeight), matrix, scale);
     }
 
     /** The extra-keys row's height as the last pass set it, 0 while the row is off. */
@@ -25345,6 +25346,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSettledWallPage = page;
         settlePlaceChrome(page);
         restoreInAppKeyboardTypingClaim();
+        mExtraKeySetController.refresh(true);
         noteTerminalPlaceMayBeVisible();
         if (mWidgetPaneController != null) {
             mWidgetPaneController.onWallPageShown(
@@ -26847,6 +26849,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncDisplayAttachment(@NonNull com.termux.app.wall.PaneWallPage page) {
         mSettledWallPage = page;
+        mExtraKeySetController.refresh(true);
         com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
             ? null : mPaneWallController.displayWindow();
         // Off its window the display's view must neither keep the keys nor take them back.
@@ -32440,6 +32443,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onActivePaneChanged() {
             adoptActivePane();
+            mExtraKeySetController.refresh(true);
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
             refreshTerminalWindowBar();
@@ -32487,6 +32491,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onHomeFloatsChanged() {
             onHomeFloatsChangedInActivity();
+            mExtraKeySetController.refresh(true);
         }
 
         @Override public void onHomeFloatDocked(
@@ -32519,6 +32524,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onHomeFloatFocusReleased() {
+            mExtraKeySetController.refresh(true);
             // A press on Home beside the floats, or the focused float minimised or closed: the
             // keyboard it raised goes with it, unless Home keeps one always on.
             if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS && mInAppKeyboard != null
@@ -34474,5 +34480,66 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         return null;
+    }
+
+    /** What the key set owner reads from and tells the activity. */
+    private final class ExtraKeySetHost implements com.termux.app.terminal.io.ExtraKeySetController.Host {
+        @NonNull @Override public com.termux.app.wall.PaneWallPage settledPlace() {
+            return settledWallPage();
+        }
+
+        @Override public boolean homeFloatFocused() {
+            return mPaneController != null && mPaneController.focusedHomeFloat() != null;
+        }
+
+        @Override public boolean homeFloatIsDisplay() {
+            return false;
+        }
+
+        @Nullable @Override public String rawLine(@NonNull String key) {
+            return mProperties == null ? null : mProperties.getPropertyValue(key, null, true);
+        }
+
+        @Nullable @Override public com.termux.shared.termux.extrakeys.ExtraKeysInfo parsePage(
+                @NonNull String value, @NonNull String fallback, int page) {
+            return TermuxTerminalExtraKeys.parsePage(TermuxActivity.this, value, page, fallback);
+        }
+
+        @Nullable @Override public ExtraKeysBarView bar() {
+            return getTerminalToolbarViewPager();
+        }
+
+        @Nullable @Override public ExtraKeysPageView edgePage() {
+            ExtraKeysPageView keys = mExtraKeysColumnPage;
+            View host = findViewById(R.id.place_extra_keys_host);
+            return keys != null && host != null && host.getVisibility() == View.VISIBLE
+                && keys.getParent() == host ? keys : null;
+        }
+
+        @Override public boolean barShown() {
+            ExtraKeysBarView bar = getTerminalToolbarViewPager();
+            return bar != null && bar.getVisibility() == View.VISIBLE && bar.isShown()
+                && bar.getWidth() > 0;
+        }
+
+        @NonNull @Override public ExtraKeyModifiers modifiers() {
+            return mExtraKeyModifiers;
+        }
+
+        @Override public void onEdgeKeysChanged() {
+            ExtraKeysPageView keys = edgePage();
+            View host = findViewById(R.id.place_extra_keys_host);
+            if (keys == null || !(host instanceof FrameLayout) || mExtraKeysHostEdge == null) return;
+            int thicknessPx = extraKeysColumnKeysWidthPx();
+            if (mExtraKeysHostEdge.isOnSide()) {
+                sizeExtraKeysColumnKeys((FrameLayout) host, keys, thicknessPx);
+            } else {
+                ViewGroup.LayoutParams hostParams = host.getLayoutParams();
+                if (hostParams != null && hostParams.height != thicknessPx) {
+                    hostParams.height = thicknessPx;
+                    host.setLayoutParams(hostParams);
+                }
+            }
+        }
     }
 }
