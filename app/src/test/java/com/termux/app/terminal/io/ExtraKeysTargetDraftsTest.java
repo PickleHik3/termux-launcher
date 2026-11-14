@@ -3,6 +3,7 @@ package com.termux.app.terminal.io;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -210,5 +211,70 @@ public class ExtraKeysTargetDraftsTest {
         assertEquals(start, d.fingerprint());
         d.giveOwnSet(ExtraKeysTarget.ASSISTANT);
         assertNotEquals(start, d.fingerprint());
+    }
+
+    // ---- Home's keys switch
+
+    private static final String HOME_KEY = TermuxPropertyConstants.KEY_EXTRA_KEYS_HOME;
+
+    @Test
+    public void homeOffWithNoLineIsNotEditedAndShowingStartsFromTheStarterKeys() {
+        ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines(
+            TermuxPropertyConstants.KEY_EXTRA_KEYS, "[[F1,F2,F3,F4]]"), false);
+        assertFalse(d.isEditing(ExtraKeysTarget.HOME));
+        d.showHome();
+        assertTrue(d.isEditing(ExtraKeysTarget.HOME));
+        assertTrue(d.homeShownChanged());
+        assertEquals(3, d.draftOf(ExtraKeysTarget.HOME).page(0).keyCount());
+        assertEquals(ExtraKeysLayoutModel.parse(TermuxPropertyConstants.HOME_PILL_STARTER_EXTRA_KEYS)
+            .serialize(), d.draftOf(ExtraKeysTarget.HOME).page(0).serialize());
+    }
+
+    @Test
+    public void homeOnShowsItsSetForEditingAndOffKeepsTheLine() {
+        ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines(HOME_KEY, "[[F1]]"), true);
+        assertTrue(d.isEditing(ExtraKeysTarget.HOME));
+        assertFalse(d.homeShownChanged());
+        d.hideHome();
+        assertFalse(d.isEditing(ExtraKeysTarget.HOME));
+        assertTrue(d.homeShownChanged());
+        assertTrue("the line stays", d.isOwn(ExtraKeysTarget.HOME));
+        for (Write w : d.writes()) {
+            if (w.key.equals(HOME_KEY)) assertNotNull("the line is not removed", w.value);
+        }
+    }
+
+    @Test
+    public void homeOffWithALineShowsThatLineWhenSwitchedOnNotTheStarter() {
+        ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines(HOME_KEY, "[[F1]]"), false);
+        assertFalse(d.isEditing(ExtraKeysTarget.HOME));
+        d.showHome();
+        assertTrue(d.isEditing(ExtraKeysTarget.HOME));
+        assertEquals(1, d.draftOf(ExtraKeysTarget.HOME).page(0).keyCount());
+        assertEquals("F1", d.draftOf(ExtraKeysTarget.HOME).page(0).row(0).get(0).key);
+    }
+
+    @Test
+    public void theSwitchIsPartOfWhatSaveHasToApplyAndUndoBringsItBack() {
+        ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines(), false);
+        String before = d.fingerprint();
+        ExtraKeysTargetDrafts.Snapshot snap = d.snapshot();
+        d.showHome();
+        assertNotEquals(before, d.fingerprint());
+        d.restore(snap);
+        assertEquals(before, d.fingerprint());
+        assertFalse(d.homeShownChanged());
+        d.showHome();
+        d.markSaved();
+        assertFalse(d.homeShownChanged());
+    }
+
+    @Test
+    public void otherTargetsAreEditedExactlyWhenOwn() {
+        ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines(
+            TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL, "[[ESC]]"), true);
+        assertTrue(d.isEditing(ExtraKeysTarget.TERMINAL));
+        assertFalse(d.isEditing(ExtraKeysTarget.DISPLAY));
+        assertTrue(d.isEditing(ExtraKeysTarget.GLOBAL));
     }
 }

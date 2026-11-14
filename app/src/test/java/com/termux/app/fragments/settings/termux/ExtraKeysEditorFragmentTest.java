@@ -142,4 +142,60 @@ public class ExtraKeysEditorFragmentTest {
         assertEquals(ExtraKeysTarget.GLOBAL,
             field.get(new ExtraKeysEditorHarness().fragment));
     }
+
+    private static void openHome(ExtraKeysEditorHarness h) throws Exception {
+        java.lang.reflect.Field field = ExtraKeysEditorFragment.class.getDeclaredField("target");
+        field.setAccessible(true);
+        field.set(h.fragment, ExtraKeysTarget.HOME);
+        java.lang.reflect.Method refresh = ExtraKeysEditorFragment.class.getDeclaredMethod("refreshAll");
+        refresh.setAccessible(true);
+        refresh.invoke(h.fragment);
+        h.idle();
+    }
+
+    @Test
+    public void homeWithKeysOffSaysSoAndOffersOnlyToShowThem() throws Exception {
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness(ExtraKeysTarget.HOME);
+        openHome(h);
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_off_title)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_off_body)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_show)));
+        assertNull("no Global wording on Home",
+            findVisible(h, s(R.string.settings_extra_keys_using_global_title)));
+        assertNull(findVisible(h, s(R.string.settings_extra_keys_home_hide)));
+        assertFalse(h.fragment.hasUnsavedChanges());
+    }
+
+    @Test
+    public void showingHomeKeysOpensItsRowsWithTheStarterKeysAndOffersToHideThem() throws Exception {
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness(ExtraKeysTarget.HOME);
+        openHome(h);
+        h.click(findText(h.page(), s(R.string.settings_extra_keys_home_show)));
+        assertTrue("applies on Save like the page's other changes", h.fragment.hasUnsavedChanges());
+        assertNull(findVisible(h, s(R.string.settings_extra_keys_home_off_title)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_add_row)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_hide)));
+        assertNull(findVisible(h, s(R.string.settings_extra_keys_use_global)));
+
+        h.click(findText(h.page(), s(R.string.settings_extra_keys_home_hide)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_show)));
+    }
+
+    @Test
+    public void otherTargetsKeepTheGenericCard() throws Exception {
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness(ExtraKeysTarget.TERMINAL);
+        java.lang.reflect.Field field = ExtraKeysEditorFragment.class.getDeclaredField("target");
+        field.setAccessible(true);
+        assertEquals(ExtraKeysTarget.TERMINAL, field.get(h.fragment));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_using_global_title)));
+        assertNull(findVisible(h, s(R.string.settings_extra_keys_home_show)));
+    }
+
+    private static View findVisible(ExtraKeysEditorHarness h, String text) {
+        View v = findText(h.page(), text);
+        for (View p = v; p != null; p = p.getParent() instanceof View ? (View) p.getParent() : null) {
+            if (p.getVisibility() != View.VISIBLE) return null;
+        }
+        return v;
+    }
 }
