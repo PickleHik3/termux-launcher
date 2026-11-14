@@ -13,7 +13,7 @@ import com.termux.app.TermuxService;
 import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeyModifiers;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
@@ -43,8 +43,8 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** The shell behind {@link #focusedView()}, or null when no pane holds one. */
     @Nullable TerminalSession currentSession();
 
-    /** The extra keys row of the visible toolbar page, or null while there is none. */
-    @Nullable ExtraKeysView extraKeysView();
+    /** The one modifier state every extra-keys page shares; the terminal reads CTRL, ALT, SHIFT and FN from it. */
+    @NonNull ExtraKeyModifiers extraKeyModifiers();
 
     /** The toolbar's text input, or null while the toolbar is not inflated. */
     @Nullable EditText toolbarTextInput();

@@ -642,10 +642,10 @@ final class DockDress {
         moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_underlay, surfaceInset);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_overlay, surfaceInset);
 
-        // Keep the extra-keys ViewPager from leaking its adjacent (text-input) page. In capsule mode
-        // the pager is inset from the dock edges, so the off-screen page's edge (the "❮" button)
-        // peeked into the visible page. clipChildren alone doesn't clip a ViewPager's off-screen
-        // pages, so hard-clip the pager to its own rectangular bounds via clipToOutline.
+        // Keep the extra-keys bar from leaking its adjacent (text-input) page. In capsule mode
+        // the bar is inset from the dock edges, so the off-screen page's edge (the "❮" button)
+        // peeked into the visible page. Its pages sit side by side, so hard-clip the bar to its
+        // own rectangular bounds via clipToOutline.
         View toolbarPager = mHost.findViewById(R.id.terminal_toolbar_view_pager);
         if (toolbarPager instanceof ViewGroup) {
             ((ViewGroup) toolbarPager).setClipChildren(true);

@@ -43,7 +43,7 @@ import com.termux.app.surfaces.SurfaceLongPressRoute.Box;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Target;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Zone;
 import com.termux.app.wall.PaneWallPage;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -336,7 +336,7 @@ public final class SurfaceLongPress {
         return view.isLongClickable()
             || view instanceof AzScrubRowView
             || view instanceof PinnedNotificationsView
-            || view.getParent() instanceof ExtraKeysView;
+            || view.getParent() instanceof ExtraKeysPageView;
     }
 
     // ------------------------------------------------------------------------ the card

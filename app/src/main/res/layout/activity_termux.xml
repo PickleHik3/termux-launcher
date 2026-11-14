@@ -600,8 +600,9 @@
                         android:visibility="gone" />
                 </LinearLayout>
 
-                <!-- The extra keys standing off the dock: the toolbar pager's own first-page
-                     ExtraKeysView is lent to this host. syncExtraKeysHost() fills and sizes it. -->
+                <!-- The extra keys standing off the dock: the activity's own standalone
+                     ExtraKeysPageView of key page 1 stands in this host. syncExtraKeysHost() fills
+                     and sizes it. -->
                 <FrameLayout
                     android:id="@+id/place_extra_keys_host"
                     android:layout_width="wrap_content"
@@ -877,7 +878,7 @@
                     android:clipChildren="false"
                     android:clipToPadding="false">
 
-                    <androidx.viewpager.widget.ViewPager
+                    <com.termux.app.terminal.extrakeys.ExtraKeysBarView
                         android:id="@+id/terminal_toolbar_view_pager"
                         android:visibility="gone"
                         android:layout_width="match_parent"

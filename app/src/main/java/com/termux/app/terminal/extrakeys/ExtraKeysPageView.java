@@ -236,6 +236,11 @@ public final class ExtraKeysPageView extends ViewGroup {
         return mMatrixRows;
     }
 
+    /** The longest configured row: how many keys stand in a line when the page is vertical. */
+    public int columnCount() {
+        return mMatrixColumns;
+    }
+
     public int keyCount() {
         return mCaps.size();
     }
@@ -282,6 +287,11 @@ public final class ExtraKeysPageView extends ViewGroup {
     }
 
     // ---- Modifiers.
+
+    @Nullable
+    public ExtraKeyModifiers getModifiers() {
+        return mModifiers;
+    }
 
     public void setModifiers(@Nullable ExtraKeyModifiers modifiers) {
         if (modifiers == mModifiers) return;
@@ -370,8 +380,13 @@ public final class ExtraKeysPageView extends ViewGroup {
         return mButtonBackgroundColor;
     }
 
+    /** Caps built later, and the ones already built, take the labels in this case. */
     public void setButtonTextAllCaps(boolean buttonTextAllCaps) {
+        if (mButtonTextAllCaps == buttonTextAllCaps) return;
         mButtonTextAllCaps = buttonTextAllCaps;
+        for (int i = 0; i < mCaps.size(); i++) {
+            mCaps.get(i).setLabel(mKeys.get(i).getDisplay(), buttonTextAllCaps);
+        }
     }
 
     /** Tint for the press glow; 0 falls back to the active text colour. */
