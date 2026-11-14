@@ -156,6 +156,28 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             return new TermuxAppSharedPreferences(termuxPackageContext, displayIdSuffixOf(context));
     }
 
+    /**
+     * Where the Home pill rests: its centre as fractions of the window, {@code {x, y}} each in
+     * [0, 1], or null while it has never been moved (or a stored value is unusable).
+     */
+    @Nullable
+    public float[] getHomePillPosition() {
+        if (mSharedPreferences == null || !mSharedPreferences.contains(TERMUX_APP.KEY_HOME_PILL_X)
+            || !mSharedPreferences.contains(TERMUX_APP.KEY_HOME_PILL_Y)) return null;
+        float x = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_X, Float.NaN);
+        float y = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_Y, Float.NaN);
+        if (Float.isNaN(x) || Float.isNaN(y)) return null;
+        return new float[]{Math.max(0f, Math.min(1f, x)), Math.max(0f, Math.min(1f, y))};
+    }
+
+    public void setHomePillPosition(float x, float y) {
+        if (Float.isNaN(x) || Float.isNaN(y)) return;
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_X,
+            Math.max(0f, Math.min(1f, x)), false);
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_Y,
+            Math.max(0f, Math.min(1f, y)), false);
+    }
+
     public boolean shouldShowTerminalToolbar() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_SHOW_TERMINAL_TOOLBAR, TERMUX_APP.DEFAULT_VALUE_SHOW_TERMINAL_TOOLBAR);
     }

@@ -433,6 +433,13 @@ public final class TermuxPreferenceConstants {
 
         public static final float DEFAULT_APP_LAUNCHER_BAR_HEIGHT = 2.18f;
 
+        /**
+         * Defines the keys for where the Home pill rests: its centre as a fraction of the window's
+         * width and height. Absent means the default first spot.
+         */
+        public static final String KEY_HOME_PILL_X = "home_pill_x";
+        public static final String KEY_HOME_PILL_Y = "home_pill_y";
+
         public static final float MIN_APP_LAUNCHER_BAR_HEIGHT = 0.4f;
 
         public static final float MAX_APP_LAUNCHER_BAR_HEIGHT = 3.0f;
