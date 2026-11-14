@@ -29,9 +29,9 @@ Terminal and Home show the Global keys until you give them their own.
 
 ## Keys for each place
 
-The bar shows the keys for whatever it is sending keys to. The terminal window in front shows the
-Terminal keys, a Display page shows the Display keys, the Assistant page shows the Assistant keys,
-and Home shows the Home keys. Home's bar is off today, but Home can hold a set of its own.
+The bar shows the keys for whatever it is sending keys to. A terminal window in front shows the
+Terminal keys, the display window shows the Display keys and the Assistant page shows the Assistant
+keys. Home does not show the bar; keys you give Home are kept for it.
 
 The keys change by themselves as you move between a terminal window and a display. Keys both sets
 share stay where they are while the rest change. A Ctrl or Alt you armed or locked is let go when
