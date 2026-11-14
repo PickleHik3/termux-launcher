@@ -258,7 +258,7 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
 
     /** The rows the bar's height stands for: those of the committed page, not of one still sliding. */
     public int committedRows() {
-        return ExtraKeysBarHeight.rowsOf(mKeyPageRows, mCommitted);
+        return pageCount() == 0 ? 0 : ExtraKeysBarHeight.rowsOf(mKeyPageRows, mCommitted);
     }
 
     public void setAnchorEdge(int gravity) {
