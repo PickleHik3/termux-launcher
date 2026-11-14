@@ -208,6 +208,34 @@ public class HomePillControllerTest {
     }
 
     @Test
+    public void aFlightHoldsTheShownPillThoughHomeIsGone() {
+        controller.refresh();
+        assertTrue(host.shown);
+        host.place = PaneWallPage.TERMINAL;
+        host.target = ExtraKeysTarget.TERMINAL;
+        controller.holdForFlight(true);
+        int keysFed = host.setKeysCalls;
+        controller.refresh();
+        assertTrue(host.shown);
+        assertTrue(controller.isShown());
+        assertEquals("it keeps Home's keys", keysFed, host.setKeysCalls);
+        controller.holdForFlight(false);
+        assertFalse("letting go rechecks and hides it", host.shown);
+        assertFalse(controller.isShown());
+    }
+
+    @Test
+    public void holdingAPillThatIsNotShownDoesNothing() {
+        host.place = PaneWallPage.TERMINAL;
+        controller.refresh();
+        controller.holdForFlight(true);
+        host.place = PaneWallPage.WIDGETS;
+        host.target = ExtraKeysTarget.HOME;
+        controller.refresh();
+        assertTrue("no hold was taken, so Home shows it", host.shown);
+    }
+
+    @Test
     public void theChipOpensTheEditor() {
         controller.onEditKeys();
         assertEquals(1, host.editorOpened);

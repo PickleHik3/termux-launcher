@@ -72,6 +72,13 @@ public final class ExtraKeySetController {
         return mTarget;
     }
 
+    /** Where the extra keys go for the place and float focus as they are now, applied or not. */
+    @NonNull
+    public ExtraKeysTarget targetNow() {
+        return ExtraKeySetResolver.targetFor(mHost.settledPlace(), mHost.homeFloatFocused(),
+            mHost.homeFloatIsDisplay());
+    }
+
     @Nullable
     public ExtraKeySetResolver.Resolved resolved() {
         return mResolved;

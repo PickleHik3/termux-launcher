@@ -113,6 +113,7 @@ public final class HomePillController {
     private int mPlacedH = -1;
     private boolean mPlacedFor;
     private boolean mShown;
+    private boolean mFlightHold;
 
     public HomePillController(@NonNull Host host) {
         mHost = host;
@@ -141,7 +142,20 @@ public final class HomePillController {
         refresh();
     }
 
+    /**
+     * Keeps a shown pill on screen, with its keys, though Home is no longer the place: a flight to
+     * the docked bar is carrying it. Letting go rechecks, which hides it. Ignored while the pill is
+     * not shown.
+     */
+    public void holdForFlight(boolean hold) {
+        if (hold && !mShown) return;
+        if (hold == mFlightHold) return;
+        mFlightHold = hold;
+        if (!hold) refresh();
+    }
+
     public void refresh() {
+        if (mFlightHold) return;
         boolean show = shows();
         boolean placed = false;
         if (show) {

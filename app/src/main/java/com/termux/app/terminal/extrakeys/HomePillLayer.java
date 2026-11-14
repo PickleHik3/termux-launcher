@@ -33,6 +33,7 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
 
     private final HomePillView mPill;
     private final HomePillChip mChip;
+    private final HomePillFlightPlayer mFlights;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final Runnable mHideChip = this::hideChip;
     private final float[] mSpot = new float[2];
@@ -54,6 +55,7 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
         setClipToPadding(false);
         mPill = new HomePillView(context);
         mPill.setListener(this);
+        mFlights = new HomePillFlightPlayer(this, mPill);
         mChip = new HomePillChip(context);
         mChip.setOnEditKeys(this::onChipClicked);
         mChip.setVisibility(INVISIBLE);
@@ -71,6 +73,20 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
     @NonNull
     public HomePillChip chip() {
         return mChip;
+    }
+
+    /** The pill's one-shot flights at a page change. */
+    @NonNull
+    public HomePillFlightPlayer flights() {
+        return mFlights;
+    }
+
+    /**
+     * A flight owns the pill's transform: the controller must not place it and a touch on it is
+     * passed over.
+     */
+    public boolean ownsPose() {
+        return mFlights.isFlying();
     }
 
     public void setHost(@Nullable Host host) {
@@ -92,8 +108,14 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
     public void setPillShown(boolean shown) {
         int visibility = shown ? VISIBLE : INVISIBLE;
         if (mPill.getVisibility() == visibility) return;
+        // An armed flight to the pill starts before the pill is drawn, so its first frame is the
+        // flight's first.
+        if (shown) mFlights.onPillShown();
         mPill.setVisibility(visibility);
-        if (!shown) hideChip();
+        if (!shown) {
+            hideChip();
+            mFlights.onPillHidden();
+        }
     }
 
     public void showChip(float left, float top) {
@@ -117,6 +139,8 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
 
     @Override
     public void onPillPickedUp() {
+        // A flight still under way lands before the finger moves the pill.
+        mFlights.finish();
         mPickupLeft = mPill.getTranslationX();
         mPickupTop = mPill.getTranslationY();
         followChip(mPickupLeft, mPickupTop);
@@ -166,6 +190,8 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
      * The activity's surface long-press guard asks this before it arms.
      */
     public boolean claimsDown(float x, float y) {
+        // A pill in flight is not a thing to press or pick up.
+        if (mFlights.isFlying()) return false;
         return hits(mPill, x, y) || hits(mChip, x, y);
     }
 
@@ -197,6 +223,7 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
     protected void onDetachedFromWindow() {
         mHandler.removeCallbacks(mHideChip);
         mClaimed = false;
+        mFlights.finish();
         super.onDetachedFromWindow();
     }
 }

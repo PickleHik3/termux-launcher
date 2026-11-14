@@ -2882,6 +2882,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         mReturnHold.onPaused();
+        endHomePillFlight();
         // A landing still waiting for its post lands before the screen goes.
         flushLandedFrameSettle();
         // The frost under a keyboard over the display goes with the screen; onResume's pass
@@ -16930,7 +16931,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             stack.contentReservationPx != appliedContentReservationPx();
         mAppliedStack = stack;
         boolean keyboardShownChanged = mKeyboardGeometry.applyKeyboardShown(state.keyboardShown);
-        if (keyboardShownChanged) mHomePill.refresh();
+        if (keyboardShownChanged) {
+            endHomePillFlight();
+            mHomePill.refresh();
+        }
         // While the slide holds the content, the room it gives back is laid out under a grid the
         // travel has paused (preRollTravelContent); the settle sends the PTY its one size.
         if (!mCrossing.holdsContent() && shouldRequestTerminalResize(requestTerminalResize,
@@ -24839,6 +24843,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : mSheets.isCommandPaletteOpen() || isHomeKeyboardAlwaysOn())) return 0;
         mKeyboardSwipeTravel = true;
         mKeyboardSwipeFromOpen = up;
+        endHomePillFlight();
         // The room the content has now, read before anything moves; the other end is read once
         // the keyboard it depends on has been measured.
         int fromReservationPx = keyboardSwipeReservationPx(up);
@@ -25381,10 +25386,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // rather than in the release frame (ADR 0003). The dock and the keyboard have
         // already travelled there with the slide; this is where what they showed
         // becomes the layout.
+        // The Home pill's flight, read before the settle re-dresses the chrome: where the docked
+        // bar stands now, and whether the pill is on screen to fly. A flight still running lands
+        // first.
+        com.termux.app.wall.PaneWallPage placeBefore = settledWallPage();
+        com.termux.app.terminal.extrakeys.HomePillLayer pillLayer = homePillLayer();
+        com.termux.app.terminal.extrakeys.HomePillFlightPlayer flights =
+            pillLayer == null ? null : pillLayer.flights();
+        boolean pillFree = false;
+        boolean barBefore = false;
+        if (flights != null) {
+            flights.finish();
+            pillFree = mHomePill.isShown() && !pillLayer.ownsPose();
+            barBefore = flights.captureDockedBar(getTerminalToolbarViewPager());
+        }
         mSettledWallPage = page;
         settlePlaceChrome(page);
         restoreInAppKeyboardTypingClaim();
-        refreshExtraKeySet(true);
+        com.termux.app.terminal.extrakeys.HomePillFlightPlan.Flight flight = flights == null
+            ? com.termux.app.terminal.extrakeys.HomePillFlightPlan.Flight.NONE
+            : com.termux.app.terminal.extrakeys.HomePillFlightPlan.decide(placeBefore, page,
+                pillFree, barBefore, buildChromeSpec().extraKeysRowEnabled,
+                mHomePillHost.switchOn(), !isReducedMotionEnabled(),
+                mExtraKeySetController.targetNow());
+        if (flight == com.termux.app.terminal.extrakeys.HomePillFlightPlan.Flight.TO_DOCK) {
+            // The pill stays on screen for the flight, with Home's keys.
+            mHomePill.holdForFlight(true);
+        } else if (flight == com.termux.app.terminal.extrakeys.HomePillFlightPlan.Flight.TO_PILL) {
+            flights.armToPill();
+        }
+        // The flight is the motion of a page change that starts or ends on Home with the bar on,
+        // so the key set swaps under it instead of morphing.
+        refreshExtraKeySet(flight == com.termux.app.terminal.extrakeys.HomePillFlightPlan.Flight.NONE);
+        if (flight == com.termux.app.terminal.extrakeys.HomePillFlightPlan.Flight.TO_DOCK) {
+            flights.flyToDock(getTerminalToolbarViewPager());
+        }
         noteTerminalPlaceMayBeVisible();
         if (mWidgetPaneController != null) {
             mWidgetPaneController.onWallPageShown(
@@ -34520,6 +34556,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return null;
     }
 
+    /**
+     * Ends a Home pill flight at its final state, at once: a keyboard change, a pause or a new
+     * settle must not leave the docked bar at alpha 0 or the pill half way.
+     */
+    private void endHomePillFlight() {
+        com.termux.app.terminal.extrakeys.HomePillLayer layer = mHomePillLayer;
+        if (layer != null) layer.flights().finish();
+    }
+
     /** The key set owner follows the place; the Home pill follows the key set. */
     private void refreshExtraKeySet(boolean allowMotion) {
         mExtraKeySetController.refresh(allowMotion);
@@ -34539,6 +34584,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (com.termux.app.terminal.extrakeys.HomePillLayer) found;
             layer.pill().pageView().setModifiers(mExtraKeyModifiers);
             layer.setHost(mHomePillHost);
+            // A flight to the docked bar held the pill on after Home went; its end lets go.
+            layer.flights().setListener(() -> mHomePill.holdForFlight(false));
             mHomePillLayer = layer;
         }
         return mHomePillLayer;
@@ -34767,7 +34814,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean pillPickedUp() {
             com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
-            return layer != null && layer.pill().isPickedUp();
+            return layer != null && (layer.pill().isPickedUp() || layer.ownsPose());
         }
 
         @Override public void setArea(@NonNull com.termux.app.terminal.extrakeys.HomePillSpot.Area area) {
