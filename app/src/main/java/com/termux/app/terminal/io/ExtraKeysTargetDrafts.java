@@ -51,6 +51,11 @@ public final class ExtraKeysTargetDrafts {
         @Nullable ExtraKeysDraft draft;
         /** Whether the target's key size line is stored. */
         boolean heightStored;
+        /**
+         * The key size the draft held when it last matched Global's: a draft still at it, with no
+         * height line stored, was not sized by the user and keeps following Global.
+         */
+        int followedTenths;
         /** Whether the target had a set of its own when loaded or last saved. */
         boolean ownAtLoad;
         /** Home only: whether its keys are switched on (the Home pill), as drafted. */
@@ -63,6 +68,7 @@ public final class ExtraKeysTargetDrafts {
             e.own = own;
             e.draft = draft == null ? null : copyOf(draft);
             e.heightStored = heightStored;
+            e.followedTenths = followedTenths;
             e.ownAtLoad = ownAtLoad;
             e.shown = shown;
             e.shownAtLoad = shownAtLoad;
@@ -104,6 +110,7 @@ public final class ExtraKeysTargetDrafts {
                 pages.add(ExtraKeysLayoutModel.parse(resolved.page2));
                 entry.draft = ExtraKeysDraft.of(pages);
                 entry.draft.setKeySizeTenths(tenthsOf(resolved.scale));
+                entry.followedTenths = entry.draft.keySizeTenths();
             }
             entry.ownAtLoad = entry.own;
             entry.shown = target == ExtraKeysTarget.HOME && homeShown;
@@ -163,6 +170,7 @@ public final class ExtraKeysTargetDrafts {
         pages.add(ExtraKeysLayoutModel.parse(TermuxPropertyConstants.HOME_PILL_STARTER_EXTRA_KEYS));
         ExtraKeysDraft draft = ExtraKeysDraft.of(pages);
         draft.setKeySizeTenths(global.keySizeTenths());
+        entry.followedTenths = global.keySizeTenths();
         entry.draft = draft;
         entry.own = true;
     }
@@ -181,6 +189,7 @@ public final class ExtraKeysTargetDrafts {
     /** The target's draft, or null while it has no set of its own. */
     @Nullable
     public ExtraKeysDraft draftOf(@NonNull ExtraKeysTarget target) {
+        followGlobalSize();
         return entry(target).draft;
     }
 
@@ -209,8 +218,25 @@ public final class ExtraKeysTargetDrafts {
             draft = copyOf(global);
         }
         draft.setKeySizeTenths(global.keySizeTenths());
+        entry.followedTenths = global.keySizeTenths();
         entry.draft = draft;
         entry.own = true;
+    }
+
+    /**
+     * A place that has its own keys but no height line and whose size was not edited follows
+     * Global's size, so a change to Global's reaches its draft before anything reads it.
+     */
+    private void followGlobalSize() {
+        int global = Objects.requireNonNull(entry(ExtraKeysTarget.GLOBAL).draft).keySizeTenths();
+        for (ExtraKeysTarget target : ExtraKeysTarget.values()) {
+            if (target == ExtraKeysTarget.GLOBAL) continue;
+            Entry entry = entry(target);
+            if (!entry.own || entry.draft == null || entry.heightStored) continue;
+            if (entry.draft.keySizeTenths() != entry.followedTenths) continue;
+            entry.draft.setKeySizeTenths(global);
+            entry.followedTenths = global;
+        }
     }
 
     /** Takes the target's own set away; it shows its built-in or Global's keys again. */
@@ -223,6 +249,7 @@ public final class ExtraKeysTargetDrafts {
 
     @NonNull
     public Snapshot snapshot() {
+        followGlobalSize();
         Map<ExtraKeysTarget, Entry> copy = new EnumMap<>(ExtraKeysTarget.class);
         for (Map.Entry<ExtraKeysTarget, Entry> e : entries.entrySet()) {
             copy.put(e.getKey(), e.getValue().copy());
@@ -250,6 +277,7 @@ public final class ExtraKeysTargetDrafts {
     /** Everything Save would write, in one string: switching a target on or off changes it too. */
     @NonNull
     public String fingerprint() {
+        followGlobalSize();
         StringBuilder out = new StringBuilder();
         for (ExtraKeysTarget target : ExtraKeysTarget.values()) {
             Entry entry = entry(target);
@@ -263,6 +291,7 @@ public final class ExtraKeysTargetDrafts {
     /** The property operations Save performs. */
     @NonNull
     public List<Write> writes() {
+        followGlobalSize();
         List<Write> out = new ArrayList<>();
         ExtraKeysDraft global = Objects.requireNonNull(entry(ExtraKeysTarget.GLOBAL).draft);
         for (ExtraKeysTarget target : ExtraKeysTarget.values()) {

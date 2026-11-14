@@ -161,6 +161,23 @@ public class ExtraKeysTargetDraftsTest {
     }
 
     @Test
+    public void aTargetWithNoHeightLineKeepsFollowingGlobalsKeySize() {
+        ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines(
+            TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL, "[[\"ESC\"]]"));
+        assertTrue(d.isOwn(ExtraKeysTarget.TERMINAL));
+        d.draftOf(ExtraKeysTarget.GLOBAL).setKeySizeTenths(15);
+        assertEquals(15, d.draftOf(ExtraKeysTarget.TERMINAL).keySizeTenths());
+        assertEquals(2, writesOf(d, ExtraKeysTarget.TERMINAL).size());
+
+        // A size the user set on the place itself stays and is written.
+        d.draftOf(ExtraKeysTarget.TERMINAL).setKeySizeTenths(12);
+        d.draftOf(ExtraKeysTarget.GLOBAL).setKeySizeTenths(18);
+        assertEquals(12, d.draftOf(ExtraKeysTarget.TERMINAL).keySizeTenths());
+        assertEquals(new Write(ExtraKeysTarget.TERMINAL.heightKey(), "1.2"),
+            writesOf(d, ExtraKeysTarget.TERMINAL).get(2));
+    }
+
+    @Test
     public void ownTargetKeepsItsStoredHeightLine() {
         ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines(
             TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL, "[[ESC]]",
