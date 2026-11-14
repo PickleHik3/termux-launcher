@@ -1,5 +1,8 @@
 package com.termux.app.terminal.extrakeys;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -19,6 +22,7 @@ import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.accessibility.AccessibilityManager;
+import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
@@ -38,6 +42,7 @@ import com.termux.shared.theme.ThemeUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,6 +120,20 @@ public final class ExtraKeysPageView extends ViewGroup {
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final List<ExtraKeyCapView> mCaps = new ArrayList<>();
     private final List<ExtraKeyButton> mKeys = new ArrayList<>();
+    /** Keys on their way out during a set change: children, drawn, but not in {@link #mCaps}. */
+    private final List<ExtraKeyCapView> mLeaving = new ArrayList<>();
+    private boolean mMorphing;
+    @Nullable private ValueAnimator mMorph;
+    @Nullable private android.view.ViewTreeObserver.OnPreDrawListener mMorphPreDraw;
+    @Nullable private Runnable mMorphEnd;
+    @Nullable private ExtraKeysSetMorph.Plan mMorphPlan;
+    @Nullable private ExtraKeyCapView[] mMorphOldCaps;
+    @Nullable private KeyId[] mMorphOldIds;
+    @Nullable private float[] mMorphOldRects;
+    private int mMorphOldLeft;
+    private int mMorphOldTop;
+    private float mMorphLeaveDx;
+    private float mMorphLeaveDy;
     private final Map<ExtraKeyColorRole, int[]> mRoleColors = new java.util.HashMap<>();
     private int mMatrixRows;
     private int mMatrixColumns;
@@ -186,30 +205,36 @@ public final class ExtraKeysPageView extends ViewGroup {
 
     /** Builds one cap per key of the matrix; null clears the page. */
     public void setKeys(@Nullable ExtraKeysInfo info) {
+        endMorph();
         cancelPress();
         removeAllViews();
         mCaps.clear();
         mKeys.clear();
-        mMatrixRows = 0;
-        mMatrixColumns = 0;
-        ExtraKeyButton[][] matrix = info == null ? null : info.getMatrix();
-        if (matrix != null) {
-            mMatrixRows = matrix.length;
-            for (int row = 0; row < matrix.length; row++) {
-                if (matrix[row] == null) continue;
-                mMatrixColumns = Math.max(mMatrixColumns, matrix[row].length);
-                for (int col = 0; col < matrix[row].length; col++) {
-                    ExtraKeyButton key = matrix[row][col];
-                    if (key != null) addCap(key, row, col);
-                }
-            }
-        }
+        buildCaps(info, null);
         syncAllModifiers();
         publishPlaceGlyphColors();
         requestLayout();
     }
 
-    private void addCap(@NonNull ExtraKeyButton key, int row, int col) {
+    /** Adds a cap per key of the matrix, taking a cap from {@code reusable} where its id is there. */
+    private void buildCaps(@Nullable ExtraKeysInfo info, @Nullable Map<KeyId, ExtraKeyCapView> reusable) {
+        mMatrixRows = 0;
+        mMatrixColumns = 0;
+        ExtraKeyButton[][] matrix = info == null ? null : info.getMatrix();
+        if (matrix == null) return;
+        mMatrixRows = matrix.length;
+        for (int row = 0; row < matrix.length; row++) {
+            if (matrix[row] == null) continue;
+            mMatrixColumns = Math.max(mMatrixColumns, matrix[row].length);
+            for (int col = 0; col < matrix[row].length; col++) {
+                ExtraKeyButton key = matrix[row][col];
+                if (key != null) addCap(key, row, col, reusable);
+            }
+        }
+    }
+
+    private void addCap(@NonNull ExtraKeyButton key, int row, int col,
+                        @Nullable Map<KeyId, ExtraKeyCapView> reusable) {
         String second = key.getPopup() == null ? null : key.getPopup().getKey();
         int occurrence = 0;
         for (int i = 0; i < mCaps.size(); i++) {
@@ -219,8 +244,15 @@ public final class ExtraKeysPageView extends ViewGroup {
                 occurrence++;
             }
         }
-        ExtraKeyCapView cap = new ExtraKeyCapView(getContext(), key,
-            new KeyId(key.getKey(), second, occurrence));
+        KeyId id = new KeyId(key.getKey(), second, occurrence);
+        ExtraKeyCapView cap = reusable == null ? null : reusable.remove(id);
+        boolean fresh = cap == null;
+        if (fresh) {
+            cap = new ExtraKeyCapView(getContext(), key, id);
+        } else {
+            cap.animate().cancel();
+            cap.rebind(key);
+        }
         cap.mRow = row;
         cap.mColumn = col;
         cap.setLabel(key.getDisplay(), mButtonTextAllCaps);
@@ -228,7 +260,160 @@ public final class ExtraKeysPageView extends ViewGroup {
         mKeys.add(key);
         // Its colour, and whether it can act here at all, decided once as it is built.
         styleCap(cap);
-        addView(cap);
+        if (fresh) addView(cap);
+    }
+
+    // ---- Set change.
+
+    /**
+     * Changes to another key set with the keys found in both gliding to their new cells, new keys
+     * growing in and gone keys shrinking out. Only translation, scale and alpha move, so no layout
+     * runs while it plays. Where the page cannot show it, this is {@link #setKeys} and {@code onEnd}
+     * runs at once; otherwise {@code onEnd} runs once when the morph has finished or was cut short.
+     */
+    public void morphTo(@Nullable ExtraKeysInfo info, @Nullable Runnable onEnd) {
+        endMorph();
+        if (!mAttached || !isShown() || !isLaidOut() || getWidth() <= 0 || getHeight() <= 0) {
+            setKeys(info);
+            if (onEnd != null) onEnd.run();
+            return;
+        }
+        cancelPress();
+        int oldCount = mCaps.size();
+        mMorphOldCaps = mCaps.toArray(new ExtraKeyCapView[0]);
+        mMorphOldIds = new KeyId[oldCount];
+        mMorphOldRects = new float[oldCount * 4];
+        mMorphOldLeft = getLeft();
+        mMorphOldTop = getTop();
+        Map<KeyId, ExtraKeyCapView> reusable = new HashMap<>();
+        for (int i = 0; i < oldCount; i++) {
+            ExtraKeyCapView cap = mMorphOldCaps[i];
+            mMorphOldIds[i] = cap.keyId();
+            mMorphOldRects[i * 4] = getLeft() + cap.getLeft();
+            mMorphOldRects[i * 4 + 1] = getTop() + cap.getTop();
+            mMorphOldRects[i * 4 + 2] = getLeft() + cap.getRight();
+            mMorphOldRects[i * 4 + 3] = getTop() + cap.getBottom();
+            reusable.put(cap.keyId(), cap);
+        }
+        mCaps.clear();
+        mKeys.clear();
+        buildCaps(info, reusable);
+        for (int i = 0; i < oldCount; i++) {
+            // Still in the map: no new key took it. It stays a child, drawn, but takes no touch.
+            if (reusable.get(mMorphOldIds[i]) == mMorphOldCaps[i]) mLeaving.add(mMorphOldCaps[i]);
+        }
+        syncAllModifiers();
+        publishPlaceGlyphColors();
+        mMorphing = true;
+        mMorphEnd = onEnd;
+        mMorphPreDraw = this::startMorph;
+        getViewTreeObserver().addOnPreDrawListener(mMorphPreDraw);
+        requestLayout();
+    }
+
+    /** Runs once, after the layout that follows {@link #morphTo}: plans, sets t=0 and plays. */
+    private boolean startMorph() {
+        removeMorphPreDraw();
+        if (!mMorphing || mMorph != null) return true;
+        int count = mCaps.size();
+        KeyId[] ids = new KeyId[count];
+        float[] rects = new float[count * 4];
+        for (int i = 0; i < count; i++) {
+            ExtraKeyCapView cap = mCaps.get(i);
+            ids[i] = cap.keyId();
+            rects[i * 4] = getLeft() + cap.getLeft();
+            rects[i * 4 + 1] = getTop() + cap.getTop();
+            rects[i * 4 + 2] = getLeft() + cap.getRight();
+            rects[i * 4 + 3] = getTop() + cap.getBottom();
+        }
+        mMorphPlan = ExtraKeysSetMorph.plan(mMorphOldIds, mMorphOldRects, ids, rects);
+        mMorphLeaveDx = mMorphOldLeft - getLeft();
+        mMorphLeaveDy = mMorphOldTop - getTop();
+        applyMorph(0f);
+        mMorph = ValueAnimator.ofFloat(0f, 1f);
+        mMorph.setDuration(ExtraKeysSetMorph.MORPH_MS);
+        mMorph.setInterpolator(new PathInterpolator(ExtraKeysSetMorph.EASE_X1,
+            ExtraKeysSetMorph.EASE_Y1, ExtraKeysSetMorph.EASE_X2, ExtraKeysSetMorph.EASE_Y2));
+        mMorph.addUpdateListener(a -> applyMorph((Float) a.getAnimatedValue()));
+        mMorph.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                endMorph();
+            }
+        });
+        mMorph.start();
+        return true;
+    }
+
+    /** Draw only: translation, scale and alpha, no layout and no text. */
+    private void applyMorph(float t) {
+        ExtraKeysSetMorph.Plan plan = mMorphPlan;
+        ExtraKeyCapView[] oldCaps = mMorphOldCaps;
+        if (plan == null || oldCaps == null) return;
+        for (int n = 0; n < mCaps.size(); n++) {
+            ExtraKeyCapView cap = mCaps.get(n);
+            if (plan.oldOfNew[n] == ExtraKeysSetMorph.ENTER) {
+                float s = ExtraKeysSetMorph.enterScale(t);
+                cap.setScaleX(s);
+                cap.setScaleY(s);
+                cap.setAlpha(ExtraKeysSetMorph.enterAlpha(t));
+            } else {
+                cap.setTranslationX(ExtraKeysSetMorph.stayTranslation(plan.fromDx[n], t));
+                cap.setTranslationY(ExtraKeysSetMorph.stayTranslation(plan.fromDy[n], t));
+                cap.setScaleX(ExtraKeysSetMorph.stayScale(plan.fromScaleX[n], t));
+                cap.setScaleY(ExtraKeysSetMorph.stayScale(plan.fromScaleY[n], t));
+            }
+        }
+        for (int o = 0; o < oldCaps.length; o++) {
+            if (!plan.leaving[o]) continue;
+            ExtraKeyCapView cap = oldCaps[o];
+            float s = ExtraKeysSetMorph.leaveScale(t);
+            // The page may have moved; the leaving key stays where it was drawn.
+            cap.setTranslationX(mMorphLeaveDx);
+            cap.setTranslationY(mMorphLeaveDy);
+            cap.setScaleX(s);
+            cap.setScaleY(s);
+            cap.setAlpha(ExtraKeysSetMorph.leaveAlpha(t));
+        }
+    }
+
+    private void removeMorphPreDraw() {
+        if (mMorphPreDraw == null) return;
+        android.view.ViewTreeObserver observer = getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnPreDrawListener(mMorphPreDraw);
+        mMorphPreDraw = null;
+    }
+
+    /** Snaps to the final state: identity on every key, gone keys removed, then {@code onEnd}. */
+    private void endMorph() {
+        if (!mMorphing) return;
+        mMorphing = false;
+        removeMorphPreDraw();
+        ValueAnimator animator = mMorph;
+        mMorph = null;
+        if (animator != null) {
+            animator.removeAllListeners();
+            animator.removeAllUpdateListeners();
+            animator.cancel();
+        }
+        for (int i = 0; i < mCaps.size(); i++) resetTransform(mCaps.get(i));
+        for (int i = 0; i < mLeaving.size(); i++) removeView(mLeaving.get(i));
+        mLeaving.clear();
+        mMorphPlan = null;
+        mMorphOldCaps = null;
+        mMorphOldIds = null;
+        mMorphOldRects = null;
+        Runnable end = mMorphEnd;
+        mMorphEnd = null;
+        if (end != null) end.run();
+    }
+
+    private static void resetTransform(@NonNull View cap) {
+        cap.setTranslationX(0f);
+        cap.setTranslationY(0f);
+        cap.setScaleX(1f);
+        cap.setScaleY(1f);
+        cap.setAlpha(1f);
     }
 
     /** The configured rows, not the transposed ones. */
@@ -312,6 +497,7 @@ public final class ExtraKeysPageView extends ViewGroup {
     @Override
     protected void onDetachedFromWindow() {
         mAttached = false;
+        endMorph();
         if (mModifiers != null) mModifiers.removeListener(mModifierListener);
         cancelPress();
         super.onDetachedFromWindow();

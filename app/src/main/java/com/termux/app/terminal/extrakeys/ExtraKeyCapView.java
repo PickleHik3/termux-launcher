@@ -47,7 +47,7 @@ public final class ExtraKeyCapView extends AppCompatTextView {
     private static final float GLOW_REACH = 0.75f;
     private static final float GLOW_REACH_WIDE = 0.95f;
 
-    @NonNull private final ExtraKeyButton mKey;
+    @NonNull private ExtraKeyButton mKey;
     @NonNull private final KeyId mKeyId;
     private final float mDensity;
 
@@ -102,6 +102,11 @@ public final class ExtraKeyCapView extends AppCompatTextView {
         mCapInsetH = 2f * mDensity;
         mCapInsetV = 3f * mDensity;
         mCapRadius = 12f * mDensity;
+    }
+
+    /** Points a cap that carries over to another key set at that set's key of the same id. */
+    void rebind(@NonNull ExtraKeyButton key) {
+        mKey = key;
     }
 
     @NonNull
