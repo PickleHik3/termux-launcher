@@ -1,9 +1,9 @@
 # Extra-keys bar per target, Home pill and the navigation dot (2026-11-13)
 
-Status: designed, not built. Grilled with the developer 2026-11-12/13. Motion is settled on a touch
-prototype first (`~/reports/extra-keys-proto/`, served at
-`https://amal-build.taild9c5dc.ts.net/reports/extra-keys-proto/`); the native build starts after
-the developer has picked the variants. Everything here reaches testers in one drop.
+Status: designed, build started 2026-11-14. Grilled with the developer 2026-11-12/13. Motion was
+chosen by the developer on a touch prototype on 2026-11-14 (see "Motion"); the prototype pages are
+kept on the local branch `proto/extra-keys-bar-and-dot`, not merged. Everything here reaches
+testers in one drop.
 
 Replaces the space-bar places dock (`feat/space-places-dock`, spec
 `space-places-dock-2026-11-09.md` on that branch): the space-bar hold is dropped, its picker moves
@@ -67,8 +67,7 @@ One floating object whose only job is changing page.
 - **System Back**: a slide inward from the edge is Android's Back swipe. The dot's own rectangle is
   excluded from it (`View.setSystemGestureExclusionRects`; the allowance per edge is far larger than
   the dot).
-- Open for the prototype to settle: rest size and dimness; whether the picker opens at touch-down or
-  when the slide starts; the row's order relative to the dot's edge; the hold time before a move.
+- Size, timings and the row's order are in "Motion".
 
 ## The bar
 
@@ -90,7 +89,7 @@ One floating object whose only job is changing page.
 - **Page keys** (`wall.*`) leave the shipped default rows and stay in the key picker. Rows a user
   has saved are not touched.
 - **Motion**: key press, lock, repeat, swipe-up, the set changing, the height changing and the
-  pill's flight are chosen on the prototype.
+  pill's flight are in "Motion".
 
 ## The Home pill
 
@@ -103,6 +102,38 @@ One floating object whose only job is changing page.
 - **Flight**: when a keyboard comes up on Home the pill flies to the docked place above the
   keyboard; when the page changes, the one bar object flies between its Home spot and its docked
   place on Terminal, Display or Assistant. Docked, a hold on a key means repeat or lock again.
+
+## Motion (chosen by the developer on the prototype, 2026-11-14)
+
+Values are the prototype's, with 1 CSS px read as 1 dp. Pong decides the final feel; a value changed
+there is changed here.
+
+### The dot
+
+| Question | Chosen |
+|---|---|
+| Rest | 28 dp wide, 35% opacity. It dims back 2 s after the last touch, over 400 ms. Its gap from the edge is a quarter of its width. |
+| When the picker opens | At touch-down, growing out of the dot. A tap leaves it open. |
+| How it opens | 220 ms, cells arriving 30 ms apart, with a bouncy overshoot (the prototype's `cubic-bezier(.3,1.6,.5,1)`). The whole-flow screen's "Soft" was chosen over "Quick"; where it differs from the single-question screen (160 ms, cells together), the whole-flow choice stands. |
+| Row order | Fixed: Home, Terminal, Display, Assistant from left to right on either edge. |
+| Hold before a move | 400 ms without leaving the touch slop. Travel past the slop before that is a slide. |
+| Keyboard | The dot rides up with the keyboard, on the keyboard's own reveal progress, and rides down with it. |
+| Release after a move | Snaps to the nearer edge, 220 ms with a small overshoot. |
+
+### The bar and the Home pill
+
+| Question | Chosen |
+|---|---|
+| Key press | Glow: light blooms from the touch point inside the cap and the rim brightens, fading over 220 ms. |
+| Modifiers | Mark: armed (one-shot) is a small dot under the label; locked is a bar under the label on a filled cap. |
+| Held repeat | Every 80 ms, a small pulse and a very light tick per repeat. |
+| Swipe-up second key | A bubble with the second glyph grows above the cap as the finger rises; it fires past 24 dp. |
+| Set change (the keys' target changes) | Morph: keys both sets share stay in place; the others scale and fade while the row re-spaces, 180 ms. |
+| Height between key pages | The page lands first, then the height changes over 160 ms. The page flips past 30% of the bar's width. |
+| Travel between Home and a page | Morph: one object travels in a straight line, stretching between pill and bar, keys cross-fading mid-flight, 280 ms. |
+| Picking up the Home pill | Lift: scale 1.06 with a deeper shadow while held, after a 400 ms hold. |
+
+None of these repaints at rest: each is a one-shot animation that ends.
 
 ## Settings and storage
 
@@ -158,3 +189,6 @@ One floating object whose only job is changing page.
   worktree removed). Port the picker and its haptics; leave the space-bar trigger, its fill and the
   "Hold space for places" setting behind. Delete the branch once ported.
 - Motion on the emulator cannot be judged (CPU glass); the prototype and then pong decide it.
+- Built on two branches cut from v2-redesign, merged back together when both are whole:
+  `feat/nav-dot` (the dot and the ported picker) and `feat/extra-keys-bar` (the bar, then the sets
+  per target, then the Home pill).
