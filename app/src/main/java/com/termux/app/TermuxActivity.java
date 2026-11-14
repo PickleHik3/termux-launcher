@@ -6080,7 +6080,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 bar.setAnimationMode(
                     com.google.android.material.snackbar.BaseTransientBottomBar.ANIMATION_MODE_FADE);
                 final View barView = bar.getView();
-                final View[] chrome = { getExtraKeysView(),
+                final View[] chrome = { getVisibleExtraKeys(),
                     findViewById(R.id.accessory_stack_container) };
                 final int gap = Math.round(8 * getResources().getDisplayMetrics().density);
                 final int[] at = new int[2];
@@ -13397,7 +13397,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * repaints only when its ink changed.
      */
     private void syncExtraKeysInk(float dockOpacity) {
-        View keys = getExtraKeysView();
+        View keys = getVisibleExtraKeys();
         if (keys == null || keys.getWidth() <= 0 || keys.getHeight() <= 0) return;
         mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
         // Where the row rests, not where a crossing's travel has it: the keys rise in the ink
@@ -20658,7 +20658,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * another edge, else the bar. What the ink and the chrome follow look at.
      */
     @Nullable
-    private View getExtraKeysView() {
+    private View getVisibleExtraKeys() {
         ExtraKeysPageView column = mExtraKeysColumnPage;
         if (column != null && column.getParent() != null) return column;
         return getTerminalToolbarViewPager();
