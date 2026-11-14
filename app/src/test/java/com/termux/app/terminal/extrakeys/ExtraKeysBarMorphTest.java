@@ -172,6 +172,18 @@ public class ExtraKeysBarMorphTest {
     }
 
     @Test
+    public void aSwapThatChangesTheHeightSaysSoOnceAndAReloadDoesNot() throws Exception {
+        bar.setCurrentItem(0, false);
+        heightChanged = 0;
+        bar.setKeySet(new ExtraKeysInfo[] {info(TWO)}, 1f, Transition.SWAP);
+        assertEquals(1, heightChanged);
+        bar.setKeySet(new ExtraKeysInfo[] {info(TWO)}, 1f, Transition.SWAP);
+        assertEquals(1, heightChanged);
+        bar.setKeySet(new ExtraKeysInfo[] {info(ONE)}, 1f, Transition.RELOAD);
+        assertEquals(1, heightChanged);
+    }
+
+    @Test
     public void aSetsScaleBecomesTheBarsScale() throws Exception {
         bar.setCurrentItem(0, false);
         bar.setKeySet(new ExtraKeysInfo[] {info(ONE)}, 2f, Transition.RELOAD);

@@ -285,6 +285,10 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
         requestLayout();
         applyOffsets();
         invalidate();
+        // A set swapped without motion (bar hidden or not laid out) still owes the one geometry
+        // pass when its height differs; a reload's caller runs that pass itself.
+        if (transition != Transition.RELOAD && committedHeightPx() != oldPx && mListener != null)
+            mListener.onCommittedHeightChanged();
     }
 
     private static int rowsOfInfo(@Nullable ExtraKeysInfo info) {
