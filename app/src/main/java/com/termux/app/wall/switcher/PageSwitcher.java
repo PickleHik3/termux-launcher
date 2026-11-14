@@ -86,6 +86,8 @@ public final class PageSwitcher {
     private float mMoveY;
     @Nullable private ObjectAnimator mSnap;
     private boolean mHintPending;
+    /** Set once the hint is known to be shown, so a frame does not ask the preferences again. */
+    private boolean mHintDone;
     private boolean mClaiming;
     private final int[] mLocation = new int[2];
 
@@ -256,7 +258,12 @@ public final class PageSwitcher {
 
     /** The first time the dot is shown, the picker opens once with a line saying how to use it. */
     private void maybeShowHint(@NonNull FrameLayout layer) {
-        if (mHintPending || mHost.hintShown() || mCx < 0f) return;
+        if (mHintDone || mHintPending || mCx < 0f) return;
+        if (mHost.hintShown()) {
+            mHintDone = true;
+            return;
+        }
+        mHintDone = true;
         mHintPending = true;
         mHost.markHintShown();
         layer.post(() -> {
