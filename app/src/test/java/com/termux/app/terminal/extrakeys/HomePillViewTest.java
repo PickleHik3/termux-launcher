@@ -70,6 +70,8 @@ public class HomePillViewTest {
         });
         layoutLayer(1000, 2000);
         layer.placePill(100f, 200f);
+        // The layer starts with the pill hidden; the controller shows it.
+        layer.setPillShown(true);
     }
 
     // ---- Size.

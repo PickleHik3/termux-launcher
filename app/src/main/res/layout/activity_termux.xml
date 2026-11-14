@@ -1187,6 +1187,18 @@
             android:focusable="false"
             android:visibility="gone" />
         </com.termux.app.chrome.LiveBackdropRelativeLayout>
+        <!-- The Home pill's layer: Home's extra keys as a small floating glass pill. Full size, no
+             background, and it claims a touch only when the down lands on the pill or its chip.
+             It sits just before the app drawer so the drawer, the palette and the sheets draw
+             over it and see touches first, while the wall (Home's widget pages) is under it.
+             HomePillController hides the pill (INVISIBLE) whenever Home is not showing it. -->
+        <com.termux.app.terminal.extrakeys.HomePillLayer
+            android:id="@+id/home_pill_layer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false" />
+
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
              deliberately NOT part of the accessory stack: the drawer animates with transforms only,

@@ -3,6 +3,7 @@ package com.termux.app.terminal.extrakeys;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -44,7 +45,11 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
     private boolean mClaimed;
 
     public HomePillLayer(@NonNull Context context) {
-        super(context);
+        this(context, null);
+    }
+
+    public HomePillLayer(@NonNull Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
         setClipChildren(false);
         setClipToPadding(false);
         mPill = new HomePillView(context);
@@ -52,6 +57,8 @@ public final class HomePillLayer extends FrameLayout implements HomePillView.Lis
         mChip = new HomePillChip(context);
         mChip.setOnEditKeys(this::onChipClicked);
         mChip.setVisibility(INVISIBLE);
+        // Hidden until the controller finds it a place.
+        mPill.setVisibility(INVISIBLE);
         addView(mPill, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
         addView(mChip, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
     }

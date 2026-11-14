@@ -1119,6 +1119,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Which keys the bar and the edge column show; the only caller of the bar's key-set change. */
     @NonNull private final com.termux.app.terminal.io.ExtraKeySetController mExtraKeySetController =
         new com.termux.app.terminal.io.ExtraKeySetController(new ExtraKeySetHost());
+    /** Whether Home's extra keys show as the floating pill, with which keys and where. */
+    @NonNull private final HomePillHost mHomePillHost = new HomePillHost();
+    @NonNull private final com.termux.app.terminal.io.HomePillController mHomePill =
+        new com.termux.app.terminal.io.HomePillController(mHomePillHost);
+    @Nullable private com.termux.app.terminal.extrakeys.HomePillLayer mHomePillLayer;
+    @Nullable private com.termux.app.terminal.io.HomePillSwitch mHomePillSwitch;
+    /** The root's layout listener that rechecks the pill after each layout pass; one, for life. */
+    @Nullable private ViewTreeObserver.OnGlobalLayoutListener mHomePillLayoutListener;
+    /** The down that began this touch stream landed on the pill or its chip. */
+    private boolean mHomePillStream;
     /**
      * Key page 1 on its own, standing in the portable host while the place puts the keys on a
      * side or the top edge; built the first time the host needs it, restyled on every sync.
@@ -1991,6 +2001,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxActivityRootView = findViewById(R.id.activity_termux_root_view);
         mTermuxActivityRootView.setActivity(this);
         mTermuxActivityRootView.setBottomMarginWriter(this::requestRootBottomMargin);
+        // The Home pill is rechecked after each layout pass: compare-guarded, never per frame.
+        mHomePillLayoutListener = mHomePill::refresh;
+        mTermuxActivityRootView.getViewTreeObserver().addOnGlobalLayoutListener(mHomePillLayoutListener);
         mWallpaperBackdropView = findViewById(R.id.wallpaper_backdrop);
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.setParallax(mWallpaperParallax);
         View sceneContainer = findViewById(R.id.terminal_root_container);
@@ -2491,6 +2504,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onResume();
         mHomePress.onResume();
         Logger.logVerbose(LOG_TAG, "onResume");
+        mHomePill.refresh();
         // Text left waiting in the pill holds the screen again, its idle release started over.
         mVoiceScreenMayHold = true;
         holdVoiceScreen();
@@ -9308,6 +9322,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.beginSection("Chrome.statusBarInk");
             mStatusBar.syncStatusBarInk();
             Trace.endSection();
+            if (mHomePill.isShown()) applyHomePillDress();
         } finally {
             Trace.endSection();
         }
@@ -10756,6 +10771,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         unwatchStartIn();
         mReturnHoldFramePosted = false;
         if (mTermuxActivityRootView != null) mTermuxActivityRootView.setBottomMarginWriter(null);
+        if (mTermuxActivityRootView != null && mHomePillLayoutListener != null) {
+            mTermuxActivityRootView.getViewTreeObserver().removeOnGlobalLayoutListener(mHomePillLayoutListener);
+            mHomePillLayoutListener = null;
+        }
         if (mPaneController != null) mPaneController.setGeometryScheduler(null);
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(terminalHost());
         mTerminalFrameMetricsMonitor.stop();
@@ -10950,6 +10969,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSheets.commandPaletteIfBuilt() != null)
             mSheets.commandPaletteIfBuilt().refreshAppearance();
         mChrome.onConfigurationChanged();
+        mHomePill.refresh();
         // Layout mode's canvas defaults to the orientation the phone is in, so it turns with it.
         mSurfaceEditor.onPlaceOrientationChanged();
         scheduleOrientationGeometryPass();
@@ -11321,6 +11341,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void reloadProperties() {
         mProperties.loadTermuxPropertiesFromDisk();
+        mHomePill.reload();
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onReloadProperties();
     }
@@ -13715,9 +13736,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * for a styling reload, which rebuilds every toolbar page when this activity resumes.
      */
     void showExtraKeysRowEditor() {
+        showExtraKeysRowEditor(null);
+    }
+
+    /** The same editor opened on one target's set; null opens it on Global, as always. */
+    void showExtraKeysRowEditor(@Nullable com.termux.app.terminal.io.ExtraKeysTarget target) {
         startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(this,
             com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment.class,
-            R.string.settings_edit_extra_keys_title));
+            R.string.settings_edit_extra_keys_title, target == null ? null : target.name(), null));
     }
 
     private void handleEditExtraKeysIntent(@Nullable Intent intent) {
@@ -15037,7 +15063,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bar.setModifiers(mExtraKeyModifiers);
         bar.setClient(getTermuxTerminalExtraKeys(0));
         bar.setPageStyler(this::styleExtraKeysPage);
-        mExtraKeySetController.refresh(false);
+        refreshExtraKeySet(false);
         String savedTextInput = null;
         if (savedInstanceState != null)
             savedTextInput = savedInstanceState.getString(ARG_TERMINAL_TOOLBAR_TEXT_INPUT);
@@ -15985,6 +16011,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void rebuildTerminalToolbarPages() {
         mExtraKeySetController.reload();
+        mHomePill.reload();
     }
 
     /**
@@ -16897,6 +16924,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             stack.contentReservationPx != appliedContentReservationPx();
         mAppliedStack = stack;
         boolean keyboardShownChanged = mKeyboardGeometry.applyKeyboardShown(state.keyboardShown);
+        if (keyboardShownChanged) mHomePill.refresh();
         // While the slide holds the content, the room it gives back is laid out under a grid the
         // travel has paused (preRollTravelContent); the settle sends the PTY its one size.
         if (!mCrossing.holdsContent() && shouldRequestTerminalResize(requestTerminalResize,
@@ -20666,17 +20694,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return getTerminalToolbarViewPager();
     }
 
-    /** How many key pages are alive: the bar's, then the column's standalone page. */
+    /** How many key pages are alive: the bar's, the column's standalone page, the Home pill's. */
     private int extraKeysPageTotal() {
         ExtraKeysBarView bar = getTerminalToolbarViewPager();
-        return (bar == null ? 0 : bar.keyPageCount()) + (mExtraKeysColumnPage == null ? 0 : 1);
+        return (bar == null ? 0 : bar.keyPageCount()) + (mExtraKeysColumnPage == null ? 0 : 1)
+            + (mHomePillLayer == null ? 0 : 1);
     }
 
     @Nullable
     private ExtraKeysPageView extraKeysPageAt(int index) {
         ExtraKeysBarView bar = getTerminalToolbarViewPager();
         int barPages = bar == null ? 0 : bar.keyPageCount();
-        return index < barPages ? bar.keyPage(index) : mExtraKeysColumnPage;
+        if (index < barPages) return bar.keyPage(index);
+        // After the bar's pages: the column's page, then the Home pill's.
+        if (index == barPages && mExtraKeysColumnPage != null) return mExtraKeysColumnPage;
+        return mHomePillLayer == null ? null : mHomePillLayer.pill().pageView();
     }
 
     /** Whether {@code page} is key page 1, which the place marks and the editor speak for. */
@@ -25346,7 +25378,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSettledWallPage = page;
         settlePlaceChrome(page);
         restoreInAppKeyboardTypingClaim();
-        mExtraKeySetController.refresh(true);
+        refreshExtraKeySet(true);
         noteTerminalPlaceMayBeVisible();
         if (mWidgetPaneController != null) {
             mWidgetPaneController.onWallPageShown(
@@ -26849,7 +26881,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncDisplayAttachment(@NonNull com.termux.app.wall.PaneWallPage page) {
         mSettledWallPage = page;
-        mExtraKeySetController.refresh(true);
+        refreshExtraKeySet(true);
         com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
             ? null : mPaneWallController.displayWindow();
         // Off its window the display's view must neither keep the keys nor take them back.
@@ -32443,7 +32475,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onActivePaneChanged() {
             adoptActivePane();
-            mExtraKeySetController.refresh(true);
+            refreshExtraKeySet(true);
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
             refreshTerminalWindowBar();
@@ -32491,7 +32523,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onHomeFloatsChanged() {
             onHomeFloatsChangedInActivity();
-            mExtraKeySetController.refresh(true);
+            refreshExtraKeySet(true);
         }
 
         @Override public void onHomeFloatDocked(
@@ -32524,7 +32556,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onHomeFloatFocusReleased() {
-            mExtraKeySetController.refresh(true);
+            refreshExtraKeySet(true);
             // A press on Home beside the floats, or the focused float minimised or closed: the
             // keyboard it raised goes with it, unless Home keeps one always on.
             if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS && mInAppKeyboard != null
@@ -34480,6 +34512,289 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         return null;
+    }
+
+    /** The key set owner follows the place; the Home pill follows the key set. */
+    private void refreshExtraKeySet(boolean allowMotion) {
+        mExtraKeySetController.refresh(allowMotion);
+        mHomePill.refresh();
+    }
+
+    /**
+     * The Home pill's layer, found the first time it is asked for and wired once: its page shares
+     * the bar's modifiers, and the layer's drop and chip go to the controller.
+     */
+    @Nullable
+    private com.termux.app.terminal.extrakeys.HomePillLayer homePillLayer() {
+        if (mHomePillLayer == null) {
+            View found = findViewById(R.id.home_pill_layer);
+            if (!(found instanceof com.termux.app.terminal.extrakeys.HomePillLayer)) return null;
+            com.termux.app.terminal.extrakeys.HomePillLayer layer =
+                (com.termux.app.terminal.extrakeys.HomePillLayer) found;
+            layer.pill().pageView().setModifiers(mExtraKeyModifiers);
+            layer.setHost(mHomePillHost);
+            mHomePillLayer = layer;
+        }
+        return mHomePillLayer;
+    }
+
+    /** The one switch for Home's bar; no screen calls its setOn yet. */
+    @Nullable
+    private com.termux.app.terminal.io.HomePillSwitch homePillSwitch() {
+        if (mHomePillSwitch == null) {
+            PlaceLayoutStore places = placeLayoutStore();
+            if (places == null || mPreferences == null) return null;
+            mHomePillSwitch = new com.termux.app.terminal.io.HomePillSwitch(
+                com.termux.app.terminal.io.HomePillSwitch.hostFor(places, mPreferences,
+                    key -> mProperties == null ? null : mProperties.getPropertyValue(key, null, true),
+                    this::reloadExtraKeysFromProperties));
+        }
+        return mHomePillSwitch;
+    }
+
+    private final int[] mHomePillLocation = new int[2];
+    private final int[] mHomePillScratchA = new int[2];
+    private final int[] mHomePillScratchB = new int[2];
+    private final int[] mHomePillScratchC = new int[2];
+    private final Rect mHomePillAzRect = new Rect();
+
+    /** Whether a down in window coordinates lands on the visible pill or its chip. */
+    private boolean homePillClaimsDown(@NonNull MotionEvent ev) {
+        com.termux.app.terminal.extrakeys.HomePillLayer layer = mHomePillLayer;
+        if (layer == null || !mHomePill.isShown()) return false;
+        layer.getLocationOnScreen(mHomePillLocation);
+        return layer.claimsDown(ev.getRawX() - mHomePillLocation[0], ev.getRawY() - mHomePillLocation[1]);
+    }
+
+    /** The pill and its chip wear the glass the notice pill wears, so they follow theme and Look. */
+    private void applyHomePillDress() {
+        com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+        if (layer == null) return;
+        TerminalDress dress = TerminalDress.resolve(this, terminalDressSource());
+        layer.pill().setDress(dress);
+        layer.chip().setDress(dress);
+    }
+
+    /** Keys of the room cache: what Home's top edge stack depends on. */
+    private int mHomePillRoomRevision = -1;
+    private int mHomePillRoomOrientation = -1;
+    private float mHomePillRoomFontScale = -1f;
+    private int mHomePillRoomThicknessPx;
+
+    /** The top edge stack's thickness for Home, recomputed only when its inputs moved. */
+    private int homePillTopStackThicknessPx() {
+        int revision = arrangementRevision();
+        int orientation = currentPlaceOrientation().ordinal();
+        float fontScale = getResources().getConfiguration().fontScale;
+        if (revision != mHomePillRoomRevision || orientation != mHomePillRoomOrientation
+            || fontScale != mHomePillRoomFontScale) {
+            mHomePillRoomRevision = revision;
+            mHomePillRoomOrientation = orientation;
+            mHomePillRoomFontScale = fontScale;
+            mHomePillRoomThicknessPx = EdgeStackPolicy.stackThicknessPx(arrangement().layout(),
+                PlaceLayout.Edge.TOP, buildEdgeStackMetrics());
+        }
+        return mHomePillRoomThicknessPx;
+    }
+
+    /**
+     * What the Home pill's controller reads and tells, and what its layer reports back. The facts
+     * are the activity's own answers; no number is predicted here that a policy already owns.
+     */
+    private final class HomePillHost implements com.termux.app.terminal.io.HomePillController.Host,
+            com.termux.app.terminal.extrakeys.HomePillLayer.Host {
+        @Override public boolean switchOn() {
+            com.termux.app.terminal.io.HomePillSwitch pillSwitch = homePillSwitch();
+            return pillSwitch != null && pillSwitch.isOn(currentPlaceOrientation());
+        }
+
+        @NonNull @Override public com.termux.app.wall.PaneWallPage settledPlace() {
+            return settledWallPage();
+        }
+
+        @Nullable @Override public com.termux.app.terminal.io.ExtraKeysTarget keyTarget() {
+            return mExtraKeySetController.target();
+        }
+
+        @Override public boolean keyboardUp() {
+            return isInAppKeyboardShown();
+        }
+
+        @Override public boolean appDrawerOpen() {
+            return isAppDrawerOpen();
+        }
+
+        @Override public boolean paletteOpen() {
+            return mSheets.isCommandPaletteOpen();
+        }
+
+        @Override public boolean layoutEditorActive() {
+            return mLayoutEditor.isActive();
+        }
+
+        @Override public boolean surfaceEditorActive() {
+            return mSurfaceEditor.isActive();
+        }
+
+        @Override public boolean appearanceOpen() {
+            return mAppearance.isOpen();
+        }
+
+        @Override public boolean overlayOpen() {
+            return mOverlays.anyOpen();
+        }
+
+        @Override public boolean minimalMode() {
+            return isMinimalMode();
+        }
+
+        @Nullable @Override public com.termux.shared.termux.extrakeys.ExtraKeysInfo keys() {
+            com.termux.shared.termux.extrakeys.ExtraKeysInfo[] pages = mExtraKeySetController.pages();
+            return pages.length == 0 ? null : pages[0];
+        }
+
+        @Override public float keysScale() {
+            return mExtraKeySetController.scale();
+        }
+
+        @Override public void setKeys(@Nullable com.termux.shared.termux.extrakeys.ExtraKeysInfo keys,
+                                      float scale) {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            if (layer == null) return;
+            layer.pill().setKeys(keys, scale);
+            styleExtraKeysPage(layer.pill().pageView(), 0);
+        }
+
+        @Override public float density() {
+            return getResources().getDisplayMetrics().density;
+        }
+
+        @Override public boolean readGeometry(@NonNull float[] out) {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            if (layer == null || layer.getWidth() <= 0 || layer.getHeight() <= 0) return false;
+            int[] at = mHomePillScratchA;
+            layer.getLocationOnScreen(at);
+            float w = layer.getWidth();
+            float h = layer.getHeight();
+            out[com.termux.app.terminal.io.HomePillController.GEO_WIDTH] = w;
+            out[com.termux.app.terminal.io.HomePillController.GEO_HEIGHT] = h;
+            // The system bars and the cutout, as far as they reach into the layer.
+            View decor = getWindow().getDecorView();
+            androidx.core.view.WindowInsetsCompat insets =
+                androidx.core.view.ViewCompat.getRootWindowInsets(layer);
+            androidx.core.graphics.Insets bars = insets == null ? androidx.core.graphics.Insets.NONE
+                : insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                    | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            out[com.termux.app.terminal.io.HomePillController.GEO_INSET_LEFT] =
+                Math.max(0, bars.left - at[0]);
+            out[com.termux.app.terminal.io.HomePillController.GEO_INSET_TOP] =
+                Math.max(0, bars.top - at[1]);
+            out[com.termux.app.terminal.io.HomePillController.GEO_INSET_RIGHT] =
+                Math.max(0, at[0] + w - (decor.getWidth() - bars.right));
+            out[com.termux.app.terminal.io.HomePillController.GEO_INSET_BOTTOM] =
+                Math.max(0, at[1] + h - (decor.getHeight() - bars.bottom));
+
+            // Where Home's content starts: under the system bar and whatever stands on the top
+            // edge, as the Home floats' room reads it (syncHomeFloatObstructions).
+            float roomTop = 0f;
+            View root = mTermuxActivityRootView;
+            View column = findViewById(R.id.terminal_content_column);
+            if (root != null && column != null) {
+                int[] rootAt = mHomePillScratchB;
+                root.getLocationOnScreen(rootAt);
+                int[] columnAt = mHomePillScratchC;
+                column.getLocationOnScreen(columnAt);
+                int statusTop = insets == null ? 0 : insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
+                float columnTop = columnAt[1] - column.getTranslationY();
+                roomTop = Math.max(rootAt[1] + statusTop, columnTop + homePillTopStackThicknessPx())
+                    - at[1];
+            }
+            out[com.termux.app.terminal.io.HomePillController.GEO_ROOM_TOP] = roomTop;
+
+            // The dock's top at rest: the stack's bottom less the rows Home floats are told, as
+            // the floats read it; the layer's bottom while no dock rows stand.
+            float stackTop = h;
+            View stack = findViewById(R.id.accessory_stack_container);
+            com.termux.app.place.StackLayout.Result applied = mAppliedStack;
+            if (stack != null && applied != null && applied.stackShown && stack.getHeight() > 0) {
+                int[] stackAt = mHomePillScratchB;
+                stack.getLocationOnScreen(stackAt);
+                int stackBottom = Math.round(stackAt[1] - stack.getTranslationY()) + stack.getHeight();
+                stackTop = com.termux.app.place.KeyboardOverlayPolicy.homeDockRestTopPx(stackBottom,
+                    mHomeFloatDockPx, mHomeFloatImePushPx) - at[1];
+            }
+            out[com.termux.app.terminal.io.HomePillController.GEO_STACK_TOP] = stackTop;
+
+            AzPullTabLayer tab = mAzTabLayer;
+            if (tab == null) tab = mAzTabLayer = findViewById(R.id.place_az_tab_layer);
+            boolean azShown = tab != null && tab.tabRectOnScreen(mHomePillAzRect);
+            out[com.termux.app.terminal.io.HomePillController.GEO_AZ_SHOWN] = azShown ? 1f : 0f;
+            out[com.termux.app.terminal.io.HomePillController.GEO_AZ_LEFT] =
+                azShown ? mHomePillAzRect.left - at[0] : 0f;
+            out[com.termux.app.terminal.io.HomePillController.GEO_AZ_TOP] =
+                azShown ? mHomePillAzRect.top - at[1] : 0f;
+            out[com.termux.app.terminal.io.HomePillController.GEO_AZ_RIGHT] =
+                azShown ? mHomePillAzRect.right - at[0] : 0f;
+            out[com.termux.app.terminal.io.HomePillController.GEO_AZ_BOTTOM] =
+                azShown ? mHomePillAzRect.bottom - at[1] : 0f;
+            return true;
+        }
+
+        @Nullable @Override public float[] storedPosition() {
+            return mPreferences == null ? null : mPreferences.getHomePillPosition();
+        }
+
+        @Override public void storePosition(float x, float y) {
+            if (mPreferences != null) mPreferences.setHomePillPosition(x, y);
+        }
+
+        @Override public int pillWidth() {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            return layer == null ? 0 : layer.pill().getWidth();
+        }
+
+        @Override public int pillHeight() {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            return layer == null ? 0 : layer.pill().getHeight();
+        }
+
+        @Override public boolean pillPickedUp() {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            return layer != null && layer.pill().isPickedUp();
+        }
+
+        @Override public void setArea(@NonNull com.termux.app.terminal.extrakeys.HomePillSpot.Area area) {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            if (layer != null) layer.setArea(area);
+        }
+
+        @Override public void placePill(float left, float top) {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            if (layer != null) layer.placePill(left, top);
+        }
+
+        @Override public void setPillShown(boolean shown) {
+            com.termux.app.terminal.extrakeys.HomePillLayer layer = homePillLayer();
+            if (layer == null) return;
+            // Re-dressed as it comes back, so a theme or Look change made while it was away shows.
+            if (shown) applyHomePillDress();
+            layer.setPillShown(shown);
+        }
+
+        @Override public void openKeysEditor() {
+            showExtraKeysRowEditor(com.termux.app.terminal.io.ExtraKeysTarget.HOME);
+        }
+
+        // The layer's own reports.
+
+        @Override public void onPillDropped(float left, float top) {
+            mHomePill.onPillDropped(left, top);
+        }
+
+        @Override public void onEditKeys() {
+            mHomePill.onEditKeys();
+        }
     }
 
     /** What the key set owner reads from and tells the activity. */
