@@ -324,6 +324,16 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
         return mKeyPages.size();
     }
 
+    /** Whether {@code position} is one of the shown set's key pages. */
+    public boolean isKeyPage(int position) {
+        return position < mKeyPages.size();
+    }
+
+    /** Whether {@code position} is the text input page, the one after the shown set's key pages. */
+    public boolean isTextInputPage(int position) {
+        return position == mKeyPages.size();
+    }
+
     public int pageCount() {
         return mKeyPages.size() + (mTextInput == null ? 0 : 1);
     }

@@ -20770,16 +20770,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return getTermuxTerminalExtraKeys(0);
     }
 
-    /**
-     * How many key pages the toolbar pager shows. Page 1 always exists; further pages exist only
-     * while their property holds keys, so emptying {@code extra-keys2} removes the page rather
-     * than leaving a blank one to swipe into.
-     */
-    public int getExtraKeysPageCount() {
-        if (mTermuxTerminalExtraKeysPages.isEmpty()) rebuildExtraKeysPageClients();
-        return Math.max(1, mTermuxTerminalExtraKeysPages.size());
-    }
-
     /** Rebuilds one client per configured key page. Cheap: it only re-parses the properties. */
     private void rebuildExtraKeysPageClients() {
         mTermuxTerminalExtraKeysPages.clear();
@@ -20917,11 +20907,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Any key page is showing; the text input is the one page after them. */
     public boolean isTerminalViewSelected() {
-        return getTerminalToolbarViewPager().getCurrentItem() < getExtraKeysPageCount();
+        return getTerminalToolbarViewPager().isKeyPage(getTerminalToolbarViewPager().getCurrentItem());
     }
 
     public boolean isTerminalToolbarTextInputViewSelected() {
-        return getTerminalToolbarViewPager().getCurrentItem() == getExtraKeysPageCount();
+        return getTerminalToolbarViewPager().isTextInputPage(getTerminalToolbarViewPager().getCurrentItem());
     }
 
     void termuxSessionListNotifyUpdated() {

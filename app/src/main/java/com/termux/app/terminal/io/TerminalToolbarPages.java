@@ -132,7 +132,7 @@ public class TerminalToolbarPages {
 
     /** The bar landed on {@code position}: the key pages hand the terminal focus, the text input takes it. */
     public void onPageSelected(@NonNull ExtraKeysBarView bar, int position) {
-        if (position < mActivity.getExtraKeysPageCount()) {
+        if (bar.isKeyPage(position)) {
             mActivity.endTerminalToolbarExternalTextInput();
             mActivity.getTerminalView().requestFocus();
         } else {

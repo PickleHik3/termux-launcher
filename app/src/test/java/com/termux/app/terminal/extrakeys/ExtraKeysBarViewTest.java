@@ -65,6 +65,17 @@ public class ExtraKeysBarViewTest {
     }
 
     @Test
+    public void thePageAfterTheShownSetsKeyPagesIsTheTextInputPage() throws Exception {
+        bar.setTextInputPage(new View(RuntimeEnvironment.getApplication()));
+        assertEquals(true, bar.isKeyPage(1));
+        assertEquals(false, bar.isTextInputPage(1));
+        assertEquals(true, bar.isTextInputPage(2));
+        bar.setKeySet(new ExtraKeysInfo[] {info("[['A']]")});
+        assertEquals(false, bar.isKeyPage(1));
+        assertEquals(true, bar.isTextInputPage(1));
+    }
+
+    @Test
     public void aPageIsAnchoredToTheBottomOrTheTopOfTheBar() {
         assertEquals("a one-row page stands on the bar's bottom", 100, bar.keyPage(0).getTop());
         assertEquals(0, bar.keyPage(1).getTop());
