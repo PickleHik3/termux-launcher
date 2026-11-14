@@ -396,6 +396,48 @@ public class ExtraKeysPageViewTest {
         assertEquals(0f, cap(0).glowLevel(), 0f);
     }
 
+    @Test
+    public void aSwipeUpToAModifierSecondKeyArmsItInsteadOfTypingItsName() throws Exception {
+        ExtraKeysPageView page = new ExtraKeysPageView(context);
+        page.setKeys(info("[[{key: 'ESC', popup: 'CTRL'}]]"));
+        layout(page, 100, 40);
+        ExtraKeyModifiers modifiers = new ExtraKeyModifiers();
+        page.setModifiers(modifiers);
+        RecordingClient client = new RecordingClient();
+        page.setClient(client);
+        View esc = page.getChildAt(0);
+        float fire = ExtraKeyPressPolicy.SWIPE_FIRE_DP * context.getResources().getDisplayMetrics().density;
+        touch(esc, MotionEvent.ACTION_DOWN, 0, 0, page);
+        touch(esc, MotionEvent.ACTION_MOVE, 0, -(fire + 6f), page);
+        touch(esc, MotionEvent.ACTION_UP, 0, -(fire + 6f), page);
+        assertTrue(client.clicked.isEmpty());
+        assertEquals(ExtraKeyModifiers.State.ARMED, modifiers.state(SpecialButton.CTRL));
+    }
+
+    @Test
+    public void anAccessibilityClickDoesWhatATapDoes() throws Exception {
+        ExtraKeysPageView page = new ExtraKeysPageView(context);
+        page.setKeys(info("[['ESC','CTRL']]"));
+        layout(page, 200, 40);
+        ExtraKeyModifiers modifiers = new ExtraKeyModifiers();
+        page.setModifiers(modifiers);
+        RecordingClient client = new RecordingClient();
+        page.setClient(client);
+        ExtraKeyCapView esc = (ExtraKeyCapView) page.getChildAt(0);
+        ExtraKeyCapView ctrl = (ExtraKeyCapView) page.getChildAt(1);
+        assertTrue(esc.isClickable());
+        assertTrue(esc.performAccessibilityAction(
+            android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK, null));
+        assertEquals("ESC", client.clicked.get(0));
+        assertTrue(ctrl.performAccessibilityAction(
+            android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK, null));
+        assertEquals(ExtraKeyModifiers.State.ARMED, modifiers.state(SpecialButton.CTRL));
+        assertEquals(1, client.clicked.size());
+        assertTrue(ctrl.performAccessibilityAction(
+            android.view.accessibility.AccessibilityNodeInfo.ACTION_LONG_CLICK, null));
+        assertEquals(ExtraKeyModifiers.State.OFF, modifiers.state(SpecialButton.CTRL));
+    }
+
     // ---- Modifiers.
 
     @Test

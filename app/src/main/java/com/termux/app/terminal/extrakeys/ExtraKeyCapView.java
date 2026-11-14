@@ -336,6 +336,12 @@ public final class ExtraKeyCapView extends AppCompatTextView {
         // These work like soft keyboard keys: with this flag set they honour TalkBack's
         // hold-to-activate, double-tap or hybrid setting.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) info.setTextEntryKey(true);
+        // The page sends the keys on touch; accessibility reaches them through click.
+        info.setClickable(!isDead());
+        if (isDead() || !ExtraKeyModifiers.isModifierKey(key().getKey())) {
+            info.setLongClickable(false);
+            info.removeAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK);
+        }
     }
 
     private static int withAlpha(int color, int alpha) {

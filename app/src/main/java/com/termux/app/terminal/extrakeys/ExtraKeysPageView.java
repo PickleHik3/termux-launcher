@@ -249,6 +249,9 @@ public final class ExtraKeysPageView extends ViewGroup {
         boolean fresh = cap == null;
         if (fresh) {
             cap = new ExtraKeyCapView(getContext(), key, id);
+            // Touch never reaches a cap (the page takes it); these serve accessibility actions.
+            cap.setOnClickListener(v -> performAccessibilityTap((ExtraKeyCapView) v));
+            cap.setOnLongClickListener(v -> performAccessibilityHold((ExtraKeyCapView) v));
         } else {
             cap.animate().cancel();
             cap.rebind(key);
@@ -965,19 +968,43 @@ public final class ExtraKeysPageView extends ViewGroup {
                 send(cap, cap.key());
                 break;
             case FIRE_SECOND:
-                send(cap, cap.key().getPopup());
+                tapKey(cap, cap.key().getPopup());
                 break;
-            case MODIFIER_TAP: {
-                SpecialButton button = modifierOf(cap.key());
-                if (button != null && mModifiers != null) {
-                    mModifiers.tap(button);
-                    announceModifier(cap.key(), button);
-                }
+            case MODIFIER_TAP:
+                tapKey(cap, cap.key());
                 break;
-            }
             default:
                 break;
         }
+    }
+
+    /** A tap of {@code key}: a modifier arms or lets go, any other key is sent once. */
+    private void tapKey(@NonNull ExtraKeyCapView cap, @Nullable ExtraKeyButton key) {
+        if (key == null) return;
+        SpecialButton button = modifierOf(key);
+        if (button != null) {
+            if (mModifiers != null) {
+                mModifiers.tap(button);
+                announceModifier(key, button);
+            }
+            return;
+        }
+        send(cap, key);
+    }
+
+    /** An accessibility click on a cap does what a touch tap does. */
+    private void performAccessibilityTap(@NonNull ExtraKeyCapView cap) {
+        if (cap.isDead()) return;
+        tapKey(cap, cap.key());
+    }
+
+    /** An accessibility long click locks a modifier, as a hold does; other keys have no hold. */
+    private boolean performAccessibilityHold(@NonNull ExtraKeyCapView cap) {
+        SpecialButton button = cap.isDead() ? null : modifierOf(cap.key());
+        if (button == null || mModifiers == null || !mHoldActsOnKey) return false;
+        mModifiers.hold(button);
+        announceModifier(cap.key(), button);
+        return true;
     }
 
     /** Stops the timers, lets the glow fade, hides the bubble and fires nothing. */
