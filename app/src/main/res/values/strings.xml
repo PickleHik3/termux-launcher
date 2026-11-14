@@ -219,6 +219,9 @@
     <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
     <string name="settings_keyboard_look_header">Keyboard look</string>
     <string name="settings_extra_keys_page">Page %1$d</string>
+    <string name="settings_extra_keys_key_size">Key size</string>
+    <string name="settings_extra_keys_key_size_note">How large the extra keys are.</string>
+    <string name="settings_extra_keys_key_size_value">%1$s×</string>
     <string name="settings_extra_keys_add_row">Add row</string>
     <string name="settings_extra_keys_row">Row %1$d</string>
     <string name="settings_extra_keys_drag_handle">Drag to reorder</string>

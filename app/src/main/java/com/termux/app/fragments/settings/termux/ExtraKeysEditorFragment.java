@@ -44,6 +44,7 @@ import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.settings.TermuxPropertiesFile;
+import com.termux.app.surfaces.rows.SliderRow;
 import com.termux.app.terminal.io.ExtraKeyActionLabels;
 import com.termux.app.terminal.io.ExtraKeyActionPicker;
 import com.termux.app.terminal.io.ExtraKeyDetailSheet;
@@ -90,6 +91,8 @@ public class ExtraKeysEditorFragment extends Fragment
     /** The draft as loaded or last saved, to tell whether anything is left to save. */
     private String savedFingerprint = "";
     private int currentPage;
+    /** Whether {@code termux.properties} has a key size line; the default is not written otherwise. */
+    private boolean keySizeStored;
 
     @NonNull
     private ExtraKeysConstants.ExtraKeyDisplayMap displayMap =
@@ -144,6 +147,7 @@ public class ExtraKeysEditorFragment extends Fragment
         column.addView(scroller, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        content.addView(keySizeRow(context));
         content.addView(pagesBar(context));
         hintView = hintRow(context);
         content.addView(hintView);
@@ -195,6 +199,10 @@ public class ExtraKeysEditorFragment extends Fragment
             loaded.add(ExtraKeysLayoutModel.parse(value));
         }
         draft = ExtraKeysDraft.of(loaded);
+        String keySize = properties.getProperty(
+            TermuxPropertyConstants.KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR);
+        keySizeStored = keySize != null;
+        draft.setKeySizeTenths(ExtraKeysDraft.keySizeTenthsFromProperty(keySize));
         savedFingerprint = draft.fingerprint();
         currentPage = Math.min(currentPage, draft.pageCount() - 1);
     }
@@ -230,6 +238,11 @@ public class ExtraKeysEditorFragment extends Fragment
         for (int page = 0; page < TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS.length; page++) {
             TermuxPropertiesFile.write(TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS[page],
                 draft.valueFor(page));
+        }
+        if (keySizeStored || draft.keySizeTenths() != ExtraKeysDraft.KEY_SIZE_DEFAULT_TENTHS) {
+            TermuxPropertiesFile.write(TermuxPropertyConstants.KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR,
+                ExtraKeysDraft.keySizeProperty(draft.keySizeTenths()));
+            keySizeStored = true;
         }
         savedFingerprint = draft.fingerprint();
         backCallback.setEnabled(false);
@@ -274,6 +287,38 @@ public class ExtraKeysEditorFragment extends Fragment
             refreshAll();
         });
         snackbar.show();
+    }
+
+    // ---------------------------------------------------------------- key size
+
+    /** Key size, a property of the whole bar, so it stands above the page tabs. */
+    private View keySizeRow(@NonNull Context context) {
+        LinearLayout block = column(context);
+        SliderRow.Track track = new SliderRow.Track(R.drawable.ic_ms_height,
+            getString(R.string.settings_extra_keys_key_size),
+            ExtraKeysDraft.KEY_SIZE_MIN_TENTHS, ExtraKeysDraft.KEY_SIZE_MAX_TENTHS, 1,
+            tenths -> getString(R.string.settings_extra_keys_key_size_value,
+                ExtraKeysDraft.keySizeProperty(tenths)));
+        SliderRow slider = SliderRow.build(context, java.util.Collections.singletonList(track),
+            new int[]{draft.keySizeTenths()}, new SliderRow.Listener() {
+                @Override
+                public void onValue(int index, int value, boolean dragging) {
+                    if (draft.keySizeTenths() == value) return;
+                    draft.setKeySizeTenths(value);
+                    edited();
+                }
+
+                @Override
+                public void onReleased(int index) {}
+            });
+        block.addView(slider.root);
+        TextView note = new TextView(context);
+        note.setText(R.string.settings_extra_keys_key_size_note);
+        note.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall);
+        note.setTextColor(colorSubtle);
+        note.setPadding(dp(4), 0, dp(4), dp(8));
+        block.addView(note);
+        return block;
     }
 
     // ---------------------------------------------------------------- pages

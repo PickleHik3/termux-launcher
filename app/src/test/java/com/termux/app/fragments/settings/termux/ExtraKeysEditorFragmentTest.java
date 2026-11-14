@@ -15,6 +15,7 @@ import android.view.View;
 import android.widget.EditText;
 
 import com.termux.R;
+import com.termux.app.terminal.io.ExtraKeysDraft;
 import com.termux.app.terminal.io.ExtraKeysLayoutModel;
 
 import org.junit.Test;
@@ -97,5 +98,26 @@ public class ExtraKeysEditorFragmentTest {
     private static View findVisibleDescription(ExtraKeysEditorHarness h, String description) {
         View v = findDescription(h.page(), description);
         return v != null && v.getVisibility() == View.VISIBLE ? v : null;
+    }
+
+    @Test
+    public void aStoredKeySizeLoadsAsTenthsAndOutOfRangeReadsAsTheDefault() {
+        assertEquals(15, ExtraKeysDraft.keySizeTenthsFromProperty("1.5"));
+        assertEquals(4, ExtraKeysDraft.keySizeTenthsFromProperty("0.4"));
+        assertEquals(30, ExtraKeysDraft.keySizeTenthsFromProperty("3"));
+        assertEquals(10, ExtraKeysDraft.keySizeTenthsFromProperty("9"));
+        assertEquals(10, ExtraKeysDraft.keySizeTenthsFromProperty("0.1"));
+        assertEquals(10, ExtraKeysDraft.keySizeTenthsFromProperty("big"));
+        assertEquals(10, ExtraKeysDraft.keySizeTenthsFromProperty(null));
+    }
+
+    @Test
+    public void movingTheKeySizeMarksTheEditorDirty() throws Exception {
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness();
+        assertFalse(h.fragment.hasUnsavedChanges());
+        h.editDraft(d -> d.setKeySizeTenths(25));
+        assertTrue(h.fragment.hasUnsavedChanges());
+        h.editDraft(d -> d.setKeySizeTenths(ExtraKeysDraft.KEY_SIZE_DEFAULT_TENTHS));
+        assertFalse(h.fragment.hasUnsavedChanges());
     }
 }
