@@ -171,6 +171,8 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
 
     private float mSlideFromPx;
     private float mSlideToPx;
+    /** The width the offset was last derived for. */
+    private int mLaidWidth;
 
     // ---- Content.
 
@@ -429,6 +431,19 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         int w = r - l;
         int h = b - t;
+        if (w != mLaidWidth) {
+            // The offset was worked out from the old width: re-derive it for the page in front,
+            // and move a running slide's ends the same way, without another layout request.
+            float ratio = mLaidWidth > 0 ? (float) w / mLaidWidth : 0f;
+            if (mSlide.isRunning() && !mDragging && mLaidWidth > 0) {
+                mSlideFromPx *= ratio;
+                mSlideToPx = mSlideTarget * (float) w;
+                mOffsetPx *= ratio;
+            } else if (!mDragging) {
+                mOffsetPx = mCurrent * (float) w;
+            }
+            mLaidWidth = w;
+        }
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             int ph = child.getMeasuredHeight();

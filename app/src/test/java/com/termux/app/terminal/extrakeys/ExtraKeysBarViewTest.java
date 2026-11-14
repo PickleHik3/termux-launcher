@@ -76,6 +76,26 @@ public class ExtraKeysBarViewTest {
     }
 
     @Test
+    public void aResizeKeepsThePageInFrontInPlaceAndASlideEndsAtTheNewWidth() {
+        bar.setCurrentItem(1, false);
+        resize(300, 200);
+        assertEquals(0f, bar.keyPage(1).getTranslationX(), 0f);
+        assertEquals(-300, bar.keyPage(0).getTranslationX(), 0f);
+
+        bar.setCurrentItem(0, true);
+        resize(400, 200);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1000, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals(0f, bar.keyPage(0).getTranslationX(), 0f);
+        assertEquals(400, bar.keyPage(1).getTranslationX(), 0f);
+    }
+
+    private void resize(int width, int barHeight) {
+        bar.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(barHeight, View.MeasureSpec.EXACTLY));
+        bar.layout(0, 0, width, barHeight);
+    }
+
+    @Test
     public void aPageIsAnchoredToTheBottomOrTheTopOfTheBar() {
         assertEquals("a one-row page stands on the bar's bottom", 100, bar.keyPage(0).getTop());
         assertEquals(0, bar.keyPage(1).getTop());
