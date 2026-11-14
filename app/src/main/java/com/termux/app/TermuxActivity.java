@@ -2360,6 +2360,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // What a package event heard while stopped left for the visible half of the refresh.
         if (mCatalogueUiRefreshOwed) {
             mCatalogueUiRefreshOwed = false;
+            // The letters follow the catalogue; the forced pass that syncs them ran data-only.
+            syncAzScrubLettersAndTint();
             scheduleSuggestionBarPackageRefresh(false, false);
         }
         refreshSuggestionBarIfLauncherCatalogChanged();
