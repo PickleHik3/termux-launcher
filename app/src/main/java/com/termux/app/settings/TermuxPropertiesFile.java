@@ -17,7 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
-import java.util.regex.Pattern;
 
 /**
  * Single-property read/write against {@code termux.properties}, kept in one place so the settings
@@ -84,44 +83,90 @@ public final class TermuxPropertiesFile {
 
     /**
      * The file's lines with {@code propertyKey} set to {@code propertyValue}: every uncommented
-     * line assigning that exact key is replaced in place, and the assignment is appended only when
-     * none does. The key is matched literally, so a dot or bracket in it is not a regex.
+     * assignment of that exact key, in any of the forms {@link Properties#load} reads, is replaced
+     * in place together with its continuation lines, and the assignment is appended only when none
+     * is found. The key is matched literally.
      */
     @NonNull
     static List<String> withProperty(@NonNull List<String> lines, @NonNull String propertyKey,
                                      @NonNull String propertyValue) {
         String assignment = propertyKey + "=" + propertyValue;
-        String assignsKey = Pattern.quote(propertyKey) + "\\s*=.*";
         List<String> out = new ArrayList<>(lines.size() + 1);
-        boolean updated = false;
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (!trimmed.startsWith("#") && trimmed.matches(assignsKey)) {
-                out.add(assignment);
-                updated = true;
-            } else {
-                out.add(line);
-            }
-        }
-        if (!updated)
+        if (!edit(lines, propertyKey, assignment, out))
             out.add(assignment);
         return out;
     }
 
     /**
-     * The file's lines without any uncommented line assigning {@code propertyKey} (matched as in
-     * {@link #withProperty}); comments and every other line stay.
+     * The file's lines without any uncommented assignment of {@code propertyKey} (matched as in
+     * {@link #withProperty}) or its continuation lines; comments and every other line stay.
      */
     @NonNull
     static List<String> withoutProperty(@NonNull List<String> lines, @NonNull String propertyKey) {
-        String assignsKey = Pattern.quote(propertyKey) + "\\s*=.*";
         List<String> out = new ArrayList<>(lines.size());
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (!trimmed.startsWith("#") && trimmed.matches(assignsKey))
-                continue;
-            out.add(line);
-        }
+        edit(lines, propertyKey, null, out);
         return out;
+    }
+
+    /**
+     * Copies {@code lines} to {@code out}, putting {@code replacement} (or nothing when null) in
+     * place of each assignment of the key and the continuation lines it owns. True when any matched.
+     */
+    private static boolean edit(@NonNull List<String> lines, @NonNull String propertyKey,
+                                String replacement, @NonNull List<String> out) {
+        boolean matched = false;
+        boolean continuing = false;
+        boolean dropping = false;
+        for (String line : lines) {
+            if (continuing) {
+                continuing = continues(line);
+                if (!dropping)
+                    out.add(line);
+                continue;
+            }
+            dropping = assignsKey(line, propertyKey);
+            continuing = !isComment(line) && continues(line);
+            if (dropping) {
+                matched = true;
+                if (replacement != null)
+                    out.add(replacement);
+            } else {
+                out.add(line);
+            }
+        }
+        return matched;
+    }
+
+    private static boolean isComment(@NonNull String line) {
+        String trimmed = stripLeadingWhitespace(line);
+        return trimmed.startsWith("#") || trimmed.startsWith("!");
+    }
+
+    /** Whether the line is not a comment and its key, up to {@code = : or whitespace}, is the key. */
+    private static boolean assignsKey(@NonNull String line, @NonNull String propertyKey) {
+        String trimmed = stripLeadingWhitespace(line);
+        if (trimmed.startsWith("#") || trimmed.startsWith("!") || !trimmed.startsWith(propertyKey))
+            return false;
+        if (trimmed.length() == propertyKey.length())
+            return true;
+        char next = trimmed.charAt(propertyKey.length());
+        return next == '=' || next == ':' || next == ' ' || next == '\t' || next == '\f';
+    }
+
+    /** A line ending in an odd number of backslashes continues on the next one. */
+    private static boolean continues(@NonNull String line) {
+        int count = 0;
+        for (int i = line.length() - 1; i >= 0 && line.charAt(i) == '\\'; i--)
+            count++;
+        return count % 2 == 1;
+    }
+
+    @NonNull
+    private static String stripLeadingWhitespace(@NonNull String line) {
+        int i = 0;
+        while (i < line.length() && (line.charAt(i) == ' ' || line.charAt(i) == '\t'
+            || line.charAt(i) == '\f'))
+            i++;
+        return line.substring(i);
     }
 }

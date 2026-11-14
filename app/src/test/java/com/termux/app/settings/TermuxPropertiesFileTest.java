@@ -56,4 +56,29 @@ public class TermuxPropertiesFileTest {
             TermuxPropertiesFile.withoutProperty(lines, "extra.keys"));
         assertEquals(lines, TermuxPropertiesFile.withoutProperty(lines, "absent"));
     }
+
+    @Test
+    public void removalFindsAKeyWrittenWithEqualsColonOrSpaceAndTakesItsContinuationLines() {
+        List<String> lines = Arrays.asList("! note", "a=1", "  extra-keys-terminal: [[ESC]]",
+            "extra-keys-terminal2 [[B]]", "extra-keys-terminal\t[[C], \\", "    [D]]", "z=9", "extra-keys-terminal");
+
+        assertEquals(Arrays.asList("! note", "a=1", "extra-keys-terminal2 [[B]]", "z=9"),
+            TermuxPropertiesFile.withoutProperty(lines, "extra-keys-terminal"));
+    }
+
+    @Test
+    public void replacementTakesTheContinuationLinesAndOtherLinesStayByteForByte() {
+        List<String> lines = Arrays.asList("# k=old", "k : first \\", "  second", "  x = \\\\", "y=2");
+
+        assertEquals(Arrays.asList("# k=old", "k=new", "  x = \\\\", "y=2"),
+            TermuxPropertiesFile.withProperty(lines, "k", "new"));
+    }
+
+    @Test
+    public void aLineInsideAnotherValuesContinuationIsNotAKey() {
+        List<String> lines = Arrays.asList("a=1 \\", "k=2", "k=3");
+
+        assertEquals(Arrays.asList("a=1 \\", "k=2"),
+            TermuxPropertiesFile.withoutProperty(lines, "k"));
+    }
 }
