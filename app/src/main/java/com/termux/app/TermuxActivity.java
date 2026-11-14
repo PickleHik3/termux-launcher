@@ -1193,7 +1193,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private static final long APP_DRAWER_WARM_DELAY_MS = 1550L;
     private boolean mPackageRefreshForceCatalogReload = false;
-    private int mLastLauncherCatalogSignature = Integer.MIN_VALUE;
+    private int mLastLauncherCatalogSignature = com.termux.app.launcher.data.CatalogueCatchUp.UNREAD;
+    /** Whether the process already held a loaded catalogue snapshot when this activity was created. */
+    private boolean mCatalogueHeldBeforeFirstRead = false;
+    /** A package event refreshed the catalogue data while stopped; the visible half waits for onStart. */
+    private boolean mCatalogueUiRefreshOwed = false;
     private int mLastLauncherIconDayKey = Integer.MIN_VALUE;
     /**
      * Packages the pending (debounced) catalogue refresh knows were touched; scopes the provider's
@@ -1945,6 +1949,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsInvalidState = true;
             return;
         }
+        // Before this activity builds anything that reads the catalogue: a snapshot already held
+        // by the process singleton may predate an install made while no activity was listening.
+        com.termux.app.launcher.data.LauncherAppDataProvider heldProvider =
+            com.termux.app.launcher.data.LauncherAppDataProvider.peekInstance();
+        mCatalogueHeldBeforeFirstRead = heldProvider != null && heldProvider.hasLoadedApps();
         // The chrome is dressed for the page the wall opens on from the first frame: every read of
         // Home's Style, Corners and Margin and of the layout variant follows mLastWallPage, which
         // otherwise said the Workspace until the first settle.
@@ -2092,6 +2101,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // app has been opened.
         TermuxUtils.sendTermuxOpenedBroadcast(this);
         registerPreferredHomeChangeReceiver();
+        // Only something that lists apps hears about packages: the catalogue behind the dock and
+        // the index, the drawer, or the widget host reconciling its providers. A terminal-only
+        // install registers neither listener. Kept until onDestroy, not onStop.
+        if (consumesPackageChanges()) {
+            registerPackageChangeReceiver();
+            registerLauncherAppsCallback();
+        }
         mSheets.ensureAppNoticeHost();
         if (savedInstanceState == null) {
             View contentView = findViewById(android.R.id.content);
@@ -2339,15 +2355,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mRecentsPolicySyncedSinceStart = true;
         mChrome.requestSync(ChromeRenderer.SCOPE_BLUR_HEALTH);
         registerTermuxActivityBroadcastReceiver();
-        // Only something that lists apps hears about packages: the catalogue behind the dock and
-        // the index, the drawer, or the widget host reconciling its providers. A terminal-only
-        // install registers neither listener.
-        if (consumesPackageChanges()) {
-            registerPackageChangeReceiver();
-            registerLauncherAppsCallback();
-        }
         registerWallpaperColorsChangedListener();
         refreshCalendarIconsIfDayChanged();
+        // What a package event heard while stopped left for the visible half of the refresh.
+        if (mCatalogueUiRefreshOwed) {
+            mCatalogueUiRefreshOwed = false;
+            scheduleSuggestionBarPackageRefresh(false, false);
+        }
         refreshSuggestionBarIfLauncherCatalogChanged();
         getWindow().getDecorView().post(() -> LauncherCtlApiServer.getInstance().ensureStartedAsync(getApplicationContext()));
         // An editor left open under another activity (the Keyboard theme page it opened) is the
@@ -10669,15 +10683,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         removeAccessoryKeyboardLayoutListener();
         removeAccessoryLayoutChangeListeners();
         unregisterTermuxActivityBroadcastReceiver();
-        unregisterPackageChangeReceiver();
-        unregisterLauncherAppsCallback();
         unregisterWallpaperColorsChangedListener();
         mChrome.cancelPendingWork();
         mKeyboardGeometry.onStop();
         applyDockImeOffset(0);
         clearAccessoryRenderEffectBackdrop();
         hideDecorNavBarSurfaceOverlay(true);
-        mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
+        // mPackageRefreshRunnable stays posted: an install heard as the user leaves must still
+        // reach the catalogue (its stopped half is data only).
         mAzGestureHandler.removeCallbacks(mLauncherCatalogWarmRunnable);
     }
 
@@ -10751,6 +10764,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
         mLandedFrameSettle.drop();
         unregisterRotationListener();
+        // The package listeners live as long as the activity so an install made while another
+        // app is in front is heard.
+        unregisterPackageChangeReceiver();
+        unregisterLauncherAppsCallback();
+        mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
         if (sLiveActivity != null && sLiveActivity.get() == this) sLiveActivity = null;
@@ -33824,7 +33842,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void refreshSuggestionBarFromPackageState(boolean forceCatalogRefresh) {
+        if (isDestroyed()) return;
         boolean catalogEnabled = isLauncherCatalogEnabled() && mSuggestionBarView != null;
+        if (!mIsVisible) {
+            // Stopped: only the data is brought up to date (one background scan; the dock defers
+            // its render while hidden). The A-Z row, FX layers, widget host and drawer are not
+            // touched with no window to draw them; onStart runs that half.
+            if (catalogEnabled && forceCatalogRefresh) {
+                mSuggestionBarView.pruneInvalidIconOverrides();
+                mSuggestionBarView.refreshAllApps(drainPendingChangedPackages());
+                computeLauncherCatalogSignatureOffMain(
+                    signature -> mLastLauncherCatalogSignature = signature);
+            }
+            mCatalogueUiRefreshOwed = true;
+            return;
+        }
         if (catalogEnabled && forceCatalogRefresh) {
             // Kick the provider's background refresh BEFORE notifying the drawer below: while the
             // refresh is in flight the provider parks warmAsync callbacks, so the drawer's
@@ -34013,7 +34045,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void scheduleSuggestionBarPackageRefresh(boolean immediate, boolean forceCatalogRefresh) {
-        if (!isLauncherCatalogEnabled()) {
+        if (isDestroyed() || !consumesPackageChanges()) {
             mPackageRefreshForceCatalogReload = false;
             mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
             return;
@@ -34030,7 +34062,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void refreshSuggestionBarIfLauncherCatalogChanged() {
-        if (!isLauncherCatalogEnabled() || mSuggestionBarView == null) {
+        if (!consumesPackageChanges()) {
             return;
         }
         // The package manager is asked on the worker; the comparison and what follows from it run
@@ -34039,18 +34071,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void onLauncherCatalogSignatureRead(int signature) {
-        if (!isLauncherCatalogEnabled() || mSuggestionBarView == null) {
+        if (!consumesPackageChanges()) {
             return;
         }
-        if (mLastLauncherCatalogSignature == Integer.MIN_VALUE) {
-            mLastLauncherCatalogSignature = signature;
-            return;
-        }
-        if (mLastLauncherCatalogSignature == signature) {
-            return;
-        }
+        boolean refresh = com.termux.app.launcher.data.CatalogueCatchUp.shouldRefresh(
+            mLastLauncherCatalogSignature, signature, mCatalogueHeldBeforeFirstRead);
         mLastLauncherCatalogSignature = signature;
-        scheduleSuggestionBarPackageRefresh(false, true);
+        if (refresh) {
+            scheduleSuggestionBarPackageRefresh(false, true);
+        }
     }
 
     private void refreshCalendarIconsIfDayChanged() {
@@ -34234,7 +34263,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (intent == null || mSuggestionBarView == null)
+            if (intent == null || !consumesPackageChanges())
                 return;
             String action = intent.getAction();
             if (Intent.ACTION_PACKAGE_ADDED.equals(action) ||
