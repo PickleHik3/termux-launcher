@@ -452,6 +452,14 @@ public final class TermuxPropertyConstants {
     public static final String DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT = "[[{key: KEYBOARD, display: '󰥻', popup: {key: 'tool:keyboard.cycle_form', display: ''}}, {key: 'tool:voice.dictate', display: '󰍬'}, {key: 'tool:clipboard.paste', display: '󰆒'}]]";
 
     /**
+     * The keys the Home pill starts with when it is switched on and Home has no key set of its own
+     * ({@link #KEY_EXTRA_KEYS_HOME} absent or blank): the command palette, the app drawer and
+     * settings. The caps are the ones the key picker gives those tools (the palette, which has none
+     * of its own, wears a magnifier).
+     */
+    public static final String HOME_PILL_STARTER_EXTRA_KEYS = "[[{key: 'tool:app.command_palette', display: '\uf002'}, {key: 'tool:app.open_app_drawer', display: '\uDB80\uDC3B'}, {key: 'tool:app.open_settings', display: '\uf013'}]]";
+
+    /**
      * Defines the key for extra keys style
      */
     // Default: "extra-keys-style"
