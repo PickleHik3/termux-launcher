@@ -218,6 +218,7 @@
     <string name="settings_icon_pack_title">Icon pack</string>
     <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
     <string name="settings_keyboard_look_header">Keyboard look</string>
+    <string name="home_pill_edit_keys">Edit keys</string>
     <string name="settings_extra_keys_page">Page %1$d</string>
     <string name="settings_extra_keys_key_size">Key size</string>
     <string name="settings_extra_keys_key_size_note">How large the extra keys are.</string>
