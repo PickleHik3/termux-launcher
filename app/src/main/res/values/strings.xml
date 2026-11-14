@@ -506,6 +506,8 @@
     <string name="launcher_media_play">Play</string>
     <string name="launcher_media_pause">Pause</string>
     <!-- The page switcher: the dot on the screen edge and the picker it opens. -->
+    <string name="settings_page_switcher_title">Page switcher</string>
+    <string name="settings_page_switcher_summary">A dot on the screen edge that jumps to any page.</string>
     <string name="page_switcher_title">Page switcher</string>
     <string name="page_switcher_home">Home</string>
     <string name="page_switcher_terminal">Terminal</string>

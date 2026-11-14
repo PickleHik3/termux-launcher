@@ -432,6 +432,9 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_haptics_enabled":
                 mPreferences.setAppHapticsEnabled(value);
                 break;
+            case "page_switcher_enabled":
+                mPreferences.setPageSwitcherEnabled(value);
+                break;
             case "app_launcher_row_haptics":
                 mPreferences.setAppLauncherRowHapticsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -483,6 +486,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherWidgetPaneEnabled();
             case "app_haptics_enabled":
                 return mPreferences.isAppHapticsEnabled();
+            case "page_switcher_enabled":
+                return mPreferences.isPageSwitcherEnabled();
             case "app_launcher_row_haptics":
                 return mPreferences.isAppLauncherRowHapticsEnabled();
             case "app_launcher_az_double_tap_lock":
