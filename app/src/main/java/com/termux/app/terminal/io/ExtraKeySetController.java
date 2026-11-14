@@ -8,8 +8,13 @@ import com.termux.app.terminal.extrakeys.ExtraKeyModifiers;
 import com.termux.app.terminal.extrakeys.ExtraKeysBarView;
 import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
+import com.termux.shared.termux.extrakeys.SpecialButton;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * The one owner of which keys the bar and the edge column show: it follows the target the keys go
@@ -122,6 +127,8 @@ public final class ExtraKeySetController {
             : allowMotion && mHost.barShown() ? ExtraKeysBarView.Transition.MORPH
             : ExtraKeysBarView.Transition.SWAP;
 
+        if (!targetChanged) mHost.modifiers().clearAbsent(modifierKeysIn(pages));
+
         mTarget = target;
         mResolved = resolved;
         mPages = pages;
@@ -140,5 +147,24 @@ public final class ExtraKeySetController {
             mEdgeScale = resolved.scale;
             if (changed) mHost.onEdgeKeysChanged();
         }
+    }
+
+    /** The modifiers that have a key, or a popup key, on any of {@code pages}. */
+    @NonNull
+    private static Set<SpecialButton> modifierKeysIn(@NonNull ExtraKeysInfo[] pages) {
+        Set<SpecialButton> present = new HashSet<>();
+        for (ExtraKeysInfo page : pages) {
+            if (page == null || page.getMatrix() == null) continue;
+            for (ExtraKeyButton[] row : page.getMatrix()) {
+                for (ExtraKeyButton key : row) {
+                    for (ExtraKeyButton k = key; k != null; k = k.getPopup()) {
+                        if (k.isMacro() || k.getKey() == null) continue;
+                        SpecialButton button = SpecialButton.valueOf(k.getKey());
+                        if (button != null) present.add(button);
+                    }
+                }
+            }
+        }
+        return present;
     }
 }

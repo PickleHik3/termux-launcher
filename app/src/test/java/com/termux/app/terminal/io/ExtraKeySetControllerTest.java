@@ -156,4 +156,19 @@ public class ExtraKeySetControllerTest {
         controller.reload();
         assertEquals(1, edgeChanged);
     }
+
+    @Test
+    public void aReloadClearsALockedModifierWhoseKeyIsGoneAndKeepsOneWhoseKeyStays() {
+        lines.put("extra-keys", "[['CTRL','ALT']]");
+        controller.refresh(false);
+        modifiers.hold(SpecialButton.CTRL);
+        modifiers.hold(SpecialButton.ALT);
+        controller.reload();
+        assertEquals(ExtraKeyModifiers.State.LOCKED, modifiers.state(SpecialButton.CTRL));
+
+        lines.put("extra-keys", "[['ESC','ALT']]");
+        controller.reload();
+        assertEquals(ExtraKeyModifiers.State.OFF, modifiers.state(SpecialButton.CTRL));
+        assertEquals(ExtraKeyModifiers.State.LOCKED, modifiers.state(SpecialButton.ALT));
+    }
 }

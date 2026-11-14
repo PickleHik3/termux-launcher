@@ -76,6 +76,13 @@ public final class ExtraKeyModifiers {
         for (int i = 0; i < mStates.length; i++) set(i, State.OFF);
     }
 
+    /** Turns off every modifier that is not in {@code present}; the ones that are keep their state. */
+    public void clearAbsent(java.util.Set<SpecialButton> present) {
+        for (int i = 0; i < mStates.length; i++) {
+            if (!present.contains(BUTTONS[i])) set(i, State.OFF);
+        }
+    }
+
     private void set(int i, State next) {
         if (mStates[i] == next) return;
         mStates[i] = next;
