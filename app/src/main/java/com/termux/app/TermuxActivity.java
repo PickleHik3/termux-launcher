@@ -34512,8 +34512,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Nullable @Override public ExtraKeysPageView edgePage() {
             ExtraKeysPageView keys = mExtraKeysColumnPage;
             View host = findViewById(R.id.place_extra_keys_host);
-            return keys != null && host != null && host.getVisibility() == View.VISIBLE
-                && keys.getParent() == host ? keys : null;
+            // Hidden or not, a standing page takes the new keys, so it is right when it shows
+            // again; it only morphs while shown (morphTo swaps otherwise).
+            return keys != null && host != null && keys.getParent() == host ? keys : null;
         }
 
         @Override public boolean barShown() {
