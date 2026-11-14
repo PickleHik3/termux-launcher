@@ -505,6 +505,21 @@
     <string name="launcher_media_channel_name">Media controls</string>
     <string name="launcher_media_play">Play</string>
     <string name="launcher_media_pause">Pause</string>
+    <!-- The page switcher: the dot on the screen edge and the picker it opens. -->
+    <string name="page_switcher_title">Page switcher</string>
+    <string name="page_switcher_home">Home</string>
+    <string name="page_switcher_terminal">Terminal</string>
+    <string name="page_switcher_display">Display</string>
+    <string name="page_switcher_assistant">Assistant</string>
+    <string name="page_switcher_start_display">Start display</string>
+    <!-- %1$d is how many more windows the column holds than it shows. -->
+    <string name="page_switcher_more">%1$d more</string>
+    <!-- %1$s is a page or window name. -->
+    <string name="page_switcher_current">%1$s, here now</string>
+    <!-- %1$s is a page kind the wall has no page for. -->
+    <string name="page_switcher_add">%1$s, not on the wall yet. Adds it.</string>
+    <string name="page_switcher_display_apps">Apps on the display</string>
+    <string name="page_switcher_hint">Slide from the dot to any page</string>
     <string name="launcher_media_next">Next</string>
     <string name="launcher_media_previous">Previous</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
