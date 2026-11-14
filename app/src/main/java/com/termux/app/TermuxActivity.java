@@ -28641,7 +28641,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int bottomChromeTopPx(@NonNull View layer) {
-                View stack = findViewById(R.id.accessory_stack_container);
+                // Read on every drawn frame: the cached lookup, not a tree walk.
+                View stack = hotView(R.id.accessory_stack_container);
                 if (stack == null || stack.getVisibility() != View.VISIBLE || stack.getHeight() <= 0)
                     return layer.getHeight();
                 stack.getLocationOnScreen(mStackAt);
