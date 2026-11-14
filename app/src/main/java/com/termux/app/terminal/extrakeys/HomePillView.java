@@ -231,12 +231,14 @@ public final class HomePillView extends ViewGroup {
                 mHandler.removeCallbacks(mHoldRunnable);
                 mTracking = true;
                 mDownTime = ev.getDownTime();
-                mGesture.down(ev.getX(), ev.getY());
+                // Screen coordinates: the pill moves under the finger by translation, so its own
+                // coordinates would cancel the drag they report.
+                mGesture.down(ev.getRawX(), ev.getRawY());
                 mHandler.postDelayed(mHoldRunnable, mGesture.holdMillis());
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (!mTracking) break;
-                HomePillGesture.Move move = mGesture.move(ev.getX(), ev.getY());
+                HomePillGesture.Move move = mGesture.move(ev.getRawX(), ev.getRawY());
                 if (move == HomePillGesture.Move.CANCEL_HOLD) {
                     mHandler.removeCallbacks(mHoldRunnable);
                 } else if (move == HomePillGesture.Move.DRAG && mListener != null) {
