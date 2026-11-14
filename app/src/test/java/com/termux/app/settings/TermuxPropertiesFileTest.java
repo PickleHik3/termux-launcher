@@ -38,4 +38,22 @@ public class TermuxPropertiesFileTest {
         assertEquals(Collections.singletonList("b=2"),
             TermuxPropertiesFile.withProperty(Collections.emptyList(), "b", "2"));
     }
+
+    @Test
+    public void withoutPropertyDropsEveryAssignmentAndKeepsCommentsAndOthers() {
+        List<String> lines = Arrays.asList("# extra-keys-home=1", "a=1", "  extra-keys-home = [[ESC]]",
+            "extra-keys-home2=x", "extra-keys-home=again");
+
+        assertEquals(Arrays.asList("# extra-keys-home=1", "a=1", "extra-keys-home2=x"),
+            TermuxPropertiesFile.withoutProperty(lines, "extra-keys-home"));
+    }
+
+    @Test
+    public void withoutPropertyMatchesTheKeyLiterallyAndLeavesAbsentKeysAlone() {
+        List<String> lines = Arrays.asList("extraXkeys=1", "extra.keys=2");
+
+        assertEquals(Collections.singletonList("extraXkeys=1"),
+            TermuxPropertiesFile.withoutProperty(lines, "extra.keys"));
+        assertEquals(lines, TermuxPropertiesFile.withoutProperty(lines, "absent"));
+    }
 }

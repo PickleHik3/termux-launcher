@@ -46,6 +46,17 @@ public final class TermuxPropertiesFile {
     }
 
     public static void write(@NonNull String propertyKey, @NonNull String propertyValue) {
+        rewrite(lines -> withProperty(lines, propertyKey, propertyValue));
+    }
+
+    /** Removes every uncommented assignment of {@code propertyKey}; a missing file stays missing. */
+    public static void remove(@NonNull String propertyKey) {
+        if (!resolveFile().exists())
+            return;
+        rewrite(lines -> withoutProperty(lines, propertyKey));
+    }
+
+    private static void rewrite(@NonNull java.util.function.Function<List<String>, List<String>> edit) {
         File propertiesFile = resolveFile();
         File parentDir = propertiesFile.getParentFile();
         if (parentDir != null && !parentDir.exists()) {
@@ -64,7 +75,7 @@ public final class TermuxPropertiesFile {
             }
         }
         StringBuilder output = new StringBuilder();
-        for (String line : withProperty(lines, propertyKey, propertyValue)) {
+        for (String line : edit.apply(lines)) {
             output.append(line).append('\n');
         }
         FileUtils.writeTextToFile("termux.properties", propertiesFile.getAbsolutePath(),
@@ -94,6 +105,23 @@ public final class TermuxPropertiesFile {
         }
         if (!updated)
             out.add(assignment);
+        return out;
+    }
+
+    /**
+     * The file's lines without any uncommented line assigning {@code propertyKey} (matched as in
+     * {@link #withProperty}); comments and every other line stay.
+     */
+    @NonNull
+    static List<String> withoutProperty(@NonNull List<String> lines, @NonNull String propertyKey) {
+        String assignsKey = Pattern.quote(propertyKey) + "\\s*=.*";
+        List<String> out = new ArrayList<>(lines.size());
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (!trimmed.startsWith("#") && trimmed.matches(assignsKey))
+                continue;
+            out.add(line);
+        }
         return out;
     }
 }
