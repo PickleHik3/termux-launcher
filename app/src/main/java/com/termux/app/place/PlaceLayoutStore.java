@@ -969,7 +969,8 @@ public final class PlaceLayoutStore {
      * Dock design the layout holds (#93). A Home page on the shared layout leaves out what Home
      * never wears (the extra keys, {@link DressResolver#wornBy}), its keyboard element is always
      * on, Home's own whichever layout it wears ({@link #isHomeKeyboardAlwaysOn}), and its dock
-     * draws the design the layout holds too. On the Home layout it is that layout as it resolves.
+     * draws the design the layout holds too. The extra keys never dock on a Home page: Home's
+     * extra-keys key switches the floating Home pill instead. On the Home layout it is that layout as it resolves.
      */
     @NonNull
     public PlaceLayout resolve(@NonNull PlaceOrientation orientation,
@@ -982,8 +983,8 @@ public final class PlaceLayoutStore {
         PageKind kind = DressResolver.kindOf(page);
         for (Element element : Element.values()) {
             Slot slot = resolved.slot(element);
-            boolean shown = kindShows(kind, orientation, element)
-                && (element != Element.EXTRA_KEYS || mPreferences.shouldShowTerminalToolbar());
+            // Home's extra-keys key means the floating Home pill, so the stack never docks the bar.
+            boolean shown = element != Element.EXTRA_KEYS && kindShows(kind, orientation, element);
             if (slot.hidden == shown) resolved = resolved.withSlot(element, slot.withHidden(!shown));
         }
         return resolved.withKeyboardShown(isHomeKeyboardAlwaysOn())
@@ -1041,9 +1042,11 @@ public final class PlaceLayoutStore {
             // An element the page's kind does not show is not shown, whatever is stored.
             // Minimal mode's layout and a page's own hold their own visibility; the others
             // follow their kind.
-            boolean shown = mMigrating.get() ? variant.offers(element)
+            // Home's extra-keys key means the floating Home pill, never a docked bar.
+            boolean homeKeys = element == Element.EXTRA_KEYS && variant.isHomeKind();
+            boolean shown = !homeKeys && (mMigrating.get() ? variant.offers(element)
                 : variant.holdsOwnVisibility()
-                    || kindShows(kindOfVariant(variant), orientation, element);
+                    || kindShows(kindOfVariant(variant), orientation, element));
             slots.put(element, shown || slot.hidden ? slot : slot.withHidden(true));
         }
         // The terminal's own toolbar switch can still have put the extra keys away everywhere.
