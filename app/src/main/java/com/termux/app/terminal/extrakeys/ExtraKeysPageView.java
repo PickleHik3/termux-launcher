@@ -311,6 +311,11 @@ public final class ExtraKeysPageView extends ViewGroup {
         requestLayout();
     }
 
+    /** Cuts a running or waiting morph short: the final state at once, and its {@code onEnd} runs. */
+    public void endMorphNow() {
+        endMorph();
+    }
+
     /** Runs once, after the layout that follows {@link #morphTo}: plans, sets t=0 and plays. */
     private boolean startMorph() {
         removeMorphPreDraw();

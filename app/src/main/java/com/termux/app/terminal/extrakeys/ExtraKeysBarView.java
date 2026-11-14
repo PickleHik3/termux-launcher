@@ -91,6 +91,11 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
     private int mConcealPx;
     private int mPendingCommit = -1;
 
+    /** While a morph to a shorter set plays, the rows and scale the bar's height still stands for. */
+    private boolean mHold;
+    private int mHeldRows;
+    private float mHeldScale = 1f;
+
     private final Paint mDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public ExtraKeysBarView(@NonNull Context context) {
@@ -194,17 +199,54 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
         return mModifiers;
     }
 
+    /** How a new key set replaces the one on show. */
+    public enum Transition {
+        /** The page in front stays (clamped); the text input page stays the text input page. */
+        RELOAD,
+        /** The first key page comes to the front, unless the text input page was in front. */
+        SWAP,
+        /** Like {@link #SWAP}, with the front page's keys gliding to the new set where it can show. */
+        MORPH
+    }
+
     /** Builds or rebuilds one page per entry; an empty or null array leaves no key pages. */
     public void setKeySet(@Nullable ExtraKeysInfo[] pages) {
+        setKeySet(pages, mScale, Transition.RELOAD);
+    }
+
+    /**
+     * Replaces the key set. {@code scale} is the row scale from here on. A {@link Transition#MORPH}
+     * that cannot be shown (bar not laid out, attached or shown, or no key page in front) is a
+     * {@link Transition#SWAP}.
+     */
+    public void setKeySet(@Nullable ExtraKeysInfo[] pages, float scale, @NonNull Transition transition) {
+        endPageMorphs();
         finishAnimations();
+        int count = pages == null ? 0 : pages.length;
+        boolean textInputInFront = mTextInput != null && mCurrent == mKeyPages.size();
+        boolean morph = transition == Transition.MORPH && count > 0 && mCurrent < mKeyPages.size()
+            && getWidth() > 0 && isAttachedToWindow() && isShown();
+        int oldRows = committedRows();
+        float oldScale = committedScale();
+        int oldPx = committedHeightPx();
+        ExtraKeysPageView front = morph ? mKeyPages.get(mCurrent) : null;
         for (int i = 0; i < mKeyPages.size(); i++) {
-            mKeyPages.get(i).dismissPopup();
-            removeView(mKeyPages.get(i));
+            ExtraKeysPageView old = mKeyPages.get(i);
+            old.dismissPopup();
+            if (old != front) removeView(old);
         }
         mKeyPages.clear();
-        int count = pages == null ? 0 : pages.length;
+        mScale = scale;
         mKeyPageRows = new int[count];
-        for (int i = 0; i < count; i++) {
+        int firstNew = 0;
+        if (morph) {
+            // Every other key page is gone, so the front one is already the first child; it stays
+            // attached, which keeps it laid out for the morph.
+            mKeyPages.add(front);
+            mKeyPageRows[0] = rowsOfInfo(pages[0]);
+            firstNew = 1;
+        }
+        for (int i = firstNew; i < count; i++) {
             ExtraKeysPageView page = new ExtraKeysPageView(getContext());
             page.setModifiers(mModifiers);
             page.setClient(mClient);
@@ -214,12 +256,52 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
             mKeyPages.add(page);
             addView(page, i);
         }
-        mCurrent = clampPage(mCurrent);
+        if (morph) {
+            mCurrent = 0;
+            mCommitted = 0;
+            mOffsetPx = 0f;
+            int newPx = heightOfRows(mKeyPageRows[0], getHeight(), mScale);
+            // Shorter: the old height stands until the keys have settled. Taller or equal: at once.
+            if (newPx < oldPx) {
+                mHold = true;
+                mHeldRows = oldRows;
+                mHeldScale = oldScale;
+            }
+            requestLayout();
+            applyOffsets();
+            invalidate();
+            if (mPageStyler != null) mPageStyler.style(front, 0);
+            front.morphTo(pages[0], this::releaseHold);
+            if (newPx > oldPx && mListener != null) mListener.onCommittedHeightChanged();
+            return;
+        }
+        int target;
+        if (textInputInFront) target = count;
+        else if (transition == Transition.RELOAD) target = count == 0 ? 0 : Math.min(mCurrent, count - 1);
+        else target = 0;
+        mCurrent = clampPage(target);
         mCommitted = mCurrent;
         mOffsetPx = mCurrent * (float) getWidth();
         requestLayout();
         applyOffsets();
         invalidate();
+    }
+
+    private static int rowsOfInfo(@Nullable ExtraKeysInfo info) {
+        return info == null || info.getMatrix() == null ? 0 : info.getMatrix().length;
+    }
+
+    /** The morph that held the old height is over: the new height stands, said once. */
+    private void releaseHold() {
+        if (!mHold) return;
+        mHold = false;
+        requestLayout();
+        invalidate();
+        if (mListener != null) mListener.onCommittedHeightChanged();
+    }
+
+    private void endPageMorphs() {
+        for (int i = 0; i < mKeyPages.size(); i++) mKeyPages.get(i).endMorphNow();
     }
 
     /** The view after the last key page, or null for none. */
@@ -258,7 +340,17 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
 
     /** The rows the bar's height stands for: those of the committed page, not of one still sliding. */
     public int committedRows() {
-        return pageCount() == 0 ? 0 : ExtraKeysBarHeight.rowsOf(mKeyPageRows, mCommitted);
+        if (pageCount() == 0) return 0;
+        return mHold ? mHeldRows : ExtraKeysBarHeight.rowsOf(mKeyPageRows, mCommitted);
+    }
+
+    /** The row scale the committed height stands for; the old one while a shorter set morphs in. */
+    public float committedScale() {
+        return mHold ? mHeldScale : mScale;
+    }
+
+    private int committedHeightPx() {
+        return heightOfRows(committedRows(), getHeight(), committedScale());
     }
 
     public void setAnchorEdge(int gravity) {
@@ -285,8 +377,12 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
     }
 
     private int heightOfRows(int rows, int barHeight) {
+        return heightOfRows(rows, barHeight, mScale);
+    }
+
+    private int heightOfRows(int rows, int barHeight, float scale) {
         return mBaseRowPx > 0
-            ? ExtraKeysBarHeight.pageHeightPx(mBaseRowPx, rows, mScale)
+            ? ExtraKeysBarHeight.pageHeightPx(mBaseRowPx, rows, scale)
             : barHeight;
     }
 
@@ -298,7 +394,7 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
             ? 0 : MeasureSpec.getSize(widthMeasureSpec);
         int h = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
             ? MeasureSpec.getSize(heightMeasureSpec)
-            : heightOfRows(rowsOfPage(mCommitted), 0);
+            : heightOfRows(committedRows(), 0, committedScale());
         if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.AT_MOST) {
             h = Math.min(h, MeasureSpec.getSize(heightMeasureSpec));
         }
@@ -418,11 +514,12 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
 
     /** The page the slide landed on: height first or after, as the step says, then the callback. */
     private void land(int page) {
+        endPageMorphs();
         if (mConceal.isRunning()) mConceal.end();
         int previous = mCurrent;
         mCurrent = page;
         if (page == previous) return;
-        int fromPx = heightOfRows(rowsOfPage(mCommitted), getHeight());
+        int fromPx = committedHeightPx();
         int toPx = heightOfRows(rowsOfPage(page), getHeight());
         ExtraKeysBarHeight.Step step = ExtraKeysBarHeight.step(fromPx, toPx);
         mStep = step;
@@ -476,6 +573,7 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
             slideTo(target);
             return;
         }
+        endPageMorphs();
         finishAnimations();
         boolean changed = target != mCurrent || target != mCommitted;
         mCurrent = target;
