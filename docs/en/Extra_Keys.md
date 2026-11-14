@@ -31,11 +31,32 @@ Terminal and Home show the Global keys until you give them their own.
 
 The bar shows the keys for whatever it is sending keys to. A terminal window in front shows the
 Terminal keys, the display window shows the Display keys and the Assistant page shows the Assistant
-keys. Home does not show the bar; keys you give Home are kept for it.
+keys. Home shows its keys as a small pill over its content (see [Home's keys as a pill](#homes-keys-as-a-pill)); keys you give Home are kept for it.
 
 The keys change by themselves as you move between a terminal window and a display. Keys both sets
 share stay where they are while the rest change. A Ctrl or Alt you armed or locked is let go when
 the keys change place.
+
+## Home's keys as a pill
+
+On Home the keys float as a small glass pill over the page instead of standing in the dock. It sits
+in the same spot on every Home page and is as wide as its keys. It starts with three keys: the
+command palette, the app drawer and settings. Give Home its own keys in the editor, under **Home**.
+
+<!-- Switch: pending the developer's choice (wave bar-3 report) -->
+
+- **Move it**: hold the pill, then drag it where you want it and let go. It stays clear of the
+  status bar, the dock and the A–Z tab, and keeps its place when you turn the phone.
+- **Edit keys**: holding the pill also shows an **Edit keys** chip beside it. Tap the chip to open
+  the Home keys in the editor. It goes away after a moment, or when you tap elsewhere.
+- **Keys**: a tap presses a key. A hold on the floating pill moves it instead of repeating the key.
+- **With the keyboard**: when the keyboard comes up the pill slides down into the dock above it and
+  becomes the bar, where holds repeat and lock again. It floats back when the keyboard goes down.
+- **Other pages**: moving from Home to the Workspace or the Assistant page carries the pill into
+  the dock as that page's bar, and coming back lifts it out again.
+
+The pill hides while the app drawer, the command palette, a sheet or an editor is open, and while a
+terminal float on Home has the keys.
 
 ## Where the row stands
 

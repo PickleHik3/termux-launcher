@@ -178,7 +178,13 @@ _ADR 0015 (proposed): becomes a **Float**, which may also hang over a Terminal p
 **Float chip**:
 Retired 2026-10-21: a minimised **Home float** is a **window chip** in the status bar on both
 halves, and Minimise flies the float into that chip. There is no row of chips above the dock.
-_Avoid_: float chip (for the bar's chip, say window chip), Home pills, minimised pill
+_Avoid_: float chip (for the bar's chip, say window chip), minimised pill, Home pill (that names the extra keys on Home, not a minimised float)
+
+**Home pill**:
+Home's extra keys as a small floating glass pill over Home's content, in the same spot on every
+**Home page**. A hold picks it up to move it and shows "Edit keys". It flies to the docked bar above
+the keyboard, and between Home and the **Workspace**'s pages.
+_Avoid_: floating bar, key bubble
 
 **Keyboard swipe**:
 The one way to the keyboard in the **Workspace**: an up or down swipe that starts on the window's
