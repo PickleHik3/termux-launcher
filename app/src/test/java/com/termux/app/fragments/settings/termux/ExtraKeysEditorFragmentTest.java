@@ -17,6 +17,7 @@ import android.widget.EditText;
 import com.termux.R;
 import com.termux.app.terminal.io.ExtraKeysDraft;
 import com.termux.app.terminal.io.ExtraKeysLayoutModel;
+import com.termux.app.terminal.io.ExtraKeysTarget;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -119,5 +120,26 @@ public class ExtraKeysEditorFragmentTest {
         assertTrue(h.fragment.hasUnsavedChanges());
         h.editDraft(d -> d.setKeySizeTenths(ExtraKeysDraft.KEY_SIZE_DEFAULT_TENTHS));
         assertFalse(h.fragment.hasUnsavedChanges());
+    }
+    @Test
+    public void theTargetInTheArgumentsIsTheOneItOpensOn() throws Exception {
+        for (ExtraKeysTarget each : ExtraKeysTarget.values()) {
+            android.os.Bundle args = new android.os.Bundle();
+            args.putString(com.termux.app.activities.SettingsActivity.EXTRA_INITIAL_PLACE, each.name());
+            assertEquals(each, ExtraKeysEditorFragment.targetFromArguments(args));
+        }
+        assertEquals("no arguments is Global", ExtraKeysTarget.GLOBAL,
+            ExtraKeysEditorFragment.targetFromArguments(null));
+        android.os.Bundle unknown = new android.os.Bundle();
+        unknown.putString(com.termux.app.activities.SettingsActivity.EXTRA_INITIAL_PLACE, "nowhere");
+        assertEquals("an unknown name is Global", ExtraKeysTarget.GLOBAL,
+            ExtraKeysEditorFragment.targetFromArguments(unknown));
+
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness(ExtraKeysTarget.HOME);
+        java.lang.reflect.Field field = ExtraKeysEditorFragment.class.getDeclaredField("target");
+        field.setAccessible(true);
+        assertEquals(ExtraKeysTarget.HOME, field.get(h.fragment));
+        assertEquals(ExtraKeysTarget.GLOBAL,
+            field.get(new ExtraKeysEditorHarness().fragment));
     }
 }

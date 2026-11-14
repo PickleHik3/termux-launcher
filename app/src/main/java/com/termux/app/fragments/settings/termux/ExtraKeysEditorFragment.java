@@ -51,6 +51,7 @@ import com.termux.app.terminal.io.ExtraKeyActionPicker;
 import com.termux.app.terminal.io.ExtraKeyEligibility;
 import com.termux.app.terminal.io.ExtraKeySetResolver;
 import com.termux.app.terminal.extrakeys.ExtraKeyCapView;
+import com.termux.app.activities.SettingsActivity;
 import com.termux.app.terminal.io.ExtraKeysTarget;
 import com.termux.app.terminal.io.ExtraKeysTargetDrafts;
 import com.termux.app.terminal.io.ExtraKeyDetailSheet;
@@ -144,6 +145,18 @@ public class ExtraKeysEditorFragment extends Fragment
         }
     };
 
+    /** The target named in the arguments ({@link SettingsActivity#EXTRA_INITIAL_PLACE}); Global when absent or unknown. */
+    @NonNull
+    static ExtraKeysTarget targetFromArguments(@Nullable Bundle arguments) {
+        String name = arguments == null ? null
+            : arguments.getString(SettingsActivity.EXTRA_INITIAL_PLACE);
+        if (name == null) return ExtraKeysTarget.GLOBAL;
+        for (ExtraKeysTarget each : ExtraKeysTarget.values()) {
+            if (each.name().equals(name)) return each;
+        }
+        return ExtraKeysTarget.GLOBAL;
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -155,6 +168,8 @@ public class ExtraKeysEditorFragment extends Fragment
             com.google.android.material.R.attr.colorOnSurfaceVariant, Color.LTGRAY);
         colorCap = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurfaceContainerHighest, 0xFF2A3140);
+        // A first open names the target to start on; a recreated page keeps the one it had.
+        if (savedInstanceState == null) target = targetFromArguments(getArguments());
         loadDraft(context);
 
         LinearLayout column = column(context);
