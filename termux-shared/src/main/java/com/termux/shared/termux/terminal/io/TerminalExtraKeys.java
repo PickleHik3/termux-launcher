@@ -3,15 +3,17 @@ package com.termux.shared.termux.terminal.io;
 import android.os.Build;
 import android.view.KeyEvent;
 import android.view.View;
+import androidx.annotation.NonNull;
 import com.google.android.material.button.MaterialButton;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
+import com.termux.shared.termux.extrakeys.ExtraKeysClient;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.extrakeys.SpecialButton;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 import static com.termux.shared.termux.extrakeys.ExtraKeysConstants.PRIMARY_KEY_CODES_FOR_STRINGS;
 
-public class TerminalExtraKeys implements ExtraKeysView.IExtraKeysView {
+public class TerminalExtraKeys implements ExtraKeysView.IExtraKeysView, ExtraKeysClient {
 
     // Not final: split panes repoint this at the focused pane so extra keys reach the active shell.
     private TerminalView mTerminalView;
@@ -27,6 +29,11 @@ public class TerminalExtraKeys implements ExtraKeysView.IExtraKeysView {
 
     @Override
     public void onExtraKeyButtonClick(View view, ExtraKeyButton buttonInfo, MaterialButton button) {
+        onExtraKeyClick(view, buttonInfo);
+    }
+
+    @Override
+    public void onExtraKeyClick(@NonNull View view, @NonNull ExtraKeyButton buttonInfo) {
         if (buttonInfo.isMacro()) {
             String[] keys = buttonInfo.getKey().split(" ");
             boolean ctrlDown = false;
@@ -89,6 +96,11 @@ public class TerminalExtraKeys implements ExtraKeysView.IExtraKeysView {
 
     @Override
     public boolean performExtraKeyButtonHapticFeedback(View view, ExtraKeyButton buttonInfo, MaterialButton button) {
+        return performExtraKeyHapticFeedback(view, buttonInfo);
+    }
+
+    @Override
+    public boolean performExtraKeyHapticFeedback(@NonNull View view, @NonNull ExtraKeyButton buttonInfo) {
         return false;
     }
 }
