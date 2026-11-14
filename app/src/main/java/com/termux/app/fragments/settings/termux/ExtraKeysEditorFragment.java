@@ -52,7 +52,9 @@ import com.termux.app.terminal.io.ExtraKeyEligibility;
 import com.termux.app.terminal.io.ExtraKeySetResolver;
 import com.termux.app.terminal.extrakeys.ExtraKeyCapView;
 import com.termux.app.activities.SettingsActivity;
+import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.terminal.io.ExtraKeysTarget;
+import com.termux.app.terminal.io.HomePillSwitch;
 import com.termux.app.terminal.io.ExtraKeysTargetDrafts;
 import com.termux.app.terminal.io.ExtraKeyDetailSheet;
 import com.termux.app.terminal.io.ExtraKeyOptionsSheets;
@@ -233,9 +235,19 @@ public class ExtraKeysEditorFragment extends Fragment
             TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE);
         displayMap = ExtraKeysInfo.getCharDisplayMapForStyle(style);
 
-        drafts = ExtraKeysTargetDrafts.load(properties::getProperty);
+        HomePillSwitch pill = homePillSwitch(context);
+        drafts = ExtraKeysTargetDrafts.load(properties::getProperty, pill != null && pill.keysOn());
         syncDraft();
         savedFingerprint = drafts.fingerprint();
+    }
+
+    /** Home's keys switch over the stores, or null before the preferences exist. */
+    @Nullable
+    private HomePillSwitch homePillSwitch(@NonNull Context context) {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context);
+        if (preferences == null) return null;
+        return new HomePillSwitch(HomePillSwitch.hostFor(new PlaceLayoutStore(preferences), preferences,
+            key -> TermuxPropertiesFile.load(context).getProperty(key), () -> {}));
     }
 
     private boolean isDirty() {
@@ -280,6 +292,11 @@ public class ExtraKeysEditorFragment extends Fragment
             } else {
                 TermuxPropertiesFile.write(write.key, write.value);
             }
+        }
+        // After the lines: switching on finds Home's set already written, so it never overwrites it.
+        if (drafts.homeShownChanged()) {
+            HomePillSwitch pill = homePillSwitch(requireContext());
+            if (pill != null) pill.setOn(drafts.homeShown());
         }
         drafts.markSaved();
         savedFingerprint = drafts.fingerprint();
@@ -426,7 +443,8 @@ public class ExtraKeysEditorFragment extends Fragment
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
         giveOwnButton.setMinHeight(dp(48));
         giveOwnButton.setOnClickListener(v -> {
-            drafts.giveOwnSet(target);
+            if (target == ExtraKeysTarget.HOME) drafts.showHome();
+            else drafts.giveOwnSet(target);
             currentPage = 0;
             edited();
             refreshAll();
@@ -441,7 +459,7 @@ public class ExtraKeysEditorFragment extends Fragment
      */
     private void refreshTarget() {
         syncDraft();
-        boolean own = drafts.isOwn(target);
+        boolean own = drafts.isEditing(target);
         String name = targetName(target);
         setShown(notOwnBlock, !own);
         setShown(keySizeBlock, own);
@@ -456,10 +474,17 @@ public class ExtraKeysEditorFragment extends Fragment
                 : getString(R.string.settings_extra_keys_key_size_note_target, name));
             boolean builtIn = target.shippedPage1() != null && target != ExtraKeysTarget.GLOBAL;
             setShown(useDefaultButton, target != ExtraKeysTarget.GLOBAL);
-            setText(useDefaultButton, getString(builtIn
+            setText(useDefaultButton, getString(target == ExtraKeysTarget.HOME
+                ? R.string.settings_extra_keys_home_hide : builtIn
                 ? R.string.settings_extra_keys_use_builtin : R.string.settings_extra_keys_use_global));
             final ExtraKeysTarget shown = target;
             useDefaultButton.setOnClickListener(v -> {
+                if (shown == ExtraKeysTarget.HOME) {
+                    drafts.hideHome();
+                    edited();
+                    refreshAll();
+                    return;
+                }
                 ExtraKeysTargetDrafts.Snapshot before = drafts.snapshot();
                 drafts.useDefault(shown);
                 currentPage = 0;
@@ -467,6 +492,10 @@ public class ExtraKeysEditorFragment extends Fragment
                 refreshAll();
                 offerUndo(R.string.settings_extra_keys_target_reset, name, before, 0);
             });
+        } else if (target == ExtraKeysTarget.HOME) {
+            setText(notOwnTitle, getString(R.string.settings_extra_keys_home_off_title));
+            setText(notOwnBody, getString(R.string.settings_extra_keys_home_off_body));
+            setText(giveOwnButton, getString(R.string.settings_extra_keys_home_show));
         } else {
             boolean shipped = drafts.sourceOf(target) == ExtraKeySetResolver.Source.SHIPPED;
             setText(notOwnTitle, getString(shipped
@@ -599,7 +628,7 @@ public class ExtraKeysEditorFragment extends Fragment
         @Override
         public void onPrepareMenu(@NonNull Menu menu) {
             MenuItem item = menu.findItem(itemId);
-            if (item != null) item.setEnabled(drafts.isOwn(target));
+            if (item != null) item.setEnabled(drafts.isEditing(target));
         }
 
         @Override
@@ -1045,7 +1074,7 @@ public class ExtraKeysEditorFragment extends Fragment
             if (!compact) { b.setMinHeight(stock[2]); b.setMinimumHeight(stock[3]); }
             b.requestLayout();
         }
-        if (hintView != null) setShown(hintView, !compact && drafts.isOwn(target));
+        if (hintView != null) setShown(hintView, !compact && drafts.isEditing(target));
     }
 
     private View saveBar(@NonNull Context context) {

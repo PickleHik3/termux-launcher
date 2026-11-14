@@ -77,6 +77,27 @@ public class HomePillSwitchTest {
     }
 
     @Test
+    public void keysOnIgnoresTheToolbarSwitchAndEitherOrientationCounts() {
+        Fake host = new Fake();
+        HomePillSwitch pill = new HomePillSwitch(host);
+        assertFalse(pill.keysOn());
+        host.shown.put(PlaceOrientation.LANDSCAPE, true);
+        host.toolbar = false;
+        assertTrue(pill.keysOn());
+    }
+
+    @Test
+    public void turningOnThenOffKeepsTheLineSoOnAgainShowsTheSameKeys() {
+        Fake host = new Fake();
+        host.properties.put(KEY, "[[F1]]");
+        HomePillSwitch pill = new HomePillSwitch(host);
+        pill.setOn(false);
+        pill.setOn(true);
+        assertEquals("[[F1]]", host.properties.get(KEY));
+        assertTrue(pill.keysOn());
+    }
+
+    @Test
     public void turningOnWritesTheKeyInBothOrientationsAndTheStarterSetWhenHomeHasNone() {
         Fake host = new Fake();
         new HomePillSwitch(host).setOn(true);

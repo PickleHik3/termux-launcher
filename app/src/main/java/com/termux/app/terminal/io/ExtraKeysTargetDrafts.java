@@ -3,6 +3,8 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
+
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -51,6 +53,10 @@ public final class ExtraKeysTargetDrafts {
         boolean heightStored;
         /** Whether the target had a set of its own when loaded or last saved. */
         boolean ownAtLoad;
+        /** Home only: whether its keys are switched on (the Home pill), as drafted. */
+        boolean shown;
+        /** Home only: whether the keys were switched on when loaded or last saved. */
+        boolean shownAtLoad;
 
         Entry copy() {
             Entry e = new Entry();
@@ -58,6 +64,8 @@ public final class ExtraKeysTargetDrafts {
             e.draft = draft == null ? null : copyOf(draft);
             e.heightStored = heightStored;
             e.ownAtLoad = ownAtLoad;
+            e.shown = shown;
+            e.shownAtLoad = shownAtLoad;
             return e;
         }
     }
@@ -78,6 +86,12 @@ public final class ExtraKeysTargetDrafts {
     /** Builds the drafts from the stored property lines, as the bar resolves them. */
     @NonNull
     public static ExtraKeysTargetDrafts load(@NonNull ExtraKeySetResolver.Lines lines) {
+        return load(lines, false);
+    }
+
+    /** As {@link #load(ExtraKeySetResolver.Lines)}, with whether Home's keys are switched on. */
+    @NonNull
+    public static ExtraKeysTargetDrafts load(@NonNull ExtraKeySetResolver.Lines lines, boolean homeShown) {
         ExtraKeysTargetDrafts out = new ExtraKeysTargetDrafts();
         for (ExtraKeysTarget target : ExtraKeysTarget.values()) {
             ExtraKeySetResolver.Resolved resolved = ExtraKeySetResolver.resolve(target, lines);
@@ -92,6 +106,8 @@ public final class ExtraKeysTargetDrafts {
                 entry.draft.setKeySizeTenths(tenthsOf(resolved.scale));
             }
             entry.ownAtLoad = entry.own;
+            entry.shown = target == ExtraKeysTarget.HOME && homeShown;
+            entry.shownAtLoad = entry.shown;
             out.entries.put(target, entry);
         }
         return out;
@@ -118,6 +134,48 @@ public final class ExtraKeysTargetDrafts {
 
     public boolean isOwn(@NonNull ExtraKeysTarget target) {
         return entry(target).own;
+    }
+
+    /**
+     * Whether the page edits the target's keys: its own set, and for Home also its keys switched on
+     * (Home with a line but switched off shows the way to switch on, not the line).
+     */
+    public boolean isEditing(@NonNull ExtraKeysTarget target) {
+        Entry entry = entry(target);
+        return entry.own && (target != ExtraKeysTarget.HOME || entry.shown);
+    }
+
+    /** Whether Home's keys are switched on as drafted. */
+    public boolean homeShown() {
+        return entry(ExtraKeysTarget.HOME).shown;
+    }
+
+    /**
+     * Switches Home's keys on. A Home with no set of its own starts from the starter keys, never a
+     * copy of Global's; a set it already has comes back as it is.
+     */
+    public void showHome() {
+        Entry entry = entry(ExtraKeysTarget.HOME);
+        entry.shown = true;
+        if (entry.own) return;
+        ExtraKeysDraft global = Objects.requireNonNull(entry(ExtraKeysTarget.GLOBAL).draft);
+        List<ExtraKeysLayoutModel> pages = new ArrayList<>(1);
+        pages.add(ExtraKeysLayoutModel.parse(TermuxPropertyConstants.HOME_PILL_STARTER_EXTRA_KEYS));
+        ExtraKeysDraft draft = ExtraKeysDraft.of(pages);
+        draft.setKeySizeTenths(global.keySizeTenths());
+        entry.draft = draft;
+        entry.own = true;
+    }
+
+    /** Switches Home's keys off; its set stays, so switching on again brings the same keys back. */
+    public void hideHome() {
+        entry(ExtraKeysTarget.HOME).shown = false;
+    }
+
+    /** Whether Save has to switch Home's keys on or off. */
+    public boolean homeShownChanged() {
+        Entry entry = entry(ExtraKeysTarget.HOME);
+        return entry.shown != entry.shownAtLoad;
     }
 
     /** The target's draft, or null while it has no set of its own. */
@@ -195,7 +253,8 @@ public final class ExtraKeysTargetDrafts {
         StringBuilder out = new StringBuilder();
         for (ExtraKeysTarget target : ExtraKeysTarget.values()) {
             Entry entry = entry(target);
-            out.append(target.name()).append(entry.own ? '+' : '-').append('\n');
+            out.append(target.name()).append(entry.own ? '+' : '-')
+                .append(entry.shown ? "*" : "").append('\n');
             if (entry.draft != null) out.append(entry.draft.fingerprint()).append('\n');
         }
         return out.toString();
@@ -233,6 +292,9 @@ public final class ExtraKeysTargetDrafts {
                 if (target.heightKey().equals(w.key)) entry(target).heightStored = w.value != null;
             }
         }
-        for (Entry entry : entries.values()) entry.ownAtLoad = entry.own;
+        for (Entry entry : entries.values()) {
+            entry.ownAtLoad = entry.own;
+            entry.shownAtLoad = entry.shown;
+        }
     }
 }

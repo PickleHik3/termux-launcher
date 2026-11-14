@@ -233,6 +233,10 @@
     <string name="settings_extra_keys_using_builtin_title">Using built-in keys</string>
     <string name="settings_extra_keys_using_builtin_body">%1$s shows a set made for it. Give it its own to change them.</string>
     <string name="settings_extra_keys_give_own">Give %1$s its own keys</string>
+    <string name="settings_extra_keys_home_off_title">Home shows no keys</string>
+    <string name="settings_extra_keys_home_off_body">Switch on a small pill of keys that floats on Home. You can move it.</string>
+    <string name="settings_extra_keys_home_show">Show keys on Home</string>
+    <string name="settings_extra_keys_home_hide">Hide keys on Home</string>
     <string name="settings_extra_keys_use_global">Use Global keys</string>
     <string name="settings_extra_keys_use_builtin">Use built-in keys</string>
     <string name="settings_extra_keys_target_reset">%1$s no longer has its own keys</string>

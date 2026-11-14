@@ -47,6 +47,14 @@ public final class HomePillSwitch {
         return mHost.homeExtraKeysShown(orientation) && mHost.toolbarOn();
     }
 
+    /** Whether Home's keys are switched on in either orientation, whatever the toolbar switch says. */
+    public boolean keysOn() {
+        for (PlaceOrientation orientation : PlaceOrientation.values()) {
+            if (mHost.homeExtraKeysShown(orientation)) return true;
+        }
+        return false;
+    }
+
     public void setOn(boolean on) {
         if (on) {
             String line = mHost.rawLine(TermuxPropertyConstants.KEY_EXTRA_KEYS_HOME);
