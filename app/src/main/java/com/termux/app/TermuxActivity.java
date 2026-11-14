@@ -2401,7 +2401,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A display that comes up after the user has started doing something does not pull
             // them over to it (Start in = Display).
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
-            if (mSurfaceLongPress.onWindowTouch(ev)) return true;
+            // A hold on the Home pill picks it up: the surface long-press never sees that stream.
+            int pillAction = ev.getActionMasked();
+            if (pillAction == MotionEvent.ACTION_DOWN) mHomePillStream = homePillClaimsDown(ev);
+            boolean pillStream = mHomePillStream;
+            if (pillAction == MotionEvent.ACTION_UP || pillAction == MotionEvent.ACTION_CANCEL)
+                mHomePillStream = false;
+            if (!pillStream && mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);
         } finally {
