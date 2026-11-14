@@ -1186,6 +1186,18 @@
             android:focusable="false"
             android:visibility="gone" />
         </com.termux.app.chrome.LiveBackdropRelativeLayout>
+
+        <!-- The page switcher's layer: the dot and its picker. Above the pages, the keyboard and a
+             running Display (all inside the relative layout), under the drawer and palette planes.
+             PageSwitcher fills it; it takes no touch of its own. -->
+        <FrameLayout
+            android:id="@+id/page_switcher_layer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false"
+            android:clipChildren="false"
+            android:importantForAccessibility="no" />
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
              deliberately NOT part of the accessory stack: the drawer animates with transforms only,
