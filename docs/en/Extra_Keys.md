@@ -6,21 +6,36 @@ how to write it by hand in `~/.termux/termux.properties`.
 
 ## The shipped row
 
-A fresh install has one row of seven keys. Swipe up on a key to run its second action; the small
+A fresh install has one row of four keys. Swipe up on a key to run its second action; the small
 label above a key shows what that is.
 
 | Key | Tap | Swipe up |
 |---|---|---|
 | Keyboard | Show or hide the keyboard | **Next keyboard type** (docked, floating, split) |
 | Mouse | **Mouse mode** on or off | |
-| Home | **Go to Home** | |
-| Terminal | **Go to Terminal** | |
-| Display | **Go to Display** | |
 | New pane | **New pane** | **New window** |
 | Sessions | **Sessions** (the sessions drawer) | **New session** |
 
-The three place keys are coloured with the theme's primary, secondary and tertiary colours. The
-second page ships empty, and an empty page is not shown.
+The go-to keys for Home, Terminal and Display are not on the row, but they are still in the key
+picker (the launcher group) if you want them. The second page ships empty, and an empty page is not
+shown.
+
+Two places ship their own keys:
+
+- **Display**: Keyboard, Mouse, Esc, Tab, Ctrl, Alt.
+- **Assistant**: Keyboard, Dictate, Paste.
+
+Terminal and Home show the Global keys until you give them their own.
+
+## Keys for each place
+
+The bar shows the keys for whatever it is sending keys to. The terminal window in front shows the
+Terminal keys, a Display page shows the Display keys, the Assistant page shows the Assistant keys,
+and Home shows the Home keys. Home's bar is off today, but Home can hold a set of its own.
+
+The keys change by themselves as you move between a terminal window and a display. Keys both sets
+share stay where they are while the rest change. A Ctrl or Alt you armed or locked is let go when
+the keys change place.
 
 ## Where the row stands
 
@@ -29,7 +44,7 @@ keyboard, or hidden by dragging it onto the eye-off button. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
 The wall is the list of pages in the order Edit pages arranged them. Two Display pages may sit next
-to each other. The row shows a go-to key for each page kind the wall has: Widgets, Terminal and
+to each other. Go-to keys you add yourself work for any page kind the wall has: Home, Terminal and
 Display. A key that cannot act on the page you are on goes faint and stops responding. On the Display place, pane, window and session keys are dimmed. On Widgets,
 typing keys, the modifiers, **PASTE** and **SCROLL** are dimmed.
 
@@ -40,6 +55,16 @@ row** from the [command palette](Command_Palette_And_Actions.md). The editor wri
 `extra-keys` property you can edit by hand, so you can start in the editor and keep hand-editing
 later.
 
+- **Places**: the row at the top picks what you are editing: Global, Terminal, Display, Home or
+  Assistant. Global is the set every place falls back on. A place without its own keys says
+  **Using Global keys** (or **Using built-in keys** for Display and Assistant); **Give Terminal its
+  own keys** (named for the place) starts a set you can change without touching the others.
+  **Use Global keys** (or **Use built-in keys**) takes the set away again after Save. Reset is
+  off for a place that has no set of its own.
+- **Key size**: set per place, and "How large the keys are when they go to Terminal." follows
+  Global until you set it.
+- **Faint keys**: a key that does nothing on the place you are editing is drawn faint with
+  "Does nothing on Display" (named for the place). You can still add it.
 - **Pages**: swipe the row sideways to switch pages. A page with no keys stays out of the row
   until it has one. With no keys on the first page, the whole row stays hidden.
 - **Rows**: **Add row** adds one below the last. Drag a row by its handle to reorder it. Removing a
@@ -99,6 +124,22 @@ A key is a name or an object:
 
 An item has either `key` or `macro`, never both. The file is read as UTF-8, so paste an icon
 itself; `\uXXXX` escapes are not read.
+
+### Keys for each place by hand
+
+Each place has its own lines: `extra-keys-terminal`, `extra-keys-terminal2`, `extra-keys-display`,
+`extra-keys-display2`, `extra-keys-home`, `extra-keys-home2`, `extra-keys-assistant` and
+`extra-keys-assistant2` (first and second page, same format as `extra-keys`), and
+`extra-keys-<place>-height` for the key size (0.4 to 3).
+
+A place has its own keys when its first-page line is set; a blank line counts as not set. Without
+one it shows its built-in set (Display, Assistant) or the Global keys. The height line follows
+`terminal-toolbar-height` when absent.
+
+```properties
+extra-keys-display = [[ESC, TAB, CTRL, ALT, LEFT, DOWN, UP, RIGHT]]
+extra-keys-display-height = 1.2
+```
 
 ### Launcher actions on a key
 
