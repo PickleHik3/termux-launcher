@@ -71,6 +71,11 @@ public final class ExtraKeyModifiers {
         return true;
     }
 
+    /** Every modifier off; each listener hears about the ones that changed, none when all were off. */
+    public void clear() {
+        for (int i = 0; i < mStates.length; i++) set(i, State.OFF);
+    }
+
     private void set(int i, State next) {
         if (mStates[i] == next) return;
         mStates[i] = next;

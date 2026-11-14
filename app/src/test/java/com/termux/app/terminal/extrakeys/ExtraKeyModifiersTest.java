@@ -92,4 +92,21 @@ public class ExtraKeyModifiersTest {
         assertTrue(ExtraKeyModifiers.isModifierKey("FN"));
         assertFalse(ExtraKeyModifiers.isModifierKey("TAB"));
     }
+
+    @Test
+    public void clearTurnsEverythingOffAndTellsChangedOnes() {
+        m.tap(SpecialButton.CTRL);
+        m.hold(SpecialButton.FN);
+        java.util.List<SpecialButton> heard = new java.util.ArrayList<>();
+        m.addListener((button, state) -> {
+            assertEquals(OFF, state);
+            heard.add(button);
+        });
+        m.clear();
+        assertEquals(OFF, m.state(SpecialButton.CTRL));
+        assertEquals(OFF, m.state(SpecialButton.FN));
+        assertEquals(2, heard.size());
+        m.clear();
+        assertEquals(2, heard.size());
+    }
 }
