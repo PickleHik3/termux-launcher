@@ -83,21 +83,23 @@
     <string name="home_pages_editor_page">Page %1$d</string>
     <string name="home_pages_editor_make_default">Open Home on page %1$d</string>
     <string name="home_pages_editor_remove">Remove page %1$d</string>
-    <!-- The page overview: Home's pages and the session's windows as cards. -->
+    <!-- The page overview: the wall's pages as cards, the Terminal page as one. -->
     <string name="page_overview_default_page">Page %1$d, Home opens here</string>
     <!-- A terminal or display card that is Home: %1$s is its name. -->
     <string name="page_overview_start_here">%1$s, the launcher starts here</string>
     <string name="page_overview_start_in_terminal">Start in Terminal</string>
     <string name="page_overview_start_on_display">Start on Display</string>
-    <string name="page_overview_terminal">Terminal %1$d</string>
-    <!-- The header grip over the Terminal page's window cards in Edit pages: a long press drags the block. -->
-    <string name="page_overview_terminal_grip">Terminal ⋮⋮</string>
-    <string name="page_overview_terminal_grip_description">Move Terminal page</string>
+    <!-- The Terminal page's card in Edit pages, with one window or none. -->
+    <string name="page_overview_terminal">Terminal</string>
+    <!-- The Terminal page's card in Edit pages while it holds more than one window. -->
+    <plurals name="page_overview_terminal_windows">
+        <item quantity="one">Terminal, %1$d window</item>
+        <item quantity="other">Terminal, %1$d windows</item>
+    </plurals>
     <string name="page_overview_move_terminal_left">Move Terminal page left</string>
     <string name="page_overview_move_terminal_right">Move Terminal page right</string>
     <string name="page_overview_display">Display</string>
     <string name="page_overview_open">Open %1$s</string>
-    <string name="page_overview_close_terminal">Close terminal %1$d</string>
     <string name="page_overview_close_display">Close the display</string>
     <string name="page_overview_add_page">Add page</string>
     <string name="page_overview_add_terminal">Add terminal</string>
@@ -122,7 +124,6 @@
     </plurals>
     <string name="tai_delete_all_chats_confirm">Delete all</string>
     <string name="page_overview_page_removed">Page %1$d removed</string>
-    <string name="page_overview_terminal_closed">Terminal closed</string>
     <string name="page_overview_display_closed">Display closed</string>
     <string name="page_overview_undo">Undo</string>
     <string name="page_overview_menu_set_home">Set as home</string>

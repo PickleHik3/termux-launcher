@@ -17,45 +17,43 @@ public class PageCardMenuPolicyTest {
     @Test
     public void aHomePageOffersSetAsHomeRenameAndRemove() {
         assertEquals(Arrays.asList(Action.SET_HOME, Action.RENAME, Action.REMOVE),
-            PageCardMenuPolicy.actions(Kind.HOME_PAGE, false, false, 2));
+            PageCardMenuPolicy.actions(Kind.HOME_PAGE, false, 2, false));
     }
 
     @Test
     public void theHomePageDoesNotOfferSetAsHome() {
         assertEquals(Arrays.asList(Action.RENAME, Action.REMOVE),
-            PageCardMenuPolicy.actions(Kind.HOME_PAGE, true, false, 2));
+            PageCardMenuPolicy.actions(Kind.HOME_PAGE, true, 2, false));
     }
 
     @Test
     public void theLastHomePageCannotBeRemoved() {
         assertEquals(Arrays.asList(Action.SET_HOME, Action.RENAME),
-            PageCardMenuPolicy.actions(Kind.HOME_PAGE, false, false, 1));
+            PageCardMenuPolicy.actions(Kind.HOME_PAGE, false, 1, false));
     }
 
     @Test
     public void aDisplayPageAlsoOffersBindApp() {
         assertEquals(Arrays.asList(Action.SET_HOME, Action.RENAME, Action.BIND_APP, Action.REMOVE),
-            PageCardMenuPolicy.actions(Kind.DISPLAY, false, false, 1));
+            PageCardMenuPolicy.actions(Kind.DISPLAY, false, 1, false));
     }
 
     @Test
-    public void onlyTheFirstTerminalWindowOffersSetAsHome() {
-        assertEquals(Arrays.asList(Action.SET_HOME, Action.REMOVE),
-            PageCardMenuPolicy.actions(Kind.TERMINAL, false, true, 1));
-        assertEquals(Collections.singletonList(Action.REMOVE),
-            PageCardMenuPolicy.actions(Kind.TERMINAL, false, false, 1));
-        assertEquals(Collections.singletonList(Action.REMOVE),
-            PageCardMenuPolicy.actions(Kind.TERMINAL, true, true, 1));
+    public void theTerminalCardOffersSetAsHomeAndNoWindowRemoval() {
+        assertEquals(Collections.singletonList(Action.SET_HOME),
+            PageCardMenuPolicy.actions(Kind.TERMINAL, false, 1, false));
+        assertEquals("already home", Collections.emptyList(),
+            PageCardMenuPolicy.actions(Kind.TERMINAL, true, 1, false));
     }
 
     @Test
-    public void aTerminalCardOffersRemoveTerminalWhileAnotherPageIsLeft() {
-        assertEquals(Arrays.asList(Action.REMOVE, Action.REMOVE_TERMINAL),
-            PageCardMenuPolicy.actions(Kind.TERMINAL, false, false, 1, true));
-        assertEquals(Collections.singletonList(Action.REMOVE),
-            PageCardMenuPolicy.actions(Kind.TERMINAL, false, false, 1, false));
-        assertEquals("only terminal cards", Arrays.asList(Action.SET_HOME, Action.RENAME,
-            Action.REMOVE), PageCardMenuPolicy.actions(Kind.HOME_PAGE, false, false, 2, true));
+    public void theTerminalCardOffersRemoveTerminalWhileAnotherPageIsLeft() {
+        assertEquals(Arrays.asList(Action.SET_HOME, Action.REMOVE_TERMINAL),
+            PageCardMenuPolicy.actions(Kind.TERMINAL, false, 1, true));
+        assertEquals(Collections.singletonList(Action.REMOVE_TERMINAL),
+            PageCardMenuPolicy.actions(Kind.TERMINAL, true, 1, true));
+        assertEquals("only the Terminal card", Arrays.asList(Action.SET_HOME, Action.RENAME,
+            Action.REMOVE), PageCardMenuPolicy.actions(Kind.HOME_PAGE, false, 2, true));
     }
 
     @Test

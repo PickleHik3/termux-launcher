@@ -32,30 +32,16 @@ public final class PageCardMenuPolicy {
 
     /**
      * The rows of the menu for a card of {@code kind}, top to bottom. {@code isHome} is whether
-     * it is the home page already; {@code firstTerminal} whether it is the first terminal window,
-     * the one that stands for the Terminal page; {@code homePages} how many Home pages there are.
-     * Set as home shows only where the card can be home and is not; Rename on Home and Display
-     * pages; Bind app on Display pages; Remove wherever the card's red button shows.
+     * it is the home page already; {@code homePages} how many Home pages there are. Set as home
+     * shows wherever the card is not home; Rename on Home and Display pages; Bind app on Display
+     * pages; Remove wherever the card's red button shows; Remove Terminal on the Terminal card
+     * while {@code terminalRemovable} (another page is left on the wall).
      */
     @NonNull
     public static List<Action> actions(@NonNull PageOverviewPolicy.Kind kind, boolean isHome,
-                                       boolean firstTerminal, int homePages) {
-        return actions(kind, isHome, firstTerminal, homePages, false);
-    }
-
-    /**
-     * As {@link #actions(PageOverviewPolicy.Kind, boolean, boolean, int)}; a terminal window's
-     * card also offers Remove Terminal while {@code terminalRemovable} (another page is left on
-     * the wall).
-     */
-    @NonNull
-    public static List<Action> actions(@NonNull PageOverviewPolicy.Kind kind, boolean isHome,
-                                       boolean firstTerminal, int homePages,
-                                       boolean terminalRemovable) {
+                                       int homePages, boolean terminalRemovable) {
         List<Action> out = new ArrayList<>(4);
-        if (PageOverviewPolicy.showsHomeButton(kind, firstTerminal) && !isHome) {
-            out.add(Action.SET_HOME);
-        }
+        if (!isHome) out.add(Action.SET_HOME);
         if (kind != PageOverviewPolicy.Kind.TERMINAL) out.add(Action.RENAME);
         if (kind == PageOverviewPolicy.Kind.DISPLAY) out.add(Action.BIND_APP);
         if (PageOverviewPolicy.canDelete(kind, homePages)) out.add(Action.REMOVE);
