@@ -63,7 +63,6 @@ public final class ExtraKeyCapView extends AppCompatTextView {
     private final Path mCapPath = new Path();
 
     private int mAccent = Color.WHITE;
-    private int mOnAccent = Color.BLACK;
     private int mLabelColor = Color.WHITE;
     private boolean mGlowWide;
     private boolean mDead;
@@ -157,13 +156,11 @@ public final class ExtraKeyCapView extends AppCompatTextView {
         invalidate();
     }
 
-    /** The feedback accent and the colour readable on top of it. */
-    public void setAccent(int accent, int onAccent) {
-        if (accent == mAccent && onAccent == mOnAccent) return;
-        if (accent != mAccent) mGradient = null;
+    /** The press feedback accent: the glow and the rim. */
+    public void setAccent(int accent) {
+        if (accent == mAccent) return;
+        mGradient = null;
         mAccent = accent;
-        mOnAccent = onAccent;
-        applyLabelColor();
         invalidate();
     }
 
@@ -174,15 +171,32 @@ public final class ExtraKeyCapView extends AppCompatTextView {
         invalidate();
     }
 
-    /** The label colour at rest; a locked modifier overrides it with the colour readable on the accent. */
+    /** The label colour at rest; a locked modifier overrides it with the colour readable on its fill. */
     public void setLabelColor(int color) {
         mLabelColor = color;
         applyLabelColor();
+        if (mState != ExtraKeyModifiers.State.OFF) invalidate();
     }
 
     private void applyLabelColor() {
-        int color = mState == ExtraKeyModifiers.State.LOCKED && !mDead ? mOnAccent : mLabelColor;
+        int color = mState == ExtraKeyModifiers.State.LOCKED && !mDead ? onInk() : mLabelColor;
         if (getCurrentTextColor() != color) setTextColor(color);
+    }
+
+    /**
+     * The colour of the modifier mark and of a locked cap's fill: the label's own ink, which the
+     * host already chose to read on the surface behind the bar. The press accent follows the
+     * wallpaper's palette and can match that surface, so a mark in it alone would vanish.
+     */
+    private int markInk() {
+        return mLabelColor | 0xFF000000;
+    }
+
+    /** Black or white, whichever reads on the mark ink: the locked label and its bar. */
+    private int onInk() {
+        int ink = markInk();
+        double luma = 0.299 * Color.red(ink) + 0.587 * Color.green(ink) + 0.114 * Color.blue(ink);
+        return luma > 150 ? Color.BLACK : Color.WHITE;
     }
 
     /** A key that cannot act where the bar stands: label at 38%, no glow, nothing to press. */
@@ -277,7 +291,7 @@ public final class ExtraKeyCapView extends AppCompatTextView {
     protected void onDraw(@NonNull Canvas canvas) {
         boolean locked = mState == ExtraKeyModifiers.State.LOCKED && !mDead;
         if (locked && !mCapRect.isEmpty()) {
-            mMarkPaint.setColor(mAccent);
+            mMarkPaint.setColor(markInk());
             canvas.drawRoundRect(mCapRect, mCapRadius, mCapRadius, mMarkPaint);
         }
         boolean lit = mGlow > 0f && !mDead && !mCapRect.isEmpty();
@@ -316,7 +330,7 @@ public final class ExtraKeyCapView extends AppCompatTextView {
         float baseline = getHeight() / 2f - (mMetrics.ascent + mMetrics.descent) / 2f;
         float gap = MARK_GAP_DP * mDensity;
         float cx = getWidth() / 2f;
-        mMarkPaint.setColor(locked ? mOnAccent : mAccent);
+        mMarkPaint.setColor(locked ? onInk() : markInk());
         if (locked) {
             float barH = MARK_BAR_HEIGHT_DP * mDensity;
             float barW = MARK_BAR_WIDTH_DP * mDensity;
