@@ -38,6 +38,17 @@ public class SetupWizardGateTest {
             SetupWizardGate.decide(SetupWizardGate.CURRENT, true, true), false));
     }
 
+    @Test
+    public void wizardWaitsOnlyWhileTheBootstrapIsMissingAndUnsettled() {
+        // Already installed: open at once.
+        assertFalse(SetupWizardGate.waitsForBootstrap(true, false));
+        // Installing on a fresh install: wait.
+        assertTrue(SetupWizardGate.waitsForBootstrap(false, false));
+        // The install failed or was given up on, or the backstop found none running: open anyway.
+        assertFalse(SetupWizardGate.waitsForBootstrap(false, true));
+        assertFalse(SetupWizardGate.waitsForBootstrap(true, true));
+    }
+
     // comesFirst: one case per way out of the wizard and of its card sheet.
 
     @Test
