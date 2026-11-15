@@ -287,22 +287,41 @@ public final class ExtraKeyCapView extends AppCompatTextView {
         mCapPath.addRoundRect(mCapRect, mCapRadius, mCapRadius, Path.Direction.CW);
     }
 
+    /**
+     * The cap draws in its own bounds, but the canvas arrives scrolled: a single-line label scrolls
+     * horizontally, and centring it in its very wide layout leaves the view scrolled by about half
+     * a million pixels. The fill, glow, rim and mark undo that scroll.
+     */
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         boolean locked = mState == ExtraKeyModifiers.State.LOCKED && !mDead;
-        if (locked && !mCapRect.isEmpty()) {
-            mMarkPaint.setColor(markInk());
-            canvas.drawRoundRect(mCapRect, mCapRadius, mCapRadius, mMarkPaint);
-        }
         boolean lit = mGlow > 0f && !mDead && !mCapRect.isEmpty();
-        if (lit) drawGlow(canvas);
-        super.onDraw(canvas);
-        if (lit) {
-            mRimPaint.setColor(mAccent);
-            mRimPaint.setAlpha(Math.round(RIM_MAX_ALPHA * mGlow));
-            canvas.drawRoundRect(mRimRect, mCapRadius, mCapRadius, mRimPaint);
+        boolean filled = locked && !mCapRect.isEmpty();
+        float sx = getScrollX();
+        float sy = getScrollY();
+        if (filled || lit) {
+            int save = canvas.save();
+            canvas.translate(sx, sy);
+            if (filled) {
+                mMarkPaint.setColor(markInk());
+                canvas.drawRoundRect(mCapRect, mCapRadius, mCapRadius, mMarkPaint);
+            }
+            if (lit) drawGlow(canvas);
+            canvas.restoreToCount(save);
         }
-        if (!mDead && mState != ExtraKeyModifiers.State.OFF) drawMark(canvas, locked);
+        super.onDraw(canvas);
+        boolean marked = !mDead && mState != ExtraKeyModifiers.State.OFF;
+        if (lit || marked) {
+            int save = canvas.save();
+            canvas.translate(sx, sy);
+            if (lit) {
+                mRimPaint.setColor(mAccent);
+                mRimPaint.setAlpha(Math.round(RIM_MAX_ALPHA * mGlow));
+                canvas.drawRoundRect(mRimRect, mCapRadius, mCapRadius, mRimPaint);
+            }
+            if (marked) drawMark(canvas, locked);
+            canvas.restoreToCount(save);
+        }
     }
 
     private void drawGlow(@NonNull Canvas canvas) {
