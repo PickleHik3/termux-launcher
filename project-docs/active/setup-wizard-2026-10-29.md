@@ -34,7 +34,9 @@ only and never written again.
   bump it only when the question set changes materially; pre-releases that merely fix the wizard do
   not re-show it.
 - Skippable at any section (Skip moves on with the section's current value). Re-runnable from
-  Settings.
+  Settings. Settled 2026-11-15: Skip makes the same writes Finish makes, for every value as it
+  stands (the pre-selected ones for sections not reached), marks the wizard done and opens the
+  Setup cards at once when any is due, as Finish does.
 - Finish writes concrete settings through the existing setters and records that the wizard ran.
   No persistent "profile" or mode: later changes in Settings are never fought by the wizard.
 

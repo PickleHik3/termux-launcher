@@ -2147,6 +2147,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             String setupCardId = getIntent().getStringExtra(EXTRA_SETUP_CARD_ID);
             // The intent the post sees can be gone by then (a relaunch after a crash cleared it).
             final Intent launchIntent = getIntent();
+            // Due cards hold the other first-run cards back until the post below has looked.
+            setupWizard().expectCardsOffer();
             contentView.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (showSetupCards) {
@@ -2766,15 +2768,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             this::openAppearanceSurface);
     }
 
-    /** The wizard is up or due: the other first-run cards wait until it is done. */
+    /**
+     * The wizard is due or up, or its cards are up or will open in this session: the other
+     * first-run cards wait until they are done. Cards that will only open on a later start hold
+     * nothing back.
+     */
     private boolean setupWizardComesFirst() {
-        if (mSetupWizard != null && (mSetupWizard.isOpen() || mSetupWizard.isCardSheetDue()))
-            return true;
-        return mPreferences != null && com.termux.app.setup.SetupWizardGate.decide(
+        boolean wizardDue = mPreferences != null && com.termux.app.setup.SetupWizardGate.decide(
             mPreferences.getSetupWizardVersion(), false, false).show;
+        com.termux.app.setup.SetupWizardController wizard = mSetupWizard;
+        boolean offerPending = wizard != null && wizard.isCardsOfferPending();
+        // The due check reads the phone, so it runs only while an offer is still to come.
+        return com.termux.app.setup.SetupWizardGate.comesFirst(wizardDue,
+            wizard != null && wizard.isOpen(), offerPending && wizard.isCardSheetDue(),
+            offerPending);
     }
 
-    /** Opens the setup wizard when its version has not been finished; true when it is up. */
+    /**
+     * Opens the setup wizard when its version has not been finished; true when it is up, or due
+     * and waiting for the bootstrap install to end (it then opens by itself).
+     */
     private boolean openSetupWizardIfDue() {
         if (mPreferences == null) return false;
         com.termux.app.setup.SetupWizardGate.Decision decision =
@@ -2783,9 +2796,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.isUseAsStored(),
                 mPreferences.isWallpaperReadPermissionPrompted());
         if (!decision.show) return false;
+        View content = findViewById(android.R.id.content);
+        if (content != null && com.termux.app.setup.SetupWizardGate.waitsForBootstrap(
+                TermuxInstaller.isBootstrapInstalled(), mBootstrapSettled)) {
+            if (!mSetupWizardAwaitsBootstrap) {
+                mSetupWizardAwaitsBootstrap = true;
+                content.postDelayed(mSetupWizardBootstrapBackstop,
+                    SETUP_WIZARD_BOOTSTRAP_BACKSTOP_MS);
+            }
+            return true;
+        }
         setupWizard().migrateFromOldTourIfDue(decision);
         setupWizard().open(decision.updater);
         return true;
+    }
+
+    /** A bootstrap install this activity started is running. */
+    private boolean mBootstrapInstalling;
+    /** The wizard no longer waits for the bootstrap: an install ended, or none was needed or came. */
+    private boolean mBootstrapSettled;
+    /** The wizard is due and opens once the bootstrap install has ended. */
+    private boolean mSetupWizardAwaitsBootstrap;
+    /**
+     * How long a waiting wizard gives the bootstrap install to start. A running install always
+     * ends in {@link #onBootstrapSettled}; with none running by then, the wizard opens anyway.
+     */
+    private static final long SETUP_WIZARD_BOOTSTRAP_BACKSTOP_MS = 10_000L;
+    private final Runnable mSetupWizardBootstrapBackstop = () -> {
+        if (mSetupWizardAwaitsBootstrap && !mBootstrapInstalling) onBootstrapSettled();
+    };
+
+    /** The bootstrap install ended (installed or failed) or none ran: a waiting wizard opens. */
+    private void onBootstrapSettled() {
+        mBootstrapInstalling = false;
+        mBootstrapSettled = true;
+        if (!mSetupWizardAwaitsBootstrap) return;
+        mSetupWizardAwaitsBootstrap = false;
+        View content = findViewById(android.R.id.content);
+        if (content != null) content.removeCallbacks(mSetupWizardBootstrapBackstop);
+        if (isFinishing() || isDestroyed()) return;
+        openSetupWizardIfDue();
     }
 
     /** Settings asking for the setup cards, on the launcher that is already up. */
@@ -11173,7 +11223,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A prefix already in place answers synchronously; anything later is an install (or its
         // error dialog's way on), whose installers may have written what styling reads.
         final boolean[] bootstrapReturned = {false};
-        TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
+        boolean installing = TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
             if (bootstrapReturned[0]) mFirstSessionRestyleWanted = true;
             // Bootstrap setup may complete after app startup; re-attempt launcher CLI script install.
             LauncherCtlApiServer.getInstance().ensureCliScriptsInstalled();
@@ -11206,8 +11256,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Activity finished - ignore.
                 mEmptySessionRecoveryInProgress = false;
             }
-        });
+        }, this::onBootstrapSettled);
         bootstrapReturned[0] = true;
+        // A waiting setup wizard opens when the install ends, or now when none started.
+        if (installing) mBootstrapInstalling = true;
+        else onBootstrapSettled();
     }
 
     /** A launch that names a shell of its own: the New session shortcut, or a failsafe one. */

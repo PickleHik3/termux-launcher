@@ -9,6 +9,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.core.content.ContextCompat;
 
@@ -176,21 +177,34 @@ final class CustomizeSection implements SetupSection {
             chip.setCheckable(true);
             chip.setCheckedIconVisible(false);
             chip.setEnsureMinTouchTargetSize(true);
-            chip.setChecked(LOOK_IDS[i].equals(state.values().lookId));
+            dressLook(chip, LOOK_IDS[i], state.values().lookId, readable);
             final int index = i;
             chip.setOnClickListener(v -> {
                 state.setLook(LOOK_IDS[index]);
                 for (int j = 0; j < chips.size(); j++)
-                    chips.get(j).setChecked(j == index);
+                    dressLook(chips.get(j), LOOK_IDS[j], state.values().lookId, readable);
             });
-            if (!readable && !SetupState.LOOK_SOLID.equals(LOOK_IDS[i])) {
-                chip.setAlpha(0.4f);
-                chip.setEnabled(false);
-            }
             chips.add(chip);
             group.addView(chip);
         }
         return group;
+    }
+
+    /**
+     * Whether a Look chip can be picked: any while the wallpaper reads; without it only Solid,
+     * which needs no wallpaper, and the Look the wall wears, which stays shown as picked.
+     */
+    static boolean lookChipEnabled(@NonNull String id, @Nullable String worn, boolean readable) {
+        return readable || SetupState.LOOK_SOLID.equals(id) || id.equals(worn);
+    }
+
+    /** Checked and dimmed from the one value the wall wears, so the screen and its reading agree. */
+    private static void dressLook(@NonNull Chip chip, @NonNull String id, @Nullable String worn,
+                                  boolean readable) {
+        boolean enabled = lookChipEnabled(id, worn, readable);
+        chip.setChecked(id.equals(worn));
+        chip.setEnabled(enabled);
+        chip.setAlpha(enabled ? 1f : 0.4f);
     }
 
     /** The Dock designs with the appearance card's glyphs, through the editor's own chip row. */

@@ -108,6 +108,10 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     private boolean mClipped;
     private int mNavInsetPx;
     private int mWindowHeightPx;
+    /** A check that opens the cards when they are due is still to run in this session. */
+    private boolean mCardsOfferPending;
+    /** Finish or Skip asked for wallpaper access; the cards open when it is answered. */
+    private boolean mCardsAfterWallpaperAsk;
 
     public SetupWizardController(@NonNull Host host) {
         mHost = host;
@@ -120,6 +124,16 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     /** The card sheet after the wizard is up (the wizard's own sheet does not count). */
     public boolean isCardSheetShowing() {
         return mOpen && mCards != null;
+    }
+
+    /** The launch is about to check whether the cards are due; until then due cards come first. */
+    public void expectCardsOffer() {
+        mCardsOfferPending = true;
+    }
+
+    /** A check that opens the cards when they are due is still to run in this session. */
+    public boolean isCardsOfferPending() {
+        return mCardsOfferPending;
     }
 
     /** Open and showing: false while the wallpaper picker has the screen. */
@@ -250,8 +264,16 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         showSection(mIndex, false);
     }
 
-    /** The storage permission was answered: Customize shows whether the wallpaper reads now. */
+    /**
+     * The storage permission was answered: Customize shows whether the wallpaper reads now, or,
+     * when Finish or Skip asked, the cards open. Declined, the look stays as it can be drawn.
+     */
     public void onWallpaperPermissionResult() {
+        if (mCardsAfterWallpaperAsk) {
+            mCardsAfterWallpaperAsk = false;
+            openCardsIfDue();
+            return;
+        }
         refreshCustomize();
     }
 
@@ -385,6 +407,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     // ---------------------------------------------------------------------------------- finish
 
     private void close(boolean animate) {
+        mCardsOfferPending = false;
         if (!mOpen)
             return;
         mOpen = false;
@@ -409,17 +432,23 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         mHost.holdPaneWall(false);
     }
 
-    /** Records that this wizard version ran. */
-    private void markDone() {
+    /**
+     * Records that this wizard version ran.
+     *
+     * @param cardsSeen every card that exists now counts as shown, so none is due (Keep)
+     */
+    private void markDone(boolean cardsSeen) {
         TermuxAppSharedPreferences prefs = mHost.preferences();
         if (prefs == null)
             return;
         prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
-        // A user finishing setup now starts with nothing seen, so the sheet after Finish (or the
-        // next launch, after Skip) shows every card once. Earlier users are seeded at launch.
-        SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
-        if (stored.startSeen())
-            SetupCardSystem.save(mHost.context(), stored);
+        // A user finishing setup now starts with nothing seen, so the sheet that opens right after
+        // Finish or Skip shows every card once. Keep leaves every card seen, as the launch-time
+        // seeding does for earlier users, so nothing is due after it.
+        Context context = mHost.context();
+        SetupCards.Stored stored = SetupCardSystem.stored(context);
+        if (cardsSeen ? stored.markSeen(SetupCardSystem.cards(context)) : stored.startSeen())
+            SetupCardSystem.save(context, stored);
         // The old tour is gone, but this stays the "has used the app before" marker the gate
         // reads, and older code paths that read it still see the tour as done (8 is its last run).
         if (prefs.getFirstBootTourCompletedVersion() < 8)
@@ -434,8 +463,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     @Override
     public void onSkip() {
-        markDone();
-        close(true);
+        exit(SetupWizardExit.Way.SKIP);
     }
 
     @Override
@@ -444,22 +472,41 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             showSection(mIndex + 1, true);
             return;
         }
-        SetupState state = mState;
-        if (state != null)
-            state.apply();
-        markDone();
-        close(true);
-        // Right after Finish: the cards, when any is still open.
-        openCardsIfDue();
+        exit(SetupWizardExit.Way.FINISH);
     }
 
     @Override
     public void onKeepCurrent() {
+        exit(SetupWizardExit.Way.KEEP);
+    }
+
+    /** Leaves the wizard: the choices kept or put back, the wizard done, then the cards. */
+    private void exit(@NonNull SetupWizardExit.Way way) {
         SetupState state = mState;
-        if (state != null)
-            state.restore(state.snapshot());
-        markDone();
+        if (state != null) {
+            if (SetupWizardExit.restoresSnapshot(way))
+                state.restore(state.snapshot());
+            else if (SetupWizardExit.appliesChoices(way))
+                state.apply();
+        }
+        markDone(SetupWizardExit.marksCardsSeen(way));
         close(true);
+        if (!SetupWizardExit.offersCards(way))
+            return;
+        // A look that follows the system wallpaper needs storage access to draw its glass: asked
+        // here, once, before the cards; the cards open when it is answered.
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        Context context = mHost.context();
+        if (prefs != null && SetupWizardExit.asksWallpaperRead(way,
+                !CustomizeSection.wallpaperReadable(context),
+                prefs.isWallpaperReadPermissionPrompted())) {
+            mCardsAfterWallpaperAsk = true;
+            mCardsOfferPending = true;
+            mHost.requestWallpaperRead();
+            return;
+        }
+        // Right after Finish or Skip: the cards, when any is due.
+        openCardsIfDue();
     }
 
     @Override
@@ -510,6 +557,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     /** Opens the card sheet when it is due; true when it is up. */
     public boolean openCardsIfDue() {
+        // The session's chance: due cards that do not open now wait for the next start.
+        mCardsOfferPending = false;
         if (mOpen)
             return true;
         if (mHost.isAppearanceEditorOpen())
@@ -540,6 +589,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
      * Learn the basics and Models for this phone rows).
      */
     public void openCards(@Nullable String pageId) {
+        mCardsOfferPending = false;
         if (mOpen) {
             if (pageId != null)
                 showPage(pageId);

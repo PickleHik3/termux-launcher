@@ -3693,7 +3693,7 @@
     <string name="setup_value_card">Setup card</string>
     <string name="setup_value_not_now">Not now</string>
     <string name="setup_section_look">Look</string>
-    <string name="setup_look_title">Look</string>
+    <string name="setup_look_title">Wallpaper and look</string>
     <string name="setup_look_description">Changes apply above as you pick.</string>
     <string name="setup_wallpaper_in_app">Set an in-app wallpaper</string>
     <string name="setup_wallpaper_in_app_summary">Needed for modern glass and wallpaper colours</string>
@@ -3726,7 +3726,7 @@
         <item quantity="other">%d cards open</item>
     </plurals>
     <string name="setup_cards_title">Setup cards</string>
-    <string name="setup_cards_line">Returns on each launcher start until every card is done or dismissed.</string>
+    <string name="setup_cards_line">Opens by itself only when a new card appears; find it any time in Settings › General › Setup.</string>
     <string name="setup_cards_open_launcher">Open launcher</string>
     <string name="setup_cards_settings">Settings</string>
     <string name="setup_cards_continue">Continue</string>
