@@ -28,7 +28,6 @@ public final class PickerLayout {
     public static final float LABEL_RISE_DP = 64f;
     public static final float LABEL_MARGIN_DP = 4f;
 
-    private static final int COLUMNS = 4;
     private static final float PILL_OVERHANG_DP = 2f;
     private static final float CARD_OVERHANG_DP = 1f;
 
@@ -46,14 +45,18 @@ public final class PickerLayout {
     private final float mPillLeft;
     private final float mPillRight;
     private final int mCapacity;
+    private final int mColumns;
 
     /**
      * @param cx,cy the dot's centre; {@code d} its diameter
      * @param topLimit,bottomLimit the band the picker may stand in
      * @param wantedRows the tallest column's cells, uncapped
+     * @param columns how many kinds the row holds ({@link PickerModel#columns()} size)
      */
     public PickerLayout(float width, float height, float density, float cx, float cy, float d,
-                        @NonNull Edge edge, float topLimit, float bottomLimit, int wantedRows) {
+                        @NonNull Edge edge, float topLimit, float bottomLimit, int wantedRows,
+                        int columns) {
+        mColumns = columns;
         mWidth = width;
         mHeight = height;
         mDensity = density;
@@ -66,7 +69,7 @@ public final class PickerLayout {
         float gap = DOT_GAP_DP * density;
         float overhang = PILL_OVERHANG_DP * density;
 
-        float rowWidth = COLUMNS * mCellW;
+        float rowWidth = mColumns * mCellW;
         mRowLeft = edge == Edge.LEFT ? cx + d / 2f + gap : cx - d / 2f - gap - rowWidth;
 
         int maxRows = Math.max(0,
@@ -112,8 +115,7 @@ public final class PickerLayout {
     /** The cell's rectangle: the glyph in the row, or a stack cell above it. */
     public void cellRect(@NonNull PickerModel model, @NonNull PickerModel.Cell cell,
                          @NonNull RectF out) {
-        int column = cell.pageKind.ordinal();
-        float left = left(column);
+        float left = left(model.columnIndex(cell.pageKind));
         if (cell.kind == PickerModel.CellKind.GLYPH) {
             out.set(left, mRowTop, left + mCellW, mRowTop + mCellH);
             return;
@@ -126,9 +128,10 @@ public final class PickerLayout {
     /** The card behind a column's stack; false when the column has no stack cells. */
     public boolean stackRect(@NonNull PickerModel model, @NonNull PickerModel.Kind kind,
                              @NonNull RectF out) {
-        int n = model.column(kind).cells.size();
+        PickerModel.Column col = model.column(kind);
+        int n = col == null ? 0 : col.cells.size();
         if (n <= 0) return false;
-        float left = left(kind.ordinal());
+        float left = left(model.columnIndex(kind));
         float overhang = CARD_OVERHANG_DP * mDensity;
         out.set(left, mRowTop - mStackGap - n * mStackCellH - overhang, left + mCellW,
             mRowTop - mStackGap + overhang);
@@ -141,7 +144,7 @@ public final class PickerLayout {
         float rel = x - mRowLeft;
         if (rel < 0f) return null;
         int column = (int) Math.floor(rel / mCellW);
-        if (column >= COLUMNS) return null;
+        if (column >= mColumns) return null;
         PickerModel.Column col = model.columns().get(column);
         if (y >= mRowTop && y < mRowTop + mCellH) return col.glyph;
         float t = mRowTop - mStackGap - y;
@@ -152,9 +155,9 @@ public final class PickerLayout {
     }
 
     /** The order cells appear in when the picker opens: glyphs from the dot out, stacks after. */
-    public int staggerIndex(@NonNull PickerModel.Cell cell) {
-        int column = cell.pageKind.ordinal();
-        int glyph = mEdge == Edge.LEFT ? column : COLUMNS - 1 - column;
+    public int staggerIndex(@NonNull PickerModel model, @NonNull PickerModel.Cell cell) {
+        int column = model.columnIndex(cell.pageKind);
+        int glyph = mEdge == Edge.LEFT ? column : mColumns - 1 - column;
         return cell.kind == PickerModel.CellKind.GLYPH ? glyph : glyph + 1;
     }
 

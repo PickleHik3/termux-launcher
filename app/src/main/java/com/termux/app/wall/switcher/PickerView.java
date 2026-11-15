@@ -212,7 +212,7 @@ public final class PickerView extends View {
         for (PickerModel.Kind kind : PickerModel.Kind.values()) {
             int i = kind.ordinal();
             if (layout.stackRect(model, kind, mCardRects[i])) {
-                mCardStagger[i] = layout.staggerIndex(model.column(kind).cells.get(0));
+                mCardStagger[i] = layout.staggerIndex(model, model.column(kind).cells.get(0));
                 last = Math.max(last, mCardStagger[i]);
             } else {
                 mCardStagger[i] = -1;
@@ -320,7 +320,7 @@ public final class PickerView extends View {
             RectF r = new RectF();
             layout.cellRect(model, cell, r);
             mCellRects.add(r);
-            mStagger[i] = layout.staggerIndex(cell);
+            mStagger[i] = layout.staggerIndex(model, cell);
             mTexts.add(cell.kind == PickerModel.CellKind.GLYPH ? glyphOf(cell)
                 : TextUtils.ellipsize(cell.label, mTextPaint, room,
                     TextUtils.TruncateAt.END).toString());

@@ -28957,6 +28957,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         in.homePageLabels = homeLabels;
         com.termux.app.wall.WallPages.Page home = pages.home();
         in.defaultStartPageId = home == null ? -1 : home.id;
+        // Use as, read as the picker opens: Terminal only has no Home cell.
+        in.homeOffered = useAs().showsHomePage();
         com.termux.app.wall.WallPages.Page terminal = pages.terminal();
         in.terminalPageId = terminal == null ? -1 : terminal.id;
         int current = mPaneWallController == null ? -1 : mPaneWallController.currentPageId();
