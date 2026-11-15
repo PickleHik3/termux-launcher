@@ -59,6 +59,19 @@ public final class ProcessLimitNoticeView extends FrameLayout
         setVisibility(GONE);
     }
 
+    /**
+     * A list keeps measuring a hidden row, so with no card the view takes no height itself: the
+     * Settings root's row would otherwise leave the card's height empty above the search.
+     */
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (getVisibility() == GONE) {
+            setMeasuredDimension(0, 0);
+            return;
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
     public void setHost(@Nullable Host host) {
         this.host = host;
     }
