@@ -415,8 +415,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         if (prefs == null)
             return;
         prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
-        // A user finishing setup now starts with nothing seen, so the sheet after Finish (or the
-        // next launch, after Skip) shows every card once. Earlier users are seeded at launch.
+        // A user finishing setup now starts with nothing seen, so the sheet that opens right after
+        // Finish or Skip shows every card once. Earlier users are seeded at launch.
         SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
         if (stored.startSeen())
             SetupCardSystem.save(mHost.context(), stored);
@@ -434,8 +434,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     @Override
     public void onSkip() {
-        markDone();
-        close(true);
+        exit(SetupWizardExit.Way.SKIP);
     }
 
     @Override
@@ -444,22 +443,28 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             showSection(mIndex + 1, true);
             return;
         }
-        SetupState state = mState;
-        if (state != null)
-            state.apply();
-        markDone();
-        close(true);
-        // Right after Finish: the cards, when any is still open.
-        openCardsIfDue();
+        exit(SetupWizardExit.Way.FINISH);
     }
 
     @Override
     public void onKeepCurrent() {
+        exit(SetupWizardExit.Way.KEEP);
+    }
+
+    /** Leaves the wizard: the choices kept or put back, the wizard done, then the cards. */
+    private void exit(@NonNull SetupWizardExit.Way way) {
         SetupState state = mState;
-        if (state != null)
-            state.restore(state.snapshot());
+        if (state != null) {
+            if (SetupWizardExit.restoresSnapshot(way))
+                state.restore(state.snapshot());
+            else if (SetupWizardExit.appliesChoices(way))
+                state.apply();
+        }
         markDone();
         close(true);
+        // Right after Finish or Skip: the cards, when any is due.
+        if (SetupWizardExit.offersCards(way))
+            openCardsIfDue();
     }
 
     @Override
