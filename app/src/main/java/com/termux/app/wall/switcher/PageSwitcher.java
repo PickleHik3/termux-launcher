@@ -222,21 +222,22 @@ public final class PageSwitcher {
             dot.setColors(mHost.palette().glass, mHost.palette().ink);
             dot.setVisibility(View.VISIBLE);
         }
-        if (!mMoving) {
+        DotGesture live = mGesture;
+        boolean fingerDown = live != null && live.isLive();
+        if (!mMoving && DotPlacement.frameMayMove(fingerDown)) {
             float y = DotPlacement.restY(mFraction, h, mBandTop, mBandBottom, mDiameter);
             if (Math.abs(mBandBottom - mLastBandBottom) > 0.5f) mStableFrames = 0;
             else if (mStableFrames < DotPlacement.STABLE_FRAMES) mStableFrames++;
             mLastBandBottom = mBandBottom;
-            DotGesture live = mGesture;
             if (mSnap == null && DotPlacement.adoptsClamp(
                     DotPlacement.clampedUp(y, mFraction, h, mBandTop),
-                    live != null && live.isLive(), pickerUp, mStableFrames,
+                    fingerDown, pickerUp, mStableFrames,
                     mStableFrames >= DotPlacement.STABLE_FRAMES && mHost.chromeAtRest())) {
                 mFraction = DotPlacement.fractionOf(y, h);
                 mHost.savePosition(mEdge, mFraction);
             }
             float x = mSnap != null ? mCx : DotPlacement.centerX(mEdge, w, mDiameter);
-            if (pickerUp && Math.abs(y - mCy) > 0.5f) {
+            if (DotPlacement.closesPicker(pickerUp, fingerDown, y, mCy)) {
                 PickerView picker = mPicker;
                 if (picker != null) picker.close(false);
             }

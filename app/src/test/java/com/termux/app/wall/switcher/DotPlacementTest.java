@@ -95,4 +95,21 @@ public class DotPlacementTest {
         // A stack still changing height.
         assertFalse(DotPlacement.adoptsClamp(true, false, false, stable - 1, true));
     }
+
+    // ---- a slide keeps the picker where it stood ----
+
+    @Test public void fingerDownMeansNothingMovesWhenTheHeightChanges() {
+        assertFalse(DotPlacement.frameMayMove(true));
+        assertFalse(DotPlacement.closesPicker(true, true, 2100f, 2021f));
+    }
+
+    @Test public void fingerUpAfterTheChangeReanchorsTheDot() {
+        assertTrue(DotPlacement.frameMayMove(false));
+    }
+
+    @Test public void noFingerAnOpenPickerClosesWhenTheHeightChanges() {
+        assertTrue(DotPlacement.closesPicker(true, false, 2100f, 2021f));
+        assertFalse(DotPlacement.closesPicker(true, false, 2021.2f, 2021f));
+        assertFalse(DotPlacement.closesPicker(false, false, 2100f, 2021f));
+    }
 }

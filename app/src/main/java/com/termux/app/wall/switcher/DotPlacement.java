@@ -73,6 +73,22 @@ public final class DotPlacement {
             && chromeAtRest;
     }
 
+    /**
+     * Whether a drawn frame may re-anchor the dot or close the picker. Not while a finger the
+     * switcher claimed is down: a slide to a cell needs the picker where it stood at DOWN, even
+     * when the resting height moves under it (a keyboard still settling). The dot catches up on
+     * the first frame after the finger lifts.
+     */
+    public static boolean frameMayMove(boolean fingerDown) {
+        return !fingerDown;
+    }
+
+    /** Whether an open picker closes because the dot's resting centre moved on this frame. */
+    public static boolean closesPicker(boolean pickerUp, boolean fingerDown, float restY,
+                                       float currentY) {
+        return pickerUp && frameMayMove(fingerDown) && Math.abs(restY - currentY) > 0.5f;
+    }
+
     public static Edge nearerEdge(float x, float width) {
         return x < width / 2f ? Edge.LEFT : Edge.RIGHT;
     }
