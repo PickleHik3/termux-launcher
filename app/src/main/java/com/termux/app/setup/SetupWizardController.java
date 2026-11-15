@@ -409,17 +409,23 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         mHost.holdPaneWall(false);
     }
 
-    /** Records that this wizard version ran. */
-    private void markDone() {
+    /**
+     * Records that this wizard version ran.
+     *
+     * @param cardsSeen every card that exists now counts as shown, so none is due (Keep)
+     */
+    private void markDone(boolean cardsSeen) {
         TermuxAppSharedPreferences prefs = mHost.preferences();
         if (prefs == null)
             return;
         prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
         // A user finishing setup now starts with nothing seen, so the sheet that opens right after
-        // Finish or Skip shows every card once. Earlier users are seeded at launch.
-        SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
-        if (stored.startSeen())
-            SetupCardSystem.save(mHost.context(), stored);
+        // Finish or Skip shows every card once. Keep leaves every card seen, as the launch-time
+        // seeding does for earlier users, so nothing is due after it.
+        Context context = mHost.context();
+        SetupCards.Stored stored = SetupCardSystem.stored(context);
+        if (cardsSeen ? stored.markSeen(SetupCardSystem.cards(context)) : stored.startSeen())
+            SetupCardSystem.save(context, stored);
         // The old tour is gone, but this stays the "has used the app before" marker the gate
         // reads, and older code paths that read it still see the tour as done (8 is its last run).
         if (prefs.getFirstBootTourCompletedVersion() < 8)
@@ -460,7 +466,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             else if (SetupWizardExit.appliesChoices(way))
                 state.apply();
         }
-        markDone();
+        markDone(SetupWizardExit.marksCardsSeen(way));
         close(true);
         // Right after Finish or Skip: the cards, when any is due.
         if (SetupWizardExit.offersCards(way))

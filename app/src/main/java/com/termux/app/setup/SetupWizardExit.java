@@ -26,6 +26,11 @@ final class SetupWizardExit {
         return way == Way.KEEP;
     }
 
+    /** Every card that exists now counts as shown, so none is due after this way out. */
+    static boolean marksCardsSeen(@NonNull Way way) {
+        return way == Way.KEEP;
+    }
+
     /** Opens the Setup cards right after the wizard closes, when any is due. */
     static boolean offersCards(@NonNull Way way) {
         return way != Way.KEEP;
