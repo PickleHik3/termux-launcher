@@ -72,6 +72,12 @@ public final class PageSwitcher {
         boolean hintShown();
 
         void markHintShown();
+
+        /**
+         * Whether the first-run setup (the wizard or one of its sheets) covers the launcher, so
+         * the hint would open under it.
+         */
+        boolean isFirstRunCovering();
     }
 
     static final long SNAP_MS = 220L;
@@ -103,6 +109,7 @@ public final class PageSwitcher {
     private boolean mHintPending;
     /** Set once the hint is known to be shown, so a frame does not ask the preferences again. */
     private boolean mHintDone;
+    private boolean mHintChecked;
     private boolean mClaiming;
     private float mLastBandBottom = -1f;
     /** The bottom chrome's top on the last frame it stood at rest; the keyboard's rise reads off it. */
@@ -168,6 +175,7 @@ public final class PageSwitcher {
 
     /** Re-reads the switch and the saved position; the next frame applies them. */
     public void onResume() {
+        mHintChecked = false;
         readSavedPosition();
         FrameLayout layer = mLayer;
         if (layer != null) layer.invalidate();
@@ -298,22 +306,36 @@ public final class PageSwitcher {
         if (dot.getTranslationY() != ty) dot.setTranslationY(ty);
     }
 
-    /** The first time the dot is shown, the picker opens once with a line saying how to use it. */
+    /**
+     * The first time the dot is visible with nothing covering the launcher, the picker opens once
+     * with a line saying how to use it. The hint is marked shown only once that picker is up, so
+     * a wizard in front only delays it.
+     */
     private void maybeShowHint(@NonNull FrameLayout layer) {
         if (mHintDone || mHintPending || mCx < 0f) return;
-        if (mHost.hintShown()) {
-            mHintDone = true;
-            return;
+        if (!mHintChecked) {
+            // The preference is asked once, not on every frame.
+            mHintChecked = true;
+            if (mHost.hintShown()) {
+                mHintDone = true;
+                return;
+            }
         }
-        mHintDone = true;
+        DotView dot = mDot;
+        if (!HintGate.opensNow(mHost.isEnabled(),
+                dot != null && dot.getVisibility() == View.VISIBLE, false,
+                mHost.isFirstRunCovering())) return;
         mHintPending = true;
-        mHost.markHintShown();
         layer.post(() -> {
             mHintPending = false;
-            DotView dot = mDot;
-            if (mLayer == null || dot == null || dot.getVisibility() != View.VISIBLE
-                || isPickerShowing()) return;
+            DotView d = mDot;
+            if (mLayer == null || d == null || d.getVisibility() != View.VISIBLE
+                || isPickerShowing() || mHost.isFirstRunCovering()) return;
             openPicker(true, true);
+            if (isPickerShowing()) {
+                mHintDone = true;
+                mHost.markHintShown();
+            }
         });
     }
 

@@ -28776,6 +28776,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mPreferences == null || mPreferences.isPageSwitcherHintShown();
             }
 
+            @Override public boolean isFirstRunCovering() {
+                return setupWizardComesFirst()
+                    || (mSetupWizard != null && mSetupWizard.isCardSheetShowing());
+            }
+
             @Override public void markHintShown() {
                 if (mPreferences != null) mPreferences.setPageSwitcherHintShown(true);
             }
