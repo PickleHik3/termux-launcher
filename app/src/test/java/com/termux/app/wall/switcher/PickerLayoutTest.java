@@ -32,11 +32,11 @@ public class PickerLayoutTest {
     private static final float EPS = 0.001f;
 
     private static PickerLayout right(float cy, float top, float bottom, int wanted) {
-        return new PickerLayout(W, H, 1f, 380f, cy, D, Edge.RIGHT, top, bottom, wanted);
+        return new PickerLayout(W, H, 1f, 380f, cy, D, Edge.RIGHT, top, bottom, wanted, 4);
     }
 
     private static PickerLayout left(float cy, float top, float bottom, int wanted) {
-        return new PickerLayout(W, H, 1f, 20f, cy, D, Edge.LEFT, top, bottom, wanted);
+        return new PickerLayout(W, H, 1f, 20f, cy, D, Edge.LEFT, top, bottom, wanted, 4);
     }
 
     /** One Home page, two terminal windows, no display running: Terminal has a 2-cell stack. */
@@ -167,12 +167,12 @@ public class PickerLayoutTest {
         Cell homeGlyph = model.column(Kind.HOME).glyph;
         Cell assistantGlyph = model.column(Kind.ASSISTANT).glyph;
         Cell terminalWindow = model.column(Kind.TERMINAL).cells.get(0);
-        assertEquals(3, r.staggerIndex(homeGlyph));
-        assertEquals(0, r.staggerIndex(assistantGlyph));
-        assertEquals(0, l.staggerIndex(homeGlyph));
-        assertEquals(3, l.staggerIndex(assistantGlyph));
-        assertEquals(3, r.staggerIndex(terminalWindow));
-        assertEquals(2, l.staggerIndex(terminalWindow));
+        assertEquals(3, r.staggerIndex(model, homeGlyph));
+        assertEquals(0, r.staggerIndex(model, assistantGlyph));
+        assertEquals(0, l.staggerIndex(model, homeGlyph));
+        assertEquals(3, l.staggerIndex(model, assistantGlyph));
+        assertEquals(3, r.staggerIndex(model, terminalWindow));
+        assertEquals(2, l.staggerIndex(model, terminalWindow));
     }
 
     @Test public void theLabelStaysOnScreenAndRisesAboveTheFinger() {
@@ -236,5 +236,77 @@ public class PickerLayoutTest {
         float top = layout.hintTop(HINT_H, 0);
         assertTrue(top >= 4f);
         assertTrue(top + HINT_H <= 200f + 600f);
+    }
+
+    // ---- Use as Terminal only: three columns ----
+
+    private static PickerModel noHomeModel() {
+        Input in = new Input();
+        in.homeOffered = false;
+        in.terminalPageId = 2;
+        in.displayPageId = 3;
+        in.assistantPageId = 4;
+        in.currentKind = Kind.TERMINAL;
+        in.currentPageId = 2;
+        in.terminalWindowLabels = Arrays.asList("zsh", "vim");
+        return PickerModel.build(in);
+    }
+
+    private static final class Calls implements PickerTargets.Navigator {
+        final StringBuilder log = new StringBuilder();
+        @Override public void goToPage(int pageId) { log.append("page:").append(pageId); }
+        @Override public void goHome() { log.append("home"); }
+        @Override public void showTerminalWindow(int index) { log.append("window:").append(index); }
+        @Override public void goToTerminal() { log.append("terminal"); }
+        @Override public void showDisplayApp(int pageId, int windowId) { log.append("app"); }
+        @Override public void startDisplay() { log.append("start"); }
+        @Override public void addAssistantPage() { log.append("addAssistant"); }
+        @Override public void addDisplayPage() { log.append("addDisplay"); }
+        @Override public void openSessionBrowser() { log.append("sessions"); }
+        @Override public void openDisplayAppList() { log.append("apps"); }
+        @Override public void openPageOverview() { log.append("overview"); }
+    }
+
+    private static String slideOnto(PickerLayout layout, PickerModel model, Cell cell) {
+        RectF r = rect(layout, model, cell);
+        Cell under = layout.cellAt(model, r.centerX(), r.centerY());
+        assertSame(cell, under);
+        Calls calls = new Calls();
+        PickerTargets.carryOut(under.target, calls);
+        return calls.log.toString();
+    }
+
+    @Test public void threeColumnsNarrowTheRowAndKeepItNextToTheDot() {
+        PickerModel model = noHomeModel();
+        PickerLayout r = new PickerLayout(W, H, 1f, 380f, 400f, D, Edge.RIGHT, 50f, 750f, 2, 3);
+        PickerLayout l = new PickerLayout(W, H, 1f, 20f, 400f, D, Edge.LEFT, 50f, 750f, 2, 3);
+        assertEquals(194f, rect(r, model, model.column(Kind.TERMINAL).glyph).left, EPS);
+        assertEquals(194f + 112f, rect(r, model, model.column(Kind.ASSISTANT).glyph).left, EPS);
+        assertEquals(38f, rect(l, model, model.column(Kind.TERMINAL).glyph).left, EPS);
+        RectF pill = new RectF();
+        r.pillRect(pill);
+        assertTrue(pill.left < 194f);
+        assertNull(r.cellAt(model, 193f, 410f));
+        assertNull(l.cellAt(model, 38f + 168f + 1f, 410f));
+    }
+
+    @Test public void staggerRunsFromTheDotOverThreeColumns() {
+        PickerModel model = noHomeModel();
+        PickerLayout r = new PickerLayout(W, H, 1f, 380f, 400f, D, Edge.RIGHT, 50f, 750f, 2, 3);
+        PickerLayout l = new PickerLayout(W, H, 1f, 20f, 400f, D, Edge.LEFT, 50f, 750f, 2, 3);
+        assertEquals(2, r.staggerIndex(model, model.column(Kind.TERMINAL).glyph));
+        assertEquals(0, r.staggerIndex(model, model.column(Kind.ASSISTANT).glyph));
+        assertEquals(0, l.staggerIndex(model, model.column(Kind.TERMINAL).glyph));
+        assertEquals(2, l.staggerIndex(model, model.column(Kind.ASSISTANT).glyph));
+    }
+
+    @Test public void aSlideOntoEachRemainingCellReachesItsTarget() {
+        PickerModel model = noHomeModel();
+        PickerLayout layout = new PickerLayout(W, H, 1f, 380f, 400f, D, Edge.RIGHT, 50f, 750f, 2, 3);
+        assertEquals("", slideOnto(layout, model, model.column(Kind.TERMINAL).glyph));
+        assertEquals("page:3", slideOnto(layout, model, model.column(Kind.DISPLAY).glyph));
+        assertEquals("page:4", slideOnto(layout, model, model.column(Kind.ASSISTANT).glyph));
+        assertEquals("window:0", slideOnto(layout, model, model.column(Kind.TERMINAL).cells.get(0)));
+        assertEquals("window:1", slideOnto(layout, model, model.column(Kind.TERMINAL).cells.get(1)));
     }
 }

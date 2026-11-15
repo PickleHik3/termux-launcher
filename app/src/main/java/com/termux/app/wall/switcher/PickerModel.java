@@ -1,14 +1,15 @@
 package com.termux.app.wall.switcher;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * What the picker shows and where each cell goes: four page-kind columns (Home, Terminal,
- * Display, Assistant, always in that order), each with its page-kind glyph at the bottom and, above
+ * What the picker shows and where each cell goes: page-kind columns (Home, Terminal,
+ * Display, Assistant, always in that order; Home only where {@link Input#homeOffered}), each with its page-kind glyph at the bottom and, above
  * it, that page kind's windows. Pure: the activity fills an {@link Input} from the wall and the
  * windows, the view draws the answer, and the geometry of where a cell stands is
  * {@link PickerLayout}'s.
@@ -132,6 +133,8 @@ public final class PickerModel {
         public int assistantPageId = -1;
         /** Whether the display can be used at all on this install. */
         public boolean displayAvailable = true;
+        /** Whether the row has a Home column: false under Use as Terminal only. */
+        public boolean homeOffered = true;
         /** The page kind the wall is on, and its page. */
         @NonNull public Kind currentKind = Kind.HOME;
         public int currentPageId = -1;
@@ -162,13 +165,23 @@ public final class PickerModel {
         mColumns = Collections.unmodifiableList(columns);
     }
 
-    /** The columns in {@link Kind} order. */
+    /** The columns in {@link Kind} order, Home left out when it is not offered. */
     @NonNull public List<Column> columns() {
         return mColumns;
     }
 
-    @NonNull public Column column(@NonNull Kind kind) {
-        return mColumns.get(kind.ordinal());
+    /** The kind's column, or null when the row has none (Home under Terminal only). */
+    @Nullable public Column column(@NonNull Kind kind) {
+        int i = columnIndex(kind);
+        return i < 0 ? null : mColumns.get(i);
+    }
+
+    /** The kind's place in the row, left to right; -1 when the row has no such column. */
+    public int columnIndex(@NonNull Kind kind) {
+        for (int i = 0; i < mColumns.size(); i++) {
+            if (mColumns.get(i).kind == kind) return i;
+        }
+        return -1;
     }
 
     /** The most cells any column holds above its glyph; what the picker's height has to fit. */
@@ -210,7 +223,7 @@ public final class PickerModel {
     @NonNull
     public static PickerModel build(@NonNull Input in) {
         List<Column> columns = new ArrayList<>(4);
-        columns.add(homeColumn(in));
+        if (in.homeOffered) columns.add(homeColumn(in));
         columns.add(terminalColumn(in));
         columns.add(displayColumn(in));
         columns.add(assistantColumn(in));
