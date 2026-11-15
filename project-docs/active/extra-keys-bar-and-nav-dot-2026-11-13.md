@@ -1,9 +1,11 @@
 # Extra-keys bar per target, Home pill and the navigation dot (2026-11-13)
 
-Status: designed, build started 2026-11-14. Grilled with the developer 2026-11-12/13. Motion was
-chosen by the developer on a touch prototype on 2026-11-14 (see "Motion"); the prototype pages are
-kept on the local branch `proto/extra-keys-bar-and-dot`, not merged. Everything here reaches
-testers in one drop.
+Status: built 2026-11-14/15 and merged into v2-redesign. Grilled with the developer 2026-11-12/13;
+motion chosen by the developer on a touch prototype on 2026-11-14 (see "Motion"; the prototype pages
+are kept on the local branch `proto/extra-keys-bar-and-dot`, not merged). Checked on the emulator
+(a Codex blind review of each part, a Codex code review, then acceptance runs on an upgraded and a
+fresh install); motion and feel are still owed on pong (`project-docs/developer-checks.md`). What
+was decided or found while building is under "As built". Everything here reaches testers in one drop.
 
 Replaces the space-bar places dock (`feat/space-places-dock`, spec
 `space-places-dock-2026-11-09.md` on that branch): the space-bar hold is dropped, its picker moves
@@ -167,6 +169,45 @@ None of these repaints at rest: each is a one-shot animation that ends.
 | Display | KEYBOARD, `mouse.toggle`, ESC, TAB, CTRL, ALT. Today the Display page shows two keys that do nothing there (`pane.split`, `session.browser`). |
 | Home (starter, written when switched on) | `app.command_palette`, `app.open_app_drawer`, `app.open_settings` |
 | Assistant | KEYBOARD, `voice.dictate`, `clipboard.paste` |
+
+## As built (2026-11-15)
+
+Where the build settled something this spec left open, or differs from it:
+
+- **The dot in code** is the page switcher (`com.termux.app.wall.switcher`); its switch is
+  Settings › General › Page switcher.
+- **The dot and Android's Back gesture.** Android honours 200 dp of Back exclusion per edge,
+  bottom-most first, and the in-app keyboard's own edges use all of it. So while a keyboard is up
+  the dot rests further in, its touch square just outside the system's Back strip, and returns to
+  the edge when the keyboard goes (the developer's choice, 2026-11-15). With no keyboard the dot's
+  own exclusion rectangle protects it.
+- **The dot's height.** It rests above the whole bottom stack (extra keys, dock), not only the
+  keyboard. Home's stack is the tallest, so a dot dropped lower is raised once, on a settled Home
+  page, and then rests at that height on every page.
+- **While a finger is down** on the dot or its picker, neither moves nor closes.
+- **The hint** ("Slide from the dot to any page") sits clear of the picker's cells and waits until
+  the setup wizard and the Setup cards are out of the way.
+- **Stack labels.** Windows that share a name carry their window number ("home 3"); the cell that
+  starts a display reads "Start".
+- **Hidden while** the app drawer, the palette, a sheet or an editor is up.
+- **Home's keys are switched in the editor**: the Home place offers "Show keys on Home" and
+  "Hide keys on Home"; there is no row in Home's Layout list. Switching on writes the starter keys
+  when Home has none; switching off keeps them.
+- **The pill** is a second host for the key page, not the docked bar moved over. Its ink is chosen
+  against its own plate. On a flight to Home the leaving bar's keys are not drawn (the bar is gone
+  at landing and the pill keeps no bitmap).
+- **Docked above a keyboard on Home**, a hold on a key repeats or locks; only the floating pill
+  lifts.
+- **The set changes after the page lands**, so a page change gives one motion; modifiers armed or
+  locked are cleared when the place changes, and one whose key leaves the shown set is cleared.
+- **Modifiers are shared across key pages.**
+- **Marks are drawn in the label's ink**, not the press accent, which can match the bar.
+- **Height between key pages**: the keys animate over 160 ms; the glass and the terminal step once.
+  The chosen motion would have needed a layout pass per frame.
+- **Display and Assistant** show their built-in keys until given their own; there is no "use
+  Global" for them other than copying Global's keys in.
+- **The editor** is titled "Extra keys".
+- **TalkBack** can press a key (a click) and lock a modifier (a long click).
 
 ## Not in this spec
 
