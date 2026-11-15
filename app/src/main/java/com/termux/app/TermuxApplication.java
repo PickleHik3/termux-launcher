@@ -140,6 +140,11 @@ public class TermuxApplication extends Application {
                 surfacePreferences.getSharedPreferences(),
                 new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
                 terminalId);
+            // A build with a higher appearance reset number puts everything the Appearance editor
+            // owns back to a new install's, once; the look steps below then run as on a new
+            // install. After the wall and page steps, which it keeps; never throws.
+            final boolean lookFresh = com.termux.app.surfaces.AppearanceReset.runAtStartUp(
+                context, surfacePreferences, freshInstall) || freshInstall;
             // Every look value moves into the one grid (ADR 0017), once, before the glass
             // controls' start-up work reads and writes looks through it.
             com.termux.app.wall.WallPagesStore wallStore =
@@ -147,7 +152,7 @@ public class TermuxApplication extends Application {
             java.util.List<Integer> lookPageIds = new java.util.ArrayList<>();
             for (com.termux.app.wall.WallPages.Page page : wallStore.current().allPages())
                 lookPageIds.add(page.id);
-            surfacePreferences.migrateLookGrid(lookPageIds, freshInstall);
+            surfacePreferences.migrateLookGrid(lookPageIds, lookFresh);
             // Every grid reads a page's kind from the wall and a kind's shipped look from the
             // shipped Looks (ADR 0018 §3); then Home's old cells move to the Home kind, once.
             com.termux.shared.termux.settings.preferences.LookGrid.install(
@@ -155,11 +160,11 @@ public class TermuxApplication extends Application {
                 com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
             com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(
                 new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
-                    surfacePreferences.getSharedPreferences()), freshInstall);
+                    surfacePreferences.getSharedPreferences()), lookFresh);
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences,
-                freshInstall);
+                lookFresh);
             // Last: each kind's shipped look becomes its kind cells, once, on fresh and upgraded
             // installs alike (ADR 0018 §3); after every freshness check above.
             com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(

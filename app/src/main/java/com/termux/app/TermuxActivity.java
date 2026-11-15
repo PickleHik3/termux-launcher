@@ -2527,6 +2527,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View nudgeContent = findViewById(android.R.id.content);
         if (nudgeContent != null && com.termux.app.setup.GlassResetNudgeCard.isDue(mPreferences))
             nudgeContent.post(this::showGlassResetNudgeIfDue);
+        if (nudgeContent != null && com.termux.app.setup.AppearanceResetCard.isDue(mPreferences))
+            nudgeContent.post(this::showAppearanceResetCardIfDue);
         // A permission page the setup cards sent the person to may have been answered.
         if (mSetupWizard != null) mSetupWizard.onActivityResumed();
         // A distro installed in a shell while we were away still needs its sound drop-in.
@@ -2737,6 +2739,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         .KEY_NIGHT_MODE, mode);
             recreate();
         });
+    }
+
+    /**
+     * The card after an appearance reset on upgrade, once it is due: on a Home page, after the
+     * setup wizard and its cards, never over a terminal; else it waits for the next resume.
+     */
+    private void showAppearanceResetCardIfDue() {
+        if (isFinishing() || isDestroyed() || mPreferences == null) return;
+        if (!com.termux.app.setup.AppearanceResetCard.isDue(mPreferences)) return;
+        if (setupWizardComesFirst()) return;
+        if (mSetupWizard != null && mSetupWizard.isCardSheetShowing()) return;
+        if (currentWallPage() != com.termux.app.wall.PaneWallPage.WIDGETS) return;
+        com.termux.app.setup.AppearanceResetCard.showIfDue(this, mPreferences,
+            this::openAppearanceSurface);
     }
 
     /** The wizard is up or due: the other first-run cards wait until it is done. */
