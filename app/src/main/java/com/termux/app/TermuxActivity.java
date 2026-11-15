@@ -1127,6 +1127,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.terminal.io.HomePillSwitch mHomePillSwitch;
     /** The root's layout listener that rechecks the pill after each layout pass; one, for life. */
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mHomePillLayoutListener;
+    /** Rechecks the pill when a cover over Home opens or closes (no layout pass marks it). */
+    @Nullable private ViewTreeObserver.OnPreDrawListener mHomePillCoverListener;
     /** The down that began this touch stream landed on the pill or its chip. */
     private boolean mHomePillStream;
     /**
@@ -2005,6 +2007,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Home pill is rechecked after each layout pass: compare-guarded, never per frame.
         mHomePillLayoutListener = mHomePill::refresh;
         mTermuxActivityRootView.getViewTreeObserver().addOnGlobalLayoutListener(mHomePillLayoutListener);
+        mHomePillCoverListener = () -> {
+            mHomePill.refreshIfCoversChanged();
+            return true;
+        };
+        mTermuxActivityRootView.getViewTreeObserver().addOnPreDrawListener(mHomePillCoverListener);
         mWallpaperBackdropView = findViewById(R.id.wallpaper_backdrop);
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.setParallax(mWallpaperParallax);
         View sceneContainer = findViewById(R.id.terminal_root_container);
@@ -10802,6 +10809,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxActivityRootView.getViewTreeObserver().removeOnGlobalLayoutListener(mHomePillLayoutListener);
             mHomePillLayoutListener = null;
         }
+        if (mTermuxActivityRootView != null && mHomePillCoverListener != null) {
+            mTermuxActivityRootView.getViewTreeObserver().removeOnPreDrawListener(mHomePillCoverListener);
+            mHomePillCoverListener = null;
+        }
         if (mPaneController != null) mPaneController.setGeometryScheduler(null);
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(terminalHost());
         mTerminalFrameMetricsMonitor.stop();
@@ -13464,7 +13475,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Each page compared on its own: a page rebuilt since (its theme colour back) is caught.
         for (int i = 0, n = extraKeysPageTotal(); i < n; i++) {
             ExtraKeysPageView view = extraKeysPageAt(i);
-            if (view == null || view.getButtonTextColor() == ink) continue;
+            // The pill's keys stand on the pill's own plate: applyHomePillDress inks them.
+            if (view == null || isHomePillPage(view) || view.getButtonTextColor() == ink) continue;
             view.setButtonTextColor(ink);
             view.refreshKeyStyles();
         }
@@ -20768,8 +20780,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void styleExtraKeysPage(@NonNull ExtraKeysPageView page, int index) {
         page.setClient(getTermuxTerminalExtraKeys(index));
         page.setButtonTextAllCaps(mProperties != null && mProperties.shouldExtraKeysTextBeAllCaps());
-        if (mExtraKeysInk != Color.TRANSPARENT && page.getButtonTextColor() != mExtraKeysInk) {
-            page.setButtonTextColor(mExtraKeysInk);
+        int ink = isHomePillPage(page) ? mHomePillInk : mExtraKeysInk;
+        if (ink != Color.TRANSPARENT && page.getButtonTextColor() != ink) {
+            page.setButtonTextColor(ink);
             page.refreshKeyStyles();
         }
         applyExtraKeysFeedbackAccent(page);
@@ -34945,6 +34958,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TerminalDress dress = TerminalDress.resolve(this, terminalDressSource());
         layer.pill().setDress(dress);
         layer.chip().setDress(dress);
+        ExtraKeysPageView page = layer.pill().pageView();
+        int theme = ThemeUtils.getSystemAttrColor(this, ExtraKeysPageView.ATTR_BUTTON_TEXT_COLOR,
+            ExtraKeysPageView.DEFAULT_BUTTON_TEXT_COLOR);
+        mHomePillInk = com.termux.app.terminal.extrakeys.HomePillInk.on(dress.fillColor, theme,
+            mChrome == null ? OnGlass.TARGET_BODY_TEXT
+                : mChrome.ink().target(OnGlass.TARGET_BODY_TEXT));
+        if (page.getButtonTextColor() != mHomePillInk) {
+            page.setButtonTextColor(mHomePillInk);
+            page.refreshKeyStyles();
+        }
+    }
+
+    /** The pill keys' label ink as last chosen on the pill's own plate; transparent before. */
+    @androidx.annotation.ColorInt private int mHomePillInk = Color.TRANSPARENT;
+
+    private boolean isHomePillPage(@NonNull ExtraKeysPageView page) {
+        return mHomePillLayer != null && mHomePillLayer.pill().pageView() == page;
     }
 
     /** Keys of the room cache: what Home's top edge stack depends on. */
