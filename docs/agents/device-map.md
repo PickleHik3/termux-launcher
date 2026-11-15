@@ -458,11 +458,11 @@ a Linux app.
 - **Edit pages**: "Edit pages" in the home actions sheet (long-press empty space on a Home page,
   e.g. 540,1200; `ad find "Edit pages"`). The long-press only works on a Home page. A card's
   menu (Set as home, Rename, Remove) opens from a 1.2 s body long-press. Add page, Add display
-  and Add assistant are not in `ad ui`: tap them by coordinates (y about 2257). A Home, Display
-  or Assistant card reorders by a body drag (DOWN, `sleep 0.9`, MOVEs, hold, UP in one call).
-  The Terminal block moves by its grip, the "Move Terminal page" node above its first card
-  (about 234,181 once that card is centred), not by a card's body. Closing Edit pages lands on
-  the page that was in front.
+  and Add assistant are not in `ad ui`: tap them by coordinates (y about 2257). A Home card or
+  the Terminal card reorders by a body drag (DOWN, `sleep 0.9`, MOVEs, hold, UP in one call);
+  Display and Assistant cards stay where they stand. The Terminal page is one card ("Terminal",
+  or "Terminal, N windows"), whose node also carries "Move Terminal page left/right". Closing
+  Edit pages lands on the page that was in front.
 - **Dock designs**: values `glass_tray` (Tray), `lens_beads` (Beads), `wall_strip` (Strip),
   `peek_glass` (Peek). Home's design is `layout.home.dock_design` and also `dock_design` inside
   the `"home"` JSON in `shared_prefs/layouts.xml`, which wins: set both, then force-stop. In
