@@ -196,7 +196,8 @@ public class PickerModelTest {
         assertEquals(1, col.cells.size());
         assertSame(CellKind.START_DISPLAY, col.cells.get(0).kind);
         assertSame(Action.START_DISPLAY, col.cells.get(0).target.action);
-        assertEquals("Start display", col.cells.get(0).label);
+        // The cell sits above the Display icon, so the short word fits a 56 dp stack cell.
+        assertEquals("Start", col.cells.get(0).label);
     }
 
     @Test public void displayRunningListsItsApps() {

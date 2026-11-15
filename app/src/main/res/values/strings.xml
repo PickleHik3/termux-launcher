@@ -536,6 +536,8 @@
     <string name="page_switcher_terminal">Terminal</string>
     <string name="page_switcher_display">Display</string>
     <string name="page_switcher_assistant">Assistant</string>
+    <!-- The cell above the Display icon; it says what the column starts. -->
+    <string name="page_switcher_start">Start</string>
     <string name="page_switcher_start_display">Start display</string>
     <!-- %1$d is how many more windows the column holds than it shows. -->
     <string name="page_switcher_more">%1$d more</string>

@@ -667,6 +667,8 @@ public final class PickerView extends View {
     private String describe(@NonNull PickerModel.Cell cell) {
         if (cell.kind == PickerModel.CellKind.OVERFLOW)
             return getContext().getString(R.string.page_switcher_more, cell.overflowCount);
+        if (cell.kind == PickerModel.CellKind.START_DISPLAY)
+            return getContext().getString(R.string.page_switcher_start_display);
         if (cell.dimmed) return getContext().getString(R.string.page_switcher_add, cell.label);
         if (cell.current) return getContext().getString(R.string.page_switcher_current, cell.label);
         return cell.label;

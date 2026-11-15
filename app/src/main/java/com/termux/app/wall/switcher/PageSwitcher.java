@@ -45,6 +45,15 @@ public final class PageSwitcher {
          */
         boolean chromeAtRest();
 
+        /**
+         * The system's gesture inset on the given edge, in px, as last dispatched with the window
+         * insets (0 with button navigation). Cached by the activity; cheap to call per frame.
+         */
+        int gestureInsetPx(@NonNull Edge edge);
+
+        /** The height of the keyboard in front (in-app or system), 0 when none is up. */
+        int keyboardHeightPx();
+
         boolean isReducedMotionEnabled();
 
         boolean hapticsEnabled();
@@ -63,6 +72,12 @@ public final class PageSwitcher {
         boolean hintShown();
 
         void markHintShown();
+
+        /**
+         * Whether the first-run setup (the wizard or one of its sheets) covers the launcher, so
+         * the hint would open under it.
+         */
+        boolean isFirstRunCovering();
     }
 
     static final long SNAP_MS = 220L;
@@ -94,8 +109,13 @@ public final class PageSwitcher {
     private boolean mHintPending;
     /** Set once the hint is known to be shown, so a frame does not ask the preferences again. */
     private boolean mHintDone;
+    private boolean mHintChecked;
     private boolean mClaiming;
     private float mLastBandBottom = -1f;
+    /** The bottom chrome's top on the last frame it stood at rest; the keyboard's rise reads off it. */
+    private float mRestChromeTop = -1f;
+    /** The keyboard's reveal on the last frame, 0..1. */
+    private float mKeyboardProgress;
     private int mStableFrames;
     private final int[] mLocation = new int[2];
 
@@ -155,6 +175,7 @@ public final class PageSwitcher {
 
     /** Re-reads the switch and the saved position; the next frame applies them. */
     public void onResume() {
+        mHintChecked = false;
         readSavedPosition();
         FrameLayout layer = mLayer;
         if (layer != null) layer.invalidate();
@@ -215,8 +236,11 @@ public final class PageSwitcher {
         if (w <= 0 || h <= 0) return;
 
         mBandTop = DotPlacement.bandTop(mDiameter, mDensity);
-        mBandBottom = DotPlacement.bandBottom(h, mHost.bottomChromeTopPx(layer), mDiameter,
-            mDensity);
+        int chromeTop = mHost.bottomChromeTopPx(layer);
+        mBandBottom = DotPlacement.bandBottom(h, chromeTop, mDiameter, mDensity);
+        if (mRestChromeTop < 0f || mHost.chromeAtRest()) mRestChromeTop = chromeTop;
+        mKeyboardProgress = DotPlacement.keyboardProgress(mRestChromeTop, chromeTop,
+            mHost.keyboardHeightPx());
         boolean becameVisible = dot.getVisibility() != View.VISIBLE;
         if (becameVisible) {
             dot.setColors(mHost.palette().glass, mHost.palette().ink);
@@ -236,7 +260,7 @@ public final class PageSwitcher {
                 mFraction = DotPlacement.fractionOf(y, h);
                 mHost.savePosition(mEdge, mFraction);
             }
-            float x = mSnap != null ? mCx : DotPlacement.centerX(mEdge, w, mDiameter);
+            float x = mSnap != null ? mCx : restX(mEdge, w);
             if (DotPlacement.closesPicker(pickerUp, fingerDown, y, mCy)) {
                 PickerView picker = mPicker;
                 if (picker != null) picker.close(false);
@@ -264,6 +288,12 @@ public final class PageSwitcher {
         }
     }
 
+    /** Where the dot rests on an edge now: at the edge, or stepped in while a keyboard is up. */
+    private float restX(@NonNull Edge edge, float width) {
+        return DotPlacement.restX(edge, width, mDiameter, mDensity, mHost.gestureInsetPx(edge),
+            mKeyboardProgress);
+    }
+
     /** Applies the centre as translation only, and only when it changed. */
     private void placeDot(float cx, float cy) {
         DotView dot = mDot;
@@ -276,22 +306,36 @@ public final class PageSwitcher {
         if (dot.getTranslationY() != ty) dot.setTranslationY(ty);
     }
 
-    /** The first time the dot is shown, the picker opens once with a line saying how to use it. */
+    /**
+     * The first time the dot is visible with nothing covering the launcher, the picker opens once
+     * with a line saying how to use it. The hint is marked shown only once that picker is up, so
+     * a wizard in front only delays it.
+     */
     private void maybeShowHint(@NonNull FrameLayout layer) {
         if (mHintDone || mHintPending || mCx < 0f) return;
-        if (mHost.hintShown()) {
-            mHintDone = true;
-            return;
+        if (!mHintChecked) {
+            // The preference is asked once, not on every frame.
+            mHintChecked = true;
+            if (mHost.hintShown()) {
+                mHintDone = true;
+                return;
+            }
         }
-        mHintDone = true;
+        DotView dot = mDot;
+        if (!HintGate.opensNow(mHost.isEnabled(),
+                dot != null && dot.getVisibility() == View.VISIBLE, false,
+                mHost.isFirstRunCovering())) return;
         mHintPending = true;
-        mHost.markHintShown();
         layer.post(() -> {
             mHintPending = false;
-            DotView dot = mDot;
-            if (mLayer == null || dot == null || dot.getVisibility() != View.VISIBLE
-                || isPickerShowing()) return;
+            DotView d = mDot;
+            if (mLayer == null || d == null || d.getVisibility() != View.VISIBLE
+                || isPickerShowing() || mHost.isFirstRunCovering()) return;
             openPicker(true, true);
+            if (isPickerShowing()) {
+                mHintDone = true;
+                mHost.markHintShown();
+            }
         });
     }
 
@@ -518,7 +562,7 @@ public final class PageSwitcher {
         mEdge = edge;
         mFraction = DotPlacement.fractionOf(mMoveY, layer.getHeight());
         final float fraction = mFraction;
-        float toX = DotPlacement.centerX(edge, layer.getWidth(), mDiameter);
+        float toX = restX(edge, layer.getWidth());
         if (reduced || !dot.isAttachedToWindow()) {
             placeDot(toX, mMoveY);
             dot.updateGestureExclusion();

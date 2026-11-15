@@ -16,6 +16,8 @@ public final class DotPlacement {
     public static final float TOUCH_RADIUS_DP = 24f;
     public static final float KEYBOARD_GAP_DP = 8f;
     public static final float BAND_MARGIN_DP = 8f;
+    /** Clear space between the system's Back strip and the dot's touch square. */
+    public static final float GESTURE_GAP_DP = 4f;
     public static final float DEFAULT_HEIGHT_FRACTION = 0.6f;
     public static final Edge DEFAULT_EDGE = Edge.RIGHT;
 
@@ -25,6 +27,36 @@ public final class DotPlacement {
     public static float centerX(Edge edge, float width, float diameter) {
         float inset = (0.5f + EDGE_GAP_FACTOR) * diameter;
         return edge == Edge.LEFT ? inset : width - inset;
+    }
+
+    /**
+     * The resting centre x while a keyboard may be up. The system keeps at most 200 dp of Back
+     * exclusion per edge and the keyboard's own side exclusion takes all of it, so with a keyboard
+     * up the dot's whole touch square rests just outside the system's gesture inset of its edge
+     * (plus {@link #GESTURE_GAP_DP}). {@code keyboardProgress} (0..1, the keyboard's reveal) moves
+     * the dot between the edge position and that one. With no gesture inset (button navigation),
+     * or when the edge position is already outside it, the dot does not move.
+     */
+    public static float restX(Edge edge, float width, float diameter, float density,
+                              float gestureInsetPx, float keyboardProgress) {
+        float edgeX = centerX(edge, width, diameter);
+        if (gestureInsetPx <= 0f) return edgeX;
+        float reach = gestureInsetPx + GESTURE_GAP_DP * density + TOUCH_RADIUS_DP * density;
+        float inwardX = edge == Edge.LEFT ? reach : width - reach;
+        boolean moreInward = edge == Edge.LEFT ? inwardX > edgeX : inwardX < edgeX;
+        if (!moreInward) return edgeX;
+        float t = Math.min(1f, Math.max(0f, keyboardProgress));
+        return edgeX + (inwardX - edgeX) * t;
+    }
+
+    /**
+     * How far the keyboard is revealed, 0..1: the bottom chrome's rise over its resting top,
+     * against the keyboard's height. No keyboard height means none is up.
+     */
+    public static float keyboardProgress(float restChromeTop, float chromeTop,
+                                         float keyboardHeight) {
+        if (keyboardHeight <= 0f) return 0f;
+        return Math.min(1f, Math.max(0f, (restChromeTop - chromeTop) / keyboardHeight));
     }
 
     /** The highest the dot's centre may stand: below the top corner zone and its margin. */
