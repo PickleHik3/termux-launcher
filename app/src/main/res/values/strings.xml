@@ -3693,7 +3693,7 @@
     <string name="setup_value_card">Setup card</string>
     <string name="setup_value_not_now">Not now</string>
     <string name="setup_section_look">Look</string>
-    <string name="setup_look_title">Look</string>
+    <string name="setup_look_title">Wallpaper and look</string>
     <string name="setup_look_description">Changes apply above as you pick.</string>
     <string name="setup_wallpaper_in_app">Set an in-app wallpaper</string>
     <string name="setup_wallpaper_in_app_summary">Needed for modern glass and wallpaper colours</string>
