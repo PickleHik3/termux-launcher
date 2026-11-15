@@ -28954,7 +28954,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         in.kindNames = new String[] {getString(R.string.page_switcher_home),
             getString(R.string.page_switcher_terminal), getString(R.string.page_switcher_display),
             getString(R.string.page_switcher_assistant)};
-        in.startDisplayLabel = getString(R.string.page_switcher_start_display);
+        in.startDisplayLabel = getString(R.string.page_switcher_start);
         return in;
     }
 

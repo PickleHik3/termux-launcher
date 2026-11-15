@@ -14,7 +14,7 @@ import java.util.List;
  * {@link PickerLayout}'s.
  *
  * <p>Home and Assistant carry no window column. Terminal's is its windows, labelled as the window
- * bar labels them. Display's is its running apps, or one "Start display" cell while no display
+ * bar labels them. Display's is its running apps, or one "Start" cell while no display
  * runs. A column that holds more than the picker is tall enough for gives its top cell to "+N",
  * which opens that page kind's full list.
  */
@@ -153,7 +153,7 @@ public final class PickerModel {
         /** Page-kind names in {@link Kind} order, and the "Start display" cell's text. */
         @NonNull public String[] kindNames =
             {"Home", "Terminal", "Display", "Assistant"};
-        @NonNull public String startDisplayLabel = "Start display";
+        @NonNull public String startDisplayLabel = "Start";
     }
 
     @NonNull private final List<Column> mColumns;
