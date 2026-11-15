@@ -130,6 +130,16 @@ public class TerminalToolbarPages {
         }
     }
 
+    /** The field held focus out of turn and the bar took it: the terminal gets it back. */
+    public void onTextInputFocusReleased() {
+        mActivity.endTerminalToolbarExternalTextInput();
+        if (!mActivity.isInAppKeyboardEnabled()) {
+            // The field was the served editor, so this hides the keyboard it asked for and no other.
+            KeyboardUtils.hideSoftKeyboard(mActivity, mActivity.getTerminalView());
+        }
+        mActivity.getTerminalView().requestFocus();
+    }
+
     /** The bar landed on {@code position}: the key pages hand the terminal focus, the text input takes it. */
     public void onPageSelected(@NonNull ExtraKeysBarView bar, int position) {
         if (bar.isKeyPage(position)) {

@@ -15175,6 +15175,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override
+            public void onTextInputFocusReleased() {
+                pages.onTextInputFocusReleased();
+            }
+
+            @Override
             public void onCommittedHeightChanged() {
                 // The committed page's rows are the row's height: the one geometry pass, which
                 // books the chrome sync itself when anything moved.
