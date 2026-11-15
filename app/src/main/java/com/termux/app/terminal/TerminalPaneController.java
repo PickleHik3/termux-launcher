@@ -4236,6 +4236,8 @@ public class TerminalPaneController {
         private final RectF mGeometryPaneRect = new RectF();
         /** Scratch for pane rects read while hit-testing a touch stream. */
         private final RectF mHitPaneRect = new RectF();
+        /** {@link #dividerGapsAt}'s scratch for each divider's frame. */
+        private final RectF mHitDividerRect = new RectF();
         /** The tab itself, laid over the whole host and pointed at whichever pane was tapped. */
         private final PaneControlsView mControls;
 
@@ -4474,7 +4476,8 @@ public class TerminalPaneController {
 
                     if (mControls.isControlsShown() && !isMaximized()) dismissControls();
                     // The gap between two panes is the divider's: a finger down in it drags the
-                    // split at once, with no hold. It never reaches over a pane's content.
+                    // split at once, with no hold. Over a pane's content it reaches only as far as
+                    // its least touch strip, centred on the seam.
                     List<SplitDividerHit.Gap> gaps = dividerGapsAt(x, y);
                     if (!gaps.isEmpty()) {
                         mGapGesture = true;
@@ -4791,26 +4794,26 @@ public class TerminalPaneController {
 
         /**
          * The splits whose gap holds a point, in host coordinates. A gap is the divider view's own
-         * frame: the whole shared edge, as thick as the gutter between the two panes, so it stops
-         * where a pane's frame starts and {@link SplitDividerHit} drops any point on a pane.
+         * frame: the whole shared edge, as thick as the gutter between the two panes (0 when they
+         * touch); {@link SplitDividerHit} gives it its minimum touch strip.
          */
         @NonNull
         private List<SplitDividerHit.Gap> dividerGapsAt(float x, float y) {
             List<SplitDividerHit.Gap> gaps = new ArrayList<>(mSplitLayouts.size());
-            int[] host = location(mHostView);
+            RectF at = mHitDividerRect;
             for (Map.Entry<Split, LinearLayout> entry : mSplitLayouts.entrySet()) {
                 LinearLayout layout = entry.getValue();
                 if (layout.getChildCount() < 3) continue;
                 View divider = layout.getChildAt(1);
-                if (!isOnHost(divider) || divider.getWidth() <= 0 || divider.getHeight() <= 0) {
+                boolean dragsX = entry.getKey().orientation == LinearLayout.HORIZONTAL;
+                // A gap of 0 is a divider with no thickness, but it still runs the seam's length.
+                if (!isOnHost(divider)
+                    || (dragsX ? divider.getHeight() : divider.getWidth()) <= 0) {
                     continue;
                 }
-                int[] at = location(divider);
-                float left = at[0] - host[0];
-                float top = at[1] - host[1];
-                gaps.add(new SplitDividerHit.Gap(entry.getKey(),
-                    entry.getKey().orientation == LinearLayout.HORIZONTAL,
-                    left, top, left + divider.getWidth(), top + divider.getHeight()));
+                laidOutRect(divider, at);
+                gaps.add(new SplitDividerHit.Gap(entry.getKey(), dragsX,
+                    at.left, at.top, at.right, at.bottom));
             }
             if (gaps.isEmpty() || mActiveWindow == null) return gaps;
             List<SplitDividerHit.Pane> panes = new ArrayList<>();
@@ -4820,7 +4823,7 @@ public class TerminalPaneController {
                     panes.add(new SplitDividerHit.Pane(rect.left, rect.top, rect.right, rect.bottom));
                 }
             }
-            return SplitDividerHit.gapsAt(gaps, panes, x, y);
+            return SplitDividerHit.gapsAt(gaps, panes, x, y, dp(SplitDividerHit.MIN_TOUCH_DP));
         }
 
         /** The drag starts on the split whose gap the finger took, from the weights it has now. */
@@ -4958,6 +4961,12 @@ public class TerminalPaneController {
         private RectF paneRect(@NonNull Leaf leaf, @NonNull RectF out) {
             FrameLayout frame = mPaneFrames.get(leaf.session);
             if (frame == null || !isOnHost(frame)) return null;
+            return laidOutRect(frame, out);
+        }
+
+        /** {@code view}'s laid-out frame in this overlay's space; see {@link #paneRect}. */
+        @NonNull
+        private RectF laidOutRect(@NonNull View frame, @NonNull RectF out) {
             // Laid-out positions up to the host, not getLocationOnScreen: that maps the corner
             // through the frame's tilt and scale (the glass plank's press, still springing back
             // when the tab comes out) while the size stays unscaled, which hung the tab off a
