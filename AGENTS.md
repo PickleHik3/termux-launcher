@@ -158,7 +158,10 @@ Raise these if you think they are wrong; do not silently undo them.
   `resolveAutoCornerRadiusDp`. Never give `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
   `DEFAULT_STATUS_BAR_CORNER_RADIUS` a real number.
 - Shipped defaults are pinned for existing installs (`adoptShippedSurfaceDefaults()`; a store
-  holding only `log_level` is a fresh install).
+  holding only `log_level` is a fresh install). The one sanctioned way to drop carried-over
+  appearance is the reset number, `AppearanceReset.NUMBER`: a build that raises it puts everything
+  the Appearance editor owns back to a new install's once, on the first start. Raised to 1 for the
+  2.0 pre-release; raised again only on the developer's say (releasing.md).
 - `SettingsLayoutUtils.applyItemLayout` overwrites every preference's layout; a preference with
   its own layout goes on the exemption list.
 - Pane inner padding favours rows; change the rule only in `PaneShape` (`verticalInsetPx`,

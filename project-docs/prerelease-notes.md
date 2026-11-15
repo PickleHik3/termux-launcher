@@ -54,6 +54,7 @@ Latest stable: v1.2.2.
 - Extra keys: modifier combinations and macros you type become keys you can pick, a guide sits under Add row, and the editor fits short and landscape windows.
 
 ### Appearance editor
+- This update starts your look again from the default, once: glass, colours, the status bar, the dock, the keyboard's look, the terminal font and text size, and every page's layout. Your Home pages, widgets, apps, wallpaper, extra keys and sessions stay. Set it up again in the Appearance editor.
 - The status bar and dock look shared by every page is edited from the Global card only, and Margin is one number.
 
 ### Voice and on-device AI
