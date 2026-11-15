@@ -183,4 +183,58 @@ public class PickerLayoutTest {
         assertEquals(236f, layout.labelTop(300f, 20f), EPS);
         assertEquals(4f, layout.labelTop(30f, 20f), EPS);
     }
+
+    // ---- first-run hint ----
+
+    private static final float HINT_H = 30f;
+
+    private static void assertHintClear(PickerLayout layout, PickerModel model, int rows) {
+        float top = layout.hintTop(HINT_H, rows);
+        float bottom = top + HINT_H;
+        assertTrue(top >= 4f);
+        assertTrue(bottom <= H - 4f + EPS);
+        RectF r = new RectF();
+        layout.pillRect(r);
+        assertTrue(bottom <= r.top + EPS || top >= r.bottom - EPS);
+        for (Cell cell : model.columns().get(1).cells) {
+            layout.cellRect(model, cell, r);
+            assertTrue(bottom <= r.top + EPS || top >= r.bottom - EPS);
+        }
+    }
+
+    @Test public void hintGoesBelowTheRowWithNoStacks() {
+        PickerLayout layout = right(400f, 0f, H, 0);
+        RectF pill = new RectF();
+        layout.pillRect(pill);
+        assertEquals(pill.bottom + 4f, layout.hintTop(HINT_H, 0), EPS);
+    }
+
+    @Test public void hintClearsATallStack() {
+        PickerLayout layout = left(400f, 0f, H, 2);
+        assertHintClear(layout, model(), 2);
+        PickerLayout tall = right(400f, 0f, H, 6);
+        Input in = new Input();
+        in.terminalWindowLabels = Arrays.asList("a", "b", "c", "d", "e", "f");
+        assertHintClear(tall, PickerModel.build(in), 6);
+    }
+
+    @Test public void hintNearTheTopGoesBelow() {
+        PickerLayout layout = right(40f, 0f, H, 2);
+        assertHintClear(layout, model(), 2);
+    }
+
+    @Test public void hintNearTheBottomGoesAboveTheStacks() {
+        PickerLayout layout = left(780f, 0f, H, 2);
+        assertHintClear(layout, model(), 2);
+        RectF pill = new RectF();
+        layout.pillRect(pill);
+        assertTrue(layout.hintTop(HINT_H, 2) + HINT_H < pill.top);
+    }
+
+    @Test public void hintStaysOnScreenWhenNeitherSideHasRoom() {
+        PickerLayout layout = right(100f, 0f, 200f, 0);
+        float top = layout.hintTop(HINT_H, 0);
+        assertTrue(top >= 4f);
+        assertTrue(top + HINT_H <= 200f + 600f);
+    }
 }

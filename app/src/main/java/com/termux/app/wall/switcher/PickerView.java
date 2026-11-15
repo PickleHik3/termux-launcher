@@ -545,7 +545,10 @@ public final class PickerView extends View {
         Paint.FontMetrics fm = mLabelPaint.getFontMetrics();
         float h = fm.descent - fm.ascent + 2f * padV;
         float left = Math.max(margin, Math.min(getWidth() - w - margin, mPill.centerX() - w / 2f));
-        float top = Math.max(margin, mPill.top - margin - h);
+        PickerLayout layout = mLayout;
+        PickerModel model = mModel;
+        float top = layout == null || model == null ? Math.max(margin, mPill.top - margin - h)
+            : layout.hintTop(h, model.tallestColumn());
         mRect.set(left, top, left + w, top + h);
         mFillPaint.setColor(ColorUtils.setAlphaComponent(mPalette.glass, 245));
         canvas.drawRoundRect(mRect, h / 2f, h / 2f, mFillPaint);

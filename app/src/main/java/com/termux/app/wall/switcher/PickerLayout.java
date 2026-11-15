@@ -33,6 +33,7 @@ public final class PickerLayout {
     private static final float CARD_OVERHANG_DP = 1f;
 
     private final float mWidth;
+    private final float mHeight;
     private final float mDensity;
     @NonNull private final Edge mEdge;
     private final float mCellW;
@@ -54,6 +55,7 @@ public final class PickerLayout {
     public PickerLayout(float width, float height, float density, float cx, float cy, float d,
                         @NonNull Edge edge, float topLimit, float bottomLimit, int wantedRows) {
         mWidth = width;
+        mHeight = height;
         mDensity = density;
         mEdge = edge;
         mCellW = CELL_W_DP * density;
@@ -165,5 +167,20 @@ public final class PickerLayout {
     /** The name label's top edge: above the finger, never above the margin. */
     public float labelTop(float fingerY, float labelH) {
         return Math.max(LABEL_MARGIN_DP * mDensity, fingerY - LABEL_RISE_DP * mDensity);
+    }
+
+    /**
+     * The first-run hint's top edge: clear of the row and of the tallest stack. Below the row when
+     * the screen has room there, else above the stack, else pinned to whichever edge fits best.
+     */
+    public float hintTop(float hintH, int stackRows) {
+        float margin = LABEL_MARGIN_DP * mDensity;
+        float below = mRowTop + mCellH + mPad + margin;
+        if (below + hintH + margin <= mHeight) return below;
+        float stackTop = mRowTop - mStackGap - Math.max(0, stackRows) * mStackCellH
+            - CARD_OVERHANG_DP * mDensity;
+        float above = Math.min(stackTop, mRowTop - mPad) - margin - hintH;
+        if (above >= margin) return above;
+        return Math.max(margin, Math.min(mHeight - hintH - margin, below));
     }
 }
