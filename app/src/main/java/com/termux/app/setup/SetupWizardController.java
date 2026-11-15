@@ -108,6 +108,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     private boolean mClipped;
     private int mNavInsetPx;
     private int mWindowHeightPx;
+    /** A check that opens the cards when they are due is still to run in this session. */
+    private boolean mCardsOfferPending;
 
     public SetupWizardController(@NonNull Host host) {
         mHost = host;
@@ -120,6 +122,16 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     /** The card sheet after the wizard is up (the wizard's own sheet does not count). */
     public boolean isCardSheetShowing() {
         return mOpen && mCards != null;
+    }
+
+    /** The launch is about to check whether the cards are due; until then due cards come first. */
+    public void expectCardsOffer() {
+        mCardsOfferPending = true;
+    }
+
+    /** A check that opens the cards when they are due is still to run in this session. */
+    public boolean isCardsOfferPending() {
+        return mCardsOfferPending;
     }
 
     /** Open and showing: false while the wallpaper picker has the screen. */
@@ -385,6 +397,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     // ---------------------------------------------------------------------------------- finish
 
     private void close(boolean animate) {
+        mCardsOfferPending = false;
         if (!mOpen)
             return;
         mOpen = false;
@@ -521,6 +534,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     /** Opens the card sheet when it is due; true when it is up. */
     public boolean openCardsIfDue() {
+        // The session's chance: due cards that do not open now wait for the next start.
+        mCardsOfferPending = false;
         if (mOpen)
             return true;
         if (mHost.isAppearanceEditorOpen())
@@ -551,6 +566,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
      * Learn the basics and Models for this phone rows).
      */
     public void openCards(@Nullable String pageId) {
+        mCardsOfferPending = false;
         if (mOpen) {
             if (pageId != null)
                 showPage(pageId);

@@ -2147,6 +2147,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             String setupCardId = getIntent().getStringExtra(EXTRA_SETUP_CARD_ID);
             // The intent the post sees can be gone by then (a relaunch after a crash cleared it).
             final Intent launchIntent = getIntent();
+            // Due cards hold the other first-run cards back until the post below has looked.
+            setupWizard().expectCardsOffer();
             contentView.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (showSetupCards) {
@@ -2766,12 +2768,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             this::openAppearanceSurface);
     }
 
-    /** The wizard is up or due: the other first-run cards wait until it is done. */
+    /**
+     * The wizard is due or up, or its cards are up or will open in this session: the other
+     * first-run cards wait until they are done. Cards that will only open on a later start hold
+     * nothing back.
+     */
     private boolean setupWizardComesFirst() {
-        if (mSetupWizard != null && (mSetupWizard.isOpen() || mSetupWizard.isCardSheetDue()))
-            return true;
-        return mPreferences != null && com.termux.app.setup.SetupWizardGate.decide(
+        boolean wizardDue = mPreferences != null && com.termux.app.setup.SetupWizardGate.decide(
             mPreferences.getSetupWizardVersion(), false, false).show;
+        com.termux.app.setup.SetupWizardController wizard = mSetupWizard;
+        boolean offerPending = wizard != null && wizard.isCardsOfferPending();
+        // The due check reads the phone, so it runs only while an offer is still to come.
+        return com.termux.app.setup.SetupWizardGate.comesFirst(wizardDue,
+            wizard != null && wizard.isOpen(), offerPending && wizard.isCardSheetDue(),
+            offerPending);
     }
 
     /** Opens the setup wizard when its version has not been finished; true when it is up. */
