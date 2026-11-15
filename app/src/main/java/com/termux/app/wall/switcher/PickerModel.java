@@ -252,10 +252,15 @@ public final class PickerModel {
         Cell glyph = glyph(in, Kind.TERMINAL, false, target);
         int count = in.terminalWindowLabels.size();
         List<Cell> windows = new ArrayList<>(count);
+        String[] names = new String[count];
+        for (int i = 0; i < count; i++) names[i] = plainLabel(in.terminalWindowLabels.get(i));
         for (int i = 0; i < count; i++) {
             boolean current = in.currentKind == Kind.TERMINAL && i == in.currentTerminalWindow;
+            boolean twin = false;
+            for (int j = 0; j < count && !twin; j++) twin = j != i && names[j].equals(names[i]);
             windows.add(new Cell(CellKind.WINDOW, Kind.TERMINAL,
-                plainLabel(in.terminalWindowLabels.get(i)),
+                // Windows sharing a name carry their number, as the window bar counts them.
+                twin ? names[i] + " " + (i + 1) : names[i],
                 current, false, 0,
                 current ? new Target(Action.CLOSE, in.terminalPageId, i)
                     : new Target(Action.GO_TERMINAL, in.terminalPageId, i)));

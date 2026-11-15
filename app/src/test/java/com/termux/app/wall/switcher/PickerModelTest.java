@@ -159,6 +159,18 @@ public class PickerModelTest {
         assertSame(Action.CLOSE, col.glyph.target.action);
     }
 
+    @Test public void windowsWithTheSameNameCarryTheirWindowNumber() {
+        Input in = wall();
+        in.terminalWindowLabels = Arrays.asList("home", "vim", "home", "\uE795 home", "vim ", "zsh");
+        Column col = build(in).column(Kind.TERMINAL);
+        assertEquals("home 1", col.cells.get(0).label);
+        assertEquals("vim 2", col.cells.get(1).label);
+        assertEquals("home 3", col.cells.get(2).label);
+        assertEquals("home 4", col.cells.get(3).label);
+        assertEquals("vim 5", col.cells.get(4).label);
+        assertEquals("zsh", col.cells.get(5).label);
+    }
+
     @Test public void terminalGlyphGoesToTheTerminalAtItsCurrentWindow() {
         Input in = wall();
         in.terminalWindowLabels = Arrays.asList("zsh", "vim");
