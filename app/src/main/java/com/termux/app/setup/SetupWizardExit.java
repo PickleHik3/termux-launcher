@@ -31,6 +31,19 @@ final class SetupWizardExit {
         return way == Way.KEEP;
     }
 
+    /**
+     * Asks for wallpaper access on the way out, before the cards: the choices are kept, the look
+     * needs access it does not have, and the wizard has not asked before (once, whatever the
+     * answer).
+     *
+     * @param lacksWallpaperRead the look follows the system wallpaper and storage access is missing
+     * @param alreadyAsked       the wallpaper access was asked before (the wizard or a first-run card)
+     */
+    static boolean asksWallpaperRead(@NonNull Way way, boolean lacksWallpaperRead,
+                                     boolean alreadyAsked) {
+        return appliesChoices(way) && lacksWallpaperRead && !alreadyAsked;
+    }
+
     /** Opens the Setup cards right after the wizard closes, when any is due. */
     static boolean offersCards(@NonNull Way way) {
         return way != Way.KEEP;

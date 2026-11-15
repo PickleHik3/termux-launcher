@@ -110,6 +110,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     private int mWindowHeightPx;
     /** A check that opens the cards when they are due is still to run in this session. */
     private boolean mCardsOfferPending;
+    /** Finish or Skip asked for wallpaper access; the cards open when it is answered. */
+    private boolean mCardsAfterWallpaperAsk;
 
     public SetupWizardController(@NonNull Host host) {
         mHost = host;
@@ -262,8 +264,16 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         showSection(mIndex, false);
     }
 
-    /** The storage permission was answered: Customize shows whether the wallpaper reads now. */
+    /**
+     * The storage permission was answered: Customize shows whether the wallpaper reads now, or,
+     * when Finish or Skip asked, the cards open. Declined, the look stays as it can be drawn.
+     */
     public void onWallpaperPermissionResult() {
+        if (mCardsAfterWallpaperAsk) {
+            mCardsAfterWallpaperAsk = false;
+            openCardsIfDue();
+            return;
+        }
         refreshCustomize();
     }
 
@@ -481,9 +491,22 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         }
         markDone(SetupWizardExit.marksCardsSeen(way));
         close(true);
+        if (!SetupWizardExit.offersCards(way))
+            return;
+        // A look that follows the system wallpaper needs storage access to draw its glass: asked
+        // here, once, before the cards; the cards open when it is answered.
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        Context context = mHost.context();
+        if (prefs != null && SetupWizardExit.asksWallpaperRead(way,
+                !CustomizeSection.wallpaperReadable(context),
+                prefs.isWallpaperReadPermissionPrompted())) {
+            mCardsAfterWallpaperAsk = true;
+            mCardsOfferPending = true;
+            mHost.requestWallpaperRead();
+            return;
+        }
         // Right after Finish or Skip: the cards, when any is due.
-        if (SetupWizardExit.offersCards(way))
-            openCardsIfDue();
+        openCardsIfDue();
     }
 
     @Override

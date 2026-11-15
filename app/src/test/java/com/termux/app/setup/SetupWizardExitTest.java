@@ -27,6 +27,24 @@ public class SetupWizardExitTest {
     }
 
     @Test
+    public void finishAndSkipAskForWallpaperAccessOnceWhenTheLookNeedsIt() {
+        assertTrue(SetupWizardExit.asksWallpaperRead(SetupWizardExit.Way.FINISH, true, false));
+        assertTrue(SetupWizardExit.asksWallpaperRead(SetupWizardExit.Way.SKIP, true, false));
+        // Asked before (the option was tapped and declined): never again from the wizard.
+        assertFalse(SetupWizardExit.asksWallpaperRead(SetupWizardExit.Way.FINISH, true, true));
+        // Access held, or an in-app wallpaper: nothing to ask.
+        assertFalse(SetupWizardExit.asksWallpaperRead(SetupWizardExit.Way.FINISH, false, false));
+        // Keep puts the old setup back and asks nothing.
+        assertFalse(SetupWizardExit.asksWallpaperRead(SetupWizardExit.Way.KEEP, true, false));
+    }
+
+    @Test
+    public void cardsWaitingOnTheWallpaperAskStillComeFirst() {
+        // Between the ask and its answer the offer is pending: due cards hold the hints back.
+        assertTrue(SetupWizardGate.comesFirst(false, false, true, true));
+    }
+
+    @Test
     public void afterKeepNoCardIsDueAtTheNextStart() {
         // What Keep stores: a known seen set holding every card that exists now.
         java.util.List<SetupCards.Card> cards = SetupCards.build(
