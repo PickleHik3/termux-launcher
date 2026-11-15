@@ -36,6 +36,31 @@ public final class SetupWizardGate {
     }
 
     /**
+     * Whether a due wizard waits before it opens: the bootstrap is not installed yet and nothing
+     * has settled it (an install ending, installed or failed, or the wait's backstop finding no
+     * install running). Fresh installs see the wizard after the bootstrap is ready, never neither.
+     */
+    public static boolean waitsForBootstrap(boolean bootstrapInstalled, boolean bootstrapSettled) {
+        return !bootstrapInstalled && !bootstrapSettled;
+    }
+
+    /**
+     * Whether the wizard and its cards come first, holding back the other first-run cards and
+     * hints: the wizard is due (up, or waiting to open), the wizard or its card sheet is up, or the
+     * cards are due and the check that opens them is still to run in this session. Cards that are
+     * due but will only open on a later start hold nothing back.
+     *
+     * @param wizardDue         this wizard version has not been finished
+     * @param sheetOpen         the wizard or the card sheet is on screen
+     * @param cardsDue          a card would open the sheet at launch
+     * @param cardsOfferPending the launch's check for the cards has not run yet
+     */
+    public static boolean comesFirst(boolean wizardDue, boolean sheetOpen, boolean cardsDue,
+                                     boolean cardsOfferPending) {
+        return wizardDue || sheetOpen || (cardsDue && cardsOfferPending);
+    }
+
+    /**
      * @param storedVersion the wizard version stored as done, 0 for never
      * @param tourCompleted whether the old first-boot tour was ever finished
      * @param useAsWritten  whether Use as was ever stored

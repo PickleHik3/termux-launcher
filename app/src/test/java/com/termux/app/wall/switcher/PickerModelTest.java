@@ -362,4 +362,63 @@ public class PickerModelTest {
         assertNotNull(model.column(Kind.ASSISTANT));
         assertNull(null);
     }
+
+    // ---- Use as Terminal only: no Home ----
+
+    private static Input terminalOnly() {
+        Input in = wall();
+        in.homeOffered = false;
+        in.currentKind = Kind.TERMINAL;
+        in.currentPageId = 3;
+        in.terminalWindowLabels = Arrays.asList("zsh", "vim");
+        in.currentTerminalWindow = 1;
+        return in;
+    }
+
+    @Test public void withoutHomeTheRowIsTerminalDisplayAssistant() {
+        PickerModel model = build(terminalOnly());
+        assertEquals(3, model.columns().size());
+        assertSame(Kind.TERMINAL, model.columns().get(0).kind);
+        assertSame(Kind.DISPLAY, model.columns().get(1).kind);
+        assertSame(Kind.ASSISTANT, model.columns().get(2).kind);
+        assertNull(model.column(Kind.HOME));
+        assertEquals(-1, model.columnIndex(Kind.HOME));
+        assertEquals(0, model.columnIndex(Kind.TERMINAL));
+        assertEquals(2, model.columnIndex(Kind.ASSISTANT));
+    }
+
+    @Test public void withHomeNothingChanges() {
+        Input in = wall();
+        assertTrue(in.homeOffered);
+        assertEquals(4, build(in).columns().size());
+        assertEquals(0, build(in).columnIndex(Kind.HOME));
+    }
+
+    @Test public void withoutHomeTheStacksAreTheOthersOwn() {
+        Input in = terminalOnly();
+        in.homePageIds = Arrays.asList(1, 2, 8);
+        PickerModel model = build(in);
+        assertEquals(2, model.column(Kind.TERMINAL).cells.size());
+        assertEquals(2, model.tallestColumn());
+        assertTrue(model.column(Kind.ASSISTANT).cells.isEmpty());
+    }
+
+    @Test public void withoutHomeTheCurrentKindIsLit() {
+        PickerModel model = build(terminalOnly());
+        assertTrue(model.column(Kind.TERMINAL).glyph.current);
+        assertFalse(model.column(Kind.DISPLAY).glyph.current);
+        assertTrue(model.column(Kind.TERMINAL).cells.get(1).current);
+    }
+
+    @Test public void aStaleHomePageUnderTerminalOnlyLightsNothing() {
+        Input in = terminalOnly();
+        in.currentKind = Kind.HOME;
+        in.currentPageId = 1;
+        PickerModel model = build(in);
+        assertEquals(3, model.columns().size());
+        for (Column c : model.columns()) {
+            assertFalse(c.glyph.current);
+            for (Cell cell : c.cells) assertFalse(cell.current);
+        }
+    }
 }

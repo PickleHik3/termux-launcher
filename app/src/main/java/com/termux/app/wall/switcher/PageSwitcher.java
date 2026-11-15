@@ -356,10 +356,12 @@ public final class PageSwitcher {
         picker.setPalette(mHost.palette());
 
         in.capacity = Integer.MAX_VALUE;
-        int wanted = PickerModel.build(in).tallestColumn();
+        PickerModel sizing = PickerModel.build(in);
+        int wanted = sizing.tallestColumn();
         float bottomLimit = Math.min(h, mHost.bottomChromeTopPx(layer));
         PickerLayout layout = new PickerLayout(w, h, mDensity, mCx, mCy, mDiameter, mEdge,
-            PickerLayout.PAD_DP * mDensity, bottomLimit, wanted);
+            PickerLayout.PAD_DP * mDensity, bottomLimit, wanted,
+            sizing.columns().size());
         in.capacity = layout.capacity();
         PickerModel model = PickerModel.build(in);
         picker.show(model, layout, animate && !reduced);
