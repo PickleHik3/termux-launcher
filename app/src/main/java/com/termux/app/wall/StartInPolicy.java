@@ -80,30 +80,6 @@ public final class StartInPolicy {
     }
 
     /**
-     * Start in after Edit pages really removed a card of {@code removed}, with
-     * {@code terminalsLeft} terminal windows still open; null when it stands. Removing the display
-     * while it is Home falls back; removing a terminal window falls back only when none is left
-     * and the Workspace was Home.
-     */
-    @Nullable
-    public static String afterRemoval(@Nullable String startIn,
-                                      @NonNull PageOverviewPolicy.Kind removed, int terminalsLeft) {
-        String value = read(startIn);
-        boolean hasTerminal = terminalsLeft > 0;
-        switch (removed) {
-            case DISPLAY:
-                return WallRow.START_IN_DISPLAY.equals(value) ? fallback(hasTerminal) : null;
-            case TERMINAL:
-                return WallRow.START_IN_WORKSPACE.equals(value) && !hasTerminal
-                    ? fallback(false) : null;
-            case HOME_PAGE:
-            default:
-                // Home always keeps a page; the Home page it opens on is clamped where it is read.
-                return null;
-        }
-    }
-
-    /**
      * The Home page the Home half opens on under Start in {@code effective}, counting from 0: the
      * page Edit pages chose ({@code defaultPage}) while Home is Start in, else page 1. A choice
      * made on a Home page that no longer wears the marker is not kept behind it: with a window as
@@ -115,15 +91,15 @@ public final class StartInPolicy {
 
     /**
      * Whether a card wears the Home marker under Start in {@code effective}
-     * ({@link #effective}): the Home page Home opens on ({@code defaultPage}), the first terminal
-     * window ({@code firstTerminal}), or the display window.
+     * ({@link #effective}): the Home page Home opens on ({@code defaultPage}), the Terminal page,
+     * or the display window.
      */
     public static boolean isHome(@NonNull PageOverviewPolicy.Kind kind, boolean defaultPage,
-                                 boolean firstTerminal, @Nullable String effective) {
+                                 @Nullable String effective) {
         String value = read(effective);
         switch (kind) {
             case HOME_PAGE: return defaultPage && WallRow.START_IN_HOME.equals(value);
-            case TERMINAL: return firstTerminal && WallRow.START_IN_WORKSPACE.equals(value);
+            case TERMINAL: return WallRow.START_IN_WORKSPACE.equals(value);
             case DISPLAY: return WallRow.START_IN_DISPLAY.equals(value);
             default: return false;
         }

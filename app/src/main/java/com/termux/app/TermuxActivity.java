@@ -27553,11 +27553,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return index >= 0 && index < homes.size() ? homes.get(index) : null;
     }
 
-    /** The display window's card key in the page overview: there is only ever one display. */
-    private static final Object PAGE_OVERVIEW_DISPLAY_KEY = new Object();
-
     /**
-     * The page overview (Edit pages): Home's pages and the current session's windows as cards,
+     * The page overview (Edit pages): the wall's pages as cards, the Terminal page as one,
      * from a pinch on Home, Home's sheet, or Settings › Home ({@code fromSettings}), which Back
      * returns to. Refused, with the notice, while the layout is locked.
      */
@@ -27698,36 +27695,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public int rowCount() {
                     return rowWindowCount();
                 }
-                @Override @NonNull public Object windowKey(int row) {
-                    int window = row;
-                    java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
-                        rowWindows();
-                    return window >= 0 && window < windows.size() ? windows.get(window)
-                        : PAGE_OVERVIEW_DISPLAY_KEY;
-                }
-                @Override public boolean windowBusy(int row) {
-                    return windowHasForegroundJob(row);
-                }
-                @Override public void moveWindow(int fromRow, int toRow) {
-                    TermuxActivity.this.moveWindow(fromRow, toRow);
-                }
-                @Override public void removeWindow(int row) {
-                    int terminals = rowWindows().size();
-                    closeWindow(row);
-                    if (mPreferences != null) overviewPages.startInAfterRemoval(
-                        com.termux.app.wall.PageOverviewPolicy.Kind.TERMINAL,
-                        Math.max(0, terminals - 1));
-                }
-                @Override public void addTerminal(int row) {
-                    insertTerminalWindowAtRow(row);
-                }
                 @Override public boolean displaySupported() {
                     return isX11DisplayEnabled();
                 }
                 @Override public boolean displayOpen() {
                     return isDisplayUp();
                 }
-                @Override public void addDisplay(int row) {
+                @Override public void addDisplay() {
                     // A lasting unbound Display page, after the current page: a drawer launch's
                     // temporary page is made lasting instead (its app stays on it), and one
                     // already on the wall is used. The display starts on it only with the
@@ -27844,6 +27818,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.goToAssistantPage(false);
             return;
         }
+        if (position.kind == com.termux.app.wall.PaneWallPage.TERMINAL && rowWindowCount() == 0) {
+            // The Terminal page with no window: closing into its card starts the first shell, as
+            // a swipe onto the page does; a preview leaves the wall where it stands.
+            if (landing) mPaneWallController.goToWorkspace(false);
+            return;
+        }
         int row = position.index;
         if (row < 0 || row >= rowWindowCount()) return;
         int previous = rowCurrentIndex();
@@ -27855,30 +27835,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (isDisplayWindowInFront()) setDisplayInFront(false, 0, 0f, previous);
         mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, false);
-        rebuildDrawerSessions();
-    }
-
-    /**
-     * The page overview's Add terminal: a fresh shell as a new window at row place {@code row}, the
-     * display window counting as one, without bringing it in front (the overview shows it). An
-     * empty Workspace starts a session as New window does.
-     */
-    private void insertTerminalWindowAtRow(int row) {
-        if (!isSplitPanesEnabled() || mPaneController == null) return;
-        if (mCurrentWSession == null) {
-            createRowWindow();
-            return;
-        }
-        TerminalSession cur = getCurrentSession();
-        TerminalSession shell = createShellForCwd(cur != null ? cur.getCwd() : null);
-        if (shell == null) return;
-        // Not shown yet: it borrows a size so its shell starts (openCommandWindow's reason).
-        seedWindowSize(shell);
-        mSheets.runWithoutNotices(() -> {
-            com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
-            int at = insertRowWindowAt(w, row);
-            if (at <= mCurrentWSession.current) mCurrentWSession.current++;
-        });
         rebuildDrawerSessions();
     }
 

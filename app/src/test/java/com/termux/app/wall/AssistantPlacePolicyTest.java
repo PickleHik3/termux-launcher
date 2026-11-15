@@ -105,9 +105,9 @@ public class AssistantPlacePolicyTest {
 
     @Test
     public void theAssistantCardIsAStillCard() {
-        assertFalse(PageOverviewPolicy.drawsLive(PageOverviewPolicy.Kind.ASSISTANT));
-        assertFalse(PageOverviewPolicy.drawsLive(PageOverviewPolicy.Kind.DISPLAY));
-        assertTrue(PageOverviewPolicy.drawsLive(PageOverviewPolicy.Kind.TERMINAL));
-        assertTrue(PageOverviewPolicy.drawsLive(PageOverviewPolicy.Kind.HOME_PAGE));
+        assertFalse(PageOverviewPolicy.drawsLive(PageOverviewPolicy.Kind.ASSISTANT, 1));
+        assertFalse(PageOverviewPolicy.drawsLive(PageOverviewPolicy.Kind.DISPLAY, 1));
+        assertTrue(PageOverviewPolicy.drawsLive(PageOverviewPolicy.Kind.TERMINAL, 1));
+        assertTrue(PageOverviewPolicy.drawsLive(PageOverviewPolicy.Kind.HOME_PAGE, 1));
     }
 }

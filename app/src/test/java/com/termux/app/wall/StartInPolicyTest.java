@@ -2,7 +2,6 @@ package com.termux.app.wall;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.wall.PageOverviewPolicy.Kind;
@@ -60,38 +59,17 @@ public class StartInPolicyTest {
     }
 
     @Test
-    public void removingTheDisplayThatIsHomeFallsBack() {
-        assertEquals(WORKSPACE, StartInPolicy.afterRemoval(DISPLAY, Kind.DISPLAY, 2));
-        assertEquals(HOME, StartInPolicy.afterRemoval(DISPLAY, Kind.DISPLAY, 0));
-        assertNull("it was not Home", StartInPolicy.afterRemoval(WORKSPACE, Kind.DISPLAY, 0));
-    }
-
-    @Test
-    public void removingTerminalsFallsBackOnlyWhenNoneIsLeft() {
-        assertNull("another terminal is first now",
-            StartInPolicy.afterRemoval(WORKSPACE, Kind.TERMINAL, 1));
-        assertEquals(HOME, StartInPolicy.afterRemoval(WORKSPACE, Kind.TERMINAL, 0));
-        assertNull(StartInPolicy.afterRemoval(DISPLAY, Kind.TERMINAL, 0));
-        assertNull(StartInPolicy.afterRemoval(HOME, Kind.TERMINAL, 0));
-    }
-
-    @Test
-    public void removingAHomePageLeavesStartIn() {
-        assertNull(StartInPolicy.afterRemoval(HOME, Kind.HOME_PAGE, 0));
-    }
-
-    @Test
     public void theMarkerFollowsStartIn() {
-        assertTrue(StartInPolicy.isHome(Kind.HOME_PAGE, true, false, HOME));
+        assertTrue(StartInPolicy.isHome(Kind.HOME_PAGE, true, HOME));
         assertFalse("not the page Home opens on",
-            StartInPolicy.isHome(Kind.HOME_PAGE, false, false, HOME));
+            StartInPolicy.isHome(Kind.HOME_PAGE, false, HOME));
         assertFalse("Start in left Home",
-            StartInPolicy.isHome(Kind.HOME_PAGE, true, false, WORKSPACE));
-        assertTrue(StartInPolicy.isHome(Kind.TERMINAL, false, true, WORKSPACE));
-        assertFalse("only the first terminal",
-            StartInPolicy.isHome(Kind.TERMINAL, false, false, WORKSPACE));
-        assertTrue(StartInPolicy.isHome(Kind.DISPLAY, false, false, DISPLAY));
-        assertFalse(StartInPolicy.isHome(Kind.DISPLAY, false, false, HOME));
+            StartInPolicy.isHome(Kind.HOME_PAGE, true, WORKSPACE));
+        assertTrue("the Terminal card, whatever its windows",
+            StartInPolicy.isHome(Kind.TERMINAL, false, WORKSPACE));
+        assertFalse(StartInPolicy.isHome(Kind.TERMINAL, false, HOME));
+        assertTrue(StartInPolicy.isHome(Kind.DISPLAY, false, DISPLAY));
+        assertFalse(StartInPolicy.isHome(Kind.DISPLAY, false, HOME));
     }
 
     @Test
@@ -108,7 +86,7 @@ public class StartInPolicyTest {
         assertEquals(WallRow.START_IN_ASSISTANT, StartInPolicy.read(WallRow.START_IN_ASSISTANT));
         assertEquals(0, StartInPolicy.homePage(2, WallRow.START_IN_ASSISTANT));
         for (Kind kind : Kind.values()) {
-            assertFalse(kind.name(), StartInPolicy.isHome(kind, true, true,
+            assertFalse(kind.name(), StartInPolicy.isHome(kind, true,
                 WallRow.START_IN_ASSISTANT));
         }
     }
@@ -118,7 +96,7 @@ public class StartInPolicyTest {
         for (String startIn : new String[] {HOME, WORKSPACE, DISPLAY}) {
             int marked = 0;
             for (Kind kind : Kind.values()) {
-                if (StartInPolicy.isHome(kind, true, true, startIn)) marked++;
+                if (StartInPolicy.isHome(kind, true, startIn)) marked++;
             }
             assertEquals(startIn, 1, marked);
         }
