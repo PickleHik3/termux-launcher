@@ -44,6 +44,14 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
          * #committedRows()}). The activity runs its geometry pass once here.
          */
         void onCommittedHeightChanged();
+
+        /**
+         * The text input field held focus while it was not the page in front (a restored state, a
+         * race) and the bar took it away; the activity hands focus back to the terminal and
+         * dismisses the keyboard the field asked for.
+         */
+        default void onTextInputFocusReleased() {
+        }
     }
 
     /** Dresses a page the bar has just built. */
@@ -61,6 +69,8 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
     private final int mTouchSlop;
     private final List<ExtraKeysPageView> mKeyPages = new ArrayList<>();
     @Nullable private View mTextInput;
+    /** The field in the text input page that takes focus, or the page itself when it has none. */
+    @Nullable private View mTextInputFocusTarget;
     private int[] mKeyPageRows = new int[0];
     @Nullable private PageStyler mPageStyler;
     @Nullable private Listener mListener;
@@ -262,6 +272,7 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
             mCurrent = 0;
             mCommitted = 0;
             mOffsetPx = 0f;
+            syncTextInputFocus(true);
             int newPx = heightOfRows(mKeyPageRows[0], getHeight(), mScale);
             // Shorter: the old height stands until the keys have settled. Taller or equal: at once.
             if (newPx < oldPx) {
@@ -284,6 +295,7 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
         mCurrent = clampPage(target);
         mCommitted = mCurrent;
         mOffsetPx = mCurrent * (float) getWidth();
+        syncTextInputFocus(true);
         requestLayout();
         applyOffsets();
         invalidate();
@@ -315,11 +327,49 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
         if (page == mTextInput) return;
         if (mTextInput != null) removeView(mTextInput);
         mTextInput = page;
+        mTextInputFocusTarget = null;
         if (page != null) addView(page);
         mCurrent = clampPage(mCurrent);
         mCommitted = clampPage(mCommitted);
+        syncTextInputFocus(true);
         requestLayout();
         applyOffsets();
+    }
+
+    /**
+     * The one place that decides whether the text input field can hold focus: only while the text
+     * input page is the page in front ({@link #isTextInputPage} of {@link #getCurrentItem}), so a
+     * focus search that runs while a key page shows (the terminal view going away on a window
+     * switch) can never land on it. A page still sliding in is not yet in front. A field that
+     * holds focus when it must not loses it; {@code notify} tells the listener so the activity
+     * returns focus to the terminal (a landing does that itself).
+     */
+    private void syncTextInputFocus(boolean notify) {
+        if (mTextInput == null) return;
+        boolean inFront = isTextInputPage(mCurrent);
+        View target = textInputFocusTarget();
+        boolean hadFocus = mTextInput.hasFocus();
+        if (mTextInput instanceof android.view.ViewGroup) {
+            ((android.view.ViewGroup) mTextInput).setDescendantFocusability(inFront
+                ? android.view.ViewGroup.FOCUS_BEFORE_DESCENDANTS
+                : android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        }
+        // The group's block stops searches; the field itself also refuses a direct request.
+        target.setFocusable(inFront);
+        target.setFocusableInTouchMode(inFront);
+        if (!inFront && hadFocus) {
+            mTextInput.clearFocus();
+            if (notify && mListener != null) mListener.onTextInputFocusReleased();
+        }
+    }
+
+    @NonNull
+    private View textInputFocusTarget() {
+        if (mTextInputFocusTarget == null) {
+            View field = mTextInput.findViewById(com.termux.R.id.terminal_toolbar_text_input);
+            mTextInputFocusTarget = field != null ? field : mTextInput;
+        }
+        return mTextInputFocusTarget;
     }
 
     public int keyPageCount() {
@@ -547,6 +597,7 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
         if (mConceal.isRunning()) mConceal.end();
         int previous = mCurrent;
         mCurrent = page;
+        syncTextInputFocus(false);
         if (page == previous) return;
         int fromPx = committedHeightPx();
         int toPx = heightOfRows(rowsOfPage(page), getHeight());
@@ -607,6 +658,7 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
         boolean changed = target != mCurrent || target != mCommitted;
         mCurrent = target;
         mCommitted = target;
+        syncTextInputFocus(false);
         mPendingCommit = -1;
         mStep = ExtraKeysBarHeight.Step.NONE;
         mOffsetPx = target * (float) getWidth();
