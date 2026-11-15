@@ -597,8 +597,8 @@ public final class ExtraKeysPageView extends ViewGroup {
 
     /**
      * The deck look: raised push-button keys on the slab the host wears. {@code on == false}
-     * restores the normal look. {@code litInk} is accepted for the host's call shape; the on-accent
-     * ink of a locked modifier is derived from the accent itself.
+     * restores the normal look. {@code litInk} is accepted for the host's call shape; the ink of a locked
+     * modifier is derived from the key's label ink.
      */
     public void setDeckLook(boolean on, int bed, int bedTop, int key, int keyTop, int keyFoot,
                             int lit, int litInk) {
@@ -652,7 +652,7 @@ public final class ExtraKeysPageView extends ViewGroup {
 
     private void applyAccent(@NonNull ExtraKeyCapView cap) {
         int accent = accent();
-        cap.setAccent(accent, readableOn(accent));
+        cap.setAccent(accent);
         cap.setGlowWide(!mKeyPressFeedbackBlurAvailable);
     }
 
