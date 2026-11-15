@@ -28727,6 +28727,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mStackAt[1] - mLayerAt[1];
             }
 
+            @Override public boolean chromeAtRest() {
+                return !isInAppKeyboardShown() && !isImeVisible() && !peekChromeTravelling()
+                    && !mKeyboardPicturedAway;
+            }
+
             @Override public boolean isReducedMotionEnabled() {
                 return TermuxActivity.this.isReducedMotionEnabled();
             }

@@ -71,4 +71,28 @@ public class DotPlacementTest {
         assertFalse(DotPlacement.onDot(131f, 100f, 100f, 100f, 30f));
         assertFalse(DotPlacement.onDot(125f, 125f, 100f, 100f, 30f));
     }
+
+    // ---- one resting height for every page ----
+
+    @Test public void clampedUpWhenTheBandHeldTheDotAboveItsChosenHeight() {
+        assertTrue(DotPlacement.clampedUp(2021f, 0.9f, 2400f, 100f));
+        assertFalse(DotPlacement.clampedUp(1440f, 0.6f, 2400f, 100f));
+        // Held by the top of the band, not the bottom: not clamped up.
+        assertFalse(DotPlacement.clampedUp(100f, 0.01f, 2400f, 100f));
+    }
+
+    @Test public void aSettledRestingFrameAdoptsTheClamp() {
+        assertTrue(DotPlacement.adoptsClamp(true, false, false, DotPlacement.STABLE_FRAMES, true));
+    }
+
+    @Test public void nothingElseInPlayAdoptsTheClamp() {
+        int stable = DotPlacement.STABLE_FRAMES;
+        assertFalse(DotPlacement.adoptsClamp(false, false, false, stable, true));
+        // A keyboard, a slide or a sheet up.
+        assertFalse(DotPlacement.adoptsClamp(true, false, false, stable, false));
+        assertFalse(DotPlacement.adoptsClamp(true, true, false, stable, true));
+        assertFalse(DotPlacement.adoptsClamp(true, false, true, stable, true));
+        // A stack still changing height.
+        assertFalse(DotPlacement.adoptsClamp(true, false, false, stable - 1, true));
+    }
 }

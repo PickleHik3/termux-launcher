@@ -39,6 +39,12 @@ public final class PageSwitcher {
         /** The top of the bottom chrome (keyboard, accessory stack) in the layer's pixels. */
         int bottomChromeTopPx(@NonNull View layer);
 
+        /**
+         * Whether the bottom chrome stands at its resting height: no keyboard up, no page slide
+         * or crossing under way.
+         */
+        boolean chromeAtRest();
+
         boolean isReducedMotionEnabled();
 
         boolean hapticsEnabled();
@@ -89,6 +95,8 @@ public final class PageSwitcher {
     /** Set once the hint is known to be shown, so a frame does not ask the preferences again. */
     private boolean mHintDone;
     private boolean mClaiming;
+    private float mLastBandBottom = -1f;
+    private int mStableFrames;
     private final int[] mLocation = new int[2];
 
     private final ViewTreeObserver.OnPreDrawListener mPreDraw = () -> {
@@ -216,6 +224,17 @@ public final class PageSwitcher {
         }
         if (!mMoving) {
             float y = DotPlacement.restY(mFraction, h, mBandTop, mBandBottom, mDiameter);
+            if (Math.abs(mBandBottom - mLastBandBottom) > 0.5f) mStableFrames = 0;
+            else if (mStableFrames < DotPlacement.STABLE_FRAMES) mStableFrames++;
+            mLastBandBottom = mBandBottom;
+            DotGesture live = mGesture;
+            if (mSnap == null && DotPlacement.adoptsClamp(
+                    DotPlacement.clampedUp(y, mFraction, h, mBandTop),
+                    live != null && live.isLive(), pickerUp, mStableFrames,
+                    mStableFrames >= DotPlacement.STABLE_FRAMES && mHost.chromeAtRest())) {
+                mFraction = DotPlacement.fractionOf(y, h);
+                mHost.savePosition(mEdge, mFraction);
+            }
             float x = mSnap != null ? mCx : DotPlacement.centerX(mEdge, w, mDiameter);
             if (pickerUp && Math.abs(y - mCy) > 0.5f) {
                 PickerView picker = mPicker;

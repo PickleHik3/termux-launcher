@@ -53,6 +53,26 @@ public final class DotPlacement {
         return Math.max(diameter / 2f, y);
     }
 
+    /** Frames the band's bottom must hold still before a clamped height is adopted. */
+    public static final int STABLE_FRAMES = 3;
+
+    /** Whether the band's bottom held the resting centre above the height the user chose. */
+    public static boolean clampedUp(float y, float fraction, float height, float top) {
+        return y < Math.max(top, fraction * height) - 0.5f;
+    }
+
+    /**
+     * Whether a clamped resting height becomes the dot's saved position: only on a settled frame
+     * with nothing else in play, so one visit to the page with the tallest bottom stack puts the
+     * dot at the same height on every page. A keyboard, a page slide or a sheet never qualifies
+     * ({@code chromeAtRest}), and neither does a stack still changing height.
+     */
+    public static boolean adoptsClamp(boolean clampedUp, boolean fingerDown, boolean pickerUp,
+                                      int stableFrames, boolean chromeAtRest) {
+        return clampedUp && !fingerDown && !pickerUp && stableFrames >= STABLE_FRAMES
+            && chromeAtRest;
+    }
+
     public static Edge nearerEdge(float x, float width) {
         return x < width / 2f ? Edge.LEFT : Edge.RIGHT;
     }
