@@ -66,6 +66,12 @@ public final class StatusRowLayout extends LinearLayout {
     @Nullable private StatusRowKeepOut.Screen mScreen;
     /** The answer the last measure was made for. */
     @NonNull private StatusRowKeepOut.Answer mKeepOut = StatusRowKeepOut.Answer.NONE;
+    /** Whether the last measure laid the children out by {@link StatusRowKeepOut#flow}. */
+    private boolean mFlowing;
+    /** The least the chip strip may be given, from the last measure; 0 with no chips to keep. */
+    private int mStripMinPx;
+    /** Bit {@code i}: child {@code i} is hidden because the row had no room for it. */
+    private int mDroppedMask;
     private int mWidthSpec;
     private int mHeightSpec;
     private boolean mHaveSpecs;
@@ -160,17 +166,30 @@ public final class StatusRowLayout extends LinearLayout {
      * then given exactly the stretch its side of the gap has for it.
      */
     private void measureRow(int widthMeasureSpec, int heightMeasureSpec) {
-        if (!keepOutApplies(widthMeasureSpec)) {
+        boolean keepOut = keepOutApplies(widthMeasureSpec);
+        if (!keepOut) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-            return;
+            mStripMinPx = stripMinPx();
+            // A plain row is laid out as a linear layout unless that would squeeze the strip
+            // below what shows one whole chip: then the flow below takes over, once.
+            View strip = findViewById(R.id.terminal_status_place_content);
+            mFlowing = mStripMinPx > 0 && strip != null && strip.getVisibility() != GONE
+                && getOrientation() == HORIZONTAL
+                && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED
+                && strip.getMeasuredWidth() < mStripMinPx;
+            if (!mFlowing) return;
         }
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int start = Math.min(width, mKeepOut.leftInsetPx);
         int end = Math.max(start, width - mKeepOut.rightInsetPx);
         int gap = Math.max(0, Math.min(end, mKeepOut.gapEndPx)
             - Math.max(start, mKeepOut.gapStartPx));
-        super.onMeasure(MeasureSpec.makeMeasureSpec(Math.max(0, end - start - gap),
-            MeasureSpec.EXACTLY), heightMeasureSpec);
+        if (keepOut) {
+            super.onMeasure(MeasureSpec.makeMeasureSpec(Math.max(0, end - start - gap),
+                MeasureSpec.EXACTLY), heightMeasureSpec);
+            mStripMinPx = stripMinPx();
+            mFlowing = true;
+        }
         View[] children = visualChildren();
         int[] left = new int[children.length];
         int[] widths = new int[children.length];
@@ -198,7 +217,10 @@ public final class StatusRowLayout extends LinearLayout {
                 super.onLayout(changed, l, t, r, b);
             }
         }
-        if (!mHaveSpecs || !keepOutApplies(mWidthSpec)) return;
+        if (!mHaveSpecs || !mFlowing) {
+            applyDropped(null, null);
+            return;
+        }
         int width = r - l;
         int start = Math.min(width, mKeepOut.leftInsetPx);
         int end = Math.max(start, width - mKeepOut.rightInsetPx);
@@ -209,9 +231,78 @@ public final class StatusRowLayout extends LinearLayout {
         for (int i = 0; i < children.length; i++) {
             View child = children[i];
             int top = child.getTop();
-            child.layout(left[i], top, left[i] + child.getMeasuredWidth(),
+            boolean dropped = StatusRowKeepOut.isDropped(child.getMeasuredWidth(), weightOf(child),
+                widths[i]);
+            child.layout(left[i], top, left[i] + (dropped ? 0 : child.getMeasuredWidth()),
                 top + child.getMeasuredHeight());
         }
+        applyDropped(children, widths);
+    }
+
+    /**
+     * Hides the children the flow dropped and shows again those it no longer drops. Invisible,
+     * not gone: that asks for no layout, and it is undone only for what this row hid.
+     */
+    private void applyDropped(@Nullable View[] children, @Nullable int[] widths) {
+        int mask = 0;
+        if (children != null && widths != null) {
+            for (int i = 0; i < children.length; i++) {
+                if (StatusRowKeepOut.isDropped(children[i].getMeasuredWidth(),
+                    weightOf(children[i]), widths[i])) {
+                    mask |= 1 << indexOfChild(children[i]);
+                }
+            }
+        }
+        if (mask == mDroppedMask) return;
+        for (int i = 0; i < getChildCount() && i < 32; i++) {
+            View child = getChildAt(i);
+            boolean now = (mask & (1 << i)) != 0;
+            boolean before = (mDroppedMask & (1 << i)) != 0;
+            if (now && child.getVisibility() == VISIBLE) child.setVisibility(INVISIBLE);
+            else if (!now && before && child.getVisibility() == INVISIBLE) {
+                child.setVisibility(VISIBLE);
+            }
+        }
+        mDroppedMask = mask;
+    }
+
+    /**
+     * The least the chip strip may be given, from the badge and the front chip at their own
+     * width: the badge is measured unconstrained, since the strip it sits in may be squeezed and
+     * would hand it a cut-down width. 0 when the strip is not a row of chips.
+     */
+    private int stripMinPx() {
+        View strip = findViewById(R.id.terminal_status_place_content);
+        TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (!(strip instanceof ViewGroup) || bar == null || bar.getVisibility() != VISIBLE
+            || getOrientation() != HORIZONTAL
+            || ((LinearLayout) strip).getOrientation() != HORIZONTAL) {
+            return 0;
+        }
+        int badgeLead = 0;
+        int badgeWidth = 0;
+        ViewGroup group = (ViewGroup) strip;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child == bar || child.getVisibility() == GONE || weightOf(child) > 0f) continue;
+            ViewGroup.LayoutParams params = child.getLayoutParams();
+            if (params instanceof MarginLayoutParams) {
+                badgeLead += ((MarginLayoutParams) params).leftMargin
+                    + ((MarginLayoutParams) params).rightMargin;
+            }
+            child.measure(getChildMeasureSpec(
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED), 0, params.width),
+                MeasureSpec.makeMeasureSpec(child.getMeasuredHeight(), MeasureSpec.EXACTLY));
+            badgeWidth += child.getMeasuredWidth();
+        }
+        int barChrome = bar.getPaddingLeft() + bar.getPaddingRight();
+        ViewGroup.LayoutParams barParams = bar.getLayoutParams();
+        if (barParams instanceof MarginLayoutParams) {
+            barChrome += ((MarginLayoutParams) barParams).leftMargin
+                + ((MarginLayoutParams) barParams).rightMargin;
+        }
+        return StatusRowFitPolicy.stripMinPx(strip.getPaddingLeft() + strip.getPaddingRight(),
+            badgeLead, badgeWidth, barChrome, bar.frontChipWidthPx());
     }
 
     /** Whether the row is laid out around a keep-out rather than as a plain linear layout. */
@@ -273,7 +364,11 @@ public final class StatusRowLayout extends LinearLayout {
             widths[i] = child.getMeasuredWidth();
             weights[i] = weightOf(child);
         }
-        StatusRowKeepOut.flow(marginLeft, widths, marginRight, weights, start, end,
+        int[] minWidths = new int[n];
+        for (int i = 0; i < n; i++) {
+            if (children[i].getId() == R.id.terminal_status_place_content) minWidths[i] = mStripMinPx;
+        }
+        StatusRowKeepOut.flow(marginLeft, widths, marginRight, weights, minWidths, start, end,
             mKeepOut.gapStartPx, mKeepOut.gapEndPx, outLeft, outWidth);
     }
 

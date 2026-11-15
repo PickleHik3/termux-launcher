@@ -251,41 +251,68 @@ public final class StatusRowKeepOut {
                             @NonNull int[] marginRight, @NonNull float[] weight,
                             int start, int end, int gapStart, int gapEnd,
                             @NonNull int[] outLeft, @NonNull int[] outWidth) {
+        flow(marginLeft, width, marginRight, weight, new int[width.length], start, end, gapStart,
+            gapEnd, outLeft, outWidth);
+    }
+
+    /**
+     * {@link #flow(int[], int[], int[], float[], int, int, int, int, int[], int[])} with a floor
+     * for each flexible child: {@code minWidth[i]} is the least child {@code i} may be given. A
+     * flexible child below its floor first takes from the other flexible children, then the fixed
+     * children in its group are dropped whole (width and margins both 0, see {@link #isDropped}),
+     * nearest the flexible child first, until the floor holds or nothing is left to drop.
+     */
+    public static void flow(@NonNull int[] marginLeft, @NonNull int[] width,
+                            @NonNull int[] marginRight, @NonNull float[] weight,
+                            @NonNull int[] minWidth, int start, int end, int gapStart,
+                            int gapEnd, @NonNull int[] outLeft, @NonNull int[] outWidth) {
         int n = width.length;
         int gs = Math.max(start, gapStart);
         int ge = Math.min(end, gapEnd);
         if (ge <= gs) {
-            placeGroup(marginLeft, width, marginRight, weight, 0, n, start, end, false,
+            placeGroup(marginLeft, width, marginRight, weight, minWidth, 0, n, start, end, false,
                 outLeft, outWidth);
             return;
         }
-        placeGroup(marginLeft, width, marginRight, weight, 0, n, start, end, false,
+        placeGroup(marginLeft, width, marginRight, weight, minWidth, 0, n, start, end, false,
             outLeft, outWidth);
         float gapCentre = (gs + ge) / 2f;
         int natural = 0;
         while (natural < n && outLeft[natural] + outWidth[natural] / 2f < gapCentre) natural++;
 
         int split = natural;
-        if (!fits(marginLeft, width, marginRight, weight, natural, start, gs, ge, end)) {
-            boolean leftOverflows = fixedSum(marginLeft, width, marginRight, weight, 0, natural)
-                > gs - start;
+        if (!fits(marginLeft, width, marginRight, weight, minWidth, natural, start, gs, ge, end)) {
+            boolean leftOverflows = !hasFloor(weight, minWidth, 0, natural)
+                && fixedSum(marginLeft, width, marginRight, weight, 0, natural) > gs - start;
             for (int s = natural; s >= 0 && s <= n; s += leftOverflows ? -1 : 1) {
-                if (fits(marginLeft, width, marginRight, weight, s, start, gs, ge, end)) {
+                if (fits(marginLeft, width, marginRight, weight, minWidth, s, start, gs, ge, end)) {
                     split = s;
                     break;
                 }
             }
         }
-        placeGroup(marginLeft, width, marginRight, weight, 0, split, start, gs, false,
+        placeGroup(marginLeft, width, marginRight, weight, minWidth, 0, split, start, gs, false,
             outLeft, outWidth);
-        placeGroup(marginLeft, width, marginRight, weight, split, n, ge, end, true,
+        placeGroup(marginLeft, width, marginRight, weight, minWidth, split, n, ge, end, true,
             outLeft, outWidth);
     }
 
+    /**
+     * Whether both sides of the gap can hold their children: a side with a flexible child that has
+     * a floor always can, since that child drops fixed ones until its floor holds.
+     */
     private static boolean fits(int[] marginLeft, int[] width, int[] marginRight, float[] weight,
-                                int split, int start, int gs, int ge, int end) {
-        return fixedSum(marginLeft, width, marginRight, weight, 0, split) <= gs - start
-            && fixedSum(marginLeft, width, marginRight, weight, split, width.length) <= end - ge;
+                                int[] minWidth, int split, int start, int gs, int ge, int end) {
+        int n = width.length;
+        return (hasFloor(weight, minWidth, 0, split)
+                || fixedSum(marginLeft, width, marginRight, weight, 0, split) <= gs - start)
+            && (hasFloor(weight, minWidth, split, n)
+                || fixedSum(marginLeft, width, marginRight, weight, split, n) <= end - ge);
+    }
+
+    private static boolean hasFloor(float[] weight, int[] minWidth, int from, int to) {
+        for (int i = from; i < to; i++) if (weight[i] > 0f && minWidth[i] > 0) return true;
+        return false;
     }
 
     /** What children {@code [from, to)} take before any flexible one gets a share. */
@@ -298,32 +325,106 @@ public final class StatusRowKeepOut {
         return sum;
     }
 
+    /** Whether {@code flow} dropped child {@code i}: a fixed child that had width and got none. */
+    public static boolean isDropped(int width, float weight, int outWidth) {
+        return weight <= 0f && width > 0 && outWidth == 0;
+    }
+
     private static void placeGroup(int[] marginLeft, int[] width, int[] marginRight,
-                                   float[] weight, int from, int to, int groupStart, int groupEnd,
-                                   boolean hugEnd, int[] outLeft, int[] outWidth) {
+                                   float[] weight, int[] minWidth, int from, int to,
+                                   int groupStart, int groupEnd, boolean hugEnd,
+                                   int[] outLeft, int[] outWidth) {
         int fixed = fixedSum(marginLeft, width, marginRight, weight, from, to);
         float weights = 0f;
-        for (int i = from; i < to; i++) if (weight[i] > 0f) weights += weight[i];
+        int needed = 0;
+        int firstFlexible = -1;
+        for (int i = from; i < to; i++) {
+            if (weight[i] <= 0f) continue;
+            weights += weight[i];
+            needed += Math.max(0, minWidth[i]);
+            if (firstFlexible < 0) firstFlexible = i;
+        }
+        boolean[] dropped = null;
+        if (needed > 0) {
+            // The floors come before the fixed children: drop them whole, nearest the flexible
+            // child first (the readings next to the chips before the mark at the row's end).
+            while (groupEnd - groupStart - fixed < needed) {
+                int pick = -1;
+                for (int i = from; i < to; i++) {
+                    if (weight[i] > 0f || width[i] <= 0 || (dropped != null && dropped[i])) continue;
+                    if (pick < 0 || Math.abs(i - firstFlexible) <= Math.abs(pick - firstFlexible)) {
+                        pick = i;
+                    }
+                }
+                if (pick < 0) break;
+                if (dropped == null) dropped = new boolean[width.length];
+                dropped[pick] = true;
+                fixed -= marginLeft[pick] + marginRight[pick] + width[pick];
+            }
+        }
         int free = Math.max(0, groupEnd - groupStart - fixed);
+        float[] share = null;
+        if (needed > 0 && weights > 0f) share = flexibleShares(weight, minWidth, from, to, free);
         int x = groupStart;
         if (weights <= 0f && hugEnd) x = Math.max(groupStart, groupEnd - fixed);
         int handedOut = 0;
         float weightLeft = weights;
         for (int i = from; i < to; i++) {
-            x += marginLeft[i];
+            boolean drop = dropped != null && dropped[i];
+            if (!drop) x += marginLeft[i];
             int w;
             if (weight[i] > 0f) {
                 // The last flexible child takes what rounding left, so the side fills exactly.
                 w = weightLeft - weight[i] <= 0f ? free - handedOut
+                    : share != null ? Math.round(share[i])
                     : Math.round(free * weight[i] / weights);
                 handedOut += w;
                 weightLeft -= weight[i];
             } else {
-                w = width[i];
+                w = drop ? 0 : width[i];
             }
             outLeft[i] = x;
             outWidth[i] = w;
-            x += w + marginRight[i];
+            x += w + (drop ? 0 : marginRight[i]);
         }
+    }
+
+    /**
+     * {@code free} shared by weight between the flexible children {@code [from, to)}, except that
+     * a child whose share is under its floor stands at the floor and the rest share what is left.
+     * When the floors alone exceed {@code free} they share it in proportion.
+     */
+    private static float[] flexibleShares(float[] weight, int[] minWidth, int from, int to,
+                                          int free) {
+        float[] share = new float[weight.length];
+        boolean[] pinned = new boolean[weight.length];
+        int floors = 0;
+        for (int i = from; i < to; i++) if (weight[i] > 0f) floors += Math.max(0, minWidth[i]);
+        if (floors >= free) {
+            for (int i = from; i < to; i++) {
+                if (weight[i] > 0f) share[i] = floors == 0 ? 0f : free * (float) Math.max(0, minWidth[i]) / floors;
+            }
+            return share;
+        }
+        boolean again = true;
+        while (again) {
+            again = false;
+            float left = free;
+            float weights = 0f;
+            for (int i = from; i < to; i++) {
+                if (weight[i] <= 0f) continue;
+                if (pinned[i]) left -= Math.max(0, minWidth[i]); else weights += weight[i];
+            }
+            for (int i = from; i < to; i++) {
+                if (weight[i] <= 0f || pinned[i]) continue;
+                share[i] = weights <= 0f ? 0f : left * weight[i] / weights;
+                if (share[i] < minWidth[i]) {
+                    pinned[i] = true;
+                    again = true;
+                }
+            }
+        }
+        for (int i = from; i < to; i++) if (weight[i] > 0f && pinned[i]) share[i] = minWidth[i];
+        return share;
     }
 }
