@@ -509,39 +509,6 @@
 
     <issue
         id="ObsoleteSdkInt"
-        message="Unnecessary; `SDK_INT` is never &lt; 26"
-        errorLine1="                if (Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP) {"
-        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java"
-            line="920"
-            column="21"/>
-    </issue>
-
-    <issue
-        id="ObsoleteSdkInt"
-        message="Unnecessary; `SDK_INT` is always >= 26"
-        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java"
-            line="1777"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="ObsoleteSdkInt"
-        message="Unnecessary; `SDK_INT` is always >= 26"
-        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java"
-            line="1787"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="ObsoleteSdkInt"
         message="Unnecessary; `SDK_INT` is always >= 26"
         errorLine1="                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">

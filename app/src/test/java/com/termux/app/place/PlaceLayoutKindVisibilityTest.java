@@ -108,6 +108,16 @@ public class PlaceLayoutKindVisibilityTest {
     }
 
     @Test
+    public void homesExtraKeysKeyMeansThePillSoTheStackNeverDocksTheBar() {
+        PlaceLayoutStore store = store();
+        store.setKindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS, true);
+        assertTrue(store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
+        assertTrue(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.EXTRA_KEYS).hidden);
+        assertFalse("the Workspace still docks it",
+            store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.EXTRA_KEYS).hidden);
+    }
+
+    @Test
     public void aKindsVisibilityIsPerOrientation() {
         PlaceLayoutStore store = store();
         store.setKindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS, true);

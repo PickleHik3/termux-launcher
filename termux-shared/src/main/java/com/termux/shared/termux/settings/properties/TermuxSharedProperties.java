@@ -2,6 +2,7 @@ package com.termux.shared.termux.settings.properties;
 
 import android.content.Context;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.settings.properties.SharedProperties;
@@ -262,6 +263,11 @@ public abstract class TermuxSharedProperties {
             /* float */
             case TermuxPropertyConstants.KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR:
                 return (float) getTerminalToolbarHeightScaleFactorInternalPropertyValueFromValue(value);
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL_HEIGHT:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_DISPLAY_HEIGHT:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_HOME_HEIGHT:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_ASSISTANT_HEIGHT:
+                return getTargetExtraKeysHeightFromValue(value);
             /* Integer (may be null) */
             case TermuxPropertyConstants.KEY_SHORTCUT_CREATE_SESSION:
             case TermuxPropertyConstants.KEY_SHORTCUT_NEXT_SESSION:
@@ -277,6 +283,15 @@ public abstract class TermuxSharedProperties {
                 return (String) getExtraKeysInternalPropertyValueFromValue(value);
             case TermuxPropertyConstants.KEY_EXTRA_KEYS2:
                 return (String) getExtraKeys2InternalPropertyValueFromValue(value);
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL2:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_DISPLAY:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_DISPLAY2:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_HOME:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_HOME2:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_ASSISTANT:
+            case TermuxPropertyConstants.KEY_EXTRA_KEYS_ASSISTANT2:
+                return getTargetExtraKeysPageFromValue(value);
             case TermuxPropertyConstants.KEY_EXTRA_KEYS_STYLE:
                 return (String) getExtraKeysStyleInternalPropertyValueFromValue(value);
             case TermuxPropertyConstants.KEY_NIGHT_MODE:
@@ -403,6 +418,37 @@ public abstract class TermuxSharedProperties {
      */
     public static int getBackgroundOverlayInternalPropertyValueFromValue(String value) {
         return DataUtils.getIntColorFromString(value, TermuxPropertyConstants.DEFAULT_IVALUE_BACKGROUND_OVERLAY_COLOR, true);
+    }
+
+    /**
+     * Returns the page line of a per-target extra keys set as stored, or {@code null} when it is
+     * absent or blank (a blank line follows the default, it does not show an empty bar).
+     */
+    @Nullable
+    public static String getTargetExtraKeysPageFromValue(@Nullable String value) {
+        if (value == null || value.trim().isEmpty())
+            return null;
+        return value;
+    }
+
+    /**
+     * Returns the key size of a per-target extra keys set, or {@code null} when the line is absent,
+     * not a number or outside the range Global allows (the target then follows Global).
+     */
+    @Nullable
+    public static Float getTargetExtraKeysHeightFromValue(@Nullable String value) {
+        if (value == null)
+            return null;
+        float f;
+        try {
+            f = Float.parseFloat(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        if (Float.isNaN(f) || f < TermuxPropertyConstants.IVALUE_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR_MIN
+            || f > TermuxPropertyConstants.IVALUE_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR_MAX)
+            return null;
+        return f;
     }
 
     /**

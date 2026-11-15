@@ -156,6 +156,28 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             return new TermuxAppSharedPreferences(termuxPackageContext, displayIdSuffixOf(context));
     }
 
+    /**
+     * Where the Home pill rests: its centre as fractions of the window, {@code {x, y}} each in
+     * [0, 1], or null while it has never been moved (or a stored value is unusable).
+     */
+    @Nullable
+    public float[] getHomePillPosition() {
+        if (mSharedPreferences == null || !mSharedPreferences.contains(TERMUX_APP.KEY_HOME_PILL_X)
+            || !mSharedPreferences.contains(TERMUX_APP.KEY_HOME_PILL_Y)) return null;
+        float x = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_X, Float.NaN);
+        float y = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_Y, Float.NaN);
+        if (Float.isNaN(x) || Float.isNaN(y)) return null;
+        return new float[]{Math.max(0f, Math.min(1f, x)), Math.max(0f, Math.min(1f, y))};
+    }
+
+    public void setHomePillPosition(float x, float y) {
+        if (Float.isNaN(x) || Float.isNaN(y)) return;
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_X,
+            Math.max(0f, Math.min(1f, x)), false);
+        SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_Y,
+            Math.max(0f, Math.min(1f, y)), false);
+    }
+
     public boolean shouldShowTerminalToolbar() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_SHOW_TERMINAL_TOOLBAR, TERMUX_APP.DEFAULT_VALUE_SHOW_TERMINAL_TOOLBAR);
     }
@@ -1862,6 +1884,52 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setAppHapticsEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APP_HAPTICS_ENABLED, value, false);
+    }
+
+    public boolean isPageSwitcherEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_PAGE_SWITCHER_ENABLED,
+            TERMUX_APP.DEFAULT_PAGE_SWITCHER_ENABLED);
+    }
+
+    public void setPageSwitcherEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_PAGE_SWITCHER_ENABLED, value, false);
+    }
+
+    /** The edge the page switcher's dot rests on: 0 left, 1 right. */
+    public int getPageSwitcherEdge() {
+        int edge = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_PAGE_SWITCHER_EDGE, TERMUX_APP.DEFAULT_PAGE_SWITCHER_EDGE);
+        return edge == 0 ? 0 : 1;
+    }
+
+    public void setPageSwitcherEdge(int edge) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_PAGE_SWITCHER_EDGE, edge == 0 ? 0 : 1, false);
+    }
+
+    /** How far down the screen the page switcher's dot rests, 0 to 1 of the screen's height. */
+    public float getPageSwitcherHeight() {
+        float fraction = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            TERMUX_APP.KEY_PAGE_SWITCHER_HEIGHT, TERMUX_APP.DEFAULT_PAGE_SWITCHER_HEIGHT);
+        return DataUtils.rangedOrDefault(fraction, TERMUX_APP.DEFAULT_PAGE_SWITCHER_HEIGHT, 0f, 1f);
+    }
+
+    public void setPageSwitcherHeight(float fraction) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            TERMUX_APP.KEY_PAGE_SWITCHER_HEIGHT, fraction, false);
+    }
+
+    public boolean isPageSwitcherHintShown() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_PAGE_SWITCHER_HINT_SHOWN,
+            TERMUX_APP.DEFAULT_PAGE_SWITCHER_HINT_SHOWN);
+    }
+
+    public void setPageSwitcherHintShown(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_PAGE_SWITCHER_HINT_SHOWN, value, false);
     }
 
     public boolean isAppLauncherRowHapticsEnabled() {

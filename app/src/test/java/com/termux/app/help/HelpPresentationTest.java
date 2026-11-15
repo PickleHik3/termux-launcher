@@ -14,7 +14,7 @@ import com.termux.app.launcher.widget.WidgetGridView;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import org.junit.Before;
@@ -40,7 +40,7 @@ public class HelpPresentationTest {
     private View status;
     private View dock;
     /** Built by the tests that are about the extra keys row; laid out with everything else. */
-    private ExtraKeysView keys;
+    private ExtraKeysPageView keys;
     private Rect keysBounds = new Rect(0, 560, 400, 620);
     private HelpOverlayView overlay;
     private HelpTargets.ViewFinder finder;
@@ -585,10 +585,10 @@ public class HelpPresentationTest {
      * {@link #onlyTheLaunchersOwnKeysAreLabelled} is where the shipped row is checked.
      */
     private void launcherKeys(int height) throws Exception {
-        keys = new ExtraKeysView(activity, null);
+        keys = new ExtraKeysPageView(activity, null);
         root.addView(keys, new FrameLayout.LayoutParams(keysBounds.width(), keysBounds.height()));
-        keys.reload(new ExtraKeysInfo("[['tool:wall.widgets','tool:wall.terminal','tool:mouse.toggle']]",
-            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), height);
+        keys.setKeys(new ExtraKeysInfo("[['tool:wall.widgets','tool:wall.terminal','tool:mouse.toggle']]",
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES));
     }
 
     /**
@@ -598,7 +598,7 @@ public class HelpPresentationTest {
     @Test public void onlyTheLaunchersOwnKeysAreLabelled() throws Exception {
         ExtraKeysInfo launcher = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
             "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES);
-        assertEquals(7, launcher.getMatrix()[0].length);
+        assertEquals(4, launcher.getMatrix()[0].length);
         for (ExtraKeyButton key : launcher.getMatrix()[0])
             assertTrue(key.getKey() + " is the launcher's own", HelpCopy.isLauncherKey(key));
         ExtraKeysInfo upstream = new ExtraKeysInfo("[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]",
@@ -612,10 +612,10 @@ public class HelpPresentationTest {
 
     /** Upstream's row of plain terminal keys says nothing: there is nothing to explain. */
     @Test public void aRowOfPlainTerminalKeysIsNotLabelledAtAll() throws Exception {
-        keys = new ExtraKeysView(activity, null);
+        keys = new ExtraKeysPageView(activity, null);
         root.addView(keys, new FrameLayout.LayoutParams(400, 60));
-        keys.reload(new ExtraKeysInfo("[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]",
-            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), 60);
+        keys.setKeys(new ExtraKeysInfo("[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]",
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES));
         overview(PaneWallPage.TERMINAL);
         assertTrue("a plain terminal key was labelled", overlay.keyCardBounds().isEmpty());
         explore(PaneWallPage.TERMINAL);
@@ -657,14 +657,14 @@ public class HelpPresentationTest {
      * toolbar is not one of them. It is an excluded region now, so the labels take the other side.
      */
     @Test public void keyCardsKeepOffTheToolbarWhenTheRowRunsDownTheMiddle() throws Exception {
-        keys = new ExtraKeysView(activity, null);
+        keys = new ExtraKeysPageView(activity, null);
         // A row of tall caps down the middle: its lanes used to reach the bottom edge, where the
         // toolbar is, because only the measured controls were obstacles.
         keysBounds = new Rect(0, 150, 200, 620);
         root.addView(keys, new FrameLayout.LayoutParams(keysBounds.width(), keysBounds.height()));
-        keys.reload(new ExtraKeysInfo("[[{key:'tool:pane.split',popup:'tool:window.new'},"
+        keys.setKeys(new ExtraKeysInfo("[[{key:'tool:pane.split',popup:'tool:window.new'},"
             + "{key:'tool:session.browser',popup:'tool:session.new'}]]",
-            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), keysBounds.height());
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES));
         dock.setVisibility(View.GONE);
         explore(PaneWallPage.TERMINAL);
         Rect row = overlay.measuredRect("keys");

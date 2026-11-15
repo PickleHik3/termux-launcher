@@ -3,15 +3,11 @@ package com.termux.app.wall;
 import androidx.annotation.NonNull;
 
 /**
- * The page overview's rules (Launcher3's overview for this wall; ADR 0008 "one wall, two
- * halves"): one strip of cards, Home's pages first and then the current session's windows, the
- * row holding terminal windows only since ADR 0015 A3b (Display pages are wall pages). Pure, so the halves, where a
- * dragged card may land, where an added card goes, which cards can be removed and how, and when
- * a display can be added read as arithmetic.
- *
- * <p>A strip position counts every card from 0: Home page {@code i} is position {@code i}, and
- * the window at row place {@code r} is position {@code homeCount + r}. The seam stands between
- * position {@code homeCount - 1} and {@code homeCount}.
+ * The page overview's rules (Launcher3's overview for this wall): one strip of cards, one per
+ * page in wall order (ADR 0015). The Terminal page is one card however many windows it holds; its
+ * windows are places in that page's row, not pages. Pure, so where a dragged card may land, where
+ * an added card goes, which cards can be removed and how, and when a display can be added read as
+ * arithmetic over the strip's kinds.
  */
 public final class PageOverviewPolicy {
 
@@ -20,21 +16,23 @@ public final class PageOverviewPolicy {
     /** No such position: a refused drop, or an empty strip. */
     public static final int NONE = -1;
 
-    /** What a card shows. */
     /**
      * Whether a card of {@code kind} is drawn live (the activity's own content, chrome included)
      * while it is focused. Not the display window's, whose picture is its surface's, and not the
      * Assistant page's, whose card is the still card with its icon and name: a live draw showed
-     * whatever chrome stood on screen and the chat's heading at the root's scale.
+     * whatever chrome stood on screen and the chat's heading at the root's scale. Not the Terminal
+     * page's while it has no window ({@code windows}), as the wall has nothing there to show.
      */
-    public static boolean drawsLive(@androidx.annotation.NonNull Kind kind) {
+    public static boolean drawsLive(@NonNull Kind kind, int windows) {
+        if (kind == Kind.TERMINAL) return windows > 0;
         return kind != Kind.DISPLAY && kind != Kind.ASSISTANT;
     }
 
+    /** What a card shows. */
     public enum Kind {
         /** A Home page. */
         HOME_PAGE,
-        /** A terminal window of the current session. */
+        /** The Terminal page, however many windows it holds. */
         TERMINAL,
         /** The display window. */
         DISPLAY,
@@ -44,7 +42,7 @@ public final class PageOverviewPolicy {
 
     /** How a card's removal goes. */
     public enum Removal {
-        /** It cannot be removed: the last Home page. */
+        /** It cannot be removed here: the last Home page, or the Terminal page. */
         REFUSED,
         /** It is empty and goes at once. */
         AT_ONCE,
@@ -52,132 +50,32 @@ public final class PageOverviewPolicy {
         WITH_UNDO
     }
 
-    /** How many cards the strip holds: every Home page and every window of the row. */
-    public static int cardCount(int homeCount, int rowCount) {
-        return Math.max(0, homeCount) + Math.max(0, rowCount);
-    }
-
-    /** Whether position {@code position} is a Home page's card. */
-    public static boolean isHome(int position, int homeCount) {
-        return position >= 0 && position < homeCount;
-    }
-
-    /** The kind of card at {@code position}: a Home page's, else a terminal window's. */
-    @NonNull
-    public static Kind kindAt(int position, int homeCount) {
-        return isHome(position, homeCount) ? Kind.HOME_PAGE : Kind.TERMINAL;
-    }
-
-    /** The row place of the window card at {@code position}. */
-    public static int rowPlace(int position, int homeCount) {
-        return position - Math.max(0, homeCount);
-    }
-
-    /** The strip position of the window at row place {@code row}. */
-    public static int positionOfRow(int row, int homeCount) {
-        return Math.max(0, homeCount) + row;
-    }
-
-    /** The first and last positions of the half {@code position} stands in, as {@code {first, last}}. */
-    @NonNull
-    public static int[] halfBounds(int position, int homeCount, int rowCount) {
-        if (isHome(position, homeCount)) return new int[] {0, homeCount - 1};
-        return new int[] {Math.max(0, homeCount), cardCount(homeCount, rowCount) - 1};
-    }
-
-    /** Whether positions {@code a} and {@code b} stand in the same half of the strip. */
-    public static boolean sameHalf(int a, int b, int homeCount) {
-        return isHome(a, homeCount) == isHome(b, homeCount);
-    }
-
-    /**
-     * Where a card dragged from {@code from} and dropped over position {@code over} goes: that
-     * position when it is in the card's own half, else {@link #NONE} — a drop across the seam is
-     * refused and the card springs back. A drop on its own place is a drop that changes nothing.
-     */
-    public static int dropTarget(int from, int over, int homeCount, int rowCount) {
-        int count = cardCount(homeCount, rowCount);
-        if (from < 0 || from >= count || over < 0 || over >= count) return NONE;
-        return sameHalf(from, over, homeCount) ? over : NONE;
-    }
-
-    // ---- Free order (ADR 0015, A2a) --------------------------------------------------------
-    // The strip is the page list in wall order, the Terminal page's window cards (and the display
-    // window's) one contiguous block among the Home cards. These read the order off the strip's
-    // kinds instead of assuming Home first; for [Home...][windows] they equal the functions above.
-
-    /** The first and last positions of the window block, as {@code {first, last}}; null if none. */
-    @androidx.annotation.Nullable
-    public static int[] blockBounds(@NonNull java.util.List<Kind> strip) {
-        int first = -1;
-        int last = -1;
-        for (int i = 0; i < strip.size(); i++) {
-            if (strip.get(i) != Kind.TERMINAL) continue;
-            if (first < 0) first = i;
-            last = i;
-        }
-        return first < 0 ? null : new int[] {first, last};
-    }
-
     /** Whether the card at {@code position} is a Home page's. */
     public static boolean isHome(int position, @NonNull java.util.List<Kind> strip) {
         return position >= 0 && position < strip.size() && strip.get(position) == Kind.HOME_PAGE;
     }
 
+    /** The Terminal card's position in {@code strip}; {@link #NONE} when the wall has none. */
+    public static int terminalAt(@NonNull java.util.List<Kind> strip) {
+        return strip.indexOf(Kind.TERMINAL);
+    }
+
     /**
      * Where a card dragged from {@code from} and dropped over {@code over} goes (its final
-     * position), or {@link #NONE}. A Home card may land anywhere outside the window block; a drop
-     * inside the block snaps to just before or just after it, whichever is nearer. A window card
-     * only reorders inside the block.
+     * position, which is also its page index on the wall), or {@link #NONE}. A Home card and the
+     * Terminal card land wherever they are dropped; Display and Assistant cards stay where they
+     * stand.
      */
     public static int dropTarget(int from, int over, @NonNull java.util.List<Kind> strip) {
         int count = strip.size();
         if (from < 0 || from >= count || over < 0 || over >= count) return NONE;
-        int[] block = blockBounds(strip);
-        if (strip.get(from) == Kind.DISPLAY || strip.get(from) == Kind.ASSISTANT) return NONE;
-        if (!isHome(from, strip)) {
-            return block != null && over >= block[0] && over <= block[1] ? over : NONE;
-        }
-        if (block == null) return over;
-        // The block's bounds once the dragged Home card has left the strip.
-        int shift = from < block[0] ? 1 : 0;
-        int first = block[0] - shift;
-        int last = block[1] - shift;
-        if (over > first && over <= last) {
-            return over - first <= (last - first + 1) / 2 ? first : last + 1;
-        }
-        return over;
-    }
-
-    /**
-     * Where the whole window block lands, as the block's first final position, when it is dragged
-     * and its label is dropped over strip position {@code over}: over a Home card it takes that
-     * card's place. Over the block itself, or outside the strip, {@link #NONE}.
-     */
-    public static int blockDropTarget(int over, @NonNull java.util.List<Kind> strip) {
-        int[] block = blockBounds(strip);
-        if (block == null || over < 0 || over >= strip.size()) return NONE;
-        if (over >= block[0] && over <= block[1]) return NONE;
-        int homes = strip.size() - (block[1] - block[0] + 1);
-        // Final first position: a Home card passed over moves to the other side of the block.
-        int target = over < block[0] ? over : over - (block[1] - block[0]);
-        return Math.max(0, Math.min(homes, target));
-    }
-
-    /**
-     * The page index (as {@link WallPages#move} counts, the block one page) of the card that
-     * stands at strip position {@code position}.
-     */
-    public static int pageIndexAt(int position, @NonNull java.util.List<Kind> strip) {
-        int[] block = blockBounds(strip);
-        if (block == null || position <= block[0]) return Math.max(0, position);
-        if (position <= block[1]) return block[0];
-        return position - (block[1] - block[0]);
+        Kind kind = strip.get(from);
+        return kind == Kind.HOME_PAGE || kind == Kind.TERMINAL ? over : NONE;
     }
 
     /**
      * The position "+ Add page" inserts a Home page at: right after the focused Home card, or
-     * after the last Home page when a window is focused (as before, whatever the order).
+     * after the last Home page when another card is focused.
      */
     public static int addPageIndex(int focused, @NonNull java.util.List<Kind> strip) {
         if (isHome(focused, strip)) return focused + 1;
@@ -185,9 +83,21 @@ public final class PageOverviewPolicy {
         return 0;
     }
 
-    /** The wall position a card's tap or Back lands on, given the strip's order. */
+    /**
+     * The window the Terminal page shows on arriving there: the row's current window
+     * ({@code rowCurrent}) among {@code rowCount}, 0 while the row has none.
+     */
+    public static int frontWindow(int rowCurrent, int rowCount) {
+        return Math.max(0, Math.min(rowCurrent, rowCount - 1));
+    }
+
+    /**
+     * The wall position a card's tap or Back lands on, given the strip's order: a Home card its
+     * page, the Terminal card the window in front ({@code frontWindow}).
+     */
     @NonNull
-    public static WallRow.Position wallPosition(int position, @NonNull java.util.List<Kind> strip) {
+    public static WallRow.Position wallPosition(int position, @NonNull java.util.List<Kind> strip,
+                                                int frontWindow) {
         if (isHome(position, strip)) {
             int n = 0;
             for (int i = 0; i < position; i++) if (strip.get(i) == Kind.HOME_PAGE) n++;
@@ -199,38 +109,42 @@ public final class PageOverviewPolicy {
         if (position >= 0 && position < strip.size() && strip.get(position) == Kind.ASSISTANT) {
             return new WallRow.Position(PaneWallPage.ASSISTANT, 0);
         }
-        int[] block = blockBounds(strip);
-        return WallRow.window(block == null ? 0 : Math.max(0, position - block[0]));
+        return WallRow.window(Math.max(0, frontWindow));
+    }
+
+    /**
+     * The strip position the overview opens focused on: the Home card the wall rests on
+     * ({@code homePage}, clamped among the Home cards) while it is on Home, else the Terminal
+     * card; the first card when there is neither.
+     */
+    public static int openingFocus(@NonNull java.util.List<Kind> strip, boolean onHome,
+                                   int homePage) {
+        if (strip.isEmpty()) return NONE;
+        if (!onHome) {
+            int terminal = terminalAt(strip);
+            if (terminal >= 0) return terminal;
+        }
+        int last = NONE;
+        int n = 0;
+        for (int i = 0; i < strip.size(); i++) {
+            if (strip.get(i) != Kind.HOME_PAGE) continue;
+            if (n == homePage) return i;
+            last = i;
+            n++;
+        }
+        return last >= 0 ? last : 0;
     }
 
     /**
      * Where the card at {@code position} stands while the card from {@code from} is held at
-     * {@code held} ({@link #dropTarget}; {@code from} itself while it is held across the seam, so
-     * nothing makes room): the cards between shift one place toward the gap it left.
+     * {@code held} ({@link #dropTarget}; {@code from} itself while it is held where it cannot
+     * land, so nothing makes room): the cards between shift one place toward the gap it left.
      */
     public static int shiftedPlace(int position, int from, int held) {
         if (position == from) return held;
         if (from < held && position > from && position <= held) return position - 1;
         if (from > held && position >= held && position < from) return position + 1;
         return position;
-    }
-
-    /**
-     * The Home page "+ Add page" inserts, counted among the pages as they stand: right after the
-     * focused Home page, or after the last Home page when a window is focused.
-     */
-    public static int addPageIndex(int focused, int homeCount) {
-        if (isHome(focused, homeCount)) return focused + 1;
-        return Math.max(0, homeCount);
-    }
-
-    /**
-     * The row place "+ Add terminal" and "+ Add display" insert at: right after the focused
-     * window, or first among the windows when a Home page is focused.
-     */
-    public static int addWindowRow(int focused, int homeCount, int rowCount) {
-        if (isHome(focused, homeCount) || focused < 0) return 0;
-        return Math.max(0, Math.min(rowCount, rowPlace(focused, homeCount) + 1));
     }
 
     /** Whether "+ Add display" is offered: only while no display is open, as only one can exist. */
@@ -246,16 +160,16 @@ public final class PageOverviewPolicy {
         return !displayOpen || onTemporaryPage;
     }
 
-    /** Marks the window block's place in {@link #wallOrder}. */
-    public static final int BLOCK = Integer.MIN_VALUE;
+    /** Marks the Terminal card's place in {@link #wallOrder}. */
+    public static final int TERMINAL_PAGE = Integer.MIN_VALUE;
 
     /**
      * The strip in wall order (ADR 0015: Display pages are wall pages): Home page {@code i} is
      * {@code i}, Display page {@code j} (of {@code displays}, in wall order) is {@code -(j + 1)},
-     * the window block is {@link #BLOCK}. {@code homesBefore[j]} is how many Home pages stand
-     * before Display page {@code j} on the wall; {@code afterTerminal[j]} whether it stands after
-     * the Terminal page. {@code beforeTerminal} is how many Home pages stand before the Terminal
-     * page; {@code hasTerminal} false puts no block in the strip.
+     * the Terminal page is {@link #TERMINAL_PAGE}. {@code homesBefore[j]} is how many Home pages
+     * stand before Display page {@code j} on the wall; {@code afterTerminal[j]} whether it stands
+     * after the Terminal page. {@code beforeTerminal} is how many Home pages stand before the
+     * Terminal page; {@code hasTerminal} false puts no Terminal card in the strip.
      */
     @NonNull
     public static java.util.List<Integer> wallOrder(int pages, boolean hasTerminal,
@@ -267,7 +181,7 @@ public final class PageOverviewPolicy {
                 if (homesBefore[j] == gap && !(gap == before && afterTerminal[j])) out.add(-(j + 1));
             }
             if (gap == before) {
-                out.add(BLOCK);
+                out.add(TERMINAL_PAGE);
                 for (int j = 0; j < homesBefore.length; j++) {
                     if (homesBefore[j] == gap && afterTerminal[j]) out.add(-(j + 1));
                 }
@@ -277,35 +191,42 @@ public final class PageOverviewPolicy {
         return out;
     }
 
-    /** Whether a card of {@code kind} shows the delete button: every card but the last Home page. */
+    /**
+     * The strip's kinds for {@link #wallOrder}'s {@code order}; {@code assistant[j]} is whether
+     * Display page {@code j} is the Assistant page.
+     */
+    @NonNull
+    public static java.util.List<Kind> kinds(@NonNull java.util.List<Integer> order,
+                                             @NonNull boolean[] assistant) {
+        java.util.List<Kind> out = new java.util.ArrayList<>(order.size());
+        for (int slot : order) {
+            if (slot == TERMINAL_PAGE) out.add(Kind.TERMINAL);
+            else if (slot < 0) out.add(assistant[-slot - 1] ? Kind.ASSISTANT : Kind.DISPLAY);
+            else out.add(Kind.HOME_PAGE);
+        }
+        return out;
+    }
+
+    /**
+     * Whether a card of {@code kind} shows the remove button: every card but the last Home page
+     * and the Terminal page, which leaves only through its menu's Remove Terminal.
+     */
     public static boolean canDelete(@NonNull Kind kind, int homeCount) {
+        if (kind == Kind.TERMINAL) return false;
         return kind != Kind.HOME_PAGE || homeCount > 1;
     }
 
     /**
      * How a card's removal goes. A Home page holding widgets, icons, folders or floats
-     * ({@code contents}) asks for undo; a terminal running a process ({@code busy}) does; the
-     * display window, an open display, always does. Empty things go at once.
+     * ({@code contents}) asks for undo; the display window, an open display, always does. Empty
+     * things go at once.
      */
     @NonNull
-    public static Removal removal(@NonNull Kind kind, int homeCount, int contents, boolean busy) {
+    public static Removal removal(@NonNull Kind kind, int homeCount, int contents) {
         if (!canDelete(kind, homeCount)) return Removal.REFUSED;
-        switch (kind) {
-            case HOME_PAGE: return contents > 0 ? Removal.WITH_UNDO : Removal.AT_ONCE;
-            case TERMINAL: return busy ? Removal.WITH_UNDO : Removal.AT_ONCE;
-            // The chats are kept either way (ADR 0022), but the page itself is brought back by Undo.
-            case ASSISTANT: return Removal.WITH_UNDO;
-            default: return Removal.WITH_UNDO;
-        }
-    }
-
-    /**
-     * Whether a card shows the home button: every Home page, the display window, and of the
-     * terminal windows only the first ({@code firstTerminal}), the one a start in the Workspace
-     * opens on. Which card wears it is {@link StartInPolicy#isHome}'s.
-     */
-    public static boolean showsHomeButton(@NonNull Kind kind, boolean firstTerminal) {
-        return kind != Kind.TERMINAL || firstTerminal;
+        if (kind == Kind.HOME_PAGE) return contents > 0 ? Removal.WITH_UNDO : Removal.AT_ONCE;
+        // An Assistant page's chats are kept either way (ADR 0022); Undo brings the page back.
+        return Removal.WITH_UNDO;
     }
 
     /**
@@ -331,23 +252,6 @@ public final class PageOverviewPolicy {
     public static int focusAfterRemoval(int removed, int remaining) {
         if (remaining <= 0) return NONE;
         return Math.max(0, Math.min(removed, remaining - 1));
-    }
-
-    /** The wall position a card's tap or Back lands on. */
-    @NonNull
-    public static WallRow.Position wallPosition(int position, int homeCount) {
-        if (isHome(position, homeCount)) return WallRow.homePage(position);
-        return WallRow.window(rowPlace(position, homeCount));
-    }
-
-    /** The strip position the overview opens focused on: the page the wall rests on. */
-    public static int openingFocus(boolean onHome, int homePage, int rowCurrent, int homeCount,
-                                   int rowCount) {
-        int count = cardCount(homeCount, rowCount);
-        if (count == 0) return NONE;
-        int position = onHome || rowCount <= 0 ? Math.max(0, Math.min(homePage, homeCount - 1))
-            : positionOfRow(Math.max(0, Math.min(rowCurrent, rowCount - 1)), homeCount);
-        return Math.max(0, Math.min(count - 1, position));
     }
 
     /**

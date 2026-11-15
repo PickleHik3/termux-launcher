@@ -178,7 +178,13 @@ _ADR 0015 (proposed): becomes a **Float**, which may also hang over a Terminal p
 **Float chip**:
 Retired 2026-10-21: a minimised **Home float** is a **window chip** in the status bar on both
 halves, and Minimise flies the float into that chip. There is no row of chips above the dock.
-_Avoid_: float chip (for the bar's chip, say window chip), Home pills, minimised pill
+_Avoid_: float chip (for the bar's chip, say window chip), minimised pill, Home pill (that names the extra keys on Home, not a minimised float)
+
+**Home pill**:
+Home's extra keys as a small floating glass pill over Home's content, in the same spot on every
+**Home page**. A hold picks it up to move it and shows "Edit keys". It flies to the docked bar above
+the keyboard, and between Home and the **Workspace**'s pages.
+_Avoid_: floating bar, key bubble
 
 **Keyboard swipe**:
 The one way to the keyboard in the **Workspace**: an up or down swipe that starts on the window's
@@ -260,6 +266,15 @@ every page. One layout dresses both halves, minimal only for windows; a Home pag
 only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
 _ADR 0015 (proposed): a page is a Home page, the Terminal page or a Display page, and each follows **Base** or detaches its own look values._
+
+**Page switcher**:
+A small dim **dot** on the left or right screen edge, in the same spot on every page, and the
+**picker** that grows out of it: a row of the four page kinds (Home, Terminal, Display, Assistant,
+always in that order) with each kind's pages or windows stacked above its glyph. Slide from the dot
+and release on a cell to go there; a tap leaves the picker open; holding the dot still picks it up
+to move it, and it snaps to the nearer edge. It rides above the keyboard and the bottom chrome.
+On by default; Settings › General turns it off. Code: `com.termux.app.wall.switcher`.
+_Avoid_: places dock (the retired space-bar version), nav button, floating button
 
 **Pane**:
 One terminal view inside a split. Panes have corner tabs but no appearance of their own. A split is resized by dragging the divider, the gap between its panes, and a corner hold only shows the pane's buttons.

@@ -150,4 +150,24 @@ public class ExtraKeysDraftTest {
         draft.restore(snapshot);
         assertEquals(before, draft.valueFor(0));
     }
+
+    @Test
+    public void movingTheKeySizeChangesTheFingerprintAndBackAgainRestoresIt() {
+        ExtraKeysDraft draft = draft("[[ESC]]", "[]");
+        String before = draft.fingerprint();
+        draft.setKeySizeTenths(20);
+        assertNotEquals(before, draft.fingerprint());
+        draft.setKeySizeTenths(ExtraKeysDraft.KEY_SIZE_DEFAULT_TENTHS);
+        assertEquals(before, draft.fingerprint());
+        draft.setKeySizeTenths(99);
+        assertEquals(30, draft.keySizeTenths());
+    }
+
+    @Test
+    public void theKeySizeWritesWithOneDecimal() {
+        assertEquals("1.0", ExtraKeysDraft.keySizeProperty(10));
+        assertEquals("0.4", ExtraKeysDraft.keySizeProperty(4));
+        assertEquals("3.0", ExtraKeysDraft.keySizeProperty(30));
+        assertEquals("1.7", ExtraKeysDraft.keySizeProperty(17));
+    }
 }

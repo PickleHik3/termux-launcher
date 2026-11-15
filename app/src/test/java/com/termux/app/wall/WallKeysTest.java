@@ -77,32 +77,23 @@ public class WallKeysTest {
         assertFalse(ExtraKeyEligibility.isUsable(term, PaneWallPage.WIDGETS, noTerm));
     }
 
-    /** The sweep's finding 2: on a Display page reached by key the row still carries Home. */
+    /**
+     * The shipped row carries no place switch any more (they moved to the navigation dot), so no
+     * wall shape adds or cuts one: the row is the same on every wall.
+     */
     @Test
-    public void theRowOnADisplayPageCarriesHomeAndTerminal() {
-        List<String> tools = tools(ExtraKeysDefaultRow.forWall(SHIPPED,
-            WallKeys.kinds(of(H, T, D), UseAs.HOME)));
-        assertTrue(tools.contains(LauncherToolRegistry.TOOL_WALL_WIDGETS));
-        assertTrue(tools.contains(LauncherToolRegistry.TOOL_WALL_TERMINAL));
-        assertTrue(tools.contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
-    }
-
-    /** A fresh wall with a Display page and the display never run: the Display key is there. */
-    @Test
-    public void aFreshWallWithADisplayPageShowsTheDisplayKey() {
-        assertTrue(tools(ExtraKeysDefaultRow.forWall(SHIPPED,
-            WallKeys.kinds(of(H, T, D), UseAs.HOME))).contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
-        assertFalse(tools(ExtraKeysDefaultRow.forWall(SHIPPED,
-            WallKeys.kinds(of(H, T), UseAs.HOME))).contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
-    }
-
-    /** A single-kind wall keeps the key of the kind it has and drops the absent kinds'. */
-    @Test
-    public void aSingleKindWallKeepsItsOwnKey() {
-        List<String> tools = tools(ExtraKeysDefaultRow.forWall(SHIPPED,
-            WallKeys.kinds(of(T), UseAs.HOME)));
-        assertTrue(tools.contains(LauncherToolRegistry.TOOL_WALL_TERMINAL));
-        assertFalse(tools.contains(LauncherToolRegistry.TOOL_WALL_WIDGETS));
-        assertFalse(tools.contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
+    public void theShippedRowIsTheSameOnEveryWall() {
+        List<List<WallPages.PageKind>> walls = new ArrayList<>();
+        walls.add(Arrays.asList(H, T, D));
+        walls.add(Arrays.asList(H, T));
+        walls.add(Collections.singletonList(T));
+        for (List<WallPages.PageKind> kinds : walls) {
+            String row = ExtraKeysDefaultRow.forWall(SHIPPED,
+                WallKeys.kinds(of(kinds.toArray(new WallPages.PageKind[0])), UseAs.HOME));
+            assertEquals(SHIPPED, row);
+            assertFalse(tools(row).contains(LauncherToolRegistry.TOOL_WALL_WIDGETS));
+            assertFalse(tools(row).contains(LauncherToolRegistry.TOOL_WALL_TERMINAL));
+            assertFalse(tools(row).contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
+        }
     }
 }

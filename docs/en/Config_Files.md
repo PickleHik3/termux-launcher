@@ -48,7 +48,7 @@ termux-reload-settings
 
 | Path | What it does | Details |
 |---|---|---|
-| `~/.termux/termux.properties` | Terminal properties: `TERM` (`terminal-term`), volume and back keys, the extra-keys row (`extra-keys`, `extra-keys2`), cursor, scrollback, margins, link taps | [Extra keys](Extra_Keys.md#write-the-row-by-hand) |
+| `~/.termux/termux.properties` | Terminal properties: `TERM` (`terminal-term`), volume and back keys, the extra-keys row (`extra-keys`, `extra-keys2`, and per place `extra-keys-terminal`, `-display`, `-home`, `-assistant` with a `2` page and `-height` line), cursor, scrollback, margins, link taps | [Extra keys](Extra_Keys.md#write-the-row-by-hand) |
 | `~/.config/termux/termux.properties` | Read only when `~/.termux/termux.properties` is absent; only one properties file is ever read | |
 | `~/.termux/termux-launcher-bindings.conf` | Shortcuts, chords, modes, app launching | [Custom keybindings](Custom_Keybindings.md) |
 | `~/.termux/keyboard/layout.xml` | Replaces the whole built-in keyboard layout | [Keyboard](Keyboard.md#your-own-layout) |

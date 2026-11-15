@@ -36,7 +36,7 @@ public final class LookGridMigration {
 
     public static final String KEY_MIGRATED = "look_grid_migrated";
 
-    static final String INHERIT_PREFIX = "surface_inherit_";
+    public static final String INHERIT_PREFIX = "surface_inherit_";
 
     /** The four old glass properties. */
     enum OldProperty {

@@ -600,8 +600,9 @@
                         android:visibility="gone" />
                 </LinearLayout>
 
-                <!-- The extra keys standing off the dock: the toolbar pager's own first-page
-                     ExtraKeysView is lent to this host. syncExtraKeysHost() fills and sizes it. -->
+                <!-- The extra keys standing off the dock: the activity's own standalone
+                     ExtraKeysPageView of key page 1 stands in this host. syncExtraKeysHost() fills
+                     and sizes it. -->
                 <FrameLayout
                     android:id="@+id/place_extra_keys_host"
                     android:layout_width="wrap_content"
@@ -877,7 +878,7 @@
                     android:clipChildren="false"
                     android:clipToPadding="false">
 
-                    <androidx.viewpager.widget.ViewPager
+                    <com.termux.app.terminal.extrakeys.ExtraKeysBarView
                         android:id="@+id/terminal_toolbar_view_pager"
                         android:visibility="gone"
                         android:layout_width="match_parent"
@@ -1186,6 +1187,30 @@
             android:focusable="false"
             android:visibility="gone" />
         </com.termux.app.chrome.LiveBackdropRelativeLayout>
+        <!-- The Home pill's layer: Home's extra keys as a small floating glass pill. Full size, no
+             background, and it claims a touch only when the down lands on the pill or its chip.
+             It sits just before the app drawer so the drawer, the palette and the sheets draw
+             over it and see touches first, while the wall (Home's widget pages) is under it.
+             HomePillController hides the pill (INVISIBLE) whenever Home is not showing it. -->
+        <com.termux.app.terminal.extrakeys.HomePillLayer
+            android:id="@+id/home_pill_layer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false" />
+
+
+        <!-- The page switcher's layer: the dot and its picker. Above the pages, the keyboard and a
+             running Display (all inside the relative layout), under the drawer and palette planes.
+             PageSwitcher fills it; it takes no touch of its own. -->
+        <FrameLayout
+            android:id="@+id/page_switcher_layer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false"
+            android:clipChildren="false"
+            android:importantForAccessibility="no" />
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
              deliberately NOT part of the accessory stack: the drawer animates with transforms only,

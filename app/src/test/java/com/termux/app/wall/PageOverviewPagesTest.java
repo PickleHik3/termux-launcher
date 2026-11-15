@@ -260,33 +260,6 @@ public class PageOverviewPagesTest {
         assertEquals(end, (int) order.get(order.size() - 1));
     }
 
-    // ---- removing a window, and Start in ---------------------------------------------------
-
-    @Test
-    public void removingTheLastWindowMovesStartInOffTheTerminal() {
-        WallPagesStore store = store(of(2, home(1), terminal(2)));
-        assertEquals(WallRow.START_IN_WORKSPACE, store.current().startIn());
-        rules(store).startInAfterRemoval(PageOverviewPolicy.Kind.TERMINAL, 0);
-        assertEquals(WallRow.START_IN_HOME, store.current().startIn());
-        assertEquals(1, store.current().homeId());
-    }
-
-    @Test
-    public void removingAWindowWithOthersLeftKeepsStartIn() {
-        WallPagesStore store = store(of(2, home(1), terminal(2)));
-        WallPages before = store.current();
-        rules(store).startInAfterRemoval(PageOverviewPolicy.Kind.TERMINAL, 1);
-        assertSame(before, store.current());
-    }
-
-    @Test
-    public void removingAWindowWhileHomeIsAHomePageKeepsStartIn() {
-        WallPagesStore store = store(of(1, home(1), terminal(2)));
-        WallPages before = store.current();
-        rules(store).startInAfterRemoval(PageOverviewPolicy.Kind.TERMINAL, 0);
-        assertSame(before, store.current());
-    }
-
     // ---- hidden and detached Home pages ----------------------------------------------------
 
     @Test

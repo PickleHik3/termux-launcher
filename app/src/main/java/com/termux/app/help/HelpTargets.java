@@ -19,7 +19,7 @@ import com.termux.app.wall.PaneWallPage;
 import com.termux.app.x11.DisplayScaleRailView;
 import com.termux.app.x11.DisplayTouchpadView;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -133,7 +133,7 @@ public final class HelpTargets {
             paneCorner(s);
             // The row as one box, for the topic that is about the row; every cap is measured
             // separately below, for the labels shown while the row is the selected control.
-            ExtraKeysView row = firstOfType(root, ExtraKeysView.class);
+            ExtraKeysPageView row = firstOfType(root, ExtraKeysPageView.class);
             add(s, "keys", rect(row), radius(row));
             // The row that was just measured, not a second walk for it: one search, one answer.
             extraKeys(row, s);
@@ -236,12 +236,12 @@ public final class HelpTargets {
     }
     private void extraKeys(View view, Snapshot s) {
         if (rect(view) == null || view == overlay) return;
-        if (view instanceof ExtraKeysView) {
-            ExtraKeysView row = (ExtraKeysView) view;
+        if (view instanceof ExtraKeysPageView) {
+            ExtraKeysPageView row = (ExtraKeysPageView) view;
             int measured = 0, defined = 0;
             for (int i = 0; i < row.getChildCount(); i++) {
                 Rect r = rect(row.getChildAt(i));
-                ExtraKeyButton key = row.definitionForChild(i);
+                ExtraKeyButton key = row.keyAt(i);
                 if (r != null) measured++;
                 if (key != null) defined++;
                 if (r == null || key == null) continue;

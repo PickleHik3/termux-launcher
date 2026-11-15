@@ -34,6 +34,11 @@
             app:entries="@array/settings_start_in_entries"
             app:entryValues="@array/settings_start_in_values"
             app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="page_switcher_enabled"
+            app:title="@string/settings_page_switcher_title"
+            app:summary="@string/settings_page_switcher_summary"
+            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="general_motion" app:title="@string/settings_general_motion_header">

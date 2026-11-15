@@ -81,8 +81,8 @@ public final class PageOverviewPages {
     }
 
     /**
-     * The card of {@code kind} at {@code index} (a Home page's index, an Assistant page's id, or
-     * a window's row place) becomes home: a Home page or the Assistant page in the page list, any
+     * The card of {@code kind} at {@code index} (a Home page's index, or an Assistant page's id)
+     * becomes home: a Home page or the Assistant page in the page list, any
      * other card through Start in ({@link StartInPolicy#choose}).
      */
     public void chooseHome(@NonNull PageOverviewPolicy.Kind kind, int index) {
@@ -131,7 +131,7 @@ public final class PageOverviewPages {
         editWallPages(pages -> pages.move(id, pages.wallIndexOfListed(wallIndex)));
     }
 
-    /** The Terminal page, with every window card, moves to page index {@code wallIndex}. */
+    /** The Terminal page, with every window it holds, moves to page index {@code wallIndex}. */
     public void moveTerminalPage(int wallIndex) {
         WallPages.Page terminal = wallPages().terminal();
         if (terminal == null) return;
@@ -258,14 +258,6 @@ public final class PageOverviewPages {
         launcher.refreshDisplayCards();
         launcher.refreshPages();
         return added.page.id;
-    }
-
-    // The current session's row of windows.
-
-    /** Edit pages really removed a window: Start in falls back if it named it. */
-    public void startInAfterRemoval(@NonNull PageOverviewPolicy.Kind kind, int terminalsLeft) {
-        String next = StartInPolicy.afterRemoval(wallPages().startIn(), kind, terminalsLeft);
-        if (next != null) editWallPages(pages -> pages.chooseStartIn(next));
     }
 
     /** The overview card kind for a wall position of {@code page}'s kind. */

@@ -15,7 +15,9 @@ import android.view.View;
 import android.widget.EditText;
 
 import com.termux.R;
+import com.termux.app.terminal.io.ExtraKeysDraft;
 import com.termux.app.terminal.io.ExtraKeysLayoutModel;
+import com.termux.app.terminal.io.ExtraKeysTarget;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -97,5 +99,103 @@ public class ExtraKeysEditorFragmentTest {
     private static View findVisibleDescription(ExtraKeysEditorHarness h, String description) {
         View v = findDescription(h.page(), description);
         return v != null && v.getVisibility() == View.VISIBLE ? v : null;
+    }
+
+    @Test
+    public void aStoredKeySizeLoadsAsTenthsAndOutOfRangeReadsAsTheDefault() {
+        assertEquals(15, ExtraKeysDraft.keySizeTenthsFromProperty("1.5"));
+        assertEquals(4, ExtraKeysDraft.keySizeTenthsFromProperty("0.4"));
+        assertEquals(30, ExtraKeysDraft.keySizeTenthsFromProperty("3"));
+        assertEquals(10, ExtraKeysDraft.keySizeTenthsFromProperty("9"));
+        assertEquals(10, ExtraKeysDraft.keySizeTenthsFromProperty("0.1"));
+        assertEquals(10, ExtraKeysDraft.keySizeTenthsFromProperty("big"));
+        assertEquals(10, ExtraKeysDraft.keySizeTenthsFromProperty(null));
+    }
+
+    @Test
+    public void movingTheKeySizeMarksTheEditorDirty() throws Exception {
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness();
+        assertFalse(h.fragment.hasUnsavedChanges());
+        h.editDraft(d -> d.setKeySizeTenths(25));
+        assertTrue(h.fragment.hasUnsavedChanges());
+        h.editDraft(d -> d.setKeySizeTenths(ExtraKeysDraft.KEY_SIZE_DEFAULT_TENTHS));
+        assertFalse(h.fragment.hasUnsavedChanges());
+    }
+    @Test
+    public void theTargetInTheArgumentsIsTheOneItOpensOn() throws Exception {
+        for (ExtraKeysTarget each : ExtraKeysTarget.values()) {
+            android.os.Bundle args = new android.os.Bundle();
+            args.putString(com.termux.app.activities.SettingsActivity.EXTRA_INITIAL_PLACE, each.name());
+            assertEquals(each, ExtraKeysEditorFragment.targetFromArguments(args));
+        }
+        assertEquals("no arguments is Global", ExtraKeysTarget.GLOBAL,
+            ExtraKeysEditorFragment.targetFromArguments(null));
+        android.os.Bundle unknown = new android.os.Bundle();
+        unknown.putString(com.termux.app.activities.SettingsActivity.EXTRA_INITIAL_PLACE, "nowhere");
+        assertEquals("an unknown name is Global", ExtraKeysTarget.GLOBAL,
+            ExtraKeysEditorFragment.targetFromArguments(unknown));
+
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness(ExtraKeysTarget.HOME);
+        java.lang.reflect.Field field = ExtraKeysEditorFragment.class.getDeclaredField("target");
+        field.setAccessible(true);
+        assertEquals(ExtraKeysTarget.HOME, field.get(h.fragment));
+        assertEquals(ExtraKeysTarget.GLOBAL,
+            field.get(new ExtraKeysEditorHarness().fragment));
+    }
+
+    private static void openHome(ExtraKeysEditorHarness h) throws Exception {
+        java.lang.reflect.Field field = ExtraKeysEditorFragment.class.getDeclaredField("target");
+        field.setAccessible(true);
+        field.set(h.fragment, ExtraKeysTarget.HOME);
+        java.lang.reflect.Method refresh = ExtraKeysEditorFragment.class.getDeclaredMethod("refreshAll");
+        refresh.setAccessible(true);
+        refresh.invoke(h.fragment);
+        h.idle();
+    }
+
+    @Test
+    public void homeWithKeysOffSaysSoAndOffersOnlyToShowThem() throws Exception {
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness(ExtraKeysTarget.HOME);
+        openHome(h);
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_off_title)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_off_body)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_show)));
+        assertNull("no Global wording on Home",
+            findVisible(h, s(R.string.settings_extra_keys_using_global_title)));
+        assertNull(findVisible(h, s(R.string.settings_extra_keys_home_hide)));
+        assertFalse(h.fragment.hasUnsavedChanges());
+    }
+
+    @Test
+    public void showingHomeKeysOpensItsRowsWithTheStarterKeysAndOffersToHideThem() throws Exception {
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness(ExtraKeysTarget.HOME);
+        openHome(h);
+        h.click(findText(h.page(), s(R.string.settings_extra_keys_home_show)));
+        assertTrue("applies on Save like the page's other changes", h.fragment.hasUnsavedChanges());
+        assertNull(findVisible(h, s(R.string.settings_extra_keys_home_off_title)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_add_row)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_hide)));
+        assertNull(findVisible(h, s(R.string.settings_extra_keys_use_global)));
+
+        h.click(findText(h.page(), s(R.string.settings_extra_keys_home_hide)));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_home_show)));
+    }
+
+    @Test
+    public void otherTargetsKeepTheGenericCard() throws Exception {
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness(ExtraKeysTarget.TERMINAL);
+        java.lang.reflect.Field field = ExtraKeysEditorFragment.class.getDeclaredField("target");
+        field.setAccessible(true);
+        assertEquals(ExtraKeysTarget.TERMINAL, field.get(h.fragment));
+        assertNotNull(findVisible(h, s(R.string.settings_extra_keys_using_global_title)));
+        assertNull(findVisible(h, s(R.string.settings_extra_keys_home_show)));
+    }
+
+    private static View findVisible(ExtraKeysEditorHarness h, String text) {
+        View v = findText(h.page(), text);
+        for (View p = v; p != null; p = p.getParent() instanceof View ? (View) p.getParent() : null) {
+            if (p.getVisibility() != View.VISIBLE) return null;
+        }
+        return v;
     }
 }

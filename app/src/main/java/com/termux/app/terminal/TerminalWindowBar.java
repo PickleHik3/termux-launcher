@@ -2782,6 +2782,21 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
+     * The width of the chip in front: the selected one, else the first shown. The least the bar
+     * must be given for one whole chip to show; 0 when there are none.
+     */
+    public int frontChipWidthPx() {
+        View chip = selectedTabView();
+        if (chip == null || chip.getVisibility() == GONE) {
+            chip = null;
+            for (int i = 0; i < mTabs.getChildCount() && chip == null; i++) {
+                if (mTabs.getChildAt(i).getVisibility() != GONE) chip = mTabs.getChildAt(i);
+            }
+        }
+        return chip == null ? 0 : chip.getMeasuredWidth();
+    }
+
+    /**
      * The selected tab's view, so a surface can anchor itself to the window it belongs to. Null
      * before the row is populated or while nothing is selected.
      */

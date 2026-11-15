@@ -25,6 +25,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.core.graphics.ColorUtils;
 import androidx.core.view.MenuProvider;
 import androidx.core.widget.NestedScrollView;
 import androidx.core.widget.TextViewCompat;
@@ -44,14 +45,22 @@ import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.settings.TermuxPropertiesFile;
+import com.termux.app.surfaces.rows.SliderRow;
 import com.termux.app.terminal.io.ExtraKeyActionLabels;
 import com.termux.app.terminal.io.ExtraKeyActionPicker;
+import com.termux.app.terminal.io.ExtraKeyEligibility;
+import com.termux.app.terminal.io.ExtraKeySetResolver;
+import com.termux.app.terminal.extrakeys.ExtraKeyCapView;
+import com.termux.app.activities.SettingsActivity;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.terminal.io.ExtraKeysTarget;
+import com.termux.app.terminal.io.HomePillSwitch;
+import com.termux.app.terminal.io.ExtraKeysTargetDrafts;
 import com.termux.app.terminal.io.ExtraKeyDetailSheet;
 import com.termux.app.terminal.io.ExtraKeyOptionsSheets;
 import com.termux.app.terminal.io.ExtraKeysDraft;
 import com.termux.app.terminal.io.ExtraKeysLayoutModel;
 import com.termux.app.terminal.io.ExtraKeysPresets;
-import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
@@ -86,8 +95,13 @@ public class ExtraKeysEditorFragment extends Fragment
     private static final int KEY_CAP_DP = 48;
     private static final int GAP_DP = 8;
 
+    /** Every target's set; Global always has one. */
+    private ExtraKeysTargetDrafts drafts = ExtraKeysTargetDrafts.load(key -> null);
+    private ExtraKeysTarget target = ExtraKeysTarget.GLOBAL;
+    /** The selected target's draft; an empty stand-in (never saved) while it has no set of its own. */
     private ExtraKeysDraft draft = ExtraKeysDraft.of(new ArrayList<>());
-    /** The draft as loaded or last saved, to tell whether anything is left to save. */
+    private final ExtraKeysDraft standIn = ExtraKeysDraft.of(new ArrayList<>());
+    /** The drafts as loaded or last saved, to tell whether anything is left to save. */
     private String savedFingerprint = "";
     private int currentPage;
 
@@ -108,6 +122,17 @@ public class ExtraKeysEditorFragment extends Fragment
     private ItemTouchHelper touchHelper;
     private View saveBar;
     private View hintView;
+    private View keySizeBlock;
+    private SliderRow keySizeSlider;
+    private TextView keySizeNote;
+    private MaterialButton useDefaultButton;
+    private View pagesView;
+    private View rowList;
+    private View addRowView;
+    private View notOwnBlock;
+    private TextView notOwnTitle;
+    private TextView notOwnBody;
+    private MaterialButton giveOwnButton;
     private int[][] stockButton;
     private MaterialButton cancelBtn;
     private MaterialButton saveButton;
@@ -122,6 +147,18 @@ public class ExtraKeysEditorFragment extends Fragment
         }
     };
 
+    /** The target named in the arguments ({@link SettingsActivity#EXTRA_INITIAL_PLACE}); Global when absent or unknown. */
+    @NonNull
+    static ExtraKeysTarget targetFromArguments(@Nullable Bundle arguments) {
+        String name = arguments == null ? null
+            : arguments.getString(SettingsActivity.EXTRA_INITIAL_PLACE);
+        if (name == null) return ExtraKeysTarget.GLOBAL;
+        for (ExtraKeysTarget each : ExtraKeysTarget.values()) {
+            if (each.name().equals(name)) return each;
+        }
+        return ExtraKeysTarget.GLOBAL;
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -133,6 +170,8 @@ public class ExtraKeysEditorFragment extends Fragment
             com.google.android.material.R.attr.colorOnSurfaceVariant, Color.LTGRAY);
         colorCap = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurfaceContainerHighest, 0xFF2A3140);
+        // A first open names the target to start on; a recreated page keeps the one it had.
+        if (savedInstanceState == null) target = targetFromArguments(getArguments());
         loadDraft(context);
 
         LinearLayout column = column(context);
@@ -144,7 +183,13 @@ public class ExtraKeysEditorFragment extends Fragment
         column.addView(scroller, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        content.addView(pagesBar(context));
+        content.addView(targetBar(context));
+        notOwnBlock = notOwnBlock(context);
+        content.addView(notOwnBlock);
+        keySizeBlock = keySizeRow(context);
+        content.addView(keySizeBlock);
+        pagesView = pagesBar(context);
+        content.addView(pagesView);
         hintView = hintRow(context);
         content.addView(hintView);
 
@@ -156,10 +201,12 @@ public class ExtraKeysEditorFragment extends Fragment
         list.setAdapter(adapter);
         touchHelper = new ItemTouchHelper(new DragCallback());
         touchHelper.attachToRecyclerView(list);
+        rowList = list;
         content.addView(list, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        content.addView(addRowButton(context));
+        addRowView = addRowButton(context);
+        content.addView(addRowView);
         content.addView(guideView(context));
 
         saveBar = saveBar(context);
@@ -188,19 +235,30 @@ public class ExtraKeysEditorFragment extends Fragment
             TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE);
         displayMap = ExtraKeysInfo.getCharDisplayMapForStyle(style);
 
-        List<ExtraKeysLayoutModel> loaded = new ArrayList<>();
-        for (int page = 0; page < TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS.length; page++) {
-            String value = properties.getProperty(TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS[page]);
-            if (value == null) value = TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES[page];
-            loaded.add(ExtraKeysLayoutModel.parse(value));
-        }
-        draft = ExtraKeysDraft.of(loaded);
-        savedFingerprint = draft.fingerprint();
-        currentPage = Math.min(currentPage, draft.pageCount() - 1);
+        HomePillSwitch pill = homePillSwitch(context);
+        drafts = ExtraKeysTargetDrafts.load(properties::getProperty, pill != null && pill.keysOn());
+        syncDraft();
+        savedFingerprint = drafts.fingerprint();
+    }
+
+    /** Home's keys switch over the stores, or null before the preferences exist. */
+    @Nullable
+    private HomePillSwitch homePillSwitch(@NonNull Context context) {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context);
+        if (preferences == null) return null;
+        return new HomePillSwitch(HomePillSwitch.hostFor(new PlaceLayoutStore(preferences), preferences,
+            key -> TermuxPropertiesFile.load(context).getProperty(key), () -> {}));
     }
 
     private boolean isDirty() {
-        return !draft.fingerprint().equals(savedFingerprint);
+        return !drafts.fingerprint().equals(savedFingerprint);
+    }
+
+    /** Points {@link #draft} at the selected target's set and keeps the page in range. */
+    private void syncDraft() {
+        ExtraKeysDraft own = drafts.draftOf(target);
+        draft = own != null ? own : standIn;
+        currentPage = Math.max(0, Math.min(currentPage, draft.pageCount() - 1));
     }
 
     /** After any edit: the save bar and the Back guard follow whether the draft differs. */
@@ -210,6 +268,7 @@ public class ExtraKeysEditorFragment extends Fragment
     }
 
     private void refreshAll() {
+        refreshTarget();
         refreshPages();
         refreshRows();
         updateSaveBar();
@@ -226,12 +285,21 @@ public class ExtraKeysEditorFragment extends Fragment
     }
 
     private void save() {
-        for (int page = 0; page < draft.pageCount(); page++) draft.page(page).pruneEmptyRows();
-        for (int page = 0; page < TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS.length; page++) {
-            TermuxPropertiesFile.write(TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS[page],
-                draft.valueFor(page));
+        drafts.pruneEmptyRows();
+        for (ExtraKeysTargetDrafts.Write write : drafts.writes()) {
+            if (write.value == null) {
+                TermuxPropertiesFile.remove(write.key);
+            } else {
+                TermuxPropertiesFile.write(write.key, write.value);
+            }
         }
-        savedFingerprint = draft.fingerprint();
+        // After the lines: switching on finds Home's set already written, so it never overwrites it.
+        if (drafts.homeShownChanged()) {
+            HomePillSwitch pill = homePillSwitch(requireContext());
+            if (pill != null) pill.setOn(drafts.homeShown());
+        }
+        drafts.markSaved();
+        savedFingerprint = drafts.fingerprint();
         backCallback.setEnabled(false);
         Context context = requireContext();
         // The terminal rebuilds its toolbar pages when it next comes to the front.
@@ -263,17 +331,191 @@ public class ExtraKeysEditorFragment extends Fragment
 
     /** Takes back the last removal: the draft returns to how it was, on the page it was on. */
     private void offerUndo(@StringRes int message, @Nullable Object arg,
-                           @NonNull ExtraKeysDraft.Snapshot before, int pageBefore) {
+                           @NonNull ExtraKeysTargetDrafts.Snapshot before, int pageBefore) {
         String text = arg == null ? getString(message) : getString(message, arg);
         Snackbar snackbar = Snackbar.make(root, text, Snackbar.LENGTH_LONG);
         snackbar.setAnchorView(saveBar);
         snackbar.setAction(R.string.settings_extra_keys_undo, v -> {
-            draft.restore(before);
-            currentPage = Math.max(0, Math.min(pageBefore, draft.pageCount() - 1));
+            drafts.restore(before);
+            currentPage = Math.max(0, pageBefore);
+            syncDraft();
             edited();
             refreshAll();
         });
         snackbar.show();
+    }
+
+    // ---------------------------------------------------------------- key size
+
+    /** Key size, a property of the whole bar, so it stands above the page tabs. */
+    private View keySizeRow(@NonNull Context context) {
+        LinearLayout block = column(context);
+        SliderRow.Track track = new SliderRow.Track(R.drawable.ic_ms_height,
+            getString(R.string.settings_extra_keys_key_size),
+            ExtraKeysDraft.KEY_SIZE_MIN_TENTHS, ExtraKeysDraft.KEY_SIZE_MAX_TENTHS, 1,
+            tenths -> getString(R.string.settings_extra_keys_key_size_value,
+                ExtraKeysDraft.keySizeProperty(tenths)));
+        keySizeSlider = SliderRow.build(context, java.util.Collections.singletonList(track),
+            new int[]{draft.keySizeTenths()}, new SliderRow.Listener() {
+                @Override
+                public void onValue(int index, int value, boolean dragging) {
+                    if (draft.keySizeTenths() == value) return;
+                    draft.setKeySizeTenths(value);
+                    edited();
+                }
+
+                @Override
+                public void onReleased(int index) {}
+            });
+        block.addView(keySizeSlider.root);
+        keySizeNote = new TextView(context);
+        keySizeNote.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall);
+        keySizeNote.setTextColor(colorSubtle);
+        keySizeNote.setPadding(dp(4), 0, dp(4), dp(8));
+        block.addView(keySizeNote);
+        useDefaultButton = new MaterialButton(context, null,
+            androidx.appcompat.R.attr.borderlessButtonStyle);
+        useDefaultButton.setMinHeight(dp(48));
+        LinearLayout.LayoutParams useParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        useParams.bottomMargin = dp(8);
+        block.addView(useDefaultButton, useParams);
+        return block;
+    }
+
+    // --------------------------------------------------------------- targets
+
+    @NonNull
+    private String targetName(@NonNull ExtraKeysTarget of) {
+        switch (of) {
+            case TERMINAL: return getString(R.string.settings_extra_keys_target_terminal);
+            case DISPLAY: return getString(R.string.settings_extra_keys_target_display);
+            case HOME: return getString(R.string.settings_extra_keys_target_home);
+            case ASSISTANT: return getString(R.string.settings_extra_keys_target_assistant);
+            case GLOBAL:
+            default: return getString(R.string.settings_extra_keys_target_global);
+        }
+    }
+
+    /** One chip per target, above everything else; Global is selected on open. */
+    private View targetBar(@NonNull Context context) {
+        HorizontalScrollView scroll = new HorizontalScrollView(context);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        ChipGroup chips = new ChipGroup(context);
+        chips.setSingleLine(true);
+        chips.setSingleSelection(true);
+        chips.setSelectionRequired(true);
+        for (ExtraKeysTarget each : ExtraKeysTarget.values()) {
+            Chip chip = new Chip(context);
+            chip.setText(targetName(each));
+            chip.setCheckable(true);
+            chip.setCheckedIconVisible(false);
+            chip.setId(View.generateViewId());
+            chip.setChecked(each == target);
+            chip.setOnClickListener(v -> {
+                if (target == each) return;
+                target = each;
+                currentPage = 0;
+                refreshAll();
+            });
+            chips.addView(chip);
+        }
+        scroll.addView(chips, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return scroll;
+    }
+
+    /** What a target without a set of its own shows instead of the editor: a fact and the way in. */
+    private View notOwnBlock(@NonNull Context context) {
+        LinearLayout block = column(context);
+        block.setPadding(dp(4), dp(16), dp(4), dp(8));
+        notOwnTitle = new TextView(context);
+        notOwnTitle.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
+        notOwnTitle.setTextColor(colorText);
+        block.addView(notOwnTitle);
+        notOwnBody = new TextView(context);
+        notOwnBody.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall);
+        notOwnBody.setTextColor(colorSubtle);
+        notOwnBody.setPadding(0, dp(4), 0, dp(12));
+        block.addView(notOwnBody);
+        giveOwnButton = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle);
+        giveOwnButton.setMinHeight(dp(48));
+        giveOwnButton.setOnClickListener(v -> {
+            if (target == ExtraKeysTarget.HOME) drafts.showHome();
+            else drafts.giveOwnSet(target);
+            currentPage = 0;
+            edited();
+            refreshAll();
+        });
+        block.addView(giveOwnButton);
+        return block;
+    }
+
+    /**
+     * Shows the editor for a target with a set of its own and the one block for a target without;
+     * everything compares before it sets, so the page does not relayout for nothing.
+     */
+    private void refreshTarget() {
+        syncDraft();
+        boolean own = drafts.isEditing(target);
+        String name = targetName(target);
+        setShown(notOwnBlock, !own);
+        setShown(keySizeBlock, own);
+        setShown(pagesView, own);
+        setShown(rowList, own);
+        setShown(addRowView, own);
+        setShown(hintView, own && !isShort());
+        if (own) {
+            keySizeSlider.setValue(0, draft.keySizeTenths());
+            setText(keySizeNote, target == ExtraKeysTarget.GLOBAL
+                ? getString(R.string.settings_extra_keys_key_size_note)
+                : getString(R.string.settings_extra_keys_key_size_note_target, name));
+            boolean builtIn = target.shippedPage1() != null && target != ExtraKeysTarget.GLOBAL;
+            setShown(useDefaultButton, target != ExtraKeysTarget.GLOBAL);
+            setText(useDefaultButton, getString(target == ExtraKeysTarget.HOME
+                ? R.string.settings_extra_keys_home_hide : builtIn
+                ? R.string.settings_extra_keys_use_builtin : R.string.settings_extra_keys_use_global));
+            final ExtraKeysTarget shown = target;
+            useDefaultButton.setOnClickListener(v -> {
+                if (shown == ExtraKeysTarget.HOME) {
+                    drafts.hideHome();
+                    edited();
+                    refreshAll();
+                    return;
+                }
+                ExtraKeysTargetDrafts.Snapshot before = drafts.snapshot();
+                drafts.useDefault(shown);
+                currentPage = 0;
+                edited();
+                refreshAll();
+                offerUndo(R.string.settings_extra_keys_target_reset, name, before, 0);
+            });
+        } else if (target == ExtraKeysTarget.HOME) {
+            setText(notOwnTitle, getString(R.string.settings_extra_keys_home_off_title));
+            setText(notOwnBody, getString(R.string.settings_extra_keys_home_off_body));
+            setText(giveOwnButton, getString(R.string.settings_extra_keys_home_show));
+        } else {
+            boolean shipped = drafts.sourceOf(target) == ExtraKeySetResolver.Source.SHIPPED;
+            setText(notOwnTitle, getString(shipped
+                ? R.string.settings_extra_keys_using_builtin_title
+                : R.string.settings_extra_keys_using_global_title));
+            setText(notOwnBody, shipped
+                ? getString(R.string.settings_extra_keys_using_builtin_body, name)
+                : getString(R.string.settings_extra_keys_using_global_body, name));
+            setText(giveOwnButton, getString(R.string.settings_extra_keys_give_own, name));
+        }
+        if (isAdded()) requireActivity().invalidateMenu();
+    }
+
+    private static void setShown(@NonNull View view, boolean shown) {
+        int visibility = shown ? View.VISIBLE : View.GONE;
+        if (view.getVisibility() != visibility) view.setVisibility(visibility);
+    }
+
+    private static void setText(@NonNull TextView view, @NonNull CharSequence text) {
+        if (!TextUtils.equals(view.getText(), text)) view.setText(text);
     }
 
     // ---------------------------------------------------------------- pages
@@ -355,7 +597,7 @@ public class ExtraKeysEditorFragment extends Fragment
 
                 @Override
                 public void remove() {
-                    ExtraKeysDraft.Snapshot before = draft.snapshot();
+                    ExtraKeysTargetDrafts.Snapshot before = drafts.snapshot();
                     currentPage = draft.removePage(page);
                     edited();
                     refreshAll();
@@ -384,6 +626,12 @@ public class ExtraKeysEditorFragment extends Fragment
         }
 
         @Override
+        public void onPrepareMenu(@NonNull Menu menu) {
+            MenuItem item = menu.findItem(itemId);
+            if (item != null) item.setEnabled(drafts.isEditing(target));
+        }
+
+        @Override
         public boolean onMenuItemSelected(@NonNull MenuItem item) {
             if (item.getItemId() != itemId) return false;
             View anchor = requireActivity().findViewById(itemId);
@@ -398,7 +646,8 @@ public class ExtraKeysEditorFragment extends Fragment
         // The row the user had before they took this release's row, when they took it: the one
         // preset that is theirs alone, so it leads the list and stays after it is used.
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        String previous = preferences == null ? null : preferences.getPreviousExtraKeys(currentPage);
+        String previous = preferences == null || target != ExtraKeysTarget.GLOBAL
+            ? null : preferences.getPreviousExtraKeys(currentPage);
         List<ExtraKeysPresets.Preset> presets =
             ExtraKeysPresets.presetsForPage(currentPage, previous);
         android.widget.PopupMenu menu = new android.widget.PopupMenu(context, anchor);
@@ -415,7 +664,7 @@ public class ExtraKeysEditorFragment extends Fragment
     private void applyPreset(@NonNull ExtraKeysPresets.Preset preset) {
         final int page = currentPage;
         Runnable apply = () -> {
-            ExtraKeysDraft.Snapshot before = draft.snapshot();
+            ExtraKeysTargetDrafts.Snapshot before = drafts.snapshot();
             draft.setPage(page, preset.model());
             edited();
             refreshAll();
@@ -513,7 +762,7 @@ public class ExtraKeysEditorFragment extends Fragment
 
                 @Override
                 public void delete() {
-                    ExtraKeysDraft.Snapshot before = draft.snapshot();
+                    ExtraKeysTargetDrafts.Snapshot before = drafts.snapshot();
                     draft.removeRow(page, row);
                     edited();
                     refreshRows();
@@ -549,7 +798,7 @@ public class ExtraKeysEditorFragment extends Fragment
 
             @Override
             public void onRemoveKey() {
-                ExtraKeysDraft.Snapshot before = draft.snapshot();
+                ExtraKeysTargetDrafts.Snapshot before = drafts.snapshot();
                 draft.removeKey(page, key);
                 edited();
                 refreshRows();
@@ -766,7 +1015,16 @@ public class ExtraKeysEditorFragment extends Fragment
         TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(cap, 8, 16, 1,
             TypedValue.COMPLEX_UNIT_SP);
         cap.setText(NerdFontSpans.span(context, ExtraKeyActionLabels.capText(key, displayMap)));
-        cap.setContentDescription(ExtraKeyActionLabels.title(context, key));
+        String title = ExtraKeyActionLabels.title(context, key);
+        cap.setContentDescription(title);
+        // Marked, never refused: a key that does nothing where these keys go is drawn like a dead
+        // key on the bar, and stays tappable and editable.
+        com.termux.app.wall.PaneWallPage place = target.markingPlace();
+        if (place != null && !ExtraKeyEligibility.isUsable(key.key, place)) {
+            cap.setTextColor(ColorUtils.setAlphaComponent(colorText, ExtraKeyCapView.DISABLED_LABEL_ALPHA));
+            cap.setContentDescription(title + ", "
+                + getString(R.string.settings_extra_keys_does_nothing_on, targetName(target)));
+        }
         GradientDrawable background = new GradientDrawable();
         background.setColor(colorCap);
         background.setCornerRadius(dp(12));
@@ -816,7 +1074,7 @@ public class ExtraKeysEditorFragment extends Fragment
             if (!compact) { b.setMinHeight(stock[2]); b.setMinimumHeight(stock[3]); }
             b.requestLayout();
         }
-        if (hintView != null) hintView.setVisibility(compact ? View.GONE : View.VISIBLE);
+        if (hintView != null) setShown(hintView, !compact && drafts.isEditing(target));
     }
 
     private View saveBar(@NonNull Context context) {

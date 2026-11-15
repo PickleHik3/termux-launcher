@@ -2,7 +2,6 @@ package com.termux.shared.termux.extrakeys;
 
 import android.view.View;
 import androidx.annotation.NonNull;
-import com.google.android.material.button.MaterialButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants.EXTRA_KEY_DISPLAY_MAPS;
 import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
 import org.json.JSONArray;
@@ -10,7 +9,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
- * A {@link Class} that defines the info needed by {@link ExtraKeysView} to display the extra key
+ * A {@link Class} that defines the info needed by the extra keys bar to display the extra key
  * views.
  *
  * The {@code propertiesInfo} passed to the constructors of this class must be json array of arrays.
@@ -63,9 +62,9 @@ import org.json.JSONObject;
  * Aliases are also allowed for the keys that you can pass as {@code extraKeyAliasMap}. Check
  * {@link ExtraKeysConstants#CONTROL_CHARS_ALIASES}.
  *
- * Its up to the {@link ExtraKeysView.IExtraKeysView} client on how to handle individual key values
+ * Its up to the {@link ExtraKeysClient} client on how to handle individual key values
  * of an {@link ExtraKeyButton}. They are sent as is via
- * {@link ExtraKeysView.IExtraKeysView#onExtraKeyButtonClick(View, ExtraKeyButton, MaterialButton)}. The
+ * {@link ExtraKeysClient#onExtraKeyClick(View, ExtraKeyButton)}. The
  * {@link TerminalExtraKeys} which is an implementation of the interface,
  * checks if the key is one of {@link ExtraKeysConstants#PRIMARY_KEY_CODES_FOR_STRINGS} and generates
  * a {@link android.view.KeyEvent} for it, and if its not, then converts the key to code points by
@@ -85,7 +84,7 @@ import org.json.JSONObject;
 public class ExtraKeysInfo {
 
     /**
-     * Matrix of buttons to be displayed in {@link ExtraKeysView}.
+     * Matrix of buttons to be displayed in the extra keys bar.
      */
     private final ExtraKeyButton[][] mButtons;
 

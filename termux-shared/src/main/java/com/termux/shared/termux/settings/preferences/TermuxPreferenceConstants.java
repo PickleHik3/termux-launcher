@@ -433,6 +433,13 @@ public final class TermuxPreferenceConstants {
 
         public static final float DEFAULT_APP_LAUNCHER_BAR_HEIGHT = 2.18f;
 
+        /**
+         * Defines the keys for where the Home pill rests: its centre as a fraction of the window's
+         * width and height. Absent means the default first spot.
+         */
+        public static final String KEY_HOME_PILL_X = "home_pill_x";
+        public static final String KEY_HOME_PILL_Y = "home_pill_y";
+
         public static final float MIN_APP_LAUNCHER_BAR_HEIGHT = 0.4f;
 
         public static final float MAX_APP_LAUNCHER_BAR_HEIGHT = 3.0f;
@@ -897,6 +904,26 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_APP_HAPTICS_ENABLED = "app_haptics_enabled";
 
         public static final boolean DEFAULT_APP_HAPTICS_ENABLED = true;
+
+        /** Whether the page switcher's dot is on the screen edge. */
+        public static final String KEY_PAGE_SWITCHER_ENABLED = "page_switcher_enabled";
+
+        public static final boolean DEFAULT_PAGE_SWITCHER_ENABLED = true;
+
+        /** The edge the dot rests on: 0 left, 1 right. */
+        public static final String KEY_PAGE_SWITCHER_EDGE = "page_switcher_edge";
+
+        public static final int DEFAULT_PAGE_SWITCHER_EDGE = 1;
+
+        /** How far down the screen the dot rests, as a fraction of its height. */
+        public static final String KEY_PAGE_SWITCHER_HEIGHT = "page_switcher_height";
+
+        public static final float DEFAULT_PAGE_SWITCHER_HEIGHT = 0.6f;
+
+        /** Whether the dot has shown its first-run hint. */
+        public static final String KEY_PAGE_SWITCHER_HINT_SHOWN = "page_switcher_hint_shown";
+
+        public static final boolean DEFAULT_PAGE_SWITCHER_HINT_SHOWN = false;
 
         /** Defines whether A-Z and app-row focus changes emit subtle haptic ticks. */
         public static final String KEY_APP_LAUNCHER_ROW_HAPTICS = "app_launcher_row_haptics";
