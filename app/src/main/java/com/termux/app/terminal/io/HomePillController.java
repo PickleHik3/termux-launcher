@@ -121,6 +121,7 @@ public final class HomePillController {
     private boolean mShown;
     private boolean mDocked;
     private boolean mFlightHold;
+    private int mCoverBits = -1;
 
     public HomePillController(@NonNull Host host) {
         mHost = host;
@@ -147,6 +148,32 @@ public final class HomePillController {
         if (mHost.layoutEditorActive() || mHost.surfaceEditorActive() || mHost.appearanceOpen()) return false;
         if (mHost.overlayOpen() || mHost.minimalMode()) return false;
         return mHost.keys() != null;
+    }
+
+    /** The covers over Home's content now, one bit each; the pill hides while any is set. */
+    private int coverBits() {
+        int bits = 0;
+        if (mHost.appDrawerOpen()) bits |= 1;
+        if (mHost.paletteOpen()) bits |= 1 << 1;
+        if (mHost.layoutEditorActive()) bits |= 1 << 2;
+        if (mHost.surfaceEditorActive()) bits |= 1 << 3;
+        if (mHost.appearanceOpen()) bits |= 1 << 4;
+        if (mHost.overlayOpen()) bits |= 1 << 5;
+        if (mHost.minimalMode()) bits |= 1 << 6;
+        return bits;
+    }
+
+    /**
+     * Rechecks when a cover has opened or closed since the last look. Covers fade and slide
+     * without a layout pass, so the layout-driven {@link #refresh} alone never hears one close;
+     * the activity calls this before each frame is drawn, and it is a few reads when nothing
+     * changed.
+     */
+    public void refreshIfCoversChanged() {
+        int bits = coverBits();
+        if (bits == mCoverBits) return;
+        mCoverBits = bits;
+        refresh();
     }
 
     /** The properties were read again: the stored spot is read afresh, then everything is rechecked. */

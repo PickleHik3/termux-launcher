@@ -1127,6 +1127,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.terminal.io.HomePillSwitch mHomePillSwitch;
     /** The root's layout listener that rechecks the pill after each layout pass; one, for life. */
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mHomePillLayoutListener;
+    /** Rechecks the pill when a cover over Home opens or closes (no layout pass marks it). */
+    @Nullable private ViewTreeObserver.OnPreDrawListener mHomePillCoverListener;
     /** The down that began this touch stream landed on the pill or its chip. */
     private boolean mHomePillStream;
     /**
@@ -2005,6 +2007,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Home pill is rechecked after each layout pass: compare-guarded, never per frame.
         mHomePillLayoutListener = mHomePill::refresh;
         mTermuxActivityRootView.getViewTreeObserver().addOnGlobalLayoutListener(mHomePillLayoutListener);
+        mHomePillCoverListener = () -> {
+            mHomePill.refreshIfCoversChanged();
+            return true;
+        };
+        mTermuxActivityRootView.getViewTreeObserver().addOnPreDrawListener(mHomePillCoverListener);
         mWallpaperBackdropView = findViewById(R.id.wallpaper_backdrop);
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.setParallax(mWallpaperParallax);
         View sceneContainer = findViewById(R.id.terminal_root_container);
@@ -10801,6 +10808,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxActivityRootView != null && mHomePillLayoutListener != null) {
             mTermuxActivityRootView.getViewTreeObserver().removeOnGlobalLayoutListener(mHomePillLayoutListener);
             mHomePillLayoutListener = null;
+        }
+        if (mTermuxActivityRootView != null && mHomePillCoverListener != null) {
+            mTermuxActivityRootView.getViewTreeObserver().removeOnPreDrawListener(mHomePillCoverListener);
+            mHomePillCoverListener = null;
         }
         if (mPaneController != null) mPaneController.setGeometryScheduler(null);
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(terminalHost());

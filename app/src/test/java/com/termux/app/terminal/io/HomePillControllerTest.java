@@ -320,6 +320,46 @@ public class HomePillControllerTest {
         }
     }
 
+    @Test
+    public void everyCoverClosingBringsThePillBackWithoutALayoutPass() {
+        java.util.List<java.util.function.BiConsumer<FakeHost, Boolean>> covers = java.util.Arrays.asList(
+            (h, on) -> h.drawer = on,
+            (h, on) -> h.palette = on,
+            (h, on) -> h.layoutEditor = on,
+            (h, on) -> h.surfaceEditor = on,
+            (h, on) -> h.appearance = on,
+            (h, on) -> h.overlay = on);
+        for (int i = 0; i < covers.size(); i++) {
+            FakeHost h = new FakeHost();
+            HomePillController c = new HomePillController(h);
+            c.refreshIfCoversChanged();
+            assertTrue("cover " + i + " starts shown", h.shown);
+            covers.get(i).accept(h, true);
+            c.refreshIfCoversChanged();
+            assertFalse("cover " + i + " opens: hidden", h.shown);
+            covers.get(i).accept(h, false);
+            c.refreshIfCoversChanged();
+            assertTrue("cover " + i + " closes: shown again", h.shown);
+            assertTrue(c.isShown());
+        }
+    }
+
+    @Test
+    public void thePaletteOpenedFromThePillsOwnKeyReturnsTheNextFrame() {
+        controller.refreshIfCoversChanged();
+        assertTrue(host.shown);
+        host.palette = true;
+        controller.refreshIfCoversChanged();
+        assertFalse(host.shown);
+        host.palette = false;
+        controller.refreshIfCoversChanged();
+        assertTrue(host.shown);
+        int calls = host.shownCalls;
+        controller.refreshIfCoversChanged();
+        controller.refreshIfCoversChanged();
+        assertEquals("nothing changed, nothing told", calls, host.shownCalls);
+    }
+
     private static final class FakeHost implements HomePillController.Host {
         boolean switchOn = true;
         PaneWallPage place = PaneWallPage.WIDGETS;
