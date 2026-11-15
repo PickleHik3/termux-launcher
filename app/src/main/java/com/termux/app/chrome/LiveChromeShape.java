@@ -11,6 +11,7 @@ import com.termux.app.place.ChromeShapeModel;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.List;
 
@@ -34,18 +35,25 @@ public final class LiveChromeShape {
 
     /** The radius assumed for the device's screen when it reports none (no longer rounds the frame). */
     public static final float FALLBACK_SCREEN_RADIUS_DP = 28f;
-    /** The most air between Floating pane cards. */
-    public static final float PANE_GAP_CAP_DP = 24f;
+    /** The most air between split panes: the top of the Inner gap slider. */
+    public static final float PANE_GAP_CAP_DP = TERMUX_APP.MAX_TERMINAL_PANE_GAP;
     /**
      * The air the Workspace's terminal keeps from what stands above and below it, in place of
      * Margin (never more than Margin): rows are what a terminal is short of, so it stands close to
      * the status bar and the dock or keyboard while its sides keep Margin.
      */
     public static final float TERMINAL_VERTICAL_GAP_DP = 4f;
-    /** The least gap between split panes: the strip the divider is dragged by. */
-    public static final float PANE_GAP_FLOOR_DP = 10f;
     /** How thick a Docked divider line draws. */
     public static final float DIVIDER_DP = 1f;
+
+    /**
+     * The gap between split panes, in dp, from the stored Inner gap: the one number the panes are
+     * laid out by, the dividers are placed by and the editor shows, under both Styles. Floating
+     * shows it as wallpaper between cards, Docked as the frame glass between inserts.
+     */
+    public static int paneGapDp(int storedDp) {
+        return Math.max(0, Math.min(storedDp, Math.round(PANE_GAP_CAP_DP)));
+    }
 
     /** The device's screen radius in px: what it reported, or 28dp when it reports none. */
     public static float screenRadiusPx(float reportedPx, float density) {
@@ -87,13 +95,31 @@ public final class LiveChromeShape {
                                  float splitHalfWidthPx,
                                  @Nullable ChromeShape.Box floatingKeyboardBox,
                                  boolean terminalGap) {
+        return of(layout, style, widthPx, heightPx, thickness, cornersPx, marginPx,
+            screenRadiusPx, density, paneCount, axis, splitHalfWidthPx, floatingKeyboardBox,
+            terminalGap, 0f);
+    }
+
+    /**
+     * {@link #of}, with {@code paneGapPx} between split panes: {@link #paneGapDp} in px, the
+     * number the terminal's dividers are as thick as.
+     */
+    @NonNull
+    public static ChromeShape of(@NonNull PlaceLayout layout, @NonNull LayoutStyle style,
+                                 int widthPx, int heightPx,
+                                 @NonNull ChromeShapeModel.Thickness thickness, float cornersPx,
+                                 float marginPx, float screenRadiusPx, float density,
+                                 int paneCount, @NonNull ChromeShapeModel.SplitAxis axis,
+                                 float splitHalfWidthPx,
+                                 @Nullable ChromeShape.Box floatingKeyboardBox,
+                                 boolean terminalGap, float paneGapPx) {
         return ChromeShapeModel.shape(ChromeShapeModel.input(layout, style, widthPx, heightPx,
                 thickness)
             .corners(cornersPx).margin(marginPx)
             .openingVerticalGap(terminalGap ? TERMINAL_VERTICAL_GAP_DP * density : -1f)
             .screenRadius(screenRadiusPx)
             .paneGapCap(PANE_GAP_CAP_DP * density)
-            .paneGapFloor(PANE_GAP_FLOOR_DP * density).dividerThickness(DIVIDER_DP * density)
+            .paneGap(paneGapPx).dividerThickness(DIVIDER_DP * density)
             .panes(paneCount, axis).splitHalfWidth(splitHalfWidthPx)
             .floatingKeyboardBox(floatingKeyboardBox).build());
     }
