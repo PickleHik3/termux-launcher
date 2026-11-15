@@ -6379,15 +6379,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The terminal pane's gap, in dp: margin between panes, never past 24dp and never under 10dp —
-     * air between Floating cards, the gutter of frame glass between Docked inserts, and the strip
-     * the divider is dragged by. The app drawer stands this far off the keyboard too.
+     * The gap between split panes, in dp: the stored Inner gap — air between Floating cards, the
+     * gutter of frame glass between Docked inserts. The divider's touch strip has its own minimum.
      */
     private int terminalPaneGapDp() {
-        return Math.max(Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_FLOOR_DP),
-            Math.min(Math.round(layoutMarginPx(com.termux.app.place.SeamDress.Surface.FRAME)
-                    / getResources().getDisplayMetrics().density),
-                Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_CAP_DP)));
+        return com.termux.app.chrome.LiveChromeShape.paneGapDp(mPreferences != null
+            ? mPreferences.getTerminalPaneGap()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
     }
 
     /** The device's screen radius, which a Docked frame's outer corners take; 28dp when unknown. */
@@ -6491,7 +6489,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : com.termux.app.place.ChromeShapeModel.SplitAxis.STACKED, 0f, null,
             // The insert stands as close to the bars as the terminal does, on the Workspace only.
             !chromeWearsHomeShape(surface)
-                && com.termux.app.wall.PaneWallPolicy.isWorkspacePlace(mLastWallPage));
+                && com.termux.app.wall.PaneWallPolicy.isWorkspacePlace(mLastWallPage),
+            dpToPx(terminalPaneGapDp()));
     }
 
     /**
@@ -14199,6 +14198,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Without commit the dock/keyboard visuals still track the drag live; only the
             // terminal resize (a SIGWINCH into the shell per reflow) waits for the release.
             setTerminalToolbarHeight(commit);
+            // Inner gap is the dividers' thickness: re-laid once, on the release.
+            if (commit && mPaneController != null) mPaneController.refreshPaneLayout();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
 
