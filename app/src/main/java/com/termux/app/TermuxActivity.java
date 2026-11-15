@@ -2039,6 +2039,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         content.setOnApplyWindowInsetsListener((v, insets) -> {
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
+            // The system's Back strip on each side, for the page switcher's dot.
+            androidx.core.graphics.Insets gestureInsets = insetsCompat.getInsets(Type.systemGestures());
+            mSwitcherGestureInsetLeftPx = gestureInsets.left;
+            mSwitcherGestureInsetRightPx = gestureInsets.right;
             noteRootFitBottom(insetsCompat);
             applyBottomKept(insetsCompat);
             applyAppDrawerEdgeBleed(insetsCompat);
@@ -28679,6 +28683,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // ---- The page switcher: a dot on the screen edge and the picker that grows out of it ---------
 
     @Nullable private com.termux.app.wall.switcher.PageSwitcher mPageSwitcher;
+    private int mSwitcherGestureInsetLeftPx;
+    private int mSwitcherGestureInsetRightPx;
 
     private void attachPageSwitcher() {
         FrameLayout layer = findViewById(R.id.page_switcher_layer);
@@ -28716,6 +28722,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public boolean chromeAtRest() {
                 return !isInAppKeyboardShown() && !isImeVisible() && !peekChromeTravelling()
                     && !mKeyboardPicturedAway;
+            }
+
+            @Override public int gestureInsetPx(@NonNull com.termux.app.wall.switcher.Edge edge) {
+                return edge == com.termux.app.wall.switcher.Edge.LEFT
+                    ? mSwitcherGestureInsetLeftPx : mSwitcherGestureInsetRightPx;
+            }
+
+            @Override public int keyboardHeightPx() {
+                if (isInAppKeyboardShown()) {
+                    View keyboard = hotView(R.id.inapp_keyboard_container);
+                    if (keyboard != null && keyboard.getHeight() > 0) return keyboard.getHeight();
+                }
+                return mLastDispatchedImeBottomPx;
             }
 
             @Override public boolean isReducedMotionEnabled() {

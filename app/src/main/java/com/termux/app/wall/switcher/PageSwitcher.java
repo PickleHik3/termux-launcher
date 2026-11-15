@@ -45,6 +45,15 @@ public final class PageSwitcher {
          */
         boolean chromeAtRest();
 
+        /**
+         * The system's gesture inset on the given edge, in px, as last dispatched with the window
+         * insets (0 with button navigation). Cached by the activity; cheap to call per frame.
+         */
+        int gestureInsetPx(@NonNull Edge edge);
+
+        /** The height of the keyboard in front (in-app or system), 0 when none is up. */
+        int keyboardHeightPx();
+
         boolean isReducedMotionEnabled();
 
         boolean hapticsEnabled();
@@ -96,6 +105,10 @@ public final class PageSwitcher {
     private boolean mHintDone;
     private boolean mClaiming;
     private float mLastBandBottom = -1f;
+    /** The bottom chrome's top on the last frame it stood at rest; the keyboard's rise reads off it. */
+    private float mRestChromeTop = -1f;
+    /** The keyboard's reveal on the last frame, 0..1. */
+    private float mKeyboardProgress;
     private int mStableFrames;
     private final int[] mLocation = new int[2];
 
@@ -215,8 +228,11 @@ public final class PageSwitcher {
         if (w <= 0 || h <= 0) return;
 
         mBandTop = DotPlacement.bandTop(mDiameter, mDensity);
-        mBandBottom = DotPlacement.bandBottom(h, mHost.bottomChromeTopPx(layer), mDiameter,
-            mDensity);
+        int chromeTop = mHost.bottomChromeTopPx(layer);
+        mBandBottom = DotPlacement.bandBottom(h, chromeTop, mDiameter, mDensity);
+        if (mRestChromeTop < 0f || mHost.chromeAtRest()) mRestChromeTop = chromeTop;
+        mKeyboardProgress = DotPlacement.keyboardProgress(mRestChromeTop, chromeTop,
+            mHost.keyboardHeightPx());
         boolean becameVisible = dot.getVisibility() != View.VISIBLE;
         if (becameVisible) {
             dot.setColors(mHost.palette().glass, mHost.palette().ink);
@@ -236,7 +252,7 @@ public final class PageSwitcher {
                 mFraction = DotPlacement.fractionOf(y, h);
                 mHost.savePosition(mEdge, mFraction);
             }
-            float x = mSnap != null ? mCx : DotPlacement.centerX(mEdge, w, mDiameter);
+            float x = mSnap != null ? mCx : restX(mEdge, w);
             if (DotPlacement.closesPicker(pickerUp, fingerDown, y, mCy)) {
                 PickerView picker = mPicker;
                 if (picker != null) picker.close(false);
@@ -262,6 +278,12 @@ public final class PageSwitcher {
             dot.setVisibility(View.INVISIBLE);
             dot.updateGestureExclusion();
         }
+    }
+
+    /** Where the dot rests on an edge now: at the edge, or stepped in while a keyboard is up. */
+    private float restX(@NonNull Edge edge, float width) {
+        return DotPlacement.restX(edge, width, mDiameter, mDensity, mHost.gestureInsetPx(edge),
+            mKeyboardProgress);
     }
 
     /** Applies the centre as translation only, and only when it changed. */
@@ -518,7 +540,7 @@ public final class PageSwitcher {
         mEdge = edge;
         mFraction = DotPlacement.fractionOf(mMoveY, layer.getHeight());
         final float fraction = mFraction;
-        float toX = DotPlacement.centerX(edge, layer.getWidth(), mDiameter);
+        float toX = restX(edge, layer.getWidth());
         if (reduced || !dot.isAttachedToWindow()) {
             placeDot(toX, mMoveY);
             dot.updateGestureExclusion();

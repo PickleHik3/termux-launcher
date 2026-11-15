@@ -112,4 +112,51 @@ public class DotPlacementTest {
         assertFalse(DotPlacement.closesPicker(true, false, 2021.2f, 2021f));
         assertFalse(DotPlacement.closesPicker(false, false, 2100f, 2021f));
     }
+
+    // 1080 px wide at density 2.625: dot 73.5 px, touch half 63 px, gap 10.5 px, Back strip 78 px.
+    private static final float W = 1080f;
+    private static final float DEN = 2.625f;
+    private static final float DIA = D * DEN;
+
+    @Test public void restXWithNoGestureInsetNeverMoves() {
+        for (float p : new float[] {0f, 0.5f, 1f}) {
+            assertEquals(DotPlacement.centerX(Edge.RIGHT, W, DIA),
+                DotPlacement.restX(Edge.RIGHT, W, DIA, DEN, 0f, p), 0.001f);
+            assertEquals(DotPlacement.centerX(Edge.LEFT, W, DIA),
+                DotPlacement.restX(Edge.LEFT, W, DIA, DEN, 0f, p), 0.001f);
+        }
+    }
+
+    @Test public void restXStaysAtTheEdgeWithNoKeyboard() {
+        assertEquals(DotPlacement.centerX(Edge.RIGHT, W, DIA),
+            DotPlacement.restX(Edge.RIGHT, W, DIA, DEN, 78f, 0f), 0.001f);
+        assertEquals(DotPlacement.centerX(Edge.LEFT, W, DIA),
+            DotPlacement.restX(Edge.LEFT, W, DIA, DEN, 78f, 0f), 0.001f);
+    }
+
+    @Test public void restXWithAKeyboardClearsTheBackStripOnBothEdges() {
+        float right = DotPlacement.restX(Edge.RIGHT, W, DIA, DEN, 78f, 1f);
+        // The touch square's outer side stands at the strip plus the gap.
+        assertEquals(W - 78f - 10.5f, right + 63f, 0.001f);
+        assertTrue(right + 63f < 1002f);
+        float left = DotPlacement.restX(Edge.LEFT, W, DIA, DEN, 78f, 1f);
+        assertEquals(78f + 10.5f, left - 63f, 0.001f);
+        assertTrue(left - 63f > 78f);
+    }
+
+    @Test public void restXRidesWithTheKeyboardProgress() {
+        float edge = DotPlacement.restX(Edge.RIGHT, W, DIA, DEN, 78f, 0f);
+        float full = DotPlacement.restX(Edge.RIGHT, W, DIA, DEN, 78f, 1f);
+        assertEquals((edge + full) / 2f, DotPlacement.restX(Edge.RIGHT, W, DIA, DEN, 78f, 0.5f),
+            0.001f);
+        assertEquals(edge, DotPlacement.restX(Edge.RIGHT, W, DIA, DEN, 78f, -1f), 0.001f);
+        assertEquals(full, DotPlacement.restX(Edge.RIGHT, W, DIA, DEN, 78f, 2f), 0.001f);
+    }
+
+    @Test public void keyboardProgressIsTheChromesRiseOverTheKeyboardHeight() {
+        assertEquals(0f, DotPlacement.keyboardProgress(2000f, 2000f, 600f), 0.001f);
+        assertEquals(0.5f, DotPlacement.keyboardProgress(2000f, 1700f, 600f), 0.001f);
+        assertEquals(1f, DotPlacement.keyboardProgress(2000f, 1300f, 600f), 0.001f);
+        assertEquals(0f, DotPlacement.keyboardProgress(2000f, 1700f, 0f), 0.001f);
+    }
 }
