@@ -71,7 +71,7 @@ typing keys, the modifiers, **PASTE** and **SCROLL** are dimmed.
 
 ## Edit the row
 
-Open **Settings → Keyboard → Terminal extra keys** ("Keys and swipe actions"), or run **Edit key
+Open **Settings → Keyboard → Extra keys** ("Keys and swipe actions"), or run **Edit key
 row** from the [command palette](Command_Palette_And_Actions.md). The editor writes the same
 `extra-keys` property you can edit by hand, so you can start in the editor and keep hand-editing
 later.

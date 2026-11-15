@@ -253,7 +253,7 @@
     <string name="settings_extra_keys_preset_replace_message">Replace the keys on page %1$d?</string>
     <string name="settings_extra_keys_preset_replace">Replace</string>
     <string name="extra_keys_default_offer_title">New key row</string>
-    <string name="extra_keys_default_offer_message">This update brings a new set of keys under the terminal. Your current row is kept in Settings, under Terminal extra keys.</string>
+    <string name="extra_keys_default_offer_message">This update brings a new set of keys under the terminal. Your current row is kept in Settings, under Extra keys.</string>
     <string name="extra_keys_default_offer_switch">Switch</string>
     <string name="extra_keys_default_offer_keep">Keep mine</string>
     <string name="extra_keys_default_offer_switched">New key row in place</string>
@@ -295,7 +295,7 @@
     <string name="settings_extra_keys_action_send_chord">Send %1$s as keys</string>
     <string name="settings_extra_keys_action_send_text">Send \"%1$s\" as text</string>
     <string name="settings_extra_keys_action_macro_summary">Send as a macro (keys separated by spaces)</string>
-    <string name="settings_extra_keys_action_keys">Terminal keys</string>
+    <string name="settings_extra_keys_action_keys">Keys</string>
     <string name="settings_extra_keys_action_no_match">No match</string>
     <string name="settings_extra_keys_action_back">Back</string>
     <string name="settings_extra_keys_action_clear_search">Clear search</string>
@@ -319,7 +319,7 @@
     <string name="settings_extra_keys_row_options_cd">Row options</string>
     <string name="settings_extra_keys_add_key_cd">Add key</string>
     <string name="settings_extra_keys_guide_title">What a key can be</string>
-    <string name="settings_extra_keys_guide_body">Key: one terminal key, like ESC, CTRL or F7.\nText: typed as written.\nCombination: ctrl+f7 or alt+shift+tab, pressed together.\nMacro: keys separated by spaces, sent one after another. CTRL F7 holds Ctrl for the next key.\nTool: a launcher action, like the keyboard, mouse mode or a page.\nDisplay label: any text, or a glyph from the Ω button\'s search.\nSwipe up: a second key on the same cap.\nWhile a Linux display is showing, the row sends its keys to it.</string>
+    <string name="settings_extra_keys_guide_body">Key: one key, like ESC, CTRL or F7.\nText: typed as written.\nCombination: ctrl+f7 or alt+shift+tab, pressed together.\nMacro: keys separated by spaces, sent one after another. CTRL F7 holds Ctrl for the next key.\nTool: a launcher action, like the keyboard, mouse mode or a page.\nDisplay label: any text, or a glyph from the Ω button\'s search.\nSwipe up: a second key on the same cap.\nWhile a Linux display is showing, the row sends its keys to it.</string>
     <string name="settings_extra_keys_hint">Tap to edit · Hold the handle to reorder</string>
     <plurals name="settings_extra_keys_row_count">
         <item quantity="one">%d row</item>
@@ -354,7 +354,7 @@
     <string name="settings_extra_keys_picker_symbols">Symbols</string>
     <string name="settings_extra_keys_picker_other">Other</string>
     <string name="settings_extra_keys_picker_actions">App actions</string>
-    <string name="settings_edit_extra_keys_title">Terminal extra keys</string>
+    <string name="settings_edit_extra_keys_title">Extra keys</string>
     <string name="settings_edit_extra_keys_summary">Keys and swipe actions</string>
     <string name="settings_extra_keys_all_caps_title">Uppercase key labels</string>
     <string name="settings_extra_keys_all_caps_summary">Show ESC, TAB and other labels in capitals</string>
