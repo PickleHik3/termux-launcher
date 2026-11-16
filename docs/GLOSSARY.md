@@ -268,13 +268,11 @@ _Avoid_: place (the retired word for Home, Terminal and Display as three pages),
 _ADR 0015 (proposed): a page is a Home page, the Terminal page or a Display page, and each follows **Base** or detaches its own look values._
 
 **Page switcher**:
-A small dim **dot** on the left or right screen edge, in the same spot on every page, and the
-**picker** that grows out of it: a row of the four page kinds (Home, Terminal, Display, Assistant,
-always in that order) with each kind's pages or windows stacked above its glyph. Slide from the dot
-and release on a cell to go there; a tap leaves the picker open; holding the dot still picks it up
-to move it, and it snaps to the nearer edge. It rides above the keyboard and the bottom chrome.
-On by default; Settings › General turns it off. Code: `com.termux.app.wall.switcher`.
-_Avoid_: places dock (the retired space-bar version), nav button, floating button
+One switcher with two entry points: the **glyph row** under the Home grid (Home, Terminal, Assistant,
+Display) and the optional page switcher key on the extra-keys bar. It opens a full-width panel with
+one cell per page; tap a cell, or touch and slide and let go on one, to go there. Spec:
+`project-docs/active/page-glyph-switcher-2026-11-16.md`. Code: `com.termux.app.wall.pageswitch`.
+_Avoid_: dot, picker, places dock (the retired space-bar version), nav button, floating button
 
 **Pane**:
 One terminal view inside a split. Panes have corner tabs but no appearance of their own. A split is resized by dragging the divider, the gap between its panes, and a corner hold only shows the pane's buttons.

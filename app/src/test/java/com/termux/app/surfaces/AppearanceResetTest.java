@@ -76,10 +76,6 @@ public class AppearanceResetTest {
         SURVIVORS.put("layout.portrait.voice_pill_x", 0.25f);
         SURVIVORS.put("layout.portrait.voice_pill_y", 0.75f);
         SURVIVORS.put("layout.portrait.keyboard_float_x", 0.4f);
-        SURVIVORS.put(TERMUX_APP.KEY_PAGE_SWITCHER_ENABLED, false);
-        SURVIVORS.put(TERMUX_APP.KEY_PAGE_SWITCHER_EDGE, 0);
-        SURVIVORS.put(TERMUX_APP.KEY_PAGE_SWITCHER_HEIGHT, 0.8f);
-        SURVIVORS.put(TERMUX_APP.KEY_PAGE_SWITCHER_HINT_SHOWN, true);
         SURVIVORS.put(TERMUX_APP.KEY_HOME_PILL_X, 0.3f);
         SURVIVORS.put(TERMUX_APP.KEY_HOME_PILL_Y, 0.6f);
         SURVIVORS.put("status_widget_weather_location", "Lisbon");
@@ -307,7 +303,6 @@ public class AppearanceResetTest {
         assertFalse(AppearanceReset.inScope("place.migrated"));
         assertFalse(AppearanceReset.inScope("layout.portrait.voice_pill_x"));
         assertFalse(AppearanceReset.inScope(TERMUX_APP.KEY_HOME_PILL_X));
-        assertFalse(AppearanceReset.inScope(TERMUX_APP.KEY_PAGE_SWITCHER_HEIGHT));
         assertFalse(AppearanceReset.inScope(GlassResetNudge.KEY));
         assertFalse(AppearanceReset.inScope(AppearanceReset.KEY_SEEN));
     }

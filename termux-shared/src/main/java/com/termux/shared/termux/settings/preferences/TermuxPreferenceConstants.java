@@ -905,26 +905,6 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_HAPTICS_ENABLED = true;
 
-        /** Whether the page switcher's dot is on the screen edge. */
-        public static final String KEY_PAGE_SWITCHER_ENABLED = "page_switcher_enabled";
-
-        public static final boolean DEFAULT_PAGE_SWITCHER_ENABLED = true;
-
-        /** The edge the dot rests on: 0 left, 1 right. */
-        public static final String KEY_PAGE_SWITCHER_EDGE = "page_switcher_edge";
-
-        public static final int DEFAULT_PAGE_SWITCHER_EDGE = 1;
-
-        /** How far down the screen the dot rests, as a fraction of its height. */
-        public static final String KEY_PAGE_SWITCHER_HEIGHT = "page_switcher_height";
-
-        public static final float DEFAULT_PAGE_SWITCHER_HEIGHT = 0.6f;
-
-        /** Whether the dot has shown its first-run hint. */
-        public static final String KEY_PAGE_SWITCHER_HINT_SHOWN = "page_switcher_hint_shown";
-
-        public static final boolean DEFAULT_PAGE_SWITCHER_HINT_SHOWN = false;
-
         /** Defines whether A-Z and app-row focus changes emit subtle haptic ticks. */
         public static final String KEY_APP_LAUNCHER_ROW_HAPTICS = "app_launcher_row_haptics";
 

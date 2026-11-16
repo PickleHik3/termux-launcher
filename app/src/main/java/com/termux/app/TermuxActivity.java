@@ -1967,7 +1967,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsInvalidState = true;
             return;
         }
-        attachPageSwitcher();
         // Before this activity builds anything that reads the catalogue: a snapshot already held
         // by the process singleton may predate an install made while no activity was listening.
         com.termux.app.launcher.data.LauncherAppDataProvider heldProvider =
@@ -2039,10 +2038,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         content.setOnApplyWindowInsetsListener((v, insets) -> {
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
-            // The system's Back strip on each side, for the page switcher's dot.
-            androidx.core.graphics.Insets gestureInsets = insetsCompat.getInsets(Type.systemGestures());
-            mSwitcherGestureInsetLeftPx = gestureInsets.left;
-            mSwitcherGestureInsetRightPx = gestureInsets.right;
             noteRootFitBottom(insetsCompat);
             applyBottomKept(insetsCompat);
             applyAppDrawerEdgeBleed(insetsCompat);
@@ -2415,8 +2410,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A display that comes up after the user has started doing something does not pull
             // them over to it (Start in = Display).
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
-            // The page switcher's dot and open picker take their stream whole, ahead of the pages.
-            if (mPageSwitcher != null && mPageSwitcher.claimsTouch(ev)) return super.dispatchTouchEvent(ev);
             // A hold on the Home pill picks it up: the surface long-press never sees that stream.
             int pillAction = ev.getActionMasked();
             if (pillAction == MotionEvent.ACTION_DOWN) mHomePillStream = homePillClaimsDown(ev);
@@ -2525,7 +2518,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onResume() {
         super.onResume();
         mHomePress.onResume();
-        if (mPageSwitcher != null) mPageSwitcher.onResume();
         Logger.logVerbose(LOG_TAG, "onResume");
         mHomePill.refresh();
         // Text left waiting in the pill holds the screen again, its idle release started over.
@@ -10830,7 +10822,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
         mLandedFrameSettle.drop();
         unregisterRotationListener();
-        if (mPageSwitcher != null) mPageSwitcher.detach();
         // The package listeners live as long as the activity so an install made while another
         // app is in front is heard.
         unregisterPackageChangeReceiver();
@@ -19011,18 +19002,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
-        // The page switcher's picker stands over the wall and nothing else: Back puts it away first.
-        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
-            @Override public boolean onBack() {
-                return mPageSwitcher != null && mPageSwitcher.onBack();
-            }
-            @Override public boolean isOpen() {
-                return mPageSwitcher != null && mPageSwitcher.isPickerShowing();
-            }
-            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                if (mPageSwitcher != null) mPageSwitcher.dropAll();
-            }
-        });
         // The setup wizard is innermost: Back steps to the previous section, never out.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -28738,284 +28717,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }, ClipboardHistory.get(this));
         return mClipboardPanel;
     }
-    // ---- The page switcher: a dot on the screen edge and the picker that grows out of it ---------
-
-    @Nullable private com.termux.app.wall.switcher.PageSwitcher mPageSwitcher;
-    private int mSwitcherGestureInsetLeftPx;
-    private int mSwitcherGestureInsetRightPx;
-
-    private void attachPageSwitcher() {
-        FrameLayout layer = findViewById(R.id.page_switcher_layer);
-        if (layer == null || mPageSwitcher != null) return;
-        mPageSwitcher = new com.termux.app.wall.switcher.PageSwitcher(pageSwitcherHost());
-        mPageSwitcher.attach(layer);
-    }
-
-    @NonNull
-    private com.termux.app.wall.switcher.PageSwitcher.Host pageSwitcherHost() {
-        return new com.termux.app.wall.switcher.PageSwitcher.Host() {
-            private final int[] mStackAt = new int[2];
-            private final int[] mLayerAt = new int[2];
-
-            @Override public boolean isEnabled() {
-                return mPreferences != null && mPreferences.isPageSwitcherEnabled();
-            }
-
-            @Override public boolean isSuppressed() {
-                return mSurfaceEditor.isActive() || mLayoutEditor.isActive()
-                    || mSheets.isAppDrawerEngaged() || mSheets.isCommandPaletteOpen()
-                    || isLayerOpen() || (mPageOverview != null && mPageOverview.isOpen());
-            }
-
-            @Override public int bottomChromeTopPx(@NonNull View layer) {
-                // Read on every drawn frame: the cached lookup, not a tree walk.
-                View stack = hotView(R.id.accessory_stack_container);
-                if (stack == null || stack.getVisibility() != View.VISIBLE || stack.getHeight() <= 0)
-                    return layer.getHeight();
-                stack.getLocationOnScreen(mStackAt);
-                layer.getLocationOnScreen(mLayerAt);
-                return mStackAt[1] - mLayerAt[1];
-            }
-
-            @Override public boolean chromeAtRest() {
-                return !isInAppKeyboardShown() && !isImeVisible() && !peekChromeTravelling()
-                    && !mKeyboardPicturedAway;
-            }
-
-            @Override public int gestureInsetPx(@NonNull com.termux.app.wall.switcher.Edge edge) {
-                return edge == com.termux.app.wall.switcher.Edge.LEFT
-                    ? mSwitcherGestureInsetLeftPx : mSwitcherGestureInsetRightPx;
-            }
-
-            @Override public int keyboardHeightPx() {
-                if (isInAppKeyboardShown()) {
-                    View keyboard = hotView(R.id.inapp_keyboard_container);
-                    if (keyboard != null && keyboard.getHeight() > 0) return keyboard.getHeight();
-                }
-                return mLastDispatchedImeBottomPx;
-            }
-
-            @Override public boolean isReducedMotionEnabled() {
-                return TermuxActivity.this.isReducedMotionEnabled();
-            }
-
-            @Override public boolean hapticsEnabled() {
-                return mPreferences != null && mPreferences.isAppHapticsEnabled();
-            }
-
-            @Override @NonNull public com.termux.app.wall.switcher.PickerView.Palette palette() {
-                return pageSwitcherPalette();
-            }
-
-            @Override @NonNull public com.termux.app.wall.switcher.PickerModel.Input snapshot() {
-                return pageSwitcherSnapshot();
-            }
-
-            @Override @NonNull public com.termux.app.wall.switcher.Edge savedEdge() {
-                return mPreferences != null && mPreferences.getPageSwitcherEdge() == 0
-                    ? com.termux.app.wall.switcher.Edge.LEFT : com.termux.app.wall.switcher.Edge.RIGHT;
-            }
-
-            @Override public float savedHeightFraction() {
-                return mPreferences == null
-                    ? com.termux.app.wall.switcher.DotPlacement.DEFAULT_HEIGHT_FRACTION
-                    : mPreferences.getPageSwitcherHeight();
-            }
-
-            @Override public void savePosition(@NonNull com.termux.app.wall.switcher.Edge edge,
-                                               float heightFraction) {
-                if (mPreferences == null) return;
-                mPreferences.setPageSwitcherEdge(
-                    edge == com.termux.app.wall.switcher.Edge.LEFT ? 0 : 1);
-                mPreferences.setPageSwitcherHeight(heightFraction);
-            }
-
-            @Override public boolean hintShown() {
-                return mPreferences == null || mPreferences.isPageSwitcherHintShown();
-            }
-
-            @Override public boolean isFirstRunCovering() {
-                return setupWizardComesFirst()
-                    || (mSetupWizard != null && mSetupWizard.isCardSheetShowing());
-            }
-
-            @Override public void markHintShown() {
-                if (mPreferences != null) mPreferences.setPageSwitcherHintShown(true);
-            }
-
-            @Override public void goToPage(int pageId) {
-                goToSwitcherPage(pageId, switcherAnimates());
-            }
-
-            @Override public void goHome() {
-                if (mPaneWallController != null) mPaneWallController.goTo("home");
-            }
-
-            @Override public void showTerminalWindow(int index) {
-                if (mPaneWallController == null) return;
-                // As a window chip tapped from elsewhere: the wall travels to the Terminal page,
-                // then the window comes in front.
-                if (currentWallPlace() != com.termux.app.wall.PaneWallPage.TERMINAL)
-                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL,
-                        switcherAnimates());
-                showRowWindow(index);
-            }
-
-            @Override public void goToTerminal() {
-                if (mPaneWallController == null) return;
-                bringTerminalWindowInFront();
-                mPaneWallController.goTo("terminal");
-            }
-
-            @Override public void showDisplayApp(int pageId, int windowId) {
-                if (mPaneWallController == null) return;
-                if (mPaneWallController.goToDisplayPage(pageId, switcherAnimates())
-                    && mX11Windows != null) {
-                    mX11Windows.activate(windowId);
-                }
-            }
-
-            @Override public void startDisplay() {
-                if (mPaneWallController == null) return;
-                // The user asked for it, so this one does start the display.
-                openDisplayWindow(true);
-            }
-
-            @Override public void addAssistantPage() {
-                if (mPaneWallController == null) return;
-                openAssistant();
-            }
-
-            @Override public void addDisplayPage() {
-                if (mPaneWallController == null) return;
-                addDisplayPageFromSwitcher();
-            }
-
-            @Override public void openSessionBrowser() {
-                if (mPaneWallController == null) return;
-                com.termux.app.terminal.TerminalSessionBrowser.toggle(TermuxActivity.this);
-            }
-
-            @Override public void openDisplayAppList() {
-                if (mPaneWallController == null) return;
-                showDisplayAppList();
-            }
-
-            @Override public void openPageOverview() {
-                if (mPaneWallController == null) return;
-                TermuxActivity.this.openPageOverview(false);
-            }
-        };
-    }
 
     private boolean switcherAnimates() {
         return isVisible() && !isReducedMotionEnabled();
-    }
-
-    /**
-     * The picker's glass is the keyboard's own, its ink the letter keys', and each page kind wears
-     * the colour the extra-keys row paints its switch in: the row's own when it stands one, else
-     * the default roles spread the way the row spreads them.
-     */
-    @NonNull
-    private com.termux.app.wall.switcher.PickerView.Palette pageSwitcherPalette() {
-        int glass = mInAppKeyboard != null ? mInAppKeyboard.glassBaseColor(this)
-            : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-                R.color.termux_surface_panel_high);
-        int[] inks = mInAppKeyboard == null ? null : mInAppKeyboard.letterKeyLegibilityInks();
-        int ink = inks != null ? inks[0]
-            : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
-                R.color.termux_on_surface);
-        boolean darkGlass = com.termux.shared.termux.extrakeys.PlaceSwitchGlyph.isDarkGlass(ink);
-        String[] keys = {"wall.widgets", "wall.terminal", "wall.display", "wall.assistant"};
-        int[] roles = new int[keys.length];
-        for (int i = 0; i < keys.length; i++) {
-            com.termux.shared.termux.extrakeys.ExtraKeyColorRole role =
-                com.termux.shared.termux.extrakeys.ExtraKeyColorRole.defaultForPlaceSwitch(keys[i]);
-            roles[i] = role == null ? ink : role.background(this);
-        }
-        int[] colors = com.termux.shared.termux.extrakeys.PlaceSwitchGlyph.vividRow(roles, darkGlass);
-        com.termux.app.wall.PaneWallPage[] pages = {com.termux.app.wall.PaneWallPage.WIDGETS,
-            com.termux.app.wall.PaneWallPage.TERMINAL, com.termux.app.wall.PaneWallPage.DISPLAY,
-            com.termux.app.wall.PaneWallPage.ASSISTANT};
-        java.util.Map<com.termux.app.wall.PaneWallPage, Integer> row = mPlaceAccents;
-        for (int i = 0; i < pages.length; i++) {
-            Integer own = row == null ? null : row.get(pages[i]);
-            if (own != null) colors[i] = own;
-        }
-        return new com.termux.app.wall.switcher.PickerView.Palette(glass, ink, colors);
-    }
-
-    /** The wall and the windows as the picker shows them, right now. */
-    @NonNull
-    private com.termux.app.wall.switcher.PickerModel.Input pageSwitcherSnapshot() {
-        com.termux.app.wall.switcher.PickerModel.Input in =
-            new com.termux.app.wall.switcher.PickerModel.Input();
-        com.termux.app.wall.WallPages pages = wallPages();
-        java.util.List<Integer> homes = new java.util.ArrayList<>();
-        java.util.List<String> homeLabels = new java.util.ArrayList<>();
-        for (com.termux.app.wall.WallPages.Page page : pages.homePages()) {
-            homes.add(page.id);
-            homeLabels.add(page.name == null || page.name.isEmpty() ? null : page.name);
-        }
-        in.homePageIds = homes;
-        in.homePageLabels = homeLabels;
-        com.termux.app.wall.WallPages.Page home = pages.home();
-        in.defaultStartPageId = home == null ? -1 : home.id;
-        // Use as, read as the picker opens: Terminal only has no Home cell.
-        in.homeOffered = useAs().showsHomePage();
-        com.termux.app.wall.WallPages.Page terminal = pages.terminal();
-        in.terminalPageId = terminal == null ? -1 : terminal.id;
-        int current = mPaneWallController == null ? -1 : mPaneWallController.currentPageId();
-        in.currentPageId = current;
-        com.termux.app.wall.WallPages.Page display = pages.displayTarget(current,
-            mPaneWallController == null ? -1 : mPaneWallController.boundDisplayPage());
-        in.displayPageId = display == null ? -1 : display.id;
-        com.termux.app.wall.WallPages.Page assistant = pages.assistant();
-        in.assistantPageId = assistant == null ? -1 : assistant.id;
-        in.displayAvailable = mPaneWallController != null && isX11DisplayEnabled();
-        switch (currentWallPlace()) {
-            case WIDGETS: in.currentKind = com.termux.app.wall.switcher.PickerModel.Kind.HOME; break;
-            case DISPLAY: in.currentKind = com.termux.app.wall.switcher.PickerModel.Kind.DISPLAY; break;
-            case ASSISTANT: in.currentKind = com.termux.app.wall.switcher.PickerModel.Kind.ASSISTANT; break;
-            default: in.currentKind = com.termux.app.wall.switcher.PickerModel.Kind.TERMINAL; break;
-        }
-        // The Terminal's windows, named as the window bar names them.
-        java.util.List<String> windowLabels = new java.util.ArrayList<>();
-        if (mPaneController != null) {
-            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
-                rowWindows();
-            for (int i = 0; i < windows.size(); i++) {
-                com.termux.app.terminal.TerminalPaneController.Window window = windows.get(i);
-                windowLabels.add(buildWindowItem(mPaneController.windowActiveSession(window), i,
-                    new java.util.ArrayList<>(), mPaneController.windowName(window)).label);
-            }
-        }
-        in.terminalWindowLabels = windowLabels;
-        in.currentTerminalWindow = windowLabels.isEmpty() ? -1 : rowCurrentIndex();
-        // The display's apps: their names as the window bar's chips carry them.
-        in.displayRunning = isEmbeddedDisplayRunning();
-        java.util.List<String> appLabels = new java.util.ArrayList<>();
-        java.util.List<Integer> appIds = new java.util.ArrayList<>();
-        if (in.displayRunning) {
-            java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
-                displayAppItems();
-            for (int i = 0; i < items.size() && i < mDisplayWindows.size(); i++) {
-                appLabels.add(items.get(i).label);
-                appIds.add(mDisplayWindows.get(i).id);
-            }
-            int front = com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayWindows.size(),
-                mDisplayActiveWindow);
-            in.currentDisplayApp = front < 0 || front >= mDisplayWindows.size()
-                ? -1 : mDisplayWindows.get(front).id;
-        }
-        in.displayAppLabels = appLabels;
-        in.displayAppIds = appIds;
-        in.kindNames = new String[] {getString(R.string.page_switcher_home),
-            getString(R.string.page_switcher_terminal), getString(R.string.page_switcher_display),
-            getString(R.string.page_switcher_assistant)};
-        in.startDisplayLabel = getString(R.string.page_switcher_start);
-        return in;
     }
 
     /** Go to the wall page {@code pageId}, by the way its kind is gone to. */
@@ -29038,44 +28742,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPaneWallController.goToPageId(pageId, animate);
                 break;
         }
-    }
-
-    /**
-     * A lasting Display page after the current one, opened on its Start screen: the display is
-     * not started, whatever the autostart setting says. A page a drawer launch made temporary is
-     * kept instead, as the page overview's Add display keeps it.
-     */
-    private void addDisplayPageFromSwitcher() {
-        final int after = linuxRouteFromPageId();
-        com.termux.app.wall.WallPages.Result added =
-            wallPagesStore().edit(pages -> pages.addDisplayPage(after));
-        mAddedLinuxPage = -1;
-        mTemporaryDisplaySawApp = false;
-        mTemporaryDisplayStartedByLaunch = false;
-        if (mPaneWallController != null) mPaneWallController.refreshPages();
-        openDisplayWindow(false, added.ok() && added.page != null ? added.page.id : -1);
-    }
-
-    /** The full list of the apps on the display, for the picker's "+N": choosing one raises it. */
-    private void showDisplayAppList() {
-        if (mDisplayWindows.isEmpty()) return;
-        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
-            displayAppItems();
-        final int count = Math.min(items.size(), mDisplayWindows.size());
-        final String[] names = new String[count];
-        final int[] ids = new int[count];
-        for (int i = 0; i < count; i++) {
-            names[i] = items.get(i).label;
-            ids[i] = mDisplayWindows.get(i).id;
-        }
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.page_switcher_display_apps)
-            .setItems(names, (dialog, which) -> {
-                if (mPaneWallController == null) return;
-                mPaneWallController.goToDisplayPage(-1, switcherAnimates());
-                if (mX11Windows != null) mX11Windows.activate(ids[which]);
-            })
-            .show();
     }
 
     /** The keyboard layout the pad follows, held so a second attach does not stack another. */
