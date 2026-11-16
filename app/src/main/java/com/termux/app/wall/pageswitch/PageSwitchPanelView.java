@@ -189,10 +189,10 @@ public final class PageSwitchPanelView extends View {
             float cy = restCentreY - mWave[0];
             PageSwitchModel.Cell cell = cells.get(i);
             boolean focus = i == mHighlight;
-            // The focused glyph is the accent, crisp, with the glow outside it and no halo; the
-            // rest float on a faint shadow away from their ink.
+            // The focused glyph is the accent, crisp, with the glow outside it; the rest are
+            // just the crisp icon and number.
             mPainter.drawFloating(canvas, cell.kind, cell.number, cx - size / 2f, cy - size / 2f,
-                size, focus ? mAccent : weakInk, focus ? 0 : GlassInk.floatingShadow(weakInk),
+                size, focus ? mAccent : weakInk,
                 focus ? (mAccent & 0x00FFFFFF) | (GLOW_ALPHA << 24) : 0);
         }
     }

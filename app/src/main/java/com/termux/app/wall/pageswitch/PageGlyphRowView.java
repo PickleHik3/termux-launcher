@@ -10,7 +10,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.ChromeShade;
-import com.termux.app.chrome.GlassInk;
 import com.termux.app.chrome.WallpaperInk;
 import com.termux.app.launcher.widget.HomeLabelInk;
 
@@ -143,9 +142,7 @@ public final class PageGlyphRowView extends View implements PageSwitchHitArea {
         for (int i = 0; i < KINDS.length; i++) {
             if (!mShown[i]) continue;
             boolean strong = i == mCurrent;
-            int ink = ink(wallpaper, strong);
-            mPainter.drawFloating(canvas, KINDS[i], mNumbers[i], x, y, glyph, ink,
-                GlassInk.floatingShadow(ink), 0);
+            mPainter.draw(canvas, KINDS[i], mNumbers[i], x, y, glyph, ink(wallpaper, strong));
             x += glyph + gap;
         }
     }
