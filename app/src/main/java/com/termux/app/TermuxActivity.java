@@ -1967,6 +1967,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsInvalidState = true;
             return;
         }
+        attachPageSwitch();
         // Before this activity builds anything that reads the catalogue: a snapshot already held
         // by the process singleton may predate an install made while no activity was listening.
         com.termux.app.launcher.data.LauncherAppDataProvider heldProvider =
@@ -2954,6 +2955,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     protected void onPause() {
+        if (mPageSwitch != null) mPageSwitch.close();
         mReturnHold.onPaused();
         endHomePillFlight();
         // A landing still waiting for its post lands before the screen goes.
@@ -10822,6 +10824,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
         mLandedFrameSettle.drop();
         unregisterRotationListener();
+        if (mPageSwitch != null) mPageSwitch.close();
         // The package listeners live as long as the activity so an install made while another
         // app is in front is heard.
         unregisterPackageChangeReceiver();
@@ -19002,6 +19005,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
+        // The page switch panel stands over the wall and nothing else: Back puts it away first.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                if (mPageSwitch == null || !mPageSwitch.isOpen()) return false;
+                mPageSwitch.close();
+                return true;
+            }
+            @Override public boolean isOpen() {
+                return mPageSwitch != null && mPageSwitch.isOpen();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mPageSwitch != null) mPageSwitch.close();
+            }
+        });
         // The setup wizard is innermost: Back steps to the previous section, never out.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -25366,6 +25383,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
+                    // A page change by any other means puts the switch panel away.
+                    if (mPageSwitch != null) mPageSwitch.close();
                     // A landing still waiting for its post lands before the page changes again.
                     flushLandedFrameSettle();
                     // One window-bar refresh for the whole change, however many syncs ask.
@@ -28716,6 +28735,54 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }, ClipboardHistory.get(this));
         return mClipboardPanel;
+    }
+
+    // ---- The page switch panel -----------------------------------------------------------------
+
+    @Nullable private com.termux.app.wall.pageswitch.PageSwitchController mPageSwitch;
+
+    private void attachPageSwitch() {
+        FrameLayout layer = findViewById(R.id.page_switch_layer);
+        if (layer == null || mPageSwitch != null) return;
+        mPageSwitch = new com.termux.app.wall.pageswitch.PageSwitchController(this,
+            new com.termux.app.wall.pageswitch.PageSwitchController.Host() {
+                private final com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator mNav =
+                    pageSwitchNavigator();
+
+                @Override public void goToPage(int pageId) { mNav.goToPage(pageId); }
+                @Override public void showTerminalWindow(int index) { mNav.showTerminalWindow(index); }
+                @Override public void goToTerminal() { mNav.goToTerminal(); }
+
+                @NonNull @Override public com.termux.app.wall.pageswitch.PageSwitchModel.Input snapshot() {
+                    return pageSwitchSnapshot();
+                }
+
+                @Override public boolean hapticsEnabled() {
+                    return mPreferences != null && mPreferences.isAppHapticsEnabled();
+                }
+
+                @Override public boolean isReducedMotionEnabled() {
+                    return TermuxActivity.this.isReducedMotionEnabled();
+                }
+
+                @Override public boolean isSuppressed() {
+                    return mSurfaceEditor.isActive() || mLayoutEditor.isActive()
+                        || mSheets.isAppDrawerEngaged() || mSheets.isCommandPaletteOpen()
+                        || isLayerOpen() || (mPageOverview != null && mPageOverview.isOpen())
+                        || setupWizardComesFirst()
+                        || (mSetupWizard != null && mSetupWizard.isCardSheetShowing());
+                }
+
+                @NonNull @Override public android.graphics.drawable.Drawable panelBackground() {
+                    // A menu or a sheet's glass: the Sheets element, one pipeline.
+                    return mSheets.buildTerminalSheetSurface();
+                }
+
+                @Override public int panelInk() {
+                    return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                        R.color.termux_on_surface);
+                }
+            }, layer);
     }
 
     private boolean switcherAnimates() {
