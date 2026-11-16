@@ -7,21 +7,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Puts the page switcher key on the extra-keys bars of Terminal, Display and Assistant: the plan
- * for the setup card's Add. Pure; the stored lines come in through
- * {@link ExtraKeySetResolver.Lines} and the planned writes go out for the caller to apply.
+ * Puts the page switcher key on the extra-keys bars: the plan for the setup card's Add. Pure; the
+ * stored lines come in through {@link ExtraKeySetResolver.Lines} and the planned writes go out for
+ * the caller to apply.
  *
- * <p>A target that followed Global (Terminal by default) now keeps its own row, so later Global
- * edits no longer reach it. This is a deliberate choice pending the developer.
+ * <p>The key goes where each bar reads its row from, and no bar changes where it reads from: a
+ * bar with its own row gets the key there, a bar that follows Global gets it through Global's
+ * row (written once), and a bar that shows its shipped set is left as it is.
  */
 public final class PageSwitcherKeyAdd {
 
     /** The key as the bar stores it. */
     public static final String KEY = "tool:app.page_switcher";
 
-    /** The targets that have the bar and so get the key. */
+    /** The bars the key goes on: every place's. */
     private static final ExtraKeysTarget[] TARGETS = {
-        ExtraKeysTarget.TERMINAL, ExtraKeysTarget.DISPLAY, ExtraKeysTarget.ASSISTANT};
+        ExtraKeysTarget.TERMINAL, ExtraKeysTarget.DISPLAY, ExtraKeysTarget.ASSISTANT,
+        ExtraKeysTarget.HOME};
 
     private PageSwitcherKeyAdd() {}
 
@@ -45,7 +47,7 @@ public final class PageSwitcherKeyAdd {
         return model.serialize();
     }
 
-    /** Whether the key is on a bar one of the three targets shows now (either page line). */
+    /** Whether the key is on a bar one of the targets shows now (either page line). */
     public static boolean isOn(@NonNull ExtraKeySetResolver.Lines lines) {
         for (ExtraKeysTarget target : TARGETS) {
             ExtraKeySetResolver.Resolved resolved = ExtraKeySetResolver.resolve(target, lines);
@@ -55,20 +57,28 @@ public final class PageSwitcherKeyAdd {
     }
 
     /**
-     * What Add writes: for each target whose bar shows keys without the page switcher, its own
-     * page-1 line with the key added. Global and Home are never written. A target that followed
-     * another set keeps its second page line too, so its bar shows the same pages as before.
+     * What Add writes: the key at the left end of the first row of the page-1 line each bar reads,
+     * where that line has keys and no page switcher yet. A target with its own row is written
+     * there; a target that follows Global puts it in Global's row, once for all of them; a target
+     * showing its shipped set is not written. No target is detached from what it follows.
      */
     @NonNull
     public static List<ExtraKeysTargetDrafts.Write> plan(@NonNull ExtraKeySetResolver.Lines lines) {
-        List<ExtraKeysTargetDrafts.Write> out = new ArrayList<>(2 * TARGETS.length);
+        List<ExtraKeysTargetDrafts.Write> out = new ArrayList<>(TARGETS.length);
+        boolean globalPlanned = false;
         for (ExtraKeysTarget target : TARGETS) {
             ExtraKeySetResolver.Resolved resolved = ExtraKeySetResolver.resolve(target, lines);
+            String key;
+            if (resolved.source == ExtraKeySetResolver.Source.OWN) {
+                key = target.page1Key();
+            } else if (resolved.source == ExtraKeySetResolver.Source.GLOBAL && !globalPlanned) {
+                globalPlanned = true;
+                key = ExtraKeysTarget.GLOBAL.page1Key();
+            } else {
+                continue;
+            }
             String page1 = withKey(resolved.page1);
-            if (page1 == null) continue;
-            out.add(new ExtraKeysTargetDrafts.Write(target.page1Key(), page1));
-            if (resolved.source != ExtraKeySetResolver.Source.OWN && resolved.page2 != null)
-                out.add(new ExtraKeysTargetDrafts.Write(target.page2Key(), resolved.page2));
+            if (page1 != null) out.add(new ExtraKeysTargetDrafts.Write(key, page1));
         }
         return out;
     }

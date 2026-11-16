@@ -56,10 +56,13 @@ key. Decided with the developer on 2026-11-16.
 
 - A new opt-in key (tool key, e.g. `app.page_switcher`). Its cap shows the current page's glyph and
   number. Touch and drag or tap behave as above, the panel anchored above the bar.
-- Available on Terminal, Assistant and Display (the pages that have the bar). Not in any default row.
+- Works on every bar, Home's included: it opens the same panel, anchored above that bar. The key
+  editor offers it for every bar. Not in any default row. (Decided 2026-11-16, replacing "Terminal,
+  Assistant and Display only".)
 - Updating users get a new **Setup card** (the setup sheet already re-opens for new cards only):
-  - used as a home screen: "Add" puts the key at the left end of their row on each target that has a
-    row; "Not now" dismisses;
+  - used as a home screen: "Add" puts the key at the left end of the row each bar reads: a bar with
+    its own row gets it there; a bar that follows Global gets it through Global's row (written once).
+    Add never detaches a bar from Global. "Not now" dismisses;
   - used as a terminal only: the card only says the key exists (no Add).
   New installs see the card the same way.
 

@@ -48,51 +48,65 @@ public class PageSwitcherKeyAddTest {
         return map::get;
     }
 
+    private static boolean writes(List<ExtraKeysTargetDrafts.Write> plan, ExtraKeysTarget target,
+                                  boolean page2) {
+        String key = page2 ? target.pageKeys()[1] : target.pageKeys()[0];
+        for (ExtraKeysTargetDrafts.Write write : plan) if (write.key.equals(key)) return true;
+        return false;
+    }
+
     @Test
-    public void planWritesOnlyTheThreeTargetsAndNeverGlobalOrHome() {
+    public void aTargetFollowingGlobalGetsTheKeyThroughGlobalOnce() {
         Map<String, String> map = new HashMap<>();
         map.put(TermuxPropertyConstants.KEY_EXTRA_KEYS, "[[\"ESC\"]]");
         map.put(TermuxPropertyConstants.KEY_EXTRA_KEYS2, "[[\"F1\"]]");
         List<ExtraKeysTargetDrafts.Write> plan = PageSwitcherKeyAdd.plan(lines(map));
-        for (ExtraKeysTargetDrafts.Write write : plan) {
-            assertFalse(write.key.equals(ExtraKeysTarget.GLOBAL.page1Key()));
-            assertFalse(write.key.equals(ExtraKeysTarget.HOME.page1Key()));
-            assertFalse(write.key.equals(ExtraKeysTarget.GLOBAL.page2Key()));
-        }
-        // Terminal follows Global: it gets its own page 1 (with the key) and keeps Global's page 2.
+        // Terminal and Home follow Global: one write, to Global's page 1, nothing detached.
         assertTrue(plan.contains(new ExtraKeysTargetDrafts.Write(
-            ExtraKeysTarget.TERMINAL.page1Key(), "[[\"" + KEY + "\",\"ESC\"]]")));
+            ExtraKeysTarget.GLOBAL.pageKeys()[0], "[[\"" + KEY + "\",\"ESC\"]]")));
+        int globalWrites = 0;
+        for (ExtraKeysTargetDrafts.Write write : plan)
+            if (write.key.equals(ExtraKeysTarget.GLOBAL.pageKeys()[0])) globalWrites++;
+        assertEquals(1, globalWrites);
+        assertFalse(writes(plan, ExtraKeysTarget.TERMINAL, false));
+        assertFalse(writes(plan, ExtraKeysTarget.HOME, false));
+        assertFalse(writes(plan, ExtraKeysTarget.GLOBAL, true));
+        assertFalse(writes(plan, ExtraKeysTarget.TERMINAL, true));
+        // Display and Assistant show their shipped sets: left as they are.
+        assertFalse(writes(plan, ExtraKeysTarget.DISPLAY, false));
+        assertFalse(writes(plan, ExtraKeysTarget.ASSISTANT, false));
+    }
+
+    @Test
+    public void aTargetWithItsOwnRowGetsTheKeyThere() {
+        Map<String, String> map = new HashMap<>();
+        map.put(ExtraKeysTarget.DISPLAY.pageKeys()[0], "[[\"ESC\"]]");
+        map.put(ExtraKeysTarget.HOME.pageKeys()[0], "[[\"TAB\"]]");
+        List<ExtraKeysTargetDrafts.Write> plan = PageSwitcherKeyAdd.plan(lines(map));
         assertTrue(plan.contains(new ExtraKeysTargetDrafts.Write(
-            ExtraKeysTarget.TERMINAL.page2Key(), "[[\"F1\"]]")));
-        // Display and Assistant start from their shipped rows.
-        boolean display = false;
-        boolean assistant = false;
-        for (ExtraKeysTargetDrafts.Write write : plan) {
-            display |= write.key.equals(ExtraKeysTarget.DISPLAY.page1Key());
-            assistant |= write.key.equals(ExtraKeysTarget.ASSISTANT.page1Key());
-        }
-        assertTrue(display && assistant);
+            ExtraKeysTarget.DISPLAY.pageKeys()[0], "[[\"" + KEY + "\",\"ESC\"]]")));
+        assertTrue(plan.contains(new ExtraKeysTargetDrafts.Write(
+            ExtraKeysTarget.HOME.pageKeys()[0], "[[\"" + KEY + "\",\"TAB\"]]")));
     }
 
     @Test
     public void planSkipsATargetThatHasTheKeyOrNoKeys() {
         Map<String, String> map = new HashMap<>();
-        map.put(ExtraKeysTarget.TERMINAL.page1Key(), "[[\"" + KEY + "\"]]");
-        map.put(ExtraKeysTarget.DISPLAY.page1Key(), "[]");
+        map.put(ExtraKeysTarget.TERMINAL.pageKeys()[0], "[[\"" + KEY + "\"]]");
+        map.put(ExtraKeysTarget.DISPLAY.pageKeys()[0], "[]");
         List<ExtraKeysTargetDrafts.Write> plan = PageSwitcherKeyAdd.plan(lines(map));
-        for (ExtraKeysTargetDrafts.Write write : plan) {
-            assertFalse(write.key.equals(ExtraKeysTarget.TERMINAL.page1Key()));
-            assertFalse(write.key.equals(ExtraKeysTarget.DISPLAY.page1Key()));
-        }
+        assertFalse(writes(plan, ExtraKeysTarget.TERMINAL, false));
+        assertFalse(writes(plan, ExtraKeysTarget.DISPLAY, false));
         assertTrue(PageSwitcherKeyAdd.isOn(lines(map)));
     }
 
     @Test
-    public void ownRowKeepsItsPageTwoUntouched() {
+    public void noPageTwoIsEverWritten() {
         Map<String, String> map = new HashMap<>();
-        map.put(ExtraKeysTarget.TERMINAL.page1Key(), "[[\"ESC\"]]");
-        map.put(ExtraKeysTarget.TERMINAL.page2Key(), "[[\"F2\"]]");
+        map.put(ExtraKeysTarget.TERMINAL.pageKeys()[0], "[[\"ESC\"]]");
+        map.put(ExtraKeysTarget.TERMINAL.pageKeys()[1], "[[\"F2\"]]");
         for (ExtraKeysTargetDrafts.Write write : PageSwitcherKeyAdd.plan(lines(map)))
-            assertFalse(write.key.equals(ExtraKeysTarget.TERMINAL.page2Key()));
+            for (ExtraKeysTarget target : ExtraKeysTarget.values())
+                assertFalse(write.key.equals(target.pageKeys()[1]));
     }
 }
