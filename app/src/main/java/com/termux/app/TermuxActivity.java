@@ -28722,6 +28722,100 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return isVisible() && !isReducedMotionEnabled();
     }
 
+    /** The wall and the windows as the page switch shows them, right now. */
+    // Read by the page switch panel and the glyph row.
+    @NonNull
+    private com.termux.app.wall.pageswitch.PageSwitchModel.Input pageSwitchSnapshot() {
+        com.termux.app.wall.pageswitch.PageSwitchModel.Input in =
+            new com.termux.app.wall.pageswitch.PageSwitchModel.Input();
+        com.termux.app.wall.WallPages pages = wallPages();
+        java.util.List<Integer> homes = new java.util.ArrayList<>();
+        java.util.List<String> homeLabels = new java.util.ArrayList<>();
+        for (com.termux.app.wall.WallPages.Page page : pages.homePages()) {
+            homes.add(page.id);
+            homeLabels.add(page.name == null || page.name.isEmpty() ? null : page.name);
+        }
+        in.homePageIds = homes;
+        in.homePageLabels = homeLabels;
+        com.termux.app.wall.WallPages.Page home = pages.home();
+        in.defaultStartPageId = home == null ? -1 : home.id;
+        // Use as, read as the panel opens: Terminal only has no Home cell.
+        in.homeOffered = useAs().showsHomePage();
+        com.termux.app.wall.WallPages.Page terminal = pages.terminal();
+        in.terminalPageId = terminal == null ? -1 : terminal.id;
+        int current = mPaneWallController == null ? -1 : mPaneWallController.currentPageId();
+        in.currentPageId = current;
+        com.termux.app.wall.WallPages.Page display = pages.displayTarget(current,
+            mPaneWallController == null ? -1 : mPaneWallController.boundDisplayPage());
+        in.displayPageId = display == null ? -1 : display.id;
+        com.termux.app.wall.WallPages.Page assistant = pages.assistant();
+        in.assistantPageId = assistant == null ? -1 : assistant.id;
+        switch (currentWallPlace()) {
+            case WIDGETS: in.currentKind = com.termux.app.wall.pageswitch.PageSwitchModel.Kind.HOME; break;
+            case DISPLAY: in.currentKind = com.termux.app.wall.pageswitch.PageSwitchModel.Kind.DISPLAY; break;
+            case ASSISTANT: in.currentKind = com.termux.app.wall.pageswitch.PageSwitchModel.Kind.ASSISTANT; break;
+            default: in.currentKind = com.termux.app.wall.pageswitch.PageSwitchModel.Kind.TERMINAL; break;
+        }
+        // The Terminal's windows, named as the window bar names them.
+        java.util.List<String> windowLabels = new java.util.ArrayList<>();
+        if (mPaneController != null) {
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
+                rowWindows();
+            for (int i = 0; i < windows.size(); i++) {
+                com.termux.app.terminal.TerminalPaneController.Window window = windows.get(i);
+                windowLabels.add(buildWindowItem(mPaneController.windowActiveSession(window), i,
+                    new java.util.ArrayList<>(), mPaneController.windowName(window)).label);
+            }
+        }
+        in.terminalWindowLabels = windowLabels;
+        in.currentTerminalWindow = windowLabels.isEmpty() ? -1 : rowCurrentIndex();
+        // The display's title is the app in front, named as the window bar's chip names it.
+        in.displayRunning = isEmbeddedDisplayRunning();
+        if (in.displayRunning) {
+            java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
+                displayAppItems();
+            int front = com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayWindows.size(),
+                mDisplayActiveWindow);
+            if (front >= 0 && front < items.size()) {
+                String title = com.termux.app.wall.pageswitch.PageSwitchModel.plainLabel(
+                    items.get(front).label);
+                in.displayTitle = title.equals(getString(R.string.launcher_entry_display))
+                    ? null : title;
+            }
+        }
+        in.kindNames = new String[] {getString(R.string.page_switch_home),
+            getString(R.string.page_switch_terminal), getString(R.string.page_switch_assistant),
+            getString(R.string.page_switch_display)};
+        return in;
+    }
+
+    /** What a chosen cell does on the wall. */
+    // Read by the page switch panel and the glyph row.
+    @NonNull
+    private com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator pageSwitchNavigator() {
+        return new com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator() {
+            @Override public void goToPage(int pageId) {
+                goToSwitcherPage(pageId, switcherAnimates());
+            }
+
+            @Override public void showTerminalWindow(int index) {
+                if (mPaneWallController == null) return;
+                // As a window chip tapped from elsewhere: the wall travels to the Terminal page,
+                // then the window comes in front.
+                if (currentWallPlace() != com.termux.app.wall.PaneWallPage.TERMINAL)
+                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL,
+                        switcherAnimates());
+                showRowWindow(index);
+            }
+
+            @Override public void goToTerminal() {
+                if (mPaneWallController == null) return;
+                bringTerminalWindowInFront();
+                mPaneWallController.goTo("terminal");
+            }
+        };
+    }
+
     /** Go to the wall page {@code pageId}, by the way its kind is gone to. */
     private void goToSwitcherPage(int pageId, boolean animate) {
         if (mPaneWallController == null) return;

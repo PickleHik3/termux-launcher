@@ -528,6 +528,10 @@
     <string name="launcher_media_channel_name">Media controls</string>
     <string name="launcher_media_play">Play</string>
     <string name="launcher_media_pause">Pause</string>
+    <string name="page_switch_home">Home</string>
+    <string name="page_switch_terminal">Terminal</string>
+    <string name="page_switch_assistant">Assistant</string>
+    <string name="page_switch_display">Display</string>
     <string name="launcher_media_next">Next</string>
     <string name="launcher_media_previous">Previous</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
