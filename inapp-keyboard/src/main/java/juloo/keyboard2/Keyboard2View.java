@@ -1742,7 +1742,7 @@ public class Keyboard2View extends View
         android.os.Trace.beginSection("Keyboard.down");
         try
         {
-          KeyboardData.Key key = getKeyAtPosition(tx, ty);
+          KeyboardData.Key key = getKeyForPress(tx, ty);
           if (key != null)
           {
             startTouchFx(event.getPointerId(p), key, tx, ty, event.getTouchMajor(p));
@@ -1975,7 +1975,7 @@ public class Keyboard2View extends View
    * inside the key's own rectangle, not in the gap to its neighbours (half a key margin on each
    * side) nor on the margins around the rows (above the top row, beside and under the rows). Those
    * are the keyboard's frame rather than any key's. A press still starts a key by its whole cell,
-   * as {@link #onTouch} reads it. The long-press popup does not use this: it reads
+   * and on the frame by the outer key beside it ({@link #getKeyForPress}). The long-press popup does not use this: it reads
    * {@link #drawnKeyRectAt} and keeps only a key's core, so gaps, key edges and margins open it.
    */
   public boolean hasKeyAt(float tx, float ty)
@@ -2057,7 +2057,63 @@ public class Keyboard2View extends View
 
   private KeyboardData.Key getKeyAtPosition(float tx, float ty)
   {
+    return getKeyInRow(getRowAtPosition(ty), tx);
+  }
+
+  /** How far beside a row's first or last key a press still starts it, in key widths. */
+  private static final float EDGE_REACH_KEY_WIDTHS = 0.5f;
+
+  /**
+   * The key a press at ({@code tx}, {@code ty}) starts: the key whose cell holds the point, or,
+   * for a press on the keyboard's frame, the outer key beside it. The frame is the margin above
+   * the top row, the margin under the bottom row, the side margins, and a row's indent up to
+   * {@link #EDGE_REACH_KEY_WIDTHS} from its first or last key: the usual half-key indent is all
+   * the key's, the far part of a wider blank is nobody's. Space between two keys of a row, and
+   * anything past the bottom margin, still starts nothing.
+   */
+  private KeyboardData.Key getKeyForPress(float tx, float ty)
+  {
+    if (_keyboard == null || _tc == null || _keyboard.rows.isEmpty())
+      return null;
     KeyboardData.Row row = getRowAtPosition(ty);
+    if (row == null)
+    {
+      float top = getPaddingTop() + _config.marginTopPx;
+      float bottom = top;
+      for (KeyboardData.Row r : _keyboard.rows)
+        bottom += (r.shift + r.height) * _tc.row_height;
+      if (ty >= 0f && ty < top)
+        row = _keyboard.rows.get(0);
+      else if (ty >= bottom && ty < bottom + _marginBottom)
+        row = _keyboard.rows.get(_keyboard.rows.size() - 1);
+      else
+        return null;
+    }
+    if (row.keys.isEmpty())
+      return null;
+    KeyboardData.Key key = getKeyInRow(row, tx);
+    if (key != null)
+      return key;
+    if (tx < 0f || tx >= getWidth())
+      return null;
+    // A press on a side margin counts as one at the rows' own edge.
+    float left = _marginLeft;
+    float right = left;
+    for (KeyboardData.Key k : row.keys)
+      right += (k.shift + k.width) * _keyWidth;
+    float rowsRight = Math.max(right, getWidth() - _marginRight);
+    float x = Math.max(left, Math.min(tx, rowsRight));
+    float reach = EDGE_REACH_KEY_WIDTHS * _keyWidth;
+    float firstLeft = left + row.keys.get(0).shift * _keyWidth;
+    if (x <= firstLeft)
+      return firstLeft - x <= reach ? row.keys.get(0) : null;
+    if (x >= right)
+      return x - right <= reach ? row.keys.get(row.keys.size() - 1) : null;
+    return null;
+  }
+
+  private KeyboardData.Key getKeyInRow(KeyboardData.Row row, float tx)
+  {
     float x = _marginLeft;
     if (row == null || tx < x)
       return null;
