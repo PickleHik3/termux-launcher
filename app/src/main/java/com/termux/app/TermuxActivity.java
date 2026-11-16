@@ -2417,6 +2417,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean pillStream = mHomePillStream;
             if (pillAction == MotionEvent.ACTION_UP || pillAction == MotionEvent.ACTION_CANCEL)
                 mHomePillStream = false;
+            // The page switcher's entry points and open panel take their stream whole, ahead of
+            // the seam's swipe and the surface long-press.
+            if (mPageSwitch != null && mPageSwitch.claimsTouch(ev)) return super.dispatchTouchEvent(ev);
             if (!pillStream && mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);

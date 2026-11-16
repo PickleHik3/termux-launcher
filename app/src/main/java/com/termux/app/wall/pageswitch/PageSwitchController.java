@@ -35,6 +35,9 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
     }
 
     private static final float GUTTER_DP = 12f;
+    private final java.util.ArrayList<PageSwitchHitArea> mHitAreas = new java.util.ArrayList<>(2);
+    /** The current stream is the switcher's: it landed on an entry point or on the open panel. */
+    private boolean mStreamClaimed;
 
     private final Host mHost;
     private final FrameLayout mLayer;
@@ -79,6 +82,36 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
         if (!mOpen) return;
         mGesture.cancel();
         hide();
+    }
+
+    @Override
+    public void addHitArea(@NonNull PageSwitchHitArea area) {
+        if (!mHitAreas.contains(area)) mHitAreas.add(area);
+    }
+
+    @Override
+    public void removeHitArea(@NonNull PageSwitchHitArea area) {
+        mHitAreas.remove(area);
+    }
+
+    /**
+     * Whether this stream goes to the views ahead of the window's own claims (the dock seam's
+     * swipe, the surface long-press): one that lands on the open panel or on an entry point.
+     */
+    public boolean claimsTouch(@NonNull MotionEvent ev) {
+        int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            boolean claimed = mOpen;
+            if (!claimed && !mHost.isSuppressed()) {
+                for (int i = 0; i < mHitAreas.size() && !claimed; i++)
+                    claimed = mHitAreas.get(i).containsRaw(ev.getRawX(), ev.getRawY());
+            }
+            mStreamClaimed = claimed;
+        }
+        boolean claimed = mStreamClaimed;
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+            mStreamClaimed = false;
+        return claimed;
     }
 
     // ---- Entry points, in raw screen coordinates ----------------------------------------------

@@ -21,7 +21,7 @@ import java.util.function.IntSupplier;
  * kind is drawn strong and the rest weak. The view is as wide and as tall as the band it stands
  * in, so a touch anywhere in the band opens the page switch panel through its {@link Entry}.
  */
-public final class PageGlyphRowView extends View {
+public final class PageGlyphRowView extends View implements PageSwitchHitArea {
 
     /** What a touch on the row calls; the page switch controller implements it. */
     public interface Entry {
@@ -30,6 +30,9 @@ public final class PageGlyphRowView extends View {
         void entryMove(float rawX, float rawY);
         void entryUp(float rawX, float rawY);
         void entryCancel();
+        /** Claims the touches that land on {@code area} ahead of the window's own gestures. */
+        void addHitArea(@NonNull PageSwitchHitArea area);
+        void removeHitArea(@NonNull PageSwitchHitArea area);
     }
 
     static final float GLYPH_DP = 20f;
@@ -64,7 +67,31 @@ public final class PageGlyphRowView extends View {
     }
 
     public void setEntry(@Nullable Entry entry) {
+        if (mEntry == entry) return;
+        if (mEntry != null) mEntry.removeHitArea(this);
         mEntry = entry;
+        if (entry != null && isAttachedToWindow()) entry.addHitArea(this);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (mEntry != null) mEntry.addHitArea(this);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (mEntry != null) mEntry.removeHitArea(this);
+        super.onDetachedFromWindow();
+    }
+
+    /** The row's band on screen, while it is shown and has a glyph to open the switcher from. */
+    @Override
+    public boolean containsRaw(float rawX, float rawY) {
+        if (!mHasModel || mEntry == null || !isShown()) return false;
+        getLocationOnScreen(mAt);
+        return rawX >= mAt[0] && rawX < mAt[0] + getWidth()
+            && rawY >= mAt[1] && rawY < mAt[1] + getHeight();
     }
 
     /** Takes the model's answer; invalidates only when what the row draws changed. */
