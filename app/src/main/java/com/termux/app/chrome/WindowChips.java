@@ -3,6 +3,8 @@ package com.termux.app.chrome;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.wall.PaneWallPage;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -110,7 +112,7 @@ public final class WindowChips<W> {
 
     private static final Meaning<?> NOTHING = new Meaning<>(Meaning.Action.NONE, -1, null, false);
 
-    private final boolean mHome;
+    private final PaneWallPage mPlace;
     private final boolean mRowShown;
     private final int mRowCount;
     private final int mRowCurrent;
@@ -121,15 +123,15 @@ public final class WindowChips<W> {
 
     /**
      * The chips of the row {@code rowWindows} (the terminal windows, in order) with row place
-     * {@code rowCurrent} in front, seen from Home when {@code home}. The display window is never a chip
+     * {@code rowCurrent} in front, seen from {@code place}, the place settled in front. The display window is never a chip
      * here: since ADR 0015 A3b it stands on Display pages of its own, whose bar shows one chip per
      * app open on the display (none for an empty display), see {@link DisplayAppChips}. Without {@code rowShown} (no
      * session is current) there is no row, and only the floats are chips. Floats follow with
      * {@link #addFloat}.
      */
-    public WindowChips(boolean home, boolean rowShown, @NonNull List<W> rowWindows,
+    public WindowChips(@Nullable PaneWallPage place, boolean rowShown, @NonNull List<W> rowWindows,
                        int rowCurrent) {
-        mHome = home;
+        mPlace = place;
         mRowShown = rowShown;
         mRowCurrent = rowCurrent;
         mChips = new ArrayList<>(rowWindows.size() + 2);
@@ -196,8 +198,25 @@ public final class WindowChips<W> {
     }
 
     /**
+     * Whether a window's chip tapped on the bar from {@code place} first travels the wall to the
+     * Workspace's window row: from every place but the row itself (Home pages, Assistant, the
+     * display), however far. Only a terminal window in front switches in place.
+     */
+    public static boolean barWindowTravels(@Nullable PaneWallPage place) {
+        return place != PaneWallPage.TERMINAL;
+    }
+
+    /**
+     * Whether a float's chip tapped from {@code place} first travels the wall Home: from every
+     * place but a Home page.
+     */
+    public static boolean floatTravels(@Nullable PaneWallPage place) {
+        return place != PaneWallPage.WIDGETS;
+    }
+
+    /**
      * What a tap on {@code surface}'s chip at {@code index} means: a window's brings it in front,
-     * the Workspace sliding in when the chip is on Home's dock or on the bar seen from Home; a
+     * the Workspace sliding in when the chip is on Home's dock or on the bar seen from any place but the window row; a
      * float's brings it back on its Home page, the wall travelling Home first when the chip was
      * tapped in the Workspace.
      */
@@ -206,10 +225,10 @@ public final class WindowChips<W> {
         Chip<W> chip = chipAt(surface, index);
         if (chip == null) return nothing();
         if (chip.kind == Kind.HOME_FLOAT)
-            return new Meaning<>(Meaning.Action.RESTORE_FLOAT, -1, chip.window, !mHome);
+            return new Meaning<>(Meaning.Action.RESTORE_FLOAT, -1, chip.window, floatTravels(mPlace));
         return new Meaning<>(Meaning.Action.SHOW_WINDOW, chip.row, null,
             surface == Surface.WALL_STRIP
-                || surface == Surface.BAR && mHome);
+                || surface == Surface.BAR && barWindowTravels(mPlace));
     }
 
     /** What a close on {@code surface}'s chip at {@code index} means: that window closes. */

@@ -1,5 +1,6 @@
 package com.termux.app.dock;
 
+import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -253,7 +254,7 @@ public class WallStripModelTest {
     @Test
     public void fromTheWindowChips_kindsSelectionAndMinimisedFloatsFollowTheChips() {
         // a b, then floats f (minimised) and g (in focus), as Home's dock sees them.
-        WindowChips<String> chips = new WindowChips<>(true, true, Arrays.asList("a", "b"), 0)
+        WindowChips<String> chips = new WindowChips<>(PaneWallPage.WIDGETS, true, Arrays.asList("a", "b"), 0)
             .addFloat("f", true, false)
             .addFloat("g", false, true);
         List<WindowItem> items = Arrays.asList(chip("a"), chip("b"), chip("f"), chip("g"));
