@@ -202,6 +202,9 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SCRATCHPAD, Band.MULTIPLEX);
 
         // ---------------------------------------------------------------- the terminal's own
+        // The page switcher key sits on the bar, which only Terminal, Assistant and Display have:
+        // TERMINAL_TOOL's places are exactly those three, so on Home it is drawn dead.
+        tools.put(LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_STATE, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_RESET, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, Band.TERMINAL_TOOL);

@@ -20850,6 +20850,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyExtraKeysFeedbackAccent(page);
         applyExtraKeysPlaceEligibility(page);
         applyExtraKeysDeck(page);
+        page.setKeyTouchOwner(mPageSwitchKey);
+        if (mPageSwitchKey != null && page.hasPageSwitcherKey()) refreshPageSwitcherKey();
     }
 
     public TermuxTerminalExtraKeys getTermuxTerminalExtraKeys(int page) {
@@ -23033,6 +23035,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         feedDrawerShape();
         mDrawerShape.endRecord();
         refreshTerminalWindowBar();
+        // The page switcher key's number follows the current window.
+        refreshPageSwitcherKey();
         refreshSessionsDrawer();
         // The same funnel is where the autosave hears that the windows or their trees moved.
         scheduleArrangementAutosave();
@@ -28789,6 +28793,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         R.color.termux_on_surface);
                 }
             }, layer);
+        mPageSwitchKey = new com.termux.app.wall.pageswitch.PageSwitchKeyOwner(mPageSwitch,
+            this::extraKeysPageTotal, this::extraKeysPageAt);
+        // Rows built before the switcher existed take the key's owner and glyph now.
+        for (int i = 0, n = extraKeysPageTotal(); i < n; i++) {
+            ExtraKeysPageView page = extraKeysPageAt(i);
+            if (page != null) page.setKeyTouchOwner(mPageSwitchKey);
+        }
+        refreshPageSwitcherKey();
+    }
+
+    /** The extra-keys bar's page switcher key: its touch, its hit area and its plain click. */
+    @Nullable private com.termux.app.wall.pageswitch.PageSwitchKeyOwner mPageSwitchKey;
+
+    /**
+     * Tells every key row that stands a page switcher key which page the wall is on, for the cap's
+     * glyph and number. Each page compares before it repaints; with no such key nothing is built.
+     */
+    private void refreshPageSwitcherKey() {
+        com.termux.app.wall.pageswitch.PageSwitchModel model = null;
+        for (int i = 0, n = extraKeysPageTotal(); i < n; i++) {
+            ExtraKeysPageView page = extraKeysPageAt(i);
+            if (page == null || !page.hasPageSwitcherKey()) continue;
+            if (model == null)
+                model = com.termux.app.wall.pageswitch.PageSwitchModel.build(pageSwitchSnapshot());
+            int current = model.currentIndex();
+            com.termux.app.wall.pageswitch.PageSwitchModel.Kind kind = current < 0
+                ? com.termux.app.wall.pageswitch.PageSwitchModel.Kind.TERMINAL
+                : model.cells().get(current).kind;
+            page.setPageSwitcherGlyph(kind, model.numberOf(kind));
+        }
     }
 
     /** Gives Home's glyph row the pages the wall has now; called when a page settles or the list changes. */
@@ -28797,6 +28831,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWidgetPaneController.setPageSwitchEntry(mPageSwitch);
         mWidgetPaneController.setPageGlyphs(com.termux.app.wall.pageswitch.PageSwitchModel.build(
             pageSwitchSnapshot()));
+        refreshPageSwitcherKey();
     }
 
     private boolean switcherAnimates() {
@@ -33639,6 +33674,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Opened on a Home page, the palette shows the Home set.
             com.termux.app.terminal.TerminalCommandPalette.show(getCommandPaletteController(),
                 mSheets.paletteContextHere());
+        }
+
+        @Override public void showPageSwitcher() {
+            // The click that does not come through the key's touch: opened above the bar as a tap
+            // would, the panel then staying open.
+            if (mPageSwitchKey != null) mPageSwitchKey.openAbove(getTerminalToolbarViewPager());
         }
 
         @Override public boolean toggleMouseMode() {

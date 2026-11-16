@@ -44,6 +44,13 @@ public final class NerdFontSpans {
      */
     private static final SparseIntArray sDrawableSymbols = new SparseIntArray();
 
+    /**
+     * The side of a drawable symbol's box, in text sizes. The vectors keep about 2/24 padding on
+     * each side, so a 1 em box drew the glyph body visibly smaller than the Nerd icons beside it;
+     * 1.2 em brings the body to about 1 em. A cap that draws a glyph itself sizes it the same.
+     */
+    public static final float DRAWABLE_SYMBOL_EM = 1.2f;
+
     private NerdFontSpans() {}
 
     /**
@@ -217,11 +224,7 @@ public final class NerdFontSpans {
     static final class TintedDrawableSpan extends ReplacementSpan {
 
         @NonNull private final Drawable mDrawable;
-        /**
-         * The vectors keep about 2/24 padding on each side, so a 1 em box drew the glyph body
-         * visibly smaller than the Nerd icons beside it; 1.2 em brings the body to about 1 em.
-         */
-        private static final float DRAWABLE_SCALE = 1.2f;
+        private static final float DRAWABLE_SCALE = DRAWABLE_SYMBOL_EM;
         private int mTint;
         private boolean mTinted;
 

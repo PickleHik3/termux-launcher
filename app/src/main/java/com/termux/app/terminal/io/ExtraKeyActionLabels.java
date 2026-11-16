@@ -63,10 +63,18 @@ public final class ExtraKeyActionLabels {
      */
     public static final String ASSISTANT_ICON = "\uDBFF\uDF00";
 
+    /**
+     * The page switcher key's placeholder, for the editor and the key sheet: the Terminal page's
+     * glyph. On the bar the cap draws the current page's glyph and number itself.
+     */
+    public static final String PAGE_SWITCHER_ICON = "􏼁";
+
     /** Registers the code points that draw as drawables. Called once from the Application. */
     public static void registerIcons() {
         NerdFontSpans.registerDrawableSymbol(ASSISTANT_ICON.codePointAt(0),
             R.drawable.ic_wall_assistant);
+        NerdFontSpans.registerDrawableSymbol(PAGE_SWITCHER_ICON.codePointAt(0),
+            R.drawable.ic_page_terminal);
     }
 
     /**
@@ -80,6 +88,7 @@ public final class ExtraKeyActionLabels {
             case LauncherToolRegistry.TOOL_WALL_TERMINAL: return "\uf120";
             case LauncherToolRegistry.TOOL_WALL_DISPLAY: return "\uf108";
             case LauncherToolRegistry.TOOL_WALL_ASSISTANT: return ASSISTANT_ICON;
+            case LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER: return PAGE_SWITCHER_ICON;
             case LauncherToolRegistry.TOOL_MOUSE_TOGGLE: return "\uDB80\uDF7D"; // nf-md-mouse
             case LauncherToolRegistry.TOOL_KEYBOARD_CYCLE_FORM: return "\uf11c";
             case LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER: return "\uDB80\uDC3B"; // nf-md-apps

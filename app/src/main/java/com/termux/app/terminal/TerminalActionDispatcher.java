@@ -209,6 +209,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
+    public static final String TOOL_APP_PAGE_SWITCHER = "app.page_switcher";
     public static final String TOOL_APP_LAUNCH = "app.launch";
     public static final String TOOL_CONTACT_OPEN = "contact.open";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
@@ -426,6 +427,7 @@ public final class TerminalActionDispatcher {
             case TOOL_APP_OPEN_LOOK_AND_FEEL:
             case TOOL_APP_OPEN_APPS_BAR:
             case TOOL_APP_COMMAND_PALETTE:
+            case TOOL_APP_PAGE_SWITCHER:
             case TOOL_APP_LAUNCH:
             case TOOL_CONTACT_OPEN:
             case TOOL_APP_KEY_INSPECTOR:
@@ -1290,6 +1292,9 @@ public final class TerminalActionDispatcher {
 
                 case TOOL_APP_COMMAND_PALETTE:
                     host.showCommandPalette();
+                    return ok();
+                case TOOL_APP_PAGE_SWITCHER:
+                    host.showPageSwitcher();
                     return ok();
                 case TOOL_APP_LAUNCH: {
                     String query = arguments.optString("query", "").trim();

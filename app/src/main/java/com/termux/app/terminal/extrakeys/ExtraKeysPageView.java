@@ -112,6 +112,25 @@ public final class ExtraKeysPageView extends ViewGroup {
         void onPlaceGlyphColors(@NonNull Map<String, Integer> colorsByKeyValue);
     }
 
+    /**
+     * A key whose touch is not the press policy's: the host takes the whole stream from the finger
+     * going down to its lifting (the page switcher key, which slides along its panel). Events carry
+     * raw screen coordinates.
+     */
+    public interface KeyTouchOwner {
+        /** Whether the primary key {@code keyValue} is the owner's. */
+        boolean ownsKey(@NonNull String keyValue);
+
+        /** The finger went down on {@code cap}; false leaves the touch to the press policy. */
+        boolean down(@NonNull MotionEvent ev, @NonNull View cap);
+
+        void move(@NonNull MotionEvent ev);
+
+        void up(@NonNull MotionEvent ev);
+
+        void cancel();
+    }
+
     // ---- State.
 
     private final float mDensity;
@@ -152,6 +171,11 @@ public final class ExtraKeysPageView extends ViewGroup {
     @Nullable private KeyUsabilityPolicy mUsabilityPolicy;
     @Nullable private PlaceSwitchPolicy mPlaceSwitchPolicy;
     @Nullable private PlaceGlyphColorListener mPlaceGlyphColorListener;
+    @Nullable private KeyTouchOwner mTouchOwner;
+    /** The page switcher key's glyph, as the host last said it; null until it has. */
+    @Nullable private com.termux.app.wall.pageswitch.PageSwitchModel.Kind mPageGlyphKind;
+    private int mPageGlyphNumber;
+    private final int[] mRawAt = new int[2];
 
     @Nullable private ExtraKeysClient mClient;
     @Nullable private ExtraKeyModifiers mModifiers;
@@ -163,6 +187,8 @@ public final class ExtraKeysPageView extends ViewGroup {
 
     @Nullable private ExtraKeyCapView mActive;
     @Nullable private ExtraKeyPressPolicy mPolicy;
+    /** The cap whose stream {@link #mTouchOwner} has: every event of it goes to the owner. */
+    @Nullable private ExtraKeyCapView mOwnedCap;
     private float mDownX;
     private float mDownY;
     private boolean mTicked;
@@ -259,6 +285,11 @@ public final class ExtraKeysPageView extends ViewGroup {
         cap.mRow = row;
         cap.mColumn = col;
         cap.setLabel(key.getDisplay(), mButtonTextAllCaps);
+        if (isPageSwitcherKey(key)) {
+            cap.setContentDescription(
+                getContext().getString(com.termux.R.string.tool_app_page_switcher));
+            if (mPageGlyphKind != null) cap.setPageGlyph(mPageGlyphKind, mPageGlyphNumber);
+        }
         mCaps.add(cap);
         mKeys.add(key);
         // Its colour, and whether it can act here at all, decided once as it is built.
@@ -624,6 +655,50 @@ public final class ExtraKeysPageView extends ViewGroup {
         restateEveryKey();
     }
 
+    /** The key value of the page switcher, whose cap draws a page glyph and slides along its panel. */
+    public static final String PAGE_SWITCHER_KEY =
+        "tool:" + com.termux.launcherctl.LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER;
+
+    private static boolean isPageSwitcherKey(@NonNull ExtraKeyButton key) {
+        return PAGE_SWITCHER_KEY.equals(key.getKey());
+    }
+
+    public void setKeyTouchOwner(@Nullable KeyTouchOwner owner) {
+        mTouchOwner = owner;
+    }
+
+    /** Whether a page switcher key stands on this page. */
+    public boolean hasPageSwitcherKey() {
+        for (int i = 0; i < mKeys.size(); i++) if (isPageSwitcherKey(mKeys.get(i))) return true;
+        return false;
+    }
+
+    /**
+     * What the page switcher key's cap draws: the current page's glyph and number. Compared before
+     * anything repaints; the caps built later take it too.
+     */
+    public void setPageSwitcherGlyph(@NonNull com.termux.app.wall.pageswitch.PageSwitchModel.Kind kind,
+                                     int number) {
+        mPageGlyphKind = kind;
+        mPageGlyphNumber = number;
+        for (int i = 0; i < mCaps.size(); i++) {
+            if (isPageSwitcherKey(mKeys.get(i))) mCaps.get(i).setPageGlyph(kind, number);
+        }
+    }
+
+    /** Whether a shown, usable page switcher cap covers the screen point; the owner's hit area. */
+    public boolean pageSwitcherKeyContainsRaw(float rawX, float rawY) {
+        if (!isShown()) return false;
+        for (int i = 0; i < mCaps.size(); i++) {
+            ExtraKeyCapView cap = mCaps.get(i);
+            if (!isPageSwitcherKey(mKeys.get(i)) || cap.isDead()) continue;
+            cap.getLocationOnScreen(mRawAt);
+            if (rawX >= mRawAt[0] && rawX < mRawAt[0] + cap.getWidth()
+                && rawY >= mRawAt[1] && rawY < mRawAt[1] + cap.getHeight()) return true;
+        }
+        return false;
+    }
+
     public void setPlaceSwitchPolicy(@Nullable PlaceSwitchPolicy policy) {
         mPlaceSwitchPolicy = policy;
         restateEveryKey();
@@ -877,8 +952,13 @@ public final class ExtraKeysPageView extends ViewGroup {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        if (mOwnedCap != null && ev.getActionMasked() != MotionEvent.ACTION_DOWN) {
+            routeToOwner(ev);
+            return true;
+        }
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                if (beginOwned(ev)) return true;
                 begin(ev.getX(), ev.getY());
                 return true;
             case MotionEvent.ACTION_MOVE:
@@ -904,6 +984,47 @@ public final class ExtraKeysPageView extends ViewGroup {
             }
         }
         return null;
+    }
+
+    /**
+     * A down on a key the owner holds: it takes this stream. The glow and the press haptic play
+     * as for any key; no bubble, hold or repeat. The bar must not turn its page on the drag.
+     */
+    private boolean beginOwned(@NonNull MotionEvent ev) {
+        KeyTouchOwner owner = mTouchOwner;
+        if (owner == null) return false;
+        cancelPress();
+        ExtraKeyCapView cap = capAtPoint(ev.getX(), ev.getY());
+        String value = cap == null ? null : cap.key().getKey();
+        if (cap == null || value == null || cap.isDead() || !owner.ownsKey(value)
+            || !owner.down(ev, cap)) return false;
+        mOwnedCap = cap;
+        cap.pressAt(ev.getX() - cap.getLeft(), ev.getY() - cap.getTop());
+        pressHaptic(cap);
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+        return true;
+    }
+
+    private void routeToOwner(@NonNull MotionEvent ev) {
+        KeyTouchOwner owner = mTouchOwner;
+        ExtraKeyCapView cap = mOwnedCap;
+        if (owner == null || cap == null) return;
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                owner.move(ev);
+                break;
+            case MotionEvent.ACTION_UP:
+                mOwnedCap = null;
+                cap.release();
+                owner.up(ev);
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                cancelPress();
+                break;
+            default:
+                break;
+        }
     }
 
     private void begin(float x, float y) {
@@ -1009,6 +1130,12 @@ public final class ExtraKeysPageView extends ViewGroup {
 
     /** Stops the timers, lets the glow fade, hides the bubble and fires nothing. */
     private void cancelPress() {
+        ExtraKeyCapView owned = mOwnedCap;
+        if (owned != null) {
+            mOwnedCap = null;
+            owned.release();
+            if (mTouchOwner != null) mTouchOwner.cancel();
+        }
         stopTimers();
         dismissBubble();
         if (mActive != null) mActive.release();

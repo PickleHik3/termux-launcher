@@ -505,6 +505,7 @@ public class TerminalActionDispatcherTest {
             {"app.open_apps_bar", "openAppsBar"},
             {"app.open_app_drawer", "openAppDrawer"},
             {"app.command_palette", "showCommandPalette"},
+            {"app.page_switcher", "showPageSwitcher"},
             // The retired sessions drawer's own binding, kept pointed at its replacement.
             {"app.open_drawer", "showSessionBrowser"},
             {"appearance.set_wallpaper", "openWallpaperPicker"},
