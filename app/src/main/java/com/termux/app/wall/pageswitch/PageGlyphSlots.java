@@ -1,37 +1,34 @@
 package com.termux.app.wall.pageswitch;
 
-import android.graphics.Typeface;
-
 /**
  * Where and how the page number is drawn inside the Home and Terminal glyphs, in the glyphs'
- * 24-unit viewport. The number is the glyph's hero: it fills almost the whole inner height of the
- * frame. The one place these live: dropping in the final art means replacing the four
- * {@code ic_page_*.xml} files and these numbers.
+ * 24-unit viewport. The number is the glyph's hero. The one place these live: new art means
+ * replacing the four {@code ic_page_*.xml} files and these numbers.
  *
- * <p>One size for every number: the text is scaled once so the widest of "1".."99" fits the slot's
- * width and its digits stand {@link #NUMBER_FILL} of the slot's height, whichever is smaller.
+ * <p>Each slot is the numeral's visible ink box: its centre, its width and its cap height (the
+ * height of the digits' ink, not the text size). Every number keeps the cap height; one wider
+ * than the slot is condensed horizontally to fit ({@link #MIN_CONDENSE} for three characters and
+ * more, then shrunk evenly).
  */
 public final class PageGlyphSlots {
 
     public static final float VIEWPORT = 24f;
 
-    /** The digits' typeface family and style (a Roboto medium by default). */
+    /** The digits' typeface: Roboto Medium (weight 500). */
     public static final String DIGIT_FAMILY = "sans-serif-medium";
-    public static final int DIGIT_STYLE = Typeface.NORMAL;
-    /** How much of the slot's height the digits stand. */
-    public static final float NUMBER_FILL = 0.9f;
+    public static final int DIGIT_WEIGHT = 500;
+    /** The most a number of three characters or more is condensed before it is shrunk instead. */
+    public static final float MIN_CONDENSE = 0.8f;
 
-    /** Placeholder house: inner frame x 8-16, y 10.5-18.5. */
     public static final float HOME_SLOT_CX = 12f;
     public static final float HOME_SLOT_CY = 14.5f;
-    public static final float HOME_SLOT_W = 8f;
-    public static final float HOME_SLOT_H = 8f;
+    public static final float HOME_SLOT_W = 12f;
+    public static final float HOME_SLOT_H = 11f;
 
-    /** Placeholder terminal: inner frame x 7-17, y 8-16. */
     public static final float TERMINAL_SLOT_CX = 12f;
-    public static final float TERMINAL_SLOT_CY = 12f;
-    public static final float TERMINAL_SLOT_W = 10f;
-    public static final float TERMINAL_SLOT_H = 8f;
+    public static final float TERMINAL_SLOT_CY = 13.5f;
+    public static final float TERMINAL_SLOT_W = 12f;
+    public static final float TERMINAL_SLOT_H = 12f;
 
     private PageGlyphSlots() {}
 }

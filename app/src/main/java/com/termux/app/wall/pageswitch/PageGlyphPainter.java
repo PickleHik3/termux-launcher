@@ -3,65 +3,70 @@ package com.termux.app.wall.pageswitch;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import com.termux.R;
 
 /**
- * Draws a page glyph tinted one colour, with the page number centred in the Home and Terminal
- * glyphs' slot (sized and placed by {@link PageGlyphSlots}). Owns its paint and drawables, loaded once; {@link #draw} allocates nothing.
+ * Draws a page glyph (a stroked outline, tinted one colour) and, in the Home and Terminal glyphs,
+ * the page number in the slot {@link PageGlyphSlots} gives: the digits' ink stands the slot's cap
+ * height and is centred on the slot by its measured ink, condensed when wider than the slot.
+ * The drawables and every number's ink metrics are loaded once; {@link #draw} allocates nothing.
  * Numbers above 99 draw as "99+".
  */
 public final class PageGlyphPainter {
 
     private static final int MAX_NUMBER = 99;
+    private static final String OVERFLOW = "99+";
+    /** The text size the ink is measured at; every metric below is per unit of text size. */
+    private static final float REFERENCE_SIZE = 100f;
 
     private final Drawable[] mGlyphs = new Drawable[PageSwitchModel.Kind.values().length];
     private final Paint mText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** Index 1..99 the numbers, index 0 "99+". */
     private final String[] mNumbers = new String[MAX_NUMBER + 1];
-    private static final String OVERFLOW = "99+";
+    private final float[] mInkLeft = new float[MAX_NUMBER + 1];
+    private final float[] mInkWidth = new float[MAX_NUMBER + 1];
+    /** The digits' common ink: its top (negative, above the baseline) and its height. */
+    private final float mCapTop;
+    private final float mCapHeight;
 
     public PageGlyphPainter(@NonNull Context context) {
         mGlyphs[PageSwitchModel.Kind.HOME.ordinal()] = load(context, R.drawable.ic_page_home);
         mGlyphs[PageSwitchModel.Kind.TERMINAL.ordinal()] = load(context, R.drawable.ic_page_terminal);
         mGlyphs[PageSwitchModel.Kind.ASSISTANT.ordinal()] = load(context, R.drawable.ic_page_assistant);
         mGlyphs[PageSwitchModel.Kind.DISPLAY.ordinal()] = load(context, R.drawable.ic_page_display);
-        mText.setTypeface(Typeface.create(PageGlyphSlots.DIGIT_FAMILY, PageGlyphSlots.DIGIT_STYLE));
-        mText.setTextAlign(Paint.Align.CENTER);
-        // Measured once at a reference size; both scale with the text size.
+        Typeface family = Typeface.create(PageGlyphSlots.DIGIT_FAMILY, Typeface.NORMAL);
+        mText.setTypeface(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+            ? Typeface.create(family, PageGlyphSlots.DIGIT_WEIGHT, false) : family);
+        mText.setTextAlign(Paint.Align.LEFT);
+        // Tabular lining digits where the font has them, so 1 and 11 sit alike.
+        mText.setFontFeatureSettings("tnum");
         mText.setTextSize(REFERENCE_SIZE);
-        float widest = 0f;
-        for (int n = 1; n <= MAX_NUMBER; n++) widest = Math.max(widest, mText.measureText(numberString(n)));
-        mWidestPerSize = widest / REFERENCE_SIZE;
-        android.graphics.Rect bounds = new android.graphics.Rect();
+        Rect bounds = new Rect();
+        for (int n = 0; n <= MAX_NUMBER; n++) {
+            String s = n == 0 ? OVERFLOW : Integer.toString(n);
+            mNumbers[n] = s;
+            mText.getTextBounds(s, 0, s.length(), bounds);
+            mInkLeft[n] = bounds.left / REFERENCE_SIZE;
+            mInkWidth[n] = bounds.width() / REFERENCE_SIZE;
+        }
         mText.getTextBounds("0123456789", 0, 10, bounds);
-        mDigitTopPerSize = bounds.top / REFERENCE_SIZE;
-        mDigitHeightPerSize = bounds.height() / REFERENCE_SIZE;
+        mCapTop = bounds.top / REFERENCE_SIZE;
+        mCapHeight = Math.max(1e-3f, bounds.height() / REFERENCE_SIZE);
     }
 
-    private static final float REFERENCE_SIZE = 100f;
-    /** The widest of "1".."99", the digits' top (negative, above the baseline) and height, per unit of text size. */
-    private final float mWidestPerSize;
-    private final float mDigitTopPerSize;
-    private final float mDigitHeightPerSize;
-
+    @Nullable
     private static Drawable load(Context context, int res) {
         Drawable d = AppCompatResources.getDrawable(context, res);
         return d == null ? null : d.mutate();
-    }
-
-    private String numberString(int number) {
-        if (number > MAX_NUMBER) return OVERFLOW;
-        String s = mNumbers[number];
-        if (s == null) {
-            s = Integer.toString(number);
-            mNumbers[number] = s;
-        }
-        return s;
     }
 
     /** Draws {@code kind}'s glyph in the square at ({@code left}, {@code top}) of side {@code size}. */
@@ -69,6 +74,7 @@ public final class PageGlyphPainter {
                      float left, float top, float size, int color) {
         Drawable d = mGlyphs[kind.ordinal()];
         if (d == null) return;
+        // The tint covers the whole drawable, the stroke included.
         d.setTint(color);
         int l = Math.round(left);
         int t = Math.round(top);
@@ -91,18 +97,27 @@ public final class PageGlyphPainter {
         } else {
             return;
         }
+        int index = number > MAX_NUMBER ? 0 : number;
         float unit = size / PageGlyphSlots.VIEWPORT;
-        String text = numberString(number);
-        // One size for every number: the digits fill the slot's height, unless the widest
-        // two-digit number would then overrun its width.
-        float byHeight = PageGlyphSlots.NUMBER_FILL * slotH * unit / Math.max(1e-3f, mDigitHeightPerSize);
-        float byWidth = slotW * unit / Math.max(1e-3f, mWidestPerSize);
-        float textSize = Math.min(byHeight, byWidth);
+        float maxWidth = slotW * unit;
+        // The cap height is the slot's: the text size follows from the digits' measured ink.
+        float textSize = slotH * unit / mCapHeight;
+        float inkWidth = mInkWidth[index] * textSize;
+        float scaleX = 1f;
+        if (inkWidth > maxWidth) {
+            scaleX = maxWidth / inkWidth;
+            // Three characters and more: condense only so far, then shrink evenly.
+            if (index == 0 && scaleX < PageGlyphSlots.MIN_CONDENSE) {
+                textSize *= scaleX / PageGlyphSlots.MIN_CONDENSE;
+                scaleX = PageGlyphSlots.MIN_CONDENSE;
+            }
+        }
         mText.setTextSize(textSize);
+        mText.setTextScaleX(scaleX);
         mText.setColor(color);
-        // Centre the digits' measured box on the slot.
-        float baseline = top + cy * unit
-            - (mDigitTopPerSize + mDigitHeightPerSize / 2f) * textSize;
-        canvas.drawText(text, left + cx * unit, baseline, mText);
+        // Centre the ink, not the line box: horizontally this number's ink, vertically the digits' caps.
+        float x = left + cx * unit - (mInkLeft[index] + mInkWidth[index] / 2f) * textSize * scaleX;
+        float baseline = top + cy * unit - (mCapTop + mCapHeight / 2f) * textSize;
+        canvas.drawText(mNumbers[index], x, baseline, mText);
     }
 }
