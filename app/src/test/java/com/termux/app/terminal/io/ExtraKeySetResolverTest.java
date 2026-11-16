@@ -77,16 +77,17 @@ public class ExtraKeySetResolverTest {
     }
 
     @Test
-    public void shippedSetForDisplayAndAssistantWithNoPageTwo() {
-        Resolved d = ExtraKeySetResolver.resolve(ExtraKeysTarget.DISPLAY,
-            lines(TermuxPropertyConstants.KEY_EXTRA_KEYS2, "[[F1]]", ExtraKeysTarget.DISPLAY.pageKeys()[1], OWN2));
-        assertEquals(Source.SHIPPED, d.source);
-        assertEquals(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_DISPLAY, d.page1);
-        assertNull(d.page2);
-        Resolved a = ExtraKeySetResolver.resolve(ExtraKeysTarget.ASSISTANT, lines());
-        assertEquals(Source.SHIPPED, a.source);
-        assertEquals(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT, a.page1);
-        assertNull(a.page2);
+    public void displayAndAssistantFollowGlobalWithNoRowOfTheirOwn() {
+        for (ExtraKeysTarget t : new ExtraKeysTarget[]{ExtraKeysTarget.DISPLAY, ExtraKeysTarget.ASSISTANT}) {
+            Resolved r = ExtraKeySetResolver.resolve(t, lines(TermuxPropertyConstants.KEY_EXTRA_KEYS, "[[ALT]]",
+                TermuxPropertyConstants.KEY_EXTRA_KEYS2, "[[F2]]", t.pageKeys()[1], OWN2));
+            assertEquals(Source.GLOBAL, r.source);
+            assertEquals("[[ALT]]", r.page1);
+            assertEquals("[[F2]]", r.page2);
+        }
+        Resolved bare = ExtraKeySetResolver.resolve(ExtraKeysTarget.ASSISTANT, lines());
+        assertEquals(Source.GLOBAL, bare.source);
+        assertEquals(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS, bare.page1);
     }
 
     @Test
@@ -111,9 +112,9 @@ public class ExtraKeySetResolverTest {
 
     @Test
     public void aBlankPageOneIsAbsent() {
-        Resolved shipped = ExtraKeySetResolver.resolve(ExtraKeysTarget.DISPLAY,
+        Resolved display = ExtraKeySetResolver.resolve(ExtraKeysTarget.DISPLAY,
             lines(ExtraKeysTarget.DISPLAY.pageKeys()[0], "   ", ExtraKeysTarget.DISPLAY.pageKeys()[1], OWN2));
-        assertEquals(Source.SHIPPED, shipped.source);
+        assertEquals(Source.GLOBAL, display.source);
         Resolved global = ExtraKeySetResolver.resolve(ExtraKeysTarget.TERMINAL,
             lines(ExtraKeysTarget.TERMINAL.pageKeys()[0], ""));
         assertEquals(Source.GLOBAL, global.source);
@@ -176,9 +177,6 @@ public class ExtraKeySetResolverTest {
         assertEquals("extra-keys-home", ExtraKeysTarget.HOME.pageKeys()[0]);
         assertEquals("extra-keys-home2", ExtraKeysTarget.HOME.pageKeys()[1]);
         assertEquals("extra-keys-home-height", ExtraKeysTarget.HOME.heightKey());
-        assertNull(ExtraKeysTarget.TERMINAL.shippedPage1());
-        assertNull(ExtraKeysTarget.HOME.shippedPage1());
-        assertEquals(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS, ExtraKeysTarget.GLOBAL.shippedPage1());
         assertNull(ExtraKeysTarget.GLOBAL.markingPlace());
         assertEquals(PaneWallPage.TERMINAL, ExtraKeysTarget.TERMINAL.markingPlace());
         assertEquals(PaneWallPage.DISPLAY, ExtraKeysTarget.DISPLAY.markingPlace());

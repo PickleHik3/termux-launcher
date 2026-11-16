@@ -135,7 +135,6 @@ public class ExtraKeyColorRoleTest {
         // The place switches left the shipped row for the navigation dot, and with them the colours.
         for (String row : new String[]{
             com.termux.shared.termux.settings.properties.TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
-            com.termux.shared.termux.settings.properties.TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_DISPLAY,
             com.termux.shared.termux.settings.properties.TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT}) {
             ExtraKeysInfo info = new ExtraKeysInfo(row,
                 com.termux.shared.termux.settings.properties.TermuxPropertyConstants

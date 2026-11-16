@@ -176,6 +176,8 @@ public class TermuxApplication extends Application {
                 new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
                     surfacePreferences.getSharedPreferences()));
         }
+        // Assistant keeps the key row it had built in, as its own row, once; before the load below.
+        com.termux.app.terminal.io.AssistantKeysMigration.runAtStartUp(context, surfacePreferences);
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
         // Init app wide shell manager
