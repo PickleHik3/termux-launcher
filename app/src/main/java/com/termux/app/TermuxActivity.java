@@ -11202,6 +11202,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
         rebuildDrawerSessions();
+        // The sessions are restored: the glyphs' first look at the windows comes after onResume's.
+        refreshPageGlyphsIfWindowsMoved();
         // A message tapped in the shade while the launcher was away waits here for its shell.
         deliverPendingShellNotificationTap();
     }
@@ -28843,11 +28845,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Gives Home's glyph row the pages the wall has now; called when a page settles or the list changes. */
     private void refreshPageGlyphs() {
-        if (mWidgetPaneController == null) return;
-        mWidgetPaneController.setPageSwitchEntry(mPageSwitch);
-        mWidgetPaneController.setPageGlyphs(com.termux.app.wall.pageswitch.PageSwitchModel.build(
-            pageSwitchSnapshot()));
+        if (mWidgetPaneController != null) {
+            mWidgetPaneController.setPageSwitchEntry(mPageSwitch);
+            mWidgetPaneController.setPageGlyphs(com.termux.app.wall.pageswitch.PageSwitchModel.build(
+                pageSwitchSnapshot()));
+        }
         refreshPageSwitcherKey();
+    }
+
+    /** The window count and current window the glyphs were last given. */
+    private int mGlyphWindowCount = -1;
+    private int mGlyphWindowCurrent = -1;
+
+    /**
+     * Terminal's glyph holds the window you would return to, so the glyphs follow the window list
+     * wherever the window bar's items are rebuilt. Compares before it refreshes.
+     */
+    private void refreshPageGlyphsIfWindowsMoved() {
+        int count = rowWindowCount();
+        int current = count == 0 ? -1 : rowCurrentIndex();
+        if (count == mGlyphWindowCount && current == mGlyphWindowCurrent) return;
+        mGlyphWindowCount = count;
+        mGlyphWindowCurrent = current;
+        refreshPageGlyphs();
     }
 
     private boolean switcherAnimates() {
@@ -30273,6 +30293,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // not the Home floats' after them. The same on both halves.
         bar.setMovableChipCount(items.isEmpty() || isDisplayWindowInFront() ? 0 : chips.rowCount());
         bar.setWindows(items, selected);
+        refreshPageGlyphsIfWindowsMoved();
         if (mScene != null && selected >= 0 && selected < items.size())
             mScene.onFocusedWindow(items.get(selected).label);
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
