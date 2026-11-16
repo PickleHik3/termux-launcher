@@ -4,9 +4,6 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.Matrix;
-import android.graphics.RadialGradient;
-import android.graphics.Shader;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.View;
@@ -32,18 +29,10 @@ public final class PageSwitchPanelView extends View {
 
     private static final long WAVE_SETTLE_MS = 180L;
     private static final int WEAK_ALPHA = 0xB0;
-    private static final int GLOW_ALPHA = 0x70;
-    /** How far the glow reaches, in glyph sizes from the glyph's centre. */
-    private static final float GLOW_REACH = 0.7f;
+    private static final int GLOW_ALPHA = 0xCC;
 
     private final PageGlyphPainter mPainter;
     private final TextPaint mTitlePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-    private final TextPaint mTitleHalo = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Matrix mGlowMatrix = new Matrix();
-    private final int mHalo = GlassInk.unmeasuredHalo(false);
-    private final int mFocusHalo = GlassInk.unmeasuredHalo(true);
-    private final float mHaloRadius;
     private final float[] mWave = new float[2];
     private final float mDensity;
     private final ValueAnimator mSettle = ValueAnimator.ofFloat(1f, 0f);
@@ -71,14 +60,7 @@ public final class PageSwitchPanelView extends View {
         mTitlePaint.setTextSize(probe.getTextSize());
         mTitlePaint.setTypeface(probe.getTypeface());
         mTitlePaint.setColor(mInk);
-        mHaloRadius = GlassInk.HALO_STROKE_DP * mDensity / 2f;
-        mTitleHalo.setTextSize(probe.getTextSize());
-        mTitleHalo.setTypeface(probe.getTypeface());
-        mTitleHalo.setStyle(Paint.Style.STROKE);
-        mTitleHalo.setStrokeJoin(Paint.Join.ROUND);
-        mTitleHalo.setStrokeWidth(GlassInk.HALO_STROKE_DP * mDensity);
-        mTitleHalo.setColor(mHalo);
-        buildGlow();
+        applyTitleShadow();
         mSettle.setDuration(WAVE_SETTLE_MS);
         mSettle.addUpdateListener(a -> {
             mStrength = (float) a.getAnimatedValue();
@@ -97,23 +79,21 @@ public final class PageSwitchPanelView extends View {
         if (mInk == ink) return;
         mInk = ink;
         mTitlePaint.setColor(ink);
+        applyTitleShadow();
         invalidate();
+    }
+
+    /** A faint lift under the title, in the colour away from its ink. */
+    private void applyTitleShadow() {
+        mTitlePaint.setShadowLayer(1.5f * mDensity, 0f, 0.7f * mDensity,
+            GlassInk.floatingShadow(mInk));
     }
 
     /** The accent the focused glyph is drawn in and glows with; the glow is rebuilt only here. */
     public void setAccent(@ColorInt int accent) {
         if (mAccent == accent) return;
         mAccent = accent;
-        buildGlow();
         invalidate();
-    }
-
-    /** A unit-radius radial glow in the accent, scaled to the glyph as it draws. */
-    private void buildGlow() {
-        int c = mAccent & 0x00FFFFFF;
-        mGlowPaint.setShader(new RadialGradient(0f, 0f, 1f,
-            new int[] {c | (GLOW_ALPHA << 24), c | ((GLOW_ALPHA / 2) << 24), c},
-            new float[] {0f, 0.55f, 1f}, Shader.TileMode.CLAMP));
     }
 
     public void setReducedMotion(boolean reduced) {
@@ -200,7 +180,6 @@ public final class PageSwitchPanelView extends View {
             float baseline = PageSwitchLayout.PANEL_VERTICAL_PADDING_DP * mDensity
                 - mTitlePaint.getFontMetrics().ascent;
             float titleX = centre - mTitleWidth / 2f;
-            canvas.drawText(mTitle, 0, mTitle.length(), titleX, baseline, mTitleHalo);
             canvas.drawText(mTitle, 0, mTitle.length(), titleX, baseline, mTitlePaint);
         }
         for (int i = 0; i < cells.size(); i++) {
@@ -208,17 +187,13 @@ public final class PageSwitchPanelView extends View {
             float size = glyph * mWave[1];
             float cx = layout.cellCentreX(i);
             float cy = restCentreY - mWave[0];
-            if (i == mHighlight) {
-                float reach = size * GLOW_REACH;
-                mGlowMatrix.setScale(reach, reach);
-                mGlowMatrix.postTranslate(cx, cy);
-                mGlowPaint.getShader().setLocalMatrix(mGlowMatrix);
-                canvas.drawCircle(cx, cy, reach, mGlowPaint);
-            }
             PageSwitchModel.Cell cell = cells.get(i);
             boolean focus = i == mHighlight;
+            // The focused glyph is the accent, crisp, with the glow outside it and no halo; the
+            // rest float on a faint shadow away from their ink.
             mPainter.drawFloating(canvas, cell.kind, cell.number, cx - size / 2f, cy - size / 2f,
-                size, focus ? mAccent : weakInk, focus ? mFocusHalo : mHalo, mHaloRadius);
+                size, focus ? mAccent : weakInk, focus ? 0 : GlassInk.floatingShadow(weakInk),
+                focus ? (mAccent & 0x00FFFFFF) | (GLOW_ALPHA << 24) : 0);
         }
     }
 

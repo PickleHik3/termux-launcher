@@ -83,6 +83,7 @@ public final class PageGlyphRowView extends View implements PageSwitchHitArea {
     @Override
     protected void onDetachedFromWindow() {
         if (mEntry != null) mEntry.removeHitArea(this);
+        setCovered(false);
         super.onDetachedFromWindow();
     }
 
@@ -93,6 +94,12 @@ public final class PageGlyphRowView extends View implements PageSwitchHitArea {
         getLocationOnScreen(mAt);
         return rawX >= mAt[0] && rawX < mAt[0] + getWidth()
             && rawY >= mAt[1] && rawY < mAt[1] + getHeight();
+    }
+
+    @Override
+    public void setCovered(boolean covered) {
+        float alpha = covered ? 0f : 1f;
+        if (getAlpha() != alpha) setAlpha(alpha);
     }
 
     /** Takes the model's answer; invalidates only when what the row draws changed. */
@@ -136,8 +143,9 @@ public final class PageGlyphRowView extends View implements PageSwitchHitArea {
         for (int i = 0; i < KINDS.length; i++) {
             if (!mShown[i]) continue;
             boolean strong = i == mCurrent;
-            mPainter.drawFloating(canvas, KINDS[i], mNumbers[i], x, y, glyph, ink(wallpaper, strong),
-                GlassInk.unmeasuredHalo(false), GlassInk.HALO_STROKE_DP * mDensity / 2f);
+            int ink = ink(wallpaper, strong);
+            mPainter.drawFloating(canvas, KINDS[i], mNumbers[i], x, y, glyph, ink,
+                GlassInk.floatingShadow(ink), 0);
             x += glyph + gap;
         }
     }

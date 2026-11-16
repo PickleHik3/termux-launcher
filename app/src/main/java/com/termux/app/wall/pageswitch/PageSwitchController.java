@@ -67,6 +67,8 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
         mHaptics = new PageSwitchHaptics(context, host::hapticsEnabled);
         mGesture = new PageSwitchGesture(new PageSwitchLayout(mDensity, 0, 0, 0f),
             ViewConfiguration.get(context).getScaledTouchSlop());
+        // The focused glyph's glow reaches past the panel's bounds; nothing clips it.
+        layer.setClipChildren(false);
         layer.addView(mPanel, new FrameLayout.LayoutParams(0, 0));
         layer.setClickable(false);
         layer.setOnTouchListener((v, ev) -> onLayerTouch(ev));
@@ -149,6 +151,7 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
         mPanel.bind(model, layout, x);
         mPanel.setVisibility(View.VISIBLE);
         mOpen = true;
+        for (int i = 0; i < mHitAreas.size(); i++) mHitAreas.get(i).setCovered(true);
         return true;
     }
 
@@ -240,6 +243,7 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
     private void hide() {
         mOpen = false;
         mModel = null;
+        for (int i = 0; i < mHitAreas.size(); i++) mHitAreas.get(i).setCovered(false);
         mLayer.setClickable(false);
         mPanel.setVisibility(View.GONE);
         mPanel.clear();

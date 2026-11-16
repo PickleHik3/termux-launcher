@@ -266,6 +266,20 @@ public final class GlassInk {
     /** The halo stroke's width: the A-Z bar's, drawn under every floating glyph. */
     public static final float HALO_STROKE_DP = 1.4f;
 
+    /** How strong the faint shadow under a floating glyph is. */
+    public static final int FLOATING_SHADOW_ALPHA = 0x66;
+
+    /**
+     * The faint shadow under a glyph floating over content nothing has measured: the side of the
+     * glyph's ink away from it, so a dark halo never sits under dark ink — pale ink takes
+     * {@link #HALO_DARK}, dark ink takes {@link #HALO_PALE}.
+     */
+    @ColorInt
+    public static int floatingShadow(@ColorInt int glyphInk) {
+        int seed = SchemeTone.tone(glyphInk | 0xFF000000) >= 50d ? HALO_DARK : HALO_PALE;
+        return (seed & 0x00FFFFFF) | (FLOATING_SHADOW_ALPHA << 24);
+    }
+
     /** The halo of a glyph over content nothing has measured: what the A-Z row starts with. */
     @ColorInt
     public static int unmeasuredHalo(boolean focused) {
