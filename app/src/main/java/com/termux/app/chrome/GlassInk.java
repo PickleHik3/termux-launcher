@@ -267,7 +267,7 @@ public final class GlassInk {
     public static final float HALO_STROKE_DP = 1.4f;
 
     /** How strong the faint shadow under a floating glyph is. */
-    public static final int FLOATING_SHADOW_ALPHA = 0x66;
+    public static final int FLOATING_SHADOW_ALPHA = 0x40;
 
     /**
      * The faint shadow under a glyph floating over content nothing has measured: the side of the

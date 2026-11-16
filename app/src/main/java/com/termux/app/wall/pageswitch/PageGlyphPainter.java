@@ -1,10 +1,8 @@
 package com.termux.app.wall.pageswitch;
 
 import android.content.Context;
-import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.MaskFilter;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
@@ -48,10 +46,9 @@ public final class PageGlyphPainter {
         mGlyphs[PageSwitchModel.Kind.TERMINAL.ordinal()] = load(context, R.drawable.ic_page_terminal);
         mGlyphs[PageSwitchModel.Kind.ASSISTANT.ordinal()] = load(context, R.drawable.ic_page_assistant);
         mGlyphs[PageSwitchModel.Kind.DISPLAY.ordinal()] = load(context, R.drawable.ic_page_display);
-        mBlurPaint.setStyle(Paint.Style.STROKE);
-        mBlurPaint.setStrokeCap(Paint.Cap.ROUND);
-        mBlurPaint.setStrokeJoin(Paint.Join.ROUND);
-        mBlurPaint.setStrokeWidth(STROKE_WIDTH);
+        mStrokePaint.setStyle(Paint.Style.STROKE);
+        mStrokePaint.setStrokeCap(Paint.Cap.ROUND);
+        mStrokePaint.setStrokeJoin(Paint.Join.ROUND);
         for (int k = 0; k < PATH_DATA.length; k++) {
             mPaths[k] = new Path[PATH_DATA[k].length];
             for (int j = 0; j < PATH_DATA[k].length; j++) {
@@ -62,6 +59,7 @@ public final class PageGlyphPainter {
         mText.setTypeface(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
             ? Typeface.create(family, PageGlyphSlots.DIGIT_WEIGHT, false) : family);
         mText.setTextAlign(Paint.Align.LEFT);
+        mText.setStrokeJoin(Paint.Join.ROUND);
         // Tabular lining digits where the font has them, so 1 and 11 sit alike.
         mText.setFontFeatureSettings("tnum");
         mText.setTextSize(REFERENCE_SIZE);
@@ -88,16 +86,17 @@ public final class PageGlyphPainter {
     public void draw(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
                      float left, float top, float size, int color) {
         drawGlyph(canvas, kind, left, top, size, color);
-        drawNumber(canvas, kind, number, left, top, size, color, null);
+        drawNumber(canvas, kind, number, left, top, size, color, 0f);
     }
 
     /**
      * {@link #draw} for a glyph that floats over content with no surface behind it. With
-     * {@code glowColor} set (the focused glyph) a soft glow of that colour is blurred outside the
-     * stroke and number, and nothing else sits under it. Otherwise {@code shadowColor} gives a
-     * faint blurred lift under the stroke and number, in the colour away from the ink. Either is
-     * drawn from the glyph's own paths on one reused paint, once per draw; the glyph itself stays
-     * the crisp icon on top. A colour with no alpha draws nothing.
+     * {@code glowColor} set (the focused glyph) a neon glow of that colour is layered outside the
+     * stroke and number: the same outlines stroked wider and wider at falling alpha, widest first.
+     * Otherwise {@code shadowColor} gives one faint, slightly wider pass dropped a little, in the
+     * colour away from the ink. Plain strokes, so it draws the same on every renderer, from reused
+     * paths and paints; the glyph itself stays the crisp icon on top. A colour with no alpha
+     * draws nothing.
      */
     public void drawFloating(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
                              float left, float top, float size, int color, int shadowColor,
@@ -108,26 +107,40 @@ public final class PageGlyphPainter {
             int save = canvas.save();
             canvas.translate(left, top + (glow ? 0f : SHADOW_DY * unit));
             canvas.scale(unit, unit);
-            MaskFilter blur = glow ? mGlowBlur : mShadowBlur;
-            int tint = glow ? glowColor : shadowColor;
-            mBlurPaint.setMaskFilter(blur);
-            mBlurPaint.setColor(tint);
-            Path[] paths = mPaths[kind.ordinal()];
-            for (int i = 0; i < paths.length; i++) canvas.drawPath(paths[i], mBlurPaint);
-            drawNumber(canvas, kind, number, 0f, 0f, PageGlyphSlots.VIEWPORT, tint, blur);
+            if (glow) {
+                int rgb = glowColor & 0x00FFFFFF;
+                float gain = Color.alpha(glowColor) / 255f;
+                for (int i = 0; i < GLOW_WIDTH.length; i++) {
+                    strokePass(canvas, kind, number, GLOW_WIDTH[i],
+                        rgb | (Math.round(GLOW_ALPHA[i] * gain) << 24));
+                }
+            } else {
+                strokePass(canvas, kind, number, SHADOW_WIDTH, shadowColor);
+            }
             canvas.restoreToCount(save);
         }
         draw(canvas, kind, number, left, top, size, color);
     }
 
-    /** The blurs' radii and the shadow's drop, in the glyph's 24-unit viewport. */
-    private static final float SHADOW_BLUR = 0.9f;
-    private static final float GLOW_BLUR = 2.6f;
-    private static final float SHADOW_DY = 0.7f;
+    /** The outlines and the number stroked {@code extra} units wider than the glyph's own line. */
+    private void strokePass(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
+                            float extra, int color) {
+        mStrokePaint.setColor(color);
+        mStrokePaint.setStrokeWidth(STROKE_WIDTH + extra);
+        Path[] paths = mPaths[kind.ordinal()];
+        for (int i = 0; i < paths.length; i++) canvas.drawPath(paths[i], mStrokePaint);
+        drawNumber(canvas, kind, number, 0f, 0f, PageGlyphSlots.VIEWPORT, color, extra);
+    }
+
+    /** The glow's passes, widest and faintest first, in the glyph's 24-unit viewport. */
+    private static final float[] GLOW_WIDTH = {7f, 4f, 2f};
+    private static final int[] GLOW_ALPHA = {0x30, 0x58, 0x88};
+    private static final float SHADOW_WIDTH = 1.4f;
+    private static final float SHADOW_DY = 0.5f;
     private static final float STROKE_WIDTH = 1.65f;
     /**
      * The glyphs' outlines as the drawables draw them, per kind in {@link PageSwitchModel.Kind}
-     * order, for the blurred passes; keep in step with {@code ic_page_*.xml}.
+     * order, for the glow and shadow passes; keep in step with {@code ic_page_*.xml}.
      */
     private static final String[][] PATH_DATA = {
         {"M3.25 9L12 2.75L20.75 9V21.25H3.25Z"},
@@ -140,9 +153,7 @@ public final class PageGlyphPainter {
     };
 
     private final Path[][] mPaths = new Path[PATH_DATA.length][];
-    private final Paint mBlurPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final MaskFilter mShadowBlur = new BlurMaskFilter(SHADOW_BLUR, BlurMaskFilter.Blur.NORMAL);
-    private final MaskFilter mGlowBlur = new BlurMaskFilter(GLOW_BLUR, BlurMaskFilter.Blur.NORMAL);
+    private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private void drawGlyph(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, float left,
                            float top, float size, int color) {
@@ -157,9 +168,9 @@ public final class PageGlyphPainter {
         d.draw(canvas);
     }
 
-    /** The number in its slot; a {@code blur} draws it soft, for the glow and the shadow. */
+    /** The number in its slot; a {@code strokeExtra} above 0 draws it as an outline of that width, for the glow and shadow. */
     private void drawNumber(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
-                            float left, float top, float size, int color, @Nullable MaskFilter blur) {
+                            float left, float top, float size, int color, float strokeExtra) {
         if (number <= 0) return;
         float cx, cy, slotW, slotH;
         if (kind == PageSwitchModel.Kind.HOME) {
@@ -193,11 +204,14 @@ public final class PageGlyphPainter {
         mText.setTextSize(textSize);
         mText.setTextScaleX(scaleX);
         mText.setColor(color);
-        mText.setMaskFilter(blur);
+        if (strokeExtra > 0f) {
+            mText.setStyle(Paint.Style.STROKE);
+            mText.setStrokeWidth(strokeExtra);
+        }
         // Centre the ink, not the line box: horizontally this number's ink, vertically the digits' caps.
         float x = left + cx * unit - (mInkLeft[index] + mInkWidth[index] / 2f) * textSize * scaleX;
         float baseline = top + cy * unit - (mCapTop + mCapHeight / 2f) * textSize;
         canvas.drawText(mNumbers[index], x, baseline, mText);
-        mText.setMaskFilter(null);
+        if (strokeExtra > 0f) mText.setStyle(Paint.Style.FILL);
     }
 }

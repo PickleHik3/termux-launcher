@@ -29,7 +29,7 @@ public final class PageSwitchPanelView extends View {
 
     private static final long WAVE_SETTLE_MS = 180L;
     private static final int WEAK_ALPHA = 0xB0;
-    private static final int GLOW_ALPHA = 0xCC;
+    private static final int GLOW_ALPHA = 0xFF;
 
     private final PageGlyphPainter mPainter;
     private final TextPaint mTitlePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
