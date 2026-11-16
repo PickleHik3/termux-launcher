@@ -86,6 +86,29 @@ public class ExtraKeysTargetDraftsTest {
     }
 
     @Test
+    public void afterAddANewOwnSetStartsFromTheResolvedBuiltInKeysWithTheKey() {
+        ExtraKeySetResolver.Lines added = lines(
+            com.termux.shared.termux.settings.properties.TermuxPropertyConstants
+                .KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, "true");
+        for (ExtraKeysTarget target : new ExtraKeysTarget[] {ExtraKeysTarget.DISPLAY, ExtraKeysTarget.ASSISTANT}) {
+            ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(added);
+            d.giveOwnSet(target);
+            String page1 = d.draftOf(target).valueFor(0);
+            assertEquals(ExtraKeysLayoutModel.parse(
+                ExtraKeySetResolver.resolve(target, added).page1).serialize(), page1);
+            assertTrue(target.toString(), PageSwitcherKeyAdd.holds(page1));
+        }
+        // Following Global's built-in row: the copy of Global's draft carries the key too.
+        ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(added);
+        d.giveOwnSet(ExtraKeysTarget.TERMINAL);
+        assertTrue(PageSwitcherKeyAdd.holds(d.draftOf(ExtraKeysTarget.TERMINAL).valueFor(0)));
+        // Without the flag the built-in keys are as shipped.
+        ExtraKeysTargetDrafts plain = ExtraKeysTargetDrafts.load(lines());
+        plain.giveOwnSet(ExtraKeysTarget.DISPLAY);
+        assertFalse(PageSwitcherKeyAdd.holds(plain.draftOf(ExtraKeysTarget.DISPLAY).valueFor(0)));
+    }
+
+    @Test
     public void useDefaultRoundTrips() {
         ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines());
         String before = d.fingerprint();

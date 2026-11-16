@@ -62,6 +62,8 @@ public final class ExtraKeysTargetDrafts {
         boolean shown;
         /** Home only: whether the keys were switched on when loaded or last saved. */
         boolean shownAtLoad;
+        /** The built-in page 1 as the bar resolves it (the page switcher key included once added); null for none. */
+        @Nullable String builtInPage1;
 
         Entry copy() {
             Entry e = new Entry();
@@ -72,6 +74,7 @@ public final class ExtraKeysTargetDrafts {
             e.ownAtLoad = ownAtLoad;
             e.shown = shown;
             e.shownAtLoad = shownAtLoad;
+            e.builtInPage1 = builtInPage1;
             return e;
         }
     }
@@ -113,6 +116,7 @@ public final class ExtraKeysTargetDrafts {
                 entry.followedTenths = entry.draft.keySizeTenths();
             }
             entry.ownAtLoad = entry.own;
+            entry.builtInPage1 = ExtraKeySetResolver.builtInPage1(target, lines);
             entry.shown = target == ExtraKeysTarget.HOME && homeShown;
             entry.shownAtLoad = entry.shown;
             out.entries.put(target, entry);
@@ -212,7 +216,9 @@ public final class ExtraKeysTargetDrafts {
         ExtraKeysDraft draft;
         if (sourceOf(target) == ExtraKeySetResolver.Source.SHIPPED) {
             List<ExtraKeysLayoutModel> pages = new ArrayList<>(1);
-            pages.add(ExtraKeysLayoutModel.parse(target.shippedPage1()));
+            // The built-in set as the bar shows it, so a set made after Add keeps the key.
+            pages.add(ExtraKeysLayoutModel.parse(entry.builtInPage1 != null
+                ? entry.builtInPage1 : target.shippedPage1()));
             draft = ExtraKeysDraft.of(pages);
         } else {
             draft = copyOf(global);
