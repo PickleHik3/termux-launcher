@@ -40,11 +40,12 @@ public final class SetupCards {
     public static final String DISPLAY = "display";
     public static final String AI = "ai";
     public static final String HOME = "home";
+    public static final String PAGE_SWITCHER = "pageSwitcher";
     public static final String GUIDE = "guide";
 
     /** Every card id, in the order the sheet lists them. */
     static final String[] ORDER = {SHIZUKU, ACCESSIBILITY, NOTIFICATIONS, NOTIFICATION_ACCESS,
-        PINNED, DISPLAY, AI, HOME, GUIDE};
+        PINNED, DISPLAY, AI, HOME, PAGE_SWITCHER, GUIDE};
 
     public enum State { OPEN, DONE, DISMISSED }
 
@@ -70,15 +71,18 @@ public final class SetupCards {
         @NonNull public final State state;
         /** How many of {@link #steps} are done. */
         public final int completed;
+        /** The card has a button that does its work (the page switcher key's Add). */
+        public final boolean offersAction;
 
         Card(@NonNull String id, int name, int description, @NonNull int[] steps,
-             @NonNull State state, int completed) {
+             @NonNull State state, int completed, boolean offersAction) {
             this.id = id;
             this.name = name;
             this.description = description;
             this.steps = steps;
             this.state = state;
             this.completed = completed;
+            this.offersAction = offersAction;
         }
     }
 
@@ -231,11 +235,16 @@ public final class SetupCards {
         for (String id : ORDER) {
             if (!exists(id, facts)) continue;
             int[] steps = stepsOf(id);
-            int completed = isSystemChecked(id) ? (systemDone.contains(id) ? steps.length : 0)
+            // The page switcher key reads done from the bars, or from Add having run when no bar
+            // had a row to put it on.
+            int completed = PAGE_SWITCHER.equals(id)
+                ? (systemDone.contains(id) ? steps.length : stored.manualCount(id, steps.length))
+                : isSystemChecked(id) ? (systemDone.contains(id) ? steps.length : 0)
                 : systemDone.contains(id) ? steps.length : stored.manualCount(id, steps.length);
             State state = completed >= steps.length ? State.DONE
                 : stored.isDismissed(id) ? State.DISMISSED : State.OPEN;
-            cards.add(new Card(id, nameOf(id), descriptionOf(id), steps, state, completed));
+            cards.add(new Card(id, nameOf(id), descriptionOf(id, facts), steps, state, completed,
+                PAGE_SWITCHER.equals(id) && facts.useAsHome));
         }
         return Collections.unmodifiableList(cards);
     }
@@ -265,7 +274,7 @@ public final class SetupCards {
         // (desktop apps, AI, guide) wait for their flows.
         for (Card card : cards)
             if (card.state == State.OPEN
-                && isCompletable(card.id, aiSelected))
+                && isCompletable(card, aiSelected))
                 return true;
         return false;
     }
@@ -281,7 +290,7 @@ public final class SetupCards {
         if (!wizardDone || !stored.seenKnown)
             return false;
         for (Card card : cards)
-            if (card.state == State.OPEN && isCompletable(card.id, aiSelected)
+            if (card.state == State.OPEN && isCompletable(card, aiSelected)
                 && !stored.isSeen(card.id))
                 return true;
         return false;
@@ -292,7 +301,17 @@ public final class SetupCards {
      * models are chosen. The rest are stubs; they neither bring the sheet back nor count as open.
      */
     public static boolean isCompletable(@NonNull String id, boolean aiSelected) {
-        return isSystemChecked(id) || (AI.equals(id) && aiSelected);
+        return (isSystemChecked(id) && !PAGE_SWITCHER.equals(id)) || (AI.equals(id) && aiSelected);
+    }
+
+    /**
+     * As {@link #isCompletable(String, boolean)} for a built card: the page switcher key's card
+     * can be completed only where it has an Add (used as a home screen); as a terminal it only
+     * says the key exists.
+     */
+    public static boolean isCompletable(@NonNull Card card, boolean aiSelected) {
+        return isCompletable(card.id, aiSelected)
+            || (PAGE_SWITCHER.equals(card.id) && card.offersAction);
     }
 
     @StringRes
@@ -306,8 +325,16 @@ public final class SetupCards {
             case DISPLAY: return R.string.setup_card_display_name;
             case AI: return R.string.setup_card_ai_name;
             case HOME: return R.string.setup_card_home_name;
+            case PAGE_SWITCHER: return R.string.setup_card_page_switcher_name;
             default: return R.string.setup_card_guide_name;
         }
+    }
+
+    @StringRes
+    static int descriptionOf(@NonNull String id, @NonNull Facts facts) {
+        if (PAGE_SWITCHER.equals(id) && !facts.useAsHome)
+            return R.string.setup_card_page_switcher_description_terminal;
+        return descriptionOf(id);
     }
 
     @StringRes
@@ -321,6 +348,7 @@ public final class SetupCards {
             case DISPLAY: return R.string.setup_card_display_description;
             case AI: return R.string.setup_card_ai_description;
             case HOME: return R.string.setup_card_home_description;
+            case PAGE_SWITCHER: return R.string.setup_card_page_switcher_description;
             default: return R.string.setup_card_guide_description;
         }
     }
@@ -338,6 +366,7 @@ public final class SetupCards {
             case AI: return new int[] {R.string.setup_card_ai_step_choose,
                 R.string.setup_card_ai_step_download};
             case HOME: return new int[] {R.string.setup_card_home_step};
+            case PAGE_SWITCHER: return new int[] {R.string.setup_card_page_switcher_step};
             default: return new int[] {R.string.setup_card_guide_step};
         }
     }

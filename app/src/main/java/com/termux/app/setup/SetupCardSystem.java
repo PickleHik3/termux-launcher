@@ -12,10 +12,14 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.termux.app.TermuxActivity;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.app.settings.UseAsSetting;
+import com.termux.app.settings.TermuxPropertiesFile;
 import com.termux.app.statusbar.EssentialNotificationRules;
+import com.termux.app.terminal.io.ExtraKeysTargetDrafts;
+import com.termux.app.terminal.io.PageSwitcherKeyAdd;
 import com.termux.app.wall.UseAs;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -80,6 +84,8 @@ public final class SetupCardSystem {
             done.add(SetupCards.PINNED);
         if (isDefaultHome(context))
             done.add(SetupCards.HOME);
+        if (PageSwitcherKeyAdd.isOn(TermuxPropertiesFile.load(context)::getProperty))
+            done.add(SetupCards.PAGE_SWITCHER);
         Set<String> selected = AiModelDownloads.selected(context);
         if (!selected.isEmpty() && AiModelDownloads.installedIds(context).containsAll(selected))
             done.add(SetupCards.AI);
@@ -103,9 +109,23 @@ public final class SetupCardSystem {
         int count = 0;
         for (SetupCards.Card card : cards(context))
             if (card.state == SetupCards.State.OPEN
-                && SetupCards.isCompletable(card.id, aiSelected))
+                && SetupCards.isCompletable(card, aiSelected))
                 count++;
         return count;
+    }
+
+    /**
+     * The card's Add: the page switcher key goes on the left of each of the Terminal, Display and
+     * Assistant bars, written as that target's own page-1 line (see {@link PageSwitcherKeyAdd}),
+     * then the bar reloads the way the extra-keys editor's Save reloads it.
+     */
+    static void addPageSwitcherKey(@NonNull Context context) {
+        List<ExtraKeysTargetDrafts.Write> writes =
+            PageSwitcherKeyAdd.plan(TermuxPropertiesFile.load(context)::getProperty);
+        if (writes.isEmpty()) return;
+        for (ExtraKeysTargetDrafts.Write write : writes)
+            if (write.value != null) TermuxPropertiesFile.write(write.key, write.value);
+        TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
     }
 
     static boolean isShizukuInstalled(@NonNull Context context) {

@@ -3792,6 +3792,11 @@
     <string name="setup_card_home_name">Default launcher</string>
     <string name="setup_card_home_description">Set the default home app.</string>
     <string name="setup_card_home_step">Set default home app</string>
+    <string name="setup_card_page_switcher_name">Page switcher key</string>
+    <string name="setup_card_page_switcher_description">A key on the extra keys that switches pages: tap it, or slide along your pages and let go.</string>
+    <string name="setup_card_page_switcher_description_terminal">You can add a page switcher key to the extra keys in Settings.</string>
+    <string name="setup_card_page_switcher_step">Add the key to your extra keys</string>
+    <string name="setup_card_page_switcher_add">Add</string>
     <string name="setup_card_guide_name">Learn the basics</string>
     <string name="setup_card_guide_description">Short chapters for this setup.</string>
     <string name="setup_card_guide_step">Explore your chapters</string>

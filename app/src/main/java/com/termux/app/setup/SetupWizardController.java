@@ -718,6 +718,15 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             case SetupCards.HOME:
                 HomeAppChooser.open(context);
                 break;
+            case SetupCards.PAGE_SWITCHER: {
+                SetupCardSystem.addPageSwitcherKey(context);
+                // Marks the card done even when no bar had a row to put the key on.
+                SetupCards.Stored stored = SetupCardSystem.stored(context);
+                stored.completeStep(id, 0);
+                SetupCardSystem.save(context, stored);
+                refreshCards();
+                break;
+            }
             default:
                 showPage(id);
                 break;
