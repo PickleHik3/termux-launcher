@@ -530,6 +530,32 @@ public class ExtraKeysPageViewTest {
         return color | 0xFF000000;
     }
 
+    @Test
+    public void thePageSwitcherCapIsBuiltWithTheCurrentGlyphAndNeverItsLabel() throws Exception {
+        com.termux.app.wall.pageswitch.PageGlyphSource.install(() ->
+            new com.termux.app.wall.pageswitch.PageGlyphSource.Glyph(
+                com.termux.app.wall.pageswitch.PageSwitchModel.Kind.HOME, 2));
+        try {
+            ExtraKeysPageView page = new ExtraKeysPageView(context);
+            page.setKeys(info("[['ESC', 'tool:app.page_switcher']]"));
+            layout(page, 500, 40);
+            ExtraKeyCapView switcher = (ExtraKeyCapView) page.getChildAt(1);
+            assertEquals(com.termux.app.wall.pageswitch.PageSwitchModel.Kind.HOME,
+                switcher.pageGlyphKind());
+            assertEquals(2, switcher.pageGlyphNumber());
+            assertEquals("", switcher.getText().toString());
+            // A key-set swap or a relabel leaves it the same.
+            page.setKeys(info("[['TAB', 'tool:app.page_switcher']]"));
+            switcher = (ExtraKeyCapView) page.getChildAt(1);
+            assertEquals(2, switcher.pageGlyphNumber());
+            assertEquals("", switcher.getText().toString());
+            page.setButtonTextAllCaps(false);
+            assertEquals("", switcher.getText().toString());
+        } finally {
+            com.termux.app.wall.pageswitch.PageGlyphSource.install(null);
+        }
+    }
+
     private static int centerPixel(Drawable drawable) {
         int size = 40;
         drawable.setBounds(0, 0, size, size);

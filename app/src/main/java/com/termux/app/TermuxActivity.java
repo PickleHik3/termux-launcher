@@ -1967,6 +1967,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsInvalidState = true;
             return;
         }
+        com.termux.app.wall.pageswitch.PageGlyphSource.install(mPageGlyphProvider);
         attachPageSwitch();
         // Before this activity builds anything that reads the catalogue: a snapshot already held
         // by the process singleton may predate an install made while no activity was listening.
@@ -10823,6 +10824,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         com.termux.app.place.layout.LayoutStore.shared(this).removeListener(mLayoutsListener);
+        com.termux.app.wall.pageswitch.PageGlyphSource.uninstall(mPageGlyphProvider);
         mLayoutsRelayoutHandler.removeCallbacks(mLayoutsRelayout);
         // A landing's settle still posted has no window left to lay out.
         mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
@@ -28812,18 +28814,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * glyph and number. Each page compares before it repaints; with no such key nothing is built.
      */
     private void refreshPageSwitcherKey() {
-        com.termux.app.wall.pageswitch.PageSwitchModel model = null;
+        com.termux.app.wall.pageswitch.PageGlyphSource.Glyph glyph = null;
         for (int i = 0, n = extraKeysPageTotal(); i < n; i++) {
             ExtraKeysPageView page = extraKeysPageAt(i);
             if (page == null || !page.hasPageSwitcherKey()) continue;
-            if (model == null)
-                model = com.termux.app.wall.pageswitch.PageSwitchModel.build(pageSwitchSnapshot());
-            int current = model.currentIndex();
-            com.termux.app.wall.pageswitch.PageSwitchModel.Kind kind = current < 0
-                ? com.termux.app.wall.pageswitch.PageSwitchModel.Kind.TERMINAL
-                : model.cells().get(current).kind;
-            page.setPageSwitcherGlyph(kind, model.numberOf(kind));
+            if (glyph == null) glyph = currentPageGlyph();
+            page.setPageSwitcherGlyph(glyph.kind, glyph.number);
         }
+    }
+
+    /**
+     * The key's cap is built with this: the glyph of the page the wall is on, with that kind's
+     * number. Installed from onCreate, so a bar built at any time starts right.
+     */
+    private final com.termux.app.wall.pageswitch.PageGlyphSource.Provider mPageGlyphProvider =
+        this::currentPageGlyph;
+
+    @NonNull
+    private com.termux.app.wall.pageswitch.PageGlyphSource.Glyph currentPageGlyph() {
+        com.termux.app.wall.pageswitch.PageSwitchModel model =
+            com.termux.app.wall.pageswitch.PageSwitchModel.build(pageSwitchSnapshot());
+        int current = model.currentIndex();
+        com.termux.app.wall.pageswitch.PageSwitchModel.Kind kind = current < 0
+            ? com.termux.app.wall.pageswitch.PageSwitchModel.Kind.TERMINAL
+            : model.cells().get(current).kind;
+        return new com.termux.app.wall.pageswitch.PageGlyphSource.Glyph(kind, model.numberOf(kind));
     }
 
     /** Gives Home's glyph row the pages the wall has now; called when a page settles or the list changes. */

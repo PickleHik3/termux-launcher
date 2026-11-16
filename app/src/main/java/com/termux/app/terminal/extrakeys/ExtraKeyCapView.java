@@ -21,6 +21,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 
 import com.termux.app.wall.pageswitch.PageGlyphPainter;
+import com.termux.app.wall.pageswitch.PageGlyphSource;
 import com.termux.app.wall.pageswitch.PageSwitchModel;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.font.NerdFontSpans;
@@ -132,6 +133,8 @@ public final class ExtraKeyCapView extends AppCompatTextView {
      * plain string and drops the typeface spans.
      */
     public void setLabel(@Nullable CharSequence display, boolean allCaps) {
+        // The page switcher key draws a glyph, never its label's raw text.
+        if (ExtraKeysPageView.PAGE_SWITCHER_KEY.equals(mKey.getKey())) display = null;
         applyLabel(this, display, allCaps);
     }
 
@@ -151,6 +154,22 @@ public final class ExtraKeyCapView extends AppCompatTextView {
                 label.toString().toUpperCase(Locale.ROOT));
         }
         view.setText(spanned);
+    }
+
+    /** The glyph this cap draws in place of its label; null on every key but the page switcher's. */
+    @Nullable
+    PageSwitchModel.Kind pageGlyphKind() {
+        return mGlyphKind;
+    }
+
+    int pageGlyphNumber() {
+        return mGlyphNumber;
+    }
+
+    /** Takes the glyph the page switcher's source holds now; called as the cap is built or bound. */
+    public void bindPageGlyph() {
+        PageGlyphSource.Glyph glyph = PageGlyphSource.current();
+        setPageGlyph(glyph.kind, glyph.number);
     }
 
     /**

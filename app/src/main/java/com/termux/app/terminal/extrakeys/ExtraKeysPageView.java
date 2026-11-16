@@ -173,8 +173,6 @@ public final class ExtraKeysPageView extends ViewGroup {
     @Nullable private PlaceGlyphColorListener mPlaceGlyphColorListener;
     @Nullable private KeyTouchOwner mTouchOwner;
     /** The page switcher key's glyph, as the host last said it; null until it has. */
-    @Nullable private com.termux.app.wall.pageswitch.PageSwitchModel.Kind mPageGlyphKind;
-    private int mPageGlyphNumber;
     private final int[] mRawAt = new int[2];
 
     @Nullable private ExtraKeysClient mClient;
@@ -288,7 +286,8 @@ public final class ExtraKeysPageView extends ViewGroup {
         if (isPageSwitcherKey(key)) {
             cap.setContentDescription(
                 getContext().getString(com.termux.R.string.tool_app_page_switcher));
-            if (mPageGlyphKind != null) cap.setPageGlyph(mPageGlyphKind, mPageGlyphNumber);
+            // Asked for as the cap is built or bound: no refresh has to have run first.
+            cap.bindPageGlyph();
         }
         mCaps.add(cap);
         mKeys.add(key);
@@ -679,8 +678,6 @@ public final class ExtraKeysPageView extends ViewGroup {
      */
     public void setPageSwitcherGlyph(@NonNull com.termux.app.wall.pageswitch.PageSwitchModel.Kind kind,
                                      int number) {
-        mPageGlyphKind = kind;
-        mPageGlyphNumber = number;
         for (int i = 0; i < mCaps.size(); i++) {
             if (isPageSwitcherKey(mKeys.get(i))) mCaps.get(i).setPageGlyph(kind, number);
         }
