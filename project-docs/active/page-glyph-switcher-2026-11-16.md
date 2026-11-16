@@ -69,3 +69,7 @@ Keyboard up and down (key panel rides above it); one and many Home pages; Termin
 glyph); display running and not; Assistant on and off; light/dark/black/Material You and scheme
 chrome; density and font scale (title above the wave); Docked and Floating dock styles (the row sits
 above the dock's line in both).
+
+## Status
+
+Built on branch feat/page-glyph-switcher; device checks owed in `project-docs/device-checks.md`.
