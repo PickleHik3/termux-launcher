@@ -61,8 +61,10 @@ key. Decided with the developer on 2026-11-16.
   Assistant and Display only".)
 - Updating users get a new **Setup card** (the setup sheet already re-opens for new cards only):
   - used as a home screen: "Add" puts the key at the left end of the row each bar reads: a bar with
-    its own row gets it there; a bar that follows Global gets it through Global's row (written once).
-    Add never detaches a bar from Global. "Not now" dismisses;
+    its own row gets it there; a bar that follows Global's stored row gets it through that row
+    (written once); and Add sets one stored flag that makes every built-in set (Global's default,
+    Display's, Assistant's) start with the key. Bars keep following what they followed; nothing is
+    copied, and the key is never added twice. "Not now" dismisses;
   - used as a terminal only: the card only says the key exists (no Add).
   New installs see the card the same way.
 
