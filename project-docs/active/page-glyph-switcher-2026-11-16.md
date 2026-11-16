@@ -32,8 +32,11 @@ key. Decided with the developer on 2026-11-16.
 
 ## The switcher (one component, two entry points)
 
-- A full-width glass panel (follows Base) holding one row with one cell per page:
-  Home 1…n · Terminal 1…n · Assistant · Display, grouped by kind, absent kinds left out.
+- A full-width panel with no background (no card, glass, rim or scrim) holding one row with one cell
+  per page: Home 1…n · Terminal 1…n · Assistant · Display, grouped by kind, absent kinds left out.
+  The glyphs and the title float over the wall with the A–Z bar's legibility treatment (its halo
+  stroke under each glyph, number and the title, `GlassInk.HALO_*`); the focused glyph draws in the
+  Material accent colour (the A–Z bar's accent, through the scheme) with a soft glow of the same colour.
 - Cells near the finger lift and grow on the A–Z bar's sine wave (`AzScrubRowView`'s envelope:
   `env = exp(-d² · 0.85)`, lift `sin(min(1, env) · π/2)`), so a dozen small cells stay pickable. The
   wave math is pure and shared, not copied.

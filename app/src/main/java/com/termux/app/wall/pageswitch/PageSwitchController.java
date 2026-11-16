@@ -1,7 +1,6 @@
 package com.termux.app.wall.pageswitch;
 
 import android.content.Context;
-import android.graphics.drawable.Drawable;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -28,10 +27,10 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
         boolean isReducedMotionEnabled();
         /** Whether something covers the wall (an editor, the drawer, a sheet, first-run setup): the switcher does not open. */
         boolean isSuppressed();
-        /** The Sheets element's glass for the panel. */
-        @NonNull Drawable panelBackground();
         /** The ink sheets and menus draw their labels in. */
         @ColorInt int panelInk();
+        /** The Material accent the focused glyph is drawn in and glows with, through the scheme. */
+        @ColorInt int panelAccent();
     }
 
     private static final float GUTTER_DP = 12f;
@@ -131,7 +130,7 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
         int panelWidth = layerWidth - 2 * gutter;
         mPanel.setReducedMotion(mHost.isReducedMotionEnabled());
         mPanel.setInk(mHost.panelInk());
-        mPanel.setBackground(mHost.panelBackground());
+        mPanel.setAccent(mHost.panelAccent());
         PageSwitchLayout layout = new PageSwitchLayout(mDensity, panelWidth,
             model.cells().size(), mPanel.titleLineHeightPx());
         int panelHeight = Math.round(layout.panelHeightPx());

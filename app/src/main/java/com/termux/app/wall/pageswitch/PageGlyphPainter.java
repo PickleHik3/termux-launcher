@@ -2,6 +2,7 @@ package com.termux.app.wall.pageswitch;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
@@ -47,6 +48,7 @@ public final class PageGlyphPainter {
         mText.setTypeface(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
             ? Typeface.create(family, PageGlyphSlots.DIGIT_WEIGHT, false) : family);
         mText.setTextAlign(Paint.Align.LEFT);
+        mText.setStrokeJoin(Paint.Join.ROUND);
         // Tabular lining digits where the font has them, so 1 and 11 sit alike.
         mText.setFontFeatureSettings("tnum");
         mText.setTextSize(REFERENCE_SIZE);
@@ -72,6 +74,33 @@ public final class PageGlyphPainter {
     /** Draws {@code kind}'s glyph in the square at ({@code left}, {@code top}) of side {@code size}. */
     public void draw(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
                      float left, float top, float size, int color) {
+        drawGlyph(canvas, kind, left, top, size, color);
+        drawNumber(canvas, kind, number, left, top, size, color, 0f);
+    }
+
+    /**
+     * {@link #draw} for a glyph that floats over content with no surface behind it: the A-Z
+     * bar's halo under it, the stroke ring that gives it an edge wherever the content matches its
+     * ink. The outline is a ring of copies at {@code haloRadiusPx}; the number's is a text stroke.
+     */
+    public void drawFloating(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
+                             float left, float top, float size, int color, int haloColor,
+                             float haloRadiusPx) {
+        if (Color.alpha(haloColor) != 0 && haloRadiusPx > 0f) {
+            for (int k = 0; k < RING_DX.length; k++) {
+                drawGlyph(canvas, kind, left + RING_DX[k] * haloRadiusPx,
+                    top + RING_DY[k] * haloRadiusPx, size, haloColor);
+            }
+            drawNumber(canvas, kind, number, left, top, size, haloColor, haloRadiusPx * 2f);
+        }
+        draw(canvas, kind, number, left, top, size, color);
+    }
+
+    private static final float[] RING_DX = {1f, 0.7071f, 0f, -0.7071f, -1f, -0.7071f, 0f, 0.7071f};
+    private static final float[] RING_DY = {0f, 0.7071f, 1f, 0.7071f, 0f, -0.7071f, -1f, -0.7071f};
+
+    private void drawGlyph(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, float left,
+                           float top, float size, int color) {
         Drawable d = mGlyphs[kind.ordinal()];
         if (d == null) return;
         // The tint covers the whole drawable, the stroke included.
@@ -81,7 +110,11 @@ public final class PageGlyphPainter {
         int s = Math.round(size);
         d.setBounds(l, t, l + s, t + s);
         d.draw(canvas);
+    }
 
+    /** The number in its slot; {@code strokePx} above 0 draws it as an outline of that width. */
+    private void drawNumber(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
+                            float left, float top, float size, int color, float strokePx) {
         if (number <= 0) return;
         float cx, cy, slotW, slotH;
         if (kind == PageSwitchModel.Kind.HOME) {
@@ -115,9 +148,14 @@ public final class PageGlyphPainter {
         mText.setTextSize(textSize);
         mText.setTextScaleX(scaleX);
         mText.setColor(color);
+        if (strokePx > 0f) {
+            mText.setStyle(Paint.Style.STROKE);
+            mText.setStrokeWidth(strokePx);
+        }
         // Centre the ink, not the line box: horizontally this number's ink, vertically the digits' caps.
         float x = left + cx * unit - (mInkLeft[index] + mInkWidth[index] / 2f) * textSize * scaleX;
         float baseline = top + cy * unit - (mCapTop + mCapHeight / 2f) * textSize;
         canvas.drawText(mNumbers[index], x, baseline, mText);
+        if (strokePx > 0f) mText.setStyle(Paint.Style.FILL);
     }
 }

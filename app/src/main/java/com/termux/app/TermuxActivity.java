@@ -28787,10 +28787,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         || (mSetupWizard != null && mSetupWizard.isCardSheetShowing());
                 }
 
-                @NonNull @Override public android.graphics.drawable.Drawable panelBackground() {
-                    // A sheet's glass (the Sheets element, one pipeline), held solid: the panel
-                    // has no frost plane behind it to give a low-opacity tint its body.
-                    return mSheets.buildFloatingSheetSurface();
+                @Override public int panelAccent() {
+                    // The A-Z bar's accent: the scheme's primary, so Material You, light, dark,
+                    // black and the scheme chrome all follow.
+                    return resolveAzGestureAccentColor();
                 }
 
                 @Override public int panelInk() {

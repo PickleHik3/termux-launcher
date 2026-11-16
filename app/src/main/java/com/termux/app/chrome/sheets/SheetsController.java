@@ -1044,22 +1044,6 @@ public final class SheetsController {
      */
     @NonNull
     public android.graphics.drawable.Drawable buildTerminalSheetSurface() {
-        return buildSheetSurface(false);
-    }
-
-    /**
-     * The Sheets glass for a card that stands over live content with no frost plane behind it (the
-     * page switch panel): the same material and rim, with the tint held at the sheet floor however
-     * low the Sheets opacity is set. A plane-backed sheet gets its body from the plane's frost and
-     * dim; without them the tint alone is the card, and a low opacity leaves it nearly clear.
-     */
-    @NonNull
-    public android.graphics.drawable.Drawable buildFloatingSheetSurface() {
-        return buildSheetSurface(true);
-    }
-
-    @NonNull
-    private android.graphics.drawable.Drawable buildSheetSurface(boolean solid) {
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             mHost.preferences();
         // The Sheets element's glass (ADR 0017), no longer the dock's.
@@ -1069,9 +1053,7 @@ public final class SheetsController {
             : com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         // Modifier: floored well above the Sheets opacity. A sheet has body text over a live blur,
         // and at a bar's tint the terminal behind it reads straight through the words.
-        float alpha = solid ? Math.max(0.92f, barAlpha)
-            : com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f);
-        return mHost.chromeGlass().forElement(sheets).surface(alpha, 0f, 1f, false, grain,
+        return mHost.chromeGlass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
             mHost.dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), !sheets.rimOff(),
             null, sheets.tintPercent);
     }
