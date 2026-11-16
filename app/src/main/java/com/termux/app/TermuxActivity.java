@@ -28784,8 +28784,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @NonNull @Override public android.graphics.drawable.Drawable panelBackground() {
-                    // A menu or a sheet's glass: the Sheets element, one pipeline.
-                    return mSheets.buildTerminalSheetSurface();
+                    // A sheet's glass (the Sheets element, one pipeline), held solid: the panel
+                    // has no frost plane behind it to give a low-opacity tint its body.
+                    return mSheets.buildFloatingSheetSurface();
                 }
 
                 @Override public int panelInk() {
