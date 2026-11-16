@@ -138,6 +138,8 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_APP_OPEN_APPS_BAR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE, Band.LAUNCHER);
+        // The page switcher key opens the switcher above whichever bar it sits on, Home's included.
+        tools.put(LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_LAUNCH, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_CONTACT_OPEN, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_KEY_INSPECTOR, Band.LAUNCHER);
@@ -202,9 +204,6 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SCRATCHPAD, Band.MULTIPLEX);
 
         // ---------------------------------------------------------------- the terminal's own
-        // The page switcher key sits on the bar, which only Terminal, Assistant and Display have:
-        // TERMINAL_TOOL's places are exactly those three, so on Home it is drawn dead.
-        tools.put(LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_STATE, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_RESET, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, Band.TERMINAL_TOOL);

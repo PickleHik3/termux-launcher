@@ -103,12 +103,11 @@ public class ExtraKeyEligibilityTest {
     }
 
     @Test
-    public void thePageSwitcherKeyWorksWhereTheBarIsAndNotOnHome() {
+    public void thePageSwitcherKeyWorksOnEveryBar() {
         String switcher = key(LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER);
-        assertSame(Band.TERMINAL_TOOL, ExtraKeyEligibility.bandOf(switcher));
-        assertTrue(ExtraKeyEligibility.isUsable(switcher, PaneWallPage.TERMINAL));
-        assertTrue(ExtraKeyEligibility.isUsable(switcher, PaneWallPage.DISPLAY));
-        assertFalse(ExtraKeyEligibility.isUsable(switcher, PaneWallPage.WIDGETS));
+        assertSame(Band.LAUNCHER, ExtraKeyEligibility.bandOf(switcher));
+        for (PaneWallPage place : PaneWallPage.values())
+            assertTrue(place.toString(), ExtraKeyEligibility.isUsable(switcher, place));
     }
 
     @Test
@@ -302,10 +301,10 @@ public class ExtraKeyEligibilityTest {
         // pane.consume and pane.expel.
         assertEquals(103, declared);
         assertEquals(Integer.valueOf(0), counts.get(Band.TERMINAL_INPUT));
-        assertEquals(Integer.valueOf(32), counts.get(Band.LAUNCHER));
+        assertEquals(Integer.valueOf(33), counts.get(Band.LAUNCHER));
         assertEquals(Integer.valueOf(4), counts.get(Band.SESSION_OVERLAY));
         assertEquals(Integer.valueOf(46), counts.get(Band.MULTIPLEX));
-        assertEquals(Integer.valueOf(21), counts.get(Band.TERMINAL_TOOL));
+        assertEquals(Integer.valueOf(20), counts.get(Band.TERMINAL_TOOL));
     }
 
     // -------------------------------------------------------------------------------- helpers
