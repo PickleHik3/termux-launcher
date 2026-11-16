@@ -2521,6 +2521,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomePress.onResume();
         Logger.logVerbose(LOG_TAG, "onResume");
         mHomePill.refresh();
+        refreshPageGlyphs();
         // Text left waiting in the pill holds the screen again, its idle release started over.
         mVoiceScreenMayHold = true;
         holdVoiceScreen();
@@ -25489,6 +25490,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void doRunWallPageSettle(
             @NonNull com.termux.app.wall.PaneWallPage wallPage) {
+        refreshPageGlyphs();
         // The place the Workspace's page shows: the display's while the display
         // window is in front of it.
         com.termux.app.wall.PaneWallPage page = placeOf(wallPage);
@@ -28470,6 +28472,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * window on its left, or the last Home page when there is none.
      */
     private void onEmbeddedDisplayRunningChanged(boolean running) {
+        refreshPageGlyphs();
         if (running) {
             mDisplayRequested = false;
             mDisplayConnectedSinceStart = true;
@@ -28783,6 +28786,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         R.color.termux_on_surface);
                 }
             }, layer);
+    }
+
+    /** Gives Home's glyph row the pages the wall has now; called when a page settles or the list changes. */
+    private void refreshPageGlyphs() {
+        if (mWidgetPaneController == null) return;
+        mWidgetPaneController.setPageSwitchEntry(mPageSwitch);
+        mWidgetPaneController.setPageGlyphs(com.termux.app.wall.pageswitch.PageSwitchModel.build(
+            pageSwitchSnapshot()));
     }
 
     private boolean switcherAnimates() {
@@ -29539,6 +29550,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPaneWallController != null) mPaneWallController.onHomePageTurned();
                 }
                 @Override public void onWidgetPageRendered() {
+                    refreshPageGlyphs();
                     // A Terminal widget gone from Home takes its shell with it, however it went.
                     mTerminalWidgets.reconcile();
                     // Another Home page in front may wear another ground, on screen or beside it.

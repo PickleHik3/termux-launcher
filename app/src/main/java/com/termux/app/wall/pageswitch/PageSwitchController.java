@@ -20,7 +20,7 @@ import java.util.List;
  * After a tap the panel stays open and the overlay layer takes the touches itself until a cell is
  * chosen or the panel is dismissed.
  */
-public final class PageSwitchController {
+public final class PageSwitchController implements PageGlyphRowView.Entry {
 
     public interface Host extends PageSwitchTargets.Navigator {
         @NonNull PageSwitchModel.Input snapshot();
@@ -83,6 +83,7 @@ public final class PageSwitchController {
 
     // ---- Entry points, in raw screen coordinates ----------------------------------------------
 
+    @Override
     public boolean entryDown(float rawX, float rawY, int anchorTopRaw, int anchorBottomRaw,
                              boolean overAnchor) {
         if (mHost.isSuppressed()) return false;
@@ -119,12 +120,14 @@ public final class PageSwitchController {
         return true;
     }
 
+    @Override
     public void entryMove(float rawX, float rawY) {
         if (!mOpen) return;
         mGesture.move(rawX - mPanelLeftRaw, rawY - mPanelTopRaw);
         pushState();
     }
 
+    @Override
     public void entryUp(float rawX, float rawY) {
         if (!mOpen) return;
         float x = rawX - mPanelLeftRaw;
@@ -143,6 +146,7 @@ public final class PageSwitchController {
         }
     }
 
+    @Override
     public void entryCancel() {
         if (!mOpen) return;
         mGesture.cancel();
