@@ -56,11 +56,13 @@ public class PageSwitcherKeyAddTest {
     }
 
     @Test
-    public void aTargetFollowingGlobalGetsTheKeyThroughGlobalOnce() {
+    public void aStoredGlobalRowGetsTheKeyOnceAndTheFlagIsSet() {
         Map<String, String> map = new HashMap<>();
         map.put(TermuxPropertyConstants.KEY_EXTRA_KEYS, "[[\"ESC\"]]");
         map.put(TermuxPropertyConstants.KEY_EXTRA_KEYS2, "[[\"F1\"]]");
         List<ExtraKeysTargetDrafts.Write> plan = PageSwitcherKeyAdd.plan(lines(map));
+        assertTrue(plan.contains(new ExtraKeysTargetDrafts.Write(
+            TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, "true")));
         // Terminal and Home follow Global: one write, to Global's page 1, nothing detached.
         assertTrue(plan.contains(new ExtraKeysTargetDrafts.Write(
             ExtraKeysTarget.GLOBAL.pageKeys()[0], "[[\"" + KEY + "\",\"ESC\"]]")));
@@ -71,10 +73,25 @@ public class PageSwitcherKeyAddTest {
         assertFalse(writes(plan, ExtraKeysTarget.TERMINAL, false));
         assertFalse(writes(plan, ExtraKeysTarget.HOME, false));
         assertFalse(writes(plan, ExtraKeysTarget.GLOBAL, true));
-        assertFalse(writes(plan, ExtraKeysTarget.TERMINAL, true));
-        // Display and Assistant show their shipped sets: left as they are.
+        // Display and Assistant show their built-in sets: the flag leads them, nothing is copied.
         assertFalse(writes(plan, ExtraKeysTarget.DISPLAY, false));
         assertFalse(writes(plan, ExtraKeysTarget.ASSISTANT, false));
+    }
+
+    @Test
+    public void onADefaultInstallOnlyTheFlagIsWrittenAndEveryBarShowsTheKey() {
+        Map<String, String> map = new HashMap<>();
+        List<ExtraKeysTargetDrafts.Write> plan = PageSwitcherKeyAdd.plan(lines(map));
+        assertEquals(1, plan.size());
+        assertEquals(TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, plan.get(0).key);
+        assertFalse(PageSwitcherKeyAdd.isOn(lines(map)));
+        map.put(TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, "true");
+        assertTrue(PageSwitcherKeyAdd.isOn(lines(map)));
+        for (ExtraKeysTarget target : ExtraKeysTarget.values()) {
+            ExtraKeySetResolver.Resolved resolved = ExtraKeySetResolver.resolve(target, lines(map));
+            if (target == ExtraKeysTarget.GLOBAL || resolved.page1.equals("[]")) continue;
+            assertTrue(target.toString(), PageSwitcherKeyAdd.holds(resolved.page1));
+        }
     }
 
     @Test

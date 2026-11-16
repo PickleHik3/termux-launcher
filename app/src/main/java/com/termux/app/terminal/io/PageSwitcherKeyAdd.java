@@ -3,6 +3,8 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,8 +14,10 @@ import java.util.List;
  * the caller to apply.
  *
  * <p>The key goes where each bar reads its row from, and no bar changes where it reads from: a
- * bar with its own row gets the key there, a bar that follows Global gets it through Global's
- * row (written once), and a bar that shows its shipped set is left as it is.
+ * bar with its own row gets the key there; a bar that follows Global's own (stored) row gets it
+ * through that row, written once; and the built-in sets (Global's default, Display's,
+ * Assistant's) gain it through one stored flag ({@link ExtraKeySetResolver#builtInPage1}), so
+ * the bars that show them keep following them.
  */
 public final class PageSwitcherKeyAdd {
 
@@ -57,21 +61,24 @@ public final class PageSwitcherKeyAdd {
     }
 
     /**
-     * What Add writes: the key at the left end of the first row of the page-1 line each bar reads,
-     * where that line has keys and no page switcher yet. A target with its own row is written
-     * there; a target that follows Global puts it in Global's row, once for all of them; a target
-     * showing its shipped set is not written. No target is detached from what it follows.
+     * What Add writes: the flag that leads every built-in set with the key, and the key at the left
+     * end of the first row of each stored page-1 line a bar reads (a target's own row, or Global's
+     * stored row, once), where that line has keys and no page switcher yet. Nothing is copied and
+     * no target is detached from what it follows.
      */
     @NonNull
     public static List<ExtraKeysTargetDrafts.Write> plan(@NonNull ExtraKeySetResolver.Lines lines) {
-        List<ExtraKeysTargetDrafts.Write> out = new ArrayList<>(TARGETS.length);
+        List<ExtraKeysTargetDrafts.Write> out = new ArrayList<>(TARGETS.length + 1);
+        out.add(new ExtraKeysTargetDrafts.Write(
+            TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, "true"));
         boolean globalPlanned = false;
         for (ExtraKeysTarget target : TARGETS) {
             ExtraKeySetResolver.Resolved resolved = ExtraKeySetResolver.resolve(target, lines);
             String key;
             if (resolved.source == ExtraKeySetResolver.Source.OWN) {
                 key = target.page1Key();
-            } else if (resolved.source == ExtraKeySetResolver.Source.GLOBAL && !globalPlanned) {
+            } else if (resolved.source == ExtraKeySetResolver.Source.GLOBAL && !globalPlanned
+                && ExtraKeySetResolver.globalStored(lines)) {
                 globalPlanned = true;
                 key = ExtraKeysTarget.GLOBAL.page1Key();
             } else {

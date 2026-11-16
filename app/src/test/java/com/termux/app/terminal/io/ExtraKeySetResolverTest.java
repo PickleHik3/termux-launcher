@@ -185,4 +185,40 @@ public class ExtraKeySetResolverTest {
         assertEquals(PaneWallPage.WIDGETS, ExtraKeysTarget.HOME.markingPlace());
         assertEquals(PaneWallPage.ASSISTANT, ExtraKeysTarget.ASSISTANT.markingPlace());
     }
+
+    // ---- the page switcher key on the built-in sets
+
+    private static final String ADDED = TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED;
+
+    @Test
+    public void builtInSetsLeadWithThePageSwitcherKeyOnlyWhileTheFlagIsSet() {
+        for (ExtraKeysTarget target : new ExtraKeysTarget[] {ExtraKeysTarget.DISPLAY, ExtraKeysTarget.ASSISTANT}) {
+            ExtraKeySetResolver.Resolved off = ExtraKeySetResolver.resolve(target, lines());
+            assertEquals(ExtraKeySetResolver.Source.SHIPPED, off.source);
+            assertEquals(target.shippedPage1(), off.page1);
+            ExtraKeySetResolver.Resolved on = ExtraKeySetResolver.resolve(target, lines(ADDED, "true"));
+            assertEquals(ExtraKeySetResolver.Source.SHIPPED, on.source);
+            assertEquals(PageSwitcherKeyAdd.withKey(target.shippedPage1()), on.page1);
+            assertEquals(PageSwitcherKeyAdd.KEY,
+                ExtraKeysLayoutModel.parse(on.page1).rows().get(0).get(0).key);
+        }
+        // Global's built-in row too, for the bars that follow it.
+        String global = ExtraKeySetResolver.resolve(ExtraKeysTarget.TERMINAL, lines()).page1;
+        assertEquals(PageSwitcherKeyAdd.withKey(global),
+            ExtraKeySetResolver.resolve(ExtraKeysTarget.TERMINAL, lines(ADDED, "true")).page1);
+    }
+
+    @Test
+    public void storedRowsAreNotChangedByTheFlagAndTheKeyIsNeverDoubled() {
+        String stored = "[[\"ESC\"]]";
+        assertEquals(stored, ExtraKeySetResolver.resolve(ExtraKeysTarget.TERMINAL,
+            lines(TermuxPropertyConstants.KEY_EXTRA_KEYS, stored, ADDED, "true")).page1);
+        assertEquals(stored, ExtraKeySetResolver.resolve(ExtraKeysTarget.DISPLAY,
+            lines(ExtraKeysTarget.DISPLAY.pageKeys()[0], stored, ADDED, "true")).page1);
+        String led = ExtraKeySetResolver.resolve(ExtraKeysTarget.DISPLAY, lines(ADDED, "true")).page1;
+        assertEquals(led, ExtraKeySetResolver.builtInPage1(ExtraKeysTarget.DISPLAY,
+            lines(ADDED, "true")));
+        // A built-in set already holding the key is not led twice.
+        assertEquals(null, PageSwitcherKeyAdd.withKey(led));
+    }
 }
