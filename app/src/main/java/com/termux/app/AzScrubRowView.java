@@ -488,8 +488,8 @@ public final class AzScrubRowView extends AppCompatTextView {
         for (int i = 0; i < visibleLetters.length; i++) {
             float along = letterCenterAlongPx(i);
             float distance = Math.abs(along - anchorAlong) / Math.max(1f, slot);
-            float envelope = (float) Math.exp(-(distance * distance) * 0.85f);
-            float waveLift = (float) Math.sin(Math.min(1f, envelope) * (Math.PI * 0.5f)) * waveAmplitude;
+            float envelope = ScrubWave.envelope(distance);
+            float waveLift = ScrubWave.lift(envelope) * waveAmplitude;
             boolean activeFocus = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
                 ? (hasInlineFocus && i == activeIndex)
                 : (waveStrength > 0.01f && i == activeIndex);
@@ -746,10 +746,10 @@ public final class AzScrubRowView extends AppCompatTextView {
         boolean activeFocus = index == activeIndex;
         float along = letterCenterAlongPx(index);
         float distance = Math.abs(along - anchorAlong) / Math.max(1f, slot);
-        float envelope = (float) Math.exp(-(distance * distance) * 0.85f);
+        float envelope = ScrubWave.envelope(distance);
         float waveLift = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
             ? 0f
-            : (float) Math.sin(Math.min(1f, envelope) * (Math.PI * 0.5f)) * (dp(15) * waveStrength);
+            : ScrubWave.lift(envelope) * (dp(15) * waveStrength);
         if (activeFocus && interactionMode != InteractionMode.INLINE_EMPHASIS_TRACK) {
             waveLift *= 1.2f;
             waveLift = Math.max(waveLift, dp(6));
