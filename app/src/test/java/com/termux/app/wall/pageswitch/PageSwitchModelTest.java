@@ -166,7 +166,7 @@ public class PageSwitchModelTest {
         Input in = wall();
         in.currentPageId = 2;
         assertEquals(2, PageSwitchModel.build(in).numberOf(Kind.HOME));
-        assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.TERMINAL));
+        assertEquals(1, PageSwitchModel.build(in).numberOf(Kind.TERMINAL));
         assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.ASSISTANT));
         assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.DISPLAY));
         in.currentKind = Kind.TERMINAL;
@@ -180,6 +180,20 @@ public class PageSwitchModelTest {
         assertEquals(2, PageSwitchModel.build(in).numberOf(Kind.HOME));
         in.homePageIds = Collections.emptyList();
         assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.HOME));
+    }
+
+    @Test public void terminalGlyphHoldsItsWindowWhileHomeIsInFront() {
+        Input in = wall();
+        in.terminalWindowLabels = Arrays.asList("a", "b", "c");
+        in.currentTerminalWindow = 2;
+        PageSwitchModel m = PageSwitchModel.build(in);
+        assertEquals(1, m.numberOf(Kind.HOME));
+        assertEquals(3, m.numberOf(Kind.TERMINAL));
+        // No window reported: the Terminal page still has its first, never an empty frame.
+        in.currentTerminalWindow = -1;
+        assertEquals(1, PageSwitchModel.build(in).numberOf(Kind.TERMINAL));
+        in.terminalPageId = -1;
+        assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.TERMINAL));
     }
 
     @Test public void homeTargetPrefersTheStartPageElseTheFirst() {

@@ -145,7 +145,12 @@ public final class PageSwitchModel {
                 ? mInput.currentPageId : homeTarget(mInput.homePageIds, mInput.defaultStartPageId);
             return mInput.homePageIds.indexOf(id) + 1;
         }
-        if (kind == Kind.TERMINAL) return Math.max(0, mInput.currentTerminalWindow + 1);
+        // The window you would return to, whichever page is in front; a Terminal page always has a
+        // first window, as its cell is numbered.
+        if (kind == Kind.TERMINAL) {
+            if (mInput.currentTerminalWindow >= 0) return mInput.currentTerminalWindow + 1;
+            return shows(Kind.TERMINAL) ? 1 : 0;
+        }
         return 0;
     }
 
