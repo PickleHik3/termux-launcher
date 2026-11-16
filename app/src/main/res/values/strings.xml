@@ -3797,6 +3797,7 @@
     <string name="setup_card_page_switcher_description_terminal">You can add a page switcher key to the extra keys in Settings.</string>
     <string name="setup_card_page_switcher_step">Add the key to your extra keys</string>
     <string name="setup_card_page_switcher_add">Add</string>
+    <string name="setup_card_page_switcher_not_now">Not now</string>
     <string name="setup_card_guide_name">Learn the basics</string>
     <string name="setup_card_guide_description">Short chapters for this setup.</string>
     <string name="setup_card_guide_step">Explore your chapters</string>

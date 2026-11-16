@@ -263,7 +263,9 @@ final class SetupCardSheet extends LinearLayout {
         buttons.setOrientation(HORIZONTAL);
         buttons.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         if (!done) {
-            buttons.addView(textButton(R.string.setup_cards_dismiss,
+            // The page switcher card offers its key: putting it off reads "Not now".
+            buttons.addView(textButton(SetupCards.PAGE_SWITCHER.equals(card.id) && card.offersAction
+                    ? R.string.setup_card_page_switcher_not_now : R.string.setup_cards_dismiss,
                 () -> mCallbacks.onDismiss(card.id)), buttonParams(0));
         }
         MaterialButton primary = new MaterialButton(context);
