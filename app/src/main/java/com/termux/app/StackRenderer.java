@@ -331,19 +331,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             StackScene.at(front, front, 0f, mEffective, mGeometry, mFrame);
         }
         mPlankTarget = plankTarget();
-        // TEMPORARY (tag WRS3C): the numbers behind a landing frame's clip, for the Floating
-        // keyboard-down landing-wrote. Reverted in its own commit.
-        if (mHasEnds || landing) {
-            android.util.Log.d("WRS3C", "stack frame uptime=" + android.os.SystemClock.uptimeMillis()
-                + " landing=" + landing + " hasEnds=" + mHasEnds + " progress=" + mEndsProgress
-                + " travel=" + mMotion.dockTravelPx + " kbShare=" + mMotion.keyboardSharePx
-                + " effTravel=" + mEffective.dockTravelPx + " effKbShare=" + mEffective.keyboardSharePx
-                + " restShare=" + StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx())
-                + " containerH=" + mGeometry.containerHeightPx + " kbH=" + mGeometry.keyboardHeightPx
-                + " kbTop=" + mGeometry.keyboardTopPx + " kbShown=" + mViews.keyboardShown()
-                + " containerClip=" + (mFrame.clipped[StackScene.V_CONTAINER] ? mFrame.clipBottom[StackScene.V_CONTAINER] : -1)
-                + " keyboardClip=" + (mFrame.clipped[StackScene.V_KEYBOARD] ? mFrame.clipBottom[StackScene.V_KEYBOARD] : -1));
-        }
 
         boolean containerMoved = writeTy(StackScene.V_CONTAINER, container,
             mFrame.ty[StackScene.V_CONTAINER] + plankTy(PLANK_CONTAINER));
