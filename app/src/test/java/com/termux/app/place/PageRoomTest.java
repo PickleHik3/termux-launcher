@@ -59,6 +59,27 @@ public class PageRoomTest {
         }
     }
 
+    /**
+     * The old column hung above the stack container, which stands on the kept band by its margin
+     * or by its foot's height (BottomInsets): what a page left of the root layout's height is the
+     * container's top above the window's bottom, less what the content reached past it, plus the
+     * edge gap while the stack is away. The wall's inset is that number, for every rest and every
+     * kept band.
+     */
+    @Test public void aPagesWallInsetIsTheOldColumnsRoomWithTheKeptBand() {
+        for (int kept : new int[] {0, 24, 48}) for (boolean foot : BOOLS)
+            for (boolean floating : BOOLS) for (boolean up : BOOLS) for (PageRef page : PAGES) {
+            StackLayout.Result r = f.settle(page, up, floating);
+            BottomInsets insets = BottomInsets.forKept(0, kept, foot, r.bottomMarginPx,
+                r.flushBottomInsetPx);
+            int containerTop = r.stackHeightPx + insets.stackExtraHeightPx + insets.stackMarginPx;
+            int oldRoom = containerTop - r.contentOverlapPx + r.contentEdgeGapPx;
+            int room = PageRoom.bottomInsetPx(f.rest(page, page, up, floating));
+            assertEquals(f.name + " " + page + " floating=" + floating + " up=" + up
+                + " kept=" + kept + " foot=" + foot, oldRoom, PageRoom.wallInsetPx(room, kept));
+        }
+    }
+
     @Test public void aPagesRoomIsItsOwnWhicheverPageIsInFront() {
         for (boolean floating : BOOLS) for (boolean up : BOOLS) for (PageRef page : PAGES) {
             int own = PageRoom.bottomInsetPx(f.rest(page, page, up, floating));

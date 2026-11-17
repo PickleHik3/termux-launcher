@@ -24,6 +24,17 @@ public final class PageRoom {
     }
 
     /**
+     * Where a page's cells end above the wall's bottom: the page's room plus the band the
+     * navigation inset keeps clear ({@link BottomInsets#keptPx}). The root layout that holds the
+     * wall reaches the screen's bottom edge, under that band, where the content column it
+     * replaced hung above the stack, which stands on it: the room alone put every page's cells
+     * that band too low.
+     */
+    public static int wallInsetPx(int roomPx, int keptBandPx) {
+        return Math.max(0, roomPx) + Math.max(0, keptBandPx);
+    }
+
+    /**
      * Whether a page whose cells stand {@code appliedInsetPx} above the bottom is resized by a
      * return to a rest of {@code restInsetPx}: only when its rest changed while it was away.
      */
