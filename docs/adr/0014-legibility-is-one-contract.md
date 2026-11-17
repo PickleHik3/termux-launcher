@@ -73,3 +73,9 @@ Amendment (2026-10-27): **The terminal's Opacity slider stays the user's.** At 0
 (plain glass, today's mean ground and floors), and below the default 34% its strength scales down
 linearly with Opacity; the text may then fall short of the floor, which is the user's choice.
 Decided 2026-10-27.
+
+Amendment (2026-11-17): **The correction is measured at rest and kept per page.**
+[ADR 0029](0029-each-glass-surface-keeps-one-picture.md) section 9: the glass service keeps one
+correction per page and band, measured at the page's rest position and measured again only when the
+wallpaper, the palette, light or dark, or the band's rest rectangle changes. A crossing blends two
+stored values and measures nothing. The strength still follows the terminal's Opacity as above.

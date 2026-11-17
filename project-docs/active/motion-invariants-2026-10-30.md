@@ -1,5 +1,7 @@
 # Motion invariants: one owner per number, and a log that says so
 
+> Note (2026-11-17): [ADR 0030](../../docs/adr/0030-pages-sides-and-the-bottom-stack.md) decides the keyboard and room pairs below, and the line references in this document are stale. The pairs are rewritten in step 3 of [the window restructure](window-restructure-2026-11-17.md).
+
 Added to the 2026-10-30 round after the Terminal landing stutter. Its cause was a number owned twice:
 the crossing pre-sized the terminal from one formula (`travelRoomChangePx`, 670 px on pong) and the
 landing laid it out from another (the accessory geometry pass, 96 px more for the dock rows under

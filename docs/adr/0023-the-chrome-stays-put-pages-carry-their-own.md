@@ -90,3 +90,11 @@ page moves and at full resolution at rest.
 - Up to 56 MB of GPU memory on large phones; evicted under pressure.
 - ADR 0020's storage and migration plan is unchanged; its kind documents simply carry fewer
   per-kind values.
+
+## Amendment (2026-11-17): §2 is by side, and rows ride the keyboard
+
+[ADR 0030](0030-pages-sides-and-the-bottom-stack.md) amends §2. "Its page" means its side of the
+seam, Home or the Workspace, not each single page: rows stay put within a side and travel with
+their side between sides. Across a crossing they also ride the keyboard's top, written by the
+stack's writer from the scene, and the glass slab stays with the shared stack. Floating follows the
+same rule with its own card geometry. Each side owns its own extra-keys bar. §4 stands.
