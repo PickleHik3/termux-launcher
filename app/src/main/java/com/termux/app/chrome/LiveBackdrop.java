@@ -66,7 +66,7 @@ import java.util.ArrayList;
  * are released when Live goes off, when their surface hides ({@link #detach}) and under memory
  * pressure ({@link #releaseAll}); a frozen page layer is let go as the wall settles.</p>
  */
-public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
+public final class LiveBackdrop implements com.termux.app.glass.GlassService.LiveCore {
 
     /**
      * The dock, the floats and the widgets on the visible page, in that order of claim
@@ -171,6 +171,18 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
 
     public LiveBackdrop(@NonNull ViewGroup root) {
         mRoot = root;
+    }
+
+    /** The glass service whose commit, the frame table's last step, runs this recorder. */
+    @Nullable private com.termux.app.glass.GlassService mService;
+
+    /**
+     * Runs inside the glass service's commit: the commit is armed while a picture is held, so it
+     * runs on every drawn frame and records what moved; null runs nothing.
+     */
+    public void setService(@Nullable com.termux.app.glass.GlassService service) {
+        mService = service;
+        if (service != null && !mPictures.isEmpty()) service.liveHeld(true);
     }
 
     /**
@@ -398,33 +410,37 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         if (on) {
             if (mObserver != null && mObserver.isAlive()) return;
             mObserver = mRoot.getViewTreeObserver();
-            mObserver.addOnPreDrawListener(this);
             mObserver.addOnGlobalLayoutListener(mLayoutListener);
             // Whatever moved while nobody listened: plan whole.
             mPlanStamp++;
         } else {
             if (mObserver != null && mObserver.isAlive()) {
-                mObserver.removeOnPreDrawListener(this);
                 mObserver.removeOnGlobalLayoutListener(mLayoutListener);
             }
             // A dead observer was merged into the live one when the root attached.
             ViewTreeObserver current = mRoot.getViewTreeObserver();
             if (current != mObserver && current.isAlive()) {
-                current.removeOnPreDrawListener(this);
                 current.removeOnGlobalLayoutListener(mLayoutListener);
             }
             mObserver = null;
         }
+        if (mService != null) mService.liveHeld(on);
     }
 
     /**
-     * Runs inside a frame already being drawn: re-records each shown surface whose beneath moved.
-     * Invalidates nothing, but for a picture's first whole recording, whose holder is asked to
-     * redraw in this same frame to swap its stored frame for it ({@link LivePicture#recorded}).
+     * The glass commit's Live step, inside a frame already being drawn: records each shown
+     * surface's layers that went stale. Invalidates nothing, but for a picture's first recording,
+     * whose holder is asked to redraw in this same frame to swap its stored frame for it
+     * ({@link LivePicture#recorded}). Whether any picture is still held.
      */
     @Override
-    public boolean onPreDraw() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true;
+    public boolean commitLive() {
+        preDraw();
+        return !mPictures.isEmpty();
+    }
+
+    private void preDraw() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         ViewGroup wall = mWall;
         boolean moving = wall != null && ((Wall) wall).isMovingForBackdrop();
         if (moving != mPlanMoving) {
@@ -438,7 +454,6 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             mPlanning = null;
         }
         if (mPictures.isEmpty()) listen(false);
-        return true;
     }
 
     private void preDrawPictures(boolean moving) {

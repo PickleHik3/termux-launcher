@@ -16,13 +16,13 @@ final class FloatLiveGlass {
     private FloatLiveGlass() {}
 
     /**
-     * Whether the slab takes the live picture: its float can be seen (attached, shown, not
-     * minimised or on another Home page), the slab is still inside that float (not docked back
+     * Whether the slab asks for the live picture: it is still inside its float (not docked back
      * into the tiled tree), and the slab itself is shown (glass on, not a widget's terminal).
-     * Pure.
+     * Whether the float can be seen is no input: motion and a minimise never change a glass
+     * surface's kind (ADR 0029 section 4). Pure.
      */
-    static boolean wants(boolean floatShown, boolean slabInFloat, boolean slabShown) {
-        return floatShown && slabInFloat && slabShown;
+    static boolean wants(boolean slabInFloat, boolean slabShown) {
+        return slabInFloat && slabShown;
     }
 
     /** Whether {@code view} sits inside {@code ancestor}. Walks the parents; allocates nothing. */
