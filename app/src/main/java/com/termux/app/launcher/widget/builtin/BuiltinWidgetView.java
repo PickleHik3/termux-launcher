@@ -176,17 +176,19 @@ public abstract class BuiltinWidgetView extends FrameLayout
         /** {@code widget} is live on this page, or its switch flipped; idempotent. */
         void addGlassWidget(@NonNull BuiltinWidgetView widget);
         void removeGlassWidget(@NonNull BuiltinWidgetView widget);
-        /** Whether Live blur is in effect now; asked as the page moves, so a field read. */
+        /** Whether Live blur is in effect now. */
         default boolean liveBlur() { return false; }
         /**
          * {@code slab}'s live picture of what is drawn beneath it, at the Look's blur; null while
-         * Live blur is off or the budget has no room for a widget, and the stored frame stands.
+         * the glass service grants it another kind, and the stored frame stands. {@code redress}
+         * runs when a policy event moves that kind.
          */
         @Nullable
-        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
+        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
+                                                                  @Nullable Runnable redress) {
             return null;
         }
-        /** {@code slab} shows its stored frame again: its picture and layer can go. */
+        /** {@code slab} stopped wearing glass or left: its glass entry, picture and layer go. */
         default void detachLiveGlass(@NonNull View slab) {}
     }
 
@@ -205,10 +207,10 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /** The alpha of the Look's tint the slab wears; what the card's ground is, see-through. */
     private int wornTintAlpha;
     @Nullable private GlassSource glassSource;
-    /** What {@link WidgetLiveGlass#wants} last answered; the page's moves act only on a change. */
+    /** What {@link WidgetLiveGlass#wants} last answered: the slab holds a glass entry. */
     private boolean liveAsked;
-    /** Scratch for {@link WidgetLiveGlass#nearScreen}. */
-    private final int[] liveLocation = new int[2];
+    /** The glass service moved this slab's kind: it puts up the new one. */
+    private final Runnable liveRedress = this::syncLiveGlass;
     /** Whether the page's ink is the pale one, so the card is the dark one ({@link #resolveStyle}). */
     private boolean inkPale;
     /** Whether the widget wears the Look's glass now: its switch on and no solid fallback. */
@@ -695,38 +697,40 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /** The wall moved the page, or the wallpaper panned: the slab re-aims at what is behind it. */
     public final void onGlassMoved() {
         if (slab != null && slab.getVisibility() == VISIBLE) slab.invalidateGlassPosition();
-        // Per frame of a slide: only a page sliding near the screen or away from it changes the answer.
-        if (slab != null && wantsLiveGlass() != liveAsked) syncLiveGlass();
     }
 
     /** {@link WidgetLiveGlass#wants} for this widget as it stands now. */
     private boolean wantsLiveGlass() {
         GlassSource source = glassSource;
-        return source != null && slab != null && WidgetLiveGlass.wants(source.liveBlur(),
-            android.os.Build.VERSION.SDK_INT, glassWorn && slab.getVisibility() == VISIBLE,
-            isShown(), WidgetLiveGlass.nearScreen(this, liveLocation));
+        return source != null && slab != null && WidgetLiveGlass.wants(
+            android.os.Build.VERSION.SDK_INT, glassWorn && slab.getVisibility() == VISIBLE);
     }
 
     /**
-     * Hands the slab Live blur's picture while {@link WidgetLiveGlass#wants} it, or gives the
-     * picture back and lets the slab draw the stored frame. With Live blur off a slab that never
-     * had a picture is not touched, so it draws exactly as it did.
+     * While {@link WidgetLiveGlass#wants} it the slab holds a glass entry and draws the kind the
+     * glass service grants (Live blur's picture, or the stored frame); otherwise it gives the entry
+     * back and draws the stored frame. With Live blur off the grant is the stored frame, so a slab
+     * that never had a picture draws exactly as it did.
      */
     private void syncLiveGlass() {
         com.termux.app.terminal.PaneGlassBackdropView glass = slab;
         if (glass == null) return;
         GlassSource source = glassSource;
         boolean want = wantsLiveGlass();
+        boolean wasAsked = liveAsked;
         liveAsked = want;
         if (want) {
-            glass.setLivePicture(source.attachLiveGlass(glass));
-        } else if (glass.livePicture() != null) {
+            glass.setLivePicture(source.attachLiveGlass(glass, liveRedress));
+        } else if (wasAsked || glass.livePicture() != null) {
             glass.setLivePicture(null);
             if (source != null) source.detachLiveGlass(glass);
         }
     }
 
-    /** The widget, its page or Home itself shown or hidden: a hidden page gives its pictures back. */
+    /**
+     * The widget, its page or Home itself shown or hidden. The kind stays (a hidden widget holds
+     * no layer); only a slab that stopped wearing glass gives its entry back.
+     */
     @Override public void onVisibilityAggregated(boolean isVisible) {
         super.onVisibilityAggregated(isVisible);
         syncLiveGlass();
@@ -1143,7 +1147,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
             inkSettle = null;
         }
         stopInternal();
-        if (slab != null && slab.livePicture() != null) {
+        if (slab != null && (slab.livePicture() != null || liveAsked)) {
             com.termux.app.terminal.PaneGlassBackdropView glass = slab;
             glass.setLivePicture(null);
             if (glassSource != null) glassSource.detachLiveGlass(glass);

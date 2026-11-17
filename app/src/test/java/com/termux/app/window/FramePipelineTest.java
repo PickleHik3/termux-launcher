@@ -79,6 +79,52 @@ public class FramePipelineTest {
     }
 
     @Test
+    public void theGlassCommitIsTheTablesLastStep() {
+        assertEquals(FrameStep.TABLE.length - 1, FrameStep.GLASS_COMMIT.ordinal());
+    }
+
+    @Test
+    public void theGlassCommitRunsAfterTheChromeCommitInOneFrame() {
+        List<String> order = new ArrayList<>();
+        chromeStep = () -> order.add("chrome");
+        frames.bind(FrameStep.GLASS_COMMIT, () -> order.add("glass"));
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        order.clear();
+
+        frames.requestFrame(FrameStep.GLASS_COMMIT);
+        frames.requestFrame(FrameStep.CHROME_COMMIT);
+        assertTrue(draws(root));
+
+        assertEquals(java.util.Arrays.asList("chrome", "glass"), order);
+    }
+
+    @Test
+    public void anArmedStepRunsOnEveryDrawnFrameAndAsksForNone() {
+        int[] glassRuns = {0};
+        frames.bind(FrameStep.GLASS_COMMIT, () -> glassRuns[0]++);
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        mainLooper().idle();
+        glassRuns[0] = 0;
+        int chromeBefore = chromeRuns;
+
+        frames.arm(FrameStep.GLASS_COMMIT, true);
+        assertFalse("arming asks for no frame", frames.isFrameBooked());
+        assertTrue(draws(root));
+        assertTrue(draws(root));
+        assertEquals(2, glassRuns[0]);
+        assertFalse("nothing is booked at rest", frames.isFrameBooked());
+        assertEquals("the chrome commit is not run by it", chromeBefore, chromeRuns);
+
+        frames.arm(FrameStep.GLASS_COMMIT, false);
+        assertTrue(draws(root));
+        assertEquals(2, glassRuns[0]);
+    }
+
+    @Test
     public void manyRequestsBeforeAFrameRunTheTableOnce() {
         frames.requestFrame(FrameStep.CHROME_COMMIT);
         frames.requestFrame(FrameStep.CHROME_COMMIT);

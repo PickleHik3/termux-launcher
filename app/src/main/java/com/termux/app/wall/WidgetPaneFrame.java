@@ -137,10 +137,11 @@ public final class WidgetPaneFrame extends PaneContentFrame
     }
 
     @Nullable @Override
-    public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
+    public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
+                                                             @Nullable Runnable redress) {
         com.termux.app.chrome.LookGlassStyle look = mStyle == null ? null : mStyle.lookGlass();
         if (mHost == null || look == null) return null;
-        return mHost.attachWidgetLiveGlass(slab, look.spec().blurDp);
+        return mHost.attachWidgetLiveGlass(slab, look.spec().blurDp, redress);
     }
 
     @Override public void detachLiveGlass(@NonNull View slab) {
@@ -222,14 +223,15 @@ public final class WidgetPaneFrame extends PaneContentFrame
         default boolean liveBlur() { return false; }
         /**
          * A widget slab's live picture at {@code blurDp}, in the budget's widget place; null while
-         * Live blur is off or no place is left.
+         * the glass service grants it another kind. {@code redress} runs when that kind moves.
          */
         @Nullable
         default com.termux.app.chrome.LivePicture attachWidgetLiveGlass(@NonNull View slab,
-                                                                        int blurDp) {
+                                                                        int blurDp,
+                                                                        @Nullable Runnable redress) {
             return null;
         }
-        /** The slab gave its live picture back. */
+        /** The slab gave its glass entry back. */
         default void detachWidgetLiveGlass(@NonNull View slab) {}
     }
 
