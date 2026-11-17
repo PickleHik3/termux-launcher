@@ -233,14 +233,14 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (store == mStore) return;
         unlistenForChoice();
         if (store == null) return;
-        store.registerOnSharedPreferenceChangeListener(mChoiceListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mChoiceListener);
         mStore = store;
     }
 
     private void unlistenForChoice() {
         SharedPreferences store = mStore;
         mStore = null;
-        if (store != null) store.unregisterOnSharedPreferenceChangeListener(mChoiceListener);
+        if (store != null) com.termux.shared.settings.preferences.PreferenceDraft.unlisten(store, mChoiceListener);
     }
 
     /** From onStop: the layer goes away with the screen it was drawn on. */

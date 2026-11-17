@@ -5,6 +5,8 @@ import android.content.SharedPreferences;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -75,6 +77,90 @@ public final class PreferenceDraft implements SharedPreferences {
             draft.discard();
     }
 
+    // ------------------------------------------------------------------------- listeners
+
+    /** One listener registered through {@link #listen}: weakly held, as a store holds its own. */
+    private static final class Listening {
+        @NonNull final WeakReference<OnSharedPreferenceChangeListener> listener;
+        @NonNull final SharedPreferences store;
+
+        Listening(@NonNull OnSharedPreferenceChangeListener listener,
+                  @NonNull SharedPreferences store) {
+            this.listener = new WeakReference<>(listener);
+            this.store = store;
+        }
+    }
+
+    private static final ArrayList<Listening> sListening = new ArrayList<>();
+
+    /**
+     * Registers {@code listener} on {@code store} and remembers it, so that while a draft sits over
+     * {@code store} a change the draft makes to what readers see is told to it as a change of the
+     * store would be: a listener that restyles a view from a key keeps restyling while the key is
+     * edited in a draft. Use this in place of the store's own register call for a store a draft
+     * may sit over; the listener is held weakly.
+     */
+    public static void listen(@NonNull SharedPreferences store,
+                              @NonNull OnSharedPreferenceChangeListener listener) {
+        store.registerOnSharedPreferenceChangeListener(listener);
+        synchronized (sListening) {
+            for (Listening each : sListening)
+                if (each.listener.get() == listener && each.store == store)
+                    return;
+            sListening.add(new Listening(listener, store));
+        }
+    }
+
+    /** Undoes {@link #listen}. */
+    public static void unlisten(@NonNull SharedPreferences store,
+                                @NonNull OnSharedPreferenceChangeListener listener) {
+        store.unregisterOnSharedPreferenceChangeListener(listener);
+        synchronized (sListening) {
+            for (int i = sListening.size() - 1; i >= 0; i--) {
+                Listening each = sListening.get(i);
+                OnSharedPreferenceChangeListener held = each.listener.get();
+                if (held == null || (held == listener && each.store == store))
+                    sListening.remove(i);
+            }
+        }
+    }
+
+    /** Tells every listener of this draft's store that {@code keys} now read differently. */
+    private void notifyChanged(@NonNull Set<String> keys) {
+        if (keys.isEmpty())
+            return;
+        ArrayList<OnSharedPreferenceChangeListener> targets = new ArrayList<>();
+        synchronized (sListening) {
+            for (int i = sListening.size() - 1; i >= 0; i--) {
+                Listening each = sListening.get(i);
+                OnSharedPreferenceChangeListener held = each.listener.get();
+                if (held == null)
+                    sListening.remove(i);
+                else if (each.store == mStore)
+                    targets.add(held);
+            }
+        }
+        for (String key : keys)
+            for (OnSharedPreferenceChangeListener target : targets)
+                target.onSharedPreferenceChanged(mStore, key);
+    }
+
+    /** Held keys whose held value differs from the store's: what readers lose when they are dropped. */
+    @NonNull
+    private Set<String> heldDifferences() {
+        HashSet<String> out = new HashSet<>();
+        if (mHeld.isEmpty())
+            return out;
+        Map<String, ?> stored = mStore.getAll();
+        for (Map.Entry<String, Object> entry : mHeld.entrySet()) {
+            Object held = entry.getValue();
+            Object was = stored.get(entry.getKey());
+            if (held == REMOVED ? was != null : !Objects.equals(held, was))
+                out.add(entry.getKey());
+        }
+        return out;
+    }
+
     /** Whether this draft is the open one. */
     public boolean isOpen() {
         return !mEnded;
@@ -135,14 +221,27 @@ public final class PreferenceDraft implements SharedPreferences {
 
     /** Drops everything held and goes on: Undo inside a session. The store is not written. */
     public void reset() {
+        Set<String> reverted = heldDifferences();
         mHeld.clear();
+        notifyChanged(reverted);
     }
 
     /** Drops everything held, writing nothing: the store is as it was, apart from outside writes. */
     public void discard() {
         if (mEnded)
             return;
+        Set<String> reverted = heldDifferences();
         end();
+        notifyChanged(reverted);
+    }
+
+    /** What readers see for {@code key} now: the held value, or the store's from {@code stored}. */
+    @Nullable
+    private Object visible(String key, @Nullable Map<String, ?> stored) {
+        Object held = mHeld.get(key);
+        if (held != null)
+            return held == REMOVED ? null : held;
+        return stored == null ? null : stored.get(key);
     }
 
     private void end() {
@@ -244,12 +343,12 @@ public final class PreferenceDraft implements SharedPreferences {
     /** Listeners are the store's: the draft changes nothing a listener could be told of. */
     @Override
     public void registerOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener listener) {
-        mStore.registerOnSharedPreferenceChangeListener(listener);
+        listen(mStore, listener);
     }
 
     @Override
     public void unregisterOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener listener) {
-        mStore.unregisterOnSharedPreferenceChangeListener(listener);
+        unlisten(mStore, listener);
     }
 
     /** Collects one editor's changes and folds them into the draft on apply or commit. */
@@ -290,18 +389,35 @@ public final class PreferenceDraft implements SharedPreferences {
                 editor.apply();
                 return true;
             }
+            Map<String, ?> stored = null;
+            HashSet<String> changed = new HashSet<>();
             if (mClear) {
                 // As on a real editor, a clear empties the draft's view before this editor's own
                 // changes: every key the store or the draft holds is held as removed.
-                Set<String> keys = new HashSet<>(mStore.getAll().keySet());
+                stored = mStore.getAll();
+                Set<String> keys = new HashSet<>(stored.keySet());
                 keys.addAll(mHeld.keySet());
-                for (String key : keys)
+                for (String key : keys) {
+                    if (visible(key, stored) != null)
+                        changed.add(key);
                     mHeld.put(key, REMOVED);
+                }
             }
-            for (Map.Entry<String, Object> entry : mChanges.entrySet())
-                mHeld.put(entry.getKey(), entry.getValue());
+            for (Map.Entry<String, Object> entry : mChanges.entrySet()) {
+                String key = entry.getKey();
+                if (stored == null && !mHeld.containsKey(key))
+                    stored = mStore.getAll();
+                Object before = visible(key, stored);
+                Object after = entry.getValue() == REMOVED ? null : entry.getValue();
+                if (Objects.equals(before, after))
+                    changed.remove(key);
+                else
+                    changed.add(key);
+                mHeld.put(key, entry.getValue());
+            }
             mChanges.clear();
             mClear = false;
+            notifyChanged(changed);
             return true;
         }
 

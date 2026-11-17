@@ -5555,8 +5555,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.content.SharedPreferences store = mPreferences.getSharedPreferences();
         if (store != null && mPeekReflectionKnobStore != store) {
             if (mPeekReflectionKnobStore != null)
-                mPeekReflectionKnobStore.unregisterOnSharedPreferenceChangeListener(mPeekReflectionKnob);
-            store.registerOnSharedPreferenceChangeListener(mPeekReflectionKnob);
+                com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mPeekReflectionKnobStore, mPeekReflectionKnob);
+            com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mPeekReflectionKnob);
             mPeekReflectionKnobStore = store;
         }
         com.termux.app.dock.PeekGlassReflection reflection = mPeekReflection;
@@ -5578,7 +5578,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPeekReflection != null) mPeekReflection.release();
         mPeekReflection = null;
         if (mPeekReflectionKnobStore != null) {
-            mPeekReflectionKnobStore.unregisterOnSharedPreferenceChangeListener(mPeekReflectionKnob);
+            com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mPeekReflectionKnobStore, mPeekReflectionKnob);
             mPeekReflectionKnobStore = null;
         }
     }
@@ -27577,7 +27577,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (mPageOverview != null) mPageOverview.refresh();
         };
-        store.registerOnSharedPreferenceChangeListener(mStartInListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mStartInListener);
         // Home moved (Settings, Edit pages, another holder of the store): the marker follows.
         mWallPagesListener = new com.termux.app.wall.WallPagesStore.Listener() {
             /** The page kinds of the last page list this listener saw: the wall keys it put on the row. */
@@ -27641,7 +27641,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.content.SharedPreferences store =
             mPreferences == null ? null : mPreferences.getSharedPreferences();
         if (store != null && mStartInListener != null) {
-            store.unregisterOnSharedPreferenceChangeListener(mStartInListener);
+            com.termux.shared.settings.preferences.PreferenceDraft.unlisten(store, mStartInListener);
         }
         mStartInListener = null;
         if (mWallPagesListener != null && mWallPagesStore != null) {

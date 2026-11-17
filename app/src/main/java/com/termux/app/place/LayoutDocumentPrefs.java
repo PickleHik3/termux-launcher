@@ -189,7 +189,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     private Object value(@NonNull String key) {
         LayoutStore store = mLayouts;
         Route route = store == null ? null : route(key);
-        if (route == null) return mPrefs.getAll().get(key);
+        if (route == null) return reads().getAll().get(key);
         return read(store, route);
     }
 
@@ -207,9 +207,9 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     @Override
     public Map<String, ?> getAll() {
         LayoutStore store = mLayouts;
-        if (store == null) return mPrefs.getAll();
+        if (store == null) return reads().getAll();
         Map<String, Object> all = new HashMap<>();
-        for (Map.Entry<String, ?> e : mPrefs.getAll().entrySet()) {
+        for (Map.Entry<String, ?> e : reads().getAll().entrySet()) {
             if (route(e.getKey()) == null) all.put(e.getKey(), e.getValue());
         }
         Layouts layouts = store.current();
@@ -266,7 +266,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     public String getString(String key, @Nullable String defValue) {
         if (unrouted(key)) {
             try {
-                return mPrefs.getString(key, defValue);
+                return reads().getString(key, defValue);
             } catch (ClassCastException other) {
                 return defValue;
             }
@@ -278,17 +278,17 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     @Nullable
     @Override
     public Set<String> getStringSet(String key, @Nullable Set<String> defValues) {
-        return mPrefs.getStringSet(key, defValues);
+        return reads().getStringSet(key, defValues);
     }
 
     @Override
     public int getInt(String key, int defValue) {
         if (unrouted(key)) {
             try {
-                return mPrefs.getInt(key, defValue);
+                return reads().getInt(key, defValue);
             } catch (ClassCastException otherNumber) {
                 // Stored as another number type: read it as the document path does.
-                Object stored = mPrefs.getAll().get(key);
+                Object stored = reads().getAll().get(key);
                 return stored instanceof Number ? ((Number) stored).intValue() : defValue;
             }
         }
@@ -300,10 +300,10 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     public long getLong(String key, long defValue) {
         if (unrouted(key)) {
             try {
-                return mPrefs.getLong(key, defValue);
+                return reads().getLong(key, defValue);
             } catch (ClassCastException otherNumber) {
                 // Stored as another number type: read it as the document path does.
-                Object stored = mPrefs.getAll().get(key);
+                Object stored = reads().getAll().get(key);
                 return stored instanceof Number ? ((Number) stored).longValue() : defValue;
             }
         }
@@ -315,10 +315,10 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     public float getFloat(String key, float defValue) {
         if (unrouted(key)) {
             try {
-                return mPrefs.getFloat(key, defValue);
+                return reads().getFloat(key, defValue);
             } catch (ClassCastException otherNumber) {
                 // Stored as another number type: read it as the document path does.
-                Object stored = mPrefs.getAll().get(key);
+                Object stored = reads().getAll().get(key);
                 return stored instanceof Number ? ((Number) stored).floatValue() : defValue;
             }
         }
@@ -330,7 +330,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     public boolean getBoolean(String key, boolean defValue) {
         if (unrouted(key)) {
             try {
-                return mPrefs.getBoolean(key, defValue);
+                return reads().getBoolean(key, defValue);
             } catch (ClassCastException other) {
                 return defValue;
             }
@@ -343,7 +343,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     public boolean contains(String key) {
         LayoutStore store = mLayouts;
         Route route = store == null ? null : route(key);
-        return route == null ? mPrefs.contains(key) : read(store, route) != null;
+        return route == null ? reads().contains(key) : read(store, route) != null;
     }
 
     @NonNull
@@ -352,14 +352,20 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         return new DocumentEditor();
     }
 
+    /** What a read of the flat keys asks: the store, or the editing session's draft over it. */
+    private SharedPreferences reads() {
+        SharedPreferences reads = com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(mPrefs);
+        return reads == null ? mPrefs : reads;
+    }
+
     @Override
     public void registerOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener l) {
-        mPrefs.registerOnSharedPreferenceChangeListener(l);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(mPrefs, l);
     }
 
     @Override
     public void unregisterOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener l) {
-        mPrefs.unregisterOnSharedPreferenceChangeListener(l);
+        com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mPrefs, l);
     }
 
     // ---------------------------------------------------------------- writes

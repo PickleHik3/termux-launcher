@@ -263,12 +263,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
         android.content.SharedPreferences store = preferences == null ? null : preferences.getSharedPreferences();
         if (store == null) return;
-        store.registerOnSharedPreferenceChangeListener(mLazyModeListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mLazyModeListener);
         mLazyModeStore = store;
     }
 
     private void unwatchLazyMode() {
-        if (mLazyModeStore != null) mLazyModeStore.unregisterOnSharedPreferenceChangeListener(mLazyModeListener);
+        if (mLazyModeStore != null) com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mLazyModeStore, mLazyModeListener);
         mLazyModeStore = null;
         mLazyModeEnabled = null;
     }

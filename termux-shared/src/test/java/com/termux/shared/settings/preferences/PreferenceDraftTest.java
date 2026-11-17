@@ -213,6 +213,71 @@ public class PreferenceDraftTest {
         assertEquals(0, SharedPreferenceUtils.getInt(store, "blur", 0));
     }
 
+    @Test
+    public void aListenerHearsWhatTheDraftChangesAndNothingItLeavesAlone() {
+        SharedPreferences store = store("draft-listen");
+        store.edit().putInt("blur", 4).putInt("same", 1).commit();
+        List<String> heard = new ArrayList<>();
+        SharedPreferences.OnSharedPreferenceChangeListener listener = (sp, key) -> {
+            // The listener reads what the launcher shows: the draft on top.
+            heard.add(key + "=" + SharedPreferenceUtils.getInt(sp, key, -1));
+        };
+        PreferenceDraft.listen(store, listener);
+        PreferenceDraft draft = PreferenceDraft.begin(store);
+
+        draft.edit().putInt("blur", 25).putInt("same", 1).apply();
+        assertEquals(java.util.Collections.singletonList("blur=25"), heard);
+
+        heard.clear();
+        draft.edit().putInt("blur", 25).apply();
+        assertTrue("an unchanged cell is not announced", heard.isEmpty());
+
+        draft.edit().putInt("blur", 30).apply();
+        assertEquals(java.util.Collections.singletonList("blur=30"), heard);
+
+        heard.clear();
+        draft.reset();
+        assertEquals("the reverted cell is announced with the store's value",
+            java.util.Collections.singletonList("blur=4"), heard);
+
+        heard.clear();
+        draft.edit().putInt("blur", 40).apply();
+        heard.clear();
+        draft.discard();
+        assertEquals(java.util.Collections.singletonList("blur=4"), heard);
+        PreferenceDraft.unlisten(store, listener);
+    }
+
+    @Test
+    public void doneIsAnnouncedByTheStoreItselfOncePerChangedCell() {
+        SharedPreferences store = store("draft-listen-done");
+        store.edit().putInt("blur", 4).commit();
+        List<String> heard = new ArrayList<>();
+        SharedPreferences.OnSharedPreferenceChangeListener listener = (sp, key) -> heard.add(key);
+        PreferenceDraft.listen(store, listener);
+        PreferenceDraft draft = PreferenceDraft.begin(store);
+        draft.edit().putInt("blur", 25).apply();
+        heard.clear();
+
+        draft.commit();
+
+        assertEquals(java.util.Collections.singletonList("blur"), heard);
+        PreferenceDraft.unlisten(store, listener);
+    }
+
+    @Test
+    public void aListenerTakenOffHearsNothingMore() {
+        SharedPreferences store = store("draft-unlisten");
+        List<String> heard = new ArrayList<>();
+        SharedPreferences.OnSharedPreferenceChangeListener listener = (sp, key) -> heard.add(key);
+        PreferenceDraft.listen(store, listener);
+        PreferenceDraft.unlisten(store, listener);
+
+        PreferenceDraft.begin(store).edit().putInt("blur", 25).apply();
+
+        assertTrue(heard.isEmpty());
+    }
+
     private static SharedPreferences store(String name) {
         SharedPreferences store = RuntimeEnvironment.getApplication()
             .getSharedPreferences(name, Context.MODE_PRIVATE);
