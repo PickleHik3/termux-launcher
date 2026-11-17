@@ -291,7 +291,14 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             if (under.getBackground() != null) under.invalidate();
         }
         View keyboard = mViews.view(R.id.inapp_keyboard_container);
-        if (keyboard != null) writeClip(StackScene.V_KEYBOARD, keyboard);
+        if (keyboard != null) {
+            writeClip(StackScene.V_KEYBOARD, keyboard);
+            // A down keyboard takes no touch: its translation leaves a strip of it on the screen.
+            if (keyboard instanceof com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout) {
+                ((com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout) keyboard)
+                    .setTouchRefused(mViews.keyboardDownLaidOutPx() > 0);
+            }
+        }
         writeContent();
         if (guard != null) {
             // On a landing frame every change is counted: the scene at progress 1 is the rest.

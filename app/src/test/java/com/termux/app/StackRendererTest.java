@@ -238,6 +238,21 @@ public class StackRendererTest {
         assertNull(mContainer.getClipBounds());
     }
 
+    @Test public void aKeyboardLaidOutButDownTakesNoTouchAndUpTakesAgain() {
+        com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout keyboard =
+            new com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout(
+                RuntimeEnvironment.getApplication());
+        mContainer.addView(keyboard);
+        keyboard.layout(0, 300, WIDTH, 600);
+        mViews.put(R.id.inapp_keyboard_container, keyboard);
+        mKeyboardDownPx = 300;
+        mRenderer.applyAtRest();
+        assertTrue(keyboard.isTouchRefused());
+        mKeyboardDownPx = 0;
+        mRenderer.applyAtRest();
+        assertFalse(keyboard.isTouchRefused());
+    }
+
     @Test public void aLandingThatMovesTheStackIsCounted() {
         FramePipeline frames = attached();
         mRenderer.setTravel(120f, 0f, 0f);

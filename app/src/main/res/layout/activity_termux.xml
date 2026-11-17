@@ -927,7 +927,7 @@
                 android:clipChildren="false"
                 android:clipToPadding="false">
 
-                <LinearLayout
+                <com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout
                     android:id="@+id/inapp_keyboard_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1052,7 +1052,7 @@
                         android:id="@+id/inapp_keyboard_view_host"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
-                </LinearLayout>
+                </com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout>
 
                 <!-- The bottom bands a place stands under the keyboard, outermost last as in every
                      bottom stack (EdgeStackPolicy.underKeyboard). applyEdgeStacks() moves the
