@@ -178,7 +178,7 @@ public class CrossingViewsTest {
 
         void step(float fraction) {
             float offset = committed == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
-            Frame frame = PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states, committed);
+            Frame frame = PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states);
             PaneWallPage other = SeamTravel.otherHalfPage(frame, committed);
             if (other != null && other != crossing.seam().other()) {
                 boolean fromHome = committed == PaneWallPage.WIDGETS;

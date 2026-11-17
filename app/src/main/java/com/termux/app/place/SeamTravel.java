@@ -199,8 +199,8 @@ public final class SeamTravel {
 
     /**
      * How far, 0 to 1, the wall itself has gone into the other half: {@link #otherHalfProgress} on
-     * the wall's own way rather than the chrome's, so it moves over the stretch at either end
-     * ({@link PlaceChromeTravel#LANDING}) where the chrome rests too.
+     * the wall's own way rather than the chrome's curve, so it moves over the stretch at either end
+     * ({@link SeamFade#START}) where the chrome rests.
      */
     public static float otherHalfFraction(@NonNull Frame frame, @NonNull PaneWallPage committed) {
         boolean fromOther = crosses(frame.from, committed);

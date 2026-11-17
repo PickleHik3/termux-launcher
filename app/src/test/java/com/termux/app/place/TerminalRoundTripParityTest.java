@@ -148,7 +148,7 @@ public class TerminalRoundTripParityTest {
         for (float t = STEP; t <= 1f + 1e-4f; t += STEP) {
             float fraction = Math.min(1f, t);
             float offset = from == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
-            Frame frame = PlaceChromeTravel.at(ROW, from, offset, WIDTH, states, from);
+            Frame frame = PlaceChromeTravel.at(ROW, from, offset, WIDTH, states);
             if (!begun) {
                 crossing.begin(end(from), end(to), SeamCrossing.Stage.of(false, () -> false,
                     false), dockRest(from), dockRest(to), 1);

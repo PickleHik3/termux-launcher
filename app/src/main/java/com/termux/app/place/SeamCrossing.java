@@ -782,7 +782,7 @@ public final class SeamCrossing {
                 // The beaded half's rows sink below the stack's bottom edge, which cuts them flat:
                 // the beads melt while the chrome still rests and sink as the slab.
                 answers.beadShare = LensBeadGeometry.leavingMeltShare(
-                    SeamTravel.otherEndFraction(frame, committedEnd), PlaceChromeTravel.LANDING);
+                    SeamTravel.otherEndFraction(frame, committedEnd), SeamFade.START);
             } else {
                 float share = clamp01(dressProgress);
                 answers.beadShare = mRun.beadsCommitted ? 1f - share : share;
@@ -1064,17 +1064,20 @@ public final class SeamCrossing {
 
     /**
      * Whether the foot answers to the other half's keyboard on this run's frame: the stack stands
-     * that half's rows, and the leaving keyboard is below the screen by then.
+     * that half's rows, and the leaving keyboard has gone or the swap has come.
      */
     private static boolean rowsHoldFoot(@NonNull Run run) {
         if (!run.dockShown) return false;
         return !run.committedKeyboardUp || leavingKeyboardAwayAtSwap(run);
     }
 
-    /** Whether the committed half's keyboard is below the screen once the stack changes rows. */
+    /**
+     * Whether the foot goes with the other half's rows once the stack changes them: with a
+     * picture of the whole stack, and at a dip's swap, which the foot follows whatever the leaving
+     * keyboard has travelled by then (it follows the seam, so it is part way down, not gone).
+     */
     private static boolean leavingKeyboardAwayAtSwap(@NonNull Run run) {
-        return (run.pictured && run.wholeStack) || (run.plan == DockPlan.DIP
-            && PlaceChromeTravel.KEYBOARD_HIDE_END <= SeamTravel.DIP_SWAP);
+        return (run.pictured && run.wholeStack) || run.plan == DockPlan.DIP;
     }
 
     /** The other half's page the crossing was begun for; null while none runs. */
