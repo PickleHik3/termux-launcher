@@ -53,7 +53,7 @@ public class LayoutEditorDrawerTileTest {
         for (boolean homeLayout : new boolean[] {false, true}) {
             com.termux.app.place.KindFixtures.onHomePage(places);
             for (PaneWallPage page : PaneWallPage.values()) {
-                LayoutEditorPlan plan = LayoutEditorPlan.enter(places, page, PORTRAIT);
+                LayoutEditorPlan plan = DraftedSession.enter(places, page, PORTRAIT);
                 assertEquals(page.name(), LayoutEditorPlan.Drop.LIVE,
                     plan.setDrawerTile(!plan.drawerTile()));
                 plan.revert();
@@ -63,7 +63,7 @@ public class LayoutEditorDrawerTileTest {
 
     @Test
     public void theToggleWritesTheEditedLayoutAndLeavesTheDesignAndTheField() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         plan.setDockStyle(DockStyle.LENS_BEADS);
         plan.setSearchField(true);
         assertFalse(plan.drawerTile());
@@ -85,7 +85,7 @@ public class LayoutEditorDrawerTileTest {
     @Test
     public void theTileKeepsItsPlaceWhileItIsOff() {
         PlaceLayoutStore normal = places.forVariant(LayoutVariant.NORMAL);
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         plan.setDrawerTile(true);
         normal.setDrawerTilePosition(DrawerTilePolicy.Position.MIDDLE);
         plan.setDrawerTile(false);
@@ -96,7 +96,7 @@ public class LayoutEditorDrawerTileTest {
     @Test
     public void aToggleFlippedOnAHomePageIsEveryPages() {
         com.termux.app.place.KindFixtures.onHomePage(places);
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
         plan.setDrawerTile(true);
         assertTrue(places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).drawerTile());
         assertTrue("the Workspace reads the same one (ADR 0023 §1)",
@@ -105,7 +105,7 @@ public class LayoutEditorDrawerTileTest {
 
     @Test
     public void aToggledTileIsUnsavedAndDiscardPutsItBack() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
         assertFalse(plan.isDirty());
         plan.setDrawerTile(true);
         assertTrue(plan.isDirty());
@@ -118,7 +118,7 @@ public class LayoutEditorDrawerTileTest {
     @Test
     public void discardPutsBackATileThatWasOn() {
         places.forVariant(LayoutVariant.NORMAL).setDrawerTile(true);
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         plan.setDrawerTile(false);
         assertTrue(plan.isDirty());
         plan.revert();
@@ -128,7 +128,7 @@ public class LayoutEditorDrawerTileTest {
 
     @Test
     public void toggledBackItIsCleanAgain() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         plan.setDrawerTile(true);
         plan.setDrawerTile(false);
         assertFalse(plan.isDirty());
@@ -136,7 +136,7 @@ public class LayoutEditorDrawerTileTest {
 
     @Test
     public void thePickerNeverWritesTheTaskbar() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.TASKBAR));
         assertEquals(DockStyle.GLASS_TRAY, plan.dockStyle());
         assertFalse(plan.drawerTile());

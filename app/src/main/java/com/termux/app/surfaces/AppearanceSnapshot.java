@@ -25,8 +25,8 @@ import java.util.List;
  * folded to one string, are the editor's dirty signature, so Undo, Discard and "is anything
  * unsaved" cannot disagree about what the editor owns (SPEC §4: tint, rim, motion and the depth
  * keys included). The Custom row's Key spacing and App icons are here too. Dock size is the dock
- * height scale, which lives in the layout store per orientation: the layout session's own
- * snapshot ({@code PlaceArrangeSnapshot}, behind the editor's one Undo and dirty state) holds it,
+ * height scale, which lives in the layout store per orientation: the editor's draft over the
+ * layouts ({@code LayoutStore#beginDraft}, behind the editor's one Undo and dirty state) holds it,
  * so it is deliberately not restored here, where a turn of the phone could write it to the
  * wrong orientation.</p>
  */

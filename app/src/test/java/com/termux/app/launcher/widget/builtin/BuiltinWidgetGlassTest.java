@@ -594,24 +594,6 @@ public class BuiltinWidgetGlassTest {
         assertEquals(2, cleared.size());
     }
 
-    @Test
-    public void undoGivesEachWidgetItsChoiceBackUnlessItChoseAgain() {
-        java.util.Map<Integer, String> choices = new java.util.HashMap<>();
-        choices.put(-1, BuiltinWidgetGlass.ON);
-        choices.put(-2, BuiltinWidgetGlass.OFF);
-        java.util.List<com.termux.app.launcher.widget.LauncherWidgetRecord> records =
-            java.util.Arrays.asList(record(-1, null), record(-2, BuiltinWidgetGlass.ON),
-                record(-3, null));
-
-        java.util.List<com.termux.app.launcher.widget.LauncherWidgetRecord> changed =
-            BuiltinWidgetGlass.withChoices(records, choices);
-
-        assertEquals(1, changed.size());
-        assertEquals(-1, changed.get(0).appWidgetId);
-        assertEquals(BuiltinWidgetGlass.ON,
-            changed.get(0).sizeOptions().getString(BuiltinWidgetGlass.CONFIG_KEY));
-    }
-
     @NonNull
     private static com.termux.app.launcher.widget.LauncherWidgetRecord record(int id,
                                                                             @Nullable String glass) {

@@ -233,38 +233,58 @@ public class SurfaceEditorCardsTest {
         assertEquals("the saved Custom's dock is the wall's", saved, opacity(PaneWallPage.WIDGETS));
     }
 
-    @Test
-    public void theGlassWidgetsSwitchAppliesToEveryWidgetAndUndoGivesTheirChoicesBack() {
-        java.util.List<String> calls = new java.util.ArrayList<>();
-        java.util.Map<Integer, String> held = java.util.Collections.singletonMap(-1, "on");
-        Object[] restored = {null};
-        EditorTestHarness harness = new EditorTestHarness(preferences, (method, args) -> {
-            if (method.equals("clearWidgetGlassChoices")) {
-                calls.add("clear");
-                return held;
-            }
-            if (method.equals("restoreWidgetGlassChoices")) {
-                calls.add("restore");
-                restored[0] = args[0];
-            }
-            return null;
-        });
+    /** The widgets' glass draft as the editor sees it, recording what it was asked. */
+    private static final class FakeWidgetGlass implements SurfaceEditorController.WidgetGlassDraft {
+        final java.util.List<String> calls = new java.util.ArrayList<>();
+        boolean held;
+
+        @Override public void followPage() { calls.add("follow"); held = true; }
+        @Override public boolean isDirty() { return held; }
+        @Override public void commit() { calls.add("commit"); held = false; }
+        @Override public void discard() { calls.add("discard"); held = false; }
+    }
+
+    private SurfaceEditorController openOnHome(FakeWidgetGlass glass) {
+        EditorTestHarness harness = new EditorTestHarness(preferences,
+            (method, args) -> method.equals("widgetGlassDraft") ? glass : null);
         SurfaceEditorController editor = harness.editor;
         editor.present(EditorCard.HOME, PaneWallPage.WIDGETS, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        glass.calls.clear();
+        return editor;
+    }
+
+    @Test
+    public void theGlassWidgetsSwitchDraftsEveryWidgetAndUndoDropsTheDraft() {
+        FakeWidgetGlass glass = new FakeWidgetGlass();
+        SurfaceEditorController editor = openOnHome(glass);
         assertEquals(EditorCard.HOME, editor.shownCard());
         assertTrue("the row says it applies to every widget",
             model(editor).summary(Row.GLASS_WIDGETS) != null);
 
         model(editor).onValue(Row.GLASS_WIDGETS, 0, false);
         model(editor).onValue(Row.GLASS_WIDGETS, 1, false);
-        assertEquals(java.util.Arrays.asList("clear", "clear"), calls);
+        assertEquals(java.util.Arrays.asList("follow", "follow"), glass.calls);
+        assertTrue("a widget shown other than stored is unsaved", isDirty(editor));
 
         editor.undo();
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
-        assertEquals(java.util.Arrays.asList("clear", "clear", "restore"), calls);
-        assertEquals("each widget's choice as it first stood", held, restored[0]);
+        assertTrue("Undo drops the draft", glass.calls.contains("discard"));
+        assertFalse("and stores nothing", glass.calls.contains("commit"));
+        assertFalse(isDirty(editor));
+    }
+
+    @Test
+    public void doneStoresTheWidgetsGlassDraft() {
+        FakeWidgetGlass glass = new FakeWidgetGlass();
+        SurfaceEditorController editor = openOnHome(glass);
+        model(editor).onValue(Row.GLASS_WIDGETS, 1, false);
+        editor.done();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals("written once, before the session's end drops what is left",
+            "commit", glass.calls.get(1));
+        assertEquals(1, java.util.Collections.frequency(glass.calls, "commit"));
     }
 
     // ------------------------------------------------------------------------------- the drive
