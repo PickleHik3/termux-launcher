@@ -183,8 +183,6 @@ public class WindowSourceRulesTest {
         "app/TermuxActivity.java:5",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/assistant/AssistantPageController.java:1",
-        // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
-        "app/chrome/DisplayKeyboardBlur.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/chrome/LivePicture.java:2",
         // local first-layout wait: moves onto the first-layout helper
@@ -207,8 +205,9 @@ public class WindowSourceRulesTest {
         "app/launcher/widget/builtin/BuiltinWidgetView.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/setup/SetupWizardController.java:2",
-        // local first-layout wait: moves onto the first-layout helper
-        "app/surfaces/SurfaceEditorController.java:3",
+        // the slider preview's per-frame coalescer: it must apply before the frame's layout, which
+        // only a table step ahead of CHROME_COMMIT could do (ADR 0028 s1 pins that order)
+        "app/surfaces/SurfaceEditorController.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/terminal/CommandPaletteView.java:2",
         // own frame tick or fling step: moves into the pipeline table or the helper

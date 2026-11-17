@@ -18,7 +18,6 @@ import androidx.appcompat.app.AlertDialog;
 import com.termux.app.layouteditor.LayoutEditorController;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
-import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
@@ -117,8 +116,7 @@ public class SurfaceEditorLeaveTest {
     public void aHiddenDockComesBackOnDiscard() {
         LayoutEditorController layout = layoutEditor();
         SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.TERMINAL, layout);
-        String normal = PlaceArrangeSnapshot.capture(places, LayoutVariant.NORMAL).signature();
-        String home = PlaceArrangeSnapshot.capture(places, LayoutVariant.HOME).signature();
+        com.termux.app.place.layout.Layouts atOpen = places.layouts().current();
         assertTrue(layout.isShown(Element.APPS));
 
         model(editor).onValue(Row.VISIBLE, 0, false);
@@ -129,9 +127,7 @@ public class SurfaceEditorLeaveTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         click(DialogInterface.BUTTON_NEGATIVE);
 
-        assertEquals(normal, PlaceArrangeSnapshot.capture(places, LayoutVariant.NORMAL).signature());
-        assertEquals(home, PlaceArrangeSnapshot.capture(places, LayoutVariant.HOME).signature());
-    }
+        assertEquals("every layout as the editor found it", atOpen, places.layouts().current());    }
 
     @Test
     public void doneKeepsAndAsksNothing() {

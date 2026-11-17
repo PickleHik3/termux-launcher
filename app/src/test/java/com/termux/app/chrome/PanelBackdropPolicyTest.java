@@ -3,9 +3,11 @@ package com.termux.app.chrome;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.chrome.PanelBackdropPolicy.Kind;
+import com.termux.app.glass.GlassKind;
 
 import org.junit.Test;
 
@@ -15,19 +17,28 @@ public class PanelBackdropPolicyTest {
 
     private static final int S = 31;
 
-    @Test public void liveOnlyWithTheSwitchInTheLaunchersWindowAndASlotFree() {
-        assertEquals(Kind.LIVE, PanelBackdropPolicy.kind(S, true, true, true, true));
-        assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(S, true, false, true, true));
+    @Test public void liveOnlyWhenTheServiceGrantsIt() {
+        assertEquals(Kind.LIVE, PanelBackdropPolicy.kind(S, true, true));
+        // Live blur off, memory short or no slot free: the service did not grant it.
+        assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(S, true, false));
+    }
+
+    @Test public void aPanelAsksForLiveOnlyOnTheGpuInTheLaunchersWindow() {
+        assertEquals(GlassKind.LIVE, PanelBackdropPolicy.wants(S, true, true));
         // A popup menu is a window of its own: the recorder does not refresh it.
-        assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(S, true, true, false, true));
-        assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(S, true, true, true, false));
+        assertEquals(GlassKind.SNAPSHOT, PanelBackdropPolicy.wants(S, true, false));
+        for (int sdk = 26; sdk < S; sdk++) {
+            assertEquals(GlassKind.SNAPSHOT, PanelBackdropPolicy.wants(sdk, true, true));
+        }
+        // Nothing to ask for when the stored frame stands in.
+        assertNull(PanelBackdropPolicy.wants(S, false, true));
+        assertNull(PanelBackdropPolicy.wants(25, true, true));
     }
 
     @Test public void belowAndroid12EveryPanelIsASoftwareSnapshotAndNeverLive() {
         for (int sdk = 26; sdk < S; sdk++) {
-            assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(sdk, true, true, true, true));
-            assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(sdk, true, false, true, true));
-            assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(sdk, true, true, false, true));
+            assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(sdk, true, true));
+            assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(sdk, true, false));
             assertTrue(PanelBackdropPolicy.canRecord(sdk));
             assertFalse(PanelBackdropPolicy.onGpu(sdk));
         }
@@ -36,9 +47,9 @@ public class PanelBackdropPolicyTest {
     }
 
     @Test public void theStoredFrameWithNoRecorderOrBeforeAndroid8() {
-        assertEquals(Kind.STORED, PanelBackdropPolicy.kind(S, false, true, true, true));
-        assertEquals(Kind.STORED, PanelBackdropPolicy.kind(30, false, false, true, true));
-        assertEquals(Kind.STORED, PanelBackdropPolicy.kind(25, true, false, true, true));
+        assertEquals(Kind.STORED, PanelBackdropPolicy.kind(S, false, true));
+        assertEquals(Kind.STORED, PanelBackdropPolicy.kind(30, false, false));
+        assertEquals(Kind.STORED, PanelBackdropPolicy.kind(25, true, false));
         assertFalse(PanelBackdropPolicy.canRecord(25));
     }
 

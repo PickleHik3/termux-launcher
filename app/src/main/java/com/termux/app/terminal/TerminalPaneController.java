@@ -5777,27 +5777,6 @@ public class TerminalPaneController {
     private boolean mDressedOpeningLine;
 
     /**
-     * The wall moved the terminal page, or the wallpaper panned under it: every slab re-aims at
-     * whatever is behind it now. The wall moves its pages by translation, which never redraws a
-     * child, and the frost is aimed in screen space, so this runs per frame of a slide — and does
-     * nothing but invalidate, so a slide costs no allocation here.
-     */
-    public void invalidatePaneGlassPositions() {
-        for (PaneGlassBackdropView backdrop : mPaneGlassViews.values()) {
-            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE)
-                backdrop.invalidateGlassPosition();
-        }
-        if (mInteractionOverlay != null) {
-            PaneControlsView tab = mInteractionOverlay.controlsView();
-            if (tab != null && tab.hasPaneGlass()) tab.invalidate();
-        }
-        for (FloatingPaneContainer container : mFloatContainers.values())
-            container.titlebar().invalidateGlassPosition();
-        for (FloatingPaneContainer container : mHomeFloatContainers.values())
-            container.titlebar().invalidateGlassPosition();
-    }
-
-    /**
      * Draws the panes' slabs onto {@code canvas} as the window-switch card: see
      * {@link DepartureCard#draw}. False, drawing nothing, while no pane wears a slab.
      */

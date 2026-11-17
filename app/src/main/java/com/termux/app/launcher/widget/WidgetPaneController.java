@@ -3191,31 +3191,29 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     /**
-     * The Home card's "Glass widgets" switch moved: every built-in widget's own On or Off goes
-     * back to following it ({@link com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass#followPage}),
-     * and the page draws again.
-     *
-     * @return what each cleared widget held, by id, for the editor's Undo
+     * The Home card's "Glass widgets" switch moved: every built-in widget's own On or Off is shown
+     * following it, in the Appearance editor's draft
+     * ({@link LauncherWidgetRepository#draftGlassFollowsPage}), and the page draws again.
      */
-    @NonNull
-    public java.util.Map<Integer, String> clearBuiltinGlassChoices() {
-        java.util.Map<Integer, String> cleared = new java.util.LinkedHashMap<>();
-        java.util.List<LauncherWidgetRecord> changed =
-            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.followPage(
-                widgets.repository().records(), cleared);
-        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+    public void draftBuiltinGlassFollowsPage() {
+        if (widgets.repository().draftGlassFollowsPage())
             render();
-        return cleared;
     }
 
-    /** The editor's Undo of {@link #clearBuiltinGlassChoices}. */
-    public void restoreBuiltinGlassChoices(@NonNull java.util.Map<Integer, String> choices) {
-        if (choices.isEmpty())
-            return;
-        java.util.List<LauncherWidgetRecord> changed =
-            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.withChoices(
-                widgets.repository().records(), choices);
-        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+    /** Whether the editor's glass draft shows a widget other than the store holds it. */
+    public boolean isBuiltinGlassDraftDirty() {
+        return widgets.repository().isGlassDraftDirty();
+    }
+
+    /** The editor's Done: the glass draft is written, once. */
+    public void commitBuiltinGlassDraft() {
+        if (widgets.repository().commitGlassDraft())
+            render();
+    }
+
+    /** The editor's Discard or Undo: the glass draft goes and the widgets show the store again. */
+    public void discardBuiltinGlassDraft() {
+        if (widgets.repository().discardGlassDraft())
             render();
     }
 

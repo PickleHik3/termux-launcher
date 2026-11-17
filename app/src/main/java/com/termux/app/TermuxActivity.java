@@ -1972,7 +1972,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         // Battery saver is a Live policy input: the next apply reads it and the kinds move at once.
         mGlass.watchPowerSave(this, () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
-        com.termux.app.chrome.PanelBackdrop.install(getWindow().getDecorView(), mPanelBackdropSource);
+        // The tint sampler is the glass service's store of legibility corrections (ADR 0029 section 9).
+        mChrome.ink().attachLegibility(mGlass.legibility());
+        View panelDecor = getWindow().getDecorView();
+        com.termux.app.chrome.PanelBackdrop.install(panelDecor, mPanelBackdropSource);
+        com.termux.app.glass.GlassService.install(panelDecor, mGlass);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
         // to right in every locale. Reading-order overlays added here (help, tour, notices, the
@@ -4354,6 +4358,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean live = currentLiveBlur(look != null);
         // A policy event for the glass service when it moved: every Live kind follows at once.
         mGlass.setLiveOn(live);
+        // Light to dark makes every legibility correction stale; the same report again does not.
+        mGlass.legibility().onSchemeChanged((getResources().getConfiguration().uiMode
+            & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+            == android.content.res.Configuration.UI_MODE_NIGHT_YES);
         if (java.util.Objects.equals(look, mFancierGlassLook) && live == mLiveBlur) return;
         mFancierGlassLook = look;
         if (live != mLiveBlur) {
@@ -4418,8 +4426,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : rank == com.termux.app.chrome.LiveBackdrop.RANK_FLOAT
                 ? com.termux.app.glass.GlassEntry.PRIORITY_FLOAT
                 : com.termux.app.glass.GlassEntry.PRIORITY_DOCK;
+            // The dock stands in the chrome layer; floats and widgets on the pages.
             kind = mGlass.register(new com.termux.app.glass.GlassEntry(element, surface,
-                com.termux.app.glass.GlassKind.LIVE, priority), redress);
+                com.termux.app.glass.GlassKind.LIVE, priority,
+                priority == com.termux.app.glass.GlassEntry.PRIORITY_DOCK
+                    ? com.termux.app.window.WindowLayer.CHROME
+                    : com.termux.app.window.WindowLayer.PAGES, null), redress);
         }
         if (kind != com.termux.app.glass.GlassKind.LIVE) {
             if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);
@@ -4476,8 +4488,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return liveBackdrop();
             }
 
-            @Override public boolean liveBlur() {
-                return mLiveBlur;
+            @Nullable @Override public com.termux.app.glass.GlassService glass() {
+                return mGlass;
             }
         };
 
@@ -4569,10 +4581,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
-        if (!pagesReaimed && mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+        // The pane slabs and the tab are re-aimed by the glass service on every frame that draws
+        // (SlabAim), so only the pages' own widgets are told here.
         if (!pagesReaimed && mPaneWallController != null) {
             if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().onWallMoved();
-            if (mPaneWallController.displayWindow() != null) mPaneWallController.displayWindow().onWallMoved();
         }
         if (mParallaxFrostViews == null) {
             mParallaxFrostViews = new View[] {
@@ -7937,6 +7949,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean mKeyboardFacesJudgedThisCrossing;
 
+    /** This crossing pushed the arriving page's stored legends ({@link #pushStoredKeyboardGlassFaces}). */
+    private boolean mKeyboardFacesStoredThisCrossing;
+
     /** The keyboard band's laid-out rect as this pass measured it ({@link #measureInAppKeyboardBand}). */
     private final Rect mKeyboardBandRect = new Rect();
 
@@ -7963,7 +7978,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keyboard it brings up rises in the inks it lands in; the landing's apply re-judges at
         // rest (KeyboardFaceJudging).
         boolean crossing = mCrossing.crossing();
-        if (!crossing) mKeyboardFacesJudgedThisCrossing = false;
+        if (!crossing) {
+            mKeyboardFacesJudgedThisCrossing = false;
+            mKeyboardFacesStoredThisCrossing = false;
+        }
+        // A crossing measures nothing (ADR 0029 section 9): the legends of the page it arrives on
+        // are the ones rest kept for it. A page with none yet is judged as before, counted by the
+        // store's guard, until the landing keeps its own.
+        if (crossing) {
+            // No judging here: a look-only crossing drifts the legends between the two kept
+            // palettes (beginLegendBlend); any other crossing takes the arriving page's once.
+            if (!mGlassDragPreview && !mKeyboardBlendOn) pushStoredKeyboardGlassFaces(keyboard);
+            return;
+        }
         boolean bandMoved = mKeyboardBandAskedThisPass
             && !mKeyboardBandRect.equals(mKeyboardFacesJudgedRect);
         if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
@@ -7983,12 +8010,76 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             com.termux.app.chrome.ChromeInk ink = mChrome.ink();
             int[] faces = ink.bandFaces(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD);
-            keyboard.setGlassFaces(faces,
-                ink.bandTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD));
+            int tone = ink.bandTone(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD);
+            keyboard.setGlassFaces(faces, tone);
             mKeyboardFacesJudgedRect.set(mKeyboardBandRect);
+            recordKeyboardLegibility(faces, tone);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /**
+     * Keeps the keyboard's faces and legend tone as judged at this page's rest, for a crossing that
+     * arrives here. Nothing is built when they are what the store already holds; never in a crossing.
+     */
+    private void recordKeyboardLegibility(@NonNull int[] faces, int tone) {
+        syncLegibilityCrossing();
+        com.termux.app.glass.LegibilityStore store = mGlass.legibility();
+        if (store.crossing() || faces.length == 0) return;
+        Rect rest = mKeyboardBandRect;
+        com.termux.app.wall.PageRef page = endpointPageOf(mLastWallPage);
+        long key = legibilityKey(page);
+        int look = dockLegibilityLook(page);
+        com.termux.app.glass.LegibilityCorrection held = store.get(key,
+            com.termux.app.glass.LegibilityBand.KEYBOARD, rest.left, rest.top, rest.right,
+            rest.bottom, look);
+        if (held == null || !held.matches(faces, tone)) {
+            store.record(key, com.termux.app.glass.LegibilityBand.KEYBOARD, rest.left, rest.top,
+                rest.right, rest.bottom, look,
+                com.termux.app.glass.LegibilityCorrection.ofRows(faces, tone));
+        }
+        if (mPreferences == null) return;
+        // The legends every other page would settle on, worked out here at rest from that page's
+        // glass, so a crossing blends two kept palettes and judges nothing.
+        for (com.termux.app.wall.PaneWallPage kind : LEGIBILITY_KINDS) {
+            if (kind == page.kind) continue;
+            com.termux.app.wall.PageRef other = endpointPageOf(kind);
+            int otherLook = dockLegibilityLook(other);
+            if (!store.needsMeasure(legibilityKey(other),
+                    com.termux.app.glass.LegibilityBand.KEYBOARD, rest.left, rest.top, rest.right,
+                    rest.bottom, otherLook)) continue;
+            int lookId = lookIdOf(other);
+            int[] rows = new int[com.termux.app.chrome.ChromeInk.FACE_ROWS];
+            int otherTone = mChrome.ink().probeEitherToneUnderGlass(
+                com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
+                mPreferences.getAppBarOpacity(lookId) / 100f,
+                mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)), rows);
+            if (otherTone == 0) continue;
+            store.record(legibilityKey(other), com.termux.app.glass.LegibilityBand.KEYBOARD,
+                rest.left, rest.top, rest.right, rest.bottom, otherLook,
+                com.termux.app.glass.LegibilityCorrection.ofRows(rows, otherTone));
+        }
+    }
+
+    /**
+     * The keyboard's faces and legend tone for the page a crossing arrives on, as rest kept them,
+     * pushed once per crossing; false (and nothing pushed) when no correction is kept for it or the
+     * crossing already pushed one.
+     */
+    private boolean pushStoredKeyboardGlassFaces(@NonNull TermuxInAppKeyboard keyboard) {
+        if (mKeyboardFacesStoredThisCrossing) return true;
+        com.termux.app.wall.PaneWallPage other = mCrossing.seam().other();
+        if (other == null) return false;
+        com.termux.app.glass.LegibilityCorrection kept = mGlass.legibility().peek(
+            legibilityKey(endpointPageOf(other)), com.termux.app.glass.LegibilityBand.KEYBOARD);
+        if (kept == null) return false;
+        int[] faces = new int[kept.rows()];
+        for (int row = 0; row < faces.length; row++) faces[row] = kept.face(row);
+        keyboard.setGlassFaces(faces, kept.tone());
+        mKeyboardFacesJudgedThisCrossing = true;
+        mKeyboardFacesStoredThisCrossing = true;
+        return true;
     }
 
     /**
@@ -8136,31 +8227,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return false;
     }
 
-    /** The frost under the keyboard on a Display page; made on first use, see {@link #frostKeyboardOverDisplay}. */
-    @Nullable private com.termux.app.chrome.DisplayKeyboardBlur mKeyboardFrost;
+    /** The frost under the keyboard on a Display page (the glass service's Compositor kind); made on first use. */
+    @Nullable private com.termux.app.chrome.KeyboardFrost mKeyboardFrost;
 
     /**
-     * Puts the compositor's blur under the keyboard's bed at the Display-pages look's Frost, or
-     * leaves the bed see-through where Android does not blur windows now
-     * ({@link com.termux.app.chrome.DisplayKeyboardBlurPolicy}). Never waits on the blur: the bed
-     * is already painted, and a layer that cannot be made only leaves it unfrosted.
+     * Says where the keyboard's bed is over the display and what its Frost is; the glass service
+     * grants the compositor's blur under it, or leaves the bed see-through
+     * ({@link com.termux.app.chrome.KeyboardFrost}).
      */
     private void frostKeyboardOverDisplay(@NonNull View surfaceHost, float cornerPx) {
         if (mPreferences == null) return;
         if (mKeyboardFrost == null) {
-            // Battery saver, or the blur setting, turned over while the keyboard is up: the next
-            // pass decides again.
-            mKeyboardFrost = new com.termux.app.chrome.DisplayKeyboardBlur(this,
-                () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
+            mKeyboardFrost = new com.termux.app.chrome.KeyboardFrost(this, mGlass);
         }
-        mKeyboardFrost.want();
-        android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
-        int radiusPx = com.termux.app.chrome.DisplayKeyboardBlurPolicy.blurRadiusPx(
-            Build.VERSION.SDK_INT, mKeyboardFrost.crossWindowBlurEnabled(),
-            power != null && power.isPowerSaveMode(),
+        mKeyboardFrost.show(surfaceHost, displayView(),
             mPreferences.getInAppKeyboardBlurRadius(stackLookPage()),
-            getResources().getDisplayMetrics().density);
-        mKeyboardFrost.show(surfaceHost, displayView(), radiusPx, cornerPx);
+            getResources().getDisplayMetrics().density, cornerPx);
     }
 
     /** Takes the frost under the keyboard away and frees it; safe when there is none. */
@@ -13492,6 +13574,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncExtraKeysInk(float dockOpacity) {
         View keys = getVisibleExtraKeys();
         if (keys == null || keys.getWidth() <= 0 || keys.getHeight() <= 0) return;
+        // A look-only crossing is drifting these inks from what rest kept (beginLegendBlend).
+        if (mLegendBlendOn) return;
         mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
         // Where the row rests, not where a crossing's travel has it: the keys rise in the ink
         // they land in (GlassAnchor#layoutRectOnScreen).
@@ -13503,6 +13587,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int ink = GlassInk.faceInk(face, theme,
             mChrome.ink().target(OnGlass.TARGET_BODY_TEXT));
         mExtraKeysInk = ink;
+        recordDockLegibility(face);
+        applyExtraKeysInk(ink);
+    }
+
+    /** The extra keys' label ink on every page of the row; a page repaints only if its ink moved. */
+    private void applyExtraKeysInk(@androidx.annotation.ColorInt int ink) {
         // Each page compared on its own: a page rebuilt since (its theme colour back) is caught.
         for (int i = 0, n = extraKeysPageTotal(); i < n; i++) {
             ExtraKeysPageView view = extraKeysPageAt(i);
@@ -13511,6 +13601,155 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             view.setButtonTextColor(ink);
             view.refreshKeyStyles();
         }
+    }
+
+    // ------------------------------------------------------------------ legibility corrections
+
+    /** The glass service's key of {@code page}: its kind and its page id. */
+    private static long legibilityKey(@NonNull com.termux.app.wall.PageRef page) {
+        return com.termux.app.glass.LegibilityStore.pageKey(page.kind.ordinal(), page.id);
+    }
+
+    /**
+     * What a page's dock face depends on beyond the wallpaper and its rest rectangle: the dock's
+     * opacity and tint under that page's look. A look edit makes the page's correction stale.
+     */
+    private int dockLegibilityLook(@NonNull com.termux.app.wall.PageRef page) {
+        if (mPreferences == null) return 0;
+        int look = lookIdOf(page);
+        return mPreferences.getAppBarOpacity(look) * 131 + mPreferences.getDockTintStrength(look);
+    }
+
+    /** The store stands down while a crossing runs; read from the crossing itself, so it cannot stick. */
+    private void syncLegibilityCrossing() {
+        com.termux.app.glass.LegibilityStore store = mGlass.legibility();
+        if (store.crossing() == mCrossing.crossing()) return;
+        if (mCrossing.crossing()) store.beginCrossing();
+        else store.endCrossing();
+    }
+
+    /**
+     * Keeps the dock's face as measured at this page's rest ({@code face}, under the extra keys'
+     * rest rect), and measures once the page a crossing from here would reach, if it has no
+     * correction yet or its look moved, so the crossing finds both ends kept. Never in a crossing:
+     * the store refuses it.
+     */
+    private void recordDockLegibility(@androidx.annotation.ColorInt int face) {
+        syncLegibilityCrossing();
+        com.termux.app.glass.LegibilityStore store = mGlass.legibility();
+        if (store.crossing() || Color.alpha(face) == 0) return;
+        Rect rest = mExtraKeysInkRect;
+        com.termux.app.wall.PageRef page = endpointPageOf(mLastWallPage);
+        store.recordFace(legibilityKey(page), com.termux.app.glass.LegibilityBand.DOCK,
+            rest.left, rest.top, rest.right, rest.bottom, dockLegibilityLook(page), face);
+        if (mPreferences == null) return;
+        // Every page a crossing from here can arrive on, so the store has both ends before it begins.
+        for (com.termux.app.wall.PaneWallPage kind : LEGIBILITY_KINDS) {
+            if (kind == page.kind) continue;
+            com.termux.app.wall.PageRef other = endpointPageOf(kind);
+            int look = dockLegibilityLook(other);
+            if (!store.needsMeasure(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
+                    rest.left, rest.top, rest.right, rest.bottom, look)) continue;
+            int lookId = lookIdOf(other);
+            int there = mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, rest,
+                mPreferences.getAppBarOpacity(lookId) / 100f,
+                mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)));
+            if (Color.alpha(there) == 0) continue;
+            store.recordFace(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
+                rest.left, rest.top, rest.right, rest.bottom, look, there);
+        }
+    }
+
+    /** The kinds of page a crossing begins or ends on, each measured at rest for the other's crossings. */
+    private static final com.termux.app.wall.PaneWallPage[] LEGIBILITY_KINDS = {
+        com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL,
+        com.termux.app.wall.PaneWallPage.DISPLAY, com.termux.app.wall.PaneWallPage.ASSISTANT};
+
+    /** The extra keys' ink at each end of a look-only crossing; set by {@link #beginLegendBlend}. */
+    private boolean mLegendBlendOn;
+    @androidx.annotation.ColorInt private int mLegendInkHere;
+    @androidx.annotation.ColorInt private int mLegendInkThere;
+
+    /**
+     * A look-only crossing begins: the extra keys' ink at each end is chosen from the face rest
+     * kept for that page, so the legends drift between the two on the glass's own curve instead of
+     * flipping at the landing. Without a kept face for both ends nothing drifts and the landing's
+     * re-dress inks as it always did; nothing is measured either way.
+     */
+    private void beginLegendBlend(@NonNull com.termux.app.wall.PageRef here,
+                                  @NonNull com.termux.app.wall.PageRef there) {
+        endLegendBlend();
+        if (mChrome == null) return;
+        com.termux.app.glass.LegibilityStore store = mGlass.legibility();
+        long hereKey = legibilityKey(here);
+        long thereKey = legibilityKey(there);
+        com.termux.app.glass.LegibilityCorrection from =
+            store.peek(hereKey, com.termux.app.glass.LegibilityBand.DOCK);
+        com.termux.app.glass.LegibilityCorrection to =
+            store.peek(thereKey, com.termux.app.glass.LegibilityBand.DOCK);
+        if (from != null && to != null) {
+            View keys = getVisibleExtraKeys();
+            if (keys != null) {
+                int theme = ThemeUtils.getSystemAttrColor(keys.getContext(),
+                    ExtraKeysPageView.ATTR_BUTTON_TEXT_COLOR,
+                    ExtraKeysPageView.DEFAULT_BUTTON_TEXT_COLOR);
+                double target = mChrome.ink().target(OnGlass.TARGET_BODY_TEXT);
+                mLegendInkHere = GlassInk.faceInk(from.face(0), theme, target);
+                mLegendInkThere = GlassInk.faceInk(to.face(0), theme, target);
+                mLegendBlendOn = true;
+            }
+            // The tiles' glyphs and the prompt line drift on the same curve, each choosing its
+            // ink at either end on that end's face by its own rule.
+            mDock.beginTilesInkBlend(from.face(0), to.face(0),
+                mChrome.ink().target(OnGlass.TARGET_LARGE_TEXT));
+            mTilesInkBlendOn = true;
+            com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
+            if (field != null) {
+                field.beginInkBlend(from.face(0), to.face(0));
+                mPromptInkBlendOn = true;
+            }
+        }
+        com.termux.app.glass.LegibilityCorrection keysFrom =
+            store.peek(hereKey, com.termux.app.glass.LegibilityBand.KEYBOARD);
+        com.termux.app.glass.LegibilityCorrection keysTo =
+            store.peek(thereKey, com.termux.app.glass.LegibilityBand.KEYBOARD);
+        TermuxInAppKeyboard keyboard = mInAppKeyboard;
+        if (keysFrom != null && keysTo != null && keyboard != null) {
+            keyboard.beginGlassBlend(facesOf(keysFrom), keysFrom.tone(), facesOf(keysTo),
+                keysTo.tone());
+            mKeyboardBlendOn = true;
+        }
+    }
+
+    @NonNull
+    private static int[] facesOf(@NonNull com.termux.app.glass.LegibilityCorrection correction) {
+        int[] faces = new int[correction.rows()];
+        for (int row = 0; row < faces.length; row++) faces[row] = correction.face(row);
+        return faces;
+    }
+
+    private boolean mTilesInkBlendOn;
+    private boolean mPromptInkBlendOn;
+    private boolean mKeyboardBlendOn;
+
+    private void legendBlend(float share) {
+        if (mLegendBlendOn) {
+            applyExtraKeysInk(com.termux.app.glass.LegibilityBlend.color(mLegendInkHere,
+                mLegendInkThere, share));
+        }
+        if (mTilesInkBlendOn) mDock.tilesInkBlend(share);
+        if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.setInkBlend(share);
+        if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.setGlassBlend(share);
+    }
+
+    private void endLegendBlend() {
+        mLegendBlendOn = false;
+        if (mTilesInkBlendOn) mDock.endTilesInkBlend();
+        mTilesInkBlendOn = false;
+        if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.endInkBlend();
+        mPromptInkBlendOn = false;
+        if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.endGlassBlend();
+        mKeyboardBlendOn = false;
     }
 
     /**
@@ -14133,15 +14372,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.setMinimalMode(minimal);
         }
 
-        @NonNull @Override public java.util.Map<Integer, String> clearWidgetGlassChoices() {
-            return mWidgetPaneController == null ? java.util.Collections.emptyMap()
-                : mWidgetPaneController.clearBuiltinGlassChoices();
-        }
-
-        @Override public void restoreWidgetGlassChoices(
-                @NonNull java.util.Map<Integer, String> choices) {
-            if (mWidgetPaneController != null)
-                mWidgetPaneController.restoreBuiltinGlassChoices(choices);
+        @Nullable @Override
+        public com.termux.app.surfaces.SurfaceEditorController.WidgetGlassDraft widgetGlassDraft() {
+            com.termux.app.launcher.widget.WidgetPaneController widgets = mWidgetPaneController;
+            if (widgets == null) return null;
+            return new com.termux.app.surfaces.SurfaceEditorController.WidgetGlassDraft() {
+                @Override public void followPage() { widgets.draftBuiltinGlassFollowsPage(); }
+                @Override public boolean isDirty() { return widgets.isBuiltinGlassDraftDirty(); }
+                @Override public void commit() { widgets.commitBuiltinGlassDraft(); }
+                @Override public void discard() { widgets.discardBuiltinGlassDraft(); }
+            };
         }
 
         @Override public void applyHomeSettings() {
@@ -24150,6 +24390,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.dressOf(page); }
         @Override public com.termux.app.place.LayoutVariant dressLayoutOf(@NonNull com.termux.app.wall.PageRef page) { return mDresses.layoutOf(page); }
         @Override public int lookIdOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.lookIdOf(page); }
+        @Override public void legibilityCrossingBegan() { TermuxActivity.this.syncLegibilityCrossing(); }
+        @Override public void beginLegendBlend(@NonNull com.termux.app.wall.PageRef here,
+                @NonNull com.termux.app.wall.PageRef there) { TermuxActivity.this.beginLegendBlend(here, there); }
+        @Override public void legendBlend(float share) { TermuxActivity.this.legendBlend(share); }
+        @Override public void endLegendBlend() { TermuxActivity.this.endLegendBlend(); }
         @Override public com.termux.app.look.PageLook.Snapshot pageLookOf(@NonNull com.termux.app.wall.PageRef page) { return TermuxActivity.this.pageLookOf(page); }
         @Override public com.termux.app.wall.PaneWallPage stackDressPage() { return TermuxActivity.this.stackDressPage(); }
         @Override public @Nullable com.termux.app.place.StackLayout.Result appliedStack() { return mAppliedStack; }
@@ -24440,6 +24685,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.endSection();
             Trace.beginSection("Settle.tail");
             mCrossing.end();
+            syncLegibilityCrossing();
             // What waits for the landed frame (the half's re-dress, the even-out's settle) runs
             // just after it.
             postLandingSettle();
@@ -25278,8 +25524,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // are the pane host's less the stroke's air on every side, so the two share
                     // a centre and one scale about it keeps the line where it frames the page.
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
-                    // The slabs' wallpaper stays on the screen while their page sinks under it.
-                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+                    // The slabs' wallpaper stays on the screen while their page sinks under it:
+                    // the glass service re-aims them in the frame the sink draws in.
                     View borderView = hotView(R.id.terminal_border_overlay);
                     if (borderView == null) return;
                     borderView.setPivotX(borderView.getWidth() / 2f);
@@ -25288,7 +25534,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     borderView.setScaleY(scale);
                 }
                 @Override public void onPagePoseChanged() {
-                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+                    // Nothing to push: the slabs follow their page's pose through the glass
+                    // service's commit (SlabAim).
                 }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
@@ -25345,13 +25592,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The dock, the keyboard and the status bar's content travel with the wall
                     // between the two places' states, as transforms only.
                     mCrossingController.syncChromeTravel(offsetPx);
-                    // The wallpaper pans with the wall, and every glass surface follows it; the
-                    // terminal's slabs re-aim whether or not it panned, since the page they sit
-                    // on moved over a wallpaper that did not go with it. Aimed once: the wall's
-                    // controller has re-aimed the other pages already, and the slabs are here.
+                    // The wallpaper pans with the wall, and every glass surface follows it. The
+                    // slabs, on the terminal's page or any other, re-aim in the frame the wall
+                    // moved in whether or not the wallpaper panned: the glass service asks each
+                    // of them at the commit (SlabAim), so nothing is pushed to them here.
                     Trace.beginSection("Wall.parallax");
                     syncWallpaperParallax(true);
-                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
                     Trace.endSection();
                     // The wall moved at all, so the terminal may be sliding back into the frame:
                     // any pane whose screen changed while it was away is drawn now, before the

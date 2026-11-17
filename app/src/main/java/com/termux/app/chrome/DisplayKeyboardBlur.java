@@ -9,7 +9,6 @@ import android.view.SurfaceControl;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
@@ -43,10 +42,14 @@ import java.util.function.Consumer;
  * Any failure there drops the layer for good in this process and leaves the bed see-through:
  * the keyboard never waits on, or is gated by, the blur.
  *
- * <p>Asked to {@link #show} on every keyboard material pass that paints the Display page's glass,
- * and to {@link #release} on every other pass, on pause and on stop.
+ * <p>It is the Compositor kind of the glass service (ADR 0029 section 2), owned by
+ * {@link KeyboardFrost}: asked to {@link #show} on every keyboard material pass that paints the
+ * Display page's glass, to {@link #follow} on every frame that draws while it is up (the glass
+ * commit calls it; this class registers no frame hook of its own), and to {@link #release} on every
+ * other pass, on pause and on stop. When the layer cannot be made or dressed it tells its owner
+ * ({@code onAvailabilityChanged}), which asks the service for Wallpaper.
  */
-public final class DisplayKeyboardBlur {
+public final class DisplayKeyboardBlur implements KeyboardFrost.Layer {
 
     private static final String LOG_TAG = "DisplayKeyboardBlur";
 
@@ -63,7 +66,10 @@ public final class DisplayKeyboardBlur {
     @Nullable private static Method sSetCrop;
 
     @NonNull private final Activity mActivity;
-    /** Called when Android turns window blur on or off while the keyboard is over the display. */
+    /**
+     * Called when Android turns window blur on or off while the keyboard is over the display, when
+     * the display's surface is new, and when the layer fails for good.
+     */
     @NonNull private final Runnable mOnAvailabilityChanged;
 
     @Nullable private SurfaceControl mLayer;
@@ -73,7 +79,6 @@ public final class DisplayKeyboardBlur {
     @Nullable private View mHost;
     /** The display whose surface callbacks are followed while the keyboard is over it. */
     @Nullable private SurfaceView mDisplay;
-    @Nullable private ViewTreeObserver mObserved;
     /** Reused for every geometry change from API 33, where a merge empties it on the UI thread. */
     @Nullable private SurfaceControl.Transaction mTransaction;
 
@@ -94,11 +99,6 @@ public final class DisplayKeyboardBlur {
     private boolean mBlurEnabled = true;
     @Nullable private Consumer<Boolean> mBlurListener;
 
-    private final ViewTreeObserver.OnPreDrawListener mFollower = () -> {
-        follow();
-        return true;
-    };
-
     /** The display's surface going takes the frost with it; a new one asks for a pass. */
     private final SurfaceHolder.Callback mSurfaceFollower = new SurfaceHolder.Callback() {
         @Override public void surfaceCreated(@NonNull SurfaceHolder holder) {
@@ -118,10 +118,17 @@ public final class DisplayKeyboardBlur {
         mOnAvailabilityChanged = onAvailabilityChanged;
     }
 
+    /** Whether a call the layer needs is missing or failed in this process: no layer is made again. */
+    @Override
+    public boolean unavailable() {
+        return sUnavailable;
+    }
+
     /**
      * Whether Android lets windows blur what is behind them, as its listener last said. True
      * below API 31 too: {@link DisplayKeyboardBlurPolicy} turns the blur off there by API level.
      */
+    @Override
     public boolean crossWindowBlurEnabled() {
         return mBlurEnabled;
     }
@@ -130,6 +137,7 @@ public final class DisplayKeyboardBlur {
      * Notes that the keyboard is over a Display page, so Android's blur switch is followed
      * ({@link #crossWindowBlurEnabled}) before the radius is decided. Safe to call on every pass.
      */
+    @Override
     public void want() {
         if (mWanted) return;
         mWanted = true;
@@ -142,6 +150,7 @@ public final class DisplayKeyboardBlur {
      * {@code cornerPx}. A radius of 0, no display, or a layer that cannot be made takes the layer
      * away and leaves the bed see-through. Returns whether the layer is up.
      */
+    @Override
     public boolean show(@NonNull View host, @Nullable SurfaceView display, int radiusPx,
                         float cornerPx) {
         want();
@@ -160,6 +169,7 @@ public final class DisplayKeyboardBlur {
     }
 
     /** Takes the layer away and stops listening: the keyboard hid, the page changed, or a pause. */
+    @Override
     public void release() {
         dropLayer();
         followSurfaceOf(null);
@@ -229,15 +239,7 @@ public final class DisplayKeyboardBlur {
             mCornerPx = -1f;
             resetGeometry();
         }
-        if (mHost != host) {
-            unfollow();
-            mHost = host;
-        }
-        if (mObserved == null || !mObserved.isAlive() || mObserved != host.getViewTreeObserver()) {
-            unfollow();
-            mObserved = host.getViewTreeObserver();
-            mObserved.addOnPreDrawListener(mFollower);
-        }
+        mHost = host;
         if (radiusPx != mRadiusPx || cornerPx != mCornerPx) {
             SurfaceControl.Transaction t = transaction();
             sSetBackgroundBlurRadius.invoke(t, mLayer, radiusPx);
@@ -254,9 +256,11 @@ public final class DisplayKeyboardBlur {
      * Moves the layer to the host's rect in the display's space, and hides it while either is not
      * on screen, in the frame the window draws in. Runs before every frame the window draws while
      * the layer is up; at rest it costs two location reads and a few compares, and nothing is
-     * sent. A display whose surface was replaced under it drops the layer and asks for a pass.
+     * sent. A display whose surface was replaced under it drops the layer and asks its owner to make
+     * a new one.
      */
-    private void follow() {
+    @Override
+    public void follow() {
         SurfaceControl layer = mLayer;
         View host = mHost;
         SurfaceView display = mDisplay;
@@ -328,11 +332,6 @@ public final class DisplayKeyboardBlur {
         if (root == null || !root.applyTransactionOnDraw(t)) t.apply();
     }
 
-    private void unfollow() {
-        if (mObserved != null && mObserved.isAlive()) mObserved.removeOnPreDrawListener(mFollower);
-        mObserved = null;
-    }
-
     private void resetGeometry() {
         mX = Integer.MIN_VALUE;
         mY = Integer.MIN_VALUE;
@@ -343,7 +342,6 @@ public final class DisplayKeyboardBlur {
 
     /** Takes the layer off the window and frees it, keeping the blur-switch listener. */
     private void dropLayer() {
-        unfollow();
         mHost = null;
         SurfaceControl layer = mLayer;
         mLayer = null;
@@ -369,6 +367,8 @@ public final class DisplayKeyboardBlur {
         sUnavailable = true;
         Logger.logStackTraceWithMessage(LOG_TAG, message + "; the keyboard stays see-through", t);
         dropLayer();
+        // The service takes the Compositor away: a policy event like any other.
+        mOnAvailabilityChanged.run();
     }
 
     /** Looks the hidden calls up once; false, and never again, when one is missing. */

@@ -2012,7 +2012,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
         if (!(blur instanceof ImageView)) return;
         if (mBackdrop == null) {
-            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur);
+            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, "drawer");
             mBackdrop.setScene(mSettledScene);
             // The scene dim is the host's background: beneath the glass on screen, but a recording
             // holds only the views beneath, so the picture wears the settled dim itself.

@@ -134,6 +134,37 @@ public final class PlaceArrangeSnapshot {
         }
     }
 
+    /**
+     * The document fields {@link #signature} reads as resolved: each element's edge, show, place in
+     * its stack and edge to come back to, the keyboard's mode and form, the bars' order, the widget grid, the four
+     * sizes, and the keyboard switch, Dock design, Search field and Drawer tile. A field written
+     * out at the value it already resolved to changes no signature.
+     */
+    public static final java.util.Set<String> FIELDS;
+
+    static {
+        java.util.Set<String> fields = new java.util.HashSet<>();
+        for (Element element : Element.values()) {
+            fields.add(element.storageKey());
+            fields.add(element.storageKey() + com.termux.app.place.layout.LayoutsJson.ORDER_SUFFIX);
+            fields.add(element.storageKey()
+                + com.termux.app.place.layout.LayoutsJson.UNDER_KEYBOARD_SUFFIX);
+            // Where a put-away element comes back to: seen only through the slot once it is back.
+            fields.add(element.storageKey()
+                + com.termux.app.place.layout.LayoutsJson.RESTORE_EDGE_SUFFIX);
+        }
+        fields.add(com.termux.app.place.layout.LayoutsJson.KEYBOARD_MODE);
+        fields.add(com.termux.app.place.layout.LayoutsJson.KEYBOARD_FORM);
+        fields.add(com.termux.app.place.layout.LayoutsJson.BAR_ORDER);
+        fields.addAll(com.termux.app.place.layout.LayoutsJson.GRID_FIELDS);
+        fields.addAll(com.termux.app.place.layout.LayoutsJson.SIZE_FIELDS);
+        fields.add(com.termux.app.place.layout.LayoutsJson.KEYBOARD_SHOWN);
+        fields.add(com.termux.app.place.layout.LayoutsJson.DOCK_DESIGN);
+        fields.add(com.termux.app.place.layout.LayoutsJson.SEARCH_FIELD);
+        fields.add(com.termux.app.place.layout.LayoutsJson.DRAWER_TILE);
+        FIELDS = java.util.Collections.unmodifiableSet(fields);
+    }
+
     @NonNull private final LayoutVariant mVariant;
     @NonNull private final List<Entry> mEntries;
     /** The keyboard element, on or off: one switch for both orientations, captured once. */

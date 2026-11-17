@@ -1502,6 +1502,18 @@ public class Keyboard2View extends View
     invalidate();
   }
 
+  /**
+   * Local addition (see UPSTREAM.md, "Palette blend"): {@link #setPalette} for a palette that
+   * differs from the current one in colours alone. No layout is requested; only the keys repaint.
+   */
+  public void setPaletteColors(Theme.Palette palette)
+  {
+    requireMainThread();
+    _theme = new Theme(getContext(), Objects.requireNonNull(palette, "palette"));
+    applyTheme();
+    invalidate();
+  }
+
   public void setShiftLocked(boolean locked)
   {
     requireMainThread();

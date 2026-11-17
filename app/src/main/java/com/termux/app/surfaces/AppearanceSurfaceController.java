@@ -396,6 +396,8 @@ public final class AppearanceSurfaceController {
     /** The apply answered; the picker stays up, busy, until {@link WallpaperApplyHold} says. */
     private boolean mHolding;
     private long mApplyFinishedAt;
+    /** The wait for the new colours, named so a device log says how each one ended. */
+    @Nullable private com.termux.app.window.Hold mColoursHold;
     /** The latest system colours callback since the apply began; {@link WallpaperApplyHold#NONE}. */
     private long mColoursAt = WallpaperApplyHold.NONE;
     private int mHoldSeq;
@@ -977,6 +979,10 @@ public final class AppearanceSurfaceController {
         mCommitting = true;
         mHolding = true;
         mApplyFinishedAt = mHost.uptime();
+        com.termux.app.window.Hold hold = com.termux.app.window.Hold.take("wallpaper-colours",
+            WallpaperApplyHold.CEILING_MS, com.termux.app.window.Hold.NO_FRAME_LIMIT, mHost::uptime);
+        mColoursHold = hold;
+        hold.onRelease(this::endHold);
         overview.holdBusy(true);
         scheduleHoldCheck();
     }
@@ -984,9 +990,17 @@ public final class AppearanceSurfaceController {
     /** Ends the hold when its time is up, else looks again when it would be. */
     private void scheduleHoldCheck() {
         final int seq = ++mHoldSeq;
+        com.termux.app.window.Hold hold = mColoursHold;
         long wait = WallpaperApplyHold.remainingMs(mApplyFinishedAt, mColoursAt, mHost.uptime());
+        if (hold == null || !hold.pollBackstop()) {
+            // The ceiling passed: the hold released itself (and ended the picker's wait).
+            if (hold == null) endHold();
+            return;
+        }
         if (wait <= 0) {
-            endHold();
+            // The rule's own end: no colours came, or the relaunch they announced did not.
+            if (mColoursAt == WallpaperApplyHold.NONE) hold.release("quiet", null);
+            else hold.landing();
             return;
         }
         mMain.postDelayed(() -> {
@@ -1006,6 +1020,13 @@ public final class AppearanceSurfaceController {
     }
 
     private void resetHold() {
+        com.termux.app.window.Hold hold = mColoursHold;
+        mColoursHold = null;
+        if (hold != null) {
+            // Let go without ending the picker's wait: a relaunch or a close carries on from here.
+            hold.onRelease(() -> {});
+            hold.release("abandoned", null);
+        }
         mHoldSeq++;
         mHolding = false;
         mApplying = false;

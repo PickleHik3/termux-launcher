@@ -61,7 +61,7 @@ public class LayoutEditorSharedLayoutTest {
     }
 
     private LayoutEditorPlan onHome() {
-        return LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        return DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
     }
 
     @Test

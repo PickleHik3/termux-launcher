@@ -464,6 +464,32 @@ public final class PlaceLayoutStore {
     /** True while the migration runs: slots read what the arrangement keys held. */
     private final java.util.concurrent.atomic.AtomicBoolean mMigrating;
 
+    /**
+     * This store as the layouts file holds it, the Appearance editor's draft left out: a reading
+     * for the editor's unsaved question, which compares what each layout resolves to on both
+     * sides. Its caches are its own and it writes nothing; this store itself where there are no
+     * documents yet.
+     */
+    @NonNull
+    public PlaceLayoutStore storedReading() {
+        return mStore instanceof LayoutDocumentPrefs
+            ? new PlaceLayoutStore(this, ((LayoutDocumentPrefs) mStore).storedOnly()) : this;
+    }
+
+    private PlaceLayoutStore(@NonNull PlaceLayoutStore root, @NonNull SharedPreferences stored) {
+        mPreferences = root.mPreferences;
+        mStore = stored;
+        mRevision = new AtomicInteger();
+        mFixedVariant = root.mFixedVariant;
+        mMigrating = new java.util.concurrent.atomic.AtomicBoolean();
+        // The layouts this store has seeded read as seeded here too; a copy, so this reading,
+        // which writes nothing, never marks one seeded for the store.
+        mSeeded = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        mSeeded.addAll(root.mSeeded);
+        mVariantViews = new java.util.concurrent.ConcurrentHashMap<>();
+        mShownPages = root.mShownPages;
+    }
+
     private PlaceLayoutStore(@NonNull PlaceLayoutStore root, @NonNull LayoutVariant variant) {
         mPreferences = root.mPreferences;
         mStore = root.mStore;
@@ -1091,7 +1117,15 @@ public final class PlaceLayoutStore {
             return;
         }
         if (mPreferences.isKeyboardTurnedOff() == !shown) return;
-        mPreferences.setKeyboardTurnedOff(!shown);
+        // The switch is the Appearance editor's while its draft is open: written there, so Done
+        // stores it and Discard drops it with the rest of the arrangement.
+        TermuxAppSharedPreferences writes = mPreferences;
+        com.termux.shared.settings.preferences.PreferenceDraft draft =
+            com.termux.shared.settings.preferences.PreferenceDraft.current();
+        if (draft != null && draft.isOpen()
+                && draft.store() == mPreferences.getSharedPreferences())
+            writes = mPreferences.overDraft(draft);
+        writes.setKeyboardTurnedOff(!shown);
         mRevision.incrementAndGet();
     }
 
@@ -1964,6 +1998,18 @@ public final class PlaceLayoutStore {
      * it back to this.
      */
     private void seedIfNeeded(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation) {
+        com.termux.app.place.layout.LayoutStore documents = layouts();
+        // The seed is the store's, not the Appearance editor's: past its draft, so a read made
+        // with the editor open neither shows it as an edit nor leaves Discard to drop it.
+        if (documents != null && documents.isDraftOpen() && variant == LayoutVariant.MINIMAL
+                && !mSeeded.contains(seededKey(variant, orientation))) {
+            documents.writePastDraft(() -> seedNow(variant, orientation));
+            return;
+        }
+        seedNow(variant, orientation);
+    }
+
+    private void seedNow(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation) {
         if (mStore == null || variant == LayoutVariant.NORMAL
             // With the documents in use only Terminal-minimal starts from another layout; the
             // others were folded whole by step 17 or read their shipped defaults.

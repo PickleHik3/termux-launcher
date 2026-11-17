@@ -164,12 +164,12 @@ public class PlaceLayoutHomeLayoutTest {
     }
 
     @Test
-    public void theEditorsSnapshotOfHomeKeepsAlwaysOn() {
+    public void theEditorsDraftOfHomeKeepsAlwaysOn() {
         PlaceLayoutStore store = store();
-        PlaceArrangeSnapshot before = PlaceArrangeSnapshot.capture(store, LayoutVariant.HOME);
+        store.layouts().beginDraft();
         store.forVariant(LayoutVariant.HOME).setKeyboardShown(true);
         assertTrue(store.isHomeKeyboardAlwaysOn());
-        before.restore(store);
+        store.layouts().discardDraft();
         assertFalse("Discard puts always on back", store.isHomeKeyboardAlwaysOn());
         assertFalse("and never touches the switch", launcher.isKeyboardTurnedOff());
     }

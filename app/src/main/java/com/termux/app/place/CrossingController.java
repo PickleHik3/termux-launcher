@@ -137,6 +137,22 @@ public final class CrossingController {
         /** The look id of {@code page}. */
         int lookIdOf(@NonNull com.termux.app.wall.PageRef page);
 
+        /** A crossing began: the legibility store stands down from measuring until it lands. */
+        default void legibilityCrossingBegan() {}
+
+        /**
+         * A look-only crossing begins between two pages: the dock's legends are to drift from
+         * {@code here}'s ink to {@code there}'s on the crossing's curve, from what rest measured.
+         */
+        default void beginLegendBlend(@NonNull com.termux.app.wall.PageRef here,
+                                      @NonNull com.termux.app.wall.PageRef there) {}
+
+        /** The legends at {@code share} (0 at {@code here}'s ink, 1 at {@code there}'s). */
+        default void legendBlend(float share) {}
+
+        /** The blend is over; the landing's re-dress inks the legends for the page it lands on. */
+        default void endLegendBlend() {}
+
         /** The look {@code page} wears. */
         com.termux.app.look.PageLook.Snapshot pageLookOf(@NonNull com.termux.app.wall.PageRef page);
 
@@ -872,6 +888,8 @@ public final class CrossingController {
         mLookBlendThereOpacity = mHost.preferences() == null ? 100
             : mHost.preferences().getAppBarOpacity(mHost.lookIdOf(therePage));
         beginStackLookBlend(therePage);
+        mHost.legibilityCrossingBegan();
+        if (mCrossing.seam().lookBlends()) mHost.beginLegendBlend(herePage, therePage);
         // The strip under the pill stands still through the crossing and crosses dresses by alpha.
         mHost.beginNavStripFade(herePage, therePage);
         mHost.beginTopBandFade(herePage, therePage);
@@ -1013,6 +1031,8 @@ public final class CrossingController {
         mLookBlendShare = share;
         // The dock's sheet, its opacity, tint and grain: a redraw at the step, nothing built.
         if (mLookBlendDock != null) mLookBlendDock.setShare(share);
+        // The legends drift on the same step, from the corrections rest kept: nothing measured.
+        mHost.legendBlend(share);
         android.widget.ImageView backdrop = mHost.hotView(R.id.accessory_blur_backdrop);
         if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) return;
         int opacity = com.termux.app.place.SeamCrossing.lookBlendValue(mLookBlendHereOpacity,
@@ -1045,6 +1065,7 @@ public final class CrossingController {
 
     /** The blend is over: the sheet keeps the end it reached, nothing rebuilt. */
     public void endStackLookBlend() {
+        mHost.endLegendBlend();
         com.termux.app.chrome.CrossfadeDrawable blend = mLookBlendDock;
         mLookBlendDock = null;
         if (blend == null) return;

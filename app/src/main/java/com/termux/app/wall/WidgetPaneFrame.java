@@ -832,14 +832,12 @@ public final class WidgetPaneFrame extends PaneContentFrame
     }
 
     /**
-     * The wall moved this page, or the wallpaper panned under it: the slab re-aims at whatever
-     * is behind it now. Per frame of a slide, so nothing here but an invalidate.
+     * The wall moved this page, or the wallpaper panned under it: its widgets re-dress. The slab
+     * and the tab re-aim through the glass service ({@code SlabAim}). Per frame of a slide.
      */
     public void onWallMoved() {
-        if (mGlass != null) mGlass.invalidateGlassPosition();
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets)
             widget.onGlassMoved();
-        if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
     }
 
     /** How much of the page's rim the wall's slide leaves showing; see PaneWallPolicy#outlineAlpha. */
