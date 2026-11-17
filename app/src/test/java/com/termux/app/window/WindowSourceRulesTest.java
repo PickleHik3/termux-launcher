@@ -217,8 +217,6 @@ public class WindowSourceRulesTest {
         "app/launcher/widget/builtin/BuiltinWidgetView.java:2",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/setup/SetupWizardController.java:2",
-        // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
-        "app/surfaces/RelaunchReveal.java:1",
         // local first-layout wait: moves onto the first-layout helper
         "app/surfaces/SurfaceEditorController.java:3",
         // own frame tick or fling step: moves into the pipeline table or the helper
@@ -362,7 +360,7 @@ public class WindowSourceRulesTest {
     /** Files that reach the decor or the content view while adding views, with the count of sites. */
     static final List<String> DECOR_OR_CONTENT_ADDS = Arrays.asList(
         // decor and content view: moves into the layer hosts
-        "app/TermuxActivity.java:85",
+        "app/TermuxActivity.java:84",
         // decor and content view: moves into the layer hosts
         "app/chrome/scene/SceneController.java:2",
         // decor and content view: moves into the layer hosts

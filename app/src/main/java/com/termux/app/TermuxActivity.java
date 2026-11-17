@@ -11015,18 +11015,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View root = findViewById(R.id.activity_termux_root_view);
         // The first frame drawn is the editor as it stood, not the plain home with the editor
         // cut in after: the window waits for it, with a time and a frame backstop.
-        final com.termux.app.surfaces.RelaunchReveal.Gate reveal =
-            com.termux.app.surfaces.RelaunchReveal.holdFirstDraw(getWindow().getDecorView(), true);
+        final com.termux.app.window.Hold reveal =
+            com.termux.app.surfaces.RelaunchReveal.hold(mFrames, true);
         Runnable open = () -> {
             if (isFinishing() || isDestroyed() || mAppearance.isOpen()
                 || !mAppearanceHandover.claim(carried)) {
-                if (reveal != null) reveal.release();
+                if (reveal != null) reveal.signal();
                 return;
             }
-            if (mAppearance.reopen(carried, reveal == null ? null : reveal::release))
+            if (mAppearance.reopen(carried, reveal == null ? null : reveal::signal))
                 mAppearanceFromSettings = fromSettings;
             else if (reveal != null)
-                reveal.release();
+                reveal.signal();
         };
         if (root != null) root.post(open);
         else open.run();
@@ -29440,29 +29440,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the one a widened parting has just asked for. The 160 ms backstop is the keyboard reveal
      * gate's, for the same reason — a layout that never comes must not swallow the pad.
      */
-    private final class DisplayTouchpadWait implements View.OnLayoutChangeListener, Runnable {
+    private final class DisplayTouchpadWait {
 
         @NonNull private final View mKeyboardView;
+        @NonNull private final com.termux.app.window.FirstLayout.Handle mLayoutWait;
 
         DisplayTouchpadWait(@NonNull View keyboardView) {
             mKeyboardView = keyboardView;
-            keyboardView.addOnLayoutChangeListener(this);
-            keyboardView.postDelayed(this, 160L);
+            mLayoutWait = com.termux.app.window.FirstLayout.afterNextLayout(keyboardView, 160L, this::onLaidOut);
         }
 
         boolean follows(@NonNull View keyboardView) {
             return mKeyboardView == keyboardView;
         }
 
-        @Override
-        public void onLayoutChange(View v, int l, int t, int r, int b,
-                                   int ol, int ot, int or, int ob) {
-            // The resume adds a view, which a layout pass is no place to do.
-            v.post(this);
-        }
-
-        @Override
-        public void run() {
+        private void onLaidOut() {
             if (mDisplayTouchpadWait != this) return;
             release();
             syncDisplayTouchpad();
@@ -29470,8 +29462,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         void release() {
             if (mDisplayTouchpadWait == this) mDisplayTouchpadWait = null;
-            mKeyboardView.removeOnLayoutChangeListener(this);
-            mKeyboardView.removeCallbacks(this);
+            mLayoutWait.cancel();
         }
     }
 

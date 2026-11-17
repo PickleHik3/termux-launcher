@@ -371,29 +371,12 @@ public class AppearanceSurfaceControllerTest {
     public void theFirstFrameIsHeldOnlyForAHandoverAndNeverPastItsBackstops() {
         assertFalse(RelaunchReveal.holds(false));
         assertTrue(RelaunchReveal.holds(true));
-        assertTrue(RelaunchReveal.stillHeld(false, 0, 0));
-        assertFalse("shown as carried", RelaunchReveal.stillHeld(true, 0, 0));
-        assertFalse("the time backstop",
-            RelaunchReveal.stillHeld(false, 1, RelaunchReveal.BACKSTOP_MS));
-        assertFalse("the frame backstop",
-            RelaunchReveal.stillHeld(false, RelaunchReveal.MAX_HELD_FRAMES, 1));
         assertNull("no handover, no hold",
-            RelaunchReveal.holdFirstDraw(activity.getWindow().getDecorView(), false));
-    }
-
-    @Test
-    public void aHeldWindowDrawsOnceReleasedOrPastItsBackstop() {
-        View decor = activity.getWindow().getDecorView();
-        RelaunchReveal.Gate gate = RelaunchReveal.holdFirstDraw(decor, true);
-        assertNotNull(gate);
-        assertFalse("held", gate.onPreDraw());
-        gate.release();
-        assertTrue(gate.onPreDraw());
-
-        RelaunchReveal.Gate late = RelaunchReveal.holdFirstDraw(decor, true);
-        assertNotNull(late);
-        idle(RelaunchReveal.BACKSTOP_MS + 10);
-        assertTrue("released by its backstop", late.onPreDraw());
+            RelaunchReveal.hold(new com.termux.app.window.FramePipeline(), false));
+        assertNull("no pipeline, no hold", RelaunchReveal.hold(null, true));
+        // The frame and time backstops are the pipeline's first-frame hold's (FramePipelineTest).
+        assertEquals(300L, RelaunchReveal.BACKSTOP_MS);
+        assertEquals(40, RelaunchReveal.MAX_HELD_FRAMES);
     }
 
     @Test
