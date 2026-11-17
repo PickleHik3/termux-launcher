@@ -290,6 +290,14 @@ fails when the catalogue has gone stale.
   changes, drawn at `PASTE_PICTURE_SCALE` (0.78) of the key's size so the full-em picture
   matches the key-font glyphs beside it; colour and the value sent are the key's own. Upstream has
   no such state.
+- Edge reach (local addition, 2026-11-16): `Keyboard2View.getKeyForPress` is what `onTouch`
+  asks on finger-down. A press on the keyboard's frame starts the outer key beside it: the margin
+  above the top row, the margin under the bottom row, the side margins, and a row's indent up to
+  `EDGE_REACH_KEY_WIDTHS` (half a key) from its first or last key. Upstream starts nothing there,
+  so a thumb that lands a few pixels off `q`, `a`, `p` or the bottom row loses the keystroke. The
+  cap keeps a blank wider than the usual half-key indent from typing a key the user was nowhere
+  near. Space between two keys of a row and anything past the bottom margin still start nothing,
+  and `getKeyAtPosition`, which the popup, `hasKeyAt` and key painting read, is unchanged.
 
 ## Refresh procedure
 
