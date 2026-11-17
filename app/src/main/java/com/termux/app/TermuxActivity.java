@@ -7979,7 +7979,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A crossing measures nothing (ADR 0029 section 9): the legends of the page it arrives on
         // are the ones rest kept for it. A page with none yet is judged as before, counted by the
         // store's guard, until the landing keeps its own.
-        if (crossing && !mGlassDragPreview && pushStoredKeyboardGlassFaces(keyboard)) return;
+        if (crossing) {
+            // No judging here: a look-only crossing drifts the legends between the two kept
+            // palettes (beginLegendBlend); any other crossing takes the arriving page's once.
+            if (!mGlassDragPreview && !mKeyboardBlendOn) pushStoredKeyboardGlassFaces(keyboard);
+            return;
+        }
         boolean bandMoved = mKeyboardBandAskedThisPass
             && !mKeyboardBandRect.equals(mKeyboardFacesJudgedRect);
         if (!com.termux.app.terminal.inappkeyboard.KeyboardFaceJudging.due(mGlassDragPreview,
@@ -8023,10 +8028,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.glass.LegibilityCorrection held = store.get(key,
             com.termux.app.glass.LegibilityBand.KEYBOARD, rest.left, rest.top, rest.right,
             rest.bottom, look);
-        if (held != null && held.matches(faces, tone)) return;
-        store.record(key, com.termux.app.glass.LegibilityBand.KEYBOARD, rest.left, rest.top,
-            rest.right, rest.bottom, look,
-            com.termux.app.glass.LegibilityCorrection.ofRows(faces, tone));
+        if (held == null || !held.matches(faces, tone)) {
+            store.record(key, com.termux.app.glass.LegibilityBand.KEYBOARD, rest.left, rest.top,
+                rest.right, rest.bottom, look,
+                com.termux.app.glass.LegibilityCorrection.ofRows(faces, tone));
+        }
+        if (mPreferences == null) return;
+        // The legends every other page would settle on, worked out here at rest from that page's
+        // glass, so a crossing blends two kept palettes and judges nothing.
+        for (com.termux.app.wall.PaneWallPage kind : LEGIBILITY_KINDS) {
+            if (kind == page.kind) continue;
+            com.termux.app.wall.PageRef other = endpointPageOf(kind);
+            int otherLook = dockLegibilityLook(other);
+            if (!store.needsMeasure(legibilityKey(other),
+                    com.termux.app.glass.LegibilityBand.KEYBOARD, rest.left, rest.top, rest.right,
+                    rest.bottom, otherLook)) continue;
+            int lookId = lookIdOf(other);
+            int[] rows = new int[com.termux.app.chrome.ChromeInk.FACE_ROWS];
+            int otherTone = mChrome.ink().probeEitherToneUnderGlass(
+                com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
+                mPreferences.getAppBarOpacity(lookId) / 100f,
+                mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)), rows);
+            if (otherTone == 0) continue;
+            store.record(legibilityKey(other), com.termux.app.glass.LegibilityBand.KEYBOARD,
+                rest.left, rest.top, rest.right, rest.bottom, otherLook,
+                com.termux.app.glass.LegibilityCorrection.ofRows(rows, otherTone));
+        }
     }
 
     /**
@@ -13619,20 +13646,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         store.recordFace(legibilityKey(page), com.termux.app.glass.LegibilityBand.DOCK,
             rest.left, rest.top, rest.right, rest.bottom, dockLegibilityLook(page), face);
         if (mPreferences == null) return;
-        com.termux.app.wall.PageRef other = endpointPageOf(page.isHome()
-            ? com.termux.app.wall.PaneWallPage.TERMINAL : com.termux.app.wall.PaneWallPage.WIDGETS);
-        if (other.equals(page)) return;
-        int look = dockLegibilityLook(other);
-        if (!store.needsMeasure(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
-                rest.left, rest.top, rest.right, rest.bottom, look)) return;
-        int lookId = lookIdOf(other);
-        int there = mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, rest,
-            mPreferences.getAppBarOpacity(lookId) / 100f,
-            mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)));
-        if (Color.alpha(there) == 0) return;
-        store.recordFace(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
-            rest.left, rest.top, rest.right, rest.bottom, look, there);
+        // Every page a crossing from here can arrive on, so the store has both ends before it begins.
+        for (com.termux.app.wall.PaneWallPage kind : LEGIBILITY_KINDS) {
+            if (kind == page.kind) continue;
+            com.termux.app.wall.PageRef other = endpointPageOf(kind);
+            int look = dockLegibilityLook(other);
+            if (!store.needsMeasure(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
+                    rest.left, rest.top, rest.right, rest.bottom, look)) continue;
+            int lookId = lookIdOf(other);
+            int there = mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, rest,
+                mPreferences.getAppBarOpacity(lookId) / 100f,
+                mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)));
+            if (Color.alpha(there) == 0) continue;
+            store.recordFace(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
+                rest.left, rest.top, rest.right, rest.bottom, look, there);
+        }
     }
+
+    /** The kinds of page a crossing begins or ends on, each measured at rest for the other's crossings. */
+    private static final com.termux.app.wall.PaneWallPage[] LEGIBILITY_KINDS = {
+        com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL,
+        com.termux.app.wall.PaneWallPage.DISPLAY, com.termux.app.wall.PaneWallPage.ASSISTANT};
 
     /** The extra keys' ink at each end of a look-only crossing; set by {@link #beginLegendBlend}. */
     private boolean mLegendBlendOn;
@@ -13647,31 +13681,78 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void beginLegendBlend(@NonNull com.termux.app.wall.PageRef here,
                                   @NonNull com.termux.app.wall.PageRef there) {
-        mLegendBlendOn = false;
-        View keys = getVisibleExtraKeys();
-        if (keys == null || mChrome == null) return;
+        endLegendBlend();
+        if (mChrome == null) return;
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
+        long hereKey = legibilityKey(here);
+        long thereKey = legibilityKey(there);
         com.termux.app.glass.LegibilityCorrection from =
-            store.peek(legibilityKey(here), com.termux.app.glass.LegibilityBand.DOCK);
+            store.peek(hereKey, com.termux.app.glass.LegibilityBand.DOCK);
         com.termux.app.glass.LegibilityCorrection to =
-            store.peek(legibilityKey(there), com.termux.app.glass.LegibilityBand.DOCK);
-        if (from == null || to == null) return;
-        int theme = ThemeUtils.getSystemAttrColor(keys.getContext(),
-            ExtraKeysPageView.ATTR_BUTTON_TEXT_COLOR, ExtraKeysPageView.DEFAULT_BUTTON_TEXT_COLOR);
-        double target = mChrome.ink().target(OnGlass.TARGET_BODY_TEXT);
-        mLegendInkHere = GlassInk.faceInk(from.face(0), theme, target);
-        mLegendInkThere = GlassInk.faceInk(to.face(0), theme, target);
-        mLegendBlendOn = true;
+            store.peek(thereKey, com.termux.app.glass.LegibilityBand.DOCK);
+        if (from != null && to != null) {
+            View keys = getVisibleExtraKeys();
+            if (keys != null) {
+                int theme = ThemeUtils.getSystemAttrColor(keys.getContext(),
+                    ExtraKeysPageView.ATTR_BUTTON_TEXT_COLOR,
+                    ExtraKeysPageView.DEFAULT_BUTTON_TEXT_COLOR);
+                double target = mChrome.ink().target(OnGlass.TARGET_BODY_TEXT);
+                mLegendInkHere = GlassInk.faceInk(from.face(0), theme, target);
+                mLegendInkThere = GlassInk.faceInk(to.face(0), theme, target);
+                mLegendBlendOn = true;
+            }
+            // The tiles' glyphs and the prompt line drift on the same curve, each choosing its
+            // ink at either end on that end's face by its own rule.
+            mDock.beginTilesInkBlend(from.face(0), to.face(0),
+                mChrome.ink().target(OnGlass.TARGET_LARGE_TEXT));
+            mTilesInkBlendOn = true;
+            com.termux.app.dock.PromptLineFieldView field = mPromptLineField;
+            if (field != null) {
+                field.beginInkBlend(from.face(0), to.face(0));
+                mPromptInkBlendOn = true;
+            }
+        }
+        com.termux.app.glass.LegibilityCorrection keysFrom =
+            store.peek(hereKey, com.termux.app.glass.LegibilityBand.KEYBOARD);
+        com.termux.app.glass.LegibilityCorrection keysTo =
+            store.peek(thereKey, com.termux.app.glass.LegibilityBand.KEYBOARD);
+        TermuxInAppKeyboard keyboard = mInAppKeyboard;
+        if (keysFrom != null && keysTo != null && keyboard != null) {
+            keyboard.beginGlassBlend(facesOf(keysFrom), keysFrom.tone(), facesOf(keysTo),
+                keysTo.tone());
+            mKeyboardBlendOn = true;
+        }
     }
 
+    @NonNull
+    private static int[] facesOf(@NonNull com.termux.app.glass.LegibilityCorrection correction) {
+        int[] faces = new int[correction.rows()];
+        for (int row = 0; row < faces.length; row++) faces[row] = correction.face(row);
+        return faces;
+    }
+
+    private boolean mTilesInkBlendOn;
+    private boolean mPromptInkBlendOn;
+    private boolean mKeyboardBlendOn;
+
     private void legendBlend(float share) {
-        if (!mLegendBlendOn) return;
-        applyExtraKeysInk(com.termux.app.glass.LegibilityBlend.color(mLegendInkHere, mLegendInkThere,
-            share));
+        if (mLegendBlendOn) {
+            applyExtraKeysInk(com.termux.app.glass.LegibilityBlend.color(mLegendInkHere,
+                mLegendInkThere, share));
+        }
+        if (mTilesInkBlendOn) mDock.tilesInkBlend(share);
+        if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.setInkBlend(share);
+        if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.setGlassBlend(share);
     }
 
     private void endLegendBlend() {
         mLegendBlendOn = false;
+        if (mTilesInkBlendOn) mDock.endTilesInkBlend();
+        mTilesInkBlendOn = false;
+        if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.endInkBlend();
+        mPromptInkBlendOn = false;
+        if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.endGlassBlend();
+        mKeyboardBlendOn = false;
     }
 
     /**

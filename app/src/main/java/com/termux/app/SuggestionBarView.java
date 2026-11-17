@@ -1204,19 +1204,58 @@ public final class SuggestionBarView extends GridLayout
         if (tileFace == face && tileInkTarget == target) return;
         tileFace = face;
         tileInkTarget = target;
-        int ink = tileGlyphInk();
-        for (Drawable glyph : new Drawable[] {drawerTileGlyph, paletteTileGlyph, floatTileGlyph}) {
-            if (glyph == null) continue;
-            DrawableCompat.setTint(glyph, ink);
-            glyph.invalidateSelf();
-        }
+        // A crossing is drifting the glyphs between two inks; the landing's face comes after it.
+        if (tileInkBlending) return;
+        tintTileGlyphs(tileGlyphInk());
+    }
+
+    private void tintTileGlyphs(int ink) {
+        tintTileGlyph(drawerTileGlyph, ink);
+        tintTileGlyph(paletteTileGlyph, ink);
+        tintTileGlyph(floatTileGlyph, ink);
+    }
+
+    private static void tintTileGlyph(@Nullable Drawable glyph, int ink) {
+        if (glyph == null) return;
+        DrawableCompat.setTint(glyph, ink);
+        glyph.invalidateSelf();
     }
 
     /** The tiles' glyph ink: the theme's, held legible on the shell over the dock's face. */
     private int tileGlyphInk() {
-        return com.termux.app.chrome.WallpaperInk.tileInk(tileFace,
+        return tileGlyphInkOn(tileFace, tileInkTarget);
+    }
+
+    private int tileGlyphInkOn(int face, double target) {
+        return com.termux.app.chrome.WallpaperInk.tileInk(face,
             com.termux.app.chrome.ChromeShade.fill(PINNED_FOLDER_FILL_COLOR),
-            getLauncherTextColor(), tileInkTarget);
+            getLauncherTextColor(), target);
+    }
+
+    private boolean tileInkBlending;
+    private int tileInkFrom;
+    private int tileInkTo;
+
+    /**
+     * A look-only crossing begins: the glyphs' ink at each end is chosen on the face rest kept for
+     * that page ({@link #tileGlyphInkOn}) and {@link #setTileInkBlend} drifts between the two, so
+     * the glyphs never flip. Nothing is measured.
+     */
+    public void beginTileInkBlend(int faceFrom, int faceTo, double target) {
+        tileInkFrom = tileGlyphInkOn(faceFrom, target);
+        tileInkTo = tileGlyphInkOn(faceTo, target);
+        tileInkBlending = true;
+    }
+
+    /** The glyphs' ink {@code share} of the way from the leaving page's to the arriving page's. */
+    public void setTileInkBlend(float share) {
+        if (!tileInkBlending) return;
+        tintTileGlyphs(com.termux.app.glass.LegibilityBlend.color(tileInkFrom, tileInkTo, share));
+    }
+
+    /** The blend is over; the landing's face inks the glyphs for the page it lands on. */
+    public void endTileInkBlend() {
+        tileInkBlending = false;
     }
 
     /**

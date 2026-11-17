@@ -134,6 +134,23 @@ public final class PromptLineInk {
             floorDirectory, floorGlyph, floorHint);
     }
 
+    /**
+     * The inks {@code t} of the way from {@code from} to {@code to}: the directory, the glyph and
+     * the hint blended as colours, everything else {@code from}'s. For the prompt's drift between
+     * two page looks across a crossing; exactly {@code from} at 0 and {@code to} at 1.
+     */
+    @NonNull
+    public static PromptLineInk blend(@NonNull PromptLineInk from, @NonNull PromptLineInk to,
+                                      float t) {
+        if (!(t > 0f)) return from;
+        if (t >= 1f) return to;
+        return new PromptLineInk(from.well, from.wellAlpha, from.pressedWellAlpha, from.tinted,
+            from.inkSurface,
+            com.termux.app.glass.LegibilityBlend.color(from.directory, to.directory, t),
+            com.termux.app.glass.LegibilityBlend.color(from.glyph, to.glyph, t),
+            com.termux.app.glass.LegibilityBlend.color(from.hint, to.hint, t));
+    }
+
     /** Whether {@code other} holds the same colours. */
     public boolean sameAs(@androidx.annotation.Nullable PromptLineInk other) {
         return other != null && other.well == well && other.wellAlpha == wellAlpha

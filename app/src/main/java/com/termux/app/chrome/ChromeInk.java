@@ -2311,12 +2311,18 @@ public final class ChromeInk {
         if (contract == null || !contract.seen) return new int[0];
         int veil = resolveBand(band, contract).veil;
         BandGlass glass = glassFor(band);
+        int[] rows = evenedRows(band, rowWallpapers(band, contract.rect));
+        return facesOn(glass, veil, rows);
+    }
+
+    /** {@link #bandFaces}'s arithmetic for {@code glass} and the veil drawn over it. */
+    @NonNull
+    private int[] facesOn(@NonNull BandGlass glass, int veil, @NonNull int[] rows) {
         int baseAlpha = ChromePolicy.dockGlassBaseAlpha(glass.opacity);
         int baseColor = baseOf(glass);
         int top = DockGlassRendering.topSheenAlpha(glass.opacity);
         int mid = DockGlassRendering.midSheenAlpha(glass.opacity);
         int foot = DockGlassRendering.footAlpha(glass.opacity, glass.withFoot);
-        int[] rows = evenedRows(band, rowWallpapers(band, contract.rect));
         int[] faces = new int[rows.length];
         for (int i = 0; i < rows.length; i++) {
             int under = OnGlass.backdrop(rows[i], groundDim(glass.framed, mDimColor),
@@ -2327,6 +2333,68 @@ public final class ChromeInk {
             faces[i] = OnGlass.opaque(OnGlass.composite(veil, surface));
         }
         return faces;
+    }
+
+    /**
+     * What an either-tone fixed-ink band (the keyboard's legends) would settle on if it wore a
+     * glass that is not the one it was told: {@code opacity} (0..1) of {@code tintBase}. The rows,
+     * the tone on the bare face and the veil are worked out as {@link #onFixedInkEitherTone} and
+     * {@link #bandFaces} work them out, on a copy of the band's glass, so the band, its tone, its
+     * veil and its polarity vote are left as they were and nothing redraws. For the page a crossing
+     * will arrive on, measured at rest, so the crossing blends and measures nothing.
+     *
+     * @param facesOut receives {@link #FACE_ROWS} faces
+     * @return the tone ({@link #TONE_DARK} or {@link #TONE_PALE}), or 0 when the band has not
+     *     asked either-tone yet or its wallpaper is not sampled
+     */
+    public int probeEitherToneUnderGlass(@NonNull GlassBackdropCache.Band band, float opacity,
+                                         @ColorInt int tintBase, @NonNull int[] facesOut) {
+        readMode();
+        Contract c = mContracts.get(band);
+        if (c == null || !c.seen || !c.fixedInk || !c.eitherTone || !mCache.hasSample(band)) return 0;
+        BandGlass real = glassFor(band);
+        BandGlass g = new BandGlass();
+        g.opacity = opacity < 0f ? 0f : (opacity > 1f ? 1f : opacity);
+        g.withFoot = real.withFoot;
+        g.sliceStart = real.sliceStart;
+        g.sliceEnd = real.sliceEnd;
+        g.tinted = true;
+        g.baseColor = tintBase;
+        g.blurRadiusDp = real.blurRadiusDp;
+        g.framed = real.framed;
+        double target = mLevel.target(c.target);
+        int baseAlpha = ChromePolicy.dockGlassBaseAlpha(g.opacity);
+        int baseColor = baseOf(g);
+        int top = DockGlassRendering.topSheenAlpha(g.opacity);
+        int mid = DockGlassRendering.midSheenAlpha(g.opacity);
+        int foot = DockGlassRendering.footAlpha(g.opacity, g.withFoot);
+        int[] rows = evenedRows(band, rowWallpapers(band, c.rect));
+        boolean ownCaps = c.secondCap != c.cap;
+        double dark = bareMargin(g, rows, c.darkInk, c.secondInk, c, ownCaps, baseColor, baseAlpha,
+            top, mid, foot, target);
+        double pale = bareMargin(g, rows, c.paleInk, c.secondPaleInk, c, ownCaps, baseColor,
+            baseAlpha, top, mid, foot, target);
+        int tone = chooseTone(0, dark, pale);
+        int ink = tone == TONE_PALE ? c.paleInk : c.darkInk;
+        int secondInk = tone == TONE_PALE ? c.secondPaleInk : c.secondInk;
+        int backdrop = worstRowSurface(g, rows, ink, c.cap, baseColor, baseAlpha, top, mid, foot);
+        OnGlass.Resolution resolved;
+        if (!ownCaps) {
+            resolved = OnGlass.resolveFixedInk(backdrop, c.cap, ink, secondInk, baseColor, target);
+        } else {
+            int secondBackdrop = worstRowSurface(g, rows, secondInk, c.secondCap, baseColor,
+                baseAlpha, top, mid, foot);
+            OnGlass.Resolution first = OnGlass.resolveFixedInk(backdrop, c.cap, ink, ink, baseColor,
+                target);
+            OnGlass.Resolution second = OnGlass.resolveFixedInk(secondBackdrop, c.secondCap,
+                secondInk, secondInk, baseColor, target);
+            resolved = Color.alpha(second.veil) > Color.alpha(first.veil) ? second : first;
+        }
+        int[] faces = facesOn(g, resolved.veil, rows);
+        for (int i = 0; i < facesOut.length; i++) {
+            facesOut[i] = faces[Math.min(i, faces.length - 1)];
+        }
+        return tone;
     }
 
     /** Where row edge {@code edge} (0 to {@link #FACE_ROWS}) falls in the band's model slice. */
