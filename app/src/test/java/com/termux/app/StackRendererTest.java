@@ -56,6 +56,7 @@ public class StackRendererTest {
 
     private final SparseArray<View> mViews = new SparseArray<>();
     private boolean mKeyboardShown;
+    private boolean mFrontHome;
     private int mKeyboardDownPx;
     private StackRenderer mRenderer;
     private Counted mContainer;
@@ -81,6 +82,7 @@ public class StackRendererTest {
             @Override public boolean underKeyboardBandsShown() { return false; }
             @Override public boolean keyboardShown() { return mKeyboardShown; }
             @Override public int keyboardDownLaidOutPx() { return mKeyboardDownPx; }
+            @Override public boolean frontIsHome() { return mFrontHome; }
         });
         Counters.clear();
         Counters.enable(true, null);
@@ -301,5 +303,69 @@ public class StackRendererTest {
         int resting = writes();
         mRenderer.onSlab(new DockPlankController.Slab());
         assertEquals(resting, writes());
+    }
+
+    /**
+     * The flat body surface is laid out once, at the smallest room any page has (here Home's, 100
+     * above the window's bottom), and the one writer cuts it to the front side's room: a rest on
+     * either side writes that cut, a crossing blends the two, and its landing writes nothing.
+     */
+    private Counted body() {
+        Context context = RuntimeEnvironment.getApplication();
+        FrameLayout parent = new FrameLayout(context);
+        parent.layout(0, 0, WIDTH, 2000);
+        Counted body = new Counted(context);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
+        params.bottomMargin = 100;
+        parent.addView(body, params);
+        body.layout(0, 0, WIDTH, 1900);
+        mViews.put(R.id.terminal_background, body);
+        return body;
+    }
+
+    @Test public void theBodySurfaceIsCutToTheFrontSidesRoom() {
+        Counted body = body();
+        mRenderer.setRooms(100, 400);
+
+        mFrontHome = true;
+        mRenderer.applyAtRest();
+        assertNull("Home's room is the layout's: nothing cut", body.getClipBounds());
+
+        mFrontHome = false;
+        mRenderer.applyAtRest();
+        assertEquals("the Workspace's room is 300 higher", 1600, body.getClipBounds().bottom);
+    }
+
+    @Test public void aCrossingBlendsTheRoomsAndItsLandingWritesNothing() {
+        Counted body = body();
+        mRenderer.setRooms(100, 400);
+        mFrontHome = false;
+        mRenderer.applyAtRest();
+
+        mRenderer.setEnds(false, true, 0.5f);
+        assertEquals("halfway, 150 up", 1750, body.getClipBounds().bottom);
+        mRenderer.setEnds(false, true, 1f);
+        assertNull("arrived on Home's rest", body.getClipBounds());
+
+        int before = body.writes;
+        mFrontHome = true;
+        mRenderer.onLanding();
+        assertEquals("the landing finds the arriving rest in place", before, body.writes);
+        assertNull(body.getClipBounds());
+    }
+
+    @Test public void aChangedLayoutOfTheBodyIsCutAgain() {
+        Counted body = body();
+        mRenderer.setRooms(100, 400);
+        mFrontHome = false;
+        mRenderer.applyAtRest();
+        assertEquals(1600, body.getClipBounds().bottom);
+
+        // The window grows: the body's parent and the body are laid out taller, and its cut is
+        // read off the new height without a pass asking.
+        ((FrameLayout) body.getParent()).layout(0, 0, WIDTH, 2200);
+        body.layout(0, 0, WIDTH, 2100);
+        assertEquals(1800, body.getClipBounds().bottom);
     }
 }

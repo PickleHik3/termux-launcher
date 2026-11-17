@@ -54,6 +54,15 @@ public final class StackGeometry {
     public int footTopPx;
     public int footBottomPx;
 
+    /**
+     * The flat body surface drawn on every page: its width, the height it is about to be laid out
+     * at, and the room its layout stands above the window's bottom (the smallest of the pages'),
+     * which the scene cuts it down from to the front page's.
+     */
+    public int bodyWidthPx;
+    public int bodyHeightPx;
+    public int bodyLaidOutRoomPx;
+
     public void set(@NonNull StackGeometry o) {
         displayWidthPx = o.displayWidthPx;
         displayHeightPx = o.displayHeightPx;
@@ -77,5 +86,8 @@ public final class StackGeometry {
         underBottomPx = o.underBottomPx;
         footTopPx = o.footTopPx;
         footBottomPx = o.footBottomPx;
+        bodyWidthPx = o.bodyWidthPx;
+        bodyHeightPx = o.bodyHeightPx;
+        bodyLaidOutRoomPx = o.bodyLaidOutRoomPx;
     }
 }

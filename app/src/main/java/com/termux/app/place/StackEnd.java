@@ -38,6 +38,13 @@ public final class StackEnd {
 
     @NonNull public final PageRef page;
     @NonNull public final StackGeometry rest = new StackGeometry();
+    /**
+     * Where this end's page leaves the wall's cells and what is drawn on every page ends above the
+     * window's bottom, its own rest's ({@link PageRoom#wallInsetPx}). The flat body surface is laid
+     * out once, at the smallest of the pages' rooms, and cut down to the front page's by the
+     * scene ({@link StackScene#bodyCutPx}); a crossing blends the two ends' rooms.
+     */
+    public int roomPx;
     public boolean floating;
     /** Each region's look; null where this end has no such region. */
     @NonNull public final RegionLook[] looks = new RegionLook[REGION_COUNT];

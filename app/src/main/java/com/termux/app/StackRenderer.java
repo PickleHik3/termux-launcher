@@ -162,6 +162,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         }
         own(guard, StackScene.V_UNDER, R.id.accessory_under_keyboard_stack);
         own(guard, StackScene.V_KEYBOARD, R.id.inapp_keyboard_container);
+        own(guard, StackScene.V_BODY, R.id.terminal_background);
         guard.own("accessory_stack_container.translationX", () -> {
             View view = mViews.view(R.id.accessory_stack_container);
             return view == null ? 0f : view.getTranslationX();
@@ -199,7 +200,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private static final String[] OWNED_NAMES = {"accessory_stack_container",
         "accessory_surface_host", "apps_bar_az_fx_underlay", "accessory_row_stack",
         "apps_bar_az_fx_overlay", "apps_bar_az_label_overlay", "inapp_keyboard_container",
-        "accessory_under_keyboard_stack"};
+        "accessory_under_keyboard_stack", "terminal_background"};
 
     /** A share changed: the step writes it on this frame (at once without a pipeline). */
     private void requestApply() {
@@ -259,6 +260,19 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mFromHome = fromHome;
         mToHome = toHome;
         mEndsProgress = progress;
+        requestApply();
+    }
+
+    /**
+     * Each side's room, the window's bottom up to where its page's cells end
+     * ({@link com.termux.app.place.PageRoom#wallInsetPx}): what the flat body surface is cut to at
+     * that side's rest ({@link StackScene#bodyCutPx}). Written at rest, once the rests are known;
+     * a crossing blends the two and its landing finds the arriving one in place.
+     */
+    public void setRooms(int homePx, int workspacePx) {
+        if (mApplied && mEndHome.roomPx == homePx && mEndWorkspace.roomPx == workspacePx) return;
+        mEndHome.roomPx = homePx;
+        mEndWorkspace.roomPx = workspacePx;
         requestApply();
     }
 
@@ -368,6 +382,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                     .setTouchRefused(mViews.keyboardDownLaidOutPx() > 0);
             }
         }
+        View body = mViews.view(R.id.terminal_background);
+        if (body != null) {
+            watchBody(body);
+            writeClip(StackScene.V_BODY, body);
+        }
         writeLanes();
         writeContent();
         if (guard != null) {
@@ -462,6 +481,37 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         g.underBottomPx = under == null ? 0 : g.underTopPx + under.getHeight();
         g.footTopPx = 0;
         g.footBottomPx = 0;
+        // The body surface at the size it is about to be laid out at (its parent's less its
+        // margins), and the room that layout stands for.
+        View body = mViews.view(R.id.terminal_background);
+        g.bodyWidthPx = 0;
+        g.bodyHeightPx = 0;
+        g.bodyLaidOutRoomPx = 0;
+        if (body != null && body.getParent() instanceof View
+            && body.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            View parent = (View) body.getParent();
+            ViewGroup.MarginLayoutParams margins =
+                (ViewGroup.MarginLayoutParams) body.getLayoutParams();
+            g.bodyWidthPx = Math.max(0, parent.getWidth() - parent.getPaddingLeft()
+                - parent.getPaddingRight() - margins.leftMargin - margins.rightMargin);
+            g.bodyHeightPx = Math.max(0, parent.getHeight() - parent.getPaddingTop()
+                - parent.getPaddingBottom() - margins.topMargin - margins.bottomMargin);
+            g.bodyLaidOutRoomPx = margins.bottomMargin;
+        }
+    }
+
+    /** The body surface whose layout changes ask for a frame: its cut is read off its size. */
+    @Nullable private View mWatchedBody;
+    private final View.OnLayoutChangeListener mBodyLayout =
+        (v, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol || b - t != ob - ot) requestApply();
+        };
+
+    private void watchBody(@NonNull View body) {
+        if (mWatchedBody == body) return;
+        if (mWatchedBody != null) mWatchedBody.removeOnLayoutChangeListener(mBodyLayout);
+        mWatchedBody = body;
+        body.addOnLayoutChangeListener(mBodyLayout);
     }
 
     /**

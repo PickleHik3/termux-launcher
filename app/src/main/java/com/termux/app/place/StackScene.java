@@ -37,7 +37,9 @@ public final class StackScene {
     public static final int V_ROWS = V_LAYER0 + StackGeometry.ROWS;
     public static final int V_KEYBOARD = V_LAYER0 + StackGeometry.LAYER_COUNT;
     public static final int V_UNDER = V_KEYBOARD + 1;
-    public static final int V_COUNT = V_UNDER + 1;
+    /** The flat body surface drawn on every page: its clip alone ({@link #bodyCutPx}). */
+    public static final int V_BODY = V_UNDER + 1;
+    public static final int V_COUNT = V_BODY + 1;
 
     /**
      * What the crossing moves the stack by on this frame: its travel, the keyboard's share of it,
@@ -274,6 +276,7 @@ public final class StackScene {
                           @NonNull Motion motion, @NonNull StackGeometry live,
                           @NonNull Frame out) {
         transforms(motion, live, out);
+        body(from, to, p, live, out);
         regions(from, to, materialShare(p), live, out);
         sides(from, to, p, live, out);
     }
@@ -408,6 +411,30 @@ public final class StackScene {
     private static boolean isAzLayer(int layer) {
         return layer == StackGeometry.AZ_UNDERLAY || layer == StackGeometry.AZ_OVERLAY
             || layer == StackGeometry.AZ_LABEL;
+    }
+
+    // ---- The body surface ------------------------------------------------------------------
+
+    /**
+     * How far the body surface is cut up from the bottom it is laid out at, at progress {@code p}
+     * from a page whose room is {@code fromRoomPx} to one whose room is {@code toRoomPx}:
+     * the blended room less {@code laidOutRoomPx}, the smallest room any page has, so the surface
+     * is laid out once and every rest's own bottom is a cut. Exactly the end's room less the
+     * layout's at p=0 and p=1.
+     */
+    public static int bodyCutPx(int fromRoomPx, int toRoomPx, float p, int laidOutRoomPx) {
+        float room = fromRoomPx + (toRoomPx - fromRoomPx) * clamp01(p);
+        return Math.max(0, Math.round(room) - Math.max(0, laidOutRoomPx));
+    }
+
+    private static void body(@Nullable StackEnd from, @Nullable StackEnd to, float p,
+                             @NonNull StackGeometry g, @NonNull Frame out) {
+        out.ty[V_BODY] = 0f;
+        out.clipped[V_BODY] = false;
+        if (from == null || to == null || g.bodyHeightPx <= 0) return;
+        int cut = bodyCutPx(from.roomPx, to.roomPx, p, g.bodyLaidOutRoomPx);
+        if (cut <= 0) return;
+        bottomCut(out, V_BODY, Math.max(1, g.bodyWidthPx), g.bodyHeightPx, g.displayHeightPx, cut);
     }
 
     // ---- Regions ---------------------------------------------------------------------------

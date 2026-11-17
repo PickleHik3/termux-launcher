@@ -17539,7 +17539,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         int frontRoomPx = frontPageRoomPx();
         boolean home = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
-        moved |= applyBodySurfaceBottom(frontRoomPx);
+        // The body surface is laid out once, at the smallest room any page has, and cut down to a
+        // page's own by the stack's one writer; a crossing blends the two sides' rooms, so a
+        // landing lays it out no more.
+        int laidOutRoomPx = Integer.MAX_VALUE;
+        for (com.termux.app.wall.PaneWallPage kind : ROOM_KINDS)
+            laidOutRoomPx = Math.min(laidOutRoomPx, wall.pageBottomInsetPx(kind));
+        mStackRenderer.setRooms(wall.pageBottomInsetPx(com.termux.app.wall.PaneWallPage.WIDGETS),
+            home ? wall.pageBottomInsetPx(com.termux.app.wall.PaneWallPage.TERMINAL)
+                : frontRoomPx);
+        moved |= applyBodySurfaceBottom(laidOutRoomPx);
         moved |= applyTerminalBorderBottom();
         if (applySideStackDockInsets(true, home ? homeSideReachPx : frontRoomPx)) {
             mChrome.onArrangementChanged();
@@ -17599,7 +17608,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? com.termux.app.wall.PaneWallPage.TERMINAL : mLastWallPage);
     }
 
-    /** Where the flat body surface ends above the canvas's bottom: the front page's room. */
+    /**
+     * Where the flat body surface is laid out to end above the canvas's bottom: the smallest of
+     * the pages' rooms. The front page's own is its cut ({@link StackScene#bodyCutPx}).
+     */
     private int mBodySurfaceBottomPx;
 
     private boolean applyBodySurfaceBottom(int roomPx) {
