@@ -86,6 +86,9 @@ public final class Crossing {
          * began on, 1 the side it arrives on): each side's lane of rows slides with its page.
          */
         default void sides(boolean fromHome, boolean toHome, float progress) {}
+
+        /** The crossing is over: the lanes stand at the front side's rest again. */
+        default void endSides() {}
     }
 
     /** The status bar, riding with the Workspace's page. */
@@ -716,6 +719,7 @@ public final class Crossing {
         mGridHold = null;
         mStack.translate(0f, 0f);
         mStack.slide(0f);
+        mStack.endSides();
         mCoverPx = 0;
         if (covered) mCover.cover(0);
         // The page takes the content's room back in the landing's pass, which gives the content

@@ -319,6 +319,11 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
     }
 
     @Override
+    public void endSides() {
+        mHost.stackRenderer().clearEnds();
+    }
+
+    @Override
     public void dropPicture() {
         StackPicture picture = mHost.stackPicture(null);
         if (picture == null) return;

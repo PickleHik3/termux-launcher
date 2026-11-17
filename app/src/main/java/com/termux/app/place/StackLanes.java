@@ -174,7 +174,6 @@ public final class StackLanes {
                                  int frontLane, @NonNull int[] topOut) {
         int band = Math.max(sideTotal(heightPx, lane, count, HOME),
             sideTotal(heightPx, lane, count, WORKSPACE));
-        int below = 0;
         int homeBelow = 0;
         int workspaceBelow = 0;
         for (int i = count - 1; i >= 0; i--) {

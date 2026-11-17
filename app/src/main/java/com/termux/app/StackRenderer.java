@@ -262,6 +262,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         requestApply();
     }
 
+    /** The crossing is over without a landing's own call: the lanes stand at the front rest. */
+    public void clearEnds() {
+        if (!mHasEnds) return;
+        mHasEnds = false;
+        requestApply();
+    }
+
     /** The stack drawn {@code px} across from its rest, riding with the arriving page. */
     public void setSlideX(float px) {
         if (mApplied && mSlideX == px) return;
