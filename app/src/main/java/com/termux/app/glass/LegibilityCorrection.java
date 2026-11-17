@@ -56,6 +56,11 @@ public final class LegibilityCorrection {
         return mFaces.length == 1 && mFaces[0] == face && mTone == TONE_NONE;
     }
 
+    /** Whether it holds exactly these rows and this tone, without building another to compare. */
+    public boolean matches(@NonNull int[] faces, int tone) {
+        return mTone == tone && Arrays.equals(mFaces, faces);
+    }
+
     @Override
     public boolean equals(Object other) {
         if (this == other) return true;

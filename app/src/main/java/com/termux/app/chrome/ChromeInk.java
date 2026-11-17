@@ -412,6 +412,18 @@ public final class ChromeInk {
     @NonNull private final ChromeRenderer.Surfaces mSurfaces;
     @NonNull private final WallpaperBlurCache mBlurCache;
     @NonNull private final GlassBackdropCache mCache = new GlassBackdropCache();
+    /** The glass service's store of corrections; told what makes them stale and when a sample is read. */
+    @Nullable private com.termux.app.glass.LegibilityStore mLegibility;
+
+    /**
+     * The tint sampler is the glass service's legibility store (ADR 0029 section 9): this keeps
+     * measuring through {@link GlassBackdropCache}, and tells {@code store} when its corrections
+     * are stale (the wallpaper, the palette, light or dark) and when it reads the wallpaper, which
+     * the store counts as a guard if a crossing is running.
+     */
+    public void attachLegibility(@Nullable com.termux.app.glass.LegibilityStore store) {
+        mLegibility = store;
+    }
     /** Run when a band's veil demand changes, so the surface that draws it is rebuilt. */
     @Nullable private final Runnable mOnVeilChanged;
 
@@ -2183,6 +2195,25 @@ public final class ChromeInk {
     }
 
     /**
+     * The face {@code band}'s content would stand on under {@code screenRect} wearing a glass that
+     * is not the one the band was told ({@link #noteBandGlass}): {@code opacity} (0..1) of
+     * {@code tintBase}, over the wallpaper and the dim. For the page a crossing will arrive on,
+     * measured at rest so the crossing only blends it. Reads and tells the band nothing; transparent
+     * until the wallpaper under the band has been sampled.
+     */
+    @ColorInt
+    public int faceUnderGlass(@NonNull GlassBackdropCache.Band band, @NonNull Rect screenRect,
+                              float opacity, @ColorInt int tintBase) {
+        readMode();
+        toRootSpace(screenRect, mTmpRootRect);
+        int wallpaper = mCache.wallpaperUnder(band, mTmpRootRect);
+        if (!mCache.hasSample(band)) return Color.TRANSPARENT;
+        float clamped = opacity < 0f ? 0f : (opacity > 1f ? 1f : opacity);
+        return WallpaperInk.faceOf(evened(band, wallpaper), bandDim(band, mTmpRootRect), tintBase,
+            clamped);
+    }
+
+    /**
      * {@link #faceUnder} at the rect the band's content last asked about ({@link #onGlass},
      * {@link #onFixedInk}); {@link Color#TRANSPARENT} before it has asked. The keyboard's caps
      * stand on this.
@@ -2497,6 +2528,19 @@ public final class ChromeInk {
      * — re-sampling the same wallpaper must not be able to flip the chrome.
      */
     public void invalidate() {
+        invalidate(true);
+    }
+
+    /**
+     * {@link #invalidate()}; {@code wallpaper} says why: the wallpaper (or its frames) changed, else
+     * the mode did (the theme's colours, the dim, the level: light and dark with them). The glass
+     * service's legibility corrections go stale for the same two reasons ({@link #attachLegibility}).
+     */
+    private void invalidate(boolean wallpaper) {
+        if (mLegibility != null) {
+            if (wallpaper) mLegibility.onWallpaperChanged();
+            else mLegibility.onPaletteChanged();
+        }
         mCache.invalidate();
         mVotes.clear();
         mPanes.clear();
@@ -2571,7 +2615,7 @@ public final class ChromeInk {
         // this round: no flash, and no crash. Without the description, bare text over a light
         // wallpaper kept the dark theme's pale ink (editor-redesign §8).
         mCache.setFallbackWallpaper(WallpaperInk.fallbackWallpaper(base, hint));
-        invalidate();
+        invalidate(false);
     }
 
     @NonNull
@@ -2650,6 +2694,7 @@ public final class ChromeInk {
      */
     @ColorInt
     private int sampleWallpaper(@NonNull Rect screenRect, int blurRadiusDp) {
+        if (mLegibility != null) mLegibility.noteSample();
         try {
             Bitmap frame = blurRadiusDp == DEFAULT_FRAME ? residentFrame()
                 : residentFrame(blurRadiusDp);
@@ -2682,6 +2727,7 @@ public final class ChromeInk {
      */
     @Nullable
     private GlassBackdropCache.Lightness sampleWallpaperLightness(@NonNull Rect screenRect) {
+        if (mLegibility != null) mLegibility.noteSample();
         try {
             Bitmap frame = residentFrame();
             if (frame == null || frame.isRecycled()) return null;
