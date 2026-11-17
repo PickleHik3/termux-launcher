@@ -17533,8 +17533,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean moved = false;
         for (com.termux.app.wall.PaneWallPage kind : ROOM_KINDS) {
             int before = wall.pageBottomInsetPx(kind);
-            wall.setPageBottomInsetPx(kind,
-                mCrossingController.travelRestReservationPx(roomPlaceOf(kind)));
+            wall.setPageBottomInsetPx(kind, com.termux.app.place.PageRoom.wallInsetPx(
+                mCrossingController.travelRestReservationPx(roomPlaceOf(kind)), mBottomKeptPx));
             moved |= wall.pageBottomInsetPx(kind) != before;
         }
         int frontRoomPx = frontPageRoomPx();
@@ -17582,8 +17582,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController != null && mCrossingController != null && !mCrossing.crossing()) {
             com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
             int applied = wall.pageBottomInsetPx(com.termux.app.wall.PaneWallPage.TERMINAL);
-            int rest = mCrossingController.travelRestReservationPx(
-                roomPlaceOf(com.termux.app.wall.PaneWallPage.TERMINAL));
+            int rest = com.termux.app.place.PageRoom.wallInsetPx(
+                mCrossingController.travelRestReservationPx(
+                    roomPlaceOf(com.termux.app.wall.PaneWallPage.TERMINAL)), mBottomKeptPx);
             if (!com.termux.app.place.PageRoom.resizesOnReturn(applied, rest)) return;
             wall.setPageBottomInsetPx(com.termux.app.wall.PaneWallPage.TERMINAL, rest);
         }
@@ -28700,7 +28701,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController == null || mPaneController.homeFloatLayer() == null) return;
         // A slide across the seam stands the other half's rows or bar for its length: the floats
         // keep the room they had, and the settle's pass gives them the new one.
-        if (mCrossing.seam().layout() != null) return;
+        if (!com.termux.app.terminal.HomeFloatPolicy.obstructionsMayMove(mCrossing.crossing(),
+            mCrossing.seam().layout() != null)) return;
         View stack = findViewById(R.id.accessory_stack_container);
         View root = findViewById(R.id.activity_termux_root_view);
         if (stack == null || root == null) return;

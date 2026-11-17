@@ -268,6 +268,21 @@ public final class HomeFloatPolicy {
     }
 
     /** Whether Home page {@code page} shows a float pinned to {@code floatPage}. */
+    /**
+     * Whether what covers the float layer may reach it now. The dock's and the keyboard's tops are
+     * read off live views, which a crossing moves on every frame (the keyboard rises or sinks
+     * toward the arriving rest, the stack stands the other half's rows), so a float would be
+     * re-laid out, and its shell resized, mid-slide. It keeps Home's rest through the whole
+     * crossing; the pass that follows the landing gives it the rest it lands on, which is the
+     * same one unless Home's own rest changed.
+     *
+     * @param crossing a crossing has begun and not landed
+     * @param seamStandsLayout the seam has laid the other half's rows out for its length
+     */
+    public static boolean obstructionsMayMove(boolean crossing, boolean seamStandsLayout) {
+        return !crossing && !seamStandsLayout;
+    }
+
     public static boolean shownOn(int floatPage, boolean minimised, int page) {
         return !minimised && floatPage >= 0 && floatPage == page;
     }
