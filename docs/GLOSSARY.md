@@ -725,8 +725,10 @@ what has no surface (the Look slider, wallpaper, theme, icon pack, text size, fu
 orientation, Undo, Done; that bar is the **editor bar**, never the Pill, which is the dictation
 card). It edits the half the frame shows. Users never meet Base, inherit or
 follow: a moved slider is the surface's own value, marked by a dot, and **Reset** in the card menu
-puts it back on the Look. Undo steps back and Done keeps the changes. Every door to it is named
-Appearance and opens on that door's object.
+puts it back on the Look. Every edit goes into one **draft** shown over the saved values: Undo and
+Discard drop the draft, Done saves it once, and a look set from outside while the editor is open
+(`launcherctl look`) shows at once and survives both. Every door to it is named Appearance and
+opens on that door's object.
 _Avoid_: surface editor, look editor, Look page, Layout page (the 2026-10-24 merge removed the pages), style editor
 
 **Corner tab**:
