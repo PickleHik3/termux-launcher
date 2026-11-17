@@ -25764,6 +25764,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             doRunWallPageSettle(page);
         } finally {
             Trace.endSection();
+            // The landing's settle has run, or a crossing came back: the crossing window shuts.
+            com.termux.app.window.CrossingWindow.shared().close();
         }
         // The wall is at rest here: clipboard reads that waited for the terminal may be due.
         if (mTermuxTerminalSessionActivityClient != null)

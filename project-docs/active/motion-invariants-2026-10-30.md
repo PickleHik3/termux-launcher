@@ -62,6 +62,11 @@ counted; never thrown:
 - `no-still-after-live`: a page that was live during the slide does not show its still after landing.
 - `no-frost-at-landing`: the reflow frost does not start within 500 ms after a settle.
 
+Two counters in the window's counter table (`window/CrossingWindow`, shown after the ring by `launcherctl motion-log dump`) make "a crossing never resizes the terminal and never redraws it stutteringly" checkable. A crossing is open from `crossing-begin` until the landing's settle has run (a window nobody closed shuts itself after 5 s):
+
+- `crossing-resized`: one per terminal size change (every `pty-resize`) while a crossing is open; detail `pane from to cause`. The sweep expects zero.
+- `crossing-redraw-slow`: one per terminal draw over 8 ms while a crossing is open; detail `pane ms`. Each landing also writes one ring line `crossing-draws draws=<n> maxMs=<ms>` (ring only, no counter).
+
 The emulator sweep greps the log for `INVARIANT` and fails on any: delivered as `MotionInvariants` (fed by `MotionLog.record`, counted in `launcherctl motion-log dump` as `invariants`) and `project-docs/verification/motion-invariants.sh <serial>`. A page "was live" when it logged `still-dropped` during the slide and no `still-kept` after it.
 
 ## 5. Layout fixtures

@@ -236,7 +236,10 @@ public final class Crossing {
             throw new IllegalArgumentException("a crossing's ends carry their arrangements");
         mSeam.begin(here, there, stage);
         if (!begins) return;
-        if (MotionLog.enabled) MotionLog.log("crossing-begin", "revision=" + revision);
+        if (MotionLog.enabled) {
+            MotionLog.log("crossing-begin", "revision=" + revision);
+            com.termux.app.window.CrossingWindow.shared().open(android.os.SystemClock.uptimeMillis());
+        }
         // A whole-stack dip pictures the committed half's stack now, before anything of the
         // crossing has touched it (the row's morph below included); a picture that cannot be
         // taken leaves the dip as it was.

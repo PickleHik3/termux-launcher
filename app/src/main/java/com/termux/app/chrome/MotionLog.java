@@ -7,6 +7,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.window.CrossingWindow;
 import com.termux.app.window.Counters;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.view.TerminalView;
@@ -44,6 +45,24 @@ public final class MotionLog {
 
     /** Delimits the counter table after the ring in a dump. */
     public static final String COUNTERS_HEADER = "--- counters ---";
+
+    /** Hands the terminal's resizes and draws to the crossing window (CrossingWindow). */
+    private static final TerminalView.CrossingProbe CROSSING_PROBE = new TerminalView.CrossingProbe() {
+        @Override public void onResize(String pane, String from, String to, String cause) {
+            CrossingWindow.shared().resized(SystemClock.uptimeMillis(), shortId(pane), from, to, cause);
+        }
+
+        @Override public void onDraw(String pane, long durationNanos) {
+            CrossingWindow window = CrossingWindow.shared();
+            long now = SystemClock.uptimeMillis();
+            // Only a slow draw names its pane; a fast one builds nothing.
+            window.drew(now, durationNanos > CrossingWindow.SLOW_DRAW_NANOS ? shortId(pane) : "", durationNanos);
+        }
+    };
+
+    private static String shortId(String handle) {
+        return handle.length() > 8 ? handle.substring(0, 8) : handle;
+    }
 
     private MotionLog() {
     }
@@ -160,6 +179,7 @@ public final class MotionLog {
         Counters.enable(on, on ? MotionLog::log : null);
         TerminalView.sMotionLogEnabled = on;
         TerminalView.setMotionSink(on ? MotionLog::log : null);
+        TerminalView.setCrossingProbe(on ? CROSSING_PROBE : null);
     }
 
     /** Applies the stored switch; called once as the activity starts. */
