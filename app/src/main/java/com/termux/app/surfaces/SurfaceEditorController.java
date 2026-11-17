@@ -772,7 +772,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSession || prefs() == null)
             return;
         View rootContainer = mHost.findView(R.id.terminal_root_container);
-        ViewGroup content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (rootContainer == null || content == null)
             return;
         mSession = true;
@@ -790,7 +790,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @Override
     public void awaitWallpaper(@NonNull Runnable ready) {
-        ViewGroup content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (mWallpaperSettled || !mSession || content == null) {
             ready.run();
             return;
@@ -809,7 +809,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Override
     public void awaitFrame(@NonNull Runnable ready, @NonNull Runnable failed) {
         final View root = mHost.findView(R.id.terminal_root_container);
-        final ViewGroup content = mHost.findView(android.R.id.content);
+        final ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (root == null || content == null) {
             failed.run();
             return;
@@ -905,7 +905,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         }
         View rootContainer = mHost.findView(R.id.terminal_root_container);
-        ViewGroup content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (rootContainer == null || content == null)
             return;
         final boolean animate = !mNextInPlace;
@@ -976,7 +976,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mBar = new EditorBar(mHost.context());
             mBar.setListener(new BarListener());
         }
-        mBar.attach(content);
+        mBar.attach(com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR));
         // A picture read before the bar existed is applied now; a new bar starts at the theme's.
         mLabelInk = 0;
         if (mLabelPicture == null)
@@ -992,7 +992,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mCardTrail.clear();
         if (mSheet == null)
             mSheet = new EditorCardSheet(mHost.context(), mModel, new SheetListener());
-        mSheet.attach(content);
+        mSheet.attach(com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR));
         mSheet.setVeiled(mChromeVeiled);
         if (mChromeVeiled)
             mBar.setUnderOverview(true);
@@ -1843,7 +1843,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private boolean layoutFrame(boolean animate) {
         AppearanceEditorFrame frame = mFrame;
-        ViewGroup content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (frame == null || content == null || content.getHeight() <= 0)
             return false;
         View root = frame.root();
@@ -2595,7 +2595,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private void refitTopReveal() {
         AppearanceEditorFrame frame = mFrame;
-        ViewGroup content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (frame == null || content == null || !mFrameCtxValid || mSliderDragActive)
             return;
         if (measureTopReveal(frame.root()) == mRevealTopPx)
@@ -5448,7 +5448,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private void placeHalo(int color, float radiusPx, float scale) {
         View root = mFrame == null ? null : mFrame.root();
-        ViewGroup content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (root == null || content == null || root.getWidth() <= 0)
             return;
         View shell = root;
@@ -5619,7 +5619,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private boolean frameSizeChanged() {
         View root = mHost.findView(R.id.terminal_root_container);
-        View content = mHost.findView(android.R.id.content);
+        View content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (root == null || content == null)
             return false;
         boolean changed = root.getWidth() != mLastRootWidth || root.getHeight() != mLastRootHeight
@@ -5632,7 +5632,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private long computeLayoutSignature() {
         View root = mHost.findView(R.id.terminal_root_container);
-        View content = mHost.findView(android.R.id.content);
+        View content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         long signature = root == null ? -1 : root.getWidth();
         signature = mix(signature, root == null ? -1 : root.getHeight());
         signature = mix(signature, content == null ? -1 : content.getHeight());
@@ -5666,7 +5666,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void unregisterLayoutListener() {
         if (mLayoutListener == null)
             return;
-        View content = mHost.findView(android.R.id.content);
+        View content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (content != null)
             content.getViewTreeObserver().removeOnGlobalLayoutListener(mLayoutListener);
         mLayoutListener = null;
@@ -5875,7 +5875,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     public void onPlaceOrientationChanged() {
         LayoutEditorController layout = mHost.layoutEditor();
-        View content = mHost.findView(android.R.id.content);
+        View content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (!mOpen || layout == null || content == null)
             return;
         // Posted: the configuration lands before the window is laid out in it.

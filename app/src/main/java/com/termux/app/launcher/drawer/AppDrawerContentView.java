@@ -529,7 +529,7 @@ public final class AppDrawerContentView extends FrameLayout
             LayoutParams.MATCH_PARENT));
         // Chrome stays last for its ordinary elevation/shadow language. Content safety does not
         // depend on that ordering: each scrolling surface clips at the top margin below the pill.
-        mPill.bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(mPill);
         applyViewType();
     }
 

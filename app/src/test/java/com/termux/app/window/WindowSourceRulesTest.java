@@ -219,7 +219,7 @@ public class WindowSourceRulesTest {
         "app/setup/SetupWizardController.java:2",
         // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
         "app/surfaces/RelaunchReveal.java:1",
-        // local first-layout wait: moves onto the first-layout helper
+        // own frame tick or fling step: moves into the pipeline table or the helper
         "app/surfaces/SurfaceEditorController.java:3",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/terminal/CommandPaletteView.java:2",
@@ -257,31 +257,12 @@ public class WindowSourceRulesTest {
         "app/x11/X11PaneFrame.java:4"
     );
 
-    /** Files that call bringToFront, with the count of calls. */
-    static final List<String> BRING_TO_FRONT = Arrays.asList(
-        // raised over siblings: the layer table replaces bringToFront
-        "app/AzScrubRowView.java:1",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/TermuxActivity.java:3",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/help/HelpOverlayView.java:1",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/help/HelpPanelView.java:1",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/launcher/drawer/AppDrawerContentView.java:1",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/launcher/home/HomeActionsSheet.java:2",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/launcher/widget/WidgetPaneView.java:2",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/launcher/widget/WidgetPickerSheetView.java:1",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/notice/AppNoticeHostView.java:1",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/surfaces/AppearanceSurfaceController.java:1",
-        // raised over siblings: the layer table replaces bringToFront
-        "app/terminal/TerminalPaneController.java:2"
-    );
+    /**
+     * Files that call bringToFront, or bringChildToFront outside the window package, with the count
+     * of calls. Empty: the layer number orders layers, and a raise inside one layer goes through
+     * WindowLayers.raiseWithin.
+     */
+    static final List<String> BRING_TO_FRONT = Arrays.asList();
 
     /** Files that write elevation or translationZ (shadow or order), with the count of writes. */
     static final List<String> Z_WRITES = Arrays.asList(
@@ -300,7 +281,7 @@ public class WindowSourceRulesTest {
         // elevation for a shadow or lift: classify when its layer moves
         "app/fragments/settings/termux/TaiBenchHomeFragment.java:1",
         // Z doubles as draw order: the layer number replaces it
-        "app/help/HelpOverlayView.java:2",
+        "app/help/HelpOverlayView.java:1",
         // elevation for a shadow or lift: classify when its layer moves
         "app/launcher/popup/AnchoredMenu.java:3",
         // elevation for a shadow or lift: classify when its layer moves
@@ -362,25 +343,11 @@ public class WindowSourceRulesTest {
     /** Files that reach the decor or the content view while adding views, with the count of sites. */
     static final List<String> DECOR_OR_CONTENT_ADDS = Arrays.asList(
         // decor and content view: moves into the layer hosts
-        "app/TermuxActivity.java:85",
+        "app/TermuxActivity.java:81",
         // decor and content view: moves into the layer hosts
         "app/chrome/scene/SceneController.java:2",
         // decor and content view: moves into the layer hosts
-        "app/chrome/sheets/SheetsController.java:4",
-        // adds beside the root: moves into its layer host
-        "app/notice/AppNotice.java:1",
-        // adds beside the root: moves into its layer host
-        "app/setup/AppearanceResetCard.java:1",
-        // adds beside the root: moves into its layer host
-        "app/setup/GlassResetNudgeCard.java:1",
-        // adds beside the root: moves into its layer host
-        "app/setup/SetupWizardController.java:4",
-        // adds beside the root: moves into its layer host
-        "app/surfaces/SurfaceEditorController.java:11",
-        // adds beside the root: moves into its layer host
-        "app/terminal/inappkeyboard/KeyPopupController.java:1",
-        // adds beside the root: moves into its layer host
-        "app/terminal/inappkeyboard/voice/VoiceListeningIndicator.java:2"
+        "app/chrome/sheets/SheetsController.java:2"
     );
 
     /** Host interfaces over the cap, as path#Name (listed until under the cap, then deleted). */
