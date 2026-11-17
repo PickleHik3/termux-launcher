@@ -4416,8 +4416,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : rank == com.termux.app.chrome.LiveBackdrop.RANK_FLOAT
                 ? com.termux.app.glass.GlassEntry.PRIORITY_FLOAT
                 : com.termux.app.glass.GlassEntry.PRIORITY_DOCK;
+            // The dock stands in the chrome layer; floats and widgets on the pages.
             kind = mGlass.register(new com.termux.app.glass.GlassEntry(element, surface,
-                com.termux.app.glass.GlassKind.LIVE, priority), redress);
+                com.termux.app.glass.GlassKind.LIVE, priority,
+                priority == com.termux.app.glass.GlassEntry.PRIORITY_DOCK
+                    ? com.termux.app.window.WindowLayer.CHROME
+                    : com.termux.app.window.WindowLayer.PAGES, null), redress);
         }
         if (kind != com.termux.app.glass.GlassKind.LIVE) {
             if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);

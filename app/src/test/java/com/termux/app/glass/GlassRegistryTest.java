@@ -4,6 +4,8 @@ import android.app.Application;
 import android.os.Build;
 import android.view.View;
 
+import com.termux.app.window.WindowLayer;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -175,5 +177,60 @@ public class GlassRegistryTest {
     public void anElementWithNoEntryHasNoKind() {
         assertNull(registry.granted("dock"));
         assertFalse(registry.unregister("dock"));
+    }
+
+    private static GlassEntry in(String element, int priority, WindowLayer layer) {
+        return new GlassEntry(element, view(), GlassKind.LIVE, priority, layer, null);
+    }
+
+    @Test
+    public void theCommitWalksTheWindowLayersBackToFront() {
+        // Registered in the wrong order on purpose: a panel in the sheets, the dock in the chrome,
+        // a widget and a float on the pages, the keyboard's frost on the ground.
+        registry.register(in("panel", GlassEntry.PRIORITY_DOCK, WindowLayer.SHEETS));
+        registry.register(in("dock", GlassEntry.PRIORITY_DOCK, WindowLayer.CHROME));
+        registry.register(in("float", GlassEntry.PRIORITY_FLOAT, WindowLayer.PAGES));
+        registry.register(in("widget", GlassEntry.PRIORITY_WIDGET, WindowLayer.PAGES));
+        registry.register(in("frost", GlassEntry.PRIORITY_DOCK, WindowLayer.GROUND));
+        String[] order = {"frost", "widget", "float", "dock", "panel"};
+        for (int i = 0; i < order.length; i++) {
+            assertEquals(order[i], registry.entryAt(i).element);
+        }
+    }
+
+    @Test
+    public void aLayerOutranksThePriorityInTheCommitButNotInTheBudget() {
+        // A dock-priority panel in the sheets is drawn after a float, yet the budget still serves
+        // it before the float: the order a surface is drawn in is not the order it is paid for.
+        for (int i = 0; i < GlassRegistry.LIVE_SLOTS; i++) {
+            registry.register(in("float" + i, GlassEntry.PRIORITY_FLOAT, WindowLayer.PAGES));
+        }
+        registry.register(in("panel", GlassEntry.PRIORITY_DOCK, WindowLayer.SHEETS));
+        assertEquals(GlassKind.LIVE, registry.granted("panel"));
+        assertEquals(GlassKind.WALLPAPER, registry.granted("float7"));
+        assertEquals("panel", registry.entryAt(registry.size() - 1).element);
+    }
+
+    @Test
+    public void aPanelFreesItsSlotForTheSurfaceThatGaveWay() {
+        for (int i = 0; i < GlassRegistry.LIVE_SLOTS; i++) {
+            registry.register(in("widget" + i, GlassEntry.PRIORITY_WIDGET, WindowLayer.PAGES));
+        }
+        registry.register(in("panel", GlassEntry.PRIORITY_DOCK, WindowLayer.SHEETS));
+        assertEquals(GlassKind.WALLPAPER, registry.granted("widget7"));
+        registry.unregister("panel");
+        assertEquals(GlassKind.LIVE, registry.granted("widget7"));
+        assertEquals(GlassRegistry.LIVE_SLOTS, registry.liveCount());
+    }
+
+    @Test
+    public void itCountsTheEntriesThatWantEveryFrame() {
+        registry.register(in("dock", GlassEntry.PRIORITY_DOCK, WindowLayer.CHROME));
+        assertEquals(0, registry.frameCount());
+        registry.register(new GlassEntry("slab", view(), GlassKind.WALLPAPER,
+            GlassEntry.PRIORITY_WIDGET, WindowLayer.PAGES, () -> { }));
+        assertEquals(1, registry.frameCount());
+        registry.unregister("slab");
+        assertEquals(0, registry.frameCount());
     }
 }
