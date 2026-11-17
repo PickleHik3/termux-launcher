@@ -4,6 +4,9 @@ import android.view.Choreographer;
 import android.view.View;
 import android.view.ViewParent;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 /**
  * Spring-physics "glass plank" reactive treatment for the launcher dock.
  *
@@ -25,6 +28,18 @@ import android.view.ViewParent;
  * moved onto true critical damping.</p>
  */
 public final class DockPlankController implements Choreographer.FrameCallback {
+
+    /**
+     * Where the dock's slab goes instead of the plank's own views: the stack's one writer
+     * ({@code StackRenderer}) composes it onto the crossing's transforms and writes the result.
+     * The slab is computed from the size of the view the sink tilts now.
+     */
+    public interface SlabSink {
+        int slabWidth();
+        int slabHeight();
+        /** The slab changed (or was reset): compose it on this frame. */
+        void onSlab(@NonNull Slab slab);
+    }
 
     private static final float DEFAULT_MAX_TILT_DEG = 3f;
     /** Pivot height for the floating capsule: slightly below centre, so it reads as pushed, not spun. */
@@ -50,7 +65,9 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     /** Ceiling on the dip's edge travel in px, or 0 for none. See {@link #setMaxDipTravelDp}. */
     private float mMaxDipTravelPx = NO_DIP_TRAVEL_CAP;
 
-    private final View mPlank;       // the transformed slab (whole dock stack)
+    private final View mPlank;       // the transformed slab (whole dock stack); null with a sink
+    /** Where the slab goes when the plank writes no view itself. */
+    @Nullable private final SlabSink mSink;
     private final View mSpecular;    // moving specular highlight
     private final View mGlow;        // accent rim glow
     private final float mDensity;
@@ -60,6 +77,16 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     private boolean[] mContentInherits = NO_FLAGS;
     /** The one answer the whole dock wears this frame, computed once from the plank's geometry. */
     private final Slab mSlab = new Slab();
+    /**
+     * The answer last written to the plank and the rows; neutral until the first write, as the
+     * views start. A slab equal to it writes nothing: the plank's transform is written only when
+     * the plank changes it, so a resting plank re-applied by the chrome never writes over another
+     * writer of the same view (a crossing sinks the glass host the plank tilts while the keyboard
+     * is up).
+     */
+    private final Slab mWritten = new Slab();
+    /** The next write goes out whole even when the slab has not changed (a reset, new rows). */
+    private boolean mWriteWhole = false;
     /** Reused by {@link #measureOffsetFromPlank}: a row's laid-out offset from the plank. */
     private final float[] mLayerOffset = new float[2];
 
@@ -96,8 +123,19 @@ public final class DockPlankController implements Choreographer.FrameCallback {
         this(plank, specular, glow, DEFAULT_MAX_TILT_DEG, DEFAULT_SHIFT_DP, DEFAULT_PRESS_DIP);
     }
 
+    /** The dock's plank, which publishes its slab to {@code sink} and writes no stack transform. */
+    public DockPlankController(@NonNull SlabSink sink, View specular, View glow) {
+        this(null, sink, specular, glow, DEFAULT_MAX_TILT_DEG, DEFAULT_SHIFT_DP, DEFAULT_PRESS_DIP);
+    }
+
     public DockPlankController(View plank, View specular, View glow,
                         float maxTiltDeg, float shiftDp, float pressDip) {
+        this(plank, null, specular, glow, maxTiltDeg, shiftDp, pressDip);
+    }
+
+    private DockPlankController(View plank, @Nullable SlabSink sink, View specular, View glow,
+                        float maxTiltDeg, float shiftDp, float pressDip) {
+        mSink = sink;
         mMaxTiltDeg = maxTiltDeg;
         mShiftDp = shiftDp;
         mPressDip = pressDip;
@@ -133,6 +171,8 @@ public final class DockPlankController implements Choreographer.FrameCallback {
         for (View previous : mContentLayers) {
             resetLayer(previous);
         }
+        // The new rows are handed the slab whatever it was last.
+        mWriteWhole = true;
         int count = countNonNull(layers);
         mContentLayers = count == 0 ? NO_LAYERS : new View[count];
         mContentInherits = count == 0 ? NO_FLAGS : new boolean[count];
@@ -198,7 +238,14 @@ public final class DockPlankController implements Choreographer.FrameCallback {
         return false;
     }
 
-    private static void resetLayer(View layer) {
+    /** Whether {@code layer} wears no transform of the plank's. */
+    public static boolean isNeutral(@NonNull View layer) {
+        return layer.getRotationX() == 0f && layer.getRotationY() == 0f
+            && layer.getTranslationX() == 0f && layer.getTranslationY() == 0f
+            && layer.getScaleX() == 1f && layer.getScaleY() == 1f;
+    }
+
+    public static void resetLayer(View layer) {
         if (layer == null) {
             return;
         }
@@ -312,6 +359,8 @@ public final class DockPlankController implements Choreographer.FrameCallback {
         mGlowLevel.reset(0f);
         mLightX.reset(0.5f);
         mLightY.reset(0.5f);
+        // Snapping back writes neutral whatever the plank last wrote.
+        mWriteWhole = true;
         applyToViews();
         if (mGlow != null) {
             mGlow.setVisibility(View.GONE);
@@ -409,10 +458,18 @@ public final class DockPlankController implements Choreographer.FrameCallback {
 
     private void applyToViews() {
         mSlab.valid = false;
-        if (!mHandedOver && mPlank != null && mPlank.getWidth() > 0 && mPlank.getHeight() > 0) {
+        boolean write = true;
+        if (mSink != null) {
+            publishSlab();
+        } else if (!mHandedOver && mPlank != null && mPlank.getWidth() > 0 && mPlank.getHeight() > 0) {
             if (mMotionEnabled) {
                 computeSlab(mPlank.getWidth(), mPlank.getHeight());
-                mSlab.applyTo(mPlank, 0f, 0f);
+                write = mWriteWhole || !mSlab.sameAs(mWritten);
+                if (write) {
+                    mSlab.applyTo(mPlank, 0f, 0f);
+                    mWritten.set(mSlab);
+                    mWriteWhole = false;
+                }
             } else if (mPlank.getRotationX() != 0f || mPlank.getRotationY() != 0f
                 || mPlank.getScaleX() != 1f) {
                 mPlank.setRotationX(0f);
@@ -423,7 +480,7 @@ public final class DockPlankController implements Choreographer.FrameCallback {
                 mPlank.setTranslationY(0f);
             }
         }
-        if (!mHandedOver) {
+        if (mSink == null && !mHandedOver && write) {
             applyToContentLayers();
         }
         if (mGlow instanceof DockEdgeGlowView) {
@@ -449,6 +506,31 @@ public final class DockPlankController implements Choreographer.FrameCallback {
             mSpecular.setTranslationY((mLightY.value - 0.5f) * hh);
             mSpecular.setAlpha(clamp01(0.07f + mGlowLevel.value * 0.22f + mPress.value * 0.12f));
         }
+    }
+
+    /**
+     * The slab handed to the sink rather than written: only when it changed (or a reset or new
+     * rows ask for it whole), never while another surface owns the dock's transforms, and
+     * neutral while motion is off. A resting plank publishes nothing new, so the sink writes
+     * nothing over a crossing's transforms.
+     */
+    private void publishSlab() {
+        if (mHandedOver) return;
+        int width = mSink.slabWidth();
+        int height = mSink.slabHeight();
+        if (mMotionEnabled && width > 0 && height > 0) {
+            computeSlab(width, height);
+        } else if (mMotionEnabled && !mWriteWhole) {
+            return;
+        } else {
+            // Motion off, or a reset with nothing laid out yet: neutral.
+            mSlab.setNeutral();
+            mSlab.valid = true;
+        }
+        if (!mWriteWhole && mSlab.sameAs(mWritten)) return;
+        mWritten.set(mSlab);
+        mWriteWhole = false;
+        mSink.onSlab(mSlab);
     }
 
     /**
@@ -489,23 +571,61 @@ public final class DockPlankController implements Choreographer.FrameCallback {
     }
 
     /** The slab's answer, held so it can be handed to the plank and to every row standing on it. */
-    private static final class Slab {
-        float pivotX;
-        float pivotY;
-        float rotationX;
-        float rotationY;
-        float translationX;
-        float translationY;
-        float scaleX = 1f;
-        float scaleY = 1f;
+    public static final class Slab {
+        public float pivotX;
+        public float pivotY;
+        public float rotationX;
+        public float rotationY;
+        public float translationX;
+        public float translationY;
+        public float scaleX = 1f;
+        public float scaleY = 1f;
         boolean valid;
+
+        /** Whether it moves nothing: no rotation, slide or scale. */
+        public boolean isNeutral() {
+            return rotationX == 0f && rotationY == 0f && translationX == 0f
+                && translationY == 0f && scaleX == 1f && scaleY == 1f;
+        }
+
+        void setNeutral() {
+            rotationX = 0f;
+            rotationY = 0f;
+            translationX = 0f;
+            translationY = 0f;
+            scaleX = 1f;
+            scaleY = 1f;
+        }
+
+        /**
+         * Whether {@code other} draws the same: the same transform, and the same pivot unless
+         * neither rotates nor scales, where the pivot moves nothing (a plank resized at rest).
+         */
+        public boolean sameAs(Slab other) {
+            if (rotationX != other.rotationX || rotationY != other.rotationY
+                || translationX != other.translationX || translationY != other.translationY
+                || scaleX != other.scaleX || scaleY != other.scaleY) return false;
+            boolean pivotFree = rotationX == 0f && rotationY == 0f && scaleX == 1f && scaleY == 1f;
+            return pivotFree || (pivotX == other.pivotX && pivotY == other.pivotY);
+        }
+
+        public void set(Slab other) {
+            pivotX = other.pivotX;
+            pivotY = other.pivotY;
+            rotationX = other.rotationX;
+            rotationY = other.rotationY;
+            translationX = other.translationX;
+            translationY = other.translationY;
+            scaleX = other.scaleX;
+            scaleY = other.scaleY;
+        }
 
         /**
          * @param offsetX the view's laid-out left relative to the plank's, so the plane's pivot
          *     lands on the same physical line in the view's own coordinates
          * @param offsetY the same for its top
          */
-        void applyTo(View view, float offsetX, float offsetY) {
+        public void applyTo(View view, float offsetX, float offsetY) {
             view.setPivotX(pivotX - offsetX);
             view.setPivotY(pivotY - offsetY);
             view.setRotationX(rotationX);
@@ -562,6 +682,14 @@ public final class DockPlankController implements Choreographer.FrameCallback {
      * that shares no ancestor with the plank keeps the plank's pivot unshifted.
      */
     private void measureOffsetFromPlank(View layer) {
+        layoutOffsetFromPlank(layer, mPlank, mLayerOffset);
+    }
+
+    /** {@link #measureOffsetFromPlank} for any plank, into {@code out}. */
+    public static void layoutOffsetFromPlank(View layer, @Nullable View plank,
+                                             @NonNull float[] out) {
+        float[] mLayerOffset = out;
+        View mPlank = plank;
         mLayerOffset[0] = 0f;
         mLayerOffset[1] = 0f;
         ViewParent plankParent = mPlank == null ? null : mPlank.getParent();

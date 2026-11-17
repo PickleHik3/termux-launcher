@@ -156,6 +156,8 @@ public final class Crossing {
     }
 
     @NonNull private final Stack mStack;
+    /** The scene's travel for this frame, reused by every frame ({@link #stack}). */
+    private final StackScene.Motion mMotion = new StackScene.Motion();
     @NonNull private final Bar mBar;
     @NonNull private final Cover mCover;
     @NonNull private final Keyboard mKeyboard;
@@ -293,8 +295,10 @@ public final class Crossing {
      */
     public float stack(@NonNull SeamCrossing.Answers seam, float dockReveal, int keyboardPx,
                        int dockPx, int rowsPx) {
-        float keyboardReveal = seam.keyboardReveal();
-        boolean rowsSink = seam.rowsSink(keyboardPx);
+        // The travel and the rows' sink are the stack scene's (StackScene#travel).
+        StackScene.Motion motion = mMotion;
+        StackScene.travel(seam.folds(), seam.rowsSink(keyboardPx), seam.keyboardReveal(),
+            dockReveal, keyboardPx, dockPx, rowsPx, motion);
         if (seam.folds()) {
             // Only the extra keys fold: the rows on the canvas's side of them sink by their hidden
             // part, the rows between them and the screen's edge stand still (#94).
@@ -302,11 +306,10 @@ public final class Crossing {
             mStack.fold();
         } else {
             mFoldShare = Float.NaN;
-            mStack.sink(rowsSink ? rowsPx * (1f - clamp01(dockReveal)) : 0f);
+            mStack.sink(motion.rowsSinkPx);
         }
-        float translation = PlaceChromeTravel.stackTranslationPx(keyboardReveal,
-            rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
-        mStack.translate(translation, keyboardPx * (1f - clamp01(keyboardReveal)));
+        float translation = motion.dockTravelPx;
+        mStack.translate(translation, motion.keyboardSharePx);
         // The committed half's stack, pictured, goes as the other half's comes: sinking, or
         // riding out with its page while the other half's waits for the landing.
         float picture = seam.pictureReveal();

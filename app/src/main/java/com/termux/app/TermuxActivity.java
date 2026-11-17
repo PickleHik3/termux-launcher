@@ -1965,6 +1965,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         registerRotationListener();
         setContentView(R.layout.activity_termux);
         mFrames.attach(findViewById(R.id.activity_termux_root_view));
+        // The bottom stack's writer is a step of the frame table, on the pipeline's guards.
+        mStackRenderer.attach(mFrames);
         mFrames.setLog((event, detail) -> {
             if (com.termux.app.chrome.MotionLog.enabled) com.termux.app.chrome.MotionLog.log(event, detail);
         });
@@ -5615,7 +5617,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         reflection.attachStrip(null, 0f, 0f);
         boolean live = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
             && mFancierGlassLook != null;
-        reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], rowAt[1] - hostAt[1],
+        reflection.update(card, mPeekRow, rowAt[0] - hostAt[0],
+            rowAt[1] - hostAt[1] + mStackRenderer.rowsOverHostPx(),
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
     }
 
@@ -9581,6 +9584,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The keyboard going up or down, or the dock lifting, does not always lay the dock host out
         // again, yet it decides whether the Peek card may stand: read it again before the next draw.
         if (mPeekWatchedHost != null) schedulePeekRefresh();
+        // The stack's transforms for this rest: written only where they differ from the last.
+        mStackRenderer.applyAtRest();
     }
 
     /**
@@ -10390,124 +10395,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The accessory stack's one translationY, which two things own a share of: the system IME's
      * lift, and the wall's travel sliding the dock and keyboard between two places' states. Each
-     * writes its own share and this sums them, so neither undoes the other.
-     *
-     * <p>While the travel has the stack below where it is laid out, the part that has slid past
-     * the stack's own laid-out bottom is clipped away: the root lets its children draw outside it,
-     * and a keyboard sliding off would otherwise draw across the navigation bar on its way out.
+     * writes its own share and the stack's renderer sums them, so neither undoes the other; it
+     * also cuts the stack and the keyboard where the travel slides them past their laid-out
+     * bottoms, and holds the bands under the keyboard up by the keyboard's share
+     * ({@link com.termux.app.place.StackScene}).
      */
     private void applyAccessoryStackTranslation() {
-        View accessoryContainer = hotView(R.id.accessory_stack_container);
-        if (accessoryContainer == null) {
-            return;
-        }
-        float translationY = mDockTravelTranslationPx - mDockImeLiftPx;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             Trace.setCounter("Wall.stackTranslationPx", Math.round(mDockTravelTranslationPx));
-        if (accessoryContainer.getTranslationY() != translationY) {
-            accessoryContainer.setTranslationY(translationY);
-            // The dock's and the keyboard's glass sample the wallpaper through this translation
-            // (mAccessoryStackLift); a transform alone redraws nothing, so they are re-aimed here.
-            View backdrop = hotView(R.id.accessory_blur_backdrop);
-            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-            View keyboardHost = hotView(R.id.inapp_keyboard_view_host);
-            if (keyboardHost != null && keyboardHost.getBackground() != null) keyboardHost.invalidate();
-            View under = hotView(R.id.accessory_under_keyboard_stack);
-            if (under != null && under.getBackground() != null) under.invalidate();
-        }
-        applyUnderKeyboardTravel();
-        int travel = Math.round(Math.max(0f, mDockTravelTranslationPx));
-        if (travel <= 0) {
-            if (accessoryContainer.getClipBounds() != null) accessoryContainer.setClipBounds(null);
-            return;
-        }
-        // Generous above and to the sides: the stack's glow and ripple layers draw outside it on
-        // purpose, and only the bottom edge is the one being cut.
-        int width = Math.max(1, accessoryContainer.getWidth());
-        // The height it is about to be laid out at: a pre-roll has just written it, and the
-        // traversal that applies it runs before this frame draws.
-        ViewGroup.LayoutParams params = accessoryContainer.getLayoutParams();
-        int height = params != null && params.height > 0 ? params.height
-            : Math.max(0, accessoryContainer.getHeight());
-        mTmpTravelClip.set(-width, -Math.max(height, getResources().getDisplayMetrics().heightPixels),
-            2 * width, Math.max(0, height - travel));
-        accessoryContainer.setClipBounds(mTmpTravelClip);
+        mStackRenderer.setTravel(mDockTravelTranslationPx, mKeyboardTravelSharePx, mDockImeLiftPx);
     }
 
     /**
-     * How far the keyboard column's bottom stands under the keyboard: the bands under it with
-     * their air, and the column's own padding.
+     * The bottom stack's one writer of transforms (the travel, the IME's lift, the sink, the
+     * slide and the plank's slab, composed), reading the stack's views through the activity.
      */
-    private static int belowKeyboardInColumnPx(@NonNull View column, @Nullable View under) {
-        int below = column.getPaddingBottom();
-        if (under == null || under.getVisibility() == View.GONE || under.getParent() != column)
-            return below;
-        below += under.getHeight();
-        ViewGroup.LayoutParams params = under.getLayoutParams();
-        if (params instanceof ViewGroup.MarginLayoutParams) {
-            below += ((ViewGroup.MarginLayoutParams) params).topMargin
-                + ((ViewGroup.MarginLayoutParams) params).bottomMargin;
+    private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
+        @Nullable @Override public View view(int id) {
+            return hotView(id);
         }
-        return below;
-    }
-
-    /** The accessory stack's bottom padding: what stands between its column and its bottom. */
-    private int accessoryStackPaddingBottomPx() {
-        View container = hotView(R.id.accessory_stack_container);
-        return container == null ? 0 : container.getPaddingBottom();
-    }
-
-    /** Scratch for the travel clip; setClipBounds copies it. */
-    private final Rect mTmpTravelClip = new Rect();
-    /** Scratch for the keyboard's own clip while it rises from behind the bands under it. */
-    private final Rect mTmpKeyboardTravelClip = new Rect();
-
-    /**
-     * The bands standing under the keyboard ({@code accessory_under_keyboard_stack}) while the
-     * keyboard travels: the stack slides the keyboard down by its share of the travel, and the
-     * bands under it would go with it; they are held back up by that share instead, so they stay
-     * on the bottom edge and the keyboard rises out from between them and the dock rows, clipped
-     * where the bands begin. The dock's own share still takes them with it. Nothing to do, and
-     * nothing left behind, while no band stands there or the keyboard is not in the column.
-     */
-    private void applyUnderKeyboardTravel() {
-        View under = hotView(R.id.accessory_under_keyboard_stack);
-        View keyboard = hotView(R.id.inapp_keyboard_container);
-        View column = hotView(R.id.accessory_keyboard_column);
-        boolean inColumn = keyboard != null && keyboard.getVisibility() != View.GONE
-            && column != null && keyboard.getParent() == column;
-        boolean holds = under != null && mDockRows.underKeyboardBandsShown() && inColumn;
-        float share = holds ? Math.max(0f, mKeyboardTravelSharePx) : 0f;
-        if (under != null && under.getTranslationY() != -share) {
-            under.setTranslationY(-share);
-            // Its sheet samples the wallpaper where it is drawn; a transform alone redraws nothing.
-            if (under.getBackground() != null) under.invalidate();
+        @Override public int keyboardDesiredHeightPx() {
+            return mKeyboardGeometry == null ? 0 : mKeyboardGeometry.desiredHeightPx();
         }
-        if (keyboard == null) return;
-        // The keyboard is also cut where it slides past its column's laid-out bottom, not only the
-        // stack's: with the dock's foot the stack reaches the screen's edge and the column stands
-        // the foot's band above it, so the tail of a crossing to a keyboard-down page would show
-        // the slid keyboard's top row under the gesture pill (BottomInsets#keyboardTravelHiddenPx).
-        int hidden = inColumn ? com.termux.app.place.BottomInsets.keyboardTravelHiddenPx(
-                mDockTravelTranslationPx, share, belowKeyboardInColumnPx(column, under),
-                accessoryStackPaddingBottomPx())
-            : Math.round(share);
-        if (hidden <= 0) {
-            if (keyboard.getClipBounds() != null) keyboard.setClipBounds(null);
-            return;
+        @Override public boolean underKeyboardBandsShown() {
+            return mDockRows != null && mDockRows.underKeyboardBandsShown();
         }
-        // Generous to the sides and above, as the stack's own clip is: only the bottom is cut. A
-        // keyboard pre-rolled this frame has not been laid out yet and has no width of its own.
-        int width = Math.max(keyboard.getWidth(), getResources().getDisplayMetrics().widthPixels);
-        // The height it is about to be laid out at: a pre-roll has just measured it, and the
-        // traversal that lays it out runs before this frame draws.
-        int measured = mKeyboardGeometry.desiredHeightPx();
-        int height = measured > 0 ? measured : Math.max(0, keyboard.getHeight());
-        mTmpKeyboardTravelClip.set(-width, -Math.max(height,
-            getResources().getDisplayMetrics().heightPixels), 2 * width,
-            Math.max(0, height - hidden));
-        keyboard.setClipBounds(mTmpKeyboardTravelClip);
-    }
+        @Override public boolean keyboardShown() {
+            return isInAppKeyboardShown();
+        }
+        @Override public boolean othersOwnStack() {
+            return mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive();
+        }
+    });
 
     /**
      * The bottom inset the root, which fits the system windows, pads itself by
@@ -23697,6 +23616,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final class DockControllerHost implements com.termux.app.dock.DockController.Host {
 
+        @NonNull @Override public StackRenderer stackRenderer() {
+            return mStackRenderer;
+        }
+
         @Nullable
         @Override
         public <T extends View> T findViewById(int id) {
@@ -24093,6 +24016,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final class CrossingViewsHost implements com.termux.app.place.CrossingViews.Host {
 
+        @NonNull @Override public StackRenderer stackRenderer() {
+            return mStackRenderer;
+        }
+
         @Nullable
         @Override
         public View hotView(int id) {
@@ -24443,6 +24370,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mCrossing.land(landed != null ? landed : shownEndpointPageOf(page),
                     arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
+            // The stack's next frame is the landing's: it should write nothing new.
+            mStackRenderer.onLanding();
             // A keyboard a pictured dip put away comes back where the wall came back.
             landKeyboardPicturedAway(page, left);
             Trace.endSection();
