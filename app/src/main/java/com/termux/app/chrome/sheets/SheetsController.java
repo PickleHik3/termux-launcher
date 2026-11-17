@@ -992,26 +992,26 @@ public final class SheetsController {
             preferences == null ? null : preferences.getSharedPreferences();
         if (store != null && mPaletteTileStore != store) {
             if (mPaletteTileStore != null)
-                mPaletteTileStore.unregisterOnSharedPreferenceChangeListener(mPaletteTileKnob);
-            store.registerOnSharedPreferenceChangeListener(mPaletteTileKnob);
+                com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mPaletteTileStore, mPaletteTileKnob);
+            com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mPaletteTileKnob);
             mPaletteTileStore = store;
         }
         boolean on = store == null
             ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
-            : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
+            : com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
                 com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
         // Its column is one for every layout; absent, the row's last.
         int column = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
-            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN,
+            : com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).getInt(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN,
                 com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
         bar.setPaletteTile(on, column,
             on ? () -> getCommandPaletteController().openFromField(null, true) : null);
         // New float terminal: the same float the Terminal entry's New float here opens.
-        boolean floatOn = store != null && store.getBoolean(
+        boolean floatOn = store != null && com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).getBoolean(
             com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON,
             com.termux.app.surfaces.cards.DockCard.DEFAULT_FLOAT_TERMINAL_BUTTON);
         int floatColumn = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
-            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN,
+            : com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).getInt(com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN,
                 com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
         bar.setFloatTile(floatOn, floatColumn, floatOn ? mHost::openHomeFloatHere : null);
     }

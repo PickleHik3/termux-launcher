@@ -258,8 +258,10 @@ public class PresetApplyTest {
     @Test
     public void aSurfaceMovedAfterGlobalDetachesThatSurfaceOnly() {
         TermuxAppSharedPreferences prefs = install();
-        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), Row.OPACITY,
-            61);
+        SurfaceEditorController first = open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS,
+            HOME_PAGE);
+        slide(first, Row.OPACITY, 61);
+        first.done();
         LookGrid grid = prefs.lookGrid();
         int status = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, HOME_PAGE);
         dockOpacity(prefs, EditorChips.AppliesTo.GLOBAL, 23);
@@ -409,6 +411,8 @@ public class PresetApplyTest {
         model.onValue(Row.OPACITY, value, false);
         model.onReleased(Row.OPACITY);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        // The edit is the draft's until Done: the store holds it from here, as a person's Done does.
+        editor.done();
     }
 
     // ---------------------------------------------------------------------------- the checks

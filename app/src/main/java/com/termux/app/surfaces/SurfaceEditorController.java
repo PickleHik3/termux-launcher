@@ -65,7 +65,7 @@ import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.settings.preferences.SharedPreferencesPreview;
+import com.termux.shared.settings.preferences.PreferenceDraft;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -101,11 +101,14 @@ import java.util.Locale;
  * the card's menu puts the surface back on that half's Look, and Copy makes the other half look
  * the same. Moving a surface's slider at any Look stop leaves the half at Custom by itself.</p>
  *
- * <p><b>Commit on Done.</b> Everything writes through, so the frame is the real thing; Undo and
- * Discard put back the state at open: the look on both halves ({@link AppearanceSnapshot}), the
- * app-wide choices ({@link EditorSettingsSnapshot}), minimal mode, and the arrangement, whose
- * session ({@link LayoutEditorController}) opens and closes with the editor. One dirty state, one
- * Undo, one Done and one unsaved-changes question cover all of it.</p>
+ * <p><b>Commit on Done.</b> Every edit of the store goes into one draft ({@link PreferenceDraft})
+ * layered over it, so the frame is the real thing and nothing is stored: Done writes the draft once,
+ * Undo and Discard drop it, and a look written from outside meanwhile shows at once and survives
+ * both. Dirty is the draft against the store. Beside it stay the app-wide choices Settings applies
+ * as it writes them ({@link EditorSettingsSnapshot}), and the arrangement, whose
+ * session ({@link LayoutEditorController}) opens and closes with the editor; they are put back from
+ * the state at open. One dirty state, one Undo, one Done and one unsaved-changes question cover all
+ * of it.</p>
  */
 public final class SurfaceEditorController implements AppearanceSurfaceController.Editor {
 
@@ -275,7 +278,43 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @Nullable
     private TermuxAppSharedPreferences prefs() {
-        return mHost.preferences();
+        PreferenceDraft draft = mDraft;
+        TermuxAppSharedPreferences editing = mDraftPrefs;
+        return draft != null && draft.isOpen() && editing != null ? editing : mHost.preferences();
+    }
+
+    /**
+     * Opens the session's draft over the store: every edit the editor makes lands in it, the
+     * launcher shows the store with it on top, Done stores it and Discard drops it. A session a
+     * relaunch carries on keeps the draft the process held. No store, no draft: the editor then
+     * writes through, as it must for a host with no preferences.
+     */
+    private void beginDraft(@NonNull TermuxAppSharedPreferences prefs, boolean carried) {
+        mDraft = null;
+        mDraftPrefs = null;
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null)
+            return;
+        PreferenceDraft open = PreferenceDraft.current();
+        mDraft = carried && open != null && open.isOpen() && open.store() == store ? open
+            : PreferenceDraft.begin(store);
+        mDraftPrefs = prefs.overDraft(mDraft);
+    }
+
+    /** The session ends: what the draft still holds is dropped, unstored. */
+    private void endDraft() {
+        PreferenceDraft draft = mDraft;
+        mDraft = null;
+        mDraftPrefs = null;
+        if (draft != null)
+            draft.discard();
+    }
+
+    /** Whether the draft holds a look the store does not: the unsaved dot and the Back dialog. */
+    private boolean isLookDirty() {
+        PreferenceDraft draft = mDraft;
+        return draft != null && draft.isOpen()
+            && draft.isDirtyIgnoring(AppearanceDraft.BOOKKEEPING_KEYS);
     }
 
     /** Use as, read fresh: Terminal only has no Home half, no Home card and no Match rows. */
@@ -328,16 +367,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     public boolean isOpen() {
         return mOpen;
     }
-    /** The state at open: what Undo and Discard return to, and what "unsaved" is measured against. */
-    @Nullable private AppearanceSnapshot mEntry;
-    @Nullable private String mEntrySignature;
+    /**
+     * Every edit of the session, layered over the store: what Undo and Discard drop, and what
+     * "unsaved" is measured against (the draft against the store). Null while closed.
+     */
+    @Nullable private PreferenceDraft mDraft;
+    /** The activity's preferences writing into {@link #mDraft}: what {@link #prefs} hands out. */
+    @Nullable private TermuxAppSharedPreferences mDraftPrefs;
     /** The app-wide choices at open, and their signature as it stands (refreshed on a write). */
     @Nullable private EditorSettingsSnapshot mEntrySettings;
     @Nullable private String mSettingsNow;
     /** Minimal mode at open. */
-    private boolean mEntryMinimal;
-    /** The saved Custom blob at open, which Undo and Discard put back; null while closed. */
-    @Nullable private String mEntryCustom;
     /** The Custom values of this session, kept while a Look is showing. */
     @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
     /**
@@ -916,39 +956,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             commitThemePreview();
         mOpen = true;
         mHost.retainGlassCapture(true);
-        if (mLookDrag == null)
-            SharedPreferencesPreview.clear();
-        mEntry = AppearanceSnapshot.capture(prefs);
-        mEntrySignature = mEntry.signature();
-        mEntryCustom = prefs.getSurfaceCustomPreset();
-        mEntryCardCustoms = CardCustoms.raw(prefs.getSharedPreferences());
+        CarriedSession carried = mCarriedNext;
+        mCarriedNext = null;
+        beginDraft(prefs, carried != null);
+        TermuxAppSharedPreferences editing = prefs();
         mEntrySettings = EditorSettingsSnapshot.capture(settingsStore());
         mSettingsNow = mEntrySettings.signature();
-        mEntryMinimal = mHost.isMinimalMode();
         mSessionCustom.clear();
         mHeldCustom.clear();
         mClearedWidgetGlass.clear();
         forgetGlassEdgePositions();
-        CarriedSession carried = mCarriedNext;
-        mCarriedNext = null;
         if (carried != null) {
-            mEntry = carried.entry;
-            mEntrySignature = carried.entrySignature;
-            mEntryCustom = carried.entryCustom;
-            mEntryCardCustoms = carried.entryCardCustoms;
             mEntrySettings = carried.settings;
-            mEntryMinimal = carried.minimal;
             mSessionCustom.copyFrom(carried.custom);
             refreshSettingsSignature();
         }
-        // On disk until the session ends, so a launcher killed before Done starts on this state.
-        AppearanceEntryStore.save(prefs, mEntry, mEntrySettings, mEntryCustom, mEntryCardCustoms);
         // A look that is Custom at open is the user's own: kept as the saved Custom, so a Look
-        // tried and kept comes back to it. Undo and a killed session put the slot back as
-        // mEntryCustom has it.
+        // tried and kept comes back to it. It goes into the draft: Done stores it, Discard drops it.
         if (carried == null && (AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.WIDGETS))
                 || AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.TERMINAL))))
-            SurfacePresets.saveCustom(prefs);
+            SurfacePresets.saveCustom(editing);
         PaneWallPage page = useAs.editorPlace(place != null ? place : mHost.pageOnScreen());
         mScreen = page == null ? PaneWallPage.TERMINAL : SeamDress.screenOf(page);
         com.termux.app.place.PlaceLayoutStore scopePlaces = scopePlaces();
@@ -2847,14 +2874,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable
     @Override
     public AppearanceSurfaceController.EditorSession carrySession() {
-        AppearanceSnapshot entry = mEntry;
-        String signature = mEntrySignature;
         EditorSettingsSnapshot settings = mEntrySettings;
-        if (!mOpen || entry == null || signature == null || settings == null)
+        if (!mOpen || settings == null)
             return mCarriedNext;
         LayoutEditorController layout = mHost.layoutEditor();
-        return new CarriedSession(entry, signature, mEntryCustom, mEntryCardCustoms, settings,
-            mEntryMinimal, mSessionCustom.copy(),
+        return new CarriedSession(settings, mSessionCustom.copy(),
             layout == null ? null : layout.entryArrangement());
     }
 
@@ -2865,27 +2889,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** {@link #carrySession}'s content: immutable, and read only by {@link #present}. */
     static final class CarriedSession implements AppearanceSurfaceController.EditorSession {
-        @NonNull final AppearanceSnapshot entry;
-        @NonNull final String entrySignature;
-        @Nullable final String entryCustom;
-        /** {@link CardCustoms#raw} at open; null when none was saved. */
-        @Nullable final String entryCardCustoms;
         @NonNull final EditorSettingsSnapshot settings;
-        final boolean minimal;
         @NonNull final SessionCustom custom;
         @Nullable final List<com.termux.app.place.PlaceArrangeSnapshot> arrangement;
 
-        CarriedSession(@NonNull AppearanceSnapshot entry, @NonNull String entrySignature,
-                       @Nullable String entryCustom, @Nullable String entryCardCustoms,
-                       @NonNull EditorSettingsSnapshot settings,
-                       boolean minimal, @NonNull SessionCustom custom,
+        CarriedSession(@NonNull EditorSettingsSnapshot settings,
+                       @NonNull SessionCustom custom,
                        @Nullable List<com.termux.app.place.PlaceArrangeSnapshot> arrangement) {
-            this.entry = entry;
-            this.entrySignature = entrySignature;
-            this.entryCustom = entryCustom;
-            this.entryCardCustoms = entryCardCustoms;
             this.settings = settings;
-            this.minimal = minimal;
             this.custom = custom;
             this.arrangement = arrangement;
         }
@@ -2985,7 +2996,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void commitSession() {
         commitLook();
         commitThemePreview();
-        AppearanceEntryStore.clear(prefs());
+        commitDraft();
+    }
+
+    /** Done: the draft is written into the store, once, and the session's writes are the store's. */
+    private void commitDraft() {
+        PreferenceDraft draft = mDraft;
+        mDraft = null;
+        mDraftPrefs = null;
+        if (draft != null)
+            draft.commit();
     }
 
     @Override
@@ -3857,8 +3877,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             + mChips.appliesTo.name();
     }
 
-    @Nullable private String mEntryCardCustoms;
-
     /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */
     @NonNull private final java.util.Set<EditorChips> mHeldCustomCells = new java.util.HashSet<>();
 
@@ -4612,29 +4630,23 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** The drag's writes, held over the store; null while no Look drag is under way. */
-    @Nullable private SurfacePresets.Batch mLookDrag;
-    @Nullable private TermuxAppSharedPreferences mLookDragPrefs;
+    /** Whether a finger is on the Look slider: each stop it crosses is previewed in the draft. */
+    private boolean mLookDragging;
 
-    /** A finger on the Look slider crossed onto {@code stop}: shown, not stored. */
+    /** A finger on the Look slider crossed onto {@code stop}: it goes into the draft, as every edit. */
     private void previewStop(int stop) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null) {
+        if (prefs.getSharedPreferences() == null) {
             if (moveToStop(prefs, stop, lookScreen()))
                 syncAfterBulkWrite();
             return;
         }
         beginDrag(true);
-        if (mLookDrag == null || mLookDragPrefs == null) {
-            mLookDrag = new SurfacePresets.Batch(store);
-            mLookDragPrefs = SurfacePresets.writingInto(prefs, mLookDrag);
-        }
-        if (!moveToStop(mLookDragPrefs, stop, lookScreen()))
+        mLookDragging = true;
+        if (!moveToStop(prefs, stop, lookScreen()))
             return;
-        SharedPreferencesPreview.show(store, mLookDrag.frozen());
         previewLook();
     }
 
@@ -4650,25 +4662,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         positionOutline();
     }
 
-    /** The finger left the Look slider: what it showed is stored, once. */
+    /** The finger left the Look slider: the launcher restates what the last stop left in the draft. */
     private void settleLookDrag() {
-        SurfacePresets.Batch batch = mLookDrag;
-        mLookDrag = null;
-        mLookDragPrefs = null;
-        if (batch == null)
+        if (!mLookDragging)
             return;
-        batch.applyToStore();
-        SharedPreferencesPreview.clear();
+        mLookDragging = false;
         syncAfterBulkWrite();
-    }
-
-    /** The drag's batch dropped unstored: a revert is putting the entry state back. */
-    private void dropLookDrag() {
-        if (mLookDrag == null)
-            return;
-        mLookDrag = null;
-        mLookDragPrefs = null;
-        SharedPreferencesPreview.clear();
     }
 
     // ---- the keyboard's two opacities ----------------------------------------------------------
@@ -5751,29 +5750,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private boolean isDirty() {
         TermuxAppSharedPreferences prefs = prefs();
-        boolean look = prefs != null && mEntrySignature != null
-            && !mEntrySignature.equals(AppearanceSnapshot.signatureOf(prefs));
+        boolean look = prefs != null && isLookDirty();
         boolean settings = mEntrySettings != null && mSettingsNow != null
             && !mEntrySettings.signature().equals(mSettingsNow);
-        boolean minimal = mHost.isMinimalMode() != mEntryMinimal;
         boolean theme = ThemePreview.pending() != null;
         LayoutEditorController layout = mHost.layoutEditor();
-        return look || settings || minimal || theme || (layout != null && layout.isDirty());
+        return look || settings || theme || (layout != null && layout.isDirty());
     }
 
     /** Undo: everything — both halves' look, the choices, the arrangement — back to the open. */
     private void revertToEntry() {
-        dropLookDrag();
+        mLookDragging = false;
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && layout.isDirty())
             layout.revert();
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null || mEntry == null)
+        PreferenceDraft draft = mDraft;
+        if (draft == null)
             return;
-        mEntry.restore(prefs);
-        if (mEntryCustom != null)
-            prefs.setSurfaceCustomPreset(mEntryCustom);
-        CardCustoms.restore(prefs.getSharedPreferences(), mEntryCardCustoms);
+        // Nothing to put back: the store was never written, so dropping the draft is the undo.
+        draft.reset();
         if (mEntrySettings != null) {
             List<String> written = mEntrySettings.restore(settingsStore());
             refreshSettingsSignature();
@@ -5781,8 +5776,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 mHost.applyHomeSettings();
         }
         dropThemePreview();
-        if (mHost.isMinimalMode() != mEntryMinimal)
-            mHost.setMinimalMode(mEntryMinimal);
+        // Minimal mode was part of the draft: the window follows the stored mode again.
+        mHost.setMinimalMode(mHost.isMinimalMode());
         mSessionCustom.clear();
         mHeldCustom.clear();
         if (!mClearedWidgetGlass.isEmpty()) {
@@ -5803,8 +5798,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null)
             return;
         // A visit that changed no look keeps the saved Custom as it found it.
-        if (mEntrySignature != null
-            && mEntrySignature.equals(AppearanceSnapshot.signatureOf(prefs)))
+        if (!isLookDirty())
             return;
         boolean custom = AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.WIDGETS))
             || AppearanceLooks.isCustomStop(matchingStop(PaneWallPage.TERMINAL));
@@ -5898,15 +5892,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mSliderDragActive)
             endDrag();
         mOpen = false;
-        AppearanceEntryStore.clear(prefs());
+        endDraft();
         closePageLook();
         mHost.retainGlassCapture(false);
         mFramed = false;
         mPresentToken++;
         mSliderDragActive = false;
-        mEntry = null;
-        mEntryCustom = null;
-        mEntrySignature = null;
         mEntrySettings = null;
         mSettingsNow = null;
         mCard = null;
@@ -6075,7 +6066,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * ticks do; a Look drag's stops do not (see {@link #previewLook}).
      */
     private boolean defersHeavyPasses() {
-        return mSliderDragActive && mLookDrag == null;
+        return mSliderDragActive && !mLookDragging;
     }
 
     private void endDrag() {

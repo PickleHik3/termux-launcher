@@ -151,7 +151,7 @@ Raise these if you think they are wrong; do not silently undo them.
 - The Sessions sidebar is legacy: no Sessions tab in the editor, no dot tab badges.
 - The Appearance editor commits only on Done. Its card sheet is always present at peek, half or
   full (no ✕); Back above peek collapses to peek, at peek it goes through the unsaved-changes
-  dialog; dirtiness compares against the entry snapshot. A view's place in Z is its window layer
+  dialog; dirtiness compares the draft against the store. A view's place in Z is its window layer
   (ground, pages, chrome, sheets, editor, notices, back to front; `WindowLayer`): runtime views
   join their layer's host through `WindowLayers`, never the window decor or the content view;
   elevation only draws a shadow and `bringToFront` is not used.

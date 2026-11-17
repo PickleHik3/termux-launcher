@@ -68,13 +68,19 @@ public class SurfaceEditorRelaunchTest {
         SurfacePresets.applyLook(preferences, clear);
     }
 
+
+    /** What the editor writes: the preferences writing into the session's draft. */
+    private TermuxAppSharedPreferences editorWrites() {
+        return preferences.overDraft(com.termux.shared.settings.preferences.PreferenceDraft.current());
+    }
+
     @Test
     public void theRelaunchedEditorKeepsTheUnsavedEditAndItsUndo() {
         String atOpen = AppearanceSnapshot.signatureOf(preferences);
         SurfaceEditorController before = editorOnNewActivity();
         present(before);
-        // An edit, written through to the preferences as every editor write is.
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
+        // An edit, written into the session's draft as every editor write is.
+        editorWrites().detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
             EDITED_KEYBOARD_OPACITY);
         String edited = AppearanceSnapshot.signatureOf(preferences);
         assertNotEquals(atOpen, edited);
@@ -111,7 +117,7 @@ public class SurfaceEditorRelaunchTest {
         CardCustoms.restore(store, atOpen);
         SurfaceEditorController before = editorOnNewActivity();
         present(before);
-        CardCustoms.put(store, "home", new int[] {4, 5, 6});
+        CardCustoms.put(editorWrites().getSharedPreferences(), "home", new int[] {4, 5, 6});
 
         AppearanceSurfaceController.EditorSession carried = before.carrySession();
         SurfaceEditorController after = editorOnNewActivity();

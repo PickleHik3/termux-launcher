@@ -20,15 +20,21 @@ public final class PrefsLookStore implements LookStore {
             for (Listener listener : listeners) listener.onKeyChanged(key);
         };
 
+    /** What a read asks: the store, or the editing session's draft over it. */
+    private SharedPreferences reads() {
+        SharedPreferences reads = com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(prefs);
+        return reads == null ? prefs : reads;
+    }
+
     public PrefsLookStore(@NonNull SharedPreferences prefs) {
         this.prefs = prefs;
-        prefs.registerOnSharedPreferenceChangeListener(prefsListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(prefs, prefsListener);
     }
 
     @Override
     public int getInt(@NonNull String key, int defaultValue) {
         try {
-            return prefs.getInt(key, defaultValue);
+            return reads().getInt(key, defaultValue);
         } catch (ClassCastException e) {
             return defaultValue;
         }
@@ -37,7 +43,7 @@ public final class PrefsLookStore implements LookStore {
     @Override
     public boolean getBoolean(@NonNull String key, boolean defaultValue) {
         try {
-            return prefs.getBoolean(key, defaultValue);
+            return reads().getBoolean(key, defaultValue);
         } catch (ClassCastException e) {
             return defaultValue;
         }
@@ -47,7 +53,7 @@ public final class PrefsLookStore implements LookStore {
     @Override
     public String getString(@NonNull String key, @NonNull String defaultValue) {
         try {
-            String value = prefs.getString(key, defaultValue);
+            String value = reads().getString(key, defaultValue);
             return value == null ? defaultValue : value;
         } catch (ClassCastException e) {
             return defaultValue;
@@ -55,7 +61,7 @@ public final class PrefsLookStore implements LookStore {
     }
 
     @Override
-    public boolean has(@NonNull String key) { return prefs.contains(key); }
+    public boolean has(@NonNull String key) { return reads().contains(key); }
 
     @Override
     public void putInt(@NonNull String key, int value) { prefs.edit().putInt(key, value).apply(); }

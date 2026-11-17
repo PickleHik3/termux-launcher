@@ -105,8 +105,9 @@ public class SurfaceEditorCardsTest {
         model(editor).onValue(Row.OPACITY, 15, false);
         model(editor).onReleased(Row.OPACITY);
         assertTrue("a Home write is unsaved", isDirty(editor));
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
-            TermuxAppSharedPreferences.terminalPageId(), 9);
+        preferences.overDraft(com.termux.shared.settings.preferences.PreferenceDraft.current())
+            .detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
+                TermuxAppSharedPreferences.terminalPageId(), 9);
 
         editor.undo();
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();

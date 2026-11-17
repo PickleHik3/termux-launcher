@@ -1939,9 +1939,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Load preferences BEFORE setting theme (needed to check wallpaper preference)
         mPreferences = buildPlaceScopedPreferences(false);
-        // An Appearance editor session the process died in leaves its entry state behind: it is
-        // put back before anything reads the look, unless a relaunch carries that session on.
-        com.termux.app.surfaces.AppearanceEntryStore.restoreLeftover(this, mPreferences,
+        // A draft an Appearance editor session left open is dropped before anything reads the
+        // look, unless a relaunch carries that session on.
+        com.termux.app.surfaces.AppearanceDraft.dropUnowned(mPreferences,
             mAppearanceHandover.pending() != null);
         // Before any chrome is built: every label reads the shared Text size as it is made.
         com.termux.app.theme.TextScale.sync(mPreferences);
@@ -1967,7 +1967,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
         if (mPreferences == null) {
             mPreferences = buildPlaceScopedPreferences(true);
-            com.termux.app.surfaces.AppearanceEntryStore.restoreLeftover(this, mPreferences,
+            com.termux.app.surfaces.AppearanceDraft.dropUnowned(mPreferences,
                 mAppearanceHandover.pending() != null);
             com.termux.app.theme.TextScale.sync(mPreferences);
         }
@@ -5564,8 +5564,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.content.SharedPreferences store = mPreferences.getSharedPreferences();
         if (store != null && mPeekReflectionKnobStore != store) {
             if (mPeekReflectionKnobStore != null)
-                mPeekReflectionKnobStore.unregisterOnSharedPreferenceChangeListener(mPeekReflectionKnob);
-            store.registerOnSharedPreferenceChangeListener(mPeekReflectionKnob);
+                com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mPeekReflectionKnobStore, mPeekReflectionKnob);
+            com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mPeekReflectionKnob);
             mPeekReflectionKnobStore = store;
         }
         com.termux.app.dock.PeekGlassReflection reflection = mPeekReflection;
@@ -5587,7 +5587,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPeekReflection != null) mPeekReflection.release();
         mPeekReflection = null;
         if (mPeekReflectionKnobStore != null) {
-            mPeekReflectionKnobStore.unregisterOnSharedPreferenceChangeListener(mPeekReflectionKnob);
+            com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mPeekReflectionKnobStore, mPeekReflectionKnob);
             mPeekReflectionKnobStore = null;
         }
     }
@@ -24585,9 +24585,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * off, the normal layout comes back, keyboard included. Everything else, the panes included,
      * works as it does in the normal layout.
      */
+    /** The minimal mode the window was last dressed for; null until a change is applied. */
+    @Nullable private Boolean mMinimalApplied;
+
     void setMinimalMode(boolean minimal) {
         PlaceLayoutStore store = placeLayoutStore();
-        if (store == null || store.isMinimal() == minimal) return;
+        if (store == null) return;
+        // The mode the window shows can differ from the stored one while the Appearance editor's
+        // draft is dropped under it: Discard puts the stored value back, and the window follows.
+        Boolean applied = mMinimalApplied;
+        if (store.isMinimal() == minimal && (applied == null || applied == minimal)) return;
+        mMinimalApplied = minimal;
         com.termux.app.wall.PaneWallPage place = mLastWallPage;
         // Home ignores minimal mode (it is the windows' alone), so from Home only the flag moves:
         // Home's keyboard is its own, and the window's memory stays as it was left.
@@ -27590,7 +27598,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (mPageOverview != null) mPageOverview.refresh();
         };
-        store.registerOnSharedPreferenceChangeListener(mStartInListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mStartInListener);
         // Home moved (Settings, Edit pages, another holder of the store): the marker follows.
         mWallPagesListener = new com.termux.app.wall.WallPagesStore.Listener() {
             /** The page kinds of the last page list this listener saw: the wall keys it put on the row. */
@@ -27654,7 +27662,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.content.SharedPreferences store =
             mPreferences == null ? null : mPreferences.getSharedPreferences();
         if (store != null && mStartInListener != null) {
-            store.unregisterOnSharedPreferenceChangeListener(mStartInListener);
+            com.termux.shared.settings.preferences.PreferenceDraft.unlisten(store, mStartInListener);
         }
         mStartInListener = null;
         if (mWallPagesListener != null && mWallPagesStore != null) {
