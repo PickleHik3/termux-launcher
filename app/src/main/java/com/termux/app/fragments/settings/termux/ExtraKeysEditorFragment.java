@@ -69,6 +69,7 @@ import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -115,6 +116,7 @@ public class ExtraKeysEditorFragment extends Fragment
 
     private View root;
     private ChipGroup pageChips;
+    private final Map<ExtraKeysTarget, Chip> targetChips = new java.util.EnumMap<>(ExtraKeysTarget.class);
     private MaterialButton pageAddButton;
     private ImageView pageMenuButton;
     private TextView countLabel;
@@ -397,6 +399,18 @@ public class ExtraKeysEditorFragment extends Fragment
         }
     }
 
+    /** The chip's text: the target and where its keys come from, so each page says it follows Global or has its own row. */
+    @NonNull
+    private String chipLabel(@NonNull ExtraKeysTarget of) {
+        String name = targetName(of);
+        if (of == ExtraKeysTarget.GLOBAL) return name;
+        if (of == ExtraKeysTarget.HOME && !drafts.isEditing(of)) {
+            return getString(R.string.settings_extra_keys_chip_off, name);
+        }
+        return getString(drafts.isEditing(of) ? R.string.settings_extra_keys_chip_own
+            : R.string.settings_extra_keys_chip_follows, name);
+    }
+
     /** One chip per target, above everything else; Global is selected on open. */
     private View targetBar(@NonNull Context context) {
         HorizontalScrollView scroll = new HorizontalScrollView(context);
@@ -408,7 +422,8 @@ public class ExtraKeysEditorFragment extends Fragment
         chips.setSelectionRequired(true);
         for (ExtraKeysTarget each : ExtraKeysTarget.values()) {
             Chip chip = new Chip(context);
-            chip.setText(targetName(each));
+            chip.setText(chipLabel(each));
+            targetChips.put(each, chip);
             chip.setCheckable(true);
             chip.setCheckedIconVisible(false);
             chip.setId(View.generateViewId());
@@ -461,6 +476,9 @@ public class ExtraKeysEditorFragment extends Fragment
         syncDraft();
         boolean own = drafts.isEditing(target);
         String name = targetName(target);
+        for (Map.Entry<ExtraKeysTarget, Chip> each : targetChips.entrySet()) {
+            setText(each.getValue(), chipLabel(each.getKey()));
+        }
         setShown(notOwnBlock, !own);
         setShown(keySizeBlock, own);
         setShown(pagesView, own);
@@ -472,11 +490,9 @@ public class ExtraKeysEditorFragment extends Fragment
             setText(keySizeNote, target == ExtraKeysTarget.GLOBAL
                 ? getString(R.string.settings_extra_keys_key_size_note)
                 : getString(R.string.settings_extra_keys_key_size_note_target, name));
-            boolean builtIn = target.shippedPage1() != null && target != ExtraKeysTarget.GLOBAL;
             setShown(useDefaultButton, target != ExtraKeysTarget.GLOBAL);
             setText(useDefaultButton, getString(target == ExtraKeysTarget.HOME
-                ? R.string.settings_extra_keys_home_hide : builtIn
-                ? R.string.settings_extra_keys_use_builtin : R.string.settings_extra_keys_use_global));
+                ? R.string.settings_extra_keys_home_hide : R.string.settings_extra_keys_use_global));
             final ExtraKeysTarget shown = target;
             useDefaultButton.setOnClickListener(v -> {
                 if (shown == ExtraKeysTarget.HOME) {
@@ -497,13 +513,8 @@ public class ExtraKeysEditorFragment extends Fragment
             setText(notOwnBody, getString(R.string.settings_extra_keys_home_off_body));
             setText(giveOwnButton, getString(R.string.settings_extra_keys_home_show));
         } else {
-            boolean shipped = drafts.sourceOf(target) == ExtraKeySetResolver.Source.SHIPPED;
-            setText(notOwnTitle, getString(shipped
-                ? R.string.settings_extra_keys_using_builtin_title
-                : R.string.settings_extra_keys_using_global_title));
-            setText(notOwnBody, shipped
-                ? getString(R.string.settings_extra_keys_using_builtin_body, name)
-                : getString(R.string.settings_extra_keys_using_global_body, name));
+            setText(notOwnTitle, getString(R.string.settings_extra_keys_using_global_title));
+            setText(notOwnBody, getString(R.string.settings_extra_keys_using_global_body, name));
             setText(giveOwnButton, getString(R.string.settings_extra_keys_give_own, name));
         }
         if (isAdded()) requireActivity().invalidateMenu();

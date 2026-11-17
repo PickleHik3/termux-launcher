@@ -38,14 +38,14 @@ public class ExtraKeysTargetDraftsTest {
     // ---- load
 
     @Test
-    public void loadReadsOwnShippedAndGlobalPerTarget() {
+    public void loadReadsOwnAndGlobalPerTarget() {
         ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines(
             TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL, "[[ESC]]"));
         assertTrue(d.isOwn(ExtraKeysTarget.GLOBAL));
         assertEquals(Source.OWN, d.sourceOf(ExtraKeysTarget.TERMINAL));
         assertEquals(Source.GLOBAL, d.sourceOf(ExtraKeysTarget.HOME));
-        assertEquals(Source.SHIPPED, d.sourceOf(ExtraKeysTarget.DISPLAY));
-        assertEquals(Source.SHIPPED, d.sourceOf(ExtraKeysTarget.ASSISTANT));
+        assertEquals(Source.GLOBAL, d.sourceOf(ExtraKeysTarget.DISPLAY));
+        assertEquals(Source.GLOBAL, d.sourceOf(ExtraKeysTarget.ASSISTANT));
         assertNull(d.draftOf(ExtraKeysTarget.HOME));
         assertEquals(1, d.draftOf(ExtraKeysTarget.TERMINAL).page(0).rowCount());
     }
@@ -77,35 +77,23 @@ public class ExtraKeysTargetDraftsTest {
     }
 
     @Test
-    public void giveOwnSetStartsFromTheBuiltInKeysWhenThereAreSome() {
+    public void giveOwnSetStartsFromGlobalsKeysForDisplayToo() {
         ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines());
         d.giveOwnSet(ExtraKeysTarget.DISPLAY);
-        assertEquals(ExtraKeysLayoutModel.parse(ExtraKeysTarget.DISPLAY.shippedPage1()).serialize(),
-            d.draftOf(ExtraKeysTarget.DISPLAY).valueFor(0));
-        assertEquals("[]", d.draftOf(ExtraKeysTarget.DISPLAY).valueFor(1));
+        assertEquals(d.draftOf(ExtraKeysTarget.GLOBAL).valueFor(0), d.draftOf(ExtraKeysTarget.DISPLAY).valueFor(0));
+        assertEquals(d.draftOf(ExtraKeysTarget.GLOBAL).valueFor(1), d.draftOf(ExtraKeysTarget.DISPLAY).valueFor(1));
     }
 
     @Test
-    public void afterAddANewOwnSetStartsFromTheResolvedBuiltInKeysWithTheKey() {
-        ExtraKeySetResolver.Lines added = lines(
-            com.termux.shared.termux.settings.properties.TermuxPropertyConstants
-                .KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, "true");
-        for (ExtraKeysTarget target : new ExtraKeysTarget[] {ExtraKeysTarget.DISPLAY, ExtraKeysTarget.ASSISTANT}) {
-            ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(added);
+    public void afterAddANewOwnSetStartsFromGlobalsKeysWithTheKey() {
+        java.util.Map<String, String> map = new java.util.HashMap<>();
+        for (ExtraKeysTargetDrafts.Write write : PageSwitcherKeyAdd.plan(map::get)) map.put(write.key, write.value);
+        for (ExtraKeysTarget target : new ExtraKeysTarget[] {ExtraKeysTarget.DISPLAY, ExtraKeysTarget.ASSISTANT,
+                ExtraKeysTarget.TERMINAL}) {
+            ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(map::get);
             d.giveOwnSet(target);
-            String page1 = d.draftOf(target).valueFor(0);
-            assertEquals(ExtraKeysLayoutModel.parse(
-                ExtraKeySetResolver.resolve(target, added).page1).serialize(), page1);
-            assertTrue(target.toString(), PageSwitcherKeyAdd.holds(page1));
+            assertTrue(target.toString(), PageSwitcherKeyAdd.holds(d.draftOf(target).valueFor(0)));
         }
-        // Following Global's built-in row: the copy of Global's draft carries the key too.
-        ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(added);
-        d.giveOwnSet(ExtraKeysTarget.TERMINAL);
-        assertTrue(PageSwitcherKeyAdd.holds(d.draftOf(ExtraKeysTarget.TERMINAL).valueFor(0)));
-        // Without the flag the built-in keys are as shipped.
-        ExtraKeysTargetDrafts plain = ExtraKeysTargetDrafts.load(lines());
-        plain.giveOwnSet(ExtraKeysTarget.DISPLAY);
-        assertFalse(PageSwitcherKeyAdd.holds(plain.draftOf(ExtraKeysTarget.DISPLAY).valueFor(0)));
     }
 
     @Test
@@ -117,7 +105,7 @@ public class ExtraKeysTargetDraftsTest {
         d.useDefault(ExtraKeysTarget.DISPLAY);
         assertFalse(d.isOwn(ExtraKeysTarget.DISPLAY));
         assertNull(d.draftOf(ExtraKeysTarget.DISPLAY));
-        assertEquals(Source.SHIPPED, d.sourceOf(ExtraKeysTarget.DISPLAY));
+        assertEquals(Source.GLOBAL, d.sourceOf(ExtraKeysTarget.DISPLAY));
         assertEquals(before, d.fingerprint());
     }
 

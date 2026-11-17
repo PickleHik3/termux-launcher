@@ -65,11 +65,9 @@ public class AssistantPlacePolicyTest {
     }
 
     @Test
-    public void theWindowChipsStayOffTheAssistantPage() {
-        assertFalse(PaneWallPolicy.showsWindowChips(PaneWallPage.ASSISTANT));
-        assertTrue(PaneWallPolicy.showsWindowChips(PaneWallPage.TERMINAL));
-        assertTrue(PaneWallPolicy.showsWindowChips(PaneWallPage.WIDGETS));
-        assertTrue(PaneWallPolicy.showsWindowChips(PaneWallPage.DISPLAY));
+    public void theWindowChipsShowOnEveryPlace_theAssistantPageIncluded() {
+        for (PaneWallPage page : PaneWallPage.values())
+            assertTrue(page.name(), PaneWallPolicy.showsWindowChips(page));
     }
 
     @Test

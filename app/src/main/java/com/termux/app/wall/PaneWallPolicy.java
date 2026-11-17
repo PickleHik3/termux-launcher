@@ -110,11 +110,11 @@ public final class PaneWallPolicy {
 
     /**
      * Whether the window bar's chips (the session's windows, the add button, the stats) show on
-     * {@code page}'s bar: everywhere but the Assistant page. It wears the Workspace's bar (ADR
-     * 0025), but it is no window of the session's row, so no chip there could stand for it.
+     * {@code page}'s bar: on every place, the Assistant page's included. A chip there is a way
+     * out to a window, and a tap travels the wall to it.
      */
     public static boolean showsWindowChips(@Nullable PaneWallPage page) {
-        return page != PaneWallPage.ASSISTANT;
+        return true;
     }
 
     /**

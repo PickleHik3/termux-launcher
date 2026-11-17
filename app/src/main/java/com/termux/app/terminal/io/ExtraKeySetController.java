@@ -111,10 +111,8 @@ public final class ExtraKeySetController {
         boolean targetChanged = !first && target != mTarget;
         if (targetChanged) mHost.modifiers().clear();
 
-        String builtIn = ExtraKeySetResolver.builtInPage1(target, mHost::rawLine);
-        String fallback1 = builtIn != null ? builtIn
-            : TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS;
-        ExtraKeysInfo page1 = mHost.parsePage(resolved.page1, fallback1, 0);
+        ExtraKeysInfo page1 = mHost.parsePage(resolved.page1,
+            TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS, 0);
         ExtraKeysInfo page2 = null;
         if (resolved.page2 != null) {
             ExtraKeysInfo parsed = mHost.parsePage(resolved.page2,

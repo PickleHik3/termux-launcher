@@ -56,42 +56,42 @@ public class PageSwitcherKeyAddTest {
     }
 
     @Test
-    public void aStoredGlobalRowGetsTheKeyOnceAndTheFlagIsSet() {
+    public void aStoredGlobalRowGetsTheKeyOnce() {
         Map<String, String> map = new HashMap<>();
         map.put(TermuxPropertyConstants.KEY_EXTRA_KEYS, "[[\"ESC\"]]");
         map.put(TermuxPropertyConstants.KEY_EXTRA_KEYS2, "[[\"F1\"]]");
         List<ExtraKeysTargetDrafts.Write> plan = PageSwitcherKeyAdd.plan(lines(map));
-        assertTrue(plan.contains(new ExtraKeysTargetDrafts.Write(
-            TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, "true")));
-        // Terminal and Home follow Global: one write, to Global's page 1, nothing detached.
+        // Every page without its own row follows Global: one write, to Global's page 1.
+        assertEquals(1, plan.size());
         assertTrue(plan.contains(new ExtraKeysTargetDrafts.Write(
             ExtraKeysTarget.GLOBAL.pageKeys()[0], "[[\"" + KEY + "\",\"ESC\"]]")));
-        int globalWrites = 0;
-        for (ExtraKeysTargetDrafts.Write write : plan)
-            if (write.key.equals(ExtraKeysTarget.GLOBAL.pageKeys()[0])) globalWrites++;
-        assertEquals(1, globalWrites);
-        assertFalse(writes(plan, ExtraKeysTarget.TERMINAL, false));
-        assertFalse(writes(plan, ExtraKeysTarget.HOME, false));
-        assertFalse(writes(plan, ExtraKeysTarget.GLOBAL, true));
-        // Display and Assistant show their built-in sets: the flag leads them, nothing is copied.
-        assertFalse(writes(plan, ExtraKeysTarget.DISPLAY, false));
-        assertFalse(writes(plan, ExtraKeysTarget.ASSISTANT, false));
+        for (ExtraKeysTarget target : ExtraKeysTarget.values())
+            assertFalse(target.toString(), writes(plan, target, true));
     }
 
     @Test
-    public void onADefaultInstallOnlyTheFlagIsWrittenAndEveryBarShowsTheKey() {
+    public void onADefaultInstallGlobalGetsTheDefaultRowLedByTheKey() {
         Map<String, String> map = new HashMap<>();
         List<ExtraKeysTargetDrafts.Write> plan = PageSwitcherKeyAdd.plan(lines(map));
         assertEquals(1, plan.size());
-        assertEquals(TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, plan.get(0).key);
+        assertEquals(ExtraKeysTarget.GLOBAL.pageKeys()[0], plan.get(0).key);
+        assertEquals(PageSwitcherKeyAdd.withKey(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS),
+            plan.get(0).value);
         assertFalse(PageSwitcherKeyAdd.isOn(lines(map)));
-        map.put(TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, "true");
+        for (ExtraKeysTargetDrafts.Write write : plan) map.put(write.key, write.value);
         assertTrue(PageSwitcherKeyAdd.isOn(lines(map)));
-        for (ExtraKeysTarget target : ExtraKeysTarget.values()) {
-            ExtraKeySetResolver.Resolved resolved = ExtraKeySetResolver.resolve(target, lines(map));
-            if (target == ExtraKeysTarget.GLOBAL || resolved.page1.equals("[]")) continue;
-            assertTrue(target.toString(), PageSwitcherKeyAdd.holds(resolved.page1));
-        }
+        for (ExtraKeysTarget target : ExtraKeysTarget.values())
+            assertTrue(target.toString(),
+                PageSwitcherKeyAdd.holds(ExtraKeySetResolver.resolve(target, lines(map)).page1));
+    }
+
+    @Test
+    public void aRowMadeAfterAddFollowsGlobalAndHasTheKey() {
+        Map<String, String> map = new HashMap<>();
+        for (ExtraKeysTargetDrafts.Write write : PageSwitcherKeyAdd.plan(lines(map))) map.put(write.key, write.value);
+        ExtraKeySetResolver.Resolved display = ExtraKeySetResolver.resolve(ExtraKeysTarget.DISPLAY, lines(map));
+        assertEquals(ExtraKeySetResolver.Source.GLOBAL, display.source);
+        assertTrue(PageSwitcherKeyAdd.holds(display.page1));
     }
 
     @Test
@@ -104,6 +104,7 @@ public class PageSwitcherKeyAddTest {
             ExtraKeysTarget.DISPLAY.pageKeys()[0], "[[\"" + KEY + "\",\"ESC\"]]")));
         assertTrue(plan.contains(new ExtraKeysTargetDrafts.Write(
             ExtraKeysTarget.HOME.pageKeys()[0], "[[\"" + KEY + "\",\"TAB\"]]")));
+        assertTrue(writes(plan, ExtraKeysTarget.GLOBAL, false));
     }
 
     @Test

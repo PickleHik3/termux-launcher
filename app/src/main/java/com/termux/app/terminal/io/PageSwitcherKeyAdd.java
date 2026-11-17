@@ -3,8 +3,6 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,11 +11,10 @@ import java.util.List;
  * stored lines come in through {@link ExtraKeySetResolver.Lines} and the planned writes go out for
  * the caller to apply.
  *
- * <p>The key goes where each bar reads its row from, and no bar changes where it reads from: a
- * bar with its own row gets the key there; a bar that follows Global's own (stored) row gets it
- * through that row, written once; and the built-in sets (Global's default, Display's,
- * Assistant's) gain it through one stored flag ({@link ExtraKeySetResolver#builtInPage1}), so
- * the bars that show them keep following them.
+ * <p>The key goes where each bar reads its row from, and no bar changes where it reads from:
+ * Global's row gets it (the default row when Global has none stored), and so does every page's
+ * own row that exists now. A page without its own row follows Global, so it gets the key through
+ * Global, now and for a row made later.
  */
 public final class PageSwitcherKeyAdd {
 
@@ -61,31 +58,20 @@ public final class PageSwitcherKeyAdd {
     }
 
     /**
-     * What Add writes: the flag that leads every built-in set with the key, and the key at the left
-     * end of the first row of each stored page-1 line a bar reads (a target's own row, or Global's
-     * stored row, once), where that line has keys and no page switcher yet. Nothing is copied and
-     * no target is detached from what it follows.
+     * What Add writes: the key at the left end of the first row of Global's page 1 (the default
+     * row when none is stored) and of each page's own page 1, where that line has keys and no page
+     * switcher yet. Nothing is copied and no target is detached from what it follows.
      */
     @NonNull
     public static List<ExtraKeysTargetDrafts.Write> plan(@NonNull ExtraKeySetResolver.Lines lines) {
         List<ExtraKeysTargetDrafts.Write> out = new ArrayList<>(TARGETS.length + 1);
-        out.add(new ExtraKeysTargetDrafts.Write(
-            TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, "true"));
-        boolean globalPlanned = false;
+        String global = withKey(ExtraKeySetResolver.resolve(ExtraKeysTarget.GLOBAL, lines).page1);
+        if (global != null) out.add(new ExtraKeysTargetDrafts.Write(ExtraKeysTarget.GLOBAL.page1Key(), global));
         for (ExtraKeysTarget target : TARGETS) {
             ExtraKeySetResolver.Resolved resolved = ExtraKeySetResolver.resolve(target, lines);
-            String key;
-            if (resolved.source == ExtraKeySetResolver.Source.OWN) {
-                key = target.page1Key();
-            } else if (resolved.source == ExtraKeySetResolver.Source.GLOBAL && !globalPlanned
-                && ExtraKeySetResolver.globalStored(lines)) {
-                globalPlanned = true;
-                key = ExtraKeysTarget.GLOBAL.page1Key();
-            } else {
-                continue;
-            }
+            if (resolved.source != ExtraKeySetResolver.Source.OWN) continue;
             String page1 = withKey(resolved.page1);
-            if (page1 != null) out.add(new ExtraKeysTargetDrafts.Write(key, page1));
+            if (page1 != null) out.add(new ExtraKeysTargetDrafts.Write(target.page1Key(), page1));
         }
         return out;
     }

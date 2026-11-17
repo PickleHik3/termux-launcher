@@ -115,8 +115,8 @@ public final class SetupCardSystem {
     }
 
     /**
-     * The card's Add: the page switcher key goes on the left of each of the Terminal, Display and
-     * Assistant bars, written as that target's own page-1 line (see {@link PageSwitcherKeyAdd}),
+     * The card's Add: the page switcher key goes on the left of Global's row and of every page's own
+     * row (see {@link PageSwitcherKeyAdd}); pages that follow Global get it through Global,
      * then the bar reloads the way the extra-keys editor's Save reloads it.
      */
     static void addPageSwitcherKey(@NonNull Context context) {

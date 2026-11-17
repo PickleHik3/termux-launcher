@@ -419,13 +419,6 @@ public final class TermuxPropertyConstants {
     public static final String KEY_EXTRA_KEYS_ASSISTANT2 = "extra-keys-assistant2";
     public static final String KEY_EXTRA_KEYS_ASSISTANT_HEIGHT = "extra-keys-assistant-height";
 
-    /**
-     * "true" once the setup card's Add put the page switcher key on the bars: every built-in key set
-     * a bar shows while it has no row of its own (Global's default, Display's, Assistant's) then
-     * starts with the key. Those bars keep following the built-in sets; nothing is copied.
-     */
-    public static final String KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED = "extra-keys-page-switcher-added";
-
 
     //public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]"; // Upstream Termux's row
 
@@ -447,14 +440,8 @@ public final class TermuxPropertyConstants {
     public static final String DEFAULT_IVALUE_EXTRA_KEYS2 = "[]";
 
     /**
-     * Shipped key set for the Display page: the keyboard and mouse keys as Global has them, then the
-     * modifiers a remote desktop needs. Used while {@link #KEY_EXTRA_KEYS_DISPLAY} is not set.
-     */
-    public static final String DEFAULT_IVALUE_EXTRA_KEYS_DISPLAY = "[[{key: KEYBOARD, display: '󰥻', popup: {key: 'tool:keyboard.cycle_form', display: ''}}, {key: 'tool:mouse.toggle', display: '󰍽'}, ESC, TAB, CTRL, ALT]]";
-
-    /**
-     * Shipped key set for the Assistant page: the keyboard key as Global has it, dictate and paste.
-     * Used while {@link #KEY_EXTRA_KEYS_ASSISTANT} is not set.
+     * The Assistant page's own row: the keyboard key as Global has it, dictate and paste. Written to
+     * {@link #KEY_EXTRA_KEYS_ASSISTANT} once, by the upgrade that made every page follow Global.
      */
     public static final String DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT = "[[{key: KEYBOARD, display: '󰥻', popup: {key: 'tool:keyboard.cycle_form', display: ''}}, {key: 'tool:voice.dictate', display: '󰍬'}, {key: 'tool:clipboard.paste', display: '󰆒'}]]";
 
@@ -549,7 +536,7 @@ public final class TermuxPropertyConstants {
     KEY_BELL_BEHAVIOUR, KEY_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT, KEY_TERMINAL_CURSOR_BLINK_RATE, KEY_TERMINAL_CURSOR_STYLE, KEY_TERMINAL_MARGIN_HORIZONTAL, KEY_TERMINAL_MARGIN_VERTICAL, KEY_TERMINAL_TRANSCRIPT_ROWS, /* float */
     KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR, KEY_EXTRA_KEYS_TERMINAL_HEIGHT, KEY_EXTRA_KEYS_DISPLAY_HEIGHT, KEY_EXTRA_KEYS_HOME_HEIGHT, KEY_EXTRA_KEYS_ASSISTANT_HEIGHT, /* Integer */
     KEY_SHORTCUT_CREATE_SESSION, KEY_SHORTCUT_NEXT_SESSION, KEY_SHORTCUT_PREVIOUS_SESSION, KEY_SHORTCUT_RENAME_SESSION, /* String */
-    KEY_BACK_KEY_BEHAVIOUR, KEY_DEFAULT_WORKING_DIRECTORY, KEY_EXTRA_KEYS, KEY_EXTRA_KEYS2, KEY_EXTRA_KEYS_TERMINAL, KEY_EXTRA_KEYS_TERMINAL2, KEY_EXTRA_KEYS_DISPLAY, KEY_EXTRA_KEYS_DISPLAY2, KEY_EXTRA_KEYS_HOME, KEY_EXTRA_KEYS_HOME2, KEY_EXTRA_KEYS_ASSISTANT, KEY_EXTRA_KEYS_ASSISTANT2, KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED, KEY_EXTRA_KEYS_STYLE, KEY_NIGHT_MODE, KEY_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR, KEY_VOLUME_KEYS_BEHAVIOUR, KEY_BACKGROUND_OVERLAY_COLOR, KEY_TERMINAL_TERM));
+    KEY_BACK_KEY_BEHAVIOUR, KEY_DEFAULT_WORKING_DIRECTORY, KEY_EXTRA_KEYS, KEY_EXTRA_KEYS2, KEY_EXTRA_KEYS_TERMINAL, KEY_EXTRA_KEYS_TERMINAL2, KEY_EXTRA_KEYS_DISPLAY, KEY_EXTRA_KEYS_DISPLAY2, KEY_EXTRA_KEYS_HOME, KEY_EXTRA_KEYS_HOME2, KEY_EXTRA_KEYS_ASSISTANT, KEY_EXTRA_KEYS_ASSISTANT2, KEY_EXTRA_KEYS_STYLE, KEY_NIGHT_MODE, KEY_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR, KEY_VOLUME_KEYS_BEHAVIOUR, KEY_BACKGROUND_OVERLAY_COLOR, KEY_TERMINAL_TERM));
 
     /**
      * Defines the set for keys loaded by termux that have default boolean behaviour with false as default.

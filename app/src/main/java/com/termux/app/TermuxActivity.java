@@ -25672,7 +25672,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             sessions.setAccent(placeAccent);
             sessions.setVisibility(workspace ? View.VISIBLE : View.GONE);
         }
-        boolean windowsShown = workspace;
+        boolean windowsShown = workspace
+            && com.termux.app.wall.PaneWallPolicy.showsWindowChips(currentWallPage());
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) {
             // The chips are drawn on glass, so they ask the chrome what they are standing on
@@ -30074,7 +30075,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean visible = isSplitPanesEnabled()
             && !arrangement().layout().slot(Element.STATUS).hidden;
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
-        // The Assistant page wears the status bar alone: no window chips (ADR 0022 section 2).
         int chips = com.termux.app.wall.PaneWallPolicy.showsWindowChips(mLastWallPage)
             ? View.VISIBLE : View.GONE;
         if (bar.getVisibility() != chips) bar.setVisibility(chips);
@@ -32415,7 +32415,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             windowChips() {
         boolean rowShown = mPaneController != null && mCurrentWSession != null;
         com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
-            chips = new com.termux.app.chrome.WindowChips<>(isWidgetsPageShowing(), rowShown,
+            chips = new com.termux.app.chrome.WindowChips<>(currentWallPlace(), rowShown,
                 rowShown ? rowWindows()
                     : java.util.Collections.<com.termux.app.terminal.TerminalPaneController.Window>
                         emptyList(),

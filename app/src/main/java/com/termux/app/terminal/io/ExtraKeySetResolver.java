@@ -10,8 +10,7 @@ import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import java.util.Objects;
 
 /**
- * Which key set the bar shows: the target the keys go to, then that target's own set, its shipped
- * set or Global's. Pure; the stored lines come in through {@link Lines}.
+ * Which key set the bar shows: the target the keys go to, then that target's own set, else Global's. Pure; the stored lines come in through {@link Lines}.
  */
 public final class ExtraKeySetResolver {
 
@@ -22,7 +21,7 @@ public final class ExtraKeySetResolver {
         @Nullable String get(@NonNull String key);
     }
 
-    public enum Source { OWN, SHIPPED, GLOBAL }
+    public enum Source { OWN, GLOBAL }
 
     /** The answer: immutable. */
     public static final class Resolved {
@@ -91,52 +90,12 @@ public final class ExtraKeySetResolver {
                 return new Resolved(target, Source.OWN, page1,
                     TermuxSharedProperties.getTargetExtraKeysPageFromValue(lines.get(target.page2Key())), scale);
             }
-            String shipped = builtInPage1(target, lines);
-            if (shipped != null) {
-                return new Resolved(target, Source.SHIPPED, shipped, null, scale);
-            }
         }
-        return new Resolved(target, Source.GLOBAL, globalPage1(lines),
+        return new Resolved(target, Source.GLOBAL,
+            TermuxSharedProperties.getExtraKeysInternalPropertyValueFromValue(
+                lines.get(TermuxPropertyConstants.KEY_EXTRA_KEYS)),
             TermuxSharedProperties.getExtraKeys2InternalPropertyValueFromValue(
                 lines.get(TermuxPropertyConstants.KEY_EXTRA_KEYS2)),
             scale);
-    }
-
-    /** Whether the setup card's Add put the page switcher key on the built-in sets. */
-    public static boolean pageSwitcherAdded(@NonNull Lines lines) {
-        String value = lines.get(TermuxPropertyConstants.KEY_EXTRA_KEYS_PAGE_SWITCHER_ADDED);
-        return value != null && "true".equalsIgnoreCase(value.trim());
-    }
-
-    /** Whether Global's page 1 is the user's own line rather than the built-in row. */
-    public static boolean globalStored(@NonNull Lines lines) {
-        String value = lines.get(TermuxPropertyConstants.KEY_EXTRA_KEYS);
-        return value != null && !value.trim().isEmpty();
-    }
-
-    /**
-     * The target's built-in page 1 as the bar shows it: the shipped set, led by the page switcher
-     * key once Add put it there (never twice); null for a target with no built-in set.
-     */
-    @Nullable
-    public static String builtInPage1(@NonNull ExtraKeysTarget target, @NonNull Lines lines) {
-        String shipped = target.shippedPage1();
-        if (shipped == null || target == ExtraKeysTarget.GLOBAL) return shipped;
-        return withAddedKey(shipped, lines);
-    }
-
-    /** Global's page 1: the user's line, else the built-in row, led by the key once Add put it there. */
-    @NonNull
-    static String globalPage1(@NonNull Lines lines) {
-        String page1 = TermuxSharedProperties.getExtraKeysInternalPropertyValueFromValue(
-            lines.get(TermuxPropertyConstants.KEY_EXTRA_KEYS));
-        return globalStored(lines) ? page1 : withAddedKey(page1, lines);
-    }
-
-    @NonNull
-    private static String withAddedKey(@NonNull String builtIn, @NonNull Lines lines) {
-        if (!pageSwitcherAdded(lines)) return builtIn;
-        String led = PageSwitcherKeyAdd.withKey(builtIn);
-        return led == null ? builtIn : led;
     }
 }

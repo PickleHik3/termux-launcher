@@ -322,6 +322,13 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
 
+        /**
+         * Set once the Assistant page's own extra-keys row has been written to termux.properties
+         * (every page follows Global unless it has a row, so Assistant keeps the row it had built
+         * in). Never cleared: a user who later makes Assistant follow Global stays that way.
+         */
+        public static final String KEY_EXTRA_KEYS_ASSISTANT_ROW_WRITTEN = "extra_keys_assistant_row_written";
+
         /** The version {@code WallReworkMigration} last brought this install to; absent is 0. */
         public static final String KEY_WALL_MIGRATION_VERSION = "wall_migration_version";
 

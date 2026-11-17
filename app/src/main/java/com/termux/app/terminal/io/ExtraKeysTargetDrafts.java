@@ -62,8 +62,6 @@ public final class ExtraKeysTargetDrafts {
         boolean shown;
         /** Home only: whether the keys were switched on when loaded or last saved. */
         boolean shownAtLoad;
-        /** The built-in page 1 as the bar resolves it (the page switcher key included once added); null for none. */
-        @Nullable String builtInPage1;
 
         Entry copy() {
             Entry e = new Entry();
@@ -74,7 +72,6 @@ public final class ExtraKeysTargetDrafts {
             e.ownAtLoad = ownAtLoad;
             e.shown = shown;
             e.shownAtLoad = shownAtLoad;
-            e.builtInPage1 = builtInPage1;
             return e;
         }
     }
@@ -116,7 +113,6 @@ public final class ExtraKeysTargetDrafts {
                 entry.followedTenths = entry.draft.keySizeTenths();
             }
             entry.ownAtLoad = entry.own;
-            entry.builtInPage1 = ExtraKeySetResolver.builtInPage1(target, lines);
             entry.shown = target == ExtraKeysTarget.HOME && homeShown;
             entry.shownAtLoad = entry.shown;
             out.entries.put(target, entry);
@@ -201,28 +197,17 @@ public final class ExtraKeysTargetDrafts {
     @NonNull
     public ExtraKeySetResolver.Source sourceOf(@NonNull ExtraKeysTarget target) {
         if (isOwn(target)) return ExtraKeySetResolver.Source.OWN;
-        return target.shippedPage1() != null
-            ? ExtraKeySetResolver.Source.SHIPPED : ExtraKeySetResolver.Source.GLOBAL;
+        return ExtraKeySetResolver.Source.GLOBAL;
     }
 
     /**
-     * Gives the target a set of its own, starting from what it shows now: its built-in keys, else a
-     * copy of Global's. The key size starts at Global's.
+     * Gives the target a set of its own, starting from a copy of Global's keys. The key size starts at Global's.
      */
     public void giveOwnSet(@NonNull ExtraKeysTarget target) {
         Entry entry = entry(target);
         if (entry.own) return;
         ExtraKeysDraft global = Objects.requireNonNull(entry(ExtraKeysTarget.GLOBAL).draft);
-        ExtraKeysDraft draft;
-        if (sourceOf(target) == ExtraKeySetResolver.Source.SHIPPED) {
-            List<ExtraKeysLayoutModel> pages = new ArrayList<>(1);
-            // The built-in set as the bar shows it, so a set made after Add keeps the key.
-            pages.add(ExtraKeysLayoutModel.parse(entry.builtInPage1 != null
-                ? entry.builtInPage1 : target.shippedPage1()));
-            draft = ExtraKeysDraft.of(pages);
-        } else {
-            draft = copyOf(global);
-        }
+        ExtraKeysDraft draft = copyOf(global);
         draft.setKeySizeTenths(global.keySizeTenths());
         entry.followedTenths = global.keySizeTenths();
         entry.draft = draft;
@@ -245,7 +230,7 @@ public final class ExtraKeysTargetDrafts {
         }
     }
 
-    /** Takes the target's own set away; it shows its built-in or Global's keys again. */
+    /** Takes the target's own set away; it follows Global again. */
     public void useDefault(@NonNull ExtraKeysTarget target) {
         if (target == ExtraKeysTarget.GLOBAL) return;
         Entry entry = entry(target);
