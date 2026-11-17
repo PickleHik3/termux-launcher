@@ -77,6 +77,24 @@ public final class DockRows {
         boolean pageTicksAreTheDocks();
     }
 
+    /**
+     * Which row views stand in the stack for either side's layout: the rows the front layout shows
+     * and the rows only the other side's layout shows (a lane of that side, drawn off screen). The
+     * views show by this, so a crossing or a landing never switches a row's visibility; what
+     * {@link Shown} answers stays the front layout's, which is what the readers ask.
+     */
+    public static final class Union {
+        public final boolean apps;
+        public final boolean az;
+        public final boolean extraKeys;
+
+        public Union(boolean apps, boolean az, boolean extraKeys) {
+            this.apps = apps;
+            this.az = az;
+            this.extraKeys = extraKeys;
+        }
+    }
+
     /** Told when what the dock shows changes. */
     public interface Listener {
         void onRowsChanged(@NonNull Shown shown);
@@ -166,6 +184,8 @@ public final class DockRows {
     @Nullable private DockLayout mLayout;
     private boolean mShelfShown;
     private boolean mStatusBarShown;
+    /** The other side's applied rest, which sizes the rows only that side shows; null for none. */
+    @Nullable private DockLayout mOtherLayout;
 
     public DockRows(@NonNull Views views) {
         mViews = views;
@@ -225,16 +245,27 @@ public final class DockRows {
      */
     public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge,
                       boolean glassOnNavStrip) {
+        apply(chrome, statusBarOnBottomEdge, glassOnNavStrip, null);
+    }
+
+    /**
+     * {@link #apply(ChromeSpec, boolean, boolean)} with the rows that stand for either side:
+     * {@code union}'s rows show whichever side is in front, so a row of the other side's lane is
+     * laid out and dressed at rest. Null shows the front layout's rows alone.
+     */
+    public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge,
+                      boolean glassOnNavStrip, @Nullable Union union) {
         Shown shown = presence(chrome, mStatusBarShown && statusBarOnBottomEdge, glassOnNavStrip,
             mShown.underKeyboard, mViews.pageTicksAreTheDocks(), surfaceOf(mLayout));
         announce(shown);
         mViews.setStackShown(shown.stack);
         mViews.setDockGlassShown(shown.dockGlass);
         mViews.setSurfaceShown(shown.surfaceHost);
-        mViews.setRowShown(Element.APPS, shown.apps);
+        mViews.setRowShown(Element.APPS, shown.apps || (union != null && union.apps));
         mViews.setPageBand(shown.pageBand);
-        mViews.setRowShown(Element.EXTRA_KEYS, shown.extraKeys);
-        mViews.setRowShown(Element.AZ, shown.az);
+        mViews.setRowShown(Element.EXTRA_KEYS,
+            shown.extraKeys || (union != null && union.extraKeys));
+        mViews.setRowShown(Element.AZ, shown.az || (union != null && union.az));
         mViews.setAzLayersShown(false);
     }
 
@@ -247,10 +278,23 @@ public final class DockRows {
         mLayout = layout;
         Shown shown = mShown;
         if (shown.surface != layout.surface) announce(shown.withSurface(layout.surface));
-        boolean moved = mViews.setRowHeight(Element.APPS, layout.appsBarHeightPx);
+        // A row the front layout does not show but the other side's lane does is sized by that
+        // side's rest, so it stands laid out at its own height.
+        DockLayout other = mOtherLayout;
+        DockLayout appsFrom = mShown.apps || other == null ? layout : other;
+        DockLayout azFrom = mShown.az || other == null ? layout : other;
+        boolean moved = mViews.setRowHeight(Element.APPS, appsFrom.appsBarHeightPx);
         moved |= mViews.setPageBandHeight(layout.indicatorBandHeightPx);
-        moved |= mViews.setRowHeight(Element.AZ, layout.azRowHeightPx);
+        moved |= mViews.setRowHeight(Element.AZ, azFrom.azRowHeightPx);
         return moved;
+    }
+
+    /**
+     * The other side's rest, read for the rows only that side shows; null when the layouts have
+     * no lane. Taken by the next {@link #applyLayout}.
+     */
+    public void setOtherLayout(@Nullable DockLayout other) {
+        mOtherLayout = other;
     }
 
     /**

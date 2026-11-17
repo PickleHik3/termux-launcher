@@ -454,4 +454,67 @@ public class DockRowsSeamTest {
         assertFalse("the same layout moves nothing", rows.applyLayout(window));
         assertSame(window, rows.layout());
     }
+
+    // ---- the rows only the other side shows are laid out whichever side is in front ----
+
+    @Test
+    public void aRowOnlyTheOtherSideShowsStaysShownThroughACommit() {
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        DockRows.Union both = new DockRows.Union(true, false, true);
+        // Home in front: the Workspace's extra keys are its lane, laid out and shown.
+        rows.apply(chrome(HOME, false), false, false, both);
+        assertTrue("the extra keys stand for the Workspace", views.row(Element.EXTRA_KEYS));
+        assertTrue(views.row(Element.APPS));
+        assertFalse("what the readers ask is the front layout's",
+            rows.isRowOnScreen(Element.EXTRA_KEYS));
+        // The landing's commit on the Workspace changes no row's visibility.
+        views.log.clear();
+        rows.apply(chrome(WINDOW, false), false, false, both);
+        assertTrue(views.row(Element.EXTRA_KEYS));
+        assertTrue(views.row(Element.APPS));
+        assertTrue(rows.isRowOnScreen(Element.EXTRA_KEYS));
+        // And back: the front layout's answer changes, the views do not.
+        rows.apply(chrome(HOME, false), false, false, both);
+        assertTrue(views.row(Element.EXTRA_KEYS));
+    }
+
+    @Test
+    public void aRowNeitherSideUsesStaysGoneWhateverIsInFront() {
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        DockRows.Union both = new DockRows.Union(true, false, true);
+        rows.apply(chrome(HOME, false), false, false, both);
+        assertFalse(views.row(Element.AZ));
+        rows.apply(chrome(WINDOW, false), false, false, both);
+        assertFalse(views.row(Element.AZ));
+    }
+
+    @Test
+    public void withoutAUnionTheFrontLayoutAloneDecidesAsBefore() {
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        rows.apply(chrome(WINDOW, false), false, false);
+        assertTrue(views.row(Element.EXTRA_KEYS));
+        rows.apply(chrome(HOME, false), false, false);
+        assertFalse("no union, no lane", views.row(Element.EXTRA_KEYS));
+    }
+
+    @Test
+    public void aRowOnlyTheOtherSideShowsTakesTheOtherSidesHeight() {
+        Snapshot.Builder device = device(half(HOME, DockStyle.GLASS_TRAY),
+            half(WINDOW, DockStyle.GLASS_TRAY));
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        DockLayout home = rest(device, PageRef.HOME);
+        DockLayout bare = DockGeometry.compute(
+            device(half(HOME, DockStyle.GLASS_TRAY), half(WINDOW_BARE, DockStyle.GLASS_TRAY))
+                .build().restOf(PageRef.TERMINAL));
+        // The bare Workspace shows no apps row of its own: Home's lane sizes the row.
+        rows.setOtherLayout(home);
+        rows.apply(chrome(WINDOW_BARE, false), false, false,
+            new DockRows.Union(true, false, false));
+        rows.applyLayout(bare);
+        assertEquals(home.appsBarHeightPx, (int) views.heights.get(Element.APPS));
+    }
 }
