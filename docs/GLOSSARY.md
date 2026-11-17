@@ -553,16 +553,15 @@ the Appearance editor's card for the Base look (developer, 2026-11-03).
 ### Look and motion
 
 **Backdrop layers**:
-While the pages move, a Live glass surface's backdrop as a short stack of pictures that each move
-on their own instead of one recording: the **ground** (the stored pre-blurred wallpaper frame at
-the parallax offset, or a live scene's frame at its glass rate), the **pages** (the pages under the
-dock or a pinned float, captured blurred as the swipe starts and moved by their travel) and the
-**local** layer (what lies beneath the surface on its own page or float, recorded and blurred
-once). The glass composites them in its one draw. The first and the landed frame of a swipe are
-the resting picture; a layer that is not ready falls back to the live recording (ADR 0021 §2b,
-`BackdropLayers`).
+A Live glass surface's backdrop, at rest and while the pages move alike, as a short stack of
+pictures that each refresh on their own trigger: the **ground** (the stored pre-blurred wallpaper
+frame at the parallax offset, or a live scene's frame at its glass rate), the **pages** (while the
+pages move, the pages under the dock or a pinned float, captured blurred as the swipe starts and
+moved by their travel; at rest they are in the local layer) and the **local** layer (everything
+else beneath the surface, drawn from the views themselves and blurred). The glass composites them
+in its one draw, so the first, every and the landed frame of a swipe are one composition and a
+landing has nothing to swap (ADR 0029 §3, `BackdropLayers`).
 _Avoid_: frozen glass, page snapshot, freeze frame
-_ADR 0029 (accepted, not yet built): a Live glass surface always draws these layers, at rest too, and "See through: One layer" is removed._
 
 **Ambient effect**:
 A built-in shader effect that animates continuously rather than in answer to something. It is off
@@ -654,7 +653,7 @@ _ADR 0028 (accepted, not yet built): the keyboard reveal gate is deleted, and th
 **Glass service**:
 The one registry every glass surface joins. An entry names its element (the look cells it reads), the view it draws in, the kind it wants and a budget priority (dock, then floats, then widgets); the service owns the granted kind, the layers, refresh, commit order and release. There are four kinds: **Wallpaper** (the stored pre-blurred frame), **Snapshot**, **Live**, and **Compositor** (the keyboard's frost over the X11 screen on the display window, falling back to Wallpaper). A surface keeps one picture for its life, and its kind changes only on a policy event (the Live blur switch, battery saver, a memory trim, a slot freeing).
 _Avoid_: backdrop service (the 0021 name), blur manager
-_ADR 0029 (accepted, not yet built): this entry describes the planned service; the app as built has separate glass mechanisms and three kinds._
+_ADR 0029 (accepted, partly built): the registry, its four kinds, the Live core and the commit as the frame table's last step are built, and the dock, floats and widgets have joined (`com.termux.app.glass`); pane slabs, panels, bars, the foot and the Compositor kind join in later steps._
 
 **Hold**:
 A wait for one signal before something is let go: a layout the pass booked, a view's first draw,
