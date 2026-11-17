@@ -35,7 +35,9 @@ public final class SideRows {
                                   @NonNull PlaceLayout fromLayout, @NonNull Side to,
                                   @NonNull PlaceLayout toLayout) {
         if (from == to || element == Element.STATUS) return Carrier.STACK;
-        if (element == Element.EXTRA_KEYS) return Carrier.STACK;
+        // Home has its own extra-keys bar in the pill layer, so the one in the stack is always the
+        // Workspace's: it slides with the Workspace whether or not Home's layout lists the row.
+        if (element == Element.EXTRA_KEYS) return Carrier.WORKSPACE;
         Slot a = fromLayout.slot(element);
         Slot b = toLayout.slot(element);
         boolean fromShows = !a.hidden;

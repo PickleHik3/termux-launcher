@@ -60,6 +60,21 @@ public class SideRowsTest {
         assertSame(SideRows.Carrier.STACK, SideRows.carrier(Element.STATUS, H, home, WS, window));
     }
 
+    @Test public void theExtraKeysInTheStackAreTheWorkspacesWhateverHomeLists() {
+        PlaceLayout home = LayoutFixtures.HOME;
+        PlaceLayout window = LayoutFixtures.PONG.window;
+        PlaceLayout homeWithKeys = home.withSlot(Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, 0));
+        // Home has its own bar in the pill layer: the stack's is the Workspace's in every pair.
+        assertSame(SideRows.Carrier.WORKSPACE,
+            SideRows.carrier(Element.EXTRA_KEYS, H, home, WS, window));
+        assertSame(SideRows.Carrier.WORKSPACE,
+            SideRows.carrier(Element.EXTRA_KEYS, WS, window, H, home));
+        assertSame(SideRows.Carrier.WORKSPACE,
+            SideRows.carrier(Element.EXTRA_KEYS, H, homeWithKeys, WS, window));
+        assertSame(SideRows.Carrier.WORKSPACE,
+            SideRows.carrier(Element.EXTRA_KEYS, H, home, WS, home));
+    }
+
     @Test public void eachExtraKeysBarGoesWithItsOwnSide() {
         assertSame(SideRows.Carrier.HOME, SideRows.extraKeysCarrier(H));
         assertSame(SideRows.Carrier.WORKSPACE, SideRows.extraKeysCarrier(WS));
