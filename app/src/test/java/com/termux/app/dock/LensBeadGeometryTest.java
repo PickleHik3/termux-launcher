@@ -464,7 +464,7 @@ public class LensBeadGeometryTest {
             float share = LensBeadGeometry.leavingMeltShare(
                 com.termux.app.place.SeamTravel.otherHalfFraction(frame,
                     com.termux.app.wall.PaneWallPage.WIDGETS),
-                com.termux.app.place.PlaceChromeTravel.LANDING);
+                com.termux.app.place.SeamFade.START);
             float dockReveal = com.termux.app.place.SeamTravel.dockReveal(
                 com.termux.app.place.SeamTravel.DockPlan.DIP,
                 com.termux.app.place.SeamTravel.otherHalfProgress(frame,

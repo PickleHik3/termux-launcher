@@ -163,6 +163,44 @@ public class StackRendererTest {
         assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
     }
 
+    @Test public void aCrossingDrivenToFractionOneLeavesTheLandingNothingToWrite() {
+        FramePipeline frames = attached();
+        // Home to a window with its keyboard up: the stack laid out for the keyboard, drawn
+        // lower by what the seam has not yet brought up (the keyboard follows the seam).
+        com.termux.app.place.PlaceChromeTravel.States states =
+            new com.termux.app.place.PlaceChromeTravel.States() {
+                @androidx.annotation.NonNull @Override
+                public com.termux.app.place.PlaceChromeTravel.Rest restOf(
+                    @androidx.annotation.NonNull com.termux.app.wall.PaneWallPage place) {
+                    return new com.termux.app.place.PlaceChromeTravel.Rest(
+                        place == com.termux.app.wall.PaneWallPage.TERMINAL, false);
+                }
+            };
+        java.util.List<com.termux.app.wall.PaneWallPage> row = java.util.Arrays.asList(
+            com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL);
+        com.termux.app.place.StackScene.Motion motion = new com.termux.app.place.StackScene.Motion();
+        float[] fractions = {0.4f, 0.8f, 1f};
+        for (float fraction : fractions) {
+            // Fraction 1 is the wall standing on the arriving page, an offset of a whole width.
+            com.termux.app.place.PlaceChromeTravel.Frame frame =
+                com.termux.app.place.PlaceChromeTravel.at(row,
+                    com.termux.app.wall.PaneWallPage.WIDGETS, -fraction * WIDTH, WIDTH, states);
+            com.termux.app.place.StackScene.travel(false, false, frame.keyboardReveal,
+                frame.dockReveal, 300, 200, 120, motion);
+            mRenderer.setTravel(motion.dockTravelPx, motion.keyboardSharePx, 0f);
+            mRenderer.setSink(0f, 0f, 0f, 0f, 0f, false);
+            frames.flush("test");
+        }
+        assertEquals(0f, mContainer.getTranslationY(), 0f);
+        int before = writes();
+        mRenderer.onLanding();
+        mRenderer.setTravel(0f, 0f, 0f);
+        mRenderer.setSink(0f, 0f, 0f, 0f, 0f, false);
+        frames.flush("test");
+        assertEquals(before, writes());
+        assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
+    }
+
     @Test public void aLandingThatMovesTheStackIsCounted() {
         FramePipeline frames = attached();
         mRenderer.setTravel(120f, 0f, 0f);
