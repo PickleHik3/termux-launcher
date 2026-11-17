@@ -262,6 +262,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx()), mEffective);
         StackScene.at(null, null, 0f, mEffective, mGeometry, mFrame);
         mPlankTarget = plankTarget();
+        if (landing) logLanding(container); // TEMP WR_S1_LAND, round 2
+        noteFrame();
 
         boolean containerMoved = writeTy(StackScene.V_CONTAINER, container,
             mFrame.ty[StackScene.V_CONTAINER] + plankTy(PLANK_CONTAINER));
@@ -307,6 +309,48 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             for (int slot = 0; slot < mGuardSlots; slot++) guard.wrote(slot);
             if (landing) guards.setLanding(false);
         }
+    }
+
+    // ---- TEMP WR_S1_LAND (round 2): what the landing frame reads against the frame before it.
+    private float mPrevTravel = Float.NaN, mPrevShare, mPrevRest;
+    private int mPrevContainerH, mPrevKbH, mPrevBelow, mPrevPad, mPrevClipC = -1, mPrevClipK = -1;
+
+    private void noteFrame() {
+        mPrevTravel = mEffective.dockTravelPx;
+        mPrevShare = mEffective.keyboardSharePx;
+        mPrevRest = mViews.keyboardDownLaidOutPx();
+        mPrevContainerH = mGeometry.containerHeightPx;
+        mPrevKbH = mGeometry.keyboardHeightPx;
+        mPrevBelow = mGeometry.belowKeyboardInColumnPx;
+        mPrevPad = mGeometry.stackPaddingBottomPx;
+        mPrevClipC = mFrame.clipped[StackScene.V_CONTAINER] ? mFrame.clipBottom[StackScene.V_CONTAINER] : -1;
+        mPrevClipK = mFrame.clipped[StackScene.V_KEYBOARD] ? mFrame.clipBottom[StackScene.V_KEYBOARD] : -1;
+    }
+
+    private void logLanding(@NonNull View container) {
+        ViewGroup.LayoutParams p = container.getLayoutParams();
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        StringBuilder frames = new StringBuilder();
+        for (int i = 1; i < Math.min(7, st.length); i++) {
+            frames.append(st[i].getClassName().substring(st[i].getClassName().lastIndexOf('.') + 1))
+                .append('.').append(st[i].getMethodName()).append(':').append(st[i].getLineNumber())
+                .append(' ');
+        }
+        android.util.Log.d("WR_S1_LAND", "t=" + android.os.SystemClock.uptimeMillis()
+            + " LAND travel(prev=" + mPrevTravel + ",now=" + mEffective.dockTravelPx
+            + ") share(prev=" + mPrevShare + ",now=" + mEffective.keyboardSharePx
+            + ") rest(prev=" + mPrevRest + ",now=" + mViews.keyboardDownLaidOutPx()
+            + ") containerH(prev=" + mPrevContainerH + ",now=" + mGeometry.containerHeightPx
+            + ",params=" + (p == null ? -1 : p.height) + ",laidOut=" + container.getHeight()
+            + ") kbH(prev=" + mPrevKbH + ",now=" + mGeometry.keyboardHeightPx
+            + ") below(prev=" + mPrevBelow + ",now=" + mGeometry.belowKeyboardInColumnPx
+            + ") pad(prev=" + mPrevPad + ",now=" + mGeometry.stackPaddingBottomPx
+            + ") clipC(prev=" + mPrevClipC + ",now="
+            + (mFrame.clipped[StackScene.V_CONTAINER] ? mFrame.clipBottom[StackScene.V_CONTAINER] : -1)
+            + ") clipK(prev=" + mPrevClipK + ",now="
+            + (mFrame.clipped[StackScene.V_KEYBOARD] ? mFrame.clipBottom[StackScene.V_KEYBOARD] : -1)
+            + ")"
+            + " kbShown=" + mViews.keyboardShown() + " frames=" + frames);
     }
 
     private int plankTarget() {
