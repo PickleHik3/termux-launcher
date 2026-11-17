@@ -655,6 +655,12 @@ The one registry every glass surface joins. An entry names its element (the look
 _Avoid_: backdrop service (the 0021 name), blur manager
 _ADR 0029 (accepted, partly built): the registry, its four kinds, the Live core and the commit as the frame table's last step are built, and the dock, floats and widgets have joined (`com.termux.app.glass`); pane slabs, panels, bars, the foot and the Compositor kind join in later steps._
 
+**Legibility correction**:
+What a band's legends have to stand on at a page's rest: the opaque face under each row of the dock or the keyboard, and the legend tone chosen on the keyboard's bare face. The glass service keeps one per **page** and band (dock, keyboard, strip, panes) in its legibility store, which is what the tint sampler became: measured when the page rests and measured again only when the wallpaper, the palette, light or dark, the band's rest rectangle or its look changes. Keying on the page covers parallax. A crossing reads the two ends' stored corrections and blends the ink between pale and dark on the glass's own curve; it measures nothing, and a page never visited is measured once, at rest, before its first crossing.
+_Avoid_: tint sample, even-out (that is the stage that narrows the wallpaper's range, not the stored value).
+
+_ADR 0029 section 9 (built for the dock and the keyboard): the dock's legends (extra keys, tiles, prompt line) and the keyboard's palette drift between the two pages' kept inks on a look-only crossing. The strip and panes bands have no crossing consumer: the A–Z letters belong to Home's rail and the panes travel with their page._
+
 **Guard**:
 One of three checks every layer's writer runs while the motion log is on: a **foreign writer** (a property the writer owns was changed by someone else), **landing wrote** (the landing frame changed something) and **crossing laid out** (a layout request from a pose writer, or one a pre-draw step made late in the frame, which draws the new look on the old layout). A guard logs and counts in the **Counter table** and never crashes.
 _Avoid_: assertion, invariant check (an invariant is a motion-log rule over events; a guard watches a writer)

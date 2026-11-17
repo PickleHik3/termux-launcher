@@ -43,6 +43,7 @@ public final class GlassService {
     private static final int REDRESS_ROUNDS = 4;
 
     @NonNull private final GlassRegistry mRegistry = new GlassRegistry();
+    @NonNull private final LegibilityStore mLegibility = new LegibilityStore();
     @NonNull private final HashMap<String, Redress> mRedress = new HashMap<>();
     @Nullable private final FramePipeline mFrames;
     @Nullable private LiveCore mCore;
@@ -53,6 +54,15 @@ public final class GlassService {
     public GlassService(@Nullable FramePipeline frames) {
         mFrames = frames;
         if (frames != null) frames.bind(FrameStep.GLASS_COMMIT, this::commit);
+    }
+
+    /**
+     * The legibility corrections, one per page and band (ADR 0029 section 9): measured at rest,
+     * blended by a crossing, which measures nothing.
+     */
+    @NonNull
+    public LegibilityStore legibility() {
+        return mLegibility;
     }
 
     public void setLiveCore(@Nullable LiveCore core) {

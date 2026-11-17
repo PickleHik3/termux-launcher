@@ -398,6 +398,22 @@ public final class DockController {
             heightPx, pieces, layout);
     }
 
+    /** A look-only crossing begins: the tiles' glyphs drift between the inks of the two pages' faces. */
+    public void beginTilesInkBlend(int faceFrom, int faceTo, double target) {
+        SuggestionBarView row = mHost.dockRow();
+        if (row != null) row.beginTileInkBlend(faceFrom, faceTo, target);
+    }
+
+    public void tilesInkBlend(float share) {
+        SuggestionBarView row = mHost.dockRow();
+        if (row != null) row.setTileInkBlend(share);
+    }
+
+    public void endTilesInkBlend() {
+        SuggestionBarView row = mHost.dockRow();
+        if (row != null) row.endTileInkBlend();
+    }
+
     /** The row's own tiles' glyphs on the dock's face at {@code dockOpacity}. */
     public void syncDockTilesInk(float dockOpacity) {
         mSurface.syncDockTilesInk(dockOpacity);

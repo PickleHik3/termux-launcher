@@ -1664,6 +1664,44 @@ public final class TermuxInAppKeyboard {
         if (mKeyPopup != null) mKeyPopup.refresh();
     }
 
+    /** The palettes a crossing blends between ({@link #beginGlassBlend}); null while none runs. */
+    @Nullable private juloo.keyboard2.Theme.Palette mBlendFrom;
+    @Nullable private juloo.keyboard2.Theme.Palette mBlendTo;
+
+    /**
+     * A look-only crossing begins: the legends drift from the palette the page being left wears to
+     * the one the arriving page will ({@link #setGlassBlend}), each built from the faces and tone
+     * rest kept for that page, so nothing is measured. Both palettes come from the memo of glass
+     * palettes, built at most once each.
+     */
+    public void beginGlassBlend(@NonNull int[] fromFaces, int fromTone, @NonNull int[] toFaces,
+                                int toTone) {
+        if (mDestroyed || mKeyboardView == null) return;
+        mBlendFrom = createPalette(fromFaces, fromTone);
+        mBlendTo = createPalette(toFaces, toTone);
+    }
+
+    /**
+     * The legends {@code share} of the way from the leaving page's inks to the arriving page's.
+     * Called at the crossing's look steps, never per frame; the keys repaint and nothing is laid
+     * out, and a step that moves no colour paints nothing.
+     */
+    public void setGlassBlend(float share) {
+        juloo.keyboard2.Theme.Palette from = mBlendFrom;
+        juloo.keyboard2.Theme.Palette to = mBlendTo;
+        if (from == null || to == null || mDestroyed || mKeyboardView == null) return;
+        juloo.keyboard2.Theme.Palette next = juloo.keyboard2.Theme.Palette.blend(from, to, share);
+        if (mAppliedPalette != null && sameInks(mAppliedPalette, next)) return;
+        mKeyboardView.setPaletteColors(next);
+        mAppliedPalette = next;
+    }
+
+    /** The blend is over; the landing's apply chooses the legends for the page it lands on. */
+    public void endGlassBlend() {
+        mBlendFrom = null;
+        mBlendTo = null;
+    }
+
     /** The last palette handed to the view, for {@link #setGlassFace} to compare against. */
     @Nullable private juloo.keyboard2.Theme.Palette mAppliedPalette;
 
@@ -1698,6 +1736,10 @@ public final class TermuxInAppKeyboard {
         new InAppKeyboardPaletteFactory.GlassMemo(4);
 
     private juloo.keyboard2.Theme.Palette createPalette() {
+        return createPalette(mGlassFaces, mGlassTone);
+    }
+
+    private juloo.keyboard2.Theme.Palette createPalette(@NonNull int[] glassFaces, int glassTone) {
         Context context = requireContainer().getContext();
         String theme = mPreferences.getInAppKeyboardTheme();
         // Every chrome apply with the keyboard up asks for the palette (the legend inks, the
@@ -1708,8 +1750,8 @@ public final class TermuxInAppKeyboard {
         try {
             InAppKeyboardPaletteFactory.GlassInputs inputs =
                 InAppKeyboardPaletteFactory.glassInputs(context, theme,
-                    com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
-                    mGlassTone);
+                    com.termux.app.chrome.GlassLook.of(mPreferences), glassFaces, mKeyOpacity,
+                    glassTone);
             palette = mGlassMemo.get(inputs);
             if (palette == null) {
                 android.os.Trace.beginSection("Keyboard.palette.glass.build");
