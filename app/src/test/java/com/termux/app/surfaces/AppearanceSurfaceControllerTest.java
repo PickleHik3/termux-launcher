@@ -477,6 +477,61 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
+    public void theColoursWaitIsANamedHoldThatSaysHowItEnded() {
+        com.termux.app.window.Counters.clear();
+        com.termux.app.window.Counters.enable(true, null);
+        try {
+            openPicker();
+            host.page.pending = true;
+            host.navigator.done();
+            assertEquals(1, com.termux.app.window.Counters.countOf("hold:wallpaper-colours"));
+            settle();
+            assertEquals("no colours came: the quiet window ended it", 1,
+                com.termux.app.window.Counters.countOf("hold:wallpaper-colours:quiet"));
+            assertFalse(surface.isWallpaperShown());
+        } finally {
+            com.termux.app.window.Counters.enable(false, null);
+            com.termux.app.window.Counters.clear();
+        }
+    }
+
+    @Test
+    public void aColoursCallbackThatBringsNoRelaunchEndsTheHoldAsLanded() {
+        com.termux.app.window.Counters.clear();
+        com.termux.app.window.Counters.enable(true, null);
+        try {
+            openPicker();
+            host.page.pending = true;
+            host.navigator.done();
+            surface.onWallpaperColoursChanged();
+            idle(WallpaperApplyHold.COLOURS_QUIET_MS + 100L);
+            idle(WallpaperApplyHold.RELAUNCH_WAIT_MS);
+            assertEquals(1, com.termux.app.window.Counters.countOf("hold:wallpaper-colours:landing"));
+            assertEquals(0, com.termux.app.window.Counters.countOf("hold:wallpaper-colours:quiet"));
+        } finally {
+            com.termux.app.window.Counters.enable(false, null);
+            com.termux.app.window.Counters.clear();
+        }
+    }
+
+    @Test
+    public void aRelaunchAbandonsTheColoursHoldWithoutRevealingAnything() {
+        com.termux.app.window.Counters.clear();
+        com.termux.app.window.Counters.enable(true, null);
+        try {
+            openPicker();
+            host.page.pending = true;
+            host.navigator.done();
+            surface.onHostDestroyed();
+            settle();
+            assertEquals(1, com.termux.app.window.Counters.countOf("hold:wallpaper-colours:abandoned"));
+        } finally {
+            com.termux.app.window.Counters.enable(false, null);
+            com.termux.app.window.Counters.clear();
+        }
+    }
+
+    @Test
     public void thePickersDoneWithNothingPendingPutsItDown() {
         openPicker();
         host.navigator.done();

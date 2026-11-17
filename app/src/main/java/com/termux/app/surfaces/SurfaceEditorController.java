@@ -1941,7 +1941,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                                       boolean animate) {
         if (!mOpen || token != mPresentToken || mFrameCtxValid || attempts <= 0)
             return;
-        content.postOnAnimation(() -> {
+        // One frame's wait per try, ended early by the content's next layout (the thing it waits for).
+        com.termux.app.window.FirstLayout.afterNextLayout(content, FRAME_RETRY_BACKSTOP_MS, () -> {
             if (!mOpen || token != mPresentToken || mFrameCtxValid)
                 return;
             frameSizeChanged();
@@ -1953,6 +1954,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     private static final int FRAME_RETRIES = 30;
+    /** One retry's longest wait when no layout comes: about a frame, as the retry always was. */
+    private static final long FRAME_RETRY_BACKSTOP_MS = 16L;
 
     /** The window the poses are computed from, read again after a measure. */
     private void refreshPoseWindow() {
@@ -5460,7 +5463,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Where the halo view's origin stands in the frame root's own space, px. */
     private int mHaloOriginX;
     private int mHaloOriginY;
-    @Nullable private ViewTreeObserver.OnPreDrawListener mHaloSync;
+    @Nullable private com.termux.app.window.FirstLayout.Handle mHaloSync;
 
     /**
      * Lays the halo round the mini UI: a view in the content behind the launcher's shell (so
@@ -5493,11 +5496,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             content.addView(view, content.indexOfChild(shell),
                 new android.widget.FrameLayout.LayoutParams(1, 1));
             mHaloView = view;
-            mHaloSync = () -> {
+            // The halo takes the frame's pose in every pre-draw pass until it is removed: a
+            // per-frame sync of one view, so the helper's repeating form, not a table step.
+            mHaloSync = com.termux.app.window.FirstLayout.beforeEachDrawUntil(content, () -> {
                 syncHalo();
-                return true;
-            };
-            content.getViewTreeObserver().addOnPreDrawListener(mHaloSync);
+                return false;
+            });
         }
         float[] clip = AppearanceEditorFrame.outlineRect(root.getWidth(), root.getHeight(),
             mDisplayInsetLeftPx, mRevealTopPx, mDisplayInsetRightPx, mDisplayInsetBottomPx);
@@ -5550,8 +5554,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void removeHalo() {
         View view = mHaloView;
         mHaloView = null;
-        if (mHaloSync != null && view != null && view.getViewTreeObserver().isAlive())
-            view.getViewTreeObserver().removeOnPreDrawListener(mHaloSync);
+        if (mHaloSync != null) mHaloSync.cancel();
         mHaloSync = null;
         if (view != null && view.getParent() instanceof ViewGroup)
             ((ViewGroup) view.getParent()).removeView(view);
