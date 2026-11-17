@@ -447,6 +447,12 @@ public final class ChromeRenderer {
     /** Set while {@link #commit} runs its apply. */
     private boolean mCommitRunning;
 
+    /** An apply was asked for from inside the running commit's first apply: it applies once more. */
+    private boolean mApplyAskedInCommit;
+
+    /** The commit's one extra apply is running; a request now books the next commit. */
+    private boolean mExtraApplyRunning;
+
     /**
      * A top-pane frost was asked for while the frame's commit was booked: the commit runs it after
      * its apply, unless the apply ran one itself, so the frame cuts the frost once.
@@ -599,6 +605,10 @@ public final class ChromeRenderer {
                 // follows applies the whole spec again anyway, so it is that pass, not a second
                 // whole apply before this frame's draw (24 ms of a drag frame on pong).
                 scopes |= SCOPE_ACCESSORY_RENDER;
+            } else if (mCommitRunning && !mExtraApplyRunning) {
+                // Asked from inside the commit's own apply: the commit applies once more at its
+                // end, in the same step, rather than booking one that would run late in pre-draw.
+                mApplyAskedInCommit = true;
             } else {
                 scheduleCommit();
             }
@@ -750,7 +760,15 @@ public final class ChromeRenderer {
         mCommitRunning = true;
         try {
             mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+            if (mApplyAskedInCommit) {
+                // At most one extra apply: a request during it books the next commit.
+                mApplyAskedInCommit = false;
+                mExtraApplyRunning = true;
+                mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+            }
         } finally {
+            mApplyAskedInCommit = false;
+            mExtraApplyRunning = false;
             mCommitRunning = false;
             Trace.endSection();
         }

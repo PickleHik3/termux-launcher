@@ -461,6 +461,44 @@ public class ChromeRendererTest {
         assertEquals("the booked frame finds the commit done", 1, surfaces.applied.size());
     }
 
+    /**
+     * An apply that asks for another apply from inside itself (the ink measuring a band's new
+     * dress) is applied once more inside the same step: no second commit is booked, so no step
+     * runs late in the frame's pre-draw.
+     */
+    @Test
+    public void anApplyThatAsksForItselfOnceIsAppliedTwiceInTheSameStep() {
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 1;
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        chrome = new ChromeRenderer(surfaces, null, frames);
+        surfaces.chrome = chrome;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        frames.flush("test");
+
+        assertEquals("twice inside the one step", 2, surfaces.applied.size());
+        assertFalse(chrome.isCommitPending());
+        assertFalse("the pipeline is not re-dirtied", frames.isFrameBooked());
+    }
+
+    @Test
+    public void anApplyThatAlwaysAsksIsAppliedTwiceThenBookedOnce() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 3;
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        chrome = new ChromeRenderer(surfaces, null, frames);
+        surfaces.chrome = chrome;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        frames.flush("test");
+
+        assertEquals("exactly twice inside the step", 2, surfaces.applied.size());
+        assertTrue("the next commit is booked, not looped", chrome.isCommitPending());
+        assertTrue(frames.isFrameBooked());
+    }
+
     /** Dispatches the root's pre-draw until a frame is let through, as a traversal would. */
     private static void drawFirstFrame(View root) {
         for (int i = 0; i < 3; i++) {
