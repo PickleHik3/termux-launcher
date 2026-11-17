@@ -3730,20 +3730,35 @@ public final class PaneWallLayout extends ViewGroup
      * ahead of the settle so its panes take their final size while the page arrives
      * ({@code Crossing#preSizeTerminal}). 0 at rest.
      */
-    private int mTerminalBottomInsetPx;
+    private final int[] mPageBottomInsetPx = new int[PaneWallPage.values().length];
 
-    /** See {@link #mTerminalBottomInsetPx}. */
+    /** See {@link #mPageBottomInsetPx}: the terminal's page, and the live neighbours with it. */
     public void setTerminalBottomInsetPx(int px) {
+        setPageBottomInsetPx(PaneWallPage.TERMINAL, px);
+    }
+
+    /**
+     * How far each page of {@code kind} ends above the wall's bottom (PageRoom: the room that
+     * page's own rest leaves its content). Compared before it is set, so a pass that finds the
+     * rest unchanged asks for no layout.
+     */
+    public void setPageBottomInsetPx(@NonNull PaneWallPage kind, int px) {
         int inset = Math.max(0, px);
-        if (inset == mTerminalBottomInsetPx) return;
-        mTerminalBottomInsetPx = inset;
+        if (inset == mPageBottomInsetPx[kind.ordinal()]) return;
+        mPageBottomInsetPx[kind.ordinal()] = inset;
         requestLayout();
+    }
+
+    /** {@code kind}'s bottom inset as last set; 0 at rest and for a page never given one. */
+    public int pageBottomInsetPx(@NonNull PaneWallPage kind) {
+        return mPageBottomInsetPx[kind.ordinal()];
     }
 
     /** How far {@code child} ends above the wall's bottom, beyond its frame. */
     private int pageBottomInsetPx(@NonNull View child) {
         // A live neighbour stands at the size the Workspace page does, so its shells never resize.
-        return child == mTerminalHost || isInnerNeighbour(child) ? mTerminalBottomInsetPx : 0;
+        PaneWallPage kind = pageKindOf(child);
+        return kind == null ? 0 : mPageBottomInsetPx[kind.ordinal()];
     }
 
     /**

@@ -104,6 +104,46 @@ public class PaneWallLayoutTest {
     }
 
     @Test
+    public void eachPageEndsAboveTheBottomByItsOwnInsetAndACrossingChangesNone() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.setPageBottomInsetPx(PaneWallPage.TERMINAL, 300);
+        wall.setPageBottomInsetPx(PaneWallPage.WIDGETS, 0);
+        wall.setPageBottomInsetPx(PaneWallPage.DISPLAY, 120);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+        PaneWallPage[] pages = {PaneWallPage.WIDGETS, PaneWallPage.DISPLAY, PaneWallPage.TERMINAL};
+        int[] first = new int[3];
+        View[] views = {widgets, display, terminal};
+        int[] insets = {0, 120, 300};
+        // Each page stands above the bottom by its own inset, once it is the one on screen.
+        for (int i = 0; i < pages.length; i++) {
+            wall.goTo(pages[i], false);
+            wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+            wall.layout(0, 0, WIDTH, HEIGHT);
+            first[i] = views[i].getHeight();
+            assertEquals(pages[i].name(), HEIGHT - insets[i], first[i]);
+        }
+        // Across the seam and back, none moves: no page's height, hence no pane's size, changes.
+        for (int round = 0; round < 2; round++) {
+            for (int i = 0; i < pages.length; i++) {
+                wall.goTo(pages[i], false);
+                wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+                wall.layout(0, 0, WIDTH, HEIGHT);
+                assertEquals(first[i], views[i].getHeight());
+            }
+        }
+        // A rest that did not change asks for no layout.
+        wall.layout(0, 0, WIDTH, HEIGHT);
+        wall.setPageBottomInsetPx(PaneWallPage.TERMINAL, 300);
+        wall.setTerminalBottomInsetPx(300);
+        assertEquals(false, wall.isLayoutRequested());
+        assertEquals(300, wall.pageBottomInsetPx(PaneWallPage.TERMINAL));
+    }
+
+    @Test
     public void theTerminalRestsOnScreenAndItsNeighboursRestOffIt() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
