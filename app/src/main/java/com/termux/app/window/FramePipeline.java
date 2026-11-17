@@ -389,9 +389,10 @@ public final class FramePipeline {
                 mDirty &= ~bit;
                 Runnable step = mSteps[i];
                 if (step == null || mDestroyed) continue;
+                // Cleared first: a step that asks for itself again names itself.
+                if (mLateBy != null) mLateBy[i] = null;
                 if (late) runLate(i, step);
                 else step.run();
-                if (mLateBy != null) mLateBy[i] = null;
             }
         } finally {
             mRunning = false;
