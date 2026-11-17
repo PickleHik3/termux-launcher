@@ -97,6 +97,40 @@ public class StackLanesParityTest {
         }
     }
 
+    @Test public void theLanesAreTheSidesOwnWhateverLayoutACrossingComposes() {
+        for (Element element : StackLanes.ROWS) {
+            Side lane = StackLanes.laneSide(element, f.home, f.window);
+            // From either front the lane is the same (a crossing's end is the rest from its side).
+            int expected = StackLanes.laneOf(element, f.home, f.window);
+            assertEquals(f.name + " " + element, expected,
+                lane == null ? StackLanes.STACK : StackLanes.laneOf(lane));
+        }
+        assertEquals(f.name + ": lanes by the two own layouts, from either front",
+            StackLanes.hasLanes(f.home, f.window, Side.HOME),
+            StackLanes.hasLanes(f.window, f.home, Side.WORKSPACE));
+    }
+
+    @Test public void theContainerStandsTheUnionAtEveryFrameOfACrossingAndAtBothRests() {
+        for (boolean floating : BOOLS) for (boolean up : BOOLS) for (PageRef front : PAGES) {
+            PageRef other = front.isHome() ? PageRef.TERMINAL : PageRef.HOME;
+            int mine = rowsPx(front, front, up, floating);
+            int theirs = rowsPx(front, other, up, floating);
+            int union = Math.max(mine, theirs);
+            String where = f.name + " front=" + front + " floating=" + floating + " up=" + up;
+            // At rest the pass stands the front's own rows: the union slack is the rest's.
+            assertEquals(where, StackLanes.slackPx(mine, theirs),
+                StackLanes.unionSlackPx(mine, theirs, mine));
+            // In a crossing the pass stands rows between the two (the seam's composite): the
+            // rows plus the slack are the union at every frame, so the container never resizes
+            // and its clip at the landing is the crossing's last.
+            for (int i = 0; i <= 8; i++) {
+                int pass = mine + Math.round((theirs - mine) * (i / 8f));
+                assertEquals(where + " frame " + i, union,
+                    pass + StackLanes.unionSlackPx(mine, theirs, pass));
+            }
+        }
+    }
+
     private StackEnd end(@NonNull PageRef page) {
         StackEnd end = new StackEnd(page);
         end.rest.containerWidthPx = f.widthPx;

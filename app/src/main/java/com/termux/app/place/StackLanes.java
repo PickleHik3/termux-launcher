@@ -154,6 +154,58 @@ public final class StackLanes {
     }
 
     /**
+     * The side whose lane {@code element} stands in over the keyboard, read from Home's layout and
+     * the Workspace's alone, so it is the same from either front and whatever layout a crossing
+     * composes; null for a row of the shared stack, one the two layouts stand in two places, or
+     * one not in the band over the keyboard.
+     */
+    @androidx.annotation.Nullable
+    public static Side laneSide(@NonNull Element element, @NonNull PlaceLayout home,
+                                @NonNull PlaceLayout workspace) {
+        if (resolve(element, home, workspace) != Where.BOTTOM_OVER
+            || conflicts(element, home, workspace)) return null;
+        switch (laneOf(element, home, workspace)) {
+            case HOME: return Side.HOME;
+            case WORKSPACE: return Side.WORKSPACE;
+            default: return null;
+        }
+    }
+
+    /**
+     * {@code rest}'s hosts with those of {@code crossing} that it lacks, each put after the row it
+     * follows in {@code crossing} (first when none of its predecessors is here): the band a
+     * crossing's composite layout stands beside both sides' rests, which it never takes a row from.
+     */
+    @NonNull
+    public static List<Element> standWith(@NonNull List<Element> rest,
+                                          @NonNull List<Element> crossing) {
+        List<Element> out = new ArrayList<>(rest);
+        for (int i = 0; i < crossing.size(); i++) {
+            Element element = crossing.get(i);
+            if (out.contains(element)) continue;
+            int at = 0;
+            for (int j = i - 1; j >= 0; j--) {
+                int found = out.indexOf(crossing.get(j));
+                if (found >= 0) {
+                    at = found + 1;
+                    break;
+                }
+            }
+            out.add(at, element);
+        }
+        return out;
+    }
+
+    /**
+     * How much taller than the rows a pass stands ({@code passRowsPx}) the band is, with a
+     * crossing's composite rows in it: the taller of the two sides' rests less them, never
+     * negative. At rest the pass stands the front's rest and this is {@link #slackPx}.
+     */
+    public static int unionSlackPx(int frontRowsPx, int otherRowsPx, int passRowsPx) {
+        return Math.max(0, Math.max(frontRowsPx, otherRowsPx) - Math.max(0, passRowsPx));
+    }
+
+    /**
      * How much taller the band is than the front side's rest: the other side's rows at rest less
      * the front's, never negative. The container stands this much taller and the slab starts this
      * far below its top, so what shows at rest is the front rest's stack.

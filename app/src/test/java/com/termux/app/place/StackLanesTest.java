@@ -145,6 +145,32 @@ public class StackLanesTest {
         assertEquals(0, StackLanes.slackPx(300, 300));
     }
 
+    @Test public void aCrossingsCompositeAddsItsRowsAndNeverTakesALanesAway() {
+        java.util.List<Element> rest = Arrays.asList(Element.APPS, Element.AZ);
+        // The composite (the seam's layout while a crossing runs) lacks Home's AZ lane row and
+        // has a status bar of its own: the band keeps AZ and gains the bar after the row it follows.
+        java.util.List<Element> composite = Arrays.asList(Element.APPS, Element.STATUS);
+        assertEquals(Arrays.asList(Element.APPS, Element.STATUS, Element.AZ),
+            StackLanes.standWith(rest, composite));
+        assertEquals(rest, StackLanes.standWith(rest, Collections.<Element>emptyList()));
+        assertEquals(Arrays.asList(Element.STATUS, Element.APPS, Element.AZ),
+            StackLanes.standWith(rest, Arrays.asList(Element.STATUS, Element.APPS)));
+    }
+
+    @Test public void aLaneSideIsReadFromTheTwoLayoutsAloneAndStaysTheSameFromEitherFront() {
+        LayoutFixtures.Fixture f = LayoutFixtures.TL16;
+        PlaceLayout bare = f.window.withSlot(Element.APPS, Slot.hiddenFrom(Edge.BOTTOM, 0));
+        assertSame(Side.HOME, StackLanes.laneSide(Element.APPS, f.home, bare));
+        assertSame(Side.WORKSPACE, StackLanes.laneSide(Element.APPS, bare, f.home));
+        assertSame(Side.WORKSPACE, StackLanes.laneSide(Element.EXTRA_KEYS, f.home, f.window));
+        org.junit.Assert.assertNull(StackLanes.laneSide(Element.APPS, f.home, f.window));
+        // The seam's composite while Home crosses to the Terminal is Home's layout standing the
+        // Terminal's dock: with no apps row on that dock it has no Home lane. Read as the front it
+        // lost the lane (the landing then wrote it); the two own layouts keep it.
+        assertSame(Side.HOME, StackLanes.laneSide(Element.APPS, f.home, bare));
+        org.junit.Assert.assertNull(StackLanes.laneSide(Element.APPS, bare, bare));
+    }
+
     @Test public void theLaneOfASideIsItsOwn() {
         assertEquals(H, StackLanes.laneOf(Side.HOME));
         assertEquals(W, StackLanes.laneOf(Side.WORKSPACE));

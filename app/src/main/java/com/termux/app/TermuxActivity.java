@@ -16482,6 +16482,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     boolean applyEdgeStacks(@NonNull PlaceLayout layout, @NonNull PlaceLayout other,
                             @NonNull com.termux.app.page.Side frontSide) {
+        return applyEdgeStacks(layout, other, frontSide, layout);
+    }
+
+    /**
+     * The same with the committed side's own layout ({@code laneFront}), which a crossing's
+     * composite {@code layout} is not: the band over the keyboard keeps the rows of both sides'
+     * lanes whatever the seam composes, and the composite's own rows stand with them
+     * ({@link com.termux.app.place.StackLanes#standWith}).
+     */
+    boolean applyEdgeStacks(@NonNull PlaceLayout layout, @NonNull PlaceLayout other,
+                            @NonNull com.termux.app.page.Side frontSide,
+                            @NonNull PlaceLayout laneFront) {
         boolean moved = false;
         // Which side of the row its page ticks take is a property of the arrangement, and the pass
         // that pads the dock's own row is handed the dock's numbers rather than the place's.
@@ -16502,8 +16514,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             List<View> plankContents = new ArrayList<>(2);
             // The bottom's bands under the keyboard stand in a stack of their own below it.
             for (Element element : edge == PlaceLayout.Edge.BOTTOM
-                ? com.termux.app.place.StackLanes.hostsOn(layout, other,
-                    com.termux.app.place.StackLanes.Where.BOTTOM_OVER)
+                ? bottomHostsOverKeyboard(layout, laneFront, other)
                 : EdgeStackPolicy.stack(layout, edge)) {
                 View host = edgeStackHost(element, edge);
                 if (host == null || stack == null) continue;
@@ -16523,7 +16534,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (stack != null) moved |= stack.setStack(bars);
         }
         moved |= applyUnderKeyboardStack(layout, other);
-        moved |= applyStackLanes(layout, other, frontSide);
+        moved |= applyStackLanes(laneFront, other, frontSide);
         // A joined Docked frame is one continuous sheet of glass: no hairline between its bands.
         if (hasDockedFrameCard()) {
             for (PlaceLayout.Edge edge : PlaceLayout.Edge.values()) {
@@ -16539,6 +16550,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mStatusBarOnDockPlank = bottom.contains(Element.STATUS)
             && !AccessoryStackLayoutPolicy.statusKeepsOwnGlass(bottom);
         return moved;
+    }
+
+    /** The hosts over the keyboard: both sides' rows by their own layouts, the composite's with them. */
+    @NonNull
+    private static List<Element> bottomHostsOverKeyboard(@NonNull PlaceLayout layout,
+            @NonNull PlaceLayout laneFront, @NonNull PlaceLayout other) {
+        List<Element> own = com.termux.app.place.StackLanes.hostsOn(laneFront, other,
+            com.termux.app.place.StackLanes.Where.BOTTOM_OVER);
+        if (layout == laneFront) return own;
+        return com.termux.app.place.StackLanes.standWith(own, com.termux.app.place.StackLanes.hostsOn(
+            layout, other, com.termux.app.place.StackLanes.Where.BOTTOM_OVER));
     }
 
     /**
@@ -16674,8 +16696,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Home's layout and the Workspace's are read at once: each host has one parent for both.
         boolean frontHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         PlaceLayout otherSideLayout = frontHome ? workspacePlaceLayout() : homePlaceLayout();
+        // The lanes stand by the two sides' own layouts, never the seam's composite a crossing
+        // stands for the rows' dress: the composite would drop the committed side's own lane rows.
         boolean moved = applyEdgeStacks(layout, otherSideLayout == null ? layout : otherSideLayout,
-            com.termux.app.page.Side.of(frontHome));
+            com.termux.app.page.Side.of(frontHome), committedArrangement().layout());
         Trace.endSection();
         Trace.beginSection("Place.edgeStacks.metrics");
         EdgeStackPolicy.Metrics metrics = buildEdgeStackMetrics();
@@ -17318,7 +17342,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mKeyboardDownLaidOutPx = keyboardDownPx;
         // The band stands at the union of both sides' rests: as much taller as the other side's
         // rows reach over the front's, the slab starting that far below the container's top.
-        int laneSlackPx = laneSlackPx(stackIn.dock, measuredToolbarHeightPx);
+        int passRowsPx = state.toolbarShown
+            ? stack.dock.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0;
+        int laneSlackPx = laneSlackPx(stackIn.dock, measuredToolbarHeightPx, passRowsPx);
         boolean laneSlackChanged = laneSlackPx != mLaneSlackPx;
         mLaneSlackPx = laneSlackPx;
         if (laneSlackChanged) applyAccessorySurfaceBounds(state);
@@ -17494,47 +17520,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mLaneSlackPx;
 
     /**
-     * Which row views stand for either side's layout: the front layout's and the rows only the
-     * other side's layout stands in the band over the keyboard, so those rows are laid out (off
-     * screen) whichever side is in front. Null until both layouts can be read.
+     * Which row views stand for either side's layout: the rows of both sides' lanes in the band
+     * over the keyboard, each by its own side's layout, so every lane row is laid out (the other
+     * side's off screen) whichever side is in front and whatever layout a crossing composes. Null
+     * until both layouts can be read.
      */
     @Nullable
     private com.termux.app.dock.DockRows.Union dockRowsUnion() {
         if (mPreferences == null) return null;
-        boolean frontHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
-        PlaceLayout other = frontHome ? workspacePlaceLayout() : homePlaceLayout();
-        if (other == null) return null;
-        PlaceLayout front = arrangement().layout();
-        ResolvedArrangement theirs = arrangementOf(frontHome
-            ? com.termux.app.wall.PageRef.TERMINAL : com.termux.app.wall.PageRef.HOME);
-        boolean dock = theirs.dockShown();
+        PlaceLayout home = homePlaceLayout();
+        PlaceLayout workspace = workspacePlaceLayout();
+        if (home == null || workspace == null) return null;
+        ResolvedArrangement homeRest = arrangementOf(com.termux.app.wall.PageRef.HOME);
+        ResolvedArrangement workspaceRest = arrangementOf(com.termux.app.wall.PageRef.TERMINAL);
         return new com.termux.app.dock.DockRows.Union(
-            dock && theirs.appsRowShown() && laneRowStands(Element.APPS, front, other),
-            dock && theirs.azRowOnDock() && laneRowStands(Element.AZ, front, other),
-            dock && theirs.extraKeysRowShown() && laneRowStands(Element.EXTRA_KEYS, front, other));
+            laneRowShown(Element.APPS, home, workspace, homeRest, workspaceRest),
+            laneRowShown(Element.AZ, home, workspace, homeRest, workspaceRest),
+            laneRowShown(Element.EXTRA_KEYS, home, workspace, homeRest, workspaceRest));
     }
 
-    /** Whether {@code element} stands in the band over the keyboard for both layouts' one parent. */
-    private static boolean laneRowStands(@NonNull Element element, @NonNull PlaceLayout front,
-                                         @NonNull PlaceLayout other) {
-        return com.termux.app.place.StackLanes.resolve(element, front, other)
-                == com.termux.app.place.StackLanes.Where.BOTTOM_OVER
-            && !com.termux.app.place.StackLanes.conflicts(element, front, other)
-            && com.termux.app.place.StackLanes.where(other, element)
-                == com.termux.app.place.StackLanes.Where.BOTTOM_OVER;
+    /** Whether {@code element} is a lane row whose own side's rest shows it. */
+    private static boolean laneRowShown(@NonNull Element element, @NonNull PlaceLayout home,
+            @NonNull PlaceLayout workspace, @NonNull ResolvedArrangement homeRest,
+            @NonNull ResolvedArrangement workspaceRest) {
+        com.termux.app.page.Side side =
+            com.termux.app.place.StackLanes.laneSide(element, home, workspace);
+        if (side == null) return false;
+        ResolvedArrangement rest = side == com.termux.app.page.Side.HOME ? homeRest : workspaceRest;
+        return rest.dockShown() && (element == Element.APPS ? rest.appsRowShown()
+            : element == Element.AZ ? rest.azRowOnDock() : rest.extraKeysRowShown());
     }
 
     /**
      * Hands Dock rows the other side's rest and whose lane each row is, before the pass applies
      * the dock: the rows only that side shows are sized by that rest, and every lane row is
-     * dressed from its own side's layout (LaneDress), whichever side is in front. Nothing here
-     * moves with a page change that keeps the same two layouts.
+     * dressed from its own side's layout (LaneDress), whichever side is in front. Read from the
+     * committed side's own layout and the other side's, never a crossing's composite. Nothing
+     * here moves with a page change that keeps the same two layouts.
      */
     private void noteLanes(@NonNull com.termux.app.dock.DockGeometry.Snapshot snapshot) {
         boolean frontHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         com.termux.app.page.Side frontSide = com.termux.app.page.Side.of(frontHome);
         PlaceLayout other = frontHome ? workspacePlaceLayout() : homePlaceLayout();
-        PlaceLayout front = arrangement().layout();
+        PlaceLayout front = committedArrangement().layout();
         if (other == null || !com.termux.app.place.StackLanes.hasLanes(front, other, frontSide)) {
             mDockRows.setOtherLayout(null);
             mDockRows.setLanes(frontSide, null, null, null);
@@ -17547,34 +17575,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout home = frontHome ? front : other;
         PlaceLayout workspace = frontHome ? other : front;
         mDockRows.setLanes(frontSide,
-            laneSideOf(Element.APPS, front, other, home, workspace),
-            laneSideOf(Element.AZ, front, other, home, workspace),
-            laneSideOf(Element.EXTRA_KEYS, front, other, home, workspace));
-    }
-
-    /** The side whose lane {@code element} is in the band over the keyboard; null for the stack's. */
-    @Nullable
-    private static com.termux.app.page.Side laneSideOf(@NonNull Element element,
-            @NonNull PlaceLayout front, @NonNull PlaceLayout other,
-            @NonNull PlaceLayout home, @NonNull PlaceLayout workspace) {
-        if (com.termux.app.place.StackLanes.resolve(element, front, other)
-                != com.termux.app.place.StackLanes.Where.BOTTOM_OVER
-            || com.termux.app.place.StackLanes.conflicts(element, front, other)) return null;
-        int lane = com.termux.app.place.StackLanes.laneOf(element, home, workspace);
-        return lane == com.termux.app.place.StackLanes.HOME ? com.termux.app.page.Side.HOME
-            : lane == com.termux.app.place.StackLanes.WORKSPACE ? com.termux.app.page.Side.WORKSPACE
-            : null;
+            com.termux.app.place.StackLanes.laneSide(Element.APPS, home, workspace),
+            com.termux.app.place.StackLanes.laneSide(Element.AZ, home, workspace),
+            com.termux.app.place.StackLanes.laneSide(Element.EXTRA_KEYS, home, workspace));
     }
 
     /**
-     * How much taller the other side's rows at rest stand over the keyboard than the front side's,
-     * 0 while the layouts have no lane.
+     * How much taller the band is laid out than this pass's own rows: the taller of the two sides'
+     * rests at rest less what the pass stands, 0 while the layouts have no lane. At rest the pass
+     * stands the front's rest, so it is the other's excess over it
+     * ({@link com.termux.app.place.StackLanes#slackPx}); in a crossing the pass stands the seam's
+     * composite rows, and the band is still the union, so the container's height does not move
+     * with the crossing ({@link com.termux.app.place.StackLanes#unionSlackPx}).
      */
     private int laneSlackPx(@NonNull com.termux.app.dock.DockGeometry.Snapshot snapshot,
-                            int measuredToolbarPx) {
+                            int measuredToolbarPx, int passRowsPx) {
         boolean frontHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         PlaceLayout other = frontHome ? workspacePlaceLayout() : homePlaceLayout();
-        PlaceLayout front = arrangement().layout();
+        PlaceLayout front = committedArrangement().layout();
         if (other == null || !com.termux.app.place.StackLanes.hasLanes(front, other,
                 com.termux.app.page.Side.of(frontHome))) {
             return 0;
@@ -17583,13 +17601,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? com.termux.app.wall.PageRef.HOME : com.termux.app.wall.PageRef.TERMINAL;
         com.termux.app.wall.PageRef otherPage = frontHome
             ? com.termux.app.wall.PageRef.TERMINAL : com.termux.app.wall.PageRef.HOME;
-        return com.termux.app.place.StackLanes.slackPx(
-            com.termux.app.place.StackLayout.restRowsPx(
-                new com.termux.app.place.StackLayout.RestInput(snapshot, frontPage)
-                    .ownRows(measuredToolbarPx)),
-            com.termux.app.place.StackLayout.restRowsPx(
-                new com.termux.app.place.StackLayout.RestInput(snapshot, otherPage)
-                    .ownRows(measuredToolbarPx)));
+        int frontRows = com.termux.app.place.StackLayout.restRowsPx(
+            new com.termux.app.place.StackLayout.RestInput(snapshot, frontPage)
+                .ownRows(measuredToolbarPx));
+        int otherRows = com.termux.app.place.StackLayout.restRowsPx(
+            new com.termux.app.place.StackLayout.RestInput(snapshot, otherPage)
+                .ownRows(measuredToolbarPx));
+        return mCrossing.crossing()
+            ? com.termux.app.place.StackLanes.unionSlackPx(frontRows, otherRows, passRowsPx)
+            : com.termux.app.place.StackLanes.slackPx(frontRows, otherRows);
     }
 
     /** The keyboard's height the stack's container is laid out taller by while it is down. */
