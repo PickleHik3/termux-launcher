@@ -9,7 +9,6 @@ import com.termux.app.chrome.BackdropLayers.Layer;
 import com.termux.app.chrome.BackdropLayers.Motion;
 import com.termux.app.chrome.BackdropLayers.Move;
 import com.termux.app.chrome.BackdropLayers.Place;
-import com.termux.app.chrome.BackdropLayers.SeeThrough;
 import com.termux.app.chrome.BackdropLayers.Tier;
 
 import org.junit.Test;
@@ -194,16 +193,6 @@ public class BackdropLayersTest {
             Move.SHIFT, true, true, false);
         assertEquals(BackdropLayers.STALE_LOCAL, plan & (BackdropLayers.STALE_GROUND
             | BackdropLayers.STALE_PAGES | BackdropLayers.STALE_LOCAL));
-    }
-
-    @Test
-    public void oneLayerTurnsTheLowerGlassToTheStoredFrame() {
-        // The back float under the front one: the stored frame, so the front float sees the back
-        // one, frosted over the wallpaper, but not the widgets through both.
-        assertTrue(BackdropLayers.drawsStored(SeeThrough.ONE, true));
-        // The topmost glass records as always.
-        assertFalse(BackdropLayers.drawsStored(SeeThrough.ONE, false));
-        assertFalse(BackdropLayers.drawsStored(SeeThrough.ALL, true));
     }
 
     @Test

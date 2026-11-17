@@ -204,29 +204,10 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     }
 
     @Nullable private GroundSource mGroundSource;
-    @NonNull private BackdropLayers.SeeThrough mSeeThrough = BackdropLayers.SeeThrough.ALL;
 
     /** The stored frames' source for the ground layer; null keeps every swipe on the one picture. */
     public void setGroundSource(@Nullable GroundSource source) {
         mGroundSource = source;
-    }
-
-    /**
-     * "See through" ({@link BackdropLayers#drawsStored}): with
-     * {@link BackdropLayers.SeeThrough#ONE} a glass with another live glass above it draws the
-     * stored frame instead of recording, at rest too. A change records every
-     * picture again on its next frame, which it asks for.
-     */
-    public void setSeeThrough(@NonNull BackdropLayers.SeeThrough seeThrough) {
-        if (seeThrough == mSeeThrough) return;
-        mSeeThrough = seeThrough;
-        mPlanStamp++;
-        for (int i = 0; i < mPictures.size(); i++) {
-            LivePicture picture = mPictures.get(i);
-            picture.mRecordedBeneath.clear();
-            picture.mRecordedLocal.clear();
-            picture.mSurface.invalidate();
-        }
     }
 
     // Scratch for the backdrop layers; UI thread only.
@@ -239,7 +220,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     @NonNull private final RectF mNeededWall = new RectF();
     @NonNull private final Matrix mAim = new Matrix();
     @NonNull private final Matrix mPagesAim = new Matrix();
-    /** The views of the local layer: beneath, neither the ground nor the pages, kept by See through. */
+    /** The views of the local layer: beneath, neither the ground nor the pages. */
     @NonNull private final ArrayList<View> mLocal = new ArrayList<>();
 
     private float parallaxPx() {
@@ -454,7 +435,6 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             mPlanMoving = moving;
             mPlanStamp++;
         }
-        markGlassAbove(moving);
         try {
             preDrawPictures(moving);
         } finally {
@@ -486,13 +466,6 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             picture.setRecordedDim(dimBeneath());
             int margin = picture.marginPx();
             int reach = picture.reachTopPx();
-            if (BackdropLayers.drawsStored(mSeeThrough, picture.mGlassAbove)
-                && drawStored(picture, surface, margin, reach)) {
-                // Back to recording, it records whole again.
-                picture.mRecordHoldsLocal = false;
-                picture.mRecordedBeneath.clear();
-                continue;
-            }
             BackdropLayers.Mode mode = pageLayerMode(picture, surface, margin, reach);
             int plan = layersPlan(picture, surface, margin, reach, mode);
             if ((plan & BackdropLayers.LAYERS) != 0
@@ -558,7 +531,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
      * drawing under the glass.
      *
      * <p>Kept while {@link #mPlanStamp} holds, which moves on a layout pass, on the wall starting
-     * or stopping, on a picture coming or going and on a See through change; a view beneath
+     * or stopping, and on a picture coming or going; a view beneath
      * that stops drawing, or a path view that changes parent, also plans whole again. A view
      * shown again without a layout (INVISIBLE to VISIBLE) or a change of elevation mid-swipe is
      * picked up at the landing frame, which always plans whole.</p>
@@ -609,9 +582,6 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     private boolean mPlanMoving;
     /** The plan of the picture being drawn while the wall moves; null otherwise. */
     @Nullable private MotionPlan mPlanning;
-    /** The stamp {@link #markGlassAbove} last marked at, and over how many pictures. */
-    private int mGlassAboveStamp = MotionPlan.NONE;
-    private int mGlassAboveCount = -1;
     /** A layout pass may have moved, shown, hidden or re-ordered any view: plan whole again. */
     @NonNull private final ViewTreeObserver.OnGlobalLayoutListener mLayoutListener =
         () -> mPlanStamp++;
@@ -1848,84 +1818,6 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             if (mPath.indexOf(parent) >= 0) return view;
             view = (View) parent;
         }
-    }
-
-    /**
-     * "See through" for this frame: marks each picture another live surface stands over
-     * ({@link LivePicture#mGlassAbove}), found among that surface's views beneath. Only with
-     * {@link BackdropLayers.SeeThrough#ONE}; allocates nothing. While the wall moves, marked
-     * once per plan ({@link MotionPlan}): which glass stands over which does not change as the
-     * pages slide.
-     */
-    private void markGlassAbove(boolean moving) {
-        int count = mPictures.size();
-        if (planHolds(mGlassAboveStamp, mPlanStamp, moving) && mGlassAboveCount == count) return;
-        mGlassAboveStamp = moving ? mPlanStamp : MotionPlan.NONE;
-        mGlassAboveCount = count;
-        for (int i = 0; i < count; i++) mPictures.get(i).mGlassAbove = false;
-        if (mSeeThrough == BackdropLayers.SeeThrough.ALL || count < 2) return;
-        for (int i = 0; i < count; i++) {
-            View top = mPictures.get(i).mSurface;
-            if (!top.isShown() || !collect(top)) continue;
-            for (int b = 0; b < mBeneath.size(); b++) {
-                View below = mBeneath.get(b);
-                if (below == null) continue;
-                for (int j = 0; j < count; j++) {
-                    LivePicture other = mPictures.get(j);
-                    if (j != i && within(other.mSurface, below)) other.mGlassAbove = true;
-                }
-            }
-        }
-    }
-
-    /**
-     * Draws {@code picture} as the Wallpaper kind, the stored frame (or the scene's) at its offset,
-     * through the ground layer alone: a glass with another glass above it under One layer.
-     * Whether it does; false keeps the one picture.
-     */
-    @RequiresApi(Build.VERSION_CODES.S)
-    private boolean drawStored(@NonNull LivePicture picture, @NonNull View surface, int margin,
-                               int reach) {
-        if (!mMatrix.invert(mInverse)) return false;
-        int width = surface.getWidth() + 2 * margin;
-        int height = surface.getHeight() + 2 * margin + reach;
-        mRoot.getLocationOnScreen(mLocation);
-        LiveSceneFrame.Frame scene = LiveSceneFrame.current();
-        mAim.set(mInverse);
-        if (scene != null) {
-            if (scene.bitmap.isRecycled()) return false;
-            mNeededRoot.set(-margin, -margin - reach, surface.getWidth() + margin,
-                surface.getHeight() + margin);
-            mMatrix.mapRect(mNeededRoot);
-            mNeededRoot.roundOut(mSceneRegion);
-            if (!mSceneRegion.intersect(0, 0, mRoot.getWidth(), mRoot.getHeight())) return false;
-            mGroundRect.set(LiveSceneFrame.rect());
-            mGroundRect.offset(-mLocation[0], -mLocation[1]);
-            picture.groundScene(scene.bitmap, scene.generation, mGroundRect, mSceneRegion);
-        } else {
-            android.graphics.Bitmap frame = mGroundSource == null ? null
-                : mGroundSource.storedFrame(picture.radiusPx(), mFrameRect);
-            if (frame == null || frame.isRecycled() || mFrameRect.isEmpty()) return false;
-            mGroundRect.set(mFrameRect);
-            mGroundRect.offset(-mLocation[0], -mLocation[1]);
-            picture.groundStored(frame, mGroundRect);
-            mAim.preTranslate(-parallaxPx(), 0f);
-        }
-        mAim.postTranslate(margin, margin + reach);
-        picture.recordNode(width, height);
-        picture.aimGround(mAim);
-        picture.showGround(width, height);
-        if (!picture.layered()) return false;
-        picture.recorded();
-        return true;
-    }
-
-    /** Whether {@code view} is {@code ancestor} or inside it. */
-    private static boolean within(@NonNull View view, @NonNull View ancestor) {
-        for (Object at = view; at instanceof View; at = ((View) at).getParent()) {
-            if (at == ancestor) return true;
-        }
-        return false;
     }
 
     /** Whether {@code a} and {@code b} hold the same views in the same order; allocates nothing. */

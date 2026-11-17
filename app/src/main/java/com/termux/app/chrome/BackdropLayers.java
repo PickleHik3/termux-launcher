@@ -37,10 +37,6 @@ import androidx.annotation.NonNull;
  * kept while every tracked pose ({@link #POSE_STRIDE} floats: the view's matrix, its left, top and
  * alpha) is the same as when it was recorded but for one shared horizontal shift. At rest under a
  * live scene the one picture draws the pages on a cached layer ({@link Mode#REFERENCE}).</p>
- *
- * <p>{@link #drawsStored} is the "See through" rule, at rest too: with {@link SeeThrough#ONE} a
- * glass with another glass above it draws the stored frame, so the one above sees it but not
- * through it.</p>
  */
 public final class BackdropLayers {
 
@@ -80,9 +76,6 @@ public final class BackdropLayers {
         /** A page's alpha moved: Fade. */
         FADE
     }
-
-    /** "See through": every glass layer beneath, or only what is directly beneath the topmost. */
-    public enum SeeThrough { ALL, ONE }
 
     /** {@link #plan}: the surface draws its layers this frame; without it, the one picture. */
     public static final int LAYERS = 1;
@@ -386,15 +379,5 @@ public final class BackdropLayers {
             if (Math.abs(now[alpha] - recorded[alpha]) > SAME_EPSILON) return Move.FADE;
         }
         return Math.abs(shift) > SHIFT_EPSILON_PX ? Move.SHIFT : Move.STILL;
-    }
-
-    /**
-     * Whether a Live surface draws as the Wallpaper kind (the stored frame at its offset) instead
-     * of recording what is beneath it. With {@link SeeThrough#ONE} a surface another Live glass
-     * stands over does: the one above records it, content and all, like anything beneath, but no
-     * longer sees through it to what lies under both.
-     */
-    public static boolean drawsStored(@NonNull SeeThrough seeThrough, boolean glassAbove) {
-        return seeThrough == SeeThrough.ONE && glassAbove;
     }
 }
