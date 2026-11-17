@@ -154,7 +154,10 @@ public final class FramePipeline {
     public void requestFrame(@NonNull FrameStep step) {
         if (mDestroyed) return;
         mDirty |= 1 << step.ordinal();
-        if (mAfterPass && Counters.enabled) recordLateCaller(step.ordinal());
+        // The chrome commit is rare (a few per crossing), so its caller is always noted.
+        if (Counters.enabled && (mAfterPass || step == FrameStep.CHROME_COMMIT)) {
+            recordLateCaller(step.ordinal());
+        }
         bookFrame();
     }
 
@@ -171,6 +174,8 @@ public final class FramePipeline {
                 .append(':').append(e.getLineNumber());
             if (++kept == 4) break;
         }
+        View root = mRoot;
+        if (root != null && root.isInLayout()) who.append(" (in layout)");
         mLateBy[index] = who.toString();
     }
 
@@ -386,6 +391,7 @@ public final class FramePipeline {
                 if (step == null || mDestroyed) continue;
                 if (late) runLate(i, step);
                 else step.run();
+                if (mLateBy != null) mLateBy[i] = null;
             }
         } finally {
             mRunning = false;
