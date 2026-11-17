@@ -8139,31 +8139,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return false;
     }
 
-    /** The frost under the keyboard on a Display page; made on first use, see {@link #frostKeyboardOverDisplay}. */
-    @Nullable private com.termux.app.chrome.DisplayKeyboardBlur mKeyboardFrost;
+    /** The frost under the keyboard on a Display page (the glass service's Compositor kind); made on first use. */
+    @Nullable private com.termux.app.chrome.KeyboardFrost mKeyboardFrost;
 
     /**
-     * Puts the compositor's blur under the keyboard's bed at the Display-pages look's Frost, or
-     * leaves the bed see-through where Android does not blur windows now
-     * ({@link com.termux.app.chrome.DisplayKeyboardBlurPolicy}). Never waits on the blur: the bed
-     * is already painted, and a layer that cannot be made only leaves it unfrosted.
+     * Says where the keyboard's bed is over the display and what its Frost is; the glass service
+     * grants the compositor's blur under it, or leaves the bed see-through
+     * ({@link com.termux.app.chrome.KeyboardFrost}).
      */
     private void frostKeyboardOverDisplay(@NonNull View surfaceHost, float cornerPx) {
         if (mPreferences == null) return;
         if (mKeyboardFrost == null) {
-            // Battery saver, or the blur setting, turned over while the keyboard is up: the next
-            // pass decides again.
-            mKeyboardFrost = new com.termux.app.chrome.DisplayKeyboardBlur(this,
-                () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
+            mKeyboardFrost = new com.termux.app.chrome.KeyboardFrost(this, mGlass);
         }
-        mKeyboardFrost.want();
-        android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
-        int radiusPx = com.termux.app.chrome.DisplayKeyboardBlurPolicy.blurRadiusPx(
-            Build.VERSION.SDK_INT, mKeyboardFrost.crossWindowBlurEnabled(),
-            power != null && power.isPowerSaveMode(),
+        mKeyboardFrost.show(surfaceHost, displayView(),
             mPreferences.getInAppKeyboardBlurRadius(stackLookPage()),
-            getResources().getDisplayMetrics().density);
-        mKeyboardFrost.show(surfaceHost, displayView(), radiusPx, cornerPx);
+            getResources().getDisplayMetrics().density, cornerPx);
     }
 
     /** Takes the frost under the keyboard away and frees it; safe when there is none. */

@@ -183,8 +183,6 @@ public class WindowSourceRulesTest {
         "app/TermuxActivity.java:5",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/assistant/AssistantPageController.java:1",
-        // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
-        "app/chrome/DisplayKeyboardBlur.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/chrome/LivePicture.java:2",
         // local first-layout wait: moves onto the first-layout helper
