@@ -294,12 +294,15 @@ public class TerminalPaneController {
         default boolean onFloatWindowOntoHome(@NonNull Window window) { return false; }
         /**
          * Live blur's picture of what is drawn beneath {@code slab}, a floating window's glass,
-         * made if it has none; null while Live blur is off or every live picture is taken, and
-         * the slab keeps the stored frame.
+         * made if it has none; null while the glass service grants it another kind, and the slab
+         * keeps the stored frame. {@code redress} runs when a policy event moves that kind.
          */
         @Nullable
-        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) { return null; }
-        /** {@code slab} no longer shows a live picture: its layer goes. */
+        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
+                                                                  @Nullable Runnable redress) {
+            return null;
+        }
+        /** {@code slab} left its float for good: its glass entry and layer go. */
         default void detachLiveGlass(@NonNull View slab) {}
         /**
          * The shell of the float terminal widget {@code widgetId} hosts ended on its own: the
@@ -5809,19 +5812,21 @@ public class TerminalPaneController {
      * tick and on every frost refresh.
      */
     /**
-     * A float's glass slab takes Live blur's picture of what is beneath it while the float can be
-     * seen and the slab is its own and shown ({@link FloatLiveGlass#wants}); otherwise it gives
-     * the picture back and draws the stored frame. A pane docked back into the tiled tree is no
-     * longer inside the float, so it gives its picture back too.
+     * A float's glass slab asks for Live blur's picture of what is beneath it while the slab is its
+     * own and shown ({@link FloatLiveGlass#wants}), and draws the kind the glass service grants;
+     * otherwise it gives the picture back and draws the stored frame. A pane docked back into the
+     * tiled tree is no longer inside the float, so it gives its picture back too. Whether the float
+     * can be seen (minimised, another Home page, a swipe) never changes it: a hidden float holds no
+     * layer, and its first frame back is recorded before it draws.
      */
-    private void syncFloatLiveGlass(@NonNull FloatingPaneContainer container, boolean shown) {
+    private void syncFloatLiveGlass(@NonNull FloatingPaneContainer container) {
         PaneGlassBackdropView slab = mPaneGlassViews.get(container.mLeaf.session);
         if (slab == null) return;
-        if (FloatLiveGlass.wants(shown, FloatLiveGlass.inside(slab, container),
+        if (FloatLiveGlass.wants(FloatLiveGlass.inside(slab, container),
                 slab.getVisibility() == View.VISIBLE)) {
-            slab.setLivePicture(mHost.attachLiveGlass(slab));
-        } else if (slab.livePicture() != null) {
-            slab.setLivePicture(null);
+            slab.setLivePicture(mHost.attachLiveGlass(slab, container.mGlassRedress));
+        } else {
+            if (slab.livePicture() != null) slab.setLivePicture(null);
             mHost.detachLiveGlass(slab);
         }
         // The titlebar shows the same picture, so glass on glass reaches it too, at no slot of
@@ -5851,11 +5856,11 @@ public class TerminalPaneController {
         // slab takes Live blur's picture or the stored frame, as Live and the slab now stand.
         for (FloatingPaneContainer container : mFloatContainers.values()) {
             container.titlebar().dress(mSurfaceStyle, radiusPx);
-            syncFloatLiveGlass(container, container.isShown());
+            syncFloatLiveGlass(container);
         }
         for (FloatingPaneContainer container : mHomeFloatContainers.values()) {
             container.titlebar().dress(mSurfaceStyle, radiusPx);
-            syncFloatLiveGlass(container, container.isShown());
+            syncFloatLiveGlass(container);
         }
         // The corner tab is cut from the same glass as the pane it grows out of, and re-dressed
         // in the same pass, so a new frost frame reaches the tab as it reaches the slabs.
@@ -7769,12 +7774,26 @@ public class TerminalPaneController {
         /**
          * Whether this float can be seen changed: attached or detached (opened, closed, docked
          * back), shown or hidden (minimised, another Home page, the Home layer away). Its glass
-         * takes or gives back the live picture with it.
+         * keeps its kind; only a slab that left the float gives its picture back.
          */
         @Override
         public void onVisibilityAggregated(boolean isVisible) {
             super.onVisibilityAggregated(isVisible);
-            syncFloatLiveGlass(this, isVisible);
+            syncFloatLiveGlass(this);
+        }
+
+        /** The glass service moved this float's kind: its slab puts up the new one. */
+        final Runnable mGlassRedress = () -> syncFloatLiveGlass(this);
+
+        /** The float closed or was docked away: its glass entry, picture and layer go. */
+        @Override
+        protected void onDetachedFromWindow() {
+            super.onDetachedFromWindow();
+            PaneGlassBackdropView slab = mPaneGlassViews.get(mLeaf.session);
+            if (slab == null) return;
+            if (slab.livePicture() != null) slab.setLivePicture(null);
+            mHost.detachLiveGlass(slab);
+            titlebar().setLiveGlass(null);
         }
 
         /**

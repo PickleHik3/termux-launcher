@@ -103,12 +103,10 @@ public final class LivePicture implements GlassPicture {
     private boolean mLayered;
     /** {@link #mShown} draws a pages layer. */
     private boolean mShownPages;
-    /** {@link #mShown} draws the ground alone: the Wallpaper kind under See through: One layer. */
-    private boolean mShownGroundOnly;
-    /** Another live surface stands over this one this frame ({@link LiveBackdrop}). */
-    boolean mGlassAbove;
     /** The record node holds the local layer only, not the one picture. */
     boolean mRecordHoldsLocal;
+    /** The local layer holds the window's ground and the wallpaper ({@link LiveBackdrop}). */
+    boolean mLocalHoldsGround;
     /** The views the local layer was recorded from, and where the surface stood then. */
     @NonNull final ArrayList<View> mRecordedLocal = new ArrayList<>();
     @NonNull final Matrix mLocalMatrix = new Matrix();
@@ -866,9 +864,8 @@ public final class LivePicture implements GlassPicture {
         if (pages && (mPagesAt == null || !mPagesAt.hasDisplayList())) return;
         if (mShown == null) mShown = new RenderNode("LiveBackdrop.layers");
         boolean resized = mShown.getWidth() != width || mShown.getHeight() != height;
-        if (!mLayered || pages != mShownPages || mShownGroundOnly || resized
+        if (!mLayered || pages != mShownPages || resized
             || !mShown.hasDisplayList()) {
-            mShownGroundOnly = false;
             mShown.setPosition(0, 0, width, height);
             RecordingCanvas canvas = mShown.beginRecording(width, height);
             try {
@@ -880,34 +877,6 @@ public final class LivePicture implements GlassPicture {
                 mShown.endRecording();
             }
             mShownPages = pages;
-        }
-        if (!mLayered) {
-            mLayered = true;
-            mDrawable.invalidateSelf();
-            mAimed.invalidateSelf();
-        }
-    }
-
-    /**
-     * The holders draw the ground alone, the stored frame (or the scene's) where the surface
-     * stands, as the Wallpaper kind does: what nothing is recorded or blurred for. Recorded only
-     * when it was not already up.
-     */
-    @RequiresApi(Build.VERSION_CODES.S)
-    void showGround(int width, int height) {
-        if (mGround == null || mBlur == null) return;
-        if (mShown == null) mShown = new RenderNode("LiveBackdrop.layers");
-        boolean resized = mShown.getWidth() != width || mShown.getHeight() != height;
-        if (!mLayered || !mShownGroundOnly || resized || !mShown.hasDisplayList()) {
-            mShown.setPosition(0, 0, width, height);
-            RecordingCanvas canvas = mShown.beginRecording(width, height);
-            try {
-                canvas.drawRenderNode(mGround);
-            } finally {
-                mShown.endRecording();
-            }
-            mShownGroundOnly = true;
-            mShownPages = false;
         }
         if (!mLayered) {
             mLayered = true;
@@ -931,7 +900,6 @@ public final class LivePicture implements GlassPicture {
     private void dropLayers() {
         mLayered = false;
         mShownPages = false;
-        mShownGroundOnly = false;
         mRecordHoldsLocal = false;
         mRecordedLocal.clear();
         mGroundFrame = null;

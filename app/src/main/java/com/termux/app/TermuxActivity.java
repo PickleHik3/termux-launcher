@@ -1686,6 +1686,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.window.FramePipeline();
 
     /**
+     * The glass service (ADR 0029): the dock, the floats and the widgets register their glass
+     * here and are granted a kind; its commit is the frame table's last step.
+     */
+    private final com.termux.app.glass.GlassService mGlass =
+        new com.termux.app.glass.GlassService(mFrames);
+    /** The dock's element in the glass registry. */
+    private static final String DOCK_GLASS = "dock";
+    /** The dock's glass kind moved: its backdrop is dressed again. */
+    private final com.termux.app.glass.GlassService.Redress mDockGlassRedress =
+        kind -> this.mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
+
+    /**
      * The accessory chrome — glass, blur, frost and backdrops for the dock, the in-app keyboard,
      * the under-pill nav strip, the top pane, the palette and the drawer plane. The Activity keeps
      * only the view slots and the lifecycle forwarding; everything the module needs from here goes
@@ -1956,6 +1968,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mFrames.setLog((event, detail) -> {
             if (com.termux.app.chrome.MotionLog.enabled) com.termux.app.chrome.MotionLog.log(event, detail);
         });
+        // Battery saver is a Live policy input: the next apply reads it and the kinds move at once.
+        mGlass.watchPowerSave(this, () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
         com.termux.app.chrome.PanelBackdrop.install(getWindow().getDecorView(), mPanelBackdropSource);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
@@ -2531,6 +2545,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onResume() {
         super.onResume();
+        // Back after a trim: a policy event, so the Live kinds return at once.
+        mGlass.setMemoryShort(false);
         mHomePress.onResume();
         Logger.logVerbose(LOG_TAG, "onResume");
         mHomePill.refresh();
@@ -4334,6 +4350,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncFancierGlassLook() {
         com.termux.app.chrome.GlassRefraction.Look look = currentFancierGlassLook();
         boolean live = currentLiveBlur(look != null);
+        // A policy event for the glass service when it moved: every Live kind follows at once.
+        mGlass.setLiveOn(live);
         if (java.util.Objects.equals(look, mFancierGlassLook) && live == mLiveBlur) return;
         mFancierGlassLook = look;
         if (live != mLiveBlur) {
@@ -4363,26 +4381,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private android.graphics.drawable.Drawable liveDockPicture(@NonNull ImageView backdrop,
                                                                int blurRadiusDp) {
-        com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, blurRadiusDp);
+        com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, blurRadiusDp,
+            com.termux.app.chrome.LiveBackdrop.RANK_CHROME, DOCK_GLASS, mDockGlassRedress);
         return picture == null ? null : picture.drawable();
     }
 
+    /** A float's or a widget's element in the glass registry: its slab's own name. */
+    @NonNull
+    private static String glassElement(@NonNull String kind, @NonNull View slab) {
+        return kind + "@" + Integer.toHexString(System.identityHashCode(slab));
+    }
+
+    /** {@code redress} as the glass service tells it; null for none. */
+    @Nullable
+    private static com.termux.app.glass.GlassService.Redress glassRedress(
+            @Nullable Runnable redress) {
+        return redress == null ? null : kind -> redress.run();
+    }
+
     /**
-     * {@code surface}'s live picture at {@code blurRadiusDp}, the recorder made on first use; null,
-     * and any picture it had dropped, while Live is off, or when the recorder is full.
+     * {@code surface}'s live picture at {@code blurRadiusDp} and {@code rank} in the budget's
+     * order, the recorder made on first use. The surface registers as {@code element} with the
+     * glass service the first time; null, and any picture it had dropped, while its granted kind
+     * is not Live.
      */
     @Nullable
     private com.termux.app.chrome.LivePicture attachLivePicture(@NonNull View surface,
-                                                                int blurRadiusDp) {
-        return attachLivePicture(surface, blurRadiusDp,
-            com.termux.app.chrome.LiveBackdrop.RANK_CHROME);
-    }
-
-    /** {@link #attachLivePicture(View, int)} at {@code rank} in the budget's order. */
-    @Nullable
-    private com.termux.app.chrome.LivePicture attachLivePicture(@NonNull View surface,
-                                                                int blurRadiusDp, int rank) {
-        if (!mLiveBlur) {
+            int blurRadiusDp, int rank, @NonNull String element,
+            @Nullable com.termux.app.glass.GlassService.Redress redress) {
+        com.termux.app.glass.GlassKind kind = mGlass.grantedTo(element, surface);
+        if (kind == null) {
+            int priority = rank == com.termux.app.chrome.LiveBackdrop.RANK_WIDGET
+                ? com.termux.app.glass.GlassEntry.PRIORITY_WIDGET
+                : rank == com.termux.app.chrome.LiveBackdrop.RANK_FLOAT
+                ? com.termux.app.glass.GlassEntry.PRIORITY_FLOAT
+                : com.termux.app.glass.GlassEntry.PRIORITY_DOCK;
+            kind = mGlass.register(new com.termux.app.glass.GlassEntry(element, surface,
+                com.termux.app.glass.GlassKind.LIVE, priority), redress);
+        }
+        if (kind != com.termux.app.glass.GlassKind.LIVE) {
             if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);
             return null;
         }
@@ -4391,9 +4428,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The picture takes the stored frames' Vibrancy and frame tint, so a hand-off never shows.
         com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
         recorder.setStoredBake(cache.bakedVibrancy(), cache.bakedFrameTint());
-        recorder.setSeeThrough(mPreferences != null && mPreferences.isGlassSeeThroughOne()
-            ? com.termux.app.chrome.BackdropLayers.SeeThrough.ONE
-            : com.termux.app.chrome.BackdropLayers.SeeThrough.ALL);
         return recorder.attach(surface,
             blurRadiusDp * getResources().getDisplayMetrics().density, rank);
     }
@@ -4405,6 +4439,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View root = findViewById(R.id.terminal_root_container);
             if (!(root instanceof ViewGroup)) return null;
             mLiveBackdrop = new com.termux.app.chrome.LiveBackdrop((ViewGroup) root);
+            // Recorded by the glass commit, the frame table's last step.
+            mLiveBackdrop.setService(mGlass);
+            mGlass.setLiveCore(mLiveBackdrop);
             // A swipe holds the wall's pages in a page layer of their own under live glass.
             View wall = findViewById(R.id.terminal_pane_wall);
             if (wall instanceof com.termux.app.chrome.LiveBackdrop.Wall) {
@@ -6890,6 +6927,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             backdrop.setRenderEffect(null);
         }
         if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
+        mGlass.unregister(DOCK_GLASS);
         backdrop.setImageDrawable(null);
         backdrop.setVisibility(View.GONE);
         // No frame: the dock's content stands on the page's dim again.
@@ -10817,6 +10855,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         clearInAppKeyboardBackdrop();
         clearAccessoryRenderEffectBackdrop();
         if (mLiveBackdrop != null) mLiveBackdrop.releaseAll();
+        // A policy event: no surface is Live again until the window comes back.
+        mGlass.setMemoryShort(true);
     }
 
     /** Drop every session's kitty animation frames, keeping the still image each rests on. */
@@ -10888,6 +10928,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // with the Activity rather than outlive it.
         com.termux.app.terminal.TerminalKeyInspector.close();
         mChrome.onDestroy();
+        mGlass.watchPowerSave(this, null);
         mFrames.destroy();
         unregisterPreferredHomeChangeReceiver();
         cancelVoiceInput();
@@ -26069,12 +26110,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public boolean liveBlur() { return mLiveBlur; }
             @Nullable @Override
             public com.termux.app.chrome.LivePicture attachWidgetLiveGlass(@NonNull View slab,
-                                                                           int blurDp) {
+                    int blurDp, @Nullable Runnable redress) {
+                String element = glassElement("widget", slab);
                 return attachLivePicture(slab, blurDp,
-                    com.termux.app.chrome.LiveBackdrop.RANK_WIDGET);
+                    com.termux.app.chrome.LiveBackdrop.RANK_WIDGET, element,
+                    mGlass.grantedTo(element, slab) == null ? glassRedress(redress) : null);
             }
             @Override public void detachWidgetLiveGlass(@NonNull View slab) {
                 if (mLiveBackdrop != null) mLiveBackdrop.detach(slab);
+                mGlass.unregister(glassElement("widget", slab));
             }
             @Override public void openSurfaceEditor() {
                 TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
@@ -32717,14 +32761,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
         // A float's glass blurs what is beneath it at the terminal glass's own radius.
         @Nullable @Override
-        public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
+        public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
+                                                                 @Nullable Runnable redress) {
+            String element = glassElement("float", slab);
             return attachLivePicture(slab,
                 mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0,
-                com.termux.app.chrome.LiveBackdrop.RANK_FLOAT);
+                com.termux.app.chrome.LiveBackdrop.RANK_FLOAT, element,
+                mGlass.grantedTo(element, slab) == null ? glassRedress(redress) : null);
         }
 
         @Override public void detachLiveGlass(@NonNull View slab) {
             if (mLiveBackdrop != null) mLiveBackdrop.detach(slab);
+            mGlass.unregister(glassElement("float", slab));
         }
 
         // Live windows while swiping: the row's windows beside the one in front. None under
