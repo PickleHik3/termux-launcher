@@ -1021,7 +1021,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mBar = new EditorBar(mHost.context());
             mBar.setListener(new BarListener());
         }
-        mBar.attach(com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR));
+        mBar.attach(com.termux.app.window.WindowLayers.panelHostIn(content));
         // A picture read before the bar existed is applied now; a new bar starts at the theme's.
         mLabelInk = 0;
         if (mLabelPicture == null)
@@ -1037,7 +1037,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mCardTrail.clear();
         if (mSheet == null)
             mSheet = new EditorCardSheet(mHost.context(), mModel, new SheetListener());
-        mSheet.attach(com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR));
+        mSheet.attach(com.termux.app.window.WindowLayers.panelHostIn(content));
         mSheet.setVeiled(mChromeVeiled);
         if (mChromeVeiled)
             mBar.setUnderOverview(true);

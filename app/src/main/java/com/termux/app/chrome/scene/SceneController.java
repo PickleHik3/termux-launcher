@@ -487,9 +487,9 @@ public final class SceneController implements LatencyProbe.CommitListener {
             & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) {
             return;
         }
-        android.view.ViewGroup content = mActivity.findViewById(android.R.id.content);
+        android.view.ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mActivity);
         if (content == null || content.getChildCount() == 0) return;
-        // The content root can hold overlays beside the main tree: the recorder wraps them all.
+        // The window root holds the shell and the editor and notices hosts: the recorder wraps them all.
         SceneInvalTrace trace = new SceneInvalTrace(mActivity, layer::drawCount);
         java.util.ArrayList<View> children = new java.util.ArrayList<>();
         java.util.ArrayList<android.view.ViewGroup.LayoutParams> params = new java.util.ArrayList<>();

@@ -245,12 +245,10 @@ public class WindowSourceRulesTest {
 
     /** Files that write elevation or translationZ (shadow or order), with the count of writes. */
     static final List<String> Z_WRITES = Arrays.asList(
-        // Z doubles as draw order: the layer number replaces it
+        // Z doubles as draw order: the A-Z row is rebuilt in #260
         "app/AzScrubRowView.java:2",
         // elevation for a shadow or lift: classify when its layer moves
         "app/SuggestionBarView.java:2",
-        // Z doubles as draw order: the layer number replaces it
-        "app/TermuxActivity.java:8",
         // elevation for a shadow or lift: classify when its layer moves
         "app/fragments/settings/termux/ExtraKeysEditorFragment.java:2",
         // elevation for a shadow or lift: classify when its layer moves
@@ -267,17 +265,15 @@ public class WindowSourceRulesTest {
         "app/launcher/popup/AppMenuCard.java:3",
         // elevation for a shadow or lift: classify when its layer moves
         "app/launcher/widget/HomeFolderPopup.java:2",
-        // Z doubles as draw order: the layer number replaces it
+        // lift shadow of the carried cell (it draws over its neighbours by child order)
         "app/launcher/widget/WidgetPaneController.java:6",
-        // Z doubles as draw order: the layer number replaces it
-        "app/launcher/widget/WidgetPaneView.java:1",
         // elevation for a shadow or lift: classify when its layer moves
         "app/launcher/widget/builtin/NotificationsWidgetView.java:1",
         // elevation for a shadow or lift: classify when its layer moves
         "app/material/M3.java:2",
         // elevation for a shadow or lift: classify when its layer moves
         "app/notice/AppNoticeHostView.java:1",
-        // Z doubles as draw order: the layer number replaces it
+        // Z doubles as draw order: the row stacks are rebuilt in #260
         "app/place/EdgeStackView.java:1",
         // elevation for a shadow or lift: classify when its layer moves
         "app/setup/AppearanceResetCard.java:1",
@@ -287,8 +283,6 @@ public class WindowSourceRulesTest {
         "app/setup/SetupCardSheet.java:1",
         // elevation for a shadow or lift: classify when its layer moves
         "app/setup/SetupSheetView.java:1",
-        // Z doubles as draw order: the layer number replaces it
-        "app/surfaces/AppearanceSurfaceController.java:1",
         // elevation for a shadow or lift: classify when its layer moves
         "app/surfaces/EditorBar.java:3",
         // elevation for a shadow or lift: classify when its layer moves
@@ -303,11 +297,11 @@ public class WindowSourceRulesTest {
         "app/terminal/TerminalHintPanelView.java:1",
         // elevation for a shadow or lift: classify when its layer moves
         "app/terminal/TerminalModeHintCard.java:1",
-        // Z doubles as draw order: the layer number replaces it
+        // the float's shadow and its ramp (floats stand after the tiles in child order)
         "app/terminal/TerminalPaneController.java:6",
         // elevation for a shadow or lift: classify when its layer moves
         "app/terminal/TerminalSheetController.java:1",
-        // Z doubles as draw order: the layer number replaces it
+        // the lifted chip's shadow (it draws last by the strip's draw order)
         "app/terminal/TerminalWindowBar.java:3",
         // elevation for a shadow or lift: classify when its layer moves
         "app/terminal/extrakeys/HomePillView.java:3",
@@ -323,8 +317,8 @@ public class WindowSourceRulesTest {
     static final List<String> DECOR_OR_CONTENT_ADDS = Arrays.asList(
         // decor and content view: moves into the layer hosts
         "app/TermuxActivity.java:80",
-        // decor and content view: moves into the layer hosts
-        "app/chrome/scene/SceneController.java:2",
+        // reads the decor to find the keys under a gesture; its debug recorder now wraps the window root
+        "app/chrome/scene/SceneController.java:1",
         // decor and content view: moves into the layer hosts
         "app/chrome/sheets/SheetsController.java:2"
     );

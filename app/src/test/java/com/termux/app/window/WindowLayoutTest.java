@@ -122,6 +122,35 @@ public class WindowLayoutTest {
         assertTrue(ids.indexOf("floating_keyboard_host") < ids.indexOf("terminal_find_bar_host"));
         assertTrue(ids.indexOf("terminal_find_bar_host")
             < ids.indexOf("surface_tuning_gesture_overlay"));
-        assertEquals(ids.size() - 1, ids.indexOf("surface_tuning_gesture_overlay"));
+        // The A-Z scrub's labels drew over everything in the body (Z 80), so they are the last child.
+        assertEquals(ids.size() - 1, ids.indexOf("apps_bar_az_label_overlay"));
+        assertEquals(ids.size() - 2, ids.indexOf("surface_tuning_gesture_overlay"));
+    }
+
+    @Test
+    public void theAccessoryStacksFxViewsStandByChildOrderNotZ() throws Exception {
+        Element stack = byId(root(), "accessory_stack_container");
+        List<String> ids = ids(children(stack));
+        // The underlay drew behind the dock's glass (Z -8) and the overlay over the keyboard (Z 60).
+        assertEquals("apps_bar_az_fx_underlay", ids.get(0));
+        assertEquals("apps_bar_az_fx_overlay", ids.get(ids.size() - 1));
+        assertTrue(ids.indexOf("accessory_keyboard_column") < ids.indexOf("apps_bar_az_fx_overlay"));
+        for (Element child : children(stack)) {
+            assertTrue(id(child) + " carries an elevation",
+                !child.hasAttributeNS(ANDROID, "elevation"));
+        }
+        List<Element> az = children(byId(root(), "apps_bar_az_host"));
+        // The scrub row drew over the hint row (Z 48 against 11).
+        assertEquals(Arrays.asList("keybind_hint_dock_row", "apps_bar_az_row"), ids(az));
+        for (Element child : az) {
+            assertTrue(id(child) + " carries an elevation",
+                !child.hasAttributeNS(ANDROID, "elevation"));
+        }
+    }
+
+    @Test
+    public void theEditorHostHoldsThePanelHostFirstSoThePickerStandsOverIt() throws Exception {
+        Element editor = byId(root(), "window_layer_editor");
+        assertEquals(Arrays.asList("editor_panel_host"), ids(children(editor)));
     }
 }

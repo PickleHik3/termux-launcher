@@ -1142,13 +1142,14 @@ public final class AppearanceSurfaceController {
             ((SurfaceHostView) view).mPassThrough = false;
         view.setClickable(takes);
         view.setFocusable(takes);
-        // The card sheet and the editor bar have elevation and draw over a sibling without it, so
-        // the host out-lifts them while it takes touches: the one Z inside the editor layer.
-        view.setTranslationZ(takes ? siblingsTopZ(view) + 1f : 0f);
+        // The card sheet and the editor bar stand in the panel host, ahead of this host in the editor
+        // layer, so the picker draws over them by child order while it takes touches.
+        if (takes)
+            com.termux.app.window.WindowLayers.raiseWithin(view);
     }
 
     /**
-     * The host keeps its Z over the card sheet and the bar but takes no touch: each goes to what
+     * The host keeps its place over the card sheet and the bar but takes no touch: each goes to what
      * lies under it, the picker on its way down answering none.
      */
     private void letTouchesThrough() {
@@ -1159,19 +1160,6 @@ public final class AppearanceSurfaceController {
         view.setFocusable(false);
         if (view instanceof SurfaceHostView)
             ((SurfaceHostView) view).mPassThrough = true;
-    }
-
-    /** The highest Z among the host's siblings (the editor's sheet and bar). */
-    private static float siblingsTopZ(@NonNull View view) {
-        float top = 0f;
-        if (view.getParent() instanceof ViewGroup) {
-            ViewGroup parent = (ViewGroup) view.getParent();
-            for (int i = 0; i < parent.getChildCount(); i++) {
-                View child = parent.getChildAt(i);
-                if (child != view) top = Math.max(top, child.getZ());
-            }
-        }
-        return top;
     }
 
     private void addPage(@NonNull View root) {
