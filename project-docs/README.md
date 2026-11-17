@@ -32,6 +32,7 @@ Three rules keep this directory from rotting:
 
 | | |
 |---|---|
+| [`active/window-restructure-2026-11-17.md`](active/window-restructure-2026-11-17.md) | The window restructure: one writer per view property and one frame order (ADRs 0028 to 0030), in eight steps with their checks and the docs each step owes. Decided; step 1 not started. |
 | [`active/fancier-glass/SPEC.md`](active/fancier-glass/SPEC.md) | Fancier Glass: refraction, motions and their bug list. Partly built. |
 | [`active/agsl-effects-and-touch-latency-2026-10-22.md`](active/agsl-effects-and-touch-latency-2026-10-22.md) | Shader effects and touch latency: measure tap-to-echo on pong with cheap fixes first, then built-in event effects (bell flash, focus pulse, find-cursor, typing sparks). Spec; not started. |
 | [`active/glass-plan-2026-10-16.md`](active/glass-plan-2026-10-16.md) | The next glass round: gathered-light edge, a per-spot film under Clear, small glass that picks its own ink. Rounds 0 and 1 built, Round 1 always on (the switch is gone); the rest is spec. |

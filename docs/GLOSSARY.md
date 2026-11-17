@@ -95,6 +95,7 @@ bottom by default. There is one dock for both halves of the wall, dressed by one
 only the Workspace's carries the extra keys. Its shape follows the **Style**. Its rows may stand under
 the keyboard instead of over it. Not the same as the Layout editor's restore tray, which holds elements that are put away.
 _Avoid_: taskbar, nav bar, hotseat
+_ADR 0030 (accepted, not yet built): the dock's rows belong to a **side** and travel with it, riding the keyboard's top; the glass slab stays with the shared stack and only blends. Floating follows the same rule with its own card geometry._
 
 **Dock geometry**:
 The pure module that answers every measurement of the dock: one snapshot of both halves in, one DockLayout out, down to the final per-slot icon. A slide is an input to it, never a path of its own (ADR 0011).
@@ -103,6 +104,7 @@ _Avoid_: dock sizing, dock policy (the internal arithmetic only), per-caller mea
 **Dock rows**:
 The one adapter that writes the dock's accessory views (the pinned-apps row, the A–Z index, the extra keys and the bands under the keyboard) from the applied DockLayout, and announces which Elements are on screen. Not the rows themselves.
 _Avoid_: dock controller, row visibility code
+_ADR 0030 (accepted, not yet built): the stack's writer places each side's row host from the scene, and both sides' rows stay laid out and dressed at all times; a landing only switches touch and focus._
 
 **Dock design**:
 Which of the dock's variants dresses it, held by the layout (so on both halves unless Home holds a
@@ -226,6 +228,7 @@ Launcher UI that opens over a page and closes again: the app drawer, the command
 help, the widget editor. While a layer is open it takes Back and the keys first, over the
 **display window** as over a terminal window; what it does not take reaches the page below.
 _Avoid_: overlay (a **keyboard mode** value), popup, modal
+_ADR 0028 (accepted, not yet built): open layers live in the sheets **window layer**. Do not call a window layer plain "layer"._
 
 **Linux app**:
 An app installed in the prefix or in a `proot-distro` container, read from its desktop file and
@@ -266,6 +269,7 @@ every page. One layout dresses both halves, minimal only for windows; a Home pag
 only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
 _ADR 0015 (proposed): a page is a Home page, the Terminal page or a Display page, and each follows **Base** or detaches its own look values._
+_ADR 0030 (accepted, not yet built): every Home page and every window (terminal, display, Assistant) is a page of one contract and names its **side**; a window is a page of the Workspace._
 
 **Page switcher**:
 One switcher with two entry points: the **glyph row** under the Home grid (Home, Terminal, Assistant,
@@ -315,6 +319,11 @@ window**. New windows (Ctrl+Alt+C, a Terminal=true Linux app, Terminal from Home
 the current one. Each pane runs its own shell, which is a `TerminalSession` in code; that is the
 code's word for a pane's shell, not for a session. See `project-docs/reference/terminal/split-panes.md`.
 _Avoid_: tab (for a window), terminal (for a pane), column (Niri's word; in prose say window)
+
+**Side**:
+Home or the Workspace: the two halves of the **wall** seen from the seam. A side owns the rows its pages share (Home: the apps row, the A–Z row, the search field and Home's own extra-keys bar; the Workspace: the extra keys, the minimal-layout tab and the **window chips**) and travels with them across a crossing. Every **page** names its side.
+_Avoid_: half (the pre-0030 word), place, "its page" for a shared row
+_ADR 0030 (accepted, not yet built): the app as built still lays rows out per page and swaps them at the landing._
 
 **Start in**:
 The one setting that says where a cold start and a home press land: Home (the default), the
@@ -405,6 +414,11 @@ _ADR 0015 (proposed): the wall is one ordered list of pages of any **page kind**
 The status bar's chip for one window, the display window or a **Home float**, the same chips in the
 same order on both halves of the wall. #3 Strip's tiles show the same window chips at tile size.
 _Avoid_: pill (the dictation control), window pill, run strip entry, float chip
+
+**Window layer**:
+One of the six named layers of the launcher's window, back to front: ground (wallpaper, live scene, the X11 surface), pages, chrome, sheets, editor and notices. The layer's number is the only Z between layers; inside a layer the order is child order, and elevation only draws shadows. Not an **open layer**, which lives in the sheets window layer.
+_Avoid_: layer (on its own), z-level, overlay
+_ADR 0028 (accepted, not yet built): the app as built orders views by layout order and elevation values._
 
 **Workspace**:
 The terminal half of the wall, right of Home: the current session's windows, then the display
@@ -549,6 +563,7 @@ the resting picture; a layer that is not ready falls back to the live recording 
 `BackdropLayers`). Under "See through: One layer" a glass with glass above it shows the stored frame, so the glass
 above sees it but not through it, at rest too.
 _Avoid_: frozen glass, page snapshot, freeze frame
+_ADR 0029 (accepted, not yet built): a Live glass surface always draws these layers, at rest too, and "See through: One layer" is removed._
 
 **Ambient effect**:
 A built-in shader effect that animates continuously rather than in answer to something. It is off
@@ -572,6 +587,7 @@ The time or frame count after which a **Hold** releases on its own because its s
 come. A backstop is a fail-safe, not a schedule: the design is that the signal arrives first, and
 every backstop that releases a hold is written to the motion log by name so it can be counted.
 _Avoid_: timeout (a timeout is an error; a backstop keeps the screen alive), fallback delay
+_ADR 0028 (accepted, not yet built): a release by backstop is counted by name, and an unexpected backstop counts against the release bar._
 
 
 **Event effect**:
@@ -634,6 +650,12 @@ A **Hold** that keeps a window from drawing until the first frame is right: the 
 gate, the first-draw gate. A gate's **Backstop** is short, because a gate that stays shut is a
 black home screen.
 _Avoid_: block, freeze
+_ADR 0028 (accepted, not yet built): the keyboard reveal gate is deleted, and the window's first frame after a relaunch is the one gate left; nothing else cancels a draw._
+
+**Glass service**:
+The one registry every glass surface joins. An entry names its element (the look cells it reads), the view it draws in, the kind it wants and a budget priority (dock, then floats, then widgets); the service owns the granted kind, the layers, refresh, commit order and release. There are four kinds: **Wallpaper** (the stored pre-blurred frame), **Snapshot**, **Live**, and **Compositor** (the keyboard's frost over the X11 screen on the display window, falling back to Wallpaper). A surface keeps one picture for its life, and its kind changes only on a policy event (the Live blur switch, battery saver, a memory trim, a slot freeing).
+_Avoid_: backdrop service (the 0021 name), blur manager
+_ADR 0029 (accepted, not yet built): this entry describes the planned service; the app as built has separate glass mechanisms and three kinds._
 
 **Hold**:
 A wait for one signal before something is let go: a layout the pass booked, a view's first draw,
@@ -641,6 +663,7 @@ a surface's first frame after a swap, the settle of a return. A hold is named, i
 by the signal it waits for or by its **Backstop**, and says which of the two released it. A hold
 that is superseded by a newer one is a no-op when it fires.
 _Avoid_: wait, timer, delay, debounce (a debounce coalesces repeats; it waits for nothing)
+_ADR 0028 (accepted, not yet built): a hold is named state in the frame's snapshot; the waiting element stays at its before-pose, the rest of the window keeps drawing, and each release logs signal, landing or backstop._
 
 
 **Lazy mode**:

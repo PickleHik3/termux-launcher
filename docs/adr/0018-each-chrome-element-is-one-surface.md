@@ -128,3 +128,10 @@ a dock of its own: the dock is the Home kind's rest, read and written there from
   through the palette loses that; the trade is one blur source for every glass.
 - The spec for this round, its waves and its device cadence are in
   `project-docs/active/chrome-elements-2026-10-31.md`. Each wave lands on pong before the next.
+
+## Amendment (2026-11-17): §1 is accepted for glass
+
+[ADR 0029](0029-each-glass-surface-keeps-one-picture.md) accepts §1 for glass: one entry per
+element drawn by its own view, no wallpaper twin, and the foot is the slab's own bottom with the
+decor strip deleted. §4's "a crossing lays out nothing" is enforced by [ADR 0028](0028-one-frame-pipeline-a-view-property-has-one-writer.md)'s
+guards and source-scan test. The rest of this ADR stays proposed.

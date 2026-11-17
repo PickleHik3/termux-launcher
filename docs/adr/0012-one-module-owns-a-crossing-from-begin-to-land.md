@@ -60,3 +60,11 @@ Related: docs/adr holds two accepted ADRs numbered 0011, `0011-one-owner-for-the
 and `0011-the-launcher-can-wear-a-wallpaper-of-its-own.md` (the second was ported from 1.3.0-pre.2,
 where it is 0009). Neither is renamed or rewritten; cite them by file name. There is no ADR index to
 carry this note.
+
+## Amendment (2026-11-17): the pipeline's writers act on a crossing
+
+[ADR 0028](0028-one-frame-pipeline-a-view-property-has-one-writer.md) amends §1 and §6. A crossing's
+work is the frame pipeline's scenes and writers, one writer per layer, and "land clears in one
+step" becomes a guarded rule: the landing frame writes nothing, and a counted guard says so. §3's
+dress morph of the dock's rows is replaced by [ADR 0030](0030-pages-sides-and-the-bottom-stack.md)
+section 4: rows travel with their side and do not morph.
