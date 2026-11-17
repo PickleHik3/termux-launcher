@@ -12,7 +12,6 @@ import android.os.Build;
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
-import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
@@ -69,7 +68,7 @@ public class LayoutEditorHomeFilterTest {
 
     /** A session the editor's own door opens: the relaunch-aware entry, with nothing carried. */
     private LayoutEditorPlan open(PaneWallPage place) {
-        return LayoutEditorPlan.enter(places, place, PORTRAIT, (List<PlaceArrangeSnapshot>) null);
+        return DraftedSession.enter(places, place, PORTRAIT);
     }
 
     @Test
@@ -163,16 +162,15 @@ public class LayoutEditorHomeFilterTest {
     }
 
     @Test
-    public void aRelaunchCarriesBothLayoutsArrangementsAtOpen() {
+    public void aRelaunchFindsBothLayoutsInTheDraft() {
         LayoutEditorPlan plan = open(PaneWallPage.TERMINAL);
         plan.drop(Bar.APPS_ROW, Edge.TOP);
         plan.showHome(true);
         plan.drop(Bar.APPS_ROW, Edge.TOP);
-        List<PlaceArrangeSnapshot> carried = plan.entries();
-        assertEquals(2, carried.size());
 
-        LayoutEditorPlan next = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT,
-            carried);
+        // The draft lives in the layouts store, which outlives the activity: the next session
+        // reads it as the last one left it.
+        LayoutEditorPlan next = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
         assertTrue(next.isDirty());
         next.revert();
         assertFalse(next.isDirty());

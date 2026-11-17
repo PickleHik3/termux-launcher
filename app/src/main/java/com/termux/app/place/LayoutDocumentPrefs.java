@@ -60,9 +60,27 @@ final class LayoutDocumentPrefs implements SharedPreferences {
 
     @NonNull private final SharedPreferences mPrefs;
     @Nullable private volatile LayoutStore mLayouts;
+    /** A reading of the store alone: the documents without the editor's draft, no writes. */
+    private final boolean mStoredOnly;
 
     LayoutDocumentPrefs(@NonNull SharedPreferences prefs) {
+        this(prefs, false);
+    }
+
+    private LayoutDocumentPrefs(@NonNull SharedPreferences prefs, boolean storedOnly) {
         mPrefs = prefs;
+        mStoredOnly = storedOnly;
+    }
+
+    /**
+     * These preferences as the store holds them, the Appearance editor's drafts left out: what
+     * its unsaved question compares against. Writes through it are dropped.
+     */
+    @NonNull
+    LayoutDocumentPrefs storedOnly() {
+        LayoutDocumentPrefs stored = new LayoutDocumentPrefs(mPrefs, true);
+        stored.mLayouts = mLayouts;
+        return stored;
     }
 
     void useDocuments(@NonNull LayoutStore layouts) {
@@ -163,7 +181,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
 
     @Nullable
     private Object read(@NonNull LayoutStore store, @NonNull Route route) {
-        Layouts layouts = store.current();
+        Layouts layouts = mStoredOnly ? store.stored() : store.current();
         LayoutFields fields;
         if (route.kind == null) {
             fields = layouts.sizes().orientation(route.orientation);
@@ -212,7 +230,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         for (Map.Entry<String, ?> e : reads().getAll().entrySet()) {
             if (route(e.getKey()) == null) all.put(e.getKey(), e.getValue());
         }
-        Layouts layouts = store.current();
+        Layouts layouts = mStoredOnly ? store.stored() : store.current();
         for (LayoutKind kind : LayoutKind.values()) {
             // A retired kind's keys read the Workspace's document, listed once under its own.
             if (kind.retired()) continue;
@@ -354,21 +372,34 @@ final class LayoutDocumentPrefs implements SharedPreferences {
 
     /** What a read of the flat keys asks: the store, or the editing session's draft over it. */
     private SharedPreferences reads() {
+        if (mStoredOnly) return mPrefs;
         SharedPreferences reads = com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(mPrefs);
         return reads == null ? mPrefs : reads;
     }
 
     @Override
     public void registerOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener l) {
+        if (mStoredOnly) return;
         com.termux.shared.settings.preferences.PreferenceDraft.listen(mPrefs, l);
     }
 
     @Override
     public void unregisterOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener l) {
+        if (mStoredOnly) return;
         com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mPrefs, l);
     }
 
     // ---------------------------------------------------------------- writes
+
+    /**
+     * What a place remembers rather than how it is arranged: whether it was left with the keyboard
+     * up, and whether the status bar rests compact. Not the Appearance editor's: written to the
+     * file even while its draft is open, so the wall moving under the editor never reads as an
+     * unsaved edit, and Discard leaves it as the place left it.
+     */
+    static boolean isMemory(@NonNull String field) {
+        return LayoutsJson.KEYBOARD_OPEN.equals(field) || LayoutsJson.STATUS_COMPACT.equals(field);
+    }
 
     private final class DocumentEditor implements Editor {
         private final Editor mFlat = mPrefs.edit();
@@ -451,12 +482,14 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         }
 
         @Override public boolean commit() {
+            if (mStoredOnly) return false;
             writeDocuments();
             if (mDraftTouched && mDraftFlat != null) mDraftFlat.apply();
             return !mFlatTouched || mFlat.commit();
         }
 
         @Override public void apply() {
+            if (mStoredOnly) return;
             writeDocuments();
             if (mDraftTouched && mDraftFlat != null) mDraftFlat.apply();
             if (mFlatTouched) mFlat.apply();
@@ -465,15 +498,33 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         private void writeDocuments() {
             LayoutStore store = mLayouts;
             if (store == null || mChanges.isEmpty()) return;
+            // While the Appearance editor holds a draft, the arrangement goes into it; what a
+            // place remembers goes to the file as ever.
+            if (store.isDraftOpen()) {
+                List<Object[]> memory = new ArrayList<>();
+                List<Object[]> arrangement = new ArrayList<>();
+                for (Object[] change : mChanges)
+                    (isMemory(((Route) change[0]).field) ? memory : arrangement).add(change);
+                write(store, memory, false);
+                write(store, arrangement, true);
+            } else {
+                write(store, mChanges, false);
+            }
+            mChanges.clear();
+        }
+
+        private void write(@NonNull LayoutStore store, @NonNull List<Object[]> changes,
+                           boolean draft) {
+            if (changes.isEmpty()) return;
             EnumMap<LayoutKind, List<Object[]>> byKind = new EnumMap<>(LayoutKind.class);
             List<Object[]> sizes = new ArrayList<>();
-            for (Object[] change : mChanges) {
+            for (Object[] change : changes) {
                 Route route = (Route) change[0];
                 if (route.kind == null) sizes.add(change);
                 else byKind.computeIfAbsent(route.kind, k -> new ArrayList<>()).add(change);
             }
             for (Map.Entry<LayoutKind, List<Object[]>> e : byKind.entrySet()) {
-                store.update(e.getKey(), layout -> {
+                java.util.function.UnaryOperator<KindLayout> edit = layout -> {
                     KindLayout out = layout;
                     for (Object[] change : e.getValue()) {
                         Route route = (Route) change[0];
@@ -481,19 +532,22 @@ final class LayoutDocumentPrefs implements SharedPreferences {
                             : out.with(route.orientation, route.field, change[1]);
                     }
                     return out;
-                });
+                };
+                if (draft) store.updateDraft(e.getKey(), edit);
+                else store.update(e.getKey(), edit);
             }
             if (!sizes.isEmpty()) {
-                store.updateSizes(s -> {
+                java.util.function.UnaryOperator<Sizes> edit = s -> {
                     Sizes out = s;
-                    for (Object[] change : sizes) {
-                        Route route = (Route) change[0];
-                        out = out.with(route.orientation, route.field, change[1]);
+                    for (Object[] each : sizes) {
+                        Route route = (Route) each[0];
+                        out = out.with(route.orientation, route.field, each[1]);
                     }
                     return out;
-                });
+                };
+                if (draft) store.updateSizesDraft(edit);
+                else store.updateSizes(edit);
             }
-            mChanges.clear();
         }
     }
 }

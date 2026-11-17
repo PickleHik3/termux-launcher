@@ -9,7 +9,6 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.place.LayoutVariant;
-import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
@@ -51,7 +50,7 @@ public class LayoutEditorLinkedSizesTest {
     }
 
     private LayoutEditorPlan open(PaneWallPage place) {
-        return LayoutEditorPlan.enter(places, place, PORTRAIT, (List<PlaceArrangeSnapshot>) null);
+        return DraftedSession.enter(places, place, PORTRAIT);
     }
 
     private PlaceLayoutStore normal() {

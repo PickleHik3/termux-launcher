@@ -41,8 +41,12 @@ public final class AppearanceDraft {
      */
     public static void dropUnowned(@Nullable TermuxAppSharedPreferences prefs,
                                    boolean editorReopening) {
-        if (!editorReopening)
+        if (!editorReopening) {
             PreferenceDraft.discardCurrent();
+            android.content.Context context = prefs == null ? null : prefs.getContext();
+            if (context != null)
+                com.termux.app.place.layout.LayoutStore.discardSharedDraft(context);
+        }
         SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
         if (store != null && store.contains(LEGACY_ENTRY_KEY))
             store.edit().remove(LEGACY_ENTRY_KEY).apply();

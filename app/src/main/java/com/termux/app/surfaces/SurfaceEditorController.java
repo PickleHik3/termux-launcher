@@ -104,15 +104,31 @@ import java.util.Locale;
  * <p><b>Commit on Done.</b> Every edit of the store goes into one draft ({@link PreferenceDraft})
  * layered over it, so the frame is the real thing and nothing is stored: Done writes the draft once,
  * Undo and Discard drop it, and a look written from outside meanwhile shows at once and survives
- * both. Dirty is the draft against the store. Beside it stay the app-wide choices Settings applies
- * as it writes them ({@link EditorSettingsSnapshot}), and the arrangement, whose
- * session ({@link LayoutEditorController}) opens and closes with the editor; they are put back from
- * the state at open. One dirty state, one Undo, one Done and one unsaved-changes question cover all
- * of it.</p>
+ * both. Dirty is the draft against the store. The arrangement the layout session
+ * ({@link LayoutEditorController}) writes and the widgets' own glass ({@link WidgetGlassDraft})
+ * are drafts the same way, over the layouts file and the widget store. Only the app-wide choices
+ * Settings applies as it writes them ({@link EditorSettingsSnapshot}) are put back from the state
+ * at open. One dirty state, one Undo, one Done and one unsaved-changes question cover all of
+ * it.</p>
  */
 public final class SurfaceEditorController implements AppearanceSurfaceController.Editor {
 
     private static final String LOG_TAG = "SurfaceEditor";
+
+    /**
+     * The built-in widgets' own glass choices as the editor drafts them: the "Glass widgets"
+     * switch shows every widget following it, unstored, until Done writes it or Discard drops it.
+     */
+    public interface WidgetGlassDraft {
+        /** The switch moved: every widget's own On or Off shows following it. */
+        void followPage();
+        /** Whether a widget shows other than the store holds it. */
+        boolean isDirty();
+        /** Done: written, once. */
+        void commit();
+        /** Discard or Undo: dropped, and the widgets show the store again. */
+        void discard();
+    }
 
     /** What the editor needs from the activity: its views, its prefs, and its render pipeline. */
     public interface Host {
@@ -234,16 +250,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         default void setMinimalMode(boolean minimal) {}
         /** Home's rows were written: the live Home takes them now. */
         default void applyHomeSettings() {}
-        /**
-         * The "Glass widgets" switch moved: every built-in widget's own glass choice goes back to
-         * following it. Returns what each cleared widget held, by id, for Undo.
-         */
-        @NonNull
-        default java.util.Map<Integer, String> clearWidgetGlassChoices() {
-            return java.util.Collections.emptyMap();
-        }
-        /** Undo of {@link #clearWidgetGlassChoices}: the widgets get their own choices back. */
-        default void restoreWidgetGlassChoices(@NonNull java.util.Map<Integer, String> choices) {}
+        /** The built-in widgets' own glass choices, drafted by the editor; null with no Home. */
+        @Nullable default WidgetGlassDraft widgetGlassDraft() { return null; }
         /**
          * The window wears {@code mode} (a {@code night-mode} value) without storing it; the
          * activity relaunches into it when the day or night it shows changes.
@@ -299,15 +307,27 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mDraft = carried && open != null && open.isOpen() && open.store() == store ? open
             : PreferenceDraft.begin(store);
         mDraftPrefs = prefs.overDraft(mDraft);
+        // The arrangement's draft lives in the process's one layouts store, so a relaunch carries
+        // it on as it carries the preferences' draft.
+        mLayoutDraft = com.termux.app.place.layout.LayoutStore.shared(mHost.context());
+        if (!carried || !mLayoutDraft.isDraftOpen())
+            mLayoutDraft.beginDraft();
     }
 
-    /** The session ends: what the draft still holds is dropped, unstored. */
+    /** The session ends: what the drafts still hold is dropped, unstored. */
     private void endDraft() {
         PreferenceDraft draft = mDraft;
         mDraft = null;
         mDraftPrefs = null;
         if (draft != null)
             draft.discard();
+        com.termux.app.place.layout.LayoutStore layouts = mLayoutDraft;
+        mLayoutDraft = null;
+        if (layouts != null)
+            layouts.discardDraft();
+        WidgetGlassDraft widgetGlass = mHost.widgetGlassDraft();
+        if (widgetGlass != null)
+            widgetGlass.discard();
     }
 
     /** Whether the draft holds a look the store does not: the unsaved dot and the Back dialog. */
@@ -374,18 +394,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private PreferenceDraft mDraft;
     /** The activity's preferences writing into {@link #mDraft}: what {@link #prefs} hands out. */
     @Nullable private TermuxAppSharedPreferences mDraftPrefs;
+    /**
+     * The layouts store holding the session's arrangement draft (the layout session's writes and
+     * the icon size), or null while closed.
+     */
+    @Nullable private com.termux.app.place.layout.LayoutStore mLayoutDraft;
     /** The app-wide choices at open, and their signature as it stands (refreshed on a write). */
     @Nullable private EditorSettingsSnapshot mEntrySettings;
     @Nullable private String mSettingsNow;
     /** Minimal mode at open. */
     /** The Custom values of this session, kept while a Look is showing. */
     @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
-    /**
-     * The widgets' own glass choices the "Glass widgets" switch cleared this visit, by id, as
-     * each first stood: what Undo gives back.
-     */
-    @NonNull private final java.util.Map<Integer, String> mClearedWidgetGlass =
-        new java.util.LinkedHashMap<>();
     /**
      * The halves the Look slider was put on Custom this visit while their values still match a
      * Look: Custom then writes nothing (the Look on screen is its seed), so without this the
@@ -964,7 +983,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mSettingsNow = mEntrySettings.signature();
         mSessionCustom.clear();
         mHeldCustom.clear();
-        mClearedWidgetGlass.clear();
         forgetGlassEdgePositions();
         if (carried != null) {
             mEntrySettings = carried.settings;
@@ -997,7 +1015,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (layout != null) {
             layout.setOnChangedListener(this::onArrangementChanged);
             layout.setOnPlaceShownListener(this::restateCard);
-            layout.begin(place, carried == null ? null : carried.arrangement);
+            layout.begin(place);
         }
         if (mBar == null) {
             mBar = new EditorBar(mHost.context());
@@ -2878,8 +2896,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (!mOpen || settings == null)
             return mCarriedNext;
         LayoutEditorController layout = mHost.layoutEditor();
-        return new CarriedSession(settings, mSessionCustom.copy(),
-            layout == null ? null : layout.entryArrangement());
+        return new CarriedSession(settings, mSessionCustom.copy());
     }
 
     @Override
@@ -2891,14 +2908,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     static final class CarriedSession implements AppearanceSurfaceController.EditorSession {
         @NonNull final EditorSettingsSnapshot settings;
         @NonNull final SessionCustom custom;
-        @Nullable final List<com.termux.app.place.PlaceArrangeSnapshot> arrangement;
 
         CarriedSession(@NonNull EditorSettingsSnapshot settings,
-                       @NonNull SessionCustom custom,
-                       @Nullable List<com.termux.app.place.PlaceArrangeSnapshot> arrangement) {
+                       @NonNull SessionCustom custom) {
             this.settings = settings;
             this.custom = custom;
-            this.arrangement = arrangement;
         }
     }
 
@@ -3006,6 +3020,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mDraftPrefs = null;
         if (draft != null)
             draft.commit();
+        com.termux.app.place.layout.LayoutStore layouts = mLayoutDraft;
+        mLayoutDraft = null;
+        if (layouts != null)
+            layouts.commitDraft();
+        WidgetGlassDraft widgetGlass = mHost.widgetGlassDraft();
+        if (widgetGlass != null)
+            widgetGlass.commit();
     }
 
     @Override
@@ -4047,10 +4068,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 AppearanceSettingsStore.putBoolean(context, "widgets_on_glass", value != 0);
                 // A widget's own On or Off overrode the switch, so on a phone whose widgets
                 // predate it (they stored "on") it did nothing: the switch now applies to every
-                // widget, and each can still choose its own look afterwards.
-                for (java.util.Map.Entry<Integer, String> entry
-                        : mHost.clearWidgetGlassChoices().entrySet())
-                    mClearedWidgetGlass.putIfAbsent(entry.getKey(), entry.getValue());
+                // widget, and each can still choose its own look afterwards. Drafted: Done stores
+                // it, Discard drops it.
+                WidgetGlassDraft widgetGlass = mHost.widgetGlassDraft();
+                if (widgetGlass != null)
+                    widgetGlass.followPage();
                 settingsWritten();
                 break;
             case TWO_LINE:
@@ -5755,15 +5777,23 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             && !mEntrySettings.signature().equals(mSettingsNow);
         boolean theme = ThemePreview.pending() != null;
         LayoutEditorController layout = mHost.layoutEditor();
-        return look || settings || theme || (layout != null && layout.isDirty());
+        WidgetGlassDraft widgetGlass = mHost.widgetGlassDraft();
+        return look || settings || theme || (layout != null && layout.isDirty())
+            || (widgetGlass != null && widgetGlass.isDirty());
     }
 
     /** Undo: everything — both halves' look, the choices, the arrangement — back to the open. */
     private void revertToEntry() {
         mLookDragging = false;
+        // The arrangement and the widgets' glass are drafts too: dropping them is their undo.
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && layout.isDirty())
             layout.revert();
+        if (mLayoutDraft != null)
+            mLayoutDraft.resetDraft();
+        WidgetGlassDraft widgetGlass = mHost.widgetGlassDraft();
+        if (widgetGlass != null)
+            widgetGlass.discard();
         PreferenceDraft draft = mDraft;
         if (draft == null)
             return;
@@ -5780,10 +5810,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mHost.setMinimalMode(mHost.isMinimalMode());
         mSessionCustom.clear();
         mHeldCustom.clear();
-        if (!mClearedWidgetGlass.isEmpty()) {
-            mHost.restoreWidgetGlassChoices(new java.util.LinkedHashMap<>(mClearedWidgetGlass));
-            mClearedWidgetGlass.clear();
-        }
         forgetGlassEdgePositions();
         syncAfterBulkWrite();
     }
@@ -7173,7 +7199,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 com.termux.app.place.layout.IconSize[] sizes =
                     com.termux.app.place.layout.IconSize.values();
                 com.termux.app.place.layout.IconSize size = sizes[clamp(value, 0, sizes.length - 1)];
-                com.termux.app.place.layout.LayoutStore.shared(context).updateSizes(size::into);
+                com.termux.app.place.layout.LayoutStore.shared(context).updateSizesDraft(size::into);
                 // Fewer apps fit at a larger size: Apps in the dock keeps to the fit.
                 reclampAppIcons(size, dockFloating());
                 requestGeometryPreview();

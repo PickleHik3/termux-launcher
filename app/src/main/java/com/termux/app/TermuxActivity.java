@@ -14133,15 +14133,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.setMinimalMode(minimal);
         }
 
-        @NonNull @Override public java.util.Map<Integer, String> clearWidgetGlassChoices() {
-            return mWidgetPaneController == null ? java.util.Collections.emptyMap()
-                : mWidgetPaneController.clearBuiltinGlassChoices();
-        }
-
-        @Override public void restoreWidgetGlassChoices(
-                @NonNull java.util.Map<Integer, String> choices) {
-            if (mWidgetPaneController != null)
-                mWidgetPaneController.restoreBuiltinGlassChoices(choices);
+        @Nullable @Override
+        public com.termux.app.surfaces.SurfaceEditorController.WidgetGlassDraft widgetGlassDraft() {
+            com.termux.app.launcher.widget.WidgetPaneController widgets = mWidgetPaneController;
+            if (widgets == null) return null;
+            return new com.termux.app.surfaces.SurfaceEditorController.WidgetGlassDraft() {
+                @Override public void followPage() { widgets.draftBuiltinGlassFollowsPage(); }
+                @Override public boolean isDirty() { return widgets.isBuiltinGlassDraftDirty(); }
+                @Override public void commit() { widgets.commitBuiltinGlassDraft(); }
+                @Override public void discard() { widgets.discardBuiltinGlassDraft(); }
+            };
         }
 
         @Override public void applyHomeSettings() {

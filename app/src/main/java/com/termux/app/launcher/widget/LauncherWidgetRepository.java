@@ -305,10 +305,92 @@ public final class LauncherWidgetRepository {
     public synchronized int indexOfPage(int id) { return ids.indexOf(id); }
 
     @NonNull public synchronized List<LauncherWidgetRecord> records() {
-        return Collections.unmodifiableList(new ArrayList<>(records.values()));
+        if (glassDraft == null) return Collections.unmodifiableList(new ArrayList<>(records.values()));
+        ArrayList<LauncherWidgetRecord> out = new ArrayList<>(records.size());
+        for (LauncherWidgetRecord record : records.values()) out.add(shown(record));
+        return Collections.unmodifiableList(out);
     }
     @Nullable public synchronized LauncherWidgetRecord get(int appWidgetId) {
-        return records.get(appWidgetId);
+        LauncherWidgetRecord record = records.get(appWidgetId);
+        return record == null ? null : shown(record);
+    }
+
+    // ------------------------------------------------- the Appearance editor's glass draft
+
+    /**
+     * The Appearance editor's "Glass widgets" switch, drafted: the built-in widgets it set back to
+     * following the page, by id. Every read shows them so until {@link #commitGlassDraft} writes
+     * it or {@link #discardGlassDraft} drops it; null while the editor holds none.
+     */
+    @Nullable private LinkedHashSet<Integer> glassDraft;
+
+    /**
+     * The switch moved: every built-in widget's own On or Off is shown following the page, in the
+     * draft. Bare stays, a look of its own.
+     *
+     * @return whether any widget shows differently now
+     */
+    public synchronized boolean draftGlassFollowsPage() {
+        if (glassDraft == null) glassDraft = new LinkedHashSet<>();
+        boolean added = false;
+        for (LauncherWidgetRecord record : followingPage(records.values()))
+            added |= glassDraft.add(record.appWidgetId);
+        return added;
+    }
+
+    /** Whether the draft shows a widget's glass other than the store holds it: the unsaved dot. */
+    public synchronized boolean isGlassDraftDirty() {
+        return glassDraft != null && !followingPage(drafted(glassDraft)).isEmpty();
+    }
+
+    /**
+     * Done: the drafted widgets follow the page in the store too, in one write; a widget whose
+     * stored choice was set from outside meanwhile follows the page as it was shown.
+     *
+     * @return whether anything was written
+     */
+    public synchronized boolean commitGlassDraft() {
+        LinkedHashSet<Integer> draft = glassDraft;
+        glassDraft = null;
+        if (draft == null) return false;
+        List<LauncherWidgetRecord> changed = followingPage(drafted(draft));
+        return !changed.isEmpty() && putRecords(changed);
+    }
+
+    /**
+     * Discard or Undo: the draft goes, and the widgets show their stored choices again.
+     *
+     * @return whether the draft held any widget, so the page has to draw again
+     */
+    public synchronized boolean discardGlassDraft() {
+        boolean held = glassDraft != null && !glassDraft.isEmpty();
+        glassDraft = null;
+        return held;
+    }
+
+    @NonNull
+    private List<LauncherWidgetRecord> drafted(@NonNull Collection<Integer> ids) {
+        ArrayList<LauncherWidgetRecord> out = new ArrayList<>(ids.size());
+        for (int id : ids) {
+            LauncherWidgetRecord record = records.get(id);
+            if (record != null) out.add(record);
+        }
+        return out;
+    }
+
+    @NonNull
+    private static List<LauncherWidgetRecord> followingPage(
+            @NonNull Collection<LauncherWidgetRecord> values) {
+        return com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.followPage(values,
+            new java.util.HashMap<>());
+    }
+
+    /** {@code record} as the reads show it: following the page while the glass draft holds it. */
+    @NonNull
+    private LauncherWidgetRecord shown(@NonNull LauncherWidgetRecord record) {
+        if (glassDraft == null || !glassDraft.contains(record.appWidgetId)) return record;
+        List<LauncherWidgetRecord> changed = followingPage(Collections.singletonList(record));
+        return changed.isEmpty() ? record : changed.get(0);
     }
     /**
      * The next free key for a built-in widget: negative, below every built-in the wall holds on
@@ -544,7 +626,8 @@ public final class LauncherWidgetRepository {
     /** Snapshot of the records on one page; the per-page collision universe. */
     @NonNull public synchronized List<LauncherWidgetRecord> recordsOnPage(int page) {
         ArrayList<LauncherWidgetRecord> out = new ArrayList<>();
-        for (LauncherWidgetRecord record : records.values()) if (record.page == page) out.add(record);
+        for (LauncherWidgetRecord record : records.values())
+            if (record.page == page) out.add(shown(record));
         return Collections.unmodifiableList(out);
     }
 

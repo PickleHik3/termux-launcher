@@ -52,7 +52,7 @@ public class LayoutEditorPlanHomeDockTest {
     }
 
     private LayoutEditorPlan open(PaneWallPage page) {
-        return LayoutEditorPlan.enter(places, page, PlaceOrientation.PORTRAIT);
+        return DraftedSession.enter(places, page, PlaceOrientation.PORTRAIT);
     }
 
     private DressResolver dresses() {
