@@ -247,15 +247,8 @@ public abstract class BuiltinWidgetView extends FrameLayout
     private boolean inkAskedSet;
     private final int[] inkNow = new int[2];
     private final int[] inkNowRoot = new int[2];
-    private boolean inkSettlePending;
-    private final android.view.ViewTreeObserver.OnPreDrawListener inkSettle = () -> {
-        inkSettlePending = false;
-        android.view.ViewTreeObserver observer = getViewTreeObserver();
-        if (observer.isAlive()) observer.removeOnPreDrawListener(inkSettleSelf());
-        remeasureIfMoved();
-        return true;
-    };
-    private android.view.ViewTreeObserver.OnPreDrawListener inkSettleSelf() { return inkSettle; }
+    /** The wait for the first frame after attach, where the ink is measured once; null when none. */
+    @Nullable private com.termux.app.window.FirstLayout.Handle inkSettle;
     /** A restyle the dress asked for inside a layout pass, built after it. */
     private final Runnable restyle = () -> { if (this.built) rebuild(); };
     @NonNull private BuiltinWidgetSpan span = BuiltinWidgetSpan.ONE_BY_ONE;
@@ -1136,16 +1129,18 @@ public abstract class BuiltinWidgetView extends FrameLayout
         super.onAttachedToWindow();
         if (!preview) startInternal();
         if (syncGlassRegistration()) restyled();
-        if (!preview && !inkSettlePending) {
-            inkSettlePending = true;
-            getViewTreeObserver().addOnPreDrawListener(inkSettle);
+        if (!preview && inkSettle == null) {
+            inkSettle = com.termux.app.window.FirstLayout.beforeNextDraw(this, () -> {
+                inkSettle = null;
+                remeasureIfMoved();
+            });
         }
     }
 
     @Override @CallSuper protected void onDetachedFromWindow() {
-        if (inkSettlePending) {
-            inkSettlePending = false;
-            getViewTreeObserver().removeOnPreDrawListener(inkSettle);
+        if (inkSettle != null) {
+            inkSettle.cancel();
+            inkSettle = null;
         }
         stopInternal();
         if (slab != null && slab.livePicture() != null) {
