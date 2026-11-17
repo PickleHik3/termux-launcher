@@ -127,7 +127,6 @@
         <com.termux.app.chrome.LiveBackdropLinearLayout
             android:id="@+id/terminal_content_column"
             android:layout_alignParentTop="true"
-            android:layout_above="@+id/accessory_stack_container"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
@@ -1117,8 +1116,7 @@
             android:id="@+id/terminal_find_bar_host"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_above="@id/accessory_stack_container"
-            android:layout_alignWithParentIfMissing="true"
+            android:layout_alignParentBottom="true"
             android:visibility="gone" />
 
         <!-- The Appearance editor's tap layer. It covers the whole frame while the editor is up,
@@ -1200,8 +1198,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
-            android:layout_above="@id/accessory_stack_container"
-            android:layout_alignWithParentIfMissing="true"
+            android:layout_alignParentBottom="true"
             android:clickable="false"
             android:focusable="false"
             android:visibility="gone" />

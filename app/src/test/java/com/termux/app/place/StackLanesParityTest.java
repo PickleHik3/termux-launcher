@@ -75,28 +75,6 @@ public class StackLanesParityTest {
         }
     }
 
-    @Test public void theRoomIsTodaysWithTheBandAtTheUnion() {
-        for (boolean floating : BOOLS) for (boolean up : BOOLS) for (PageRef front : PAGES) {
-            PageRef other = front.isHome() ? PageRef.TERMINAL : PageRef.HOME;
-            StackLayout.Result r = f.settle(front, up, floating);
-            int kbDown = up ? 0 : f.keyboardLaidOutPx();
-            int slack = StackLanes.slackPx(rowsPx(front, front, up, floating),
-                rowsPx(front, other, up, floating));
-            // Today: the window less the stack and its margin, the content reaching past by the overlap.
-            int today = WINDOW_PX - StackScene.containerHeightPx(r.stackHeightPx, kbDown)
-                - r.bottomMarginPx + StackScene.contentOverlapPx(r.contentOverlapPx, kbDown);
-            int union = WINDOW_PX
-                - StackScene.containerHeightPx(r.stackHeightPx, kbDown, slack)
-                - r.bottomMarginPx
-                + StackScene.contentOverlapPx(r.contentOverlapPx, kbDown, slack);
-            assertEquals(f.name + " front=" + front + " floating=" + floating + " up=" + up,
-                today, union);
-            // And the room before the keyboard stood laid out while down: the stack alone.
-            assertEquals(WINDOW_PX - r.stackHeightPx - r.bottomMarginPx + r.contentOverlapPx,
-                union);
-        }
-    }
-
     @Test public void theLanesAreTheSidesOwnWhateverLayoutACrossingComposes() {
         for (Element element : StackLanes.ROWS) {
             Side lane = StackLanes.laneSide(element, f.home, f.window);

@@ -132,10 +132,9 @@ public final class StackScene {
     }
 
     /**
-     * The room the terminal keeps while the keyboard is laid out but down. D1-A step 3 removes
-     * this: the stack's container is as tall as both rests need, and the content gives it back
-     * as a reach past its top, so the room is today's keyboard-down room ({@code downPx} of the
-     * container is the keyboard's, which a content that stands above the container would lose).
+     * The container's height while the keyboard is laid out but down: the stack's and the
+     * keyboard's. No page's room reads it; each page's room is its own rest's
+     * ({@link PageRoom}).
      */
     public static int containerHeightPx(int stackHeightPx, int keyboardDownLaidOutPx) {
         return containerHeightPx(stackHeightPx, keyboardDownLaidOutPx, 0);
@@ -150,20 +149,6 @@ public final class StackScene {
                                         int slackPx) {
         return Math.max(0, stackHeightPx) + Math.max(0, keyboardDownLaidOutPx)
             + Math.max(0, slackPx);
-    }
-
-    /** The reach the content keeps past the container's top; see {@link #containerHeightPx}. */
-    public static int contentOverlapPx(int overlapPx, int keyboardDownLaidOutPx) {
-        return contentOverlapPx(overlapPx, keyboardDownLaidOutPx, 0);
-    }
-
-    /**
-     * {@link #contentOverlapPx(int, int)} with the band's slack: the content reaches past the
-     * taller container's top by it as well, so the room is the front rest's, today's. D1-A step 3
-     * removes this.
-     */
-    public static int contentOverlapPx(int overlapPx, int keyboardDownLaidOutPx, int slackPx) {
-        return Math.max(0, overlapPx) + Math.max(0, keyboardDownLaidOutPx) + Math.max(0, slackPx);
     }
 
     /**

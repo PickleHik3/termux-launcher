@@ -146,27 +146,4 @@ public class KeyboardLaidOutParityTest {
                 StackLayout.flushPx(false, restFlush, live, 100, 10));
         }
     }
-
-    @Test public void theRoomWithTheKeyboardLaidOutIsTodaysRoomUpAndDown() {
-        for (boolean floating : BOOLS) for (PageRef page : PAGES) {
-            int kb = floating ? 0 : f.keyboardLaidOutPx();
-            StackLayout.Result down = f.settle(page, false, floating);
-            StackLayout.Result up = f.settle(page, true, floating);
-            String what = f + (floating ? ", Floating" : ", Docked") + ", " + page;
-            // Down: the container is the keyboard taller, the content reaches past its top by it.
-            assertEquals(what + " down",
-                KeyboardOverlayPolicy.contentReservationPx(down.stackHeightPx, down.bottomMarginPx,
-                    down.contentOverlapPx),
-                KeyboardOverlayPolicy.contentReservationPx(
-                    StackScene.containerHeightPx(down.stackHeightPx, kb), down.bottomMarginPx,
-                    StackScene.contentOverlapPx(down.contentOverlapPx, kb)));
-            // Up: nothing laid out beyond what the stack holds, nothing reached past.
-            assertEquals(what + " up",
-                KeyboardOverlayPolicy.contentReservationPx(up.stackHeightPx, up.bottomMarginPx,
-                    up.contentOverlapPx),
-                KeyboardOverlayPolicy.contentReservationPx(
-                    StackScene.containerHeightPx(up.stackHeightPx, 0), up.bottomMarginPx,
-                    StackScene.contentOverlapPx(up.contentOverlapPx, 0)));
-        }
-    }
 }

@@ -123,10 +123,10 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         }
         RelativeLayout.LayoutParams labelOverlayParams = (RelativeLayout.LayoutParams)
             mActivity.findViewById(R.id.apps_bar_az_label_overlay).getLayoutParams();
-        assertEquals(R.id.accessory_stack_container,
-            labelOverlayParams.getRules()[RelativeLayout.ABOVE]);
-        assertEquals(0, labelOverlayParams.getRules()[RelativeLayout.ALIGN_PARENT_BOTTOM]);
-        assertTrue(labelOverlayParams.alignWithParent);
+        // The labels stand on the front page's rest, written as a bottom margin: the container
+        // is laid out once at the union of both sides' rests, so it is no anchor for them.
+        assertEquals(0, labelOverlayParams.getRules()[RelativeLayout.ABOVE]);
+        assertTrue(labelOverlayParams.getRules()[RelativeLayout.ALIGN_PARENT_BOTTOM] != 0);
     }
 
     @Test
@@ -371,6 +371,10 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         preferences.setAppLauncherAppsRowEnabled(true);
         preferences.setAppLauncherAzRowEnabled(false);
         TerminalView terminalView = mActivity.findViewById(R.id.terminal_view);
+        // The terminal's room is its page's own rest, written into the wall.
+        preferences.setAppLauncherWidgetPaneEnabled(true);
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_WORKSPACE);
+        buildWall().landOnColdStart(preferences.getLauncherStartIn());
 
         ReflectionHelpers.callInstanceMethod(mActivity, "initializeInAppKeyboard",
             ReflectionHelpers.ClassParameter.from(Bundle.class, null));
@@ -432,8 +436,12 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(View.VISIBLE, appsBar.getVisibility());
         assertTrue(dockContentHeight > 0);
         assertEquals(combinedHeight, accessoryContainer.getLayoutParams().height);
-        assertEquals(accessoryContainer.getTop(), terminalView.getBottom());
-        assertEquals(rootRelativeLayout.getHeight() - combinedHeight, terminalView.getHeight());
+        // The page's room is the rest's, the stack's height: it ends at the stack's top, and
+        // starts where the wall puts its frame.
+        assertEquals(accessoryContainer.getTop(),
+            terminalTopInRoot(terminalView) + terminalView.getHeight());
+        assertEquals(rootRelativeLayout.getHeight() - combinedHeight
+            - terminalTopInRoot(terminalView), terminalView.getHeight());
     }
 
     @Test
@@ -589,7 +597,11 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
     @Test
     public void liveHeightPreviewInvalidatesCachedKeyboardAndTerminalGeometry() {
-        createActivityHostedController(null);
+        TermuxAppSharedPreferences preferences = prepareActivity(true);
+        preferences.setAppLauncherWidgetPaneEnabled(true);
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_WORKSPACE);
+        buildWall().landOnColdStart(preferences.getLauncherStartIn());
+        hostKeyboard(null);
         float initialMarginScale = mActivity.getPreferences().getInAppKeyboardKeyMarginScale();
         float initialRadiusDp = mActivity.getPreferences().getInAppKeyboardKeyCornerRadiusDp();
         layoutActivityRoot();
@@ -608,8 +620,9 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertTrue(previewHeight > initialHeight);
         assertEquals(previewHeight, accessory.getLayoutParams().height);
         assertEquals(previewHeight, keyboard.getHeight());
-        assertEquals(accessory.getTop(), terminal.getBottom());
-        assertEquals(root.getHeight() - previewHeight, terminal.getHeight());
+        assertEquals(accessory.getTop(), terminalTopInRoot(terminal) + terminal.getHeight());
+        assertEquals(root.getHeight() - previewHeight - terminalTopInRoot(terminal),
+            terminal.getHeight());
         assertFalse(keyboardHeightDirty());
 
         Keyboard2View keyboardView = (Keyboard2View) ReflectionHelpers.getField(
@@ -633,7 +646,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(initialHeight, desiredKeyboardHeightPx());
         assertEquals(initialHeight, accessory.getLayoutParams().height);
         assertEquals(initialHeight, keyboard.getHeight());
-        assertEquals(accessory.getTop(), terminal.getBottom());
+        assertEquals(accessory.getTop(), terminalTopInRoot(terminal) + terminal.getHeight());
         assertEquals(initialMarginScale, keyboardView.getKeyMarginScale(), 0.0001f);
         assertEquals(initialRadiusDp * mActivity.getResources().getDisplayMetrics().density,
             keyboardView.getKeyCornerRadiusOverride(), 0.0001f);
@@ -751,6 +764,17 @@ public class TermuxActivityInAppKeyboardGeometryTest {
             ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
             layoutActivityRoot();
         }
+    }
+
+    /** Where the terminal view's top stands below the root relative layout's, from the layout. */
+    private int terminalTopInRoot(View terminal) {
+        View root = mActivity.findViewById(R.id.activity_termux_root_relative_layout);
+        int top = 0;
+        for (View v = terminal; v != null && v != root; v = v.getParent() instanceof View
+            ? (View) v.getParent() : null) {
+            top += v.getTop();
+        }
+        return top;
     }
 
     private void layoutActivityRoot() {

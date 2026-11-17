@@ -3440,14 +3440,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // does: the Workspace's top inset below the frame's own (applyWorkspaceTopInset).
             mTerminalBorderFrameTopPx = borderVerticalInsetPx;
             int borderTopPx = borderVerticalInsetPx + mWorkspaceTopInsetPx;
+            // The Terminal's frame line ends above the canvas's bottom by the Terminal's own room.
+            int borderBottomPx = borderVerticalInsetPx + (mPaneWallController == null ? 0
+                : mPaneWallController.wall().pageBottomInsetPx(
+                    com.termux.app.wall.PaneWallPage.TERMINAL));
             if (marginParams.leftMargin != borderHorizontalInsetPx || marginParams.rightMargin != borderHorizontalInsetPx
                 || marginParams.topMargin != borderTopPx
-                || marginParams.bottomMargin != borderVerticalInsetPx + mTerminalPreSizePx) {
+                || marginParams.bottomMargin != borderBottomPx) {
                 marginParams.leftMargin = borderHorizontalInsetPx;
                 marginParams.rightMargin = borderHorizontalInsetPx;
                 marginParams.topMargin = borderTopPx;
-                // A page pre-sized for a slide ends that much higher (applyTerminalPreSize).
-                marginParams.bottomMargin = borderVerticalInsetPx + mTerminalPreSizePx;
+                marginParams.bottomMargin = borderBottomPx;
                 borderView.setLayoutParams(marginParams);
             }
         }
@@ -3952,9 +3955,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Below the bar the canvas reaches up behind, where the canvas used to start
             // (PageTopInsets.bodySurfaceTopPx).
             int top = mBodySurfaceTopPx;
+            // And ends where the front page's room does (applyBodySurfaceBottom).
+            int bottom = mBodySurfaceBottomPx;
             if (marginParams.leftMargin != 0 || marginParams.topMargin != top
-                || marginParams.rightMargin != 0 || marginParams.bottomMargin != 0) {
-                marginParams.setMargins(0, top, 0, 0);
+                || marginParams.rightMargin != 0 || marginParams.bottomMargin != bottom) {
+                marginParams.setMargins(0, top, 0, bottom);
                 bodySurface.setLayoutParams(marginParams);
             }
         }
@@ -6923,7 +6928,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int verticalInset = mTmpFrameInsets[1];
         out.set(location[0] + sideInset, location[1] + verticalInset,
             location[0] + host.getWidth() - sideInset,
-            location[1] + host.getHeight() - verticalInset);
+            location[1] + host.getHeight() - frontPageRoomPx() - verticalInset);
         return out.width() > 0 && out.height() > 0;
     }
 
@@ -14642,7 +14647,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 location[0] + horizontal,
                 location[1] + vertical,
                 location[0] + host.getWidth() - horizontal,
-                location[1] + host.getHeight() - vertical};
+                location[1] + host.getHeight() - frontPageRoomPx() - vertical};
         }
 
         @Override public float terminalFrameCornerRadiusPx() {
@@ -17333,11 +17338,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && findViewById(R.id.inapp_keyboard_container) != null
             && findViewById(R.id.inapp_keyboard_container).getVisibility() != View.GONE
             ? mKeyboardGeometry.measureHeightPx() : 0;
-        // A container that stands where the content used to end (the stack was away, so nothing
-        // anchored it) takes its bottom margin from the room: the content and the views above
-        // the stack reach past its top by that as well, so the room is today's. D1-A step 3
-        // removes this.
-        int aloneMarginReachPx = keyboardDownPx > 0 && !stack.stackShown ? accessoryBottomMarginPx : 0;
         boolean keyboardDownChanged = keyboardDownPx != mKeyboardDownLaidOutPx;
         mKeyboardDownLaidOutPx = keyboardDownPx;
         // The band stands at the union of both sides' rests: as much taller as the other side's
@@ -17382,10 +17382,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeFloatKeyboardShown = state.keyboardShown;
         mHomeFloatImePushPx = stack.homeFloatImePushPx;
         syncHomeFloatObstructions();
-        boolean dockOverlays = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
-        // A side rail on Home ends above the dock, as it does on the Workspace.
-        if (applySideStackDockInsets(dockOverlays, stack.sideStackOverlapPx))
-            mChrome.onArrangementChanged();
         mCrossing.heldOverlap(stack.contentOverlapPx);
         // The kept band this pass stood the stack on, so the next inset dispatch answers a band
         // that moves as well as the take (noteRootFitBottom).
@@ -17401,12 +17397,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
                 stack.homeGridDockReservePx);
         }
-        // D1-A step 3 removes this: the room stays today's while the container is as tall as the
-        // keyboard-up stack, so the content reaches past the container's top by the keyboard's height.
-        boolean overlapChanged = applyContentBottomMargin(stack.contentEdgeGapPx,
-            com.termux.app.place.StackScene.contentOverlapPx(stack.contentOverlapPx,
-                keyboardDownPx + aloneMarginReachPx, laneSlackPx));
-        overlapChanged |= applyAboveStackReach(keyboardDownPx + aloneMarginReachPx + laneSlackPx);
+        // The content column fills the window to its bottom; what each page leaves of it is that
+        // page's own rest (applyPageRooms). All it keeps of its old bottom margin is the system
+        // keyboard's reach on Home.
+        boolean overlapChanged = applyContentImeReach(stack.homeImeReachPx);
         boolean contentReservationChanged =
             stack.contentReservationPx != appliedContentReservationPx();
         mAppliedStack = stack;
@@ -17415,6 +17409,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             endHomePillFlight();
             mHomePill.refresh();
         }
+        // Each page's room, from its own rest; after the keyboard's state is applied, which the
+        // front page's rest reads.
+        overlapChanged |= applyPageRooms(stack.stackShown
+            ? stack.stackHeightPx + bottomInsets.stackExtraHeightPx + accessoryBottomMarginPx : 0,
+            stack.sideStackOverlapPx);
         // While the slide holds the content, the room it gives back is laid out under a grid the
         // travel has paused (preRollTravelContent); the settle sends the PTY its one size.
         if (!mCrossing.holdsContent() && shouldRequestTerminalResize(requestTerminalResize,
@@ -17486,22 +17485,121 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Lets the content root reach past the accessory stack's top by {@code overlapPx}, as a negative
-     * bottom margin against the {@code layout_above} rule that otherwise couples the two. The stack
-     * is the later sibling, so it draws over what the content keeps. {@code edgeGapPx} is the gap
-     * the content keeps from the screen's bottom edge while the stack is away and it is the
-     * surface standing there; 0 whenever the stack is on screen and the gap is the stack's.
+     * The content column fills the window to its bottom: what a page leaves of it is that page's
+     * own rest, in the wall (applyPageRooms). The one reach the column keeps past its bottom is
+     * the system keyboard's on Home, which keeps its grid whole while the phone's keyboard is up;
+     * it is the column's only bottom margin.
      */
-    private boolean applyContentBottomMargin(int edgeGapPx, int overlapPx) {
+    private boolean applyContentImeReach(int imeReachPx) {
         View content = findViewById(R.id.terminal_content_column);
         if (content == null) return false;
         ViewGroup.LayoutParams layoutParams = content.getLayoutParams();
         if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
         ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
-        int bottomMargin = Math.max(0, edgeGapPx) - Math.max(0, overlapPx);
+        int bottomMargin = -Math.max(0, imeReachPx);
         if (marginParams.bottomMargin == bottomMargin) return false;
         marginParams.bottomMargin = bottomMargin;
         content.setLayoutParams(marginParams);
+        return true;
+    }
+
+    /** The wall's page kinds that stand a page of their own room (a display window is the Workspace's). */
+    private static final com.termux.app.wall.PaneWallPage[] ROOM_KINDS = {
+        com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL,
+        com.termux.app.wall.PaneWallPage.ASSISTANT};
+
+    /** Where the stack's top stood on the last pass at rest, from the window's bottom; -1 before. */
+    private int mAppliedStackTopInsetPx = -1;
+
+    /**
+     * Each page's room, from its own rest (D1-A, PageRoom): the wall's cells end that far above
+     * its bottom, whichever page is in front and whatever a crossing is doing, so a crossing
+     * resizes no page. What draws on every page stands on the front page's rest instead (the flat
+     * body surface, a side stack's end, the find strip and the A-Z labels), as a layout value
+     * written at rest; what draws for the Terminal alone, its frame line, takes the Terminal's.
+     * Nothing here runs while a crossing does: both ends' rests are known before it begins, and
+     * the landing's pass finds them written.
+     *
+     * @param stackTopInsetPx how far the front rest's stack top stands above the window's bottom
+     *     (0 while the stack is away)
+     * @param homeSideReachPx the reach a side rail on Home ends above, the stack and its margin
+     * @return whether anything moved
+     */
+    private boolean applyPageRooms(int stackTopInsetPx, int homeSideReachPx) {
+        if (mPaneWallController == null || mCrossingController == null || mCrossing.crossing())
+            return false;
+        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+        boolean moved = false;
+        for (com.termux.app.wall.PaneWallPage kind : ROOM_KINDS) {
+            com.termux.app.wall.PaneWallPage place =
+                kind == com.termux.app.wall.PaneWallPage.TERMINAL
+                    && mLastWallPage == com.termux.app.wall.PaneWallPage.DISPLAY
+                    ? com.termux.app.wall.PaneWallPage.DISPLAY : kind;
+            int before = wall.pageBottomInsetPx(kind);
+            wall.setPageBottomInsetPx(kind, mCrossingController.travelRestReservationPx(place));
+            moved |= wall.pageBottomInsetPx(kind) != before;
+        }
+        int frontRoomPx = frontPageRoomPx();
+        boolean home = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        moved |= applyBodySurfaceBottom(frontRoomPx);
+        moved |= applyTerminalBorderBottom();
+        if (applySideStackDockInsets(true, home ? homeSideReachPx : frontRoomPx)) {
+            mChrome.onArrangementChanged();
+            moved = true;
+        }
+        if (stackTopInsetPx != mAppliedStackTopInsetPx) {
+            mAppliedStackTopInsetPx = stackTopInsetPx;
+            for (int id : new int[] {R.id.terminal_find_bar_host, R.id.apps_bar_az_label_overlay}) {
+                View view = findViewById(id);
+                if (view == null
+                    || !(view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) continue;
+                ViewGroup.MarginLayoutParams params =
+                    (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+                if (params.bottomMargin == stackTopInsetPx) continue;
+                params.bottomMargin = stackTopInsetPx;
+                view.setLayoutParams(params);
+                moved = true;
+            }
+        }
+        return moved;
+    }
+
+    /** The room the page in front leaves its content (the wall's inset for its kind). */
+    private int frontPageRoomPx() {
+        if (mPaneWallController == null) return 0;
+        return mPaneWallController.wall().pageBottomInsetPx(
+            mLastWallPage == com.termux.app.wall.PaneWallPage.DISPLAY
+                ? com.termux.app.wall.PaneWallPage.TERMINAL : mLastWallPage);
+    }
+
+    /** Where the flat body surface ends above the canvas's bottom: the front page's room. */
+    private int mBodySurfaceBottomPx;
+
+    private boolean applyBodySurfaceBottom(int roomPx) {
+        if (roomPx == mBodySurfaceBottomPx) return false;
+        mBodySurfaceBottomPx = roomPx;
+        View body = findViewById(R.id.terminal_background);
+        if (body == null || !(body.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
+            return true;
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) body.getLayoutParams();
+        if (params.bottomMargin != roomPx) {
+            params.bottomMargin = roomPx;
+            body.setLayoutParams(params);
+        }
+        return true;
+    }
+
+    /** The Terminal's frame line ends above the canvas's bottom by the Terminal's own room. */
+    private boolean applyTerminalBorderBottom() {
+        View borderView = findViewById(R.id.terminal_border_overlay);
+        if (borderView == null || mPaneWallController == null
+            || !(borderView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return false;
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) borderView.getLayoutParams();
+        int bottom = mTerminalBorderFrameTopPx + mPaneWallController.wall().pageBottomInsetPx(
+            com.termux.app.wall.PaneWallPage.TERMINAL);
+        if (params.bottomMargin == bottom) return false;
+        params.bottomMargin = bottom;
+        borderView.setLayoutParams(params);
         return true;
     }
 
@@ -17514,8 +17612,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * How much taller the stack's band is laid out than the front side's rest (the union of both
-     * sides' rests, {@link com.termux.app.place.StackLanes#slackPx}); the content reaches past the
-     * container's top by it and the slab starts that far below it. D1-A step 3 removes this.
+     * sides' rests, {@link com.termux.app.place.StackLanes#slackPx}); the slab starts that far
+     * below the container's top.
      */
     private int mLaneSlackPx;
 
@@ -17614,31 +17712,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The keyboard's height the stack's container is laid out taller by while it is down. */
     private int mKeyboardDownLaidOutPx;
-    /** How far the views that stand above the container reach past its top (the same height). */
-    private int mAboveStackReachPx;
-
-    /**
-     * The find strip and the A-Z labels stand above the stack's container; its top is the
-     * keyboard's height higher while the keyboard is laid out but down, so they reach back down by
-     * it and stand where they stood. D1-A step 3 removes this.
-     */
-    private boolean applyAboveStackReach(int reachPx) {
-        if (reachPx == mAboveStackReachPx) return false;
-        int delta = reachPx - mAboveStackReachPx;
-        mAboveStackReachPx = reachPx;
-        boolean changed = false;
-        for (int id : new int[] {R.id.terminal_find_bar_host, R.id.apps_bar_az_label_overlay}) {
-            View view = findViewById(id);
-            if (view == null || !(view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
-                continue;
-            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
-            params.bottomMargin -= delta;
-            view.setLayoutParams(params);
-            changed = true;
-        }
-        return changed;
-    }
-
     /** Whether the docked in-app keyboard stays laid out while it is down (D1-A). */
     private boolean keyboardStaysLaidOut() {
         return mInAppKeyboard != null && mInAppKeyboard.isEnabled() && !mInAppKeyboard.isTurnedOff()
@@ -24722,6 +24795,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int keyboardDesiredHeightPx() { return mKeyboardGeometry.desiredHeightPx(); }
         @Override public int travelKeyboardLaidOutPx() { return TermuxActivity.this.travelKeyboardLaidOutPx(); }
         @Override public int keyboardDownLaidOutPx() { return mKeyboardDownLaidOutPx; }
+        @Override public boolean displayWindowInFront() { return isDisplayWindowInFront(); }
         @Override public int imeLiftPx() { return mImeLiftPx; }
         @Override public int appliedToolbarHeightPx() { return TermuxActivity.this.appliedToolbarHeightPx(); }
         @Override public int measuredExtraKeysRowPx() { return TermuxActivity.this.measuredExtraKeysRowPx(); }
@@ -24820,18 +24894,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int inset = Math.max(0, px);
         if (inset == mTerminalPreSizePx) return;
         mTerminalPreSizePx = inset;
-        if (mPaneWallController != null) mPaneWallController.wall().setTerminalBottomInsetPx(inset);
-        View borderView = hotView(R.id.terminal_border_overlay);
-        if (borderView != null
-            && borderView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
-            ViewGroup.MarginLayoutParams params =
-                (ViewGroup.MarginLayoutParams) borderView.getLayoutParams();
-            int bottom = mTerminalBorderFrameTopPx + inset;
-            if (params.bottomMargin != bottom) {
-                params.bottomMargin = bottom;
-                borderView.setLayoutParams(params);
-            }
-        }
     }
 
     /**

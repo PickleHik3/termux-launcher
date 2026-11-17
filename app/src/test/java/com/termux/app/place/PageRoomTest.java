@@ -43,6 +43,22 @@ public class PageRoomTest {
         }
     }
 
+    /**
+     * What stands on the front page's room (the flat body surface, a side stack's end) ends where
+     * the content column ended before the column filled the window: the window less the stack and
+     * its margin, plus what the content reached past the stack's top by.
+     */
+    @Test public void whatStandsOnAPagesRoomEndsWhereTheContentColumnEndedAtRest() {
+        final int window = 2400;
+        for (boolean floating : BOOLS) for (boolean up : BOOLS) for (PageRef page : PAGES) {
+            StackLayout.Result r = f.settle(page, up, floating);
+            int columnBottom = window - r.stackHeightPx - r.bottomMarginPx + r.contentOverlapPx;
+            int room = PageRoom.bottomInsetPx(f.rest(page, page, up, floating));
+            assertEquals(f.name + " " + page + " floating=" + floating + " up=" + up,
+                columnBottom, window - room);
+        }
+    }
+
     @Test public void aPagesRoomIsItsOwnWhicheverPageIsInFront() {
         for (boolean floating : BOOLS) for (boolean up : BOOLS) for (PageRef page : PAGES) {
             int own = PageRoom.bottomInsetPx(f.rest(page, page, up, floating));

@@ -200,6 +200,11 @@ public final class CrossingController {
         /** The keyboard's height as the stack lays it out; 0 while it is down or floating. */
         int travelKeyboardLaidOutPx();
 
+        /** Whether a display window is the Workspace's window in front (its keyboard form rules). */
+        default boolean displayWindowInFront() {
+            return false;
+        }
+
         /**
          * The keyboard's height the stack's container is laid out taller by while the keyboard is
          * down (D1-A); 0 otherwise. The dock's rows are the container less this.
@@ -1111,7 +1116,9 @@ public final class CrossingController {
         // committed place, else its half's stored layout.
         PlaceLayout placeLayout = place == mHost.lastWallPage()
             ? mHost.arrangement().layout() : snapshot.half(side).layout;
-        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place, placeLayout);
+        in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place == mHost.lastWallPage()
+            ? KeyboardOverlayPolicy.keyboardPlace(place, mHost.displayWindowInFront()) : place,
+            placeLayout);
         // The Terminal's flush padding is part of its rest: the applied one while it is the place,
         // else the one it last rested with, so Home's terminal page and the slide back are laid
         // out at the height the landing settles at, not one padding taller.
@@ -1119,7 +1126,7 @@ public final class CrossingController {
             : place == mHost.lastWallPage()
                 ? (mHost.appliedStack() != null ? mHost.appliedStack().flushPaddingPx : 0)
                 : mHost.terminalRestFlushPaddingPx();
-        return com.termux.app.place.StackLayout.restReservationPx(in);
+        return PageRoom.bottomInsetPx(in);
     }
 
     /**
