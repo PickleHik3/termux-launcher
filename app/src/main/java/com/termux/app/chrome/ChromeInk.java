@@ -424,6 +424,15 @@ public final class ChromeInk {
     public void attachLegibility(@Nullable com.termux.app.glass.LegibilityStore store) {
         mLegibility = store;
     }
+
+    /**
+     * Nothing reads the wallpaper while {@code freeze} says so (a crossing measures nothing, ADR
+     * 0029 section 9): every read goes through {@link GlassBackdropCache}, which then answers from
+     * what it holds. Asked of the crossing itself at each read, so it cannot stick.
+     */
+    public void setMeasureFreeze(@Nullable GlassBackdropCache.Freeze freeze) {
+        mCache.setFreeze(freeze);
+    }
     /** Run when a band's veil demand changes, so the surface that draws it is rebuilt. */
     @Nullable private final Runnable mOnVeilChanged;
 
