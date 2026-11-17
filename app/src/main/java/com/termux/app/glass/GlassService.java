@@ -5,10 +5,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.PowerManager;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.R;
 import com.termux.app.window.FramePipeline;
 import com.termux.app.window.FrameStep;
 
@@ -48,6 +50,19 @@ public final class GlassService {
     @Nullable private LiveCore mCore;
     private int mPolicyEvents;
     @Nullable private BroadcastReceiver mPowerSave;
+    private boolean mLiveHeld;
+
+    /** Makes {@code service} the glass service of every surface in {@code decor}'s window. */
+    public static void install(@NonNull View decor, @Nullable GlassService service) {
+        decor.setTag(R.id.glass_service, service);
+    }
+
+    /** The glass service of the window {@code view} is in; null before one is installed or off a window. */
+    @Nullable
+    public static GlassService of(@NonNull View view) {
+        Object tag = view.getRootView().getTag(R.id.glass_service);
+        return tag instanceof GlassService ? (GlassService) tag : null;
+    }
 
     /** {@code frames} runs the commit as its last step; null for a service without a window. */
     public GlassService(@Nullable FramePipeline frames) {
@@ -61,7 +76,18 @@ public final class GlassService {
 
     /** The Live core took its first picture or let go of its last: the commit runs on every drawn frame while one is held. */
     public void liveHeld(boolean held) {
-        if (mFrames != null) mFrames.arm(FrameStep.GLASS_COMMIT, held);
+        mLiveHeld = held;
+        arm();
+    }
+
+    /**
+     * The commit runs on every drawn frame while a Live picture is held or a surface asks to be
+     * visited each frame ({@link GlassEntry#frame}); otherwise only on a frame a policy event booked.
+     */
+    private void arm() {
+        if (mFrames != null) {
+            mFrames.arm(FrameStep.GLASS_COMMIT, mLiveHeld || mRegistry.frameCount() > 0);
+        }
     }
 
     /**
@@ -76,7 +102,11 @@ public final class GlassService {
             if (held.view != entry.view) return null;
         } else {
             mRegistry.register(entry);
+            arm();
             afterGrants();
+            // A surface this one displaced from a Live slot lets its picture go now, before the
+            // newcomer takes one in the recorder: the registry is the only budget.
+            redressMoved(entry.element);
         }
         if (redress != null) mRedress.put(entry.element, redress);
         return mRegistry.granted(entry.element);
@@ -93,6 +123,7 @@ public final class GlassService {
     public void unregister(@NonNull String element) {
         if (!mRegistry.unregister(element)) return;
         mRedress.remove(element);
+        arm();
         afterGrants();
     }
 
@@ -112,6 +143,12 @@ public final class GlassService {
     public void setCompositorOn(boolean on) {
         mRegistry.setCompositorOn(on);
         afterGrants();
+    }
+
+    /** The entry of {@code element}; null when it has none. */
+    @Nullable
+    public GlassEntry entry(@NonNull String element) {
+        return mRegistry.entry(element);
     }
 
     /** The kind granted to {@code element}; null when it has no entry. */
@@ -166,18 +203,34 @@ public final class GlassService {
      * while it is re-dressed is taken in the same commit.
      */
     void commit() {
+        redressMoved(null);
+        // Surfaces that need a word every drawn frame, back to front: after the re-dress, so a
+        // surface put up this frame is the one visited.
+        for (int i = 0; i < mRegistry.size(); i++) {
+            GlassEntry.Frame frame = mRegistry.entryAt(i).frame;
+            if (frame != null) frame.onFrame();
+        }
+        LiveCore core = mCore;
+        if (core != null) liveHeld(core.commitLive());
+    }
+
+    /**
+     * Tells every surface whose kind moved its new kind, back to front, except {@code skip} (the
+     * surface that has just registered and was told its kind by the registration). A surface that
+     * registers or lets go while it is re-dressed is taken in the same pass.
+     */
+    private void redressMoved(@Nullable String skip) {
         int rounds = REDRESS_ROUNDS * (mRegistry.size() + 1);
         while (rounds-- > 0 && mRegistry.anyChanged()) {
             for (int i = 0; i < mRegistry.size(); i++) {
                 if (!mRegistry.takeChanged(i)) continue;
-                Redress redress = mRedress.get(mRegistry.entryAt(i).element);
+                String element = mRegistry.entryAt(i).element;
+                Redress redress = element.equals(skip) ? null : mRedress.get(element);
                 GlassKind kind = mRegistry.grantedAt(i);
                 if (redress != null) redress.onGranted(kind);
                 // The redress may have changed the registry: start the walk again.
                 break;
             }
         }
-        LiveCore core = mCore;
-        if (core != null) liveHeld(core.commitLive());
     }
 }

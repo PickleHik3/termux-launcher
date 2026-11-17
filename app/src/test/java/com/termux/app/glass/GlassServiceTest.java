@@ -160,4 +160,44 @@ public class GlassServiceTest {
         frame();
         assertEquals(1, heard[0]);
     }
+
+    @Test
+    public void aSurfaceDisplacedByANewcomerLetsGoAtOnceNotAtTheNextFrame() {
+        glass.setLiveOn(true);
+        for (int i = 0; i < GlassRegistry.LIVE_SLOTS; i++) {
+            register("widget" + i, GlassEntry.PRIORITY_WIDGET);
+        }
+        frame();
+        redressed.clear();
+        // A panel registers: the widget it displaces is told inside the registration, so the
+        // recorder never has to evict a picture the registry still counts as Live.
+        glass.register(new GlassEntry("panel", view(), GlassKind.LIVE, GlassEntry.PRIORITY_DOCK,
+            com.termux.app.window.WindowLayer.SHEETS, null), null);
+        assertEquals(Arrays.asList("widget7=WALLPAPER"), redressed);
+        assertEquals(1, glass.policyEvents());
+        frame();
+        assertEquals(Arrays.asList("widget7=WALLPAPER"), redressed);
+    }
+
+    @Test
+    public void aSurfaceThatWantsEveryFrameIsVisitedInLayerOrderAndArmsTheCommit() {
+        List<String> visits = new ArrayList<>();
+        assertFalse(frames.isArmed(FrameStep.GLASS_COMMIT));
+        glass.register(new GlassEntry("panel", view(), GlassKind.SNAPSHOT,
+            GlassEntry.PRIORITY_DOCK, com.termux.app.window.WindowLayer.SHEETS,
+            () -> visits.add("panel")), null);
+        glass.register(new GlassEntry("slab", view(), GlassKind.WALLPAPER,
+            GlassEntry.PRIORITY_WIDGET, com.termux.app.window.WindowLayer.PAGES,
+            () -> visits.add("slab")), null);
+        assertTrue("a surface that wants frames arms the commit", frames.isArmed(FrameStep.GLASS_COMMIT));
+        frames.flush("test");
+        assertEquals(Arrays.asList("slab", "panel"), visits);
+        // Every drawn frame, with no policy event.
+        frames.flush("test");
+        assertEquals(4, visits.size());
+        assertEquals(0, glass.policyEvents());
+        glass.unregister("panel");
+        glass.unregister("slab");
+        assertFalse(frames.isArmed(FrameStep.GLASS_COMMIT));
+    }
 }

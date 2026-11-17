@@ -1971,6 +1971,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Battery saver is a Live policy input: the next apply reads it and the kinds move at once.
         mGlass.watchPowerSave(this, () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
         com.termux.app.chrome.PanelBackdrop.install(getWindow().getDecorView(), mPanelBackdropSource);
+        com.termux.app.glass.GlassService.install(getWindow().getDecorView(), mGlass);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
         // to right in every locale. Reading-order overlays added here (help, tour, notices, the
@@ -4478,8 +4479,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return liveBackdrop();
             }
 
-            @Override public boolean liveBlur() {
-                return mLiveBlur;
+            @Nullable @Override public com.termux.app.glass.GlassService glass() {
+                return mGlass;
             }
         };
 

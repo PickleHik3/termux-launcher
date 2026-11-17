@@ -2,14 +2,17 @@ package com.termux.app.chrome;
 
 import android.os.Build;
 
+import com.termux.app.glass.GlassKind;
+
 /**
  * Which picture a panel (the app drawer, the command palette, the terminal sheet, a popup menu)
  * shows behind its glass, and when a Snapshot is taken. Pure, so every rule is testable without a
  * window; {@link PanelBackdrop} applies the answers.
  *
  * <ul>
- *   <li><b>Live</b>: Live blur is on and the panel is in the launcher's own window: the recorded
- *   picture refreshes on frames where something beneath it changed.</li>
+ *   <li><b>Live</b>: the glass service granted the panel Live (Live blur is on, memory is not
+ *   short and a slot is free) and it is in the launcher's own window: the recorded picture
+ *   refreshes on frames where something beneath it changed.</li>
  *   <li><b>Snapshot</b>: the same recording, blurred once when the panel opens and again when it
  *   settles, and frozen while it moves: on the GPU from Android 12, and below it (no
  *   {@code RenderEffect}, so no Live either) drawn in software and blurred by RenderScript.</li>
@@ -49,17 +52,31 @@ public final class PanelBackdropPolicy {
     }
 
     /**
+     * What a panel asks the glass service for ({@code GlassService.register}), or null when it
+     * asks for nothing because it shows the stored frame instead. Live where the GPU records and
+     * the panel is in the launcher's own window; a Snapshot everywhere else. The service decides
+     * whether Live is granted: the switch, battery saver, a memory trim and the slot budget.
+     *
      * @param recorderAvailable the window has a recorder ({@link LiveBackdrop}) to record with
-     * @param liveBlur          {@link LiveBlurPolicy#live} as it stands now
      * @param sameWindow        the panel is inside the recorder's window (a popup menu is not, and
      *                          the recorder only refreshes surfaces in its own window)
-     * @param liveSlotFree      the recorder can take one more live surface
      */
-    public static Kind kind(int sdkInt, boolean recorderAvailable, boolean liveBlur,
-                            boolean sameWindow, boolean liveSlotFree) {
+    public static GlassKind wants(int sdkInt, boolean recorderAvailable, boolean sameWindow) {
+        if (!canRecord(sdkInt) || !recorderAvailable) return null;
+        return onGpu(sdkInt) && sameWindow ? GlassKind.LIVE : GlassKind.SNAPSHOT;
+    }
+
+    /**
+     * The picture a panel shows: Live when the service granted it Live, a Snapshot when it did not
+     * (Live is off, memory is short, or no slot is free), the stored frame when it cannot record.
+     *
+     * @param recorderAvailable the window has a recorder to record with
+     * @param liveGranted       the glass service granted this panel Live
+     */
+    public static Kind kind(int sdkInt, boolean recorderAvailable, boolean liveGranted) {
         if (!canRecord(sdkInt) || !recorderAvailable) return Kind.STORED;
         if (!onGpu(sdkInt)) return Kind.SNAPSHOT;
-        return liveBlur && sameWindow && liveSlotFree ? Kind.LIVE : Kind.SNAPSHOT;
+        return liveGranted ? Kind.LIVE : Kind.SNAPSHOT;
     }
 
     /**

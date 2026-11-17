@@ -657,7 +657,7 @@ public final class TerminalCommandPaletteController
         View blur = mPaletteHost.findView(R.id.command_palette_blur);
         if (mHost == null || mGlass == null || blur == null) return false;
         mBackdrop = blur instanceof ImageView
-            ? new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur) : null;
+            ? new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, "palette") : null;
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
             @Override
