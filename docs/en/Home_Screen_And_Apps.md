@@ -40,14 +40,8 @@ Home and the Workspace replace them.)
 
 ### Page switcher
 
-A small dim dot sits on the edge of the screen, in the same place on every page. Touch it and
-slide: a row of Home, Terminal, Display and Assistant opens beside it, with each one's pages or
-windows stacked above it; let go on one to go there. A tap opens the row and leaves it open for a
-second tap; Back or a tap anywhere else closes it. Hold the dot still for a moment to pick it up,
-then drag it anywhere and let go: it settles on the nearer edge. When the keyboard comes up the dot
-rises above it. The dot hides while an editor, the app drawer, the command palette or a sheet is
-open. **Settings → General → Page switcher** turns it off; swiping between pages still works either
-way.
+The glyph row under the Home grid, and the optional page switcher key on the extra-keys bar,
+switch pages: tap to open the panel and tap a page, or touch and slide and let go on one.
 
 ## App icons on Home
 

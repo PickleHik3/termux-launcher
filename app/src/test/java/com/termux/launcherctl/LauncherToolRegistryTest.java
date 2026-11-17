@@ -72,7 +72,7 @@ public class LauncherToolRegistryTest {
         // with its palette pair window.move_left and window.move_right, which reorder the row, and
         // by pane.consume and pane.expel, Niri's column moves on the row, and by minimal.toggle,
         // the palette's door to minimal mode, and by wall.assistant, the Assistant key.
-        assertEquals(91, registry.getUiTools().size());
+        assertEquals(92, registry.getUiTools().size());
     }
 
     @Test

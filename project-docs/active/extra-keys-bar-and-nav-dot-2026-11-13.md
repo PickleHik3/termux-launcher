@@ -1,3 +1,5 @@
+> Superseded 2026-11-16: the nav dot is replaced by the glyph row and the page switcher key (`page-glyph-switcher-2026-11-16.md`).
+
 # Extra-keys bar per target, Home pill and the navigation dot (2026-11-13)
 
 Status: built 2026-11-14/15 and merged into v2-redesign. Grilled with the developer 2026-11-12/13;

@@ -38,13 +38,13 @@ public class WidgetPaneAccessibilityTest {
         assertEquals(activity.getString(R.string.widget_empty_hint), hint.getText().toString());
         // The empty grid stays hittable: its surface owns the long-press menu.
         assertEquals(View.VISIBLE, pane.findViewById(R.id.widget_grid).getVisibility());
-        // Single page: the indicator stays out of the way.
-        assertEquals(View.GONE, pane.findViewById(R.id.widget_page_dots).getVisibility());
+        // The glyph row shows even with one page.
+        assertEquals(View.VISIBLE, pane.findViewById(R.id.widget_page_dots).getVisibility());
         controller.openPicker();
         assertNotNull(findDescription(pane.picker(), "Close widget picker"));
     }
 
-    @Test public void populatedPageHidesHintAndSecondPageShowsDots() {
+    @Test public void populatedPageHidesHintAndSecondPageKeepsGlyphs() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         WidgetPaneView pane = new WidgetPaneView(activity); activity.setContentView(pane);
@@ -55,7 +55,7 @@ public class WidgetPaneAccessibilityTest {
         layout(pane);
         View emptyState = (View) pane.findViewById(R.id.widget_empty_message).getParent();
         assertEquals(View.GONE, emptyState.getVisibility());
-        assertEquals(View.GONE, pane.findViewById(R.id.widget_page_dots).getVisibility());
+        assertEquals(View.VISIBLE, pane.findViewById(R.id.widget_page_dots).getVisibility());
         assertTrue(repository.addPage() > 0);
         pane.render(repository, LauncherWidgetHostController.Capability.AVAILABLE, 1);
         layout(pane);

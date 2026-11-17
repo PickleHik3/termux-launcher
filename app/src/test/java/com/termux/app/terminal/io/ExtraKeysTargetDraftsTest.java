@@ -85,6 +85,18 @@ public class ExtraKeysTargetDraftsTest {
     }
 
     @Test
+    public void afterAddANewOwnSetStartsFromGlobalsKeysWithTheKey() {
+        java.util.Map<String, String> map = new java.util.HashMap<>();
+        for (ExtraKeysTargetDrafts.Write write : PageSwitcherKeyAdd.plan(map::get)) map.put(write.key, write.value);
+        for (ExtraKeysTarget target : new ExtraKeysTarget[] {ExtraKeysTarget.DISPLAY, ExtraKeysTarget.ASSISTANT,
+                ExtraKeysTarget.TERMINAL}) {
+            ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(map::get);
+            d.giveOwnSet(target);
+            assertTrue(target.toString(), PageSwitcherKeyAdd.holds(d.draftOf(target).valueFor(0)));
+        }
+    }
+
+    @Test
     public void useDefaultRoundTrips() {
         ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines());
         String before = d.fingerprint();

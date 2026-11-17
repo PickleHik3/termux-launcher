@@ -29,13 +29,13 @@ public class SetupCardsTest {
 
     @Test
     public void everyoneGetsPermissionCardsAndGuide() {
-        assertEquals("shizuku,accessibility,notifications,notificationAccess,pinned,guide,",
+        assertEquals("shizuku,accessibility,notifications,notificationAccess,pinned,pageSwitcher,guide,",
             ids(build(false, false, false, new SetupCards.Stored())));
     }
 
     @Test
     public void optionalCardsFollowTheirFacts() {
-        assertEquals("shizuku,accessibility,notifications,notificationAccess,pinned,display,ai,home,guide,",
+        assertEquals("shizuku,accessibility,notifications,notificationAccess,pinned,display,ai,home,pageSwitcher,guide,",
             ids(build(true, true, true, new SetupCards.Stored())));
         assertTrue(ids(build(true, false, false, new SetupCards.Stored())).contains("display"));
         assertFalse(ids(build(true, false, false, new SetupCards.Stored())).contains("ai"));
@@ -59,7 +59,7 @@ public class SetupCardsTest {
         List<SetupCards.Card> cards = build(false, false, false, stored, SetupCards.SHIZUKU);
         assertEquals(SetupCards.State.DONE, cards.get(0).state);
         assertEquals(SetupCards.State.DISMISSED, cards.get(1).state);
-        assertEquals(4, SetupCards.openCount(cards));
+        assertEquals(5, SetupCards.openCount(cards));
     }
 
     @Test
@@ -203,5 +203,61 @@ public class SetupCardsTest {
         assertEquals(SetupCards.State.OPEN, build(false, false, false, stored).get(4).state);
         assertTrue(SetupCards.openCount(build(false, false, false, stored)) > 0);
         assertFalse(dueAtLaunch(stored, false, false, false));
+    }
+
+    private static SetupCards.Card pageSwitcher(List<SetupCards.Card> cards) {
+        for (SetupCards.Card card : cards)
+            if (SetupCards.PAGE_SWITCHER.equals(card.id)) return card;
+        throw new AssertionError("no page switcher card");
+    }
+
+    @Test
+    public void pageSwitcherCardExistsForBothFactsWithWordingAndButtonsByFacts() {
+        SetupCards.Card home = pageSwitcher(build(false, false, true, new SetupCards.Stored()));
+        SetupCards.Card terminal = pageSwitcher(build(false, false, false, new SetupCards.Stored()));
+        assertEquals(com.termux.R.string.setup_card_page_switcher_name, home.name);
+        assertEquals(home.name, terminal.name);
+        assertEquals(com.termux.R.string.setup_card_page_switcher_description, home.description);
+        assertEquals(com.termux.R.string.setup_card_page_switcher_description_terminal,
+            terminal.description);
+        assertTrue(home.offersAction);
+        assertFalse(terminal.offersAction);
+    }
+
+    @Test
+    public void pageSwitcherIsNotCompletableUnderTerminalOnly() {
+        assertFalse(SetupCards.isCompletable(SetupCards.PAGE_SWITCHER, true));
+        assertTrue(SetupCards.isCompletable(
+            pageSwitcher(build(false, false, true, new SetupCards.Stored())), false));
+        assertFalse(SetupCards.isCompletable(
+            pageSwitcher(build(false, false, false, new SetupCards.Stored())), false));
+    }
+
+    @Test
+    public void pageSwitcherBringsTheSheetOnceForAnUpdatingHomeUser() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        // An earlier user: every card then known was seeded as seen; the new id was not.
+        stored.markSeen(build(false, false, true, stored, SetupCards.SHIZUKU));
+        stored.seen.remove(SetupCards.PAGE_SWITCHER);
+        assertTrue(dueAtLaunch(stored, false, false, true));
+        stored.markSeen(build(false, false, true, stored));
+        assertFalse(dueAtLaunch(stored, false, false, true));
+        // Used as a terminal only it never brings the sheet by itself.
+        SetupCards.Stored terminal = new SetupCards.Stored();
+        terminal.markSeen(build(false, false, false, terminal));
+        terminal.seen.remove(SetupCards.PAGE_SWITCHER);
+        assertFalse(dueAtLaunch(terminal, false, false, false));
+    }
+
+    @Test
+    public void pageSwitcherIsDoneFromTheBarsOrAfterAdd() {
+        assertEquals(SetupCards.State.DONE, pageSwitcher(build(false, false, true,
+            new SetupCards.Stored(), SetupCards.PAGE_SWITCHER)).state);
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.completeStep(SetupCards.PAGE_SWITCHER, 0);
+        assertEquals(SetupCards.State.DONE,
+            pageSwitcher(build(false, false, true, stored)).state);
+        assertEquals(SetupCards.State.OPEN,
+            pageSwitcher(build(false, false, true, new SetupCards.Stored())).state);
     }
 }

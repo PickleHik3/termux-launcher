@@ -501,6 +501,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
+    /** The page switcher panel, opened above the key row as a tap on its key would. */
+    public static final String TOOL_APP_PAGE_SWITCHER = "app.page_switcher";
     public static final String TOOL_APP_LAUNCH = "app.launch";
     /** A contact's card, by the lookup key that survives a rename. */
     public static final String TOOL_CONTACT_OPEN = "contact.open";
@@ -1137,6 +1139,14 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_command_palette, R.string.tool_desc_app_command_palette,
             Binding.all("ctrl+alt+shift+p", "ctrl+alt+space>p"));
+        // The key's own touch is handled by the row (it slides along the panel); this is the
+        // plain click: an accessibility tap or a script, which opens the panel as a tap would.
+        addUi(map, TOOL_APP_PAGE_SWITCHER,
+            "Open the page switcher above the key row.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_app_page_switcher, R.string.tool_desc_app_page_switcher,
+            null);
         // Required 'query' keeps this out of the palette's tool rows; the palette
         // contributes one Apps row per installed app instead, and each row runs
         // this tool. Unbound by default: which app deserves a stroke is personal.

@@ -198,6 +198,7 @@ final class SetupCardSheet extends LinearLayout {
             case SetupCards.DISPLAY: return R.drawable.ic_ms_desktop_windows;
             case SetupCards.AI: return R.drawable.ic_ms_smart_toy;
             case SetupCards.HOME: return R.drawable.ic_ms_home;
+            case SetupCards.PAGE_SWITCHER: return R.drawable.ic_ms_tour;
             default: return R.drawable.ic_ms_tour;
         }
     }
@@ -231,7 +232,9 @@ final class SetupCardSheet extends LinearLayout {
         description.setText(card.description);
         box.addView(description, SetupUi.matchWrap(SetupUi.dp(context, 8)));
 
-        for (int i = 0; i < card.steps.length; i++) {
+        // The terminal-only page switcher card has nothing to do: no step row, no button.
+        boolean noAction = SetupCards.PAGE_SWITCHER.equals(card.id) && !card.offersAction;
+        for (int i = 0; i < card.steps.length && !noAction; i++) {
             boolean stepDone = i < card.completed;
             TextView step = SetupUi.text(context, 14f, false, SetupUi.onSurface(this));
             step.setText((stepDone ? "✓  " : "○  ") + context.getString(card.steps[i]));
@@ -260,12 +263,16 @@ final class SetupCardSheet extends LinearLayout {
         buttons.setOrientation(HORIZONTAL);
         buttons.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         if (!done) {
-            buttons.addView(textButton(R.string.setup_cards_dismiss,
+            // The page switcher card offers its key: putting it off reads "Not now".
+            buttons.addView(textButton(SetupCards.PAGE_SWITCHER.equals(card.id) && card.offersAction
+                    ? R.string.setup_card_page_switcher_not_now : R.string.setup_cards_dismiss,
                 () -> mCallbacks.onDismiss(card.id)), buttonParams(0));
         }
         MaterialButton primary = new MaterialButton(context);
         primary.setAllCaps(false);
-        primary.setText(done ? R.string.setup_cards_review : R.string.setup_cards_continue);
+        primary.setText(done ? R.string.setup_cards_review
+            : SetupCards.PAGE_SWITCHER.equals(card.id) ? R.string.setup_card_page_switcher_add
+            : R.string.setup_cards_continue);
         primary.setOnClickListener(v -> {
             // Review of a done permission or home card has no page class: the stub says Done.
             if (done && SetupCards.isSystemChecked(card.id)
@@ -276,7 +283,7 @@ final class SetupCardSheet extends LinearLayout {
         });
         LayoutParams primaryParams = buttonParams(0);
         primaryParams.leftMargin = SetupUi.dp(context, 8);
-        buttons.addView(primary, primaryParams);
+        if (!(noAction && !done)) buttons.addView(primary, primaryParams);
         box.addView(buttons, SetupUi.matchWrap(SetupUi.dp(context, 6)));
         return box;
     }

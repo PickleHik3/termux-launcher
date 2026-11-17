@@ -671,6 +671,9 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void showCommandPalette();
 
+    /** Opens the page switcher above the key row, as a tap on its key would. */
+    void showPageSwitcher();
+
     void showExtraKeysRowEditor();
 
     /** Flip mouse mode; returns the new state. */

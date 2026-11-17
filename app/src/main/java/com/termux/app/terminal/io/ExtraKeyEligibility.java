@@ -138,6 +138,8 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_APP_OPEN_APPS_BAR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE, Band.LAUNCHER);
+        // The page switcher key opens the switcher above whichever bar it sits on, Home's included.
+        tools.put(LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_LAUNCH, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_CONTACT_OPEN, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_KEY_INSPECTOR, Band.LAUNCHER);

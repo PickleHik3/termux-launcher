@@ -1,4 +1,4 @@
-package com.termux.app.wall.switcher;
+package com.termux.app.wall.pageswitch;
 
 import android.content.Context;
 import android.media.AudioAttributes;
@@ -16,23 +16,20 @@ import com.termux.shared.logger.Logger;
 import java.util.function.BooleanSupplier;
 
 /**
- * The feel of the page switcher: a crisp double click when the dot is lifted for a move (this
- * gesture's alone), a light tick on crossing onto a cell and a firm click on choosing one.
+ * The feel of the page switch panel: a light tick on crossing onto a cell and a firm click on
+ * choosing one.
  *
  * <p>On API 30 and later a {@link VibrationEffect.Composition} of the phone's own primitives,
  * where it supports them; otherwise the predefined effects (API 29), and on API 26-28 short
  * one-shots. Everything is played as touch feedback, so the system's own haptics setting silences
  * it, and the app's master haptics switch is asked first.
  */
-public final class PickerHaptics {
+public final class PageSwitchHaptics {
 
-    private static final String LOG_TAG = "PickerHaptics";
+    private static final String LOG_TAG = "PageSwitchHaptics";
 
     /** Strengths are 0..1. */
     static final float CROSS_SCALE = 0.35f;
-    static final float OPEN_SCALE_FIRST = 0.7f;
-    static final float OPEN_SCALE_SECOND = 1.0f;
-    static final int OPEN_GAP_MS = 55;
     static final float COMMIT_SCALE = 1.0f;
 
     @NonNull private final Context mContext;
@@ -42,14 +39,9 @@ public final class PickerHaptics {
     /** Whether the phone has every primitive the compositions use. Asked once. */
     private boolean mPrimitives;
 
-    public PickerHaptics(@NonNull Context context, @NonNull BooleanSupplier enabled) {
+    public PageSwitchHaptics(@NonNull Context context, @NonNull BooleanSupplier enabled) {
         mContext = context.getApplicationContext();
         mEnabled = enabled;
-    }
-
-    /** The dot was lifted for a move: a double click nothing else in the app uses. */
-    public void pickedUp() {
-        play(Kind.OPEN);
     }
 
     /** The finger crossed onto another cell. */
@@ -62,7 +54,7 @@ public final class PickerHaptics {
         play(Kind.COMMIT);
     }
 
-    private enum Kind { OPEN, CROSS, COMMIT }
+    private enum Kind { CROSS, COMMIT }
 
     private void play(Kind kind) {
         if (!mEnabled.getAsBoolean() || !Haptics.isEnabled(mContext)) return;
@@ -89,11 +81,6 @@ public final class PickerHaptics {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && mPrimitives) {
             VibrationEffect.Composition c = VibrationEffect.startComposition();
             switch (kind) {
-                case OPEN:
-                    c.addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, OPEN_SCALE_FIRST);
-                    c.addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK,
-                        OPEN_SCALE_SECOND, OPEN_GAP_MS);
-                    break;
                 case CROSS:
                     c.addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, CROSS_SCALE);
                     break;
@@ -111,17 +98,12 @@ public final class PickerHaptics {
     private static VibrationEffect fallback(@NonNull Kind kind) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             switch (kind) {
-                case OPEN: return VibrationEffect.createPredefined(
-                    VibrationEffect.EFFECT_DOUBLE_CLICK);
                 case CROSS: return VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK);
                 default: return VibrationEffect.createPredefined(
                     VibrationEffect.EFFECT_HEAVY_CLICK);
             }
         }
         switch (kind) {
-            case OPEN:
-                return VibrationEffect.createWaveform(new long[] {0, 14, 55, 18},
-                    new int[] {0, 180, 0, 255}, -1);
             case CROSS:
                 return VibrationEffect.createOneShot(8, 70);
             default:

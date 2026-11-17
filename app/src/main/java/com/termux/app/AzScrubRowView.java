@@ -103,8 +103,8 @@ public final class AzScrubRowView extends AppCompatTextView {
      */
     private int glassBackdrop = Color.TRANSPARENT;
     /** The halo the current backdrop and fill colours resolve to; recomputed only when they move. */
-    private int haloRestingColor = withAlpha(GlassInk.HALO_DARK, 195);
-    private int haloFocusColor = withAlpha(GlassInk.HALO_DARK, 215);
+    private int haloRestingColor = GlassInk.unmeasuredHalo(false);
+    private int haloFocusColor = GlassInk.unmeasuredHalo(true);
     private int haloCacheBackdrop = Color.WHITE;
     private int haloCacheBase;
     private int haloCacheFocus;
@@ -488,8 +488,8 @@ public final class AzScrubRowView extends AppCompatTextView {
         for (int i = 0; i < visibleLetters.length; i++) {
             float along = letterCenterAlongPx(i);
             float distance = Math.abs(along - anchorAlong) / Math.max(1f, slot);
-            float envelope = (float) Math.exp(-(distance * distance) * 0.85f);
-            float waveLift = (float) Math.sin(Math.min(1f, envelope) * (Math.PI * 0.5f)) * waveAmplitude;
+            float envelope = ScrubWave.envelope(distance);
+            float waveLift = ScrubWave.lift(envelope) * waveAmplitude;
             boolean activeFocus = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
                 ? (hasInlineFocus && i == activeIndex)
                 : (waveStrength > 0.01f && i == activeIndex);
@@ -525,7 +525,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             float density = getResources().getDisplayMetrics().density;
             letterOutlinePaint.setTextSize(letterPaint.getTextSize());
             letterOutlinePaint.setTypeface(letterPaint.getTypeface());
-            letterOutlinePaint.setStrokeWidth(density * 1.4f);
+            letterOutlinePaint.setStrokeWidth(density * GlassInk.HALO_STROKE_DP);
             // Sword-glint shimmer: a soft material-accent highlight that the sweep brushes across
             // each outline in turn. Gaussian falloff around the sweep position; soothing, capped.
             // The blend only ever moves the halo towards a mid accent, which is towards the band it
@@ -689,8 +689,8 @@ public final class AzScrubRowView extends AppCompatTextView {
         haloCacheFocus = focusColor;
         if (Color.alpha(glassBackdrop) == 0) {
             // Nothing measured yet: exactly what the row drew before the backdrop was ever sampled.
-            haloRestingColor = withAlpha(GlassInk.HALO_DARK, 195);
-            haloFocusColor = withAlpha(GlassInk.HALO_DARK, 215);
+            haloRestingColor = GlassInk.unmeasuredHalo(false);
+            haloFocusColor = GlassInk.unmeasuredHalo(true);
             return;
         }
         haloRestingColor = GlassInk.halo(baseColor, glassBackdrop, false);
@@ -746,10 +746,10 @@ public final class AzScrubRowView extends AppCompatTextView {
         boolean activeFocus = index == activeIndex;
         float along = letterCenterAlongPx(index);
         float distance = Math.abs(along - anchorAlong) / Math.max(1f, slot);
-        float envelope = (float) Math.exp(-(distance * distance) * 0.85f);
+        float envelope = ScrubWave.envelope(distance);
         float waveLift = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
             ? 0f
-            : (float) Math.sin(Math.min(1f, envelope) * (Math.PI * 0.5f)) * (dp(15) * waveStrength);
+            : ScrubWave.lift(envelope) * (dp(15) * waveStrength);
         if (activeFocus && interactionMode != InteractionMode.INLINE_EMPHASIS_TRACK) {
             waveLift *= 1.2f;
             waveLift = Math.max(waveLift, dp(6));

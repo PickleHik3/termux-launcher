@@ -885,6 +885,10 @@ class FakeTerminalHost implements TerminalHost {
         record("showCommandPalette");
     }
 
+    @Override public void showPageSwitcher() {
+        record("showPageSwitcher");
+    }
+
     @Override public void showExtraKeysRowEditor() {
         record("showExtraKeysRowEditor");
     }

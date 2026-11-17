@@ -10,6 +10,7 @@ import com.termux.app.terminal.io.ExtraKeyEligibility.Band;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
+import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import org.junit.Test;
 
@@ -98,6 +99,26 @@ public class ExtraKeyEligibilityTest {
         }) {
             for (PaneWallPage place : PaneWallPage.values())
                 assertTrue(tool + " on " + place, ExtraKeyEligibility.isUsable(key(tool), place));
+        }
+    }
+
+    @Test
+    public void thePageSwitcherKeyWorksOnEveryBar() {
+        String switcher = key(LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER);
+        assertSame(Band.LAUNCHER, ExtraKeyEligibility.bandOf(switcher));
+        for (PaneWallPage place : PaneWallPage.values())
+            assertTrue(place.toString(), ExtraKeyEligibility.isUsable(switcher, place));
+    }
+
+    @Test
+    public void noShippedDefaultRowHoldsThePageSwitcherKey() throws Exception {
+        for (Field field : TermuxPropertyConstants.class.getDeclaredFields()) {
+            if (!field.getName().startsWith("DEFAULT_IVALUE_") || field.getType() != String.class)
+                continue;
+            field.setAccessible(true);
+            String value = (String) field.get(null);
+            assertFalse(field.getName(), value != null
+                && value.contains(LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER));
         }
     }
 
@@ -278,9 +299,9 @@ public class ExtraKeyEligibilityTest {
         }
         // window.move and its left/right pair are multiplexing, beside window.select, and so are
         // pane.consume and pane.expel.
-        assertEquals(102, declared);
+        assertEquals(103, declared);
         assertEquals(Integer.valueOf(0), counts.get(Band.TERMINAL_INPUT));
-        assertEquals(Integer.valueOf(32), counts.get(Band.LAUNCHER));
+        assertEquals(Integer.valueOf(33), counts.get(Band.LAUNCHER));
         assertEquals(Integer.valueOf(4), counts.get(Band.SESSION_OVERLAY));
         assertEquals(Integer.valueOf(46), counts.get(Band.MULTIPLEX));
         assertEquals(Integer.valueOf(20), counts.get(Band.TERMINAL_TOOL));

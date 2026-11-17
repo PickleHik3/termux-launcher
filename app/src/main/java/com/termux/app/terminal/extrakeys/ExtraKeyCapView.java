@@ -20,6 +20,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 
+import com.termux.app.wall.pageswitch.PageGlyphPainter;
+import com.termux.app.wall.pageswitch.PageGlyphSource;
+import com.termux.app.wall.pageswitch.PageSwitchModel;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.font.NerdFontSpans;
 
@@ -67,6 +70,11 @@ public final class ExtraKeyCapView extends AppCompatTextView {
     private boolean mGlowWide;
     private boolean mDead;
     private ExtraKeyModifiers.State mState = ExtraKeyModifiers.State.OFF;
+
+    /** The page switcher key's state; null until the host says, when the cap draws its label. */
+    @Nullable private PageSwitchModel.Kind mGlyphKind;
+    private int mGlyphNumber;
+    @Nullable private PageGlyphPainter mGlyphPainter;
 
     private float mGlow;
     private float mGlowX;
@@ -125,6 +133,8 @@ public final class ExtraKeyCapView extends AppCompatTextView {
      * plain string and drops the typeface spans.
      */
     public void setLabel(@Nullable CharSequence display, boolean allCaps) {
+        // The page switcher key draws a glyph, never its label's raw text.
+        if (ExtraKeysPageView.PAGE_SWITCHER_KEY.equals(mKey.getKey())) display = null;
         applyLabel(this, display, allCaps);
     }
 
@@ -144,6 +154,41 @@ public final class ExtraKeyCapView extends AppCompatTextView {
                 label.toString().toUpperCase(Locale.ROOT));
         }
         view.setText(spanned);
+    }
+
+    /** The glyph this cap draws in place of its label; null on every key but the page switcher's. */
+    @Nullable
+    PageSwitchModel.Kind pageGlyphKind() {
+        return mGlyphKind;
+    }
+
+    int pageGlyphNumber() {
+        return mGlyphNumber;
+    }
+
+    /** Takes the glyph the page switcher's source holds now; called as the cap is built or bound. */
+    public void bindPageGlyph() {
+        PageGlyphSource.Glyph glyph = PageGlyphSource.current();
+        setPageGlyph(glyph.kind, glyph.number);
+    }
+
+    /**
+     * The page switcher key's cap: it draws {@code kind}'s glyph with {@code number} in place of
+     * its label, sized and inked as a symbol in the label would be. Compared before it repaints.
+     */
+    public void setPageGlyph(@NonNull PageSwitchModel.Kind kind, int number) {
+        if (mGlyphKind == kind && mGlyphNumber == number) return;
+        if (mGlyphPainter == null) mGlyphPainter = new PageGlyphPainter(getContext());
+        mGlyphKind = kind;
+        mGlyphNumber = number;
+        invalidate();
+    }
+
+    private void drawPageGlyph(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind,
+                               @NonNull PageGlyphPainter painter) {
+        float size = getTextSize() * NerdFontSpans.DRAWABLE_SYMBOL_EM;
+        painter.draw(canvas, kind, mGlyphNumber, getScrollX() + (getWidth() - size) / 2f,
+            getScrollY() + (getHeight() - size) / 2f, size, getCurrentTextColor());
     }
 
     /** The cap's outline inside its cell, which the glow is clipped to and the rim follows. */
@@ -309,7 +354,10 @@ public final class ExtraKeyCapView extends AppCompatTextView {
             if (lit) drawGlow(canvas);
             canvas.restoreToCount(save);
         }
-        super.onDraw(canvas);
+        PageSwitchModel.Kind glyphKind = mGlyphKind;
+        PageGlyphPainter glyphPainter = mGlyphPainter;
+        if (glyphKind != null && glyphPainter != null) drawPageGlyph(canvas, glyphKind, glyphPainter);
+        else super.onDraw(canvas);
         boolean marked = !mDead && mState != ExtraKeyModifiers.State.OFF;
         if (lit || marked) {
             int save = canvas.save();

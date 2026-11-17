@@ -639,7 +639,17 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         folderDensity = density;
     }
 
-    /** The dots under the grid, or none (Settings › Home › Page indicator). */
+    /** The page glyphs under the grid: what the wall has pages for and where the user is. */
+    public void setPageGlyphs(@Nullable com.termux.app.wall.pageswitch.PageSwitchModel model) {
+        pane.setPageGlyphs(model);
+    }
+
+    /** Where a touch on the glyph row goes. */
+    public void setPageSwitchEntry(@Nullable com.termux.app.wall.pageswitch.PageGlyphRowView.Entry entry) {
+        pane.setPageSwitchEntry(entry);
+    }
+
+    /** The glyphs under the grid, or none (Settings › Home › Page indicator). */
     public void setPageIndicator(@NonNull com.termux.app.launcher.home.HomePageIndicator indicator) {
         pane.setPageIndicator(indicator);
     }
