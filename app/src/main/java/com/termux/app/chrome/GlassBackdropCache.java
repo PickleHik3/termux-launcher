@@ -191,6 +191,26 @@ public final class GlassBackdropCache {
     @ColorInt private int mFallbackWallpaper = Color.TRANSPARENT;
     private int mGeneration;
 
+    /**
+     * Asked before every read of the wallpaper: true while measuring is not allowed (a crossing).
+     * Frozen, the cache reads nothing: a band keeps the sample it holds, whatever rect it is now
+     * asked at, a band with none answers the fallback, and the uncached reads answer nothing; the
+     * next ask after the freeze lifts measures as it always did.
+     */
+    public interface Freeze {
+        boolean frozen();
+    }
+
+    @Nullable private Freeze mFreeze;
+
+    public void setFreeze(@Nullable Freeze freeze) {
+        mFreeze = freeze;
+    }
+
+    private boolean frozen() {
+        return mFreeze != null && mFreeze.frozen();
+    }
+
     /** The sampler to read pixels through; null parks the cache on its fallback. */
     public void setSampler(@Nullable Sampler sampler) {
         if (mSampler == sampler) return;
@@ -242,7 +262,7 @@ public final class GlassBackdropCache {
      */
     @ColorInt
     public int sampleUncached(@NonNull Rect rect) {
-        if (mSampler == null || rect.isEmpty()) return UNREADABLE;
+        if (mSampler == null || rect.isEmpty() || frozen()) return UNREADABLE;
         int read = mSampler.sampleWallpaper(rect);
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
     }
@@ -250,7 +270,7 @@ public final class GlassBackdropCache {
     /** {@link Sampler#sampleLightness}, remembered nowhere; null when there is nothing to read. */
     @Nullable
     public Lightness sampleLightnessUncached(@NonNull Rect rect) {
-        if (mSampler == null || rect.isEmpty()) return null;
+        if (mSampler == null || rect.isEmpty() || frozen()) return null;
         return mSampler.sampleLightness(rect);
     }
 
@@ -261,7 +281,7 @@ public final class GlassBackdropCache {
      */
     @ColorInt
     public int sampleUncached(@NonNull Rect rect, int blurRadiusDp) {
-        if (mSampler == null || rect.isEmpty()) return UNREADABLE;
+        if (mSampler == null || rect.isEmpty() || frozen()) return UNREADABLE;
         int read = mSampler.sampleWallpaper(rect, blurRadiusDp);
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
     }
@@ -405,7 +425,8 @@ public final class GlassBackdropCache {
             entry = new Entry();
             entry.wallpaper = mFallbackWallpaper;
             mEntries.put(band, entry);
-        } else if (entry.sampled && entry.rect.equals(screenRect)) {
+            if (frozen()) return entry;
+        } else if (frozen() || (entry.sampled && entry.rect.equals(screenRect))) {
             return entry;
         }
         entry.rect.set(screenRect);

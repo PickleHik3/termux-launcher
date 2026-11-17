@@ -1975,6 +1975,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mGlass.watchPowerSave(this, () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
         // The tint sampler is the glass service's store of legibility corrections (ADR 0029 section 9).
         mChrome.ink().attachLegibility(mGlass.legibility());
+        mChrome.ink().setMeasureFreeze(mCrossing::crossing);
         View panelDecor = getWindow().getDecorView();
         com.termux.app.chrome.PanelBackdrop.install(panelDecor, mPanelBackdropSource);
         com.termux.app.glass.GlassService.install(panelDecor, mGlass);

@@ -121,7 +121,27 @@ public final class LegibilityStore {
     public void noteSample() {
         if (!mCrossing) return;
         mSampledInCrossing++;
-        if (Counters.enabled) Counters.violation(GUARD_SAMPLED_IN_CROSSING, "sample");
+        // Diagnostic only, built when the motion log is on: who asked, outside the sampler itself.
+        if (Counters.enabled) Counters.violation(GUARD_SAMPLED_IN_CROSSING, callers());
+    }
+
+    /** The first six frames above the sampler, for the guard line. */
+    private static String callers() {
+        StackTraceElement[] frames = new Throwable().getStackTrace();
+        StringBuilder out = new StringBuilder();
+        int kept = 0;
+        for (StackTraceElement frame : frames) {
+            String cls = frame.getClassName();
+            if (cls.endsWith("LegibilityStore") || cls.endsWith("ChromeInk$1")
+                    || (cls.endsWith("ChromeInk") && frame.getMethodName().startsWith("sample"))) {
+                continue;
+            }
+            if (kept++ > 0) out.append('<');
+            out.append(cls.substring(cls.lastIndexOf('.') + 1)).append('.')
+                .append(frame.getMethodName()).append(':').append(frame.getLineNumber());
+            if (kept == 6) break;
+        }
+        return out.toString();
     }
 
     // ---------------------------------------------------------------------- read
