@@ -73,3 +73,5 @@ Display layout or look apart from the Terminal's loses that difference.
   the dock and the soft keyboard is to be checked on a device.
 - Minimal mode now dresses the Assistant page as it does the windows.
 - `AssistantSeed` and `AssistantLookSeed` are gone; adding the Assistant page seeds nothing.
+
+- 2026-11-16: the window bar's chips now show on the Assistant page (lines 40-41 above no longer hold); a tap on one travels the wall to the window row first, from any place but the row itself.
