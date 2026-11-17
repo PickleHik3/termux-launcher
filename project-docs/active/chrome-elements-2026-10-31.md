@@ -163,7 +163,7 @@ point of the round trip.
 - The keyboard's shown state moves from one wall-wide flag into each kind's rest. Home's rest
   carries its own (the palette raises it; a swipe to Terminal does not lower Terminal's).
 - The terminal's PTY size is settled from the Terminal kind's rest alone. The motion invariant
-  `one-resize-per-crossing` becomes **`no-resize-per-crossing`**: a `pty-resize` line between a
+  `one-resize-per-crossing` becomes **`zero-resize-per-crossing`**: a `pty-resize` line between a
   `crossing-begin` and its `land` is a violation.
 - The status bar's state is part of its kind's rest; a crossing between kinds whose bars differ
   morphs the bar along the slide (`StatusBarFoldMotion`), never at the landing.
@@ -225,7 +225,7 @@ is a later wave).
 - D1 the kind tier, over seeding page cells at creation: a kind-wide change is one write.
 - D2 keyboard Home lifted (Mist) / Display Clear (the Clear preset, frost stop 2); other elements one look per kind for now.
 - D10 per-kind shipped looks are seeded as kind cells (a Base cell would otherwise hide them).
-- D11 one rest per page kind, held across every crossing; the invariant becomes no-resize-per-crossing; the dock over the keyboard on Home is Home's dock.
+- D11 one rest per page kind, held across every crossing; the invariant becomes zero-resize-per-crossing; the dock over the keyboard on Home is Home's dock.
 - D12 (wave D, 2026-10-31 night) the activity's root stops fitting the bottom inset; the content keeps the band clear through its own margin and the dock's surface alone reaches the screen's bottom edge; one pure owner answers how the inset splits, with a parity test. No negative margins.
 - D13 the decor strip overlay survives wave D for the keyboard-up band only (the keyboard's foot, D8) and is deleted in wave S when `KeyboardView` reaches under the inset itself.
 - D14 Floating + Peek on a Home page with the keyboard up: the Peek card stands on the keyboard (floats=false, its bottom edge a seam into the keyboard's glass, the capsule gap gone there); Home's keyboard-up rest height changes by the gap, the Terminal page's rest does not.
