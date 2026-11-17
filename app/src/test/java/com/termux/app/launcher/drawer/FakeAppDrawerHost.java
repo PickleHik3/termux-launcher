@@ -71,6 +71,13 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         decorNavStripAlpha = alpha;
     }
 
+    /** Whether the built-in keyboard is up (a laid-out one that is down is not). */
+    boolean inAppKeyboardShown = true;
+
+    @Override public boolean inAppKeyboardShown() {
+        return inAppKeyboardShown;
+    }
+
     /** Whether the close puts down a keyboard the drawer's search raised. */
     boolean closeLowersKeyboard;
 

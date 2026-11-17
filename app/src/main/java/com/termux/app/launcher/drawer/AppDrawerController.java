@@ -160,6 +160,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         }
 
         /**
+         * Whether the built-in keyboard is up. It stands laid out while it is down, below the
+         * screen and clipped by the stack's one writer, so its view being laid out says nothing:
+         * a keyboard that is down has no band for the drawer to choreograph.
+         */
+        default boolean inAppKeyboardShown() {
+            return true;
+        }
+
+        /**
          * The built-in keyboard card's corner radius, in px, for the hole the Floating scrim cuts
          * around it; 0 for a square card.
          */
@@ -1548,7 +1557,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     private void captureBands(@NonNull Frame dockRect, boolean resting) {
         mExtraKeysView = mHost.findView(R.id.terminal_toolbar_view_pager);
-        mKeyboardView = mHost.findView(R.id.inapp_keyboard_container);
+        // A keyboard that is down stands laid out below the screen and is cut by the stack's one
+        // writer: it has no band to choreograph, and the drawer writes none of its properties.
+        mKeyboardView = mHost.inAppKeyboardShown()
+            ? mHost.findView(R.id.inapp_keyboard_container) : null;
         Frame extraKeys = isBandVisible(mExtraKeysView)
             ? (resting ? restingFrameOf(mExtraKeysView) : frameOf(mExtraKeysView)) : null;
         Frame keyboard = isBandVisible(mKeyboardView)

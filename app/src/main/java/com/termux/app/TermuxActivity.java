@@ -19395,6 +19395,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.restingPage();
         }
 
+        @Override public boolean inAppKeyboardShown() {
+            return isInAppKeyboardShown();
+        }
+
         @Nullable @Override public <T extends View> T findView(int viewId) {
             return findViewById(viewId);
         }
