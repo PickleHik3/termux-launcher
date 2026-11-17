@@ -30,8 +30,7 @@ public final class LauncherFolderPopupController {
     @Nullable private String folderId;
     @Nullable private Runnable onDismiss;
     @Nullable private FolderExpandMotion motion;
-    @Nullable private View preDrawRoot;
-    @Nullable private ViewTreeObserver.OnPreDrawListener preDraw;
+    @Nullable private com.termux.app.window.FirstLayout.Handle preDraw;
     private boolean hiddenForDrag;
     @Nullable private OutsideTouchGuard outsideTouchGuard;
 
@@ -68,14 +67,10 @@ public final class LauncherFolderPopupController {
         root.setAlpha(0f);
         FolderExpandMotion expand = new FolderExpandMotion(root);
         motion = expand;
-        ViewTreeObserver.OnPreDrawListener listener = () -> {
-            removePreDraw();
+        preDraw = com.termux.app.window.FirstLayout.beforeNextDraw(root, () -> {
+            preDraw = null;
             if (motion == expand && !hiddenForDrag) startOpen(expand, root, anchor);
-            return true;
-        };
-        preDrawRoot = root;
-        preDraw = listener;
-        root.getViewTreeObserver().addOnPreDrawListener(listener);
+        });
     }
 
     /** The panel's and the icon's screen rects, once, then the grow. */
@@ -97,13 +92,9 @@ public final class LauncherFolderPopupController {
     }
 
     private void removePreDraw() {
-        View root = preDrawRoot;
-        ViewTreeObserver.OnPreDrawListener listener = preDraw;
-        preDrawRoot = null;
+        com.termux.app.window.FirstLayout.Handle handle = preDraw;
         preDraw = null;
-        if (root == null || listener == null) return;
-        ViewTreeObserver observer = root.getViewTreeObserver();
-        if (observer.isAlive()) observer.removeOnPreDrawListener(listener);
+        if (handle != null) handle.cancel();
     }
 
     /**

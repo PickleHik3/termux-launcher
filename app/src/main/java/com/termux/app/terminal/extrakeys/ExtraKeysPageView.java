@@ -143,7 +143,7 @@ public final class ExtraKeysPageView extends ViewGroup {
     private final List<ExtraKeyCapView> mLeaving = new ArrayList<>();
     private boolean mMorphing;
     @Nullable private ValueAnimator mMorph;
-    @Nullable private android.view.ViewTreeObserver.OnPreDrawListener mMorphPreDraw;
+    @Nullable private com.termux.app.window.FirstLayout.Handle mMorphPreDraw;
     @Nullable private Runnable mMorphEnd;
     @Nullable private ExtraKeysSetMorph.Plan mMorphPlan;
     @Nullable private ExtraKeyCapView[] mMorphOldCaps;
@@ -339,8 +339,7 @@ public final class ExtraKeysPageView extends ViewGroup {
         publishPlaceGlyphColors();
         mMorphing = true;
         mMorphEnd = onEnd;
-        mMorphPreDraw = this::startMorph;
-        getViewTreeObserver().addOnPreDrawListener(mMorphPreDraw);
+        mMorphPreDraw = com.termux.app.window.FirstLayout.beforeNextDraw(this, this::startMorph);
         requestLayout();
     }
 
@@ -417,8 +416,7 @@ public final class ExtraKeysPageView extends ViewGroup {
 
     private void removeMorphPreDraw() {
         if (mMorphPreDraw == null) return;
-        android.view.ViewTreeObserver observer = getViewTreeObserver();
-        if (observer.isAlive()) observer.removeOnPreDrawListener(mMorphPreDraw);
+        mMorphPreDraw.cancel();
         mMorphPreDraw = null;
     }
 

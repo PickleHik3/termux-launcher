@@ -50,7 +50,6 @@ public final class HomePillKeyboardDock {
     /** The rect the pill is posed on now: left, top, right, bottom. */
     private final float[] mPose = new float[4];
     private final Runnable mFailsafe = this::onFailsafe;
-    private final ViewTreeObserver.OnPreDrawListener mPreDraw = this::onPreDraw;
 
     @Nullable private Source mSource;
     @NonNull private State mState = State.FLOATING;
@@ -58,7 +57,8 @@ public final class HomePillKeyboardDock {
     private boolean mProgressSeen;
     private boolean mPoseActive;
     private boolean mSnapArmed;
-    private boolean mPreDrawArmed;
+    /** The wait for the next frame that snaps the pill when no swipe reports; null when none. */
+    @Nullable private com.termux.app.window.FirstLayout.Handle mPreDrawWait;
 
     public HomePillKeyboardDock(@NonNull HomePillLayer layer, @NonNull HomePillView pill) {
         mLayer = layer;
@@ -95,13 +95,7 @@ public final class HomePillKeyboardDock {
         cancelSnap();
         mSnapArmed = true;
         mHandler.postDelayed(mFailsafe, FAILSAFE_MS);
-        if (!swiping) {
-            ViewTreeObserver observer = mPill.getViewTreeObserver();
-            if (observer.isAlive()) {
-                observer.addOnPreDrawListener(mPreDraw);
-                mPreDrawArmed = true;
-            }
-        }
+        if (!swiping) mPreDrawWait = com.termux.app.window.FirstLayout.beforeNextDraw(mPill, this::onPreDraw);
     }
 
     /** The keyboard swipe landed: the pill takes the pose of where the keyboard ended. */
@@ -242,15 +236,12 @@ public final class HomePillKeyboardDock {
 
     // ---- The snap for a change that brings no progress.
 
-    private boolean onPreDraw() {
-        mPreDrawArmed = false;
-        ViewTreeObserver observer = mPill.getViewTreeObserver();
-        if (observer.isAlive()) observer.removeOnPreDrawListener(mPreDraw);
+    private void onPreDraw() {
+        mPreDrawWait = null;
         if (mSnapArmed && !mProgressSeen) {
             cancelSnap();
             snapToWanted();
         }
-        return true;
     }
 
     private void onFailsafe() {
@@ -266,9 +257,8 @@ public final class HomePillKeyboardDock {
     }
 
     private void disarmPreDraw() {
-        if (!mPreDrawArmed) return;
-        mPreDrawArmed = false;
-        ViewTreeObserver observer = mPill.getViewTreeObserver();
-        if (observer.isAlive()) observer.removeOnPreDrawListener(mPreDraw);
+        com.termux.app.window.FirstLayout.Handle wait = mPreDrawWait;
+        mPreDrawWait = null;
+        if (wait != null) wait.cancel();
     }
 }

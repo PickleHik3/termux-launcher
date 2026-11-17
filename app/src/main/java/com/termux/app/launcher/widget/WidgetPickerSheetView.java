@@ -58,7 +58,6 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
     private BottomSheetBehavior<LinearLayout> behavior;
     private final BottomSheetBehavior.BottomSheetCallback behaviorCallback;
     private final ModalSheetSlide slide;
-    private final android.view.ViewTreeObserver.OnPreDrawListener slideInOnFirstDraw;
     private final android.graphics.Rect cardBounds = new android.graphics.Rect();
     private final TextView title;
     private final EditText search;
@@ -157,15 +156,6 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         };
         behavior.addBottomSheetCallback(behaviorCallback);
         slide = new ModalSheetSlide(sheet, this::onSlideFrame);
-        slideInOnFirstDraw = new android.view.ViewTreeObserver.OnPreDrawListener() {
-            @Override public boolean onPreDraw() {
-                getViewTreeObserver().removeOnPreDrawListener(this);
-                if (!open) return true;
-                slide.slideIn(null);
-                scrim.setAlpha(slide.scrimAlpha());
-                return true;
-            }
-        };
         sheetParams.setBehavior(behavior);
         addView(sheet, sheetParams);
         scrim.setAlpha(0f); setVisibility(GONE);
@@ -322,8 +312,15 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
             slide.slideIn(null);
         } else {
             scrim.setAlpha(0f);
-            getViewTreeObserver().addOnPreDrawListener(slideInOnFirstDraw);
+            com.termux.app.window.FirstLayout.beforeNextDraw(this, this::slideInOnFirstDraw);
         }
+    }
+
+    /** The sheet's first frame: it slides in unless it closed meanwhile. */
+    private void slideInOnFirstDraw() {
+        if (!open) return;
+        slide.slideIn(null);
+        scrim.setAlpha(slide.scrimAlpha());
     }
     public void close() {
         if (!open) return; open = false;

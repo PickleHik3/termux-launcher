@@ -197,24 +197,16 @@ public class WindowSourceRulesTest {
         "app/dock/DockController.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/dock/PeekGlassReflection.java:1",
-        // local first-layout wait: moves onto the first-layout helper
-        "app/fragments/settings/termux/TaiBenchHomeFragment.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/launcher/drawer/AppDrawerContentView.java:4",
         // local first-layout wait: moves onto the first-layout helper
-        "app/launcher/drawer/AppDrawerController.java:2",
+        "app/launcher/drawer/AppDrawerController.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/launcher/drawer/AppDrawerDragOverlayView.java:1",
         // local first-layout wait: moves onto the first-layout helper
-        "app/launcher/folder/LauncherFolderPopupController.java:1",
-        // local first-layout wait: moves onto the first-layout helper
-        "app/launcher/home/HomeActionsSheet.java:2",
-        // local first-layout wait: moves onto the first-layout helper
         "app/launcher/widget/WidgetPaneView.java:1",
         // local first-layout wait: moves onto the first-layout helper
-        "app/launcher/widget/WidgetPickerSheetView.java:1",
-        // local first-layout wait: moves onto the first-layout helper
-        "app/launcher/widget/builtin/BuiltinWidgetView.java:2",
+        "app/launcher/widget/builtin/BuiltinWidgetView.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/setup/SetupWizardController.java:2",
         // local first-layout wait: moves onto the first-layout helper
@@ -229,22 +221,14 @@ public class WindowSourceRulesTest {
         "app/terminal/TerminalCommandPaletteController.java:1",
         // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
         "app/terminal/TerminalPaneController.java:1",
-        // local first-layout wait: moves onto the first-layout helper
-        "app/terminal/TerminalSheetController.java:2",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/terminal/TerminalWindowBar.java:2",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/terminal/TermuxTerminalSessionActivityClient.java:1",
-        // local first-layout wait: moves onto the first-layout helper
-        "app/terminal/extrakeys/ExtraKeysPageView.java:1",
         // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
         "app/terminal/extrakeys/HomePillFlightPlayer.java:1",
-        // local first-layout wait: moves onto the first-layout helper
-        "app/terminal/extrakeys/HomePillKeyboardDock.java:1",
         // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
         "app/terminal/inappkeyboard/KeyboardGeometryChoreographer.java:2",
-        // local first-layout wait: moves onto the first-layout helper
-        "app/wall/FirstDrawGate.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/wall/PageOverviewView.java:4",
         // local first-layout wait: moves onto the first-layout helper
