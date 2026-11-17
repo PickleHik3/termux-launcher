@@ -55,6 +55,8 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
 
     // ---- what the test observes
     @NonNull final List<ChromeSpec> applied = new ArrayList<>();
+    /** Run inside every apply, after it is recorded: what the apply does to the window. */
+    @androidx.annotation.Nullable Runnable onApply;
     int invariantsEnforced;
     int terminalGlassFrostUpdates;
     int captureCount;
@@ -231,6 +233,7 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     @Override
     public void applyChromeSpec(@NonNull ChromeSpec spec) {
         applied.add(spec);
+        if (onApply != null) onApply.run();
         if (chrome != null && applyRequestsScopes != 0 && applyRequestsRemaining > 0) {
             applyRequestsRemaining--;
             chrome.requestSync(applyRequestsScopes);

@@ -431,10 +431,40 @@ public class ChromeRendererTest {
         assertEquals(1, surfaces.terminalGlassFrostUpdates);
     }
 
+    /** A renderer whose commit is a step of a frame pipeline hooked on {@code root}. */
+    private ChromeRenderer rendererOnWindow(View root) {
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        frames.attach(root);
+        return new ChromeRenderer(surfaces, null, frames);
+    }
+
+    /**
+     * A commit asked for after the frame's animation phase runs in the pipeline's pre-draw hook,
+     * and the frame draws even when the apply moved a view: the draw cancel is gone (ADR 0028).
+     */
+    @Test
+    public void aCommitAskedInsideTheTraversalRunsAtPreDrawAndTheFrameDraws() {
+        View root = new View(RuntimeEnvironment.getApplication());
+        chrome = rendererOnWindow(root);
+        drawFirstFrame(root);
+        surfaces.applied.clear();
+        root.layout(0, 0, 10, 10);
+        surfaces.onApply = root::requestLayout;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+
+        assertFalse("the draw goes ahead (the observer reports no cancel)",
+            root.getViewTreeObserver().dispatchOnPreDraw());
+        assertEquals(1, surfaces.applied.size());
+        assertFalse(chrome.isCommitPending());
+        mainLooper().idle();
+        assertEquals("the booked frame finds the commit done", 1, surfaces.applied.size());
+    }
+
     /** Dispatches the root's pre-draw until a frame is let through, as a traversal would. */
     private static void drawFirstFrame(View root) {
         for (int i = 0; i < 3; i++) {
-            if (root.getViewTreeObserver().dispatchOnPreDraw()) return;
+            if (!root.getViewTreeObserver().dispatchOnPreDraw()) return;
         }
     }
 
@@ -445,7 +475,7 @@ public class ChromeRendererTest {
     @Test
     public void topPaneFrostBeforeTheFirstFrameFoldsIntoOnePassAtItsPreDraw() {
         View root = new View(RuntimeEnvironment.getApplication());
-        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome = rendererOnWindow(root);
 
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         assertEquals("the first pass runs at once", 1, surfaces.terminalGlassFrostUpdates);
@@ -470,7 +500,7 @@ public class ChromeRendererTest {
     @Test
     public void theFirstFramesCommitRunsBeforeTheHeldFrost() {
         View root = new View(RuntimeEnvironment.getApplication());
-        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome = rendererOnWindow(root);
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_TOP_PANE_FROST);
         assertTrue(chrome.isCommitPending());
@@ -489,7 +519,7 @@ public class ChromeRendererTest {
     @Test
     public void destroyingBeforeTheFirstFrameRunsNothingHeld() {
         View root = new View(RuntimeEnvironment.getApplication());
-        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome = rendererOnWindow(root);
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
 

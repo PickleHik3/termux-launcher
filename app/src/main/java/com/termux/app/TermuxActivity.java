@@ -1681,10 +1681,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private String mInAppKeyboardSchemeBackgroundJson;
     @Nullable private Integer mInAppKeyboardSchemeBackgroundColor;
     /**
+     * The window's one frame order (ADR 0028): inputs ask it for a frame, and its one pre-draw hook
+     * runs the frame table, whose first step is the chrome's commit. Hooked on the root in onCreate.
+     */
+    private final com.termux.app.window.FramePipeline mFrames =
+        new com.termux.app.window.FramePipeline();
+
+    /**
      * The accessory chrome — glass, blur, frost and backdrops for the dock, the in-app keyboard,
      * the under-pill nav strip, the top pane, the palette and the drawer plane. The Activity keeps
      * only the view slots and the lifecycle forwarding; everything the module needs from here goes
-     * through {@link ChromeRenderer.Surfaces} below.
+     * through {@link ChromeRenderer.Surfaces} below. Its commit is a step of {@link #mFrames}.
      */
     private final ChromeRenderer mChrome = new ChromeRenderer(new ChromeRenderer.Surfaces() {
         @NonNull @Override public Context context() {
@@ -1876,7 +1883,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isBlurHealthy(@NonNull ChromeSpec spec) {
             return isAccessoryBlurHealthy(spec);
         }
-    });
+    }, ChromeRenderer.newBlurWorker(), mFrames);
 
     /** The accessory chrome module — the one way in to glass, blur, frost and backdrop work. */
     @VisibleForTesting
@@ -1947,6 +1954,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         sLiveActivity = new java.lang.ref.WeakReference<>(this);
         registerRotationListener();
         setContentView(R.layout.activity_termux);
+        mFrames.attach(findViewById(R.id.activity_termux_root_view));
+        mFrames.setLog((event, detail) -> {
+            if (com.termux.app.chrome.MotionLog.enabled) com.termux.app.chrome.MotionLog.log(event, detail);
+        });
         com.termux.app.chrome.PanelBackdrop.install(getWindow().getDecorView(), mPanelBackdropSource);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
@@ -10877,6 +10888,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // with the Activity rather than outlive it.
         com.termux.app.terminal.TerminalKeyInspector.close();
         mChrome.onDestroy();
+        mFrames.destroy();
         unregisterPreferredHomeChangeReceiver();
         cancelVoiceInput();
         if (mIsInvalidState)
@@ -12501,7 +12513,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             applySuggestionBarSurfaceStyling();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
-            mChrome.commitNow();
+            mFrames.flush("editor glass drag");
         } finally {
             Trace.endSection();
         }
