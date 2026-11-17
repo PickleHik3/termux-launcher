@@ -65,6 +65,12 @@ public final class FramePipeline {
 
     @Nullable private View mRoot;
     private boolean mAnimationBooked;
+    /**
+     * The frame's animation pass has run and its pre-draw hook not yet: a request now runs late.
+     * With the motion log on, such a request records its caller for the crossing-laid-out line.
+     */
+    private boolean mAfterPass;
+    @Nullable private String[] mLateBy;
     private boolean mPostBooked;
     private boolean mRunning;
     private boolean mDestroyed;
@@ -148,8 +154,26 @@ public final class FramePipeline {
     public void requestFrame(@NonNull FrameStep step) {
         if (mDestroyed) return;
         mDirty |= 1 << step.ordinal();
+        if (mAfterPass && Counters.enabled) recordLateCaller(step.ordinal());
         bookFrame();
     }
+
+    /** Names the first caller outside the pipeline's plumbing that asked for {@code index} late. */
+    private void recordLateCaller(int index) {
+        if (mLateBy == null) mLateBy = new String[FrameStep.TABLE.length];
+        StringBuilder who = new StringBuilder();
+        int kept = 0;
+        for (StackTraceElement e : new Throwable().getStackTrace()) {
+            String c = e.getClassName();
+            if (c.startsWith("com.termux.app.window.") || c.startsWith("com.termux.app.chrome.ChromeRenderer")) continue;
+            if (who.length() > 0) who.append(" < ");
+            who.append(c.substring(c.lastIndexOf('.') + 1)).append('.').append(e.getMethodName())
+                .append(':').append(e.getLineNumber());
+            if (++kept == 4) break;
+        }
+        mLateBy[index] = who.toString();
+    }
+
 
     /**
      * Arms {@code step} to run in the pre-draw hook of every frame that draws, or disarms it. An
@@ -262,6 +286,7 @@ public final class FramePipeline {
         boolean framed = root != null && root.isAttachedToWindow();
         // Without a window the post stands in for the whole frame, the draw steps too.
         runTable(!framed, false);
+        mAfterPass = framed;
         // A draw step waits for the pre-draw hook: make sure this frame draws.
         if (framed && (mDirty & DRAW_STEPS) != 0 && !mDestroyed) root.invalidate();
     }
@@ -270,6 +295,7 @@ public final class FramePipeline {
     private boolean onPreDraw() {
         View root = mRoot;
         if (mDestroyed || root == null) return true;
+        mAfterPass = false;
         if (mFirstFrameDrawn) {
             mDirty |= mArmed;
             // After the animation phase: what runs here draws on this frame's layout.
@@ -377,8 +403,9 @@ public final class FramePipeline {
         if (!Counters.enabled) return;
         Counters.count(LATE_KEYS[index], null);
         if (root != null && !laidOutBefore && root.isLayoutRequested()) {
+            String by = mLateBy == null ? null : mLateBy[index];
             mGuards.layoutRequested(FrameStep.TABLE[index].name(),
-                "late in pre-draw: new look drawn on the old layout");
+                "late in pre-draw: new look drawn on the old layout" + (by == null ? "" : " asked by " + by));
         }
     }
 
