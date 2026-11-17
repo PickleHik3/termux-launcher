@@ -1,7 +1,6 @@
 package com.termux.app.place;
 
 import android.content.Context;
-import android.graphics.Rect;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -61,19 +60,8 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         int wallWidthPx();
         /** The terminal's page laid out {@code px} shorter at its bottom than the wall. */
         void applyTerminalPreSize(int px);
-    }
-
-    /** The dock rows' layers, which sink into the keyboard together ({@link #sink}). */
-    private static final int[] SEAM_ROW_LAYERS = {R.id.accessory_surface_host,
-        R.id.apps_bar_az_fx_underlay, R.id.accessory_row_stack, R.id.apps_bar_az_fx_overlay,
-        R.id.apps_bar_az_label_overlay};
-    /** The layers drawn over the A-Z row alone, which a fold that holds that row leaves be. */
-    private static final int[] SEAM_AZ_LAYERS = {R.id.apps_bar_az_fx_underlay,
-        R.id.apps_bar_az_fx_overlay, R.id.apps_bar_az_label_overlay};
-
-    private static boolean isSeamAzLayer(int id) {
-        for (int az : SEAM_AZ_LAYERS) if (az == id) return true;
-        return false;
+        /** The stack's one writer of transforms: the sink, the cut and the slide go through it. */
+        @NonNull com.termux.app.StackRenderer stackRenderer();
     }
 
     /**
@@ -82,34 +70,23 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
      */
     static final long PICTURE_HANDOVER_MS = 200L;
 
-    @NonNull private final Context mContext;
     @NonNull private final Host mHost;
     /** The crossing this adapts, whose fold share and seam a fold's sink reads. */
     @Nullable private Crossing mCrossing;
-    /** The clip a sunk layer is cut at, reused by every frame. */
-    private final Rect mTmpTravelClip = new Rect();
-
-    /** How far the dock rows' layers last sank into the keyboard's top edge. */
-    private float mRowSinkPx;
-    /** How much of the rows' layers that sink cut; and the sheet's sink and cut, for a fold. */
-    private float mRowCutPx;
-    private float mSheetSinkPx;
-    private float mSheetCutPx;
-    /** How far a fold sank the A-Z row's own layers while it held that row. */
-    private float mHeldSinkPx;
-    /** Whether that sink left the A-Z row's layers standing, for a fold that holds the row. */
-    private boolean mSinkHoldsAz;
+    /** The sink a fold or a plain sink hands the renderer, reused by every frame. */
+    private final StackScene.Motion mFoldMotion = new StackScene.Motion();
     /** The row stack re-reads a running fold's sink whenever it is laid out; added once. */
     private boolean mFoldListening;
     private final View.OnLayoutChangeListener mFoldLayoutListener =
         (v, l, t, r, b, ol, ot, orr, ob) -> applyFoldSink();
+    /** The stack's slide across the wall as last handed to the renderer. */
+    private float mSlideX;
     /** The alphas the travel last wrote, 1 when it has put everything back. */
     private float mStatusAlpha = 1f;
     private float mSideAlpha = 1f;
 
     /** @param context whose display a sunk layer's clip reaches up through */
     public CrossingViews(@NonNull Context context, @NonNull Host host) {
-        mContext = context;
         mHost = host;
     }
 
@@ -222,20 +199,18 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         int padUnderRows = stack != null ? Math.max(0, stack.getPaddingBottom()) : 0;
         int flush = Math.max(0, mHost.terminalFlushPaddingPx());
         SeamCrossing seam = crossing.seam();
-        int growth = seam.foldRestGrowthPx();
-        float cut = SeamTravel.foldSinkPx(keysPx, share);
-        float rows = SeamTravel.foldRowsSinkPx(keysPx, share, padUnderRows, growth);
-        float sheet = SeamTravel.foldSheetSinkPx(keysPx, share, flush, growth);
-        float held = SeamTravel.foldHeldSinkPx(padUnderRows, share);
         // With rows held outside the extra keys, the keys row cuts itself (holdOutside) and
         // the stack is cut only where the held rows end; with none, the stack's cut is the
-        // keys'.
+        // keys' (StackScene#foldSink).
         boolean holdsAz = seam.foldHolds(Element.AZ);
         boolean holdsRows = holdsAz || seam.foldHolds(Element.APPS);
-        applyLayerSink(rows, holdsRows ? rows - held : cut, sheet, sheet - held, held,
-            holdsAz);
+        StackScene.Motion motion = mFoldMotion;
+        float cut = StackScene.foldSink(keysPx, share, padUnderRows, flush,
+            seam.foldRestGrowthPx(), holdsAz, holdsRows, motion);
+        applyLayerSink(motion);
         if (rowStack instanceof EdgeStackView) {
-            ((EdgeStackView) rowStack).holdOutside(keys, rows - held, cut);
+            ((EdgeStackView) rowStack).holdOutside(keys, motion.rowsSinkPx - motion.heldSinkPx,
+                cut);
         }
     }
 
@@ -247,7 +222,8 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
      */
     @Override
     public void sink(float sinkPx) {
-        applyLayerSink(sinkPx, sinkPx, sinkPx, sinkPx, 0f, false);
+        mFoldMotion.sink(sinkPx);
+        applyLayerSink(mFoldMotion);
         // Every sink but a fold's moves the rows together: a fold's hold, if one ran, lets go.
         View rowStack = mHost.hotView(R.id.accessory_row_stack);
         if (rowStack instanceof EdgeStackView) {
@@ -256,46 +232,13 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
     }
 
     /**
-     * The dock's layers drawn lower than they are laid out, each cut at its own laid-out
-     * bottom less a hidden part: the rows' layers by {@code rowsPx}, cut by {@code rowsCutPx};
-     * the dock's sheet by {@code sheetPx}, cut by {@code sheetCutPx}; and, for a fold that
-     * holds the A-Z row, that row's own layers by {@code heldPx}, uncut. A sink into the
-     * keyboard moves them all alike; a fold's differ (applyFoldSink).
+     * The dock's layers drawn lower than they are laid out, each cut at its own laid-out bottom
+     * less a hidden part ({@link StackScene.Motion#layerSink}): handed to the stack's renderer,
+     * the only writer of those transforms, which writes what changed.
      */
-    private void applyLayerSink(float rowsPx, float rowsCutPx, float sheetPx,
-                                float sheetCutPx, float heldPx, boolean holdsAz) {
-        if (rowsPx == mRowSinkPx && rowsCutPx == mRowCutPx
-            && sheetPx == mSheetSinkPx && sheetCutPx == mSheetCutPx
-            && heldPx == mHeldSinkPx && holdsAz == mSinkHoldsAz) return;
-        mRowSinkPx = rowsPx;
-        mRowCutPx = rowsCutPx;
-        mSheetSinkPx = sheetPx;
-        mSheetCutPx = sheetCutPx;
-        mHeldSinkPx = heldPx;
-        mSinkHoldsAz = holdsAz;
-        for (int id : SEAM_ROW_LAYERS) {
-            View layer = mHost.hotView(id);
-            if (layer == null) continue;
-            boolean sheet = id == R.id.accessory_surface_host;
-            boolean held = holdsAz && isSeamAzLayer(id);
-            float layerSink = held ? heldPx : sheet ? sheetPx : rowsPx;
-            int hidden = held ? 0 : Math.round(sheet ? sheetCutPx : rowsCutPx);
-            if (layer.getTranslationY() != layerSink) layer.setTranslationY(layerSink);
-            if (hidden <= 0) {
-                if (layer.getClipBounds() != null) layer.setClipBounds(null);
-                continue;
-            }
-            // Generous above and to the sides, as the stack's own clip is: only the bottom is
-            // cut.
-            int width = Math.max(1, layer.getWidth());
-            mTmpTravelClip.set(-width, -Math.max(layer.getHeight(),
-                mContext.getResources().getDisplayMetrics().heightPixels), 2 * width,
-                Math.max(0, layer.getHeight() - hidden));
-            layer.setClipBounds(mTmpTravelClip);
-        }
-        // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
-        View backdrop = mHost.hotView(R.id.accessory_blur_backdrop);
-        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
+    private void applyLayerSink(@NonNull StackScene.Motion motion) {
+        mHost.stackRenderer().setSink(motion.rowsSinkPx, motion.rowsCutPx, motion.sheetSinkPx,
+            motion.sheetCutPx, motion.heldSinkPx, motion.holdsAz);
     }
 
     /**
@@ -356,11 +299,11 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         int wall = mHost.wallWidthPx();
         int width = wall > 0 ? wall : stack.getWidth();
         float x = widths * width;
-        if (stack.getTranslationX() == x) return;
-        stack.setTranslationX(x);
-        // Its glass samples the wallpaper where it is drawn; a transform alone redraws nothing.
-        View backdrop = mHost.hotView(R.id.accessory_blur_backdrop);
-        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
+        if (x == mSlideX) return;
+        mSlideX = x;
+        // The renderer composes it with the plank's slide and writes the container's one
+        // translationX (the backdrop is re-aimed there).
+        mHost.stackRenderer().setSlideX(x);
     }
 
     @Override

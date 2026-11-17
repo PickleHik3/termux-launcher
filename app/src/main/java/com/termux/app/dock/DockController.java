@@ -46,6 +46,9 @@ public final class DockController {
 
     /** What only the activity gives the dock. */
     public interface Host {
+        /** The bottom stack's one writer of transforms, which the plank's slab goes to. */
+        @NonNull com.termux.app.StackRenderer stackRenderer();
+
         // -------------------------------------------------------------- window and views
 
         /** The window's view of {@code id}, looked up afresh; null while it has none. */
@@ -1095,7 +1098,9 @@ public final class DockController {
 
     /** Reactive glass-plank physics for the dock (tilt, specular, accent rim glow). */
     @Nullable private DockPlankController mDockPlankController;
-    @Nullable private View mDockPlankTarget;
+    /** The specular and glow views the plank was made with; a new tree makes a new plank. */
+    @Nullable private View mDockPlankSpecular;
+    @Nullable private View mDockPlankGlow;
     private boolean mDockPlankTouchInside = false;
     private float mDockPlankLeft = 0f;
     private float mDockPlankTop = 0f;
@@ -1136,7 +1141,7 @@ public final class DockController {
         }
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
-                View plank = mDockPlankTarget;
+                View plank = mHost.stackRenderer().plankTargetView();
                 mDockPlankTouchInside = false;
                 if (plank == null || plank.getVisibility() != View.VISIBLE
                     || plank.getWidth() <= 0 || plank.getHeight() <= 0) {
@@ -1307,27 +1312,23 @@ public final class DockController {
 
     /** Lazily wires the reactive glass-plank controller to the inflated dock views. */
     public void setupDockPlankFx() {
-        View plank = mHost.findViewById(mHost.isInAppKeyboardShown()
-            ? R.id.accessory_surface_host : R.id.accessory_stack_container);
-        if (plank == null) {
+        if (mHost.findViewById(R.id.accessory_stack_container) == null) {
             return;
         }
-        if (mDockPlankController == null || mDockPlankTarget != plank) {
+        // The plank writes no transform of the stack's: it publishes its slab to the stack's
+        // renderer, which tilts the container (keyboard down) or the glass host (keyboard up),
+        // hands the rows standing on it the same slab, and composes it with the crossing's
+        // translation. One controller for both, so its springs survive the keyboard's toggle.
+        View specular = mHost.findViewById(R.id.accessory_specular_fx);
+        View glow = mHost.findViewById(R.id.accessory_edge_glow_fx);
+        if (mDockPlankController == null || mDockPlankSpecular != specular
+            || mDockPlankGlow != glow) {
             if (mDockPlankController != null)
                 mDockPlankController.reset();
-            View specular = mHost.findViewById(R.id.accessory_specular_fx);
-            View glow = mHost.findViewById(R.id.accessory_edge_glow_fx);
-            mDockPlankController = new DockPlankController(plank, specular, glow);
-            mDockPlankTarget = plank;
+            mDockPlankController = new DockPlankController(mHost.stackRenderer(), specular, glow);
+            mDockPlankSpecular = specular;
+            mDockPlankGlow = glow;
         }
-        // Every row standing on the glass follows the same springs as the glass under it: the
-        // pinned-apps layer, the letters, and the band of air between them. The set is registered
-        // whole rather than one row at a time — a row left out is a row that reads as thrown off
-        // the surface the moment the dock is pushed.
-        mDockPlankController.setContentLayers(
-            mHost.findViewById(R.id.apps_bar_plank_layer),
-            mHost.findViewById(R.id.apps_bar_az_row),
-            mHost.findViewById(R.id.apps_bar_indicator_band));
         mDockPlankController.setReducedMotion(mHost.isReducedMotionEnabled());
     }
 

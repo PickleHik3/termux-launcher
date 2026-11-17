@@ -182,7 +182,8 @@ public class DockControllerTest {
         View plank = plankAtOrigin();
         mDock.setupDockPlankFx();
         assertNotNull(mDock.dockPlankController());
-        assertSame(plank, ReflectionHelpers.getField(mDock, "mDockPlankTarget"));
+        // The plank tilts what the stack's renderer says: the container while the keyboard is down.
+        assertSame(plank, mHost.stackRenderer().plankTargetView());
 
         mDock.feedDockPlank(touch(MotionEvent.ACTION_DOWN, 200f, 50f));
         assertTrue("a press on the plank", plankTouchInside());
@@ -554,6 +555,15 @@ public class DockControllerTest {
         @NonNull PlaceLayout layout = HOME;
         @Nullable View surfaceHost;
         final SparseArray<View> views = new SparseArray<>();
+        /** The stack's one writer, over these views. */
+        final com.termux.app.StackRenderer renderer = new com.termux.app.StackRenderer(
+            new com.termux.app.StackRenderer.Views() {
+                @Nullable @Override public View view(int id) { return views.get(id); }
+                @Override public int keyboardDesiredHeightPx() { return 0; }
+                @Override public boolean underKeyboardBandsShown() { return false; }
+                @Override public boolean keyboardShown() { return false; }
+            });
+        @NonNull @Override public com.termux.app.StackRenderer stackRenderer() { return renderer; }
         final DockRows rows = new DockRows(new DockRowViews(id -> null, band -> false));
         final SeamCrossing seam = new SeamCrossing();
         @Nullable PlaceLayoutStore store;

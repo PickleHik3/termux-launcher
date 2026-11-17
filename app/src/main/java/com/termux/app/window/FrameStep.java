@@ -13,7 +13,15 @@ public enum FrameStep {
      * before the frame's animation phase it runs there, so the frame's layout takes what it
      * writes; asked for later it runs in the pre-draw hook and the next frame lays it out.
      */
-    CHROME_COMMIT;
+    CHROME_COMMIT,
+
+    /**
+     * The bottom stack's writer: the container's translation and clip, the rows' and the glass
+     * slab's sink and cut, the keyboard's clip, the bands under it and the plank's tilt, written
+     * from the stack's scene after the chrome commit has written the stack's structure. Its owned
+     * properties are on the guards.
+     */
+    STACK;
 
     static final FrameStep[] TABLE = values();
 }
