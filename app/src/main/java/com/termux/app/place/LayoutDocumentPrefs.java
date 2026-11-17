@@ -376,11 +376,38 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         private final List<Object[]> mChanges = new ArrayList<>();
         private boolean mFlatTouched;
 
-        private Editor put(@NonNull String key, @Nullable Object value, @NonNull Runnable flat) {
+        /**
+         * Minimal mode is the Appearance editor's: while its session holds a draft over these
+         * preferences, the flag is written into the draft, so Done stores it and Discard drops it.
+         */
+        @Nullable private Editor mDraftFlat;
+        private boolean mDraftTouched;
+
+        @Nullable
+        private Editor draftFor(@NonNull String key) {
+            if (!key.equals(PlaceLayoutStore.minimalKey()))
+                return null;
+            if (mDraftFlat == null) {
+                com.termux.shared.settings.preferences.PreferenceDraft draft =
+                    com.termux.shared.settings.preferences.PreferenceDraft.current();
+                if (draft != null && draft.isOpen() && draft.store() == mPrefs)
+                    mDraftFlat = draft.edit();
+            }
+            return mDraftFlat;
+        }
+
+        private Editor put(@NonNull String key, @Nullable Object value,
+                           @NonNull java.util.function.Consumer<Editor> flat) {
             Route route = mLayouts == null ? null : route(key);
             if (route == null) {
-                flat.run();
-                mFlatTouched = true;
+                Editor draft = draftFor(key);
+                if (draft != null) {
+                    flat.accept(draft);
+                    mDraftTouched = true;
+                } else {
+                    flat.accept(mFlat);
+                    mFlatTouched = true;
+                }
             } else {
                 mChanges.add(new Object[]{route, value});
             }
@@ -388,7 +415,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         }
 
         @Override public Editor putString(String key, @Nullable String value) {
-            return put(key, value, () -> mFlat.putString(key, value));
+            return put(key, value, e -> e.putString(key, value));
         }
 
         @Override public Editor putStringSet(String key, @Nullable Set<String> values) {
@@ -398,23 +425,23 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         }
 
         @Override public Editor putInt(String key, int value) {
-            return put(key, value, () -> mFlat.putInt(key, value));
+            return put(key, value, e -> e.putInt(key, value));
         }
 
         @Override public Editor putLong(String key, long value) {
-            return put(key, value, () -> mFlat.putLong(key, value));
+            return put(key, value, e -> e.putLong(key, value));
         }
 
         @Override public Editor putFloat(String key, float value) {
-            return put(key, value, () -> mFlat.putFloat(key, value));
+            return put(key, value, e -> e.putFloat(key, value));
         }
 
         @Override public Editor putBoolean(String key, boolean value) {
-            return put(key, value, () -> mFlat.putBoolean(key, value));
+            return put(key, value, e -> e.putBoolean(key, value));
         }
 
         @Override public Editor remove(String key) {
-            return put(key, null, () -> mFlat.remove(key));
+            return put(key, null, e -> e.remove(key));
         }
 
         @Override public Editor clear() {
@@ -425,11 +452,13 @@ final class LayoutDocumentPrefs implements SharedPreferences {
 
         @Override public boolean commit() {
             writeDocuments();
+            if (mDraftTouched && mDraftFlat != null) mDraftFlat.apply();
             return !mFlatTouched || mFlat.commit();
         }
 
         @Override public void apply() {
             writeDocuments();
+            if (mDraftTouched && mDraftFlat != null) mDraftFlat.apply();
             if (mFlatTouched) mFlat.apply();
         }
 

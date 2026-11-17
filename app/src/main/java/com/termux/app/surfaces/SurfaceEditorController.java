@@ -105,7 +105,7 @@ import java.util.Locale;
  * layered over it, so the frame is the real thing and nothing is stored: Done writes the draft once,
  * Undo and Discard drop it, and a look written from outside meanwhile shows at once and survives
  * both. Dirty is the draft against the store. Beside it stay the app-wide choices Settings applies
- * as it writes them ({@link EditorSettingsSnapshot}), minimal mode, and the arrangement, whose
+ * as it writes them ({@link EditorSettingsSnapshot}), and the arrangement, whose
  * session ({@link LayoutEditorController}) opens and closes with the editor; they are put back from
  * the state at open. One dirty state, one Undo, one Done and one unsaved-changes question cover all
  * of it.</p>
@@ -378,7 +378,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private EditorSettingsSnapshot mEntrySettings;
     @Nullable private String mSettingsNow;
     /** Minimal mode at open. */
-    private boolean mEntryMinimal;
     /** The Custom values of this session, kept while a Look is showing. */
     @NonNull private final SessionCustom mSessionCustom = new SessionCustom();
     /**
@@ -963,14 +962,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         TermuxAppSharedPreferences editing = prefs();
         mEntrySettings = EditorSettingsSnapshot.capture(settingsStore());
         mSettingsNow = mEntrySettings.signature();
-        mEntryMinimal = mHost.isMinimalMode();
         mSessionCustom.clear();
         mHeldCustom.clear();
         mClearedWidgetGlass.clear();
         forgetGlassEdgePositions();
         if (carried != null) {
             mEntrySettings = carried.settings;
-            mEntryMinimal = carried.minimal;
             mSessionCustom.copyFrom(carried.custom);
             refreshSettingsSignature();
         }
@@ -2881,7 +2878,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (!mOpen || settings == null)
             return mCarriedNext;
         LayoutEditorController layout = mHost.layoutEditor();
-        return new CarriedSession(settings, mEntryMinimal, mSessionCustom.copy(),
+        return new CarriedSession(settings, mSessionCustom.copy(),
             layout == null ? null : layout.entryArrangement());
     }
 
@@ -2893,15 +2890,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** {@link #carrySession}'s content: immutable, and read only by {@link #present}. */
     static final class CarriedSession implements AppearanceSurfaceController.EditorSession {
         @NonNull final EditorSettingsSnapshot settings;
-        final boolean minimal;
         @NonNull final SessionCustom custom;
         @Nullable final List<com.termux.app.place.PlaceArrangeSnapshot> arrangement;
 
         CarriedSession(@NonNull EditorSettingsSnapshot settings,
-                       boolean minimal, @NonNull SessionCustom custom,
+                       @NonNull SessionCustom custom,
                        @Nullable List<com.termux.app.place.PlaceArrangeSnapshot> arrangement) {
             this.settings = settings;
-            this.minimal = minimal;
             this.custom = custom;
             this.arrangement = arrangement;
         }
@@ -5758,10 +5753,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean look = prefs != null && isLookDirty();
         boolean settings = mEntrySettings != null && mSettingsNow != null
             && !mEntrySettings.signature().equals(mSettingsNow);
-        boolean minimal = mHost.isMinimalMode() != mEntryMinimal;
         boolean theme = ThemePreview.pending() != null;
         LayoutEditorController layout = mHost.layoutEditor();
-        return look || settings || minimal || theme || (layout != null && layout.isDirty());
+        return look || settings || theme || (layout != null && layout.isDirty());
     }
 
     /** Undo: everything — both halves' look, the choices, the arrangement — back to the open. */
@@ -5782,8 +5776,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 mHost.applyHomeSettings();
         }
         dropThemePreview();
-        if (mHost.isMinimalMode() != mEntryMinimal)
-            mHost.setMinimalMode(mEntryMinimal);
+        // Minimal mode was part of the draft: the window follows the stored mode again.
+        mHost.setMinimalMode(mHost.isMinimalMode());
         mSessionCustom.clear();
         mHeldCustom.clear();
         if (!mClearedWidgetGlass.isEmpty()) {

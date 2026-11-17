@@ -24572,9 +24572,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * off, the normal layout comes back, keyboard included. Everything else, the panes included,
      * works as it does in the normal layout.
      */
+    /** The minimal mode the window was last dressed for; null until a change is applied. */
+    @Nullable private Boolean mMinimalApplied;
+
     void setMinimalMode(boolean minimal) {
         PlaceLayoutStore store = placeLayoutStore();
-        if (store == null || store.isMinimal() == minimal) return;
+        if (store == null) return;
+        // The mode the window shows can differ from the stored one while the Appearance editor's
+        // draft is dropped under it: Discard puts the stored value back, and the window follows.
+        Boolean applied = mMinimalApplied;
+        if (store.isMinimal() == minimal && (applied == null || applied == minimal)) return;
+        mMinimalApplied = minimal;
         com.termux.app.wall.PaneWallPage place = mLastWallPage;
         // Home ignores minimal mode (it is the windows' alone), so from Home only the flag moves:
         // Home's keyboard is its own, and the window's memory stays as it was left.
