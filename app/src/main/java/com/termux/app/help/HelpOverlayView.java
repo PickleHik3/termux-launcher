@@ -216,7 +216,6 @@ public final class HelpOverlayView extends FrameLayout {
         // lifted between 6 and 40dp, and exploration has to wash over all of them; the outline is
         // dropped so the height casts no shadow of its own.
         setElevation(com.termux.app.chrome.ShapeTokens.elevationPx(context, 5));
-        setTranslationZ(stackHeightPx(context) - getElevation());
         setOutlineProvider(null);
         setWillNotDraw(false);
         setClickable(true);
@@ -263,7 +262,7 @@ public final class HelpOverlayView extends FrameLayout {
         if (!showing) getViewTreeObserver().addOnGlobalLayoutListener(layoutListener);
         showing = true;
         setVisibility(VISIBLE);
-        bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(this);
         requestFocus();
         requestLayout();
         refresh();

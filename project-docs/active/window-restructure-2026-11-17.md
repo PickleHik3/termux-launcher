@@ -41,3 +41,15 @@ of normal use of that drop on pong with every guard and counter at zero, every p
 check passed in light and dark, the full unit suite green and no open tester regression. Step 0's
 counters ([the results](https://github.com/PickleHik3/termux-launcher/issues/249)) ran on
 `diag/motion-counters`, which stays unmerged.
+
+## Step 2, the layer hosts (#258)
+
+Built: a window root holds the launcher's shell, the editor host and the notices host; the shell's
+container holds ground, the body (pages, plus the chrome still laid out against them until steps 3,
+5 and 6), the chrome host (Home pill, page switch) and the sheets host (drawer, palette, terminal
+sheet, rename chip). The editor and notices stand beside the shell because the Appearance editor
+and the setup sheet scale the shell to a miniature (until the editor's frame is snapshot state,
+step 1's amendment). Left for later steps: the editor's tap layer and the editor's scrim and halo
+(they must sit in or behind the scaled shell), the decor nav strip (step 6), elevation that still
+orders children inside the body and pages (A-Z row, widget pane cells, pane floats, window bar),
+and the debug-only invalidation recorder in `SceneController`.

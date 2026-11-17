@@ -600,7 +600,7 @@ public final class WidgetPaneView extends FrameLayout
             addView(editOverlay, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.MATCH_PARENT));
         } else if (indexOfChild(editOverlay) != getChildCount() - 1) {
-            editOverlay.bringToFront();
+            com.termux.app.window.WindowLayers.raiseWithin(editOverlay);
         }
         return editOverlay;
     }
@@ -647,7 +647,7 @@ public final class WidgetPaneView extends FrameLayout
                 LayoutParams.MATCH_PARENT));
         }
         if (editOverlay != null && indexOfChild(editOverlay) != getChildCount() - 1) {
-            editOverlay.bringToFront();
+            com.termux.app.window.WindowLayers.raiseWithin(editOverlay);
         }
         return dragLayer;
     }

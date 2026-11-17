@@ -398,13 +398,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Help's one controller: the corner overview, the explorer, Back and practice. */
     private void ensureHelpController(@NonNull ViewGroup content) {
         if (mHelpController != null) return;
-        // Over the whole screen, not over the content alone: the dock, the A-Z row, the extra
-        // keys and the keyboard are all lifted above the content, and the strip under the
-        // gesture pill is not in the content at all. Everything help measures is measured
-        // against its own origin, so the wider frame moves nothing.
-        ViewGroup helpHost = content;
-        if (getWindow() != null && getWindow().getDecorView() instanceof FrameLayout)
-            helpHost = (FrameLayout) getWindow().getDecorView();
+        // In the notices layer, over every other layer and the window's whole frame (the strip
+        // under the gesture pill included). Everything help measures is measured against its own
+        // origin, so the frame moves nothing.
+        ViewGroup helpHost = com.termux.app.window.WindowLayers.host(this, com.termux.app.window.WindowLayer.NOTICES);
+        if (helpHost == null) helpHost = content;
         mHelpController = new com.termux.app.help.HelpController(this, helpHost,
             new com.termux.app.help.HelpTargets.ViewFinder() {
                 @Override public View findHelpView(int id) { return findViewById(id); }
@@ -1681,10 +1679,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private String mInAppKeyboardSchemeBackgroundJson;
     @Nullable private Integer mInAppKeyboardSchemeBackgroundColor;
     /**
+     * The window's one frame order (ADR 0028): inputs ask it for a frame, and its one pre-draw hook
+     * runs the frame table, whose first step is the chrome's commit. Hooked on the root in onCreate.
+     */
+    private final com.termux.app.window.FramePipeline mFrames =
+        new com.termux.app.window.FramePipeline();
+
+    /**
      * The accessory chrome — glass, blur, frost and backdrops for the dock, the in-app keyboard,
      * the under-pill nav strip, the top pane, the palette and the drawer plane. The Activity keeps
      * only the view slots and the lifecycle forwarding; everything the module needs from here goes
-     * through {@link ChromeRenderer.Surfaces} below.
+     * through {@link ChromeRenderer.Surfaces} below. Its commit is a step of {@link #mFrames}.
      */
     private final ChromeRenderer mChrome = new ChromeRenderer(new ChromeRenderer.Surfaces() {
         @NonNull @Override public Context context() {
@@ -1876,7 +1881,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isBlurHealthy(@NonNull ChromeSpec spec) {
             return isAccessoryBlurHealthy(spec);
         }
-    });
+    }, ChromeRenderer.newBlurWorker(), mFrames);
 
     /** The accessory chrome module — the one way in to glass, blur, frost and backdrop work. */
     @VisibleForTesting
@@ -1947,6 +1952,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         sLiveActivity = new java.lang.ref.WeakReference<>(this);
         registerRotationListener();
         setContentView(R.layout.activity_termux);
+        mFrames.attach(findViewById(R.id.activity_termux_root_view));
+        mFrames.setLog((event, detail) -> {
+            if (com.termux.app.chrome.MotionLog.enabled) com.termux.app.chrome.MotionLog.log(event, detail);
+        });
         com.termux.app.chrome.PanelBackdrop.install(getWindow().getDecorView(), mPanelBackdropSource);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
@@ -10513,6 +10522,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (container instanceof com.termux.app.place.BottomInsetFrameLayout) {
             ((com.termux.app.place.BottomInsetFrameLayout) container).setReachingChild(
                 findViewById(R.id.activity_termux_root_relative_layout));
+            ((com.termux.app.place.BottomInsetFrameLayout) container).setReachingLayer(
+                findViewById(R.id.window_layer_sheets));
             if (container.getPaddingBottom() != kept)
                 container.setPadding(container.getPaddingLeft(), container.getPaddingTop(),
                     container.getPaddingRight(), kept);
@@ -10877,6 +10888,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // with the Activity rather than outlive it.
         com.termux.app.terminal.TerminalKeyInspector.close();
         mChrome.onDestroy();
+        mFrames.destroy();
         unregisterPreferredHomeChangeReceiver();
         cancelVoiceInput();
         if (mIsInvalidState)
@@ -12501,7 +12513,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             applySuggestionBarSurfaceStyling();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
-            mChrome.commitNow();
+            mFrames.flush("editor glass drag");
         } finally {
             Trace.endSection();
         }
@@ -12716,7 +12728,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         updateAzOverflowAffordance();
         mAzScrubRowView.setBackgroundColor(Color.TRANSPARENT);
-        mAzScrubRowView.bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(mAzScrubRowView);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             mAzScrubRowView.setElevation(dpToPx(24));
             mAzScrubRowView.setTranslationZ(dpToPx(24));
@@ -14605,7 +14617,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             host.addView(mKeybindHintPanel,
                 com.termux.app.terminal.TerminalHintPanelView.buildHostLayoutParams());
         }
-        mKeybindHintPanel.bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(mKeybindHintPanel);
         return mKeybindHintPanel;
     }
 
@@ -17997,7 +18009,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void showWallStripTileMenu(int chipIndex, @NonNull Rect anchor) {
         com.termux.app.dock.WallStripRowView row = mWallStripRow;
-        View contentView = findViewById(android.R.id.content);
+        View contentView = com.termux.app.window.WindowLayers.host(this,
+            com.termux.app.window.WindowLayer.NOTICES);
         if (row == null || !(contentView instanceof FrameLayout) || mPaneController == null) return;
         int count = rowWindowCount();
         if (chipIndex < 0 || chipIndex >= count) return;
@@ -19728,7 +19741,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             host.addView(mModeHintCard,
                 com.termux.app.terminal.TerminalModeHintCard.buildHostLayoutParams());
         }
-        mModeHintCard.bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(mModeHintCard);
         return mModeHintCard;
     }
 
@@ -22070,7 +22083,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Nullable @Override public ViewGroup content() {
-            return findViewById(android.R.id.content);
+            return com.termux.app.window.WindowLayers.windowRoot(TermuxActivity.this);
         }
 
         @Override public void createOverview(

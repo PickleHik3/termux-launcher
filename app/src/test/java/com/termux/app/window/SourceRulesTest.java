@@ -45,6 +45,14 @@ public class SourceRulesTest {
     }
 
     @Test
+    public void raisingAChildIsCountedOutsideTheWindowPackageOnly() {
+        Map<String, String> src = sources(
+            "app/a/A.java", "parent.bringChildToFront(v);",
+            "app/window/WindowLayers.java", "parent.bringChildToFront(v);");
+        assertEquals(Collections.singletonMap("app/a/A.java", 1), SourceRules.bringToFront(src));
+    }
+
+    @Test
     public void zWritesCoverElevationAndTranslationZ() {
         Map<String, String> src = sources("app/a/A.java",
             "v.setElevation(1); v.setTranslationZ(2); v.animate().translationZ(0f); float e = getElevation();"

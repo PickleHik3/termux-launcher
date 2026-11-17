@@ -1,0 +1,90 @@
+package com.termux.app.window;
+
+import android.app.Activity;
+import android.view.View;
+import android.view.ViewGroup;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.R;
+
+import java.util.function.IntFunction;
+
+/**
+ * Where a runtime view joins the window: its layer's host, never the window decor or the content
+ * view beside the root (ADR 0028 section 6). A host that is missing is not an error: the view goes
+ * to the window root instead, and with no root to the content view, so a misplaced host costs an
+ * overlay its Z and never the screen. Nothing here gates drawing.
+ */
+public final class WindowLayers {
+
+    private WindowLayers() {}
+
+    /** The host of {@code layer}, found by id through {@code finder} (a view's or an activity's lookup). */
+    @Nullable
+    public static ViewGroup host(@NonNull IntFunction<View> finder, @NonNull WindowLayer layer) {
+        ViewGroup host = group(finder.apply(layer.hostId()));
+        if (host != null) return host;
+        host = group(finder.apply(R.id.window_layers_root));
+        if (host != null) return host;
+        return ContentFrame.of(finder);
+    }
+
+    @Nullable
+    public static ViewGroup host(@NonNull Activity activity, @NonNull WindowLayer layer) {
+        return host(activity::findViewById, layer);
+    }
+
+    /** The window root: what the content view holds, the frame every layer is measured in. */
+    @Nullable
+    public static ViewGroup windowRoot(@NonNull IntFunction<View> finder) {
+        ViewGroup root = group(finder.apply(R.id.window_layers_root));
+        return root != null ? root : ContentFrame.of(finder);
+    }
+
+    @Nullable
+    public static ViewGroup windowRoot(@NonNull Activity activity) {
+        return windowRoot(activity::findViewById);
+    }
+
+    /**
+     * The host of {@code layer} inside a window frame already in hand (the window root, or a test's
+     * stand-in for it): the frame itself when it holds no such host.
+     */
+    @NonNull
+    public static ViewGroup hostIn(@NonNull ViewGroup frame, @NonNull WindowLayer layer) {
+        ViewGroup host = group(frame.findViewById(layer.hostId()));
+        return host != null ? host : frame;
+    }
+
+    /** Adds {@code view} to {@code layer}'s host; false when there is no host to add it to. */
+    public static boolean add(@NonNull IntFunction<View> finder, @NonNull WindowLayer layer,
+                              @NonNull View view, @NonNull ViewGroup.LayoutParams params) {
+        ViewGroup host = host(finder, layer);
+        if (host == null) return false;
+        host.addView(view, params);
+        return true;
+    }
+
+    public static boolean add(@NonNull Activity activity, @NonNull WindowLayer layer,
+                              @NonNull View view, @NonNull ViewGroup.LayoutParams params) {
+        return add(activity::findViewById, layer, view, params);
+    }
+
+    /**
+     * Moves {@code view} last among its siblings: for a view that must stand over the others of its
+     * own layer (a float focused over the floats beside it). Never a way past a layer; the layer
+     * number decides that.
+     */
+    public static void raiseWithin(@Nullable View view) {
+        if (view == null || !(view.getParent() instanceof ViewGroup)) return;
+        ViewGroup parent = (ViewGroup) view.getParent();
+        if (parent.getChildAt(parent.getChildCount() - 1) != view) parent.bringChildToFront(view);
+    }
+
+    @Nullable
+    private static ViewGroup group(@Nullable View view) {
+        return view instanceof ViewGroup ? (ViewGroup) view : null;
+    }
+}

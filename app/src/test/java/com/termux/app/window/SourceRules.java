@@ -44,7 +44,12 @@ final class SourceRules {
     static final Pattern FRAME_HOOK = Pattern.compile(
         "\\b(addOnPreDrawListener|addOnDrawListener|postFrameCallback(Delayed)?"
             + "|postOnAnimation(Delayed)?)\\s*\\(");
-    static final Pattern BRING_TO_FRONT = Pattern.compile("\\bbringToFront\\s*\\(\\s*\\)");
+    /**
+     * Raising a view over its siblings: {@code bringToFront()} anywhere, and {@code bringChildToFront}
+     * outside the window package, whose {@code WindowLayers.raiseWithin} is the one raise inside a layer.
+     */
+    static final Pattern BRING_TO_FRONT = Pattern.compile(
+        "\\bbringToFront\\s*\\(\\s*\\)|\\bbringChildToFront\\s*\\(");
     static final Pattern Z_USE = Pattern.compile(
         "\\b(setElevation|setTranslationZ|setZ|translationZ|elevation)\\s*\\(");
     static final Pattern ADD_VIEW = Pattern.compile("\\b(addView|addContentView)\\s*\\(");
@@ -146,7 +151,7 @@ final class SourceRules {
     }
 
     static Map<String, Integer> bringToFront(Map<String, String> sources) {
-        return countMatches(sources, BRING_TO_FRONT, false);
+        return countMatches(sources, BRING_TO_FRONT, true);
     }
 
     /** Elevation or translationZ writes: shadow or order cannot be told apart, so every one is listed. */

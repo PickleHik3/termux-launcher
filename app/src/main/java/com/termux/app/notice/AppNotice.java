@@ -334,7 +334,7 @@ public final class AppNotice {
     }
 
     /**
-     * The window's own content root, on every screen. The terminal used to get the chip inside its
+     * The window's notices layer, on every screen. The terminal used to get the chip inside its
      * surface host instead, to hang it off the window bar — but that made it a sibling of anything
      * the terminal opens in there, and the surface editor, added later, drew straight over the
      * notice it had just raised. {@link AppNoticePlacement} lines the chip up with the chrome
@@ -342,8 +342,7 @@ public final class AppNotice {
      */
     @Nullable
     private static ViewGroup anchorFor(@NonNull Activity activity) {
-        View content = activity.findViewById(android.R.id.content);
-        return content instanceof ViewGroup ? (ViewGroup) content : null;
+        return com.termux.app.window.WindowLayers.host(activity, com.termux.app.window.WindowLayer.NOTICES);
     }
 
     @Nullable
