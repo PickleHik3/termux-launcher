@@ -378,6 +378,112 @@ public class StackSceneParityTest {
         assertEquals(StackEnd.TOPOLOGY_FLOATING, frame.topology);
     }
 
+    // ---- Rows travel with their side (ADR 0030 section 4) -----------------------------------
+
+    private static int side(@NonNull PageRef page) {
+        return com.termux.app.page.Side.of(page.isHome()).ordinal();
+    }
+
+    @Test public void rowsSlideWithTheirSideAndRestAtEachEnd() {
+        StackScene.Motion motion = new StackScene.Motion();
+        StackScene.Frame frame = new StackScene.Frame();
+        StackScene.Frame previous = new StackScene.Frame();
+        StackScene.Frame rest = new StackScene.Frame();
+        int home = com.termux.app.page.Side.HOME.ordinal();
+        int work = com.termux.app.page.Side.WORKSPACE.ordinal();
+        for (boolean floating : BOOLS) for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
+            for (boolean fromHome : BOOLS) {
+                PageRef a = fromHome ? PageRef.HOME : PageRef.TERMINAL;
+                PageRef b = fromHome ? PageRef.TERMINAL : PageRef.HOME;
+                StackEnd from = end(a, fromUp, floating);
+                StackEnd to = end(b, toUp, floating);
+                Laid laid = laid(PageRef.TERMINAL, fromUp || toUp, floating);
+                float w = laid.g.containerWidthPx;
+                String what = what(floating, fromUp) + " to up=" + toUp + " from home=" + fromHome;
+                // Each rest: its own side's rows on screen, the other side's a wall away, Home's
+                // to the left of the seam and the Workspace's to its right.
+                StackScene.rest(from, 0f, new StackScene.Motion(), rest);
+                assertEquals(what + " rest from", 0f, rest.sideTx[side(a)], 0f);
+                assertEquals(what + " rest from, other side", fromHome ? w : -w,
+                    rest.sideTx[side(b)], 0f);
+                for (int i = 0; i <= STEPS; i++) {
+                    float p = i / (float) STEPS;
+                    motion.rest();
+                    StackScene.at(from, to, p, motion, i == 0 ? from.rest : i == STEPS ? to.rest
+                        : laid.g, frame);
+                    // The two sides stand one wall apart and move together.
+                    assertEquals(what + " p=" + p, w, frame.sideTx[work] - frame.sideTx[home],
+                        0.01f);
+                    float leaving = fromHome ? -p * w : p * w;
+                    assertEquals(what + " p=" + p, leaving, frame.sideTx[side(a)], 0.01f);
+                    if (i > 0) {
+                        assertTrue(what + " continuous p=" + p,
+                            Math.abs(frame.sideTx[home] - previous.sideTx[home]) <= w / STEPS + 1f);
+                    }
+                    System.arraycopy(frame.sideTx, 0, previous.sideTx, 0, frame.sideTx.length);
+                }
+                StackScene.rest(to, 0f, new StackScene.Motion(), rest);
+                assertEquals(what + " p=1", rest.sideTx[home], frame.sideTx[home], 0f);
+                assertEquals(what + " p=1", rest.sideTx[work], frame.sideTx[work], 0f);
+            }
+        }
+    }
+
+    @Test public void withinASideNoRowMoves() {
+        StackScene.Motion motion = new StackScene.Motion();
+        StackScene.Frame frame = new StackScene.Frame();
+        StackScene.Frame rest = new StackScene.Frame();
+        PageRef home2 = PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, 2);
+        PageRef display = PageRef.of(com.termux.app.wall.PaneWallPage.DISPLAY, 7);
+        PageRef[][] pairs = {{PageRef.HOME, home2}, {PageRef.TERMINAL, display}};
+        for (PageRef[] pair : pairs) for (boolean floating : BOOLS) for (boolean up : BOOLS) {
+            StackEnd from = end(pair[0], up, floating);
+            StackEnd to = end(pair[1], up, floating);
+            StackScene.rest(from, 0f, new StackScene.Motion(), rest);
+            for (int i = 0; i <= STEPS; i++) {
+                float p = i / (float) STEPS;
+                motion.rest();
+                StackScene.at(from, to, p, motion, from.rest, frame);
+                String what = pair[0] + " to " + pair[1] + " " + what(floating, up) + " p=" + p;
+                for (int s = 0; s < com.termux.app.page.Side.COUNT; s++) {
+                    assertEquals(what + " side " + s, rest.sideTx[s], frame.sideTx[s], 0f);
+                    assertEquals(what + " side " + s, rest.sideTy[s], frame.sideTy[s], 0f);
+                }
+            }
+        }
+    }
+
+    @Test public void rowsRideTheKeyboardsTop() {
+        StackScene.Motion motion = new StackScene.Motion();
+        StackScene.Frame frame = new StackScene.Frame();
+        for (boolean floating : BOOLS) for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
+            StackEnd from = end(PageRef.HOME, fromUp, floating);
+            StackEnd to = end(PageRef.TERMINAL, toUp, floating);
+            // The keyboard pre-rolled: the stack laid out with it for the whole crossing.
+            Laid laid = laid(PageRef.TERMINAL, fromUp || toUp, floating);
+            StackGeometry g = laid.g;
+            int rowsBottom = g.layerTopPx[StackGeometry.ROWS] + g.layerHeightPx[StackGeometry.ROWS];
+            for (int i = 0; i <= STEPS; i++) {
+                float p = i / (float) STEPS;
+                float kbReveal = (fromUp ? 1f - p : 0f) + (toUp ? p : 0f);
+                StackScene.travel(false, false, kbReveal, 1f, laid.keyboardPx, laid.dockPx,
+                    laid.rowsPx, motion);
+                StackScene.at(from, to, p, motion, g, frame);
+                String what = what(floating, fromUp) + " to up=" + toUp + " p=" + p;
+                for (int s = 0; s < com.termux.app.page.Side.COUNT; s++) {
+                    float bottom = rowsBottom + frame.sideTy[s];
+                    if (g.keyboardPresent && g.keyboardInColumn) {
+                        // The rows stand on the keyboard's top as it is drawn: never over air.
+                        assertEquals(what + " side " + s, frame.regionTop[StackEnd.KEYBOARD],
+                            bottom, 0f);
+                    } else {
+                        assertEquals(what + " side " + s, rowsBottom, bottom, 0f);
+                    }
+                }
+            }
+        }
+    }
+
     // ---- Helpers ---------------------------------------------------------------------------
 
     private static void assertRowsRegionIsTheRowsCut(String what, StackGeometry g,

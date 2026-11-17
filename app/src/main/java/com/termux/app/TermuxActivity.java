@@ -1967,6 +1967,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mFrames.attach(findViewById(R.id.activity_termux_root_view));
         // The bottom stack's writer is a step of the frame table, on the pipeline's guards.
         mStackRenderer.attach(mFrames);
+        mRowsGuard.attach(mFrames.guards());
         mFrames.setLog((event, detail) -> {
             if (com.termux.app.chrome.MotionLog.enabled) com.termux.app.chrome.MotionLog.log(event, detail);
         });
@@ -9534,6 +9535,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncFrameStandDown();
             Trace.endSection();
             doApplyChromeSpec(state);
+            mRowsGuard.afterCommit();
             // The bar's ink is measured from the wallpaper under it, so it is re-asked on the same
             // pass that re-cuts the glass — a wallpaper, palette, mode or geometry change reaches
             // both through one request.
@@ -10492,6 +10494,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The bottom stack's one writer of transforms (the travel, the IME's lift, the sink, the
      * slide and the plank's slab, composed), reading the stack's views through the activity.
      */
+
+    /**
+     * The landing guard over rows: a Home and Workspace landing changes no row's visibility or
+     * parent (ADR 0030 section 4). The rows are read through the side that owns them.
+     */
+    private static final int[] GUARDED_ROW_IDS = {
+        com.termux.app.dock.SideRowViews.id(Element.APPS, com.termux.app.dock.SideRowViews.Part.ROW),
+        com.termux.app.dock.SideRowViews.id(Element.APPS,
+            com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST),
+        com.termux.app.dock.SideRowViews.id(Element.AZ, com.termux.app.dock.SideRowViews.Part.ROW),
+        com.termux.app.dock.SideRowViews.id(Element.AZ,
+            com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST),
+        com.termux.app.dock.SideRowViews.id(Element.EXTRA_KEYS,
+            com.termux.app.dock.SideRowViews.Part.ROW),
+        com.termux.app.dock.SideRowViews.id(Element.EXTRA_KEYS,
+            com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST)};
+    private final com.termux.app.dock.RowsLandingGuard mRowsGuard =
+        new com.termux.app.dock.RowsLandingGuard(new com.termux.app.dock.RowsLandingGuard.Rows() {
+            @Override public int count() {
+                return GUARDED_ROW_IDS.length;
+            }
+
+            @NonNull @Override public String name(int row) {
+                return getResources().getResourceEntryName(GUARDED_ROW_IDS[row]);
+            }
+
+            @Override public float visibility(int row) {
+                View view = findViewById(GUARDED_ROW_IDS[row]);
+                return view == null ? -1f : view.getVisibility();
+            }
+
+            @Override public float parent(int row) {
+                View view = findViewById(GUARDED_ROW_IDS[row]);
+                android.view.ViewParent parent = view == null ? null : view.getParent();
+                return parent instanceof View ? ((View) parent).getId() : -1f;
+            }
+        });
+
     private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
         @Nullable @Override public View view(int id) {
             return hotView(id);
@@ -15970,8 +16010,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             dockIndicator.setVerticalForm(false);
             // The dock's own pair follows the same rule as the portable host's: the ticks stand
             // on the row's outer side unless the row is the band next to the canvas.
-            orderAppsBarBands(findViewById(R.id.apps_bar_row_host),
-                findViewById(R.id.apps_bar_viewpager), dockIndicator,
+            orderAppsBarBands(findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST)),
+                findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.ROW)), dockIndicator,
                 !PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM,
                     isAppsRowNextToCanvas(layout)));
         }
@@ -16366,18 +16408,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private View edgeStackHost(@NonNull Element element, @NonNull PlaceLayout.Edge edge) {
         boolean bottom = edge == PlaceLayout.Edge.BOTTOM;
-        switch (element) {
-            case STATUS:
-                return findViewById(R.id.terminal_window_bar_host);
-            case AZ:
-                return findViewById(bottom ? R.id.apps_bar_az_host : R.id.place_az_bar_host);
-            case EXTRA_KEYS:
-                return findViewById(
-                    bottom ? R.id.terminal_toolbar_host : R.id.place_extra_keys_host);
-            case APPS:
-            default:
-                return findViewById(bottom ? R.id.apps_bar_row_host : R.id.place_apps_bar_host);
-        }
+        if (element == Element.STATUS) return findViewById(R.id.terminal_window_bar_host);
+        // A row's host, through the side that owns it.
+        return findViewById(com.termux.app.dock.SideRowViews.id(element, bottom
+            ? com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST
+            : com.termux.app.dock.SideRowViews.Part.EDGE_HOST));
     }
 
     /**
@@ -24601,6 +24636,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             storeMoved = crossingLanding.storeMoved();
             // The stack's next frame is the landing's: it should write nothing new.
             mStackRenderer.onLanding();
+            // And the next chrome commit is its landing's: within a side it may move rows to the
+            // arriving page's edges; between Home and the Workspace it writes none.
+            mRowsGuard.onLanding(
+                com.termux.app.page.Side.of(left == com.termux.app.wall.PaneWallPage.WIDGETS),
+                com.termux.app.page.Side.of(page == com.termux.app.wall.PaneWallPage.WIDGETS),
+                true);
             // A keyboard a pictured dip put away comes back where the wall came back.
             landKeyboardPicturedAway(page, left);
             Trace.endSection();

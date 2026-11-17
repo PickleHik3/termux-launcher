@@ -114,12 +114,7 @@ public final class DockRowViews implements DockRows.Views {
     }
 
     private static int rowId(@NonNull Element row) {
-        switch (row) {
-            case APPS: return R.id.apps_bar_viewpager;
-            case AZ: return R.id.apps_bar_az_row;
-            case EXTRA_KEYS: return R.id.terminal_toolbar_view_pager;
-            default: return 0;
-        }
+        return SideRowViews.id(row, SideRowViews.Part.ROW);
     }
 
     private void show(int viewId, boolean shown) {

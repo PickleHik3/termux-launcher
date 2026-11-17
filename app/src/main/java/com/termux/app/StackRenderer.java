@@ -55,7 +55,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         R.id.apps_bar_az_label_overlay};
     /** The rows that stand on the plank and are handed its slab when they are not inside it. */
     private static final int[] PLANK_CONTENT_IDS = {R.id.apps_bar_plank_layer,
-        R.id.apps_bar_az_row, R.id.apps_bar_indicator_band};
+        com.termux.app.dock.SideRowViews.id(com.termux.app.place.Element.AZ,
+            com.termux.app.dock.SideRowViews.Part.ROW),
+        R.id.apps_bar_indicator_band};
 
     /** Where the plank's slab goes. */
     static final int PLANK_NONE = 0;

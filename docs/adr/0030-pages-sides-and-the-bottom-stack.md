@@ -117,6 +117,20 @@ Pages move behind the contract in this order: Assistant (the smallest, proves th
 Display, then Terminal on a proven contract. Each kind starts with a split plan the developer checks.
 The Workspace side's rows do not wait on Terminal.
 
+## Amendment, 2026-11-17 (decided with the developer while building [#260](https://github.com/PickleHik3/termux-launcher/issues/260))
+
+1. **A row both ends show in the same place is the stack's.** When both ends of a crossing show
+   a row on the same edge (pong pins the apps row under the keyboard on the Terminal as well as on
+   Home), it belongs to the stack like the slab and the keyboard and stays put. A row only one end
+   shows goes with that end's side. The stack's writer decides per crossing from both ends'
+   layouts (`SideRows`).
+2. **Per-page row layouts stay, within a side.** Between pages of one side whose layouts differ,
+   the landing may move rows to their new edges as before, and the landing guard counts nothing
+   for that case. A Home and Workspace landing still writes nothing to a row.
+
+The status bar standing among the bottom rows keeps its behaviour until the top stack
+([#267](https://github.com/PickleHik3/termux-launcher/issues/267)) takes it.
+
 ## Considered options
 
 - **A hidden second row host promoted at the landing.** Rejected, as in 0023: a second copy dressed

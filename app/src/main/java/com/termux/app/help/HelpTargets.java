@@ -128,7 +128,11 @@ public final class HelpTargets {
             }
             // A dock that is a rail down one side reads off its own measured rect: whoever draws
             // help asks which edge of the wall it is past, so nothing here has to say.
-            add(s, "dock", firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host));
+            add(s, "dock", firstShown(
+                com.termux.app.dock.SideRowViews.id(com.termux.app.place.Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.ROW),
+                com.termux.app.dock.SideRowViews.id(com.termux.app.place.Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.EDGE_HOST)));
             add(s, "az", firstOfType(root, AzScrubRowView.class));
             paneCorner(s);
             // The row as one box, for the topic that is about the row; every cap is measured
