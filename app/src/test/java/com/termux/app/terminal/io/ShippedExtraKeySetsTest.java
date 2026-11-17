@@ -23,7 +23,6 @@ public class ShippedExtraKeySetsTest {
 
     private static final String[] SHIPPED = {
         TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
-        TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_DISPLAY,
         TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT,
     };
 

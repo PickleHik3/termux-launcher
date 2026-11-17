@@ -10,8 +10,7 @@ import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import java.util.Objects;
 
 /**
- * Which key set the bar shows: the target the keys go to, then that target's own set, its shipped
- * set or Global's. Pure; the stored lines come in through {@link Lines}.
+ * Which key set the bar shows: the target the keys go to, then that target's own set, else Global's. Pure; the stored lines come in through {@link Lines}.
  */
 public final class ExtraKeySetResolver {
 
@@ -22,7 +21,7 @@ public final class ExtraKeySetResolver {
         @Nullable String get(@NonNull String key);
     }
 
-    public enum Source { OWN, SHIPPED, GLOBAL }
+    public enum Source { OWN, GLOBAL }
 
     /** The answer: immutable. */
     public static final class Resolved {
@@ -90,10 +89,6 @@ public final class ExtraKeySetResolver {
             if (page1 != null) {
                 return new Resolved(target, Source.OWN, page1,
                     TermuxSharedProperties.getTargetExtraKeysPageFromValue(lines.get(target.page2Key())), scale);
-            }
-            String shipped = target.shippedPage1();
-            if (shipped != null) {
-                return new Resolved(target, Source.SHIPPED, shipped, null, scale);
             }
         }
         return new Resolved(target, Source.GLOBAL,

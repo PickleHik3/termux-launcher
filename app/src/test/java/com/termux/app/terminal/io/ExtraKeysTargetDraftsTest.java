@@ -38,14 +38,14 @@ public class ExtraKeysTargetDraftsTest {
     // ---- load
 
     @Test
-    public void loadReadsOwnShippedAndGlobalPerTarget() {
+    public void loadReadsOwnAndGlobalPerTarget() {
         ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines(
             TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL, "[[ESC]]"));
         assertTrue(d.isOwn(ExtraKeysTarget.GLOBAL));
         assertEquals(Source.OWN, d.sourceOf(ExtraKeysTarget.TERMINAL));
         assertEquals(Source.GLOBAL, d.sourceOf(ExtraKeysTarget.HOME));
-        assertEquals(Source.SHIPPED, d.sourceOf(ExtraKeysTarget.DISPLAY));
-        assertEquals(Source.SHIPPED, d.sourceOf(ExtraKeysTarget.ASSISTANT));
+        assertEquals(Source.GLOBAL, d.sourceOf(ExtraKeysTarget.DISPLAY));
+        assertEquals(Source.GLOBAL, d.sourceOf(ExtraKeysTarget.ASSISTANT));
         assertNull(d.draftOf(ExtraKeysTarget.HOME));
         assertEquals(1, d.draftOf(ExtraKeysTarget.TERMINAL).page(0).rowCount());
     }
@@ -77,12 +77,11 @@ public class ExtraKeysTargetDraftsTest {
     }
 
     @Test
-    public void giveOwnSetStartsFromTheBuiltInKeysWhenThereAreSome() {
+    public void giveOwnSetStartsFromGlobalsKeysForDisplayToo() {
         ExtraKeysTargetDrafts d = ExtraKeysTargetDrafts.load(lines());
         d.giveOwnSet(ExtraKeysTarget.DISPLAY);
-        assertEquals(ExtraKeysLayoutModel.parse(ExtraKeysTarget.DISPLAY.shippedPage1()).serialize(),
-            d.draftOf(ExtraKeysTarget.DISPLAY).valueFor(0));
-        assertEquals("[]", d.draftOf(ExtraKeysTarget.DISPLAY).valueFor(1));
+        assertEquals(d.draftOf(ExtraKeysTarget.GLOBAL).valueFor(0), d.draftOf(ExtraKeysTarget.DISPLAY).valueFor(0));
+        assertEquals(d.draftOf(ExtraKeysTarget.GLOBAL).valueFor(1), d.draftOf(ExtraKeysTarget.DISPLAY).valueFor(1));
     }
 
     @Test
@@ -94,7 +93,7 @@ public class ExtraKeysTargetDraftsTest {
         d.useDefault(ExtraKeysTarget.DISPLAY);
         assertFalse(d.isOwn(ExtraKeysTarget.DISPLAY));
         assertNull(d.draftOf(ExtraKeysTarget.DISPLAY));
-        assertEquals(Source.SHIPPED, d.sourceOf(ExtraKeysTarget.DISPLAY));
+        assertEquals(Source.GLOBAL, d.sourceOf(ExtraKeysTarget.DISPLAY));
         assertEquals(before, d.fingerprint());
     }
 

@@ -440,14 +440,8 @@ public final class TermuxPropertyConstants {
     public static final String DEFAULT_IVALUE_EXTRA_KEYS2 = "[]";
 
     /**
-     * Shipped key set for the Display page: the keyboard and mouse keys as Global has them, then the
-     * modifiers a remote desktop needs. Used while {@link #KEY_EXTRA_KEYS_DISPLAY} is not set.
-     */
-    public static final String DEFAULT_IVALUE_EXTRA_KEYS_DISPLAY = "[[{key: KEYBOARD, display: '󰥻', popup: {key: 'tool:keyboard.cycle_form', display: ''}}, {key: 'tool:mouse.toggle', display: '󰍽'}, ESC, TAB, CTRL, ALT]]";
-
-    /**
-     * Shipped key set for the Assistant page: the keyboard key as Global has it, dictate and paste.
-     * Used while {@link #KEY_EXTRA_KEYS_ASSISTANT} is not set.
+     * The Assistant page's own row: the keyboard key as Global has it, dictate and paste. Written to
+     * {@link #KEY_EXTRA_KEYS_ASSISTANT} once, by the upgrade that made every page follow Global.
      */
     public static final String DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT = "[[{key: KEYBOARD, display: '󰥻', popup: {key: 'tool:keyboard.cycle_form', display: ''}}, {key: 'tool:voice.dictate', display: '󰍬'}, {key: 'tool:clipboard.paste', display: '󰆒'}]]";
 

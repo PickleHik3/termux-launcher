@@ -191,6 +191,25 @@ public class ExtraKeysEditorFragmentTest {
         assertNull(findVisible(h, s(R.string.settings_extra_keys_home_show)));
     }
 
+    @Test
+    public void eachChipSaysWhereItsKeysComeFrom() throws Exception {
+        ExtraKeysEditorHarness h = new ExtraKeysEditorHarness(ExtraKeysTarget.TERMINAL);
+        assertNotNull(findText(h.page(), "Global"));
+        assertNotNull(findText(h.page(), "Display \u00b7 Follows Global"));
+        assertNotNull(findText(h.page(), "Assistant \u00b7 Follows Global"));
+        assertNotNull(findText(h.page(), "Terminal \u00b7 Follows Global"));
+        assertNotNull(findText(h.page(), "Home \u00b7 Off"));
+
+        h.click(findText(h.page(), "Give Terminal its own keys"));
+        assertNotNull(findText(h.page(), "Terminal \u00b7 Own row"));
+        assertNull(findText(h.page(), "Terminal \u00b7 Follows Global"));
+        assertNotNull(findText(h.page(), "Display \u00b7 Follows Global"));
+        assertNotNull(findVisible(h, "Follow Global"));
+
+        h.click(findText(h.page(), "Follow Global"));
+        assertNotNull(findText(h.page(), "Terminal \u00b7 Follows Global"));
+    }
+
     private static View findVisible(ExtraKeysEditorHarness h, String text) {
         View v = findText(h.page(), text);
         for (View p = v; p != null; p = p.getParent() instanceof View ? (View) p.getParent() : null) {

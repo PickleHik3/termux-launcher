@@ -47,29 +47,22 @@ public class DefaultExtraKeysTest {
     }
 
     @Test
-    public void displayAndAssistantDefaultsParseAndShareGlobalsKeyboardAndMouseKeys() throws Exception {
+    public void assistantDefaultParsesAndSharesGlobalsKeyboardAndMouseKeys() throws Exception {
         ExtraKeyButton[] global = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
-            TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES)
-            .getMatrix()[0];
-        ExtraKeyButton[] display = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_DISPLAY,
             TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES)
             .getMatrix()[0];
         ExtraKeyButton[] assistant = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT,
             TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES)
             .getMatrix()[0];
-        String[] displayKeys = {"KEYBOARD", "tool:mouse.toggle", "ESC", "TAB", "CTRL", "ALT"};
-        assertEquals(displayKeys.length, display.length);
-        for (int i = 0; i < displayKeys.length; i++) assertEquals(displayKeys[i], display[i].getKey());
         String[] assistantKeys = {"KEYBOARD", "tool:voice.dictate", "tool:clipboard.paste"};
         assertEquals(assistantKeys.length, assistant.length);
         for (int i = 0; i < assistantKeys.length; i++) assertEquals(assistantKeys[i], assistant[i].getKey());
         // Same definitions, so the caps are the same keys when the bar changes set.
-        for (ExtraKeyButton[] row : new ExtraKeyButton[][]{display, assistant}) {
+        for (ExtraKeyButton[] row : new ExtraKeyButton[][]{assistant}) {
             assertEquals(global[0].getDisplay(), row[0].getDisplay());
             assertEquals(global[0].getPopup().getKey(), row[0].getPopup().getKey());
             assertEquals(global[0].getPopup().getDisplay(), row[0].getPopup().getDisplay());
         }
-        assertEquals(global[1].getDisplay(), display[1].getDisplay());
     }
 
     @Test
