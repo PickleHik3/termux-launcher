@@ -105,6 +105,8 @@ public final class LivePicture implements GlassPicture {
     private boolean mShownPages;
     /** The record node holds the local layer only, not the one picture. */
     boolean mRecordHoldsLocal;
+    /** The local layer holds the window's ground and the wallpaper ({@link LiveBackdrop}). */
+    boolean mLocalHoldsGround;
     /** The views the local layer was recorded from, and where the surface stood then. */
     @NonNull final ArrayList<View> mRecordedLocal = new ArrayList<>();
     @NonNull final Matrix mLocalMatrix = new Matrix();

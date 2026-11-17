@@ -45,24 +45,21 @@ import java.util.ArrayList;
  * ground is the wallpaper and ground strip views inside the root). Without it a recording is only
  * as opaque as the views in it, and the live screen shows through the glass.</p>
  *
- * <p><b>When.</b> Surfaces are re-recorded in a pre-draw of a frame that is already being drawn,
- * and only when what is beneath them moved: the views drawn beneath (a sibling shown, hidden or
- * raised) or where the surface stands among them. Anything that merely redraws beneath (a page
- * sliding inside its parent, a terminal printing) reaches the picture through the node it
- * references, without a new recording. Recording never invalidates a view or schedules a frame:
- * at rest nothing draws, so nothing records and nothing blurs.</p>
+ * <p><b>Layers, always.</b> A surface other than a panel draws its backdrop layers
+ * ({@link BackdropLayers}) at rest and while the wall moves alike (ADR 0029 section 3): the ground
+ * (the stored pre-blurred frame, or the scene's), the local layer (everything else beneath, drawn
+ * from the views' own display lists and blurred) and, while the wall moves, a frozen picture of the
+ * pages ({@link PageLayerCapture}) moved by their travel. At rest the pages are in the local layer;
+ * a landing re-records the local layer around them, the same composition, so a landing has nothing
+ * to swap. A panel keeps its one picture until panels join the glass service.</p>
  *
- * <p><b>The page layer.</b> While the wall of pages moves, and at rest under a live scene, a
- * surface whose beneath holds the wall ({@link #setWall}) is drawn in two layers
- * ({@link BackdropLayers}): the record node draws the ground and the chrome as always, and
- * in the wall's place a quarter-scale page layer. Under a scene that layer is the pages as they are
- * on a layer of their own, so a scene frame no longer re-blurs them. During a swipe it is one
- * picture of the pages, rendered offscreen as the swipe starts ({@link PageLayerCapture}) and only
- * moved by the pages' travel each frame, so the swipe re-blurs the ground, the chrome and a
- * picture, not the pages. Everything that does not move with the pages (the wallpaper's parallax,
- * the scene, the bars, the dock, the keyboard, the frame line) stays in the record node and is
- * drawn where it stands. Until the picture lands, and whenever the pages stop moving together, the
- * surface keeps its one-layer recording.</p>
+ * <p><b>When.</b> Layers are recorded again in a pre-draw of a frame that is already being drawn
+ * (the glass commit, the frame table's last step), and only when their own trigger fires: the local
+ * layer's views changed or the surface moved against one that stands still; the pages' travel turned
+ * them; the scene published a frame. Anything that merely redraws beneath (a terminal printing)
+ * reaches the picture through the node it references, without a new recording. Recording never
+ * invalidates a view or schedules a frame: at rest nothing draws, so nothing records and nothing
+ * blurs.</p>
  *
  * <p><b>Memory.</b> At most {@link #MAX_LIVE_SURFACES} pictures, each one blur layer and at most one
  * page layer, together at most {@link #MAX_LAYER_BYTES}: {@link #BUDGET_BYTES} in all. Pictures
@@ -171,8 +168,6 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     @NonNull private final Rect mSlot = new Rect();
     @NonNull private final RectF mSlotBounds = new RectF();
     @NonNull private int[] mSaves = new int[8];
-    /** The page layer was recorded or changed this frame: the record node is recorded around it. */
-    private boolean mPageChanged;
 
     public LiveBackdrop(@NonNull ViewGroup root) {
         mRoot = root;
@@ -222,6 +217,8 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     @NonNull private final Matrix mPagesAim = new Matrix();
     /** The views of the local layer: beneath, neither the ground nor the pages. */
     @NonNull private final ArrayList<View> mLocal = new ArrayList<>();
+    /** The local layer holds the window's ground and the wallpaper: their frame is not at hand. */
+    private boolean mLocalGround;
 
     private float parallaxPx() {
         return mGroundSource == null ? 0f : mGroundSource.parallaxOffsetPx();
@@ -461,61 +458,62 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 continue;
             }
             if (!collectPlanned(picture.mMotionPlan, surface, moving)) continue;
-            // The dim the recording carries is taken back out after the blur; a dim moved is a
-            // new effect on the same recording, never a re-record.
-            picture.setRecordedDim(dimBeneath());
             int margin = picture.marginPx();
             int reach = picture.reachTopPx();
+            if (picture.panelRadius()) {
+                // A panel keeps its one picture until panels join the glass service.
+                picture.setRecordedDim(dimBeneath());
+                recordOne(picture, surface, margin, reach);
+                continue;
+            }
             BackdropLayers.Mode mode = pageLayerMode(picture, surface, margin, reach);
             int plan = layersPlan(picture, surface, margin, reach, mode);
-            if ((plan & BackdropLayers.LAYERS) != 0
-                && drawLayers(picture, surface, margin, reach, plan)) {
-                continue;
-            }
-            if (picture.layered() || picture.mRecordHoldsLocal) {
-                // Back to the one picture: recorded again below, in this same frame.
-                Trace.beginSection("Glass.layers.toOne");
-                picture.showOne();
-                picture.mRecordHoldsLocal = false;
-                picture.mRecordedBeneath.clear();
-                Trace.endSection();
-            }
-            // A frozen pages layer is blurred already: it is drawn only beside the ground, so the
-            // one picture records the pages as they are.
-            boolean split = mode == BackdropLayers.Mode.REFERENCE;
-            if (picture.mRecordedMode == mode
-                && picture.mRecordedReach == reach
-                && picture.mRecordedWidth == surface.getWidth()
-                && picture.mRecordedHeight == surface.getHeight()
-                && picture.mRecordedMargin == margin
-                && picture.mRecordedMatrix.equals(mMatrix)
-                && sameViews(picture.mRecordedBeneath, mBeneath)
-                && picture.mRecordedSceneGen == sceneGeneration()
-                && (!split || (!mPageChanged && sameViews(picture.mRecordedExpand, mExpand)
-                    && picture.mRecordedWallMatrix.equals(mWallMatrix)))) {
-                continue;
-            }
-            int width = surface.getWidth() + 2 * margin;
-            int height = surface.getHeight() + 2 * margin + reach;
-            RenderNode node = picture.recordNode(width, height);
-            if (!(split ? recordSplit(node, width, height, margin, reach, picture)
-                : record(node, width, height, margin, reach))) continue;
-            picture.mRecordedMode = mode;
-            picture.mRecordedBeneath.clear();
-            picture.mRecordedBeneath.addAll(mBeneath);
-            picture.mRecordedExpand.clear();
-            if (split) picture.mRecordedExpand.addAll(mExpand);
-            picture.mRecordedWallMatrix.set(mWallMatrix);
-            picture.mRecordedMatrix.set(mMatrix);
-            picture.mRecordedWidth = surface.getWidth();
-            picture.mRecordedHeight = surface.getHeight();
-            picture.mRecordedMargin = margin;
-            picture.mRecordedReach = reach;
-            picture.mRecordedSceneGen = sceneGeneration();
-            picture.mRecordedParallax = parallaxPx();
-            // The first whole recording: its holder swaps the stored frame for it in this frame.
-            picture.recorded();
+            if (plan != 0 && drawLayers(picture, surface, margin, reach, plan)) continue;
+            // A transform that cannot be undone: the one picture, recorded live, this frame.
+            Trace.beginSection("Glass.layers.degenerate");
+            Trace.endSection();
+            picture.setRecordedDim(dimBeneath());
+            picture.showOne();
+            picture.mRecordHoldsLocal = false;
+            recordOne(picture, surface, margin, reach);
         }
+    }
+
+    /**
+     * Records {@code picture} as one picture of everything beneath, blurred: a panel's, and a
+     * surface whose layers cannot be drawn this frame. Recorded again only when what is beneath
+     * moved.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private void recordOne(@NonNull LivePicture picture, @NonNull View surface, int margin,
+                           int reach) {
+        if (picture.mRecordedMode == BackdropLayers.Mode.LIVE
+            && !picture.mRecordHoldsLocal
+            && picture.mRecordedReach == reach
+            && picture.mRecordedWidth == surface.getWidth()
+            && picture.mRecordedHeight == surface.getHeight()
+            && picture.mRecordedMargin == margin
+            && picture.mRecordedMatrix.equals(mMatrix)
+            && sameViews(picture.mRecordedBeneath, mBeneath)
+            && picture.mRecordedSceneGen == sceneGeneration()) {
+            return;
+        }
+        int width = surface.getWidth() + 2 * margin;
+        int height = surface.getHeight() + 2 * margin + reach;
+        RenderNode node = picture.recordNode(width, height);
+        if (!record(node, width, height, margin, reach)) return;
+        picture.mRecordedMode = BackdropLayers.Mode.LIVE;
+        picture.mRecordedBeneath.clear();
+        picture.mRecordedBeneath.addAll(mBeneath);
+        picture.mRecordedMatrix.set(mMatrix);
+        picture.mRecordedWidth = surface.getWidth();
+        picture.mRecordedHeight = surface.getHeight();
+        picture.mRecordedMargin = margin;
+        picture.mRecordedReach = reach;
+        picture.mRecordedSceneGen = sceneGeneration();
+        picture.mRecordedParallax = parallaxPx();
+        // The first whole recording: its holder swaps the stored frame for it in this frame.
+        picture.recorded();
     }
 
     // ---- The motion plan -------------------------------------------------------------------
@@ -977,24 +975,21 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
     // ---- The page layer --------------------------------------------------------------------
 
     /**
-     * How {@code picture} is drawn this frame ({@link BackdropLayers}), its page layer
-     * recorded, captured, collected or re-aimed to match. Runs after {@link #collect}. LIVE at
-     * rest without a scene before anything is walked, and LIVE for a frame whose page layer is not
-     * ready (a capture still rendering): the surface keeps its one-layer recording until it is.
+     * Where {@code picture}'s pages are this frame ({@link BackdropLayers.Mode}), its frozen page
+     * layer captured, collected or re-aimed to match. Runs after {@link #collect}. LIVE at rest
+     * before anything is walked, and LIVE for a frame whose frozen layer is not ready (a capture
+     * still rendering): the pages are then in the local layer, drawn as they are.
      */
     @NonNull
     private BackdropLayers.Mode pageLayerMode(@NonNull LivePicture picture,
                                                     @NonNull View surface, int margin, int reach) {
-        mPageChanged = false;
         mExpand.clear();
         mWallMatrix.reset();
         BackdropLayers.Mode want = BackdropLayers.Mode.LIVE;
         ViewGroup wall = mWall;
         boolean moving = wall != null && ((Wall) wall).isMovingForBackdrop();
-        boolean scene = LiveSceneFrame.current() != null;
-        if (wall != null && (moving || scene)) {
-            want = BackdropLayers.mode(splittable(wall, surface, margin, reach, moving), moving,
-                scene);
+        if (moving) {
+            want = BackdropLayers.mode(splittable(wall, surface, margin, reach, true), true);
         }
         if (want != BackdropLayers.Mode.FROZEN) picture.mSwipeCaptures = 0;
         if (want == BackdropLayers.Mode.LIVE) {
@@ -1218,8 +1213,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
 
     /**
      * Records, captures, collects or re-aims {@code picture}'s page layer for {@code want}. Whether
-     * it can be drawn this frame. Sets {@link #mPageChanged} when the record node has to be
-     * recorded around a new one.
+     * it can be drawn this frame.
      */
     private boolean preparePageLayer(@NonNull LivePicture picture,
                                      @NonNull BackdropLayers.Mode want) {
@@ -1237,7 +1231,6 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             if (want == BackdropLayers.Mode.FROZEN && !BackdropLayers.needsRecord(want,
                     want, samePages, shift, covered)) {
                 if (!picture.collectCapture()) return false;
-                mPageChanged = true;
                 picture.aimPage(aim);
                 picture.alphaPages(mPoses, mPoseCount);
                 return true;
@@ -1266,19 +1259,6 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             System.arraycopy(mPoses, 0, picture.mRecordedPoses, 0, floats);
             picture.mRecordedPoseCount = mPoseCount;
             picture.mPageReach.set(mReach);
-            if (want == BackdropLayers.Mode.REFERENCE) {
-                RenderNode page = picture.pageNode(mPageRect, true);
-                RecordingCanvas canvas = page.beginRecording(LivePicture.quarter(mPageRect.width()),
-                    LivePicture.quarter(mPageRect.height()));
-                try {
-                    drawPages(canvas, mPageRect, false);
-                } finally {
-                    page.endRecording();
-                }
-                picture.mPageMode = want;
-                mPageChanged = true;
-                return true;
-            }
             if (!recordSlots(picture)) {
                 picture.dropPageLayer();
                 return false;
@@ -1410,146 +1390,29 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
         }
     }
 
-    /** {@link #record} with the page layer in the wall's place. */
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private boolean recordSplit(@NonNull RenderNode out, int width, int height, int marginPx,
-                                int reachTopPx, @NonNull LivePicture picture) {
-        RenderNode page = picture.pageLayer();
-        if (page == null || !mMatrix.invert(mInverse)) return false;
-        RecordingCanvas canvas = out.beginRecording(width, height);
-        try {
-            canvas.translate(marginPx, marginPx + reachTopPx);
-            canvas.concat(mInverse);
-            drawGround(canvas);
-            int next = 0;
-            for (int i = mPath.size() - 1; i >= 1; i--) {
-                ViewGroup parent = (ViewGroup) mPath.get(i);
-                View child = mPath.get(i - 1);
-                int save = canvas.save();
-                canvas.translate(-parent.getScrollX(), -parent.getScrollY());
-                if (i == mWallPathIndex) {
-                    // The page layer stands for this level and every one below it.
-                    drawPageSlot(canvas, page, picture.mPageRect);
-                    canvas.restoreToCount(save);
-                    break;
-                }
-                canvas.enableZ();
-                for (View below = mBeneath.get(next++); below != null; below = mBeneath.get(next++)) {
-                    if (!mChain.isEmpty() && below == mChain.get(0)) {
-                        canvas.disableZ();
-                        drawAroundWall(canvas, page, picture.mPageRect);
-                        canvas.enableZ();
-                    } else {
-                        drawBeneath((Container) parent, canvas, below);
-                    }
-                }
-                canvas.disableZ();
-                canvas.restoreToCount(save);
-                canvas.translate(child.getLeft() - parent.getScrollX(),
-                    child.getTop() - parent.getScrollY());
-                Matrix own = child.getMatrix();
-                if (!own.isIdentity()) canvas.concat(own);
-            }
-        } finally {
-            out.endRecording();
-        }
-        return true;
-    }
-
-    /**
-     * The view beneath the surface that holds the wall ({@link #mChain}), opened down to the wall:
-     * each container as its parent would place, clip and paint it, its children drawn one by one
-     * around the next, and the page layer where the wall's pages are. A container's own drawing
-     * other than its background is not drawn; none of the ones around the wall has any.
-     */
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private void drawAroundWall(@NonNull RecordingCanvas canvas, @NonNull RenderNode page,
-                                @NonNull Rect rect) {
-        int last = mChain.size() - 1;
-        if (mSaves.length <= last) mSaves = new int[last + 1];
-        int next = 0;
-        for (int d = 0; d <= last; d++) {
-            ViewGroup view = (ViewGroup) mChain.get(d);
-            mSaves[d] = canvas.save();
-            canvas.translate(view.getLeft(), view.getTop());
-            Matrix own = view.getMatrix();
-            if (!own.isIdentity()) canvas.concat(own);
-            if (view.getClipChildren()) canvas.clipRect(0, 0, view.getWidth(), view.getHeight());
-            Drawable background = view.getBackground();
-            if (background != null) background.draw(canvas);
-            canvas.translate(-view.getScrollX(), -view.getScrollY());
-            if (view.getClipToPadding() && (view.getPaddingLeft() != 0 || view.getPaddingTop() != 0
-                    || view.getPaddingRight() != 0 || view.getPaddingBottom() != 0)) {
-                canvas.clipRect(view.getScrollX() + view.getPaddingLeft(),
-                    view.getScrollY() + view.getPaddingTop(),
-                    view.getScrollX() + view.getWidth() - view.getPaddingRight(),
-                    view.getScrollY() + view.getHeight() - view.getPaddingBottom());
-            }
-            if (d == last) {
-                drawPageSlot(canvas, page, rect);
-                break;
-            }
-            canvas.enableZ();
-            for (View child = mExpand.get(next++); child != null; child = mExpand.get(next++)) {
-                ((Container) view).drawChildForBackdrop(canvas, child);
-            }
-            canvas.disableZ();
-            // Skip this level's children after the next container; drawn on the way back up.
-            while (mExpand.get(next++) != null) { }
-        }
-        for (int d = last - 1; d >= 0; d--) {
-            canvas.restoreToCount(mSaves[d + 1]);
-            int at = afterStart(d);
-            canvas.enableZ();
-            for (View child = mExpand.get(at++); child != null; child = mExpand.get(at++)) {
-                ((Container) mChain.get(d)).drawChildForBackdrop(canvas, child);
-            }
-            canvas.disableZ();
-        }
-        canvas.restoreToCount(mSaves[0]);
-    }
-
-    /** Where the children after the next container start, for {@link #mChain}'s level {@code d}. */
-    private int afterStart(int d) {
-        int nulls = 2 * d + 1;
-        int at = 0;
-        while (nulls > 0) {
-            if (mExpand.get(at++) == null) nulls--;
-        }
-        return at;
-    }
-
-    /** The page layer over {@code rect}, in the wall's children's coordinates, drawn back at full scale. */
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private static void drawPageSlot(@NonNull RecordingCanvas canvas, @NonNull RenderNode page,
-                                     @NonNull Rect rect) {
-        int save = canvas.save();
-        canvas.translate(rect.left, rect.top);
-        canvas.scale(LivePicture.SCALE, LivePicture.SCALE);
-        canvas.drawRenderNode(page);
-        canvas.restoreToCount(save);
-    }
-
     // ---- Backdrop layers -------------------------------------------------------------------
 
     /**
      * {@link BackdropLayers#plan} for {@code picture} this frame, from what {@link #collect} and
-     * {@link #pageLayerMode} found. Fills the layers' scratch: {@link #mLocal}, the ground's frame
-     * ({@link #mGroundBitmap}, {@link #mFrameRect}) or the scene's region, {@link #mInverse} and
-     * the wall's matrix. 0 at rest, for a panel and below Android 12: the one picture.
+     * {@link #pageLayerMode} found. Fills the layers' scratch: {@link #mLocal} and whether it holds
+     * the ground ({@link #mLocalGround}), the ground's frame ({@link #mGroundBitmap},
+     * {@link #mFrameRect}) or the scene's region, {@link #mInverse} and the wall's matrix. The same
+     * at rest and while the wall moves; 0 only when the surface's transform cannot be undone.
      */
+    @RequiresApi(Build.VERSION_CODES.S)
     private int layersPlan(@NonNull LivePicture picture, @NonNull View surface, int margin,
                            int reach, @NonNull BackdropLayers.Mode mode) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || picture.panelRadius()) return 0;
-        ViewGroup wall = mWall;
-        if (wall == null || !wall.isAttachedToWindow() || !((Wall) wall).isMovingForBackdrop()) {
-            return 0;
-        }
         Trace.beginSection("Glass.layers.plan");
         try {
-            if (!wallMatrix(wall) || !mMatrix.invert(mInverse)) return 0;
-            int wallAt = mPath.indexOf(wall);
-            if (wallAt == 0) return 0;
+            if (!mMatrix.invert(mInverse)) return 0;
+            ViewGroup wall = mWall;
+            if (wall != null && (!wall.isAttachedToWindow() || !wallMatrix(wall))) wall = null;
+            int wallAt = wall == null ? -1 : mPath.indexOf(wall);
+            if (wallAt == 0) {
+                // The surface is the wall itself: nothing of it is beneath.
+                wall = null;
+                wallAt = -1;
+            }
             BackdropLayers.Place place = wallAt > 0 ? BackdropLayers.Place.PAGE
                 : picture.mRank == RANK_FLOAT ? BackdropLayers.Place.FLOAT
                 : BackdropLayers.Place.CHROME;
@@ -1557,16 +1420,42 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
             mNeededRoot.set(-margin, -margin - reach, surface.getWidth() + margin,
                 surface.getHeight() + margin);
             mMatrix.mapRect(mNeededRoot);
-            mNeededWall.set(mNeededRoot);
-            mWallInverse.mapRect(mNeededWall);
-            View holder = onPage ? null : wallHolder(wall);
+            if (wall != null) {
+                mNeededWall.set(mNeededRoot);
+                mWallInverse.mapRect(mNeededWall);
+            }
+            View holder = onPage || wall == null ? null : wallHolder(wall);
             mRoot.getLocationInWindow(mRootLocation);
-            boolean pagesBeneath = false;
+            // A ground strip whose seams travel under a surface that stays lies under the pages:
+            // drawn in the local layer, above a frozen pages layer, it would cover them.
+            boolean seams = false;
+            if (!onPage) {
+                for (int i = 0; i < mBeneath.size() && !seams; i++) {
+                    View below = mBeneath.get(i);
+                    seams = below instanceof WallGround && ((WallGround) below).groundsDiffer();
+                }
+            }
+            boolean frozenReady = picture.holdsFrozen() && picture.hasPageLayer();
+            boolean pagesHeld = holder != null && BackdropLayers.holdsPages(place, mode,
+                BackdropLayers.Move.SHIFT, frozenReady, seams);
+            LiveSceneFrame.Frame scene = LiveSceneFrame.current();
+            boolean groundReady;
+            if (scene != null) {
+                groundReady = !scene.bitmap.isRecycled() && sceneRegion(onPage, picture, surface,
+                    margin, reach, pagesHeld);
+                mGroundBitmap = null;
+            } else {
+                android.graphics.Bitmap frame = mGroundSource == null ? null
+                    : mGroundSource.storedFrame(picture.radiusPx(), mFrameRect);
+                groundReady = frame != null && !frame.isRecycled() && !mFrameRect.isEmpty();
+                mGroundBitmap = groundReady ? frame : null;
+            }
             boolean fixed = false;
             mLocal.clear();
             int next = 0;
             for (int i = mPath.size() - 1; i >= 1; i--) {
-                BackdropLayers.Tier tier = i > wallAt ? BackdropLayers.Tier.BENEATH_WALL
+                BackdropLayers.Tier tier = wallAt < 0 || i > wallAt
+                    ? BackdropLayers.Tier.BENEATH_WALL
                     : i == wallAt ? BackdropLayers.Tier.PAGE : BackdropLayers.Tier.ON_PAGE;
                 for (View below = mBeneath.get(next++); below != null; below = mBeneath.get(next++)) {
                     boolean ground = below instanceof WallpaperBackdropView
@@ -1577,76 +1466,48 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                     boolean band = beneathWall && !ground && !rides && bandOf(next - 1, below);
                     boolean overlaps = onPage && tier == BackdropLayers.Tier.PAGE && !ground
                         && overlapsNeeded(below);
-                    boolean seams = rides && ((WallGround) below).groundsDiffer();
-                    switch (BackdropLayers.holder(place, tier, ground, below == holder, rides,
-                            seams, band, overlaps)) {
-                        case PAGES:
-                            pagesBeneath = true;
+                    switch (BackdropLayers.holder(place, tier, ground, groundReady,
+                            below == holder, pagesHeld, rides, band, overlaps)) {
+                        case FIXED:
+                            fixed = true;
+                            mLocal.add(below);
                             break;
                         case LOCAL:
                             mLocal.add(below);
-                            break;
-                        case FIXED:
-                            fixed = true;
                             break;
                         default:
                             break;
                     }
                 }
             }
-            LiveSceneFrame.Frame scene = LiveSceneFrame.current();
-            boolean groundReady;
-            if (scene != null) {
-                groundReady = !scene.bitmap.isRecycled() && sceneRegion(onPage, picture, surface,
-                    margin, reach, pagesBeneath);
-                mGroundBitmap = null;
-            } else {
-                android.graphics.Bitmap frame = mGroundSource == null ? null
-                    : mGroundSource.storedFrame(picture.radiusPx(), mFrameRect);
-                groundReady = frame != null && !frame.isRecycled() && !mFrameRect.isEmpty();
-                mGroundBitmap = groundReady ? frame : null;
-            }
-            boolean frozen = mode == BackdropLayers.Mode.FROZEN;
-            boolean displaced = !mMatrix.equals(picture.mRecordedMatrix)
-                || parallaxPx() != picture.mRecordedParallax
-                || (frozen && Math.abs(picture.mPageAimPx) > BackdropLayers.SHIFT_EPSILON_PX);
-            BackdropLayers.Move pagesMove;
-            boolean pagesReady;
-            if (onPage) {
-                // A lower page under a surface on a page: whether it rides along is not tracked.
-                pagesMove = BackdropLayers.Move.TURN;
-                pagesReady = false;
-            } else if (frozen) {
-                // pageLayerMode answers FROZEN only for a pages layer that moved by one shift.
-                pagesMove = BackdropLayers.Move.SHIFT;
-                pagesReady = picture.holdsFrozen() && picture.hasPageLayer();
-            } else {
-                pagesMove = picture.capturing() ? BackdropLayers.Move.SHIFT : BackdropLayers.Move.TURN;
-                pagesReady = false;
-            }
+            // Without the ground's frame the window's own ground is drawn in the local layer too;
+            // it stands still where a surface on a page moves.
+            mLocalGround = !groundReady;
+            if (mLocalGround && onPage) fixed = true;
+            // The wall's dim is taken back out of a local layer that holds the wallpaper; one
+            // that does not holds no dim.
+            picture.setRecordedDim(mLocalGround ? dimBeneath() : 0);
+            boolean displaced = !mMatrix.equals(picture.mLocalMatrix);
             boolean localChanged = !picture.mRecordHoldsLocal
+                || picture.mLocalHoldsGround != mLocalGround
                 || !sameViews(picture.mRecordedLocal, mLocal)
                 || picture.mRecordedWidth != surface.getWidth()
                 || picture.mRecordedHeight != surface.getHeight()
                 || picture.mRecordedMargin != margin || picture.mRecordedReach != reach
-                || (!onPage && !mLocal.isEmpty() && !mMatrix.equals(picture.mLocalMatrix));
-            int plan = BackdropLayers.plan(place, true, displaced, groundReady, scene != null,
-                scene != null && scene.generation != picture.groundGeneration(), pagesBeneath,
-                pagesMove, pagesReady, localChanged, fixed);
-            if (displaced && (plan & BackdropLayers.LAYERS) == 0) {
-                // The one picture, recorded live: a trace shows how often a swipe falls back.
-                Trace.beginSection("Glass.layers.fallback");
-                Trace.endSection();
-            }
-            return plan;
+                || (!onPage && !mLocal.isEmpty() && displaced);
+            return BackdropLayers.plan(groundReady, scene != null,
+                scene != null && scene.generation != picture.groundGeneration(), pagesHeld,
+                localChanged, fixed, displaced);
         } finally {
             Trace.endSection();
         }
     }
 
     /**
-     * Draws {@code picture}'s backdrop layers for {@code plan}: records the stale ones, aims the
-     * ground and the pages, and has the holders draw the composite. Whether they do.
+     * Draws {@code picture}'s backdrop layers for {@code plan}: records the local layer when it
+     * is stale, aims the ground and the pages, and has the holders draw the composite. Without
+     * the ground's frame the local layer holds the wallpaper too and the holders draw it alone.
+     * Whether they draw.
      */
     @RequiresApi(Build.VERSION_CODES.S)
     private boolean drawLayers(@NonNull LivePicture picture, @NonNull View surface, int margin,
@@ -1663,6 +1524,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                     try {
                         canvas.translate(margin, margin + reach);
                         canvas.concat(mInverse);
+                        if (mLocalGround) drawGround(canvas);
                         drawLocal(canvas);
                     } finally {
                         node.endRecording();
@@ -1671,6 +1533,7 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                     Trace.endSection();
                 }
                 picture.mRecordHoldsLocal = true;
+                picture.mLocalHoldsGround = mLocalGround;
                 picture.mRecordedLocal.clear();
                 picture.mRecordedLocal.addAll(mLocal);
                 picture.mLocalMatrix.set(mMatrix);
@@ -1678,6 +1541,11 @@ public final class LiveBackdrop implements ViewTreeObserver.OnPreDrawListener {
                 picture.mRecordedHeight = surface.getHeight();
                 picture.mRecordedMargin = margin;
                 picture.mRecordedReach = reach;
+            }
+            if ((plan & BackdropLayers.GROUND) == 0) {
+                picture.showOne();
+                picture.recorded();
+                return true;
             }
             mRoot.getLocationOnScreen(mLocation);
             LiveSceneFrame.Frame scene = LiveSceneFrame.current();
