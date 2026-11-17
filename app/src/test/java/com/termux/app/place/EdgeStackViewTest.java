@@ -301,4 +301,90 @@ public class EdgeStackViewTest {
             assertEquals(edge + " right", 0, stack.getPaddingRight());
         }
     }
+
+    // ---- side lanes: both sides' rows in one band ----
+
+    private View row(int heightPx) {
+        View row = new View(mActivity);
+        row.setMinimumHeight(heightPx);
+        return row;
+    }
+
+    private void layOut(EdgeStackView stack) {
+        stack.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        stack.layout(0, 0, stack.getMeasuredWidth(), stack.getMeasuredHeight());
+    }
+
+    @Test public void aStackWithNoLaneLaysOutAsAColumnOfItsRows() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View apps = row(100);
+        View keys = row(98);
+        stack.setStack(Arrays.asList(keys, apps));
+        layOut(stack);
+        assertEquals(198, stack.getMeasuredHeight());
+        assertEquals(0, apps.getTop());
+        assertEquals(100, keys.getTop());
+    }
+
+    @Test public void theBandIsTheTallerSidesAndTheFrontsRowsStandOnItsFloor() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View apps = row(100);
+        View keys = row(98);
+        stack.setStack(Arrays.asList(keys, apps));
+        stack.setLane(keys, StackLanes.WORKSPACE);
+        // Home in front: the shared apps row stands on the band's floor under the keys' room.
+        stack.setFrontLane(StackLanes.HOME);
+        layOut(stack);
+        assertEquals("the union of both sides' rests", 198, stack.getMeasuredHeight());
+        assertEquals(98, apps.getTop());
+        assertEquals(198, apps.getBottom());
+        assertEquals("the Workspace's lane stands over the apps row", 100, keys.getTop());
+        // The Workspace in front: the apps row stands on the extra keys, as before lanes.
+        stack.setFrontLane(StackLanes.WORKSPACE);
+        layOut(stack);
+        assertEquals(198, stack.getMeasuredHeight());
+        assertEquals(0, apps.getTop());
+        assertEquals(100, keys.getTop());
+    }
+
+    @Test public void bothLanesShareOneBand() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View homeRow = row(60);
+        View keys = row(98);
+        View shared = row(50);
+        stack.setStack(Arrays.asList(shared, keys, homeRow));
+        stack.setLane(homeRow, StackLanes.HOME);
+        stack.setLane(keys, StackLanes.WORKSPACE);
+        layOut(stack);
+        assertEquals("shared rows plus the taller lane", 148, stack.getMeasuredHeight());
+        assertEquals("the shared row on the floor", 98, shared.getTop());
+        assertEquals("the Workspace's row stacked on it", 0, keys.getTop());
+        assertEquals("Home's row stacked on the same floor, in the same band", 38,
+            homeRow.getTop());
+        assertEquals(98, homeRow.getBottom());
+    }
+
+    @Test public void aRowGoneFromTheLaneLeavesTheColumn() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View apps = row(100);
+        View keys = row(98);
+        stack.setStack(Arrays.asList(keys, apps));
+        stack.setLane(keys, StackLanes.WORKSPACE);
+        keys.setVisibility(View.GONE);
+        layOut(stack);
+        assertEquals(100, stack.getMeasuredHeight());
+        assertEquals(0, apps.getTop());
+    }
+
+    @Test public void aLaneChangesOnlyWhenItIsSet() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View keys = row(98);
+        stack.setStack(Arrays.asList(keys));
+        assertEquals(StackLanes.STACK, stack.getLane(keys));
+        assertTrue(stack.setLane(keys, StackLanes.WORKSPACE));
+        assertFalse(stack.setLane(keys, StackLanes.WORKSPACE));
+        assertTrue(stack.setLane(keys, StackLanes.STACK));
+        assertEquals(StackLanes.STACK, stack.getLane(keys));
+    }
 }

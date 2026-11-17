@@ -338,6 +338,18 @@ public final class StackLayout {
     }
 
     /**
+     * {@code page}'s dock rows at rest with its own extra-keys row, nothing squeezed, 0 while its
+     * dock is away: the band the side stands over the keyboard. The taller of the two sides' is the
+     * band the stack lays out once (D1-A, {@link StackLanes#slackPx}).
+     */
+    public static int restRowsPx(@NonNull RestInput in) {
+        return in.toolbarShown
+            ? DockGeometry.compute(in.dock.restOf(in.page))
+                .combinedHeight(in.toolbarHeightPx, in.extraKeysRowEnabled)
+            : 0;
+    }
+
+    /**
      * The room {@code page}'s chrome leaves the content at rest, built from the stack's parts the
      * way {@link #layout} builds them: its own dock rows in its own Style, its own status band,
      * the terminal's padding, the keyboard when it is up and the margin under all of that. Home's

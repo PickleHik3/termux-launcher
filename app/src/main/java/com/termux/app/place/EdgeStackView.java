@@ -16,6 +16,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.place.PlaceLayout.Edge;
 
+import java.util.IdentityHashMap;
 import java.util.List;
 
 /**
@@ -65,6 +66,19 @@ public class EdgeStackView extends LinearLayout {
     /** The first gap, counted from the first child, whose hairline goes back with them. */
     private int mFoldGapFrom = Integer.MAX_VALUE;
     @NonNull private final android.graphics.Rect mFoldClip = new android.graphics.Rect();
+
+    /**
+     * The rows that stand in one side's lane ({@link StackLanes#HOME} or {@link StackLanes#WORKSPACE});
+     * a row not here is the shared stack's. Set by the activity's edge walk, read by the layout.
+     */
+    @NonNull private final IdentityHashMap<View, Integer> mLanes = new IdentityHashMap<>(4);
+    /** The side standing in front: the shared rows stand as that side's rest has them. */
+    private int mFrontLane = StackLanes.WORKSPACE;
+    /** Whether the last measure laid the rows out by lane (a visible row of a lane stands here). */
+    private boolean mLaned;
+    @NonNull private int[] mLaneHeight = new int[4];
+    @NonNull private int[] mLaneOf = new int[4];
+    @NonNull private int[] mLaneTop = new int[4];
 
     public EdgeStackView(@NonNull Context context) {
         this(context, null);
@@ -122,6 +136,110 @@ public class EdgeStackView extends LinearLayout {
             moved = true;
         }
         return moved;
+    }
+
+    /**
+     * Puts {@code bar} in {@code lane}'s side lane, or back in the shared stack
+     * ({@link StackLanes#STACK}). Lanes lay out along the bottom edge only.
+     *
+     * @return whether the lane changed
+     */
+    public boolean setLane(@NonNull View bar, int lane) {
+        int was = getLane(bar);
+        if (was == lane) return false;
+        if (lane == StackLanes.STACK) mLanes.remove(bar);
+        else mLanes.put(bar, lane);
+        requestLayout();
+        return true;
+    }
+
+    /** {@code bar}'s lane: {@link StackLanes#STACK} for a row that is not in a side's lane. */
+    public int getLane(@NonNull View bar) {
+        Integer lane = mLanes.get(bar);
+        return lane == null ? StackLanes.STACK : lane;
+    }
+
+    /**
+     * The side standing in front ({@link StackLanes#HOME} or {@link StackLanes#WORKSPACE}): the
+     * shared rows stand on the rows that side shows. Changes only when the front page does.
+     */
+    public void setFrontLane(int lane) {
+        if (lane == mFrontLane) return;
+        mFrontLane = lane;
+        if (!mLanes.isEmpty()) requestLayout();
+    }
+
+    public int getFrontLane() {
+        return mFrontLane;
+    }
+
+    /** Whether a visible row of a side's lane stands in this stack, so it lays out by lane. */
+    private boolean lanesStand() {
+        if (mEdge != Edge.BOTTOM || mLanes.isEmpty()) return false;
+        for (int index = 0; index < getChildCount(); index++) {
+            View child = getChildAt(index);
+            if (child.getVisibility() != GONE && mLanes.containsKey(child)) return true;
+        }
+        return false;
+    }
+
+    /** Whether {@code child} is in the lane the front side stands: the shared rows and its own. */
+    private boolean inFront(@NonNull View child) {
+        if (!mLaned) return true;
+        int lane = getLane(child);
+        return lane == StackLanes.STACK || lane == mFrontLane;
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        mLaned = lanesStand();
+        if (!mLaned) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            return;
+        }
+        int count = getChildCount();
+        if (mLaneHeight.length < count) {
+            mLaneHeight = new int[count];
+            mLaneOf = new int[count];
+            mLaneTop = new int[count];
+        }
+        int widest = 0;
+        for (int index = 0; index < count; index++) {
+            View child = getChildAt(index);
+            mLaneOf[index] = getLane(child);
+            if (child.getVisibility() == GONE) {
+                mLaneHeight[index] = 0;
+                continue;
+            }
+            measureChildWithMargins(child, widthMeasureSpec, 0,
+                MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED), 0);
+            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) child.getLayoutParams();
+            mLaneHeight[index] = child.getMeasuredHeight() + params.topMargin + params.bottomMargin;
+            widest = Math.max(widest, child.getMeasuredWidth() + params.leftMargin
+                + params.rightMargin);
+        }
+        int band = StackLanes.layoutBand(mLaneHeight, mLaneOf, count, mFrontLane, mLaneTop);
+        setMeasuredDimension(
+            resolveSizeAndState(Math.max(widest + getPaddingLeft() + getPaddingRight(),
+                getSuggestedMinimumWidth()), widthMeasureSpec, 0),
+            resolveSizeAndState(Math.max(band + getPaddingTop() + getPaddingBottom(),
+                getSuggestedMinimumHeight()), heightMeasureSpec, 0));
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        if (!mLaned) {
+            super.onLayout(changed, left, top, right, bottom);
+            return;
+        }
+        for (int index = 0; index < getChildCount(); index++) {
+            View child = getChildAt(index);
+            if (child.getVisibility() == GONE) continue;
+            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) child.getLayoutParams();
+            int x = getPaddingLeft() + params.leftMargin;
+            int y = getPaddingTop() + mLaneTop[index] + params.topMargin;
+            child.layout(x, y, x + child.getMeasuredWidth(), y + child.getMeasuredHeight());
+        }
     }
 
     /**
@@ -306,7 +424,7 @@ public class EdgeStackView extends LinearLayout {
         mFoldGapFrom = Integer.MAX_VALUE;
         for (int index = 0; index < getChildCount() && drawn < wanted; index++) {
             View child = getChildAt(index);
-            if (child.getVisibility() == GONE) continue;
+            if (child.getVisibility() == GONE || !inFront(child)) continue;
             if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
             if (previous != null) {
                 if (foldIndex >= 0 && index > foldIndex && mFoldGapFrom == Integer.MAX_VALUE)

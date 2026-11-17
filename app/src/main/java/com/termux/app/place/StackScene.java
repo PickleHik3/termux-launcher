@@ -138,12 +138,32 @@ public final class StackScene {
      * container is the keyboard's, which a content that stands above the container would lose).
      */
     public static int containerHeightPx(int stackHeightPx, int keyboardDownLaidOutPx) {
-        return Math.max(0, stackHeightPx) + Math.max(0, keyboardDownLaidOutPx);
+        return containerHeightPx(stackHeightPx, keyboardDownLaidOutPx, 0);
+    }
+
+    /**
+     * {@link #containerHeightPx(int, int)} with the band laid out at the union of both sides'
+     * rests: {@code slackPx} taller than the front side's ({@link StackLanes#slackPx}). The slab
+     * starts that far below the container's top, so at rest the stack shows the front rest.
+     */
+    public static int containerHeightPx(int stackHeightPx, int keyboardDownLaidOutPx,
+                                        int slackPx) {
+        return Math.max(0, stackHeightPx) + Math.max(0, keyboardDownLaidOutPx)
+            + Math.max(0, slackPx);
     }
 
     /** The reach the content keeps past the container's top; see {@link #containerHeightPx}. */
     public static int contentOverlapPx(int overlapPx, int keyboardDownLaidOutPx) {
-        return Math.max(0, overlapPx) + Math.max(0, keyboardDownLaidOutPx);
+        return contentOverlapPx(overlapPx, keyboardDownLaidOutPx, 0);
+    }
+
+    /**
+     * {@link #contentOverlapPx(int, int)} with the band's slack: the content reaches past the
+     * taller container's top by it as well, so the room is the front rest's, today's. D1-A step 3
+     * removes this.
+     */
+    public static int contentOverlapPx(int overlapPx, int keyboardDownLaidOutPx, int slackPx) {
+        return Math.max(0, overlapPx) + Math.max(0, keyboardDownLaidOutPx) + Math.max(0, slackPx);
     }
 
     /**
@@ -297,7 +317,11 @@ public final class StackScene {
     /**
      * Each side's rows (ADR 0030 section 4): across with their side, and down to the keyboard's
      * top as the frame draws it, so no row hangs over a sinking keyboard. Rows carry no glass;
-     * the slab under them is the shared stack's. Not written to views yet (see #260's report).
+     * the slab under them is the shared stack's. Home's lane and the Workspace's slide with their
+     * pages ({@link #sideSlide}), so the front side's lane stands at 0 and the other's a wall's
+     * width off its page's side, and the frame at progress 0 and 1 is each end's rest.
+     * {@code StackRenderer} writes {@code sideTx} to the lanes' rows; {@code sideTy} is not
+     * written yet.
      */
     private static void sides(@Nullable StackEnd from, @Nullable StackEnd to, float p,
                               @NonNull StackGeometry g, @NonNull Frame out) {
