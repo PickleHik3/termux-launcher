@@ -80,6 +80,12 @@ public final class Crossing {
          * the arriving page ({@link SeamCrossing.Answers#stackSlide}); 0 puts it back.
          */
         default void slide(float widths) {}
+
+        /**
+         * The crossing's two ends by side and the wall's progress between them (0 the side it
+         * began on, 1 the side it arrives on): each side's lane of rows slides with its page.
+         */
+        default void sides(boolean fromHome, boolean toHome, float progress) {}
     }
 
     /** The status bar, riding with the Workspace's page. */
@@ -278,6 +284,11 @@ public final class Crossing {
         SeamCrossing.Answers answers = mSeam.frame(frame, wallFrame, dressable, bandEaseRuns,
             fieldUnderPalette);
         SeamCrossing.Endpoint here = mHere;
+        SeamCrossing.Endpoint there = mThere;
+        if (here != null && there != null) {
+            mStack.sides(here.page.isHome(), there.page.isHome(),
+                SeamTravel.otherEndFraction(wallFrame, here.page));
+        }
         if (mCommitted != null && here != null && mMorph.active()) {
             // Read by end, so a frame of Home's pager morphs between two Home pages' rests.
             mMorph.at(mSeam.pictured() ? 1f : SeamTravel.otherEndProgress(frame, here.page));

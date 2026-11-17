@@ -9,8 +9,14 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.page.Side;
+import com.termux.app.place.EdgeStackView;
+import com.termux.app.place.Element;
+import com.termux.app.place.StackEnd;
 import com.termux.app.place.StackGeometry;
+import com.termux.app.place.StackLanes;
 import com.termux.app.place.StackScene;
+import com.termux.app.wall.PageRef;
 import com.termux.app.window.FrameGuards;
 import com.termux.app.window.FramePipeline;
 import com.termux.app.window.FrameStep;
@@ -50,6 +56,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         default int keyboardDownLaidOutPx() {
             return 0;
         }
+        /** Whether Home's side stands in front (a Home page is committed), else the Workspace's. */
+        default boolean frontIsHome() {
+            return false;
+        }
         /** Whether the app drawer or an editor owns the stack's transforms for now. */
         default boolean othersOwnStack() {
             return false;
@@ -65,6 +75,15 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         com.termux.app.dock.SideRowViews.id(com.termux.app.place.Element.AZ,
             com.termux.app.dock.SideRowViews.Part.ROW),
         R.id.apps_bar_indicator_band};
+
+    /** The row hosts a side's lane may carry, the stack's own children ({@link EdgeStackView#getLane}). */
+    private static final int[] LANE_HOST_IDS = {
+        com.termux.app.dock.SideRowViews.id(Element.APPS,
+            com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST),
+        com.termux.app.dock.SideRowViews.id(Element.AZ,
+            com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST),
+        com.termux.app.dock.SideRowViews.id(Element.EXTRA_KEYS,
+            com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST)};
 
     /** Where the plank's slab goes. */
     static final int PLANK_NONE = 0;
@@ -86,6 +105,20 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private final StackGeometry mGeometry = new StackGeometry();
     private final StackScene.Frame mFrame = new StackScene.Frame();
     private float mSlideX;
+    /**
+     * The crossing's two ends by side and its progress between them, set by the wall's frames and
+     * cleared at the landing; with none the scene is the front side at rest. The ends are made
+     * once: a frame allocates nothing.
+     */
+    private final StackEnd mEndHome = new StackEnd(PageRef.HOME);
+    private final StackEnd mEndWorkspace = new StackEnd(PageRef.TERMINAL);
+    private boolean mHasEnds;
+    private boolean mFromHome;
+    private boolean mToHome;
+    private float mEndsProgress;
+    /** What was last written to each lane host's translationX, and to which view. */
+    private final View[] mWrittenLaneView = new View[LANE_HOST_IDS.length];
+    private final float[] mWrittenLaneTx = new float[LANE_HOST_IDS.length];
     private final DockPlankController.Slab mSlab = new DockPlankController.Slab();
     private int mPlankTarget = PLANK_NONE;
 
@@ -133,7 +166,14 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             View view = mViews.view(R.id.accessory_stack_container);
             return view == null ? 0f : view.getTranslationX();
         });
-        mGuardSlots = 2 * StackScene.V_COUNT + 1;
+        for (int lane = 0; lane < LANE_HOST_IDS.length; lane++) {
+            final int id = LANE_HOST_IDS[lane];
+            guard.own("lane_host_" + lane + ".translationX", () -> {
+                View view = mViews.view(id);
+                return view == null ? 0f : view.getTranslationX();
+            });
+        }
+        mGuardSlots = 2 * StackScene.V_COUNT + 1 + LANE_HOST_IDS.length;
         mGuard = guard;
     }
 
@@ -173,6 +213,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * stands the arriving rest, so that apply should change nothing; any change is counted.
      */
     public void onLanding() {
+        mHasEnds = false;
         mLandingPending = true;
         requestApply();
     }
@@ -203,6 +244,21 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             && m.sheetSinkPx == sheetPx && m.sheetCutPx == sheetCutPx && m.heldSinkPx == heldPx
             && m.holdsAz == holdsAz) return;
         m.layerSink(rowsPx, rowsCutPx, sheetPx, sheetCutPx, heldPx, holdsAz);
+        requestApply();
+    }
+
+    /**
+     * The crossing's ends and where it is between them: {@code progress} 0 is the side it began
+     * on ({@code fromHome}), 1 the side it arrives on. Each side's lane slides with its page
+     * ({@link StackScene#sideSlide}); the shared rows do not. The landing clears it.
+     */
+    public void setEnds(boolean fromHome, boolean toHome, float progress) {
+        if (mHasEnds && mFromHome == fromHome && mToHome == toHome && mEndsProgress == progress
+            && mApplied) return;
+        mHasEnds = true;
+        mFromHome = fromHome;
+        mToHome = toHome;
+        mEndsProgress = progress;
         requestApply();
     }
 
@@ -260,7 +316,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         readGeometry(container);
         StackScene.withKeyboardRest(mMotion,
             StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx()), mEffective);
-        StackScene.at(null, null, 0f, mEffective, mGeometry, mFrame);
+        if (mHasEnds) {
+            StackScene.at(mFromHome ? mEndHome : mEndWorkspace, mToHome ? mEndHome : mEndWorkspace,
+                mEndsProgress, mEffective, mGeometry, mFrame);
+        } else {
+            StackEnd front = mViews.frontIsHome() ? mEndHome : mEndWorkspace;
+            StackScene.at(front, front, 0f, mEffective, mGeometry, mFrame);
+        }
         mPlankTarget = plankTarget();
 
         boolean containerMoved = writeTy(StackScene.V_CONTAINER, container,
@@ -299,6 +361,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                     .setTouchRefused(mViews.keyboardDownLaidOutPx() > 0);
             }
         }
+        writeLanes();
         writeContent();
         if (guard != null) {
             // On a landing frame every change is counted: the scene at progress 1 is the rest.
@@ -306,6 +369,38 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             if (landing) guards.setLanding(true);
             for (int slot = 0; slot < mGuardSlots; slot++) guard.wrote(slot);
             if (landing) guards.setLanding(false);
+        }
+    }
+
+    /**
+     * Each side's lane rows across by their side's slide: the scene's {@code sideTx} less the part
+     * the container itself already rides ({@link #setSlideX}), so the rows stand where the scene
+     * puts them. A row in no lane stands at 0. At rest the front side's lane writes nothing.
+     */
+    private void writeLanes() {
+        View rowStack = mViews.view(R.id.accessory_row_stack);
+        if (!(rowStack instanceof EdgeStackView)) return;
+        EdgeStackView stack = (EdgeStackView) rowStack;
+        for (int i = 0; i < LANE_HOST_IDS.length; i++) {
+            View host = mViews.view(LANE_HOST_IDS[i]);
+            if (host == null) continue;
+            float want = 0f;
+            if (host.getParent() == stack) {
+                int lane = stack.getLane(host);
+                if (lane != StackLanes.STACK) {
+                    want = mFrame.sideTx[(lane == StackLanes.HOME ? Side.HOME : Side.WORKSPACE)
+                        .ordinal()] - mSlideX;
+                }
+            }
+            if (host != mWrittenLaneView[i]) {
+                mWrittenLaneView[i] = host;
+                mWrittenLaneTx[i] = Float.NaN;
+            }
+            if (mWrittenLaneTx[i] == want) continue;
+            mWrittenLaneTx[i] = want;
+            if (host.getTranslationX() == want) continue;
+            host.setTranslationX(want);
+            mWriteCount++;
         }
     }
 
