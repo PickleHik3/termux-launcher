@@ -1,6 +1,6 @@
 # Motion invariants: one owner per number, and a log that says so
 
-> Note (2026-11-17): [ADR 0030](../../docs/adr/0030-pages-sides-and-the-bottom-stack.md) decides the keyboard and room pairs below, and the line references in this document are stale. The pairs are rewritten in step 3 of [the window restructure](window-restructure-2026-11-17.md).
+> Note (2026-11-17): section 2 is rewritten against [ADR 0030](../../docs/adr/0030-pages-sides-and-the-bottom-stack.md) in step 3 of [the window restructure](window-restructure-2026-11-17.md).
 
 Added to the 2026-10-30 round after the Terminal landing stutter. Its cause was a number owned twice:
 the crossing pre-sized the terminal from one formula (`travelRoomChangePx`, 670 px on pong) and the
@@ -18,25 +18,28 @@ the enforcement and the visibility it lacked.
 A number that one phase predicts, pre-rolls or pre-sizes and a later phase settles comes from one
 pure policy, and the two phases share a parity test. Written into AGENTS.md ("Coding style").
 
-## 2. The audit (once)
+## 2. The pairs, against ADR 0030 (rewritten 2026-11-17, window restructure step 3)
 
-The inventory (scouted 2026-10-30 at `0f2cf4a04`; "two" = two formulas that can diverge), ranked
-by how likely a layout (floating keyboard, dock rows under the keyboard, status bar at the bottom,
-split panes, Docked vs Floating) makes the two sides disagree:
+[ADR 0030](../../docs/adr/0030-pages-sides-and-the-bottom-stack.md) section 5 gives every keyboard
+and room number one owner: the stack's scene (`place/StackScene`, written to views only by
+`StackRenderer` as the frame table's STACK step). The 2026-10-30 audit's line references are gone;
+names are used instead.
 
-| # | Number | Predicting side | Settling side | Owners | Parity test |
-|---|---|---|---|---|---|
-| 1 | Terminal pre-size room | `TermuxActivity` :23714 `travelRoomChangePx` :24365 via `travelRestReservationPx` / `chromeRestOf` | `runAccessoryGeometryPass` :12479 → `StackLayout.layout` (:154 `underKeyboardTopMarginPx`), `applyUnderKeyboardBandAir` :17136 | two | none (the landing fix of this round unifies it) |
-| 2 | Dock lift / flush absorption under the keyboard | `PlaceChromeTravel` :385-386, `travelDockLaidOutPx` ~:23727 | `StackLayout` :154, `DockGeometry` :409-412 | two | `UnderKeyboardBandTest`, `DockRowsSeamTest` (rest only) |
-| 3 | Terminal resize prediction | `TerminalView` :3290-3294 `predictResize*` :3382-3397 | `updateSize` :3177-3186 | two | `TravelDisplacementTest` (prediction math only) |
-| 4 | Keyboard reveal at pre-roll vs rest | `Crossing.preRollKeyboard` :445 (`hold(reservationPx)`) | `PlaceChromeTravel` :377-378 rest `keyboardReveal()` | two | `PlaceChromeTravelTest` :177 (pre-roll asked, no rest parity) |
-| 5 | Status bar reveal and position | `PlaceChromeTravel` :378 `statusReveal` | `PlaceChromeTravel` :385 rest | one class, two states | `PlaceChromeTravelTest` :430 (fade only) |
-| 6 | Still size vs live view | `PageStillPolicy.pictureSide` :63 in `PaneWallLayout` :882-904 | the live view's bounds | one formula, compared to wall dims not live bounds | `PageStillsTest` :151 |
-| 7 | Frame tint in a crossing vs at rest | `GlassLook` :219-220, `ChromeRenderer` :85-90 | `GlassVibrancy` :58-59 | one (`GlassFrameTint.of`), two callers | `GlassFrameTintTest` (no crossing-vs-rest case) |
-| 8 | Held overlap | `PlaceChromeTravel` :438, :452 | `StackLayout` :180 | one formula, two input sources | `PlaceChromeTravelTest` :221, :238 |
+| # | Number | Owner under ADR 0030 | Where it stands (2026-11-17) | Parity test |
+|---|---|---|---|---|
+| 1 | The page's room (was: the terminal's pre-size) | the stack's scene: each page sized for its own rest; a crossing resizes nothing | not yet: the room still follows the stack's laid-out height (`terminal_content_column` above the stack), the crossing pre-sizes the terminal cell (`Crossing.preSizeTerminal`, `PaneWallLayout.setTerminalBottomInsetPx`) and resumes size updates after the settle. Waits on the room decision in step 3's report | none yet |
+| 2 | Dock lift and flush absorption under the keyboard | the stack's scene | at rest `StackLayout` (flush padding, IME lift into its pass); in a crossing `PlaceChromeTravel` reveals on the seam's curve feeding `StackScene.travel` | `StackSceneParityTest`, `UnderKeyboardBandTest`, `DockRowsSeamTest` |
+| 3 | The terminal's resize prediction | goes with pair 1: nothing to predict once a crossing never resizes | unchanged (`TerminalView.predictResize*` vs `updateSize`) | `TravelDisplacementTest` |
+| 4 | The keyboard in a crossing | the stack's scene: its reveal is one function of the seam's progress on the look's curve (`StackScene.materialShare`); held halfway it holds halfway, reversed it reverses, progress 1 is the arriving rest | done for the reveal (`PlaceChromeTravel`, no landing margin, no early hide, no `ChromeSettle` clock). The pre-roll (the keyboard laid out below the screen for a slide) stays until the room decision | `KeyboardFollowsSeamTest`, `PlaceChromeTravelTest`, `KeyboardPreRollParityTest` |
+| 5 | The status bar's reveal | the crossing's frame, on the same curve as pair 4 | done | `PlaceChromeTravelTest`, `KeyboardFollowsSeamTest` |
+| 6 | A still's size vs the live view | `PageStillPolicy` (not a keyboard number) | unchanged | `PageStillsTest` |
+| 7 | Frame tint in a crossing vs at rest | `GlassFrameTint.of` (not a keyboard number) | unchanged | `GlassFrameTintTest` |
+| 8 | Held overlap | goes with pair 1 | unchanged (`PlaceChromeTravel.heldOverlapPx` vs `StackLayout`) | `PlaceChromeTravelTest` |
 
-Pairs 1–4 become one ticket each (one policy both phases read, a parity test over the layout
-fixtures of §5); 5–8 get a parity case in their existing test.
+The guards of [ADR 0028](../../docs/adr/0028-one-frame-pipeline-a-view-property-has-one-writer.md)
+(foreign writer, landing wrote, crossing laid out) replace hand-checked pairs for anything the
+stack's writer owns; "one resize per crossing" becomes "a crossing resized" and counts zero once
+pair 1 lands.
 
 ## 3. Motion log (a product switch)
 
