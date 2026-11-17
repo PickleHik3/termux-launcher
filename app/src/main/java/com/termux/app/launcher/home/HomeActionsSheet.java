@@ -111,7 +111,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     @NonNull private BottomSheetBehavior<LinearLayout> behavior;
     @NonNull private final BottomSheetBehavior.BottomSheetCallback behaviorCallback;
     @NonNull private final ModalSheetSlide slide;
-    @NonNull private final ViewTreeObserver.OnPreDrawListener slideInOnFirstDraw;
     @NonNull private final android.graphics.Rect cardBounds = new android.graphics.Rect();
     private final int cardPadLeft, cardPadRight, cardPadBottom;
     /** The navigation bar's height under the card, from the last {@link #applyInsets}. */
@@ -198,15 +197,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         };
         behavior.addBottomSheetCallback(behaviorCallback);
         slide = new ModalSheetSlide(card, this::onSlideFrame);
-        slideInOnFirstDraw = new ViewTreeObserver.OnPreDrawListener() {
-            @Override public boolean onPreDraw() {
-                getViewTreeObserver().removeOnPreDrawListener(this);
-                if (!open) return true;
-                slide.slideIn(null);
-                onSlideFrame();
-                return true;
-            }
-        };
         setVisibility(GONE);
     }
 
@@ -265,7 +255,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         open = true;
         if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);
         setVisibility(VISIBLE);
-        bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(this);
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;
@@ -289,7 +279,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         open = true;
         if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);
         setVisibility(VISIBLE);
-        bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(this);
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;
@@ -318,7 +308,14 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             return;
         }
         scrim.setAlpha(0f);
-        getViewTreeObserver().addOnPreDrawListener(slideInOnFirstDraw);
+        com.termux.app.window.FirstLayout.beforeNextDraw(this, this::slideInOnFirstDraw);
+    }
+
+    /** The card's first frame: it slides in unless the sheet closed meanwhile. */
+    private void slideInOnFirstDraw() {
+        if (!open) return;
+        slide.slideIn(null);
+        onSlideFrame();
     }
 
     /**
@@ -326,12 +323,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
      * leaves it at the new height's offset rather than the old one's.
      */
     private void settleExpandedAfterLayout() {
-        getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
-            @Override public boolean onPreDraw() {
-                getViewTreeObserver().removeOnPreDrawListener(this);
-                if (open) behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
-                return true;
-            }
+        com.termux.app.window.FirstLayout.beforeNextDraw(this, () -> {
+            if (open) behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
         });
     }
 

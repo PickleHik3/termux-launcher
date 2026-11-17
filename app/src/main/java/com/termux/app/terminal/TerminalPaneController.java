@@ -3770,7 +3770,7 @@ public class TerminalPaneController {
             mHomeFloats.add(w);
         }
         FloatingPaneContainer container = mHomeFloatContainers.get(w.active);
-        if (container != null) container.bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(container);
         updateActiveBorders();
         focusActiveView();
         applyHomeFloatLift();
@@ -4841,7 +4841,7 @@ public class TerminalPaneController {
             window.floating.add(leaf);
         }
         FloatingPaneContainer container = mFloatContainers.get(leaf);
-        if (container != null) container.bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(container);
     }
 
     private void removeFloatContainer(@NonNull Leaf leaf) {
@@ -5129,7 +5129,7 @@ public class TerminalPaneController {
         mHostView.addView(container, new FrameLayout.LayoutParams(0, 0));
         // render() puts the motion overlay last on purpose; a float attached afterwards (the cheap
         // addFloatOnly path) would otherwise draw over the ghosts and smears it must sit under.
-        if (mMotionOverlay.getParent() == mHostView) mHostView.bringChildToFront(mMotionOverlay);
+        if (mMotionOverlay.getParent() == mHostView) com.termux.app.window.WindowLayers.raiseWithin(mMotionOverlay);
         applyFloatBounds(leaf, container);
         maybeAnimateFloatEntry(leaf, container);
     }

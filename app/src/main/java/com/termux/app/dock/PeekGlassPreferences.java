@@ -22,7 +22,7 @@ public final class PeekGlassPreferences {
         if (store == null) return PeekGlassGeometry.REFLECTION_DEFAULT;
         try {
             return PeekGlassGeometry.clampReflection(
-                store.getInt(KEY_REFLECTION, PeekGlassGeometry.REFLECTION_DEFAULT));
+                com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).getInt(KEY_REFLECTION, PeekGlassGeometry.REFLECTION_DEFAULT));
         } catch (ClassCastException e) {
             return PeekGlassGeometry.REFLECTION_DEFAULT;
         }
@@ -32,7 +32,7 @@ public final class PeekGlassPreferences {
     public static void setReflection(@Nullable SharedPreferences store, int value) {
         if (store == null) return;
         int clamped = PeekGlassGeometry.clampReflection(value);
-        if (store.contains(KEY_REFLECTION) && reflection(store) == clamped) return;
+        if (com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).contains(KEY_REFLECTION) && reflection(store) == clamped) return;
         store.edit().putInt(KEY_REFLECTION, clamped).apply();
     }
 }

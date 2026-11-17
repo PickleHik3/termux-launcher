@@ -244,7 +244,7 @@ public final class VoiceListeningIndicator implements VoiceCardEdit.Card {
             resume(dimRaw, base);
             return;
         }
-        ViewGroup content = activity.findViewById(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.host(activity, com.termux.app.window.WindowLayer.NOTICES);
         if (content == null) return;
         Context context = activity;
         readColors(context);
@@ -315,7 +315,7 @@ public final class VoiceListeningIndicator implements VoiceCardEdit.Card {
      */
     public void showReading(@NonNull ReadingCallbacks callbacks, @NonNull String text, @NonNull String voice) {
         if (card != null) hide();
-        ViewGroup content = activity.findViewById(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.host(activity, com.termux.app.window.WindowLayer.NOTICES);
         if (content == null) return;
         Context context = activity;
         readColors(context);

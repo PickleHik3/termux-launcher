@@ -107,14 +107,14 @@ public final class WidgetPaneFrame extends PaneContentFrame
             : prefs.getSharedPreferences();
         mWidgetsOnGlass = prefs != null && prefs.isWidgetsOnGlassEnabled();
         if (store == null) return;
-        store.registerOnSharedPreferenceChangeListener(mWidgetsOnGlassListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mWidgetsOnGlassListener);
         mWidgetsOnGlassStore = store;
         mWidgetsOnGlassWatched = true;
     }
 
     private void unwatchWidgetsOnGlass() {
         if (mWidgetsOnGlassStore != null)
-            mWidgetsOnGlassStore.unregisterOnSharedPreferenceChangeListener(mWidgetsOnGlassListener);
+            com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mWidgetsOnGlassStore, mWidgetsOnGlassListener);
         mWidgetsOnGlassStore = null;
         mWidgetsOnGlassWatched = false;
     }

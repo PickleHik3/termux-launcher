@@ -478,15 +478,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         RecyclerView hostList = host == null ? null : host.findViewById(R.id.tai_bench_list);
         if (firstFill && hostList != null) {
             skipMoves = true;
-            hostList.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
-                @Override
-                public boolean onPreDraw() {
-                    skipMoves = false;
-                    android.view.ViewTreeObserver observer = hostList.getViewTreeObserver();
-                    if (observer.isAlive()) observer.removeOnPreDrawListener(this);
-                    return true;
-                }
-            });
+            com.termux.app.window.FirstLayout.beforeNextDraw(hostList, () -> skipMoves = false);
         }
         adapter.submit(items);
         if (atTop) {

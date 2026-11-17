@@ -1661,21 +1661,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             return;
         }
         if (mRaisedKeyboardWatch != null) return;
-        ViewTreeObserver.OnPreDrawListener watch = () -> {
+        // Never holds a frame back: the check only decides when to measure.
+        mRaisedKeyboardWatch = com.termux.app.window.FirstLayout.beforeEachDrawUntil(keyboard, () -> {
             if (!mEngaged) {
                 stopAwaitingRaisedKeyboard();
-            } else if (isRaisedKeyboardMeasurable(keyboard.getVisibility(), keyboard.getHeight(),
+                return true;
+            }
+            if (isRaisedKeyboardMeasurable(keyboard.getVisibility(), keyboard.getHeight(),
                     isLayoutPending(keyboard))) {
                 stopAwaitingRaisedKeyboard();
                 recaptureBandsForRaisedKeyboard();
+                return true;
             }
-            // Never holds a frame back: the check only decides when to measure.
-            return true;
-        };
-        mRaisedKeyboardWatch = watch;
-        mRaisedKeyboardView = keyboard;
-        mRaisedKeyboardObserver = keyboard.getViewTreeObserver();
-        mRaisedKeyboardObserver.addOnPreDrawListener(watch);
+            return false;
+        });
     }
 
     /**
@@ -1699,23 +1698,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /** The one pre-draw wait for {@link #onBuiltInKeyboardRaised}; gone on close. */
     private void stopAwaitingRaisedKeyboard() {
-        ViewTreeObserver.OnPreDrawListener watch = mRaisedKeyboardWatch;
-        ViewTreeObserver observer = mRaisedKeyboardObserver;
-        View keyboard = mRaisedKeyboardView;
+        com.termux.app.window.FirstLayout.Handle watch = mRaisedKeyboardWatch;
         mRaisedKeyboardWatch = null;
-        mRaisedKeyboardObserver = null;
-        mRaisedKeyboardView = null;
-        if (watch == null) return;
-        if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(watch);
-        // An observer taken before the view was attached is merged into the window's on attach.
-        ViewTreeObserver current = keyboard == null ? null : keyboard.getViewTreeObserver();
-        if (current != null && current != observer && current.isAlive())
-            current.removeOnPreDrawListener(watch);
+        if (watch != null) watch.cancel();
     }
 
-    @Nullable private ViewTreeObserver.OnPreDrawListener mRaisedKeyboardWatch;
-    @Nullable private ViewTreeObserver mRaisedKeyboardObserver;
-    @Nullable private View mRaisedKeyboardView;
+    @Nullable private com.termux.app.window.FirstLayout.Handle mRaisedKeyboardWatch;
 
     private void recaptureBandsForRaisedKeyboard() {
         Frame dockRect = mDockRect;

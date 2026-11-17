@@ -124,6 +124,11 @@ final class DeviceControlRoutes {
     @NonNull
     static JSONObject motionLogDump() throws JSONException {
         List<String> lines = MotionLog.dump();
+        List<String> counters = MotionLog.counterLines();
+        if (!counters.isEmpty()) {
+            lines.add(MotionLog.COUNTERS_HEADER);
+            lines.addAll(counters);
+        }
         return ok().put("enabled", MotionLog.enabled).put("count", lines.size())
             .put("invariants", MotionLog.invariantCount()).put("lines", new org.json.JSONArray(lines));
     }

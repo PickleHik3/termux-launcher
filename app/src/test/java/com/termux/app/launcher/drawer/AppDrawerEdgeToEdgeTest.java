@@ -138,9 +138,9 @@ public class AppDrawerEdgeToEdgeTest {
     }
 
     /**
-     * The status-bar inset strip is the drawer host's earlier sibling with no elevation of its own,
-     * so the plane paints over it rather than under it. Reverse the two and the strip would stand
-     * on top of a full-screen drawer.
+     * The status-bar inset strip stands in the ground layer and the drawer host in the sheets layer,
+     * with no elevation on either, so the plane paints over the strip rather than under it. Reverse
+     * the layers and the strip would stand on top of a full-screen drawer.
      */
     @Test public void theDrawerHostPaintsOverTheStatusInsetStrip() {
         ViewGroup container = mRoot.findViewById(R.id.terminal_root_container);
@@ -148,11 +148,14 @@ public class AppDrawerEdgeToEdgeTest {
         View host = mRoot.findViewById(R.id.app_drawer_host);
         assertNotNull(strip);
         assertNotNull(host);
-        assertEquals("both are children of the same container",
-            container, strip.getParent());
-        assertEquals(container, host.getParent());
-        assertTrue("the drawer is the later sibling, so it wins in z",
-            container.indexOfChild(host) > container.indexOfChild(strip));
+        View ground = mRoot.findViewById(R.id.window_layer_ground);
+        View sheets = mRoot.findViewById(R.id.window_layer_sheets);
+        assertEquals("the strip stands in the ground layer", ground, strip.getParent());
+        assertEquals("the drawer stands in the sheets layer", sheets, host.getParent());
+        assertEquals(container, ground.getParent());
+        assertEquals(container, sheets.getParent());
+        assertTrue("the sheets layer is above the ground layer, so the drawer wins",
+            container.indexOfChild(sheets) > container.indexOfChild(ground));
         assertEquals(0f, strip.getElevation(), 0.001f);
         assertEquals(0f, host.getElevation(), 0.001f);
     }

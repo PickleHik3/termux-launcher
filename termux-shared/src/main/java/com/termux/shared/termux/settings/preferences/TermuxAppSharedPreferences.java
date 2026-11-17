@@ -10,7 +10,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.termux.shared.android.PackageUtils;
 import com.termux.shared.settings.preferences.AppSharedPreferences;
+import com.termux.shared.settings.preferences.PreferenceDraft;
 import com.termux.shared.settings.preferences.SharedPreferenceUtils;
+import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.data.DataUtils;
@@ -65,6 +67,27 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         mDisplayIdSuffix = displayIdSuffix;
         sTerminalPageId = sharedPreferences.getInt(PageLookKeys.KEY_TERMINAL_PAGE_ID, -1);
         setFontVariables(context);
+    }
+
+    /**
+     * What a direct read of the store asks: the store, or the editing session's draft over it
+     * ({@link SharedPreferencesPreview}). The getters reach it through {@link SharedPreferenceUtils}.
+     */
+    @Nullable
+    private SharedPreferences reads() {
+        return SharedPreferencesPreview.readsFor(mSharedPreferences);
+    }
+
+    /**
+     * These preferences writing into {@code draft}, an editing session's {@link PreferenceDraft}:
+     * {@link #over} with the per-place sizes kept, so the dock's and the keyboard's heights are
+     * still the layout store's, which has its own session.
+     */
+    @NonNull
+    public TermuxAppSharedPreferences overDraft(@NonNull PreferenceDraft draft) {
+        TermuxAppSharedPreferences out = over(draft);
+        out.mPlaceSizes = mPlaceSizes;
+        return out;
     }
 
     /** These preferences over {@code sharedPreferences} instead, for the same context and display. */
@@ -162,8 +185,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     @Nullable
     public float[] getHomePillPosition() {
-        if (mSharedPreferences == null || !mSharedPreferences.contains(TERMUX_APP.KEY_HOME_PILL_X)
-            || !mSharedPreferences.contains(TERMUX_APP.KEY_HOME_PILL_Y)) return null;
+        if (mSharedPreferences == null || !reads().contains(TERMUX_APP.KEY_HOME_PILL_X)
+            || !reads().contains(TERMUX_APP.KEY_HOME_PILL_Y)) return null;
         float x = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_X, Float.NaN);
         float y = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_HOME_PILL_Y, Float.NaN);
         if (Float.isNaN(x) || Float.isNaN(y)) return null;
@@ -1183,7 +1206,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     @Nullable
     public Integer getLegacyStatusBarCutoutCenter() {
         return mSharedPreferences != null
-            && mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER)
+            && reads().contains(TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER)
             ? Integer.valueOf(SharedPreferenceUtils.getInt(mSharedPreferences,
                 TERMUX_APP.KEY_STATUS_BAR_CUTOUT_CENTER, 0)) : null;
     }
@@ -1192,7 +1215,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     @Nullable
     public Integer getLegacyStatusBarCutoutWidth() {
         return mSharedPreferences != null
-            && mSharedPreferences.contains(TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH)
+            && reads().contains(TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH)
             ? Integer.valueOf(SharedPreferenceUtils.getInt(mSharedPreferences,
                 TERMUX_APP.KEY_STATUS_BAR_CUTOUT_WIDTH, 32)) : null;
     }
@@ -1747,7 +1770,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Whether the user has ever set the display's text size; unset reads as the default 0. */
     public boolean hasX11DisplayDpi() {
-        return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_X11_DISPLAY_DPI);
+        return mSharedPreferences != null && reads().contains(TERMUX_APP.KEY_X11_DISPLAY_DPI);
     }
 
     /** One of termux, arch, ubuntu, debian, fedora; anything else reads as termux. */
@@ -1909,7 +1932,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     private void migrateAppLauncherAzLockMethodIfNeeded() {
-        if (mSharedPreferences == null || mSharedPreferences.contains(TERMUX_APP.KEY_APP_LAUNCHER_AZ_LOCK_METHOD)) {
+        if (mSharedPreferences == null || reads().contains(TERMUX_APP.KEY_APP_LAUNCHER_AZ_LOCK_METHOD)) {
             return;
         }
         boolean legacyEnabled = SharedPreferenceUtils.getBoolean(
@@ -1998,7 +2021,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (migrationDone)
             return;
 
-        boolean hasStoredValue = mSharedPreferences.contains(TERMUX_APP.KEY_TERMINAL_MARGIN_ADJUSTMENT);
+        boolean hasStoredValue = reads().contains(TERMUX_APP.KEY_TERMINAL_MARGIN_ADJUSTMENT);
         boolean currentEnabled = isTerminalMarginAdjustmentEnabled();
         if (shouldEnableTerminalMarginAdjustmentOnMigration(migrationDone, hasStoredValue, currentEnabled)) {
             SharedPreferenceUtils.setBoolean(
@@ -2143,7 +2166,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Whether the speech engine was ever picked; unpicked, the app goes on-device once a speech model is installed. */
     public boolean isInAppKeyboardVoiceEngineChosen() {
-        return mSharedPreferences.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_ENGINE);
+        return reads().contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_ENGINE);
     }
 
     /** {@code auto} or an ISO 639-1 code, lowercased. */
@@ -2999,7 +3022,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     public int getScratchpadFontSize() {
         String key = TERMUX_APP.KEY_FONTSIZE + "_scratchpad" + getDisplayIdAsString();
-        if (!mSharedPreferences.contains(key)) {
+        if (!reads().contains(key)) {
             SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences, key, getFontSize(), false);
         }
         return DataUtils.clamp(SharedPreferenceUtils.getIntStoredAsString(
@@ -3316,7 +3339,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * shipped one's.
      */
     public boolean isFreshInstall() {
-        for (String key : mSharedPreferences.getAll().keySet()) {
+        for (String key : reads().getAll().keySet()) {
             if (!TERMUX_APP.KEY_LOG_LEVEL.equals(key))
                 return false;
         }
@@ -3356,7 +3379,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     private void pinPreShippedDefaults(@NonNull Object[][] defaults) {
         for (Object[] entry : defaults) {
             String key = (String) entry[0];
-            if (mSharedPreferences.contains(key))
+            if (reads().contains(key))
                 continue;
             Object value = entry[1];
             if (value instanceof Boolean)
@@ -3865,7 +3888,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     // ---- the half keys' plumbing
 
     private boolean containsKey(@NonNull String key) {
-        return mSharedPreferences != null && mSharedPreferences.contains(key);
+        return mSharedPreferences != null && reads().contains(key);
     }
 
     /** {@code key}'s value for a half: the half's own once written, else the shared one. */
@@ -3887,7 +3910,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     private void removePageKeys(@NonNull SharedPreferences.Editor editor, @NonNull String key) {
         if (mSharedPreferences == null || !PageLookKeys.DETACHABLE.contains(key)) return;
         String prefix = key + PageLookKeys.PAGE_SEPARATOR;
-        for (String stored : mSharedPreferences.getAll().keySet()) {
+        for (String stored : reads().getAll().keySet()) {
             if (stored.startsWith(prefix) && isPageId(stored, prefix.length()))
                 editor.remove(stored);
         }
@@ -3970,7 +3993,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     public int getSurfaceGlassPosition(@Nullable SurfaceSlot slot) {
         String key = surfaceGlassPositionKey(slot);
-        if (mSharedPreferences == null || !mSharedPreferences.contains(key)) return -1;
+        if (mSharedPreferences == null || !reads().contains(key)) return -1;
         return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences, key, -1),
             TERMUX_APP.MIN_SURFACE_GLASS_POSITION, TERMUX_APP.MAX_SURFACE_GLASS_POSITION);
     }
@@ -4503,7 +4526,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Whether Use as was ever stored: false on an install that never chose. */
     public boolean isUseAsStored() {
-        return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_USE_AS);
+        return mSharedPreferences != null && reads().contains(TERMUX_APP.KEY_USE_AS);
     }
 
     /** Whether the Appearance editor's theme hint has been dismissed for good. */

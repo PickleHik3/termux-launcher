@@ -47,6 +47,13 @@ public final class SharedPreferencesPreview {
         sShown = null;
     }
 
+    /** {@link #clear} when {@code reads} is what is shown; another preview shown since stays. */
+    public static void clear(@NonNull SharedPreferences reads) {
+        Shown shown = sShown;
+        if (shown != null && shown.reads == reads)
+            sShown = null;
+    }
+
     public static boolean isShowing() {
         return sShown != null;
     }
