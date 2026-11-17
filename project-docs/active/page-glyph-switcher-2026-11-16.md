@@ -63,11 +63,10 @@ key. Decided with the developer on 2026-11-16.
   editor offers it for every bar. Not in any default row. (Decided 2026-11-16, replacing "Terminal,
   Assistant and Display only".)
 - Updating users get a new **Setup card** (the setup sheet already re-opens for new cards only):
-  - used as a home screen: "Add" puts the key at the left end of the row each bar reads: a bar with
-    its own row gets it there; a bar that follows Global's stored row gets it through that row
-    (written once); and Add sets one stored flag that makes every built-in set (Global's default,
-    Display's, Assistant's) start with the key. Bars keep following what they followed; nothing is
-    copied, and the key is never added twice. "Not now" dismisses;
+  - used as a home screen: "Add" puts the key at the left end of Global's row (the default row
+    when Global has none stored) and of every page's own row that exists then. A page without its
+    own row follows Global, so it gets the key through Global, and so does a row made later. Nothing
+    is copied, and the key is never added twice. "Not now" dismisses;
   - used as a terminal only: the card only says the key exists (no Add).
   New installs see the card the same way.
 
