@@ -3725,17 +3725,10 @@ public final class PaneWallLayout extends ViewGroup
     }
 
     /**
-     * How much shorter than the wall the terminal's page is laid out at its bottom: the room the
-     * chrome of the place a slide is arriving on will take from the content, given to the page
-     * ahead of the settle so its panes take their final size while the page arrives
-     * ({@code Crossing#preSizeTerminal}). 0 at rest.
+     * How far each kind of page ends above the wall's bottom: the room that page's own rest
+     * leaves its content (PageRoom). 0 for a page never given one.
      */
     private final int[] mPageBottomInsetPx = new int[PaneWallPage.values().length];
-
-    /** See {@link #mPageBottomInsetPx}: the terminal's page, and the live neighbours with it. */
-    public void setTerminalBottomInsetPx(int px) {
-        setPageBottomInsetPx(PaneWallPage.TERMINAL, px);
-    }
 
     /**
      * How far each page of {@code kind} ends above the wall's bottom (PageRoom: the room that

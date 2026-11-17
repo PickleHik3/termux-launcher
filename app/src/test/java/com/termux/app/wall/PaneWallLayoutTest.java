@@ -138,7 +138,6 @@ public class PaneWallLayoutTest {
         // A rest that did not change asks for no layout.
         wall.layout(0, 0, WIDTH, HEIGHT);
         wall.setPageBottomInsetPx(PaneWallPage.TERMINAL, 300);
-        wall.setTerminalBottomInsetPx(300);
         assertEquals(false, wall.isLayoutRequested());
         assertEquals(300, wall.pageBottomInsetPx(PaneWallPage.TERMINAL));
     }

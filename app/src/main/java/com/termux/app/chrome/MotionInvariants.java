@@ -10,13 +10,14 @@ import java.util.Set;
 
 /**
  * The motion invariants, checked from the events {@link MotionLog} records. One crossing at a
- * time: {@code crossing-begin} opens it, {@code presize} marks it, {@code wall-page-settled}
+ * time: {@code crossing-begin} opens it, {@code wall-page-settled}
  * starts a {@link #WINDOW_MS} window in which the landing must stay quiet. Pure: no Android
  * types and no timers; the caller feeds {@link #tick} when no event arrives.
  *
  * <ul>
- * <li>{@code one-resize-per-crossing}: a crossing that pre-sized sees no {@code pty-resize}
- *     within {@link #WINDOW_MS} after its settle.</li>
+ * <li>{@code zero-resize-per-crossing}: a crossing sees no {@code pty-resize} from its begin to
+ *     {@link #WINDOW_MS} after its settle: each page's room is its own rest's (PageRoom), so
+ *     nothing a crossing does resizes a pane.</li>
  * <li>{@code no-still-after-live}: a page that went live during the slide (a
  *     {@code still-dropped}, no {@code still-kept} after it) logs no {@code still-kept} within
  *     {@link #QUIET_MS} after the settle.</li>
@@ -46,7 +47,6 @@ public final class MotionInvariants {
     }
 
     private boolean mOpen;
-    private boolean mPresized;
     private long mSettledAt = -1;
     private final Set<String> mLivePages = new HashSet<>();
     private boolean mResizeReported;
@@ -59,13 +59,9 @@ public final class MotionInvariants {
         switch (event) {
             case "crossing-begin":
                 mOpen = true;
-                mPresized = false;
                 mSettledAt = -1;
                 mResizeReported = false;
                 mLivePages.clear();
-                break;
-            case "presize":
-                if (mOpen && mSettledAt < 0) mPresized = true;
                 break;
             case "wall-page-settled":
                 if (mOpen && mSettledAt < 0) mSettledAt = uptimeMs;
@@ -88,11 +84,12 @@ public final class MotionInvariants {
                 break;
             }
             case "pty-resize":
-                if (mOpen && mSettledAt >= 0 && mPresized && !mResizeReported
-                        && uptimeMs - mSettledAt <= WINDOW_MS) {
+                if (mOpen && !mResizeReported
+                        && (mSettledAt < 0 || uptimeMs - mSettledAt <= WINDOW_MS)) {
                     mResizeReported = true;
-                    out.add(new Violation("one-resize-per-crossing",
-                        "afterSettleMs=" + (uptimeMs - mSettledAt)
+                    out.add(new Violation("zero-resize-per-crossing",
+                        (mSettledAt < 0 ? "duringSlide=true"
+                            : "afterSettleMs=" + (uptimeMs - mSettledAt))
                             + (kv == null || kv.isEmpty() ? "" : " " + kv)));
                 }
                 break;

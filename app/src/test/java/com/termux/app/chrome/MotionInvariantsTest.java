@@ -17,44 +17,63 @@ public class MotionInvariantsTest {
         for (MotionInvariants.Violation v : mInvariants.onEvent(t, event, kv)) mNames.add(v.name);
     }
 
-    private void crossingToSettle(boolean presize) {
+    private void crossingToSettle() {
         feed(1000, "crossing-begin", "revision=3");
-        if (presize) feed(1010, "presize", "taken=true reservationPx=0");
-        feed(1020, "pty-resize", "from=70x65 to=70x44 cause=presize returnHold=false");
         feed(1300, "wall-page-settled", "page=TERMINAL");
     }
 
     @Test
-    public void stutterWithASecondResizeAfterSettleViolates() {
-        crossingToSettle(true);
+    public void aResizeAfterTheSettleViolates() {
+        crossingToSettle();
         feed(1436, "pty-resize", "from=70x44 to=70x41 cause=layout returnHold=false");
-        assertEquals(List.of("one-resize-per-crossing"), mNames);
+        assertEquals(List.of("zero-resize-per-crossing"), mNames);
     }
 
     @Test
-    public void oneResizeBeforeSettleDoesNotViolate() {
-        crossingToSettle(true);
+    public void aResizeDuringTheSlideViolates() {
+        feed(1000, "crossing-begin", "revision=3");
+        feed(1020, "pty-resize", "from=70x65 to=70x44 cause=layout returnHold=false");
+        feed(1300, "wall-page-settled", "page=TERMINAL");
+        assertEquals(List.of("zero-resize-per-crossing"), mNames);
+    }
+
+    @Test
+    public void aCrossingIsReportedOnceHoweverManyResizesFollow() {
+        feed(1000, "crossing-begin", "revision=3");
+        feed(1020, "pty-resize", "from=70x65 to=70x44");
+        feed(1100, "pty-resize", "from=70x44 to=70x41");
+        crossingSettledOnly();
+        feed(1436, "pty-resize", "from=70x41 to=70x40");
+        assertEquals(List.of("zero-resize-per-crossing"), mNames);
+    }
+
+    private void crossingSettledOnly() {
+        feed(1300, "wall-page-settled", "page=TERMINAL");
+    }
+
+    @Test
+    public void aResizeLongAfterTheSettleDoesNotViolate() {
+        crossingToSettle();
         feed(2600, "pty-resize", "from=70x44 to=70x41");
         assertTrue(mNames.toString(), mNames.isEmpty());
     }
 
     @Test
-    public void resizeAfterACrossingWithoutPresizeDoesNotViolate() {
-        crossingToSettle(false);
-        feed(1436, "pty-resize", "from=70x44 to=70x41");
+    public void aCrossingThatResizesNothingDoesNotViolate() {
+        crossingToSettle();
         assertTrue(mNames.isEmpty());
     }
 
     @Test
     public void frostAfterSettleViolates() {
-        crossingToSettle(false);
+        crossingToSettle();
         feed(1400, "reflow-frost-start", "radiusPx=12");
         assertEquals(List.of("no-frost-at-landing"), mNames);
     }
 
     @Test
     public void frostLongAfterSettleDoesNot() {
-        crossingToSettle(false);
+        crossingToSettle();
         feed(1900, "reflow-frost-start", "radiusPx=12");
         assertTrue(mNames.isEmpty());
     }

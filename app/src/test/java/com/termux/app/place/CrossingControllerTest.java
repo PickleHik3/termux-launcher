@@ -122,7 +122,7 @@ public class CrossingControllerTest {
         float dockPx = Float.NaN, keyboardPx = Float.NaN, sinkPx = Float.NaN;
         float statusAlpha = Float.NaN, sideAlpha = Float.NaN, barX = Float.NaN, slide = Float.NaN;
         int coverPx = -1;
-        int morphBegins, dresses, morphEnds, folds, covers, preSizes;
+        int morphBegins, dresses, morphEnds, folds, covers;
         final List<PaneWallPage> preRolls = new ArrayList<>();
         DockLayout leaving, arriving, landed;
         DockMorph dressed;
@@ -143,7 +143,6 @@ public class CrossingControllerTest {
         }
         @Override public void rideX(float px) { barX = px; writes++; }
         @Override public void cover(int px) { coverPx = px; covers++; writes++; }
-        @Override public void preSize(int px) { preSizes++; writes++; }
         @Override public void slide(float widths) { slide = widths; writes++; }
         @Override public void preRoll(@NonNull PaneWallPage target) {
             preRolls.add(target);
@@ -551,7 +550,6 @@ public class CrossingControllerTest {
         int layouts = host.count("syncPlaceLayout");
         int restyles = host.count("restyleDockSurface");
         int preRollKeyboard = host.count("preRollTravelKeyboard");
-        int preRollContent = host.count("preRollTravelContent");
         int begins = host.count("beginNavStripFade") + host.count("beginTopBandFade")
             + host.count("beginTravelHold") + host.count("flushLandingRestyle");
         int geometry = host.count("geometryRequestNow");
@@ -567,7 +565,6 @@ public class CrossingControllerTest {
         assertEquals(layouts, host.count("syncPlaceLayout"));
         assertEquals(restyles, host.count("restyleDockSurface"));
         assertEquals(preRollKeyboard, host.count("preRollTravelKeyboard"));
-        assertEquals(preRollContent, host.count("preRollTravelContent"));
         assertEquals(begins, host.count("beginNavStripFade") + host.count("beginTopBandFade")
             + host.count("beginTravelHold") + host.count("flushLandingRestyle"));
         assertEquals("no geometry pass requested again", geometry,

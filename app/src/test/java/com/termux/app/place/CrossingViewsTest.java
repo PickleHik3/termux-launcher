@@ -101,7 +101,7 @@ public class CrossingViewsTest {
             });
         @NonNull @Override public com.termux.app.StackRenderer stackRenderer() { return renderer; }
         float dockPx = Float.NaN, keyboardPx = Float.NaN, barX = Float.NaN;
-        int coverPx = -1, preSizePx = -1;
+        int coverPx = -1;
         final List<PaneWallPage> preRolls = new ArrayList<>();
 
         @Nullable @Override public View hotView(int id) { return views.get(id); }
@@ -119,7 +119,6 @@ public class CrossingViewsTest {
         @Override public void onDockRowContentChanged() {}
         @Nullable @Override public StackPicture stackPicture(@Nullable View stack) { return null; }
         @Override public int wallWidthPx() { return WIDTH; }
-        @Override public void applyTerminalPreSize(int px) { preSizePx = px; }
     }
 
     /** The layers a sink or a fold moves, and the views the alphas fade. */

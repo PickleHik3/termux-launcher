@@ -237,9 +237,6 @@ public final class CrossingController {
         /** The keyboard brought up below the screen for the frame's arriving place. */
         void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame);
 
-        /** The content given {@code roomGivenBackPx} now. */
-        void preRollTravelContent(int roomGivenBackPx);
-
         /** The keyboard put away with the picture of the stack. */
         void putKeyboardAwayWithPicture();
 
@@ -251,9 +248,6 @@ public final class CrossingController {
 
         /** A keyboard up on both places crosses from one material to the other. */
         void syncKeyboardMaterialTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame);
-
-        /** The terminal's rows drawn where the settle's resize will put them. */
-        void syncTerminalTravelDisplacement(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame, @Nullable com.termux.app.wall.PaneWallPage arriving);
 
         /** The cover under the stack's picture, px. */
         int stackPictureCoverPx();
@@ -470,26 +464,8 @@ public final class CrossingController {
             && mHost.canPreRollTravelKeyboard()) {
             mHost.preRollTravelKeyboard(frame);
         }
-        // Toward a place whose chrome takes less room from the content than this one's, the
-        // content gets that room now rather than at settle, so no band of wallpaper opens between
-        // the pane and the chrome sliding away from it (ADR 0003, amended).
-        com.termux.app.wall.PaneWallPage arriving =
-            com.termux.app.place.PlaceChromeTravel.arriving(frame, mHost.lastWallPage());
-        if (!mCrossing.contentPreRolled() && arriving != null) {
-            int givenBack = travelRoomChangePx(arriving);
-            if (givenBack > 0) mHost.preRollTravelContent(givenBack);
-        }
-        // Toward the terminal, whose chrome takes more room than this place's (its keyboard), its
-        // page is laid out at the size it lands at in this frame, while it is still arriving, and
-        // its panes resize now rather than after the page has landed (Crossing#preSizeTerminal).
-        if (arriving == com.termux.app.wall.PaneWallPage.TERMINAL
-            && mCrossing.terminalPreSizePx() == 0) {
-            int taken = -travelRoomChangePx(arriving);
-            if (MotionLog.enabled) {
-                MotionLog.log("presize", "taken=" + taken + " reservationPx=" + mHost.appliedContentReservationPx());
-            }
-            if (taken > 0) mCrossing.preSizeTerminal(taken, mHost.appliedContentReservationPx());
-        }
+        // A crossing moves no page's room: each page's room is its own rest's (PageRoom), written
+        // at rest, so nothing is given back or taken, and no pane resizes while it runs.
         Trace.endSection();
         // Across the seam the dock's rows and the status bar are the halves' own: the stack is
         // given the other half's rows where none of them shows, and their reveal is the seam's.
@@ -514,16 +490,6 @@ public final class CrossingController {
         // A keyboard up on both places crosses from one material to the other with the wall.
         Trace.beginSection("Travel.material");
         mHost.syncKeyboardMaterialTravel(frame);
-        Trace.endSection();
-        // The terminal's rows are drawn where the settle's resize is going to put them, and the
-        // pane's own edge ends where the chrome's live edge begins rather than under it.
-        Trace.beginSection("Travel.content");
-        if (mCrossing.holdsContent()) {
-            mHost.syncTerminalTravelDisplacement(frame, arriving);
-            // The cover the pane controller holds for the window in front, under whichever edge
-            // stands higher: the stack's, or the picture of the committed half's stack.
-            mCrossing.coverAt(translation, mHost.stackPictureCoverPx());
-        }
         Trace.endSection();
         // The status bar travels with the Workspace's page wherever the frame reaches Home while
         // the pages slide; it fades in place where it cannot ride (a bar on a side or the bottom

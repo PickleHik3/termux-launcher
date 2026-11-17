@@ -25,15 +25,12 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * D11 for the Home ⇄ Terminal crossing with the Terminal's keyboard closed
- * ({@code project-docs/active/chrome-elements-2026-10-31.md} section 4): the terminal's page is
- * laid out at the Terminal's rest wherever the wall stands, so its grid never changes on the
- * round trip Terminal → Home → Terminal: not as either crossing begins, not mid-slide, not at
- * either landing. The crossing is driven the way the activity drives it (doSyncChromeTravel,
- * doSettlePlaceChrome): the room given back on the way out, the Terminal's pre-size on the way
- * back, the landings; the rooms are the layout fixtures' own passes and rests. The page's height
- * is the content's room (the hold's while one holds, else the committed page's landing) less the
- * inset its page was last laid out with.
+ * The Terminal's grid on the round trip Home ⇄ Terminal with its keyboard closed, D1-A: each
+ * page's room is its own rest's ({@link PageRoom}), so the terminal's page is laid out at the
+ * Terminal's rest wherever the wall stands: not as either crossing begins, not mid-slide, not at
+ * either landing, and a crossing gives nothing back and takes nothing. The crossing is driven
+ * the way the activity drives it (doSyncChromeTravel, doSettlePlaceChrome); the rests are the
+ * layout fixtures' own. The page's height is the window less the room of the Terminal's rest.
  */
 @RunWith(Parameterized.class)
 public class TerminalRoundTripParityTest {
@@ -65,14 +62,12 @@ public class TerminalRoundTripParityTest {
 
     private static final class Views implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
             Crossing.Keyboard, Crossing.Dock {
-        int insetPx;
         @Override public void translate(float dockPx, float keyboardPx) {}
         @Override public void sink(float px) {}
         @Override public void fold() {}
         @Override public void alpha(float status, float side) {}
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}
-        @Override public void preSize(int px) { insetPx = Math.max(0, px); }
         @Override public void preRoll(@NonNull PaneWallPage target) {}
         @Override public void beginMorph(@NonNull DockLayout leaving, @NonNull DockLayout arriving) {}
         @Override public void dress(@NonNull DockMorph morph) {}
@@ -123,15 +118,10 @@ public class TerminalRoundTripParityTest {
         return DockGeometry.compute(f.snapshot(ref, floating).restOf(ref));
     }
 
-    /** The room the content holds: the hold's while one holds, else the committed page's. */
-    private int contentReservationPx(@NonNull PaneWallPage committed) {
-        if (crossing.holdsContent()) return crossing.heldReservationPx();
-        return f.settle(PageRef.of(committed), false, floating).contentReservationPx;
-    }
-
-    /** The terminal's page as it is laid out: the content's height less its page's inset. */
-    private int terminalPagePx(@NonNull PaneWallPage committed) {
-        return f.heightPx - contentReservationPx(committed) - views.insetPx;
+    /** The terminal's page as it is laid out: the window less the room of the Terminal's rest. */
+    private int terminalPagePx() {
+        return f.heightPx - PageRoom.bottomInsetPx(f.rest(PageRef.TERMINAL, PageRef.TERMINAL,
+            false, floating));
     }
 
     /** One slide from {@code from}, landed on the other half, asserting the page every frame. */
@@ -140,11 +130,7 @@ public class TerminalRoundTripParityTest {
             : PaneWallPage.WIDGETS;
         String way = f + (floating ? ", Floating" : ", Docked") + ", " + from + " → " + to;
         PlaceChromeTravel.States states = place -> new Rest(false, false, true);
-        int terminalRest = f.restReservationPx(PageRef.TERMINAL, false, floating);
-        int homeRest = f.restReservationPx(PageRef.HOME, false, floating);
-        int committedRest = f.settle(PageRef.of(from), false, floating).contentReservationPx;
         boolean begun = false;
-        boolean preRolled = false;
         for (float t = STEP; t <= 1f + 1e-4f; t += STEP) {
             float fraction = Math.min(1f, t);
             float offset = from == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
@@ -156,30 +142,18 @@ public class TerminalRoundTripParityTest {
             }
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
             if (answers.relayout()) crossing.seam().standLayout();
-            // Toward a place whose chrome takes less room, the content gets it now.
-            int roomChange = (from == PaneWallPage.TERMINAL ? committedRest : homeRest)
-                - (to == PaneWallPage.TERMINAL ? terminalRest : homeRest);
-            if (!preRolled && roomChange > 0) {
-                crossing.giveRoomBack(roomChange, committedRest);
-                preRolled = true;
-            }
-            // Toward the Terminal, its page is pre-sized to its rest.
-            if (to == PaneWallPage.TERMINAL && crossing.terminalPreSizePx() == 0
-                && -roomChange > 0) {
-                crossing.preSizeTerminal(-roomChange, committedRest);
-            }
             float translation = crossing.stack(answers, answers.dockReveal(), 0, 200, 150);
             crossing.coverAt(translation);
-            assertEquals(way + " at " + fraction, restPx, terminalPagePx(from));
+            assertEquals(way + " at " + fraction, restPx, terminalPagePx());
         }
         crossing.land(PageRef.of(to), 1);
         crossing.end();
-        assertEquals(way + ", landed", restPx, terminalPagePx(to));
+        assertEquals(way + ", landed", restPx, terminalPagePx());
     }
 
     @Test
     public void theTerminalsGridNeverChangesOnARoundTripThroughHome() {
-        int restPx = terminalPagePx(PaneWallPage.TERMINAL);
+        int restPx = terminalPagePx();
         assertEquals(f.heightPx - f.settle(PageRef.TERMINAL, false, floating).contentReservationPx,
             restPx);
         slide(PaneWallPage.TERMINAL, restPx);
@@ -187,6 +161,5 @@ public class TerminalRoundTripParityTest {
         // And again: the second round trip finds everything as the first left it.
         slide(PaneWallPage.TERMINAL, restPx);
         slide(PaneWallPage.WIDGETS, restPx);
-        assertEquals("nothing is laid short on the Terminal", 0, views.insetPx);
     }
 }

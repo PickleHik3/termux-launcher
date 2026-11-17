@@ -134,8 +134,7 @@ public class CrossingTest {
         boolean pictureTaken = true;
         int pictures, pictureDrops;
         float pictureReveal = Float.NaN, pictureSlide = Float.NaN, slide = Float.NaN;
-        int preSizePx = -1;
-        int covers, preSizes;
+        int covers;
         final List<PaneWallPage> preRolls = new ArrayList<>();
         // The row: told both rests once, dressed every frame, laid out once at the landing.
         int morphBegins, dresses, morphEnds;
@@ -156,10 +155,6 @@ public class CrossingTest {
         @Override public void cover(int px) {
             coverPx = px;
             covers++;
-        }
-        @Override public void preSize(int px) {
-            preSizePx = px;
-            preSizes++;
         }
         @Override public boolean picture() {
             pictures++;
@@ -633,42 +628,25 @@ public class CrossingTest {
     }
 
     /**
-     * Toward a place whose chrome takes more room, the terminal's page is laid out short of it
-     * once, under the hold; the cover counts the gap already left; the landing puts the page back
-     * in the pass that gives the content the same room, and says how much that was.
+     * A crossing gives nothing back and takes nothing: no page's room is written by it (each
+     * is its own rest's, PageRoom), so a landing has no pre-size to put back and the crossing is
+     * idle once it ends.
      */
     @Test
-    public void theTerminalIsPreSizedOnceAndPutBackAtTheLanding() {
+    public void aCrossingLeavesNothingOfTheRoomToPutBackAtTheLanding() {
         Moves moves = new Moves();
         Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
-        crossing.preSizeTerminal(0, 500);
-        assertEquals("nothing taken, nothing pre-sized", -1, moves.preSizePx);
         assertFalse(crossing.holdsContent());
-        crossing.preSizeTerminal(300, 500);
-        assertTrue(crossing.holdsContent());
-        assertEquals(500, crossing.heldReservationPx());
-        assertEquals(300, moves.preSizePx);
-        assertEquals(300, crossing.terminalPreSizePx());
-        crossing.preSizeTerminal(120, 500);
-        assertEquals("once per slide", 300, crossing.terminalPreSizePx());
-        // The keyboard rising through the held room covers nothing of a page already that short.
-        crossing.heldOverlap(300);
-        crossing.coverAt(100f);
-        assertEquals(0, moves.coverPx);
-        Crossing.Landing landing = crossing.land(PageRef.of(PaneWallPage.TERMINAL), REVISION);
-        assertEquals(300, landing.terminalPreSizePx());
-        assertEquals(0, moves.preSizePx);
-        assertEquals(0, crossing.terminalPreSizePx());
+        crossing.land(PageRef.of(PaneWallPage.TERMINAL), REVISION);
         crossing.end();
         assertTrue(crossing.idle());
     }
 
     @Test
     public void theHigherOfTheStacksAndThePicturesEdgesCovers() {
-        assertEquals(120, Crossing.coverPx(80, 120, 0));
-        assertEquals(80, Crossing.coverPx(80, 0, 0));
-        assertEquals(20, Crossing.coverPx(80, 120, 100));
-        assertEquals(0, Crossing.coverPx(80, 120, 300));
+        assertEquals(120, Crossing.coverPx(80, 120));
+        assertEquals(80, Crossing.coverPx(80, 0));
+        assertEquals(0, Crossing.coverPx(-20, -10));
         Moves moves = new Moves();
         Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
         crossing.hold(0);

@@ -27,7 +27,7 @@ names are used instead.
 
 | # | Number | Owner under ADR 0030 | Where it stands (2026-11-17) | Parity test |
 |---|---|---|---|---|
-| 1 | The page's room (was: the terminal's pre-size) | the stack's scene: each page sized for its own rest; a crossing resizes nothing | not yet: the room still follows the stack's laid-out height (`terminal_content_column` above the stack), the crossing pre-sizes the terminal cell (`Crossing.preSizeTerminal`, `PaneWallLayout.setTerminalBottomInsetPx`) and resumes size updates after the settle. Waits on the room decision in step 3's report | none yet |
+| 1 | The page's room (was: the terminal's pre-size) | the stack's scene: each page sized for its own rest; a crossing resizes nothing | done (D1-A step 3): `terminal_content_column` fills the window; the wall's cells end `PageRoom.bottomInsetPx` of their own page's rest above its bottom (`PaneWallLayout.setPageBottomInsetPx`, written by the geometry pass at rest, never in a crossing); the crossing's pre-size (`Crossing.preSizeTerminal`), its pause of size updates and its resume resize are gone, and a return (resume, focus) re-measures only if `PageRoom.resizesOnReturn` says the rest changed. The pause itself stays as the host surface's hold (divider drags, overview preview, return hold, the keyboard swipe's travel) | `PageRoomTest`, `PaneWallLayoutTest`, `MotionInvariantsTest` |
 | 2 | Dock lift and flush absorption under the keyboard | the stack's scene | at rest `StackLayout` (flush padding, IME lift into its pass); in a crossing `PlaceChromeTravel` reveals on the seam's curve feeding `StackScene.travel` | `StackSceneParityTest`, `UnderKeyboardBandTest`, `DockRowsSeamTest` |
 | 3 | The terminal's resize prediction | goes with pair 1: nothing to predict once a crossing never resizes | unchanged (`TerminalView.predictResize*` vs `updateSize`) | `TravelDisplacementTest` |
 | 4 | The keyboard in a crossing | the stack's scene: its reveal is one function of the seam's progress on the look's curve (`StackScene.materialShare`); held halfway it holds halfway, reversed it reverses, progress 1 is the arriving rest | done for the reveal (`PlaceChromeTravel`, no landing margin, no early hide, no `ChromeSettle` clock). The pre-roll (the keyboard laid out below the screen for a slide) stays until the room decision | `KeyboardFollowsSeamTest`, `PlaceChromeTravelTest`, `KeyboardPreRollParityTest` |
@@ -35,21 +35,20 @@ names are used instead.
 | 6 | A still's size vs the live view | `PageStillPolicy` (not a keyboard number) | unchanged | `PageStillsTest` |
 | 7 | Frame tint in a crossing vs at rest | `GlassFrameTint.of` (not a keyboard number) | unchanged | `GlassFrameTintTest` |
 
-D1-A step 1 (wave 2): the docked in-app keyboard is never GONE while it is on; down is the stack's translation, `StackScene.keyboardTranslationPx` = `(1 - reveal) * laidOutHeight`, read by the rest (`StackRenderer` adds it for a laid-out, down keyboard) and by the crossing (`StackScene.travel`), so the crossing's end is the landing's rest and a landing writes nothing for the keyboard. The terminal's room stays today's through a temporary rule (the container is the keyboard taller while it is down, the content reaches past its top by the same, `StackScene.containerHeightPx` / `contentOverlapPx`; step 3 removes it). Pinned by `KeyboardLaidOutParityTest`, `StackRendererTest`, `KeyboardGeometryChoreographerTest`.
+D1-A step 1 (wave 2): the docked in-app keyboard is never GONE while it is on; down is the stack's translation, `StackScene.keyboardTranslationPx` = `(1 - reveal) * laidOutHeight`, read by the rest (`StackRenderer` adds it for a laid-out, down keyboard) and by the crossing (`StackScene.travel`), so the crossing's end is the landing's rest and a landing writes nothing for the keyboard. The container is the keyboard taller while it is down (`StackScene.containerHeightPx`); no page's room reads that height, each page's room is its own rest's (step 3). Pinned by `KeyboardLaidOutParityTest`, `StackRendererTest`, `KeyboardGeometryChoreographerTest`.
 | 8 | Held overlap | goes with pair 1 | unchanged (`PlaceChromeTravel.heldOverlapPx` vs `StackLayout`) | `PlaceChromeTravelTest` |
 
 The guards of [ADR 0028](../../docs/adr/0028-one-frame-pipeline-a-view-property-has-one-writer.md)
 (foreign writer, landing wrote, crossing laid out) replace hand-checked pairs for anything the
-stack's writer owns; "one resize per crossing" becomes "a crossing resized" and counts zero once
-pair 1 lands.
+stack's writer owns; "one resize per crossing" is now `zero-resize-per-crossing` (pair 1 landed
+in D1-A step 3).
 
 ## 3. Motion log (a product switch)
 
 Settings › Debugging › **Motion log**, off by default. While on, the launcher writes one line per
 event under tag `TermuxMotion` and into a ring buffer of the last 2,000 lines, with uptime ms:
 crossing begin and land, every PTY resize (the existing `TermGeom` line joins it), a page still
-shown or dropped, a hold taken or released, a reflow frost started, a keyboard pre-roll, a
-pre-size. `launcherctl motion-log dump` prints the buffer; `launcherctl motion-log clear` empties
+shown or dropped, a hold taken or released, a reflow frost started, a keyboard pre-roll. `launcherctl motion-log dump` prints the buffer; `launcherctl motion-log clear` empties
 it. Zero cost at rest when off (one boolean check per event; no allocation).
 While the wall is off its rest, each position pass adds one `page-pose` line per page on screen: `kind page effect slide progress tx scale alpha rotY`, plus `still` for a surface page.
 
@@ -60,7 +59,7 @@ Copy: title "Motion log", description "Records page changes and resizes for bug 
 Checked after every crossing settles, reported under the same tag as `INVARIANT <name>` and
 counted; never thrown:
 
-- `one-resize-per-crossing`: no `TermGeom` resize after the settle of the crossing that pre-sized.
+- `zero-resize-per-crossing`: no `TermGeom` resize from a crossing's begin to 1 s after its settle. Each page's room is its own rest's (`PageRoom`), written at rest and never in a crossing, so nothing a crossing does resizes a pane; a keyboard that is shown or hidden at rest still resizes the Terminal, because its rest changed.
 - `no-still-after-live`: a page that was live during the slide does not show its still after landing.
 - `no-frost-at-landing`: the reflow frost does not start within 500 ms after a settle.
 

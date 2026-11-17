@@ -58,8 +58,6 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         @Nullable StackPicture stackPicture(@Nullable View stack);
         /** The wall's width; 0 while there is no wall or it is not laid out. */
         int wallWidthPx();
-        /** The terminal's page laid out {@code px} shorter at its bottom than the wall. */
-        void applyTerminalPreSize(int px);
         /** The stack's one writer of transforms: the sink, the cut and the slide go through it. */
         @NonNull com.termux.app.StackRenderer stackRenderer();
     }
@@ -331,12 +329,5 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         // brought back up has drawn. Sunk, it shows nothing and goes now.
         if (picture.atRest()) picture.releaseAfter(PICTURE_HANDOVER_MS);
         else picture.release();
-    }
-
-    // ---- The terminal's page laid out at its landing size ahead of the settle ----
-
-    @Override
-    public void preSize(int px) {
-        mHost.applyTerminalPreSize(px);
     }
 }

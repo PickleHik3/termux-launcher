@@ -2657,7 +2657,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!isSplitPanesEnabled())
                 collapseAllSplits();
             else if (mPaneController != null) {
-                mPaneController.refreshPaneSizes();
+                refreshPaneSizesOnReturn();
                 // Settings may have flipped the pane behaviour toggles while we were away.
                 applyPaneBehaviourPreferences();
             }
@@ -17416,7 +17416,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             stack.sideStackOverlapPx);
         // While the slide holds the content, the room it gives back is laid out under a grid the
         // travel has paused (preRollTravelContent); the settle sends the PTY its one size.
-        if (!mCrossing.holdsContent() && shouldRequestTerminalResize(requestTerminalResize,
+        // A crossing never resizes the terminal: every page's room is its own rest's, written at rest.
+        if (!mCrossing.holdsContent() && !mCrossing.crossing() && shouldRequestTerminalResize(requestTerminalResize,
             accessoryHeightChanged, accessoryMarginChanged, keyboardShownChanged, keyboardOverlays,
             contentReservationChanged) && mTerminalView != null) {
             // Bottom-anchored, like the window-bar collapse: the keyboard or dock changing height
@@ -17531,12 +17532,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
         boolean moved = false;
         for (com.termux.app.wall.PaneWallPage kind : ROOM_KINDS) {
-            com.termux.app.wall.PaneWallPage place =
-                kind == com.termux.app.wall.PaneWallPage.TERMINAL
-                    && mLastWallPage == com.termux.app.wall.PaneWallPage.DISPLAY
-                    ? com.termux.app.wall.PaneWallPage.DISPLAY : kind;
             int before = wall.pageBottomInsetPx(kind);
-            wall.setPageBottomInsetPx(kind, mCrossingController.travelRestReservationPx(place));
+            wall.setPageBottomInsetPx(kind,
+                mCrossingController.travelRestReservationPx(roomPlaceOf(kind)));
             moved |= wall.pageBottomInsetPx(kind) != before;
         }
         int frontRoomPx = frontPageRoomPx();
@@ -17562,6 +17560,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         return moved;
+    }
+
+    /** The place whose rest {@code kind}'s room is read from: a display window is the Workspace's. */
+    @NonNull
+    private com.termux.app.wall.PaneWallPage roomPlaceOf(
+            @NonNull com.termux.app.wall.PaneWallPage kind) {
+        return kind == com.termux.app.wall.PaneWallPage.TERMINAL
+            && mLastWallPage == com.termux.app.wall.PaneWallPage.DISPLAY
+            ? com.termux.app.wall.PaneWallPage.DISPLAY : kind;
+    }
+
+    /**
+     * The window came back (resume, focus): the panes are measured again only when the
+     * Terminal's rest changed while away (PageRoom#resizesOnReturn); the room the wall holds
+     * is the one they were last sized with, so a return that finds the rest the same asks the
+     * panes for nothing. A changed rest is written, and that layout is the resize.
+     */
+    private void refreshPaneSizesOnReturn() {
+        if (mPaneController == null) return;
+        if (mPaneWallController != null && mCrossingController != null && !mCrossing.crossing()) {
+            com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+            int applied = wall.pageBottomInsetPx(com.termux.app.wall.PaneWallPage.TERMINAL);
+            int rest = mCrossingController.travelRestReservationPx(
+                roomPlaceOf(com.termux.app.wall.PaneWallPage.TERMINAL));
+            if (!com.termux.app.place.PageRoom.resizesOnReturn(applied, rest)) return;
+            wall.setPageBottomInsetPx(com.termux.app.wall.PaneWallPage.TERMINAL, rest);
+        }
+        mPaneController.refreshPaneSizes();
     }
 
     /** The room the page in front leaves its content (the wall's inset for its kind). */
@@ -24041,33 +24067,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * One frame of the terminal's rows travelling toward where the settle's resize will put them
-     * (TerminalView#setTravelDisplacement): the one tiled pane, whose bottom edge is the room's.
-     * A split's tiles each take a share of the change the tiling knows and this does not; they
-     * land under the frost instead. The displacement is measured from the height the travel began
-     * at, so it is the same arithmetic whether the room was given back in the first frame or is
-     * taken at settle.
-     */
-    private void syncTerminalTravelDisplacement(
-            @NonNull com.termux.app.place.PlaceChromeTravel.Frame frame,
-            @Nullable com.termux.app.wall.PaneWallPage arriving) {
-        if (mPaneController == null) return;
-        com.termux.view.TerminalView view = mPaneController.soleTiledPaneView();
-        if (view == null) return;
-        if (arriving == null) {
-            view.setTravelDisplacement(0, 0f);
-            return;
-        }
-        // A pre-sized page has its room already; what is left of the change is the settle's. Toward
-        // the terminal the pre-size is room taken ahead of it; away from it, toward Home, it is
-        // room given back that the page does not take (Crossing#giveRoomBack).
-        int preSized = mCrossing.terminalPreSizePx();
-        if (arriving != com.termux.app.wall.PaneWallPage.TERMINAL) preSized = -preSized;
-        view.setTravelDisplacement(mCrossingController.travelRoomChangePx(arriving) + preSized,
-            com.termux.app.place.PlaceChromeTravel.progressToward(frame, arriving));
-    }
-
-    /**
      * The slide landed: every pane's travel ends on the resize it was drawn toward, or now. The
      * reflow is frosted only where it can be seen, on the terminal, and not under lazy mode or
      * reduced motion, which stop every animation.
@@ -24724,11 +24723,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public int wallWidthPx() {
             return mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth();
         }
-
-        @Override
-        public void applyTerminalPreSize(int px) {
-            TermuxActivity.this.applyTerminalPreSize(px);
-        }
     }
 
     /** What only the activity gives the crossing's driver (place.CrossingController). */
@@ -24804,12 +24798,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean canPreRollTravelKeyboard() { return TermuxActivity.this.canPreRollTravelKeyboard(); }
         @Override public void beginTravelHold() { TermuxActivity.this.beginTravelHold(); }
         @Override public void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.preRollTravelKeyboard(frame); }
-        @Override public void preRollTravelContent(int roomGivenBackPx) { TermuxActivity.this.preRollTravelContent(roomGivenBackPx); }
         @Override public void putKeyboardAwayWithPicture() { TermuxActivity.this.putKeyboardAwayWithPicture(); }
         @Override public boolean keyboardPicturedAway() { return mKeyboardPicturedAway; }
         @Override public boolean keyboardSwipeTravel() { return mKeyboardSwipeTravel; }
         @Override public void syncKeyboardMaterialTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.syncKeyboardMaterialTravel(frame); }
-        @Override public void syncTerminalTravelDisplacement(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame, @Nullable com.termux.app.wall.PaneWallPage arriving) { TermuxActivity.this.syncTerminalTravelDisplacement(frame, arriving); }
         @Override public int stackPictureCoverPx() { return TermuxActivity.this.stackPictureCoverPx(); }
         // ---- dock ------------------------------------------------------------------
         @Override public @NonNull com.termux.app.dock.DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout arrangement, @NonNull com.termux.app.wall.PaneWallPage rowsPage) { return mDock.dockSnapshot(arrangement, rowsPage); }
@@ -24881,19 +24873,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.StackPicture picture = mStackPicture;
         if (picture == null || !picture.holds() || mPaneWallController == null) return 0;
         return picture.coverOver(picture.bottomOf(mPaneWallController.wall()));
-    }
-
-    /** How much shorter the terminal's page is laid out for a slide (Crossing#preSizeTerminal). */
-    private int mTerminalPreSizePx;
-
-    /**
-     * The terminal's page laid out {@code px} shorter at its bottom than the wall (0 puts it
-     * back), and its plain frame line, which frames it from outside the wall, with it.
-     */
-    private void applyTerminalPreSize(int px) {
-        int inset = Math.max(0, px);
-        if (inset == mTerminalPreSizePx) return;
-        mTerminalPreSizePx = inset;
     }
 
     /**
@@ -25056,7 +25035,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 Trace.endSection();
             }
             Trace.beginSection("Settle.away");
-            syncTerminalAway(page);
             if (beadsMelted) mDock.applyDockBeadMelt(true);
             if (seamLanding.bandsMoved() && page == left && setTerminalToolbarHeight(false))
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
@@ -25130,25 +25108,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The crops were cut where the stack was laid out; one pass re-cuts any a frame of the
         // slide drew somewhere else.
         if (moved || held) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-    }
-
-    /**
-     * Resting on Home, the terminal's page is laid out at the Terminal's rest, not at Home's room
-     * (Crossing#restTerminalAway, D11): it is not seen there, and a crossing back then finds
-     * nothing to resize. A crossing that left the Terminal landed with it already set, to the
-     * room the Terminal stood in, which is kept; a landing on Home with no crossing behind it
-     * (reduced motion, a jump) sets it here, in the settle's batch, before the pass that gives
-     * the content Home's room. Anywhere else it is 0.
-     */
-    private void syncTerminalAway(@NonNull com.termux.app.wall.PaneWallPage page) {
-        boolean home = page == com.termux.app.wall.PaneWallPage.WIDGETS && mLastWallPage == page;
-        if (!home) {
-            mCrossing.restTerminalAway(0);
-        } else if (mCrossing.terminalAwayPx() == 0) {
-            mCrossing.restTerminalAway(
-                mCrossingController.travelRestReservationPx(com.termux.app.wall.PaneWallPage.TERMINAL)
-                    - mCrossingController.travelRestReservationPx(com.termux.app.wall.PaneWallPage.WIDGETS));
-        }
     }
 
     /**
@@ -34537,10 +34496,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // not re-rendered for them (a re-render under the scaled editor frame showed as a flash).
         if (!mAppearance.isOpen())
             mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
-        // Returning from another app can restore focus before the terminal host re-measures to full
-        // size, leaving panes stuck at a tiny stale grid. Re-measure once layout settles.
-        if (mPaneController != null)
-            mPaneController.refreshPaneSizes();
+        // Returning from another app: the panes are measured again only if the Terminal's rest
+        // changed while away.
+        refreshPaneSizesOnReturn();
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BLUR_HEALTH);
     }
 
