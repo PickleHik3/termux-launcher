@@ -184,8 +184,6 @@ public class WindowSourceRulesTest {
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/assistant/AssistantPageController.java:1",
         // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
-        "app/chrome/ChromeRenderer.java:3",
-        // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
         "app/chrome/DisplayKeyboardBlur.java:1",
         // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
         "app/chrome/LiveBackdrop.java:1",

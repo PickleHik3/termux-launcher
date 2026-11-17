@@ -18,6 +18,7 @@ unfixed findings were listed for the developer to file as issues, not kept here.
 
 ## Agent
 
+- 2026-11-17 · feat/wr-256-frame-pipeline (#256) · Emulator sweep after the chrome commit moved into the frame pipeline (no draw cancel, no commit on demand). Passes when Home ⇄ Workspace crossings, keyboard up and down (Docked and Floating), and an Appearance editor Frost/Opacity/Tint drag look as before; a cold start and a relaunch show no frame of unstyled or misplaced dock, keyboard or bars; with the motion log on, `first-frame-release` reads `signal` and `frame-flush` lines name only `editor glass drag`; at rest no frame is drawn (GPU profile bars stay flat) · emulator. Not seen on screen: any of it.
 - 2026-11-16 · feat/page-glyph-switcher · Home glyph row. Passes when the row of glyphs sits where the page dots were, above the dock's line, in Docked and Floating dock styles, and no widget is resized · emulator, then pong. Not seen on screen: any of it.
 - 2026-11-16 · feat/page-glyph-switcher · Home glyph row contents. Passes when the row shows Home, Terminal, Assistant, Display in that order; Assistant is hidden when Assistant is off; Display is hidden when no display runs; the numbers read right with one and with many Home pages and Terminal windows, 1-digit and 2-digit · emulator, then pong. Not seen on screen: any of it.
 - 2026-11-16 · feat/page-glyph-switcher · Terminal only. Passes when the panel has no Home glyph and the setup card says the key exists, with no Add · emulator, then pong. Not seen on screen: any of it.
