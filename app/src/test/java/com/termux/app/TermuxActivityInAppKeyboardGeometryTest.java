@@ -312,12 +312,12 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         // stack scene's translation (StackScene.keyboardTranslationPx), not GONE.
         assertFalse(mController.isVisible());
         assertEquals(View.VISIBLE, keyboardContainer.getVisibility());
-        // This fixture's stack holds the keyboard alone (no dock rows, no status bar), so with
-        // the keyboard down the stack itself has nothing to show and is put away (DockRows
-        // stackShown); the keyboard inside is not laid out then. With rows on the stack the
-        // keyboard stays laid out under the translation (KeyboardLaidOutParityTest).
-        assertEquals(View.GONE, accessoryContainer.getVisibility());
-        assertEquals(0, accessoryContainer.getLayoutParams().height);
+        // This fixture's stack holds the keyboard alone (no dock rows, no status bar). The
+        // keyboard is always laid out, so the container stays laid out with it, as tall as the
+        // keyboard-up stack, and the scene translates it down; DockRows.stackShown (what the
+        // readers ask) still says the stack has nothing to show.
+        assertEquals(View.VISIBLE, accessoryContainer.getVisibility());
+        assertEquals(shownHeight, accessoryContainer.getLayoutParams().height);
 
         mController.toggle(TermuxInAppKeyboard.ToggleReason.KEYBOARD_ACTION);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
