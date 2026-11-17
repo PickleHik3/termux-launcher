@@ -42,7 +42,6 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_LOW_MEMORY_PRESET = "low_memory_preset";
     private static final String KEY_GLASS_REFRACTION = "fancier_glass";
     private static final String KEY_LIVE_BLUR = "live_blur";
-    private static final String KEY_SEE_THROUGH = "glass_see_through";
     private static final String KEY_LIVING_GLASS = TermuxStylePreferencesDataStore.KEY_MOTION_LIGHT;
     private static final String KEY_WALLPAPER_PARALLAX = "wallpaper_parallax";
     /** The trail's on/off, which the preset and the Appearance editor write; not Terminal's style list. */
@@ -72,8 +71,6 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         if (composite != null) composite.setVisible(PaneRetroEffect.available());
         Preference liveBlur = findPreference(KEY_LIVE_BLUR);
         if (liveBlur != null) liveBlur.setVisible(LiveBlurPolicy.offered(Build.VERSION.SDK_INT));
-        Preference seeThrough = findPreference(KEY_SEE_THROUGH);
-        if (seeThrough != null) seeThrough.setVisible(LiveBlurPolicy.offered(Build.VERSION.SDK_INT));
         Preference idle = findPreference(KEY_IDLE_ANIMATIONS);
         if (idle != null) idle.setVisible(PaneRetroEffect.available());
         Preference tearRate = findPreference(KEY_IDLE_TEAR_RATE);
@@ -261,21 +258,11 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         public void putString(@Nullable String key, @Nullable String value) {
             if (KEY_TERMINAL_EFFECT.equals(key) || KEY_IDLE_TEAR_RATE.equals(key)) {
                 view.putString(key, value);
-            } else if (KEY_SEE_THROUGH.equals(key)) {
-                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
-                if (prefs == null) return;
-                prefs.setGlassSeeThrough(value);
-                // The launcher re-reads the glass on its next apply when it resumes.
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
             }
         }
 
         @Override
         public String getString(@Nullable String key, @Nullable String defValue) {
-            if (KEY_SEE_THROUGH.equals(key)) {
-                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
-                return prefs == null ? defValue : prefs.getGlassSeeThrough();
-            }
             return KEY_TERMINAL_EFFECT.equals(key) || KEY_IDLE_TEAR_RATE.equals(key)
                 ? view.getString(key, defValue) : defValue;
         }

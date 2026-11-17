@@ -553,17 +553,15 @@ the Appearance editor's card for the Base look (developer, 2026-11-03).
 ### Look and motion
 
 **Backdrop layers**:
-While the pages move, a Live glass surface's backdrop as a short stack of pictures that each move
-on their own instead of one recording: the **ground** (the stored pre-blurred wallpaper frame at
-the parallax offset, or a live scene's frame at its glass rate), the **pages** (the pages under the
-dock or a pinned float, captured blurred as the swipe starts and moved by their travel) and the
-**local** layer (what lies beneath the surface on its own page or float, recorded and blurred
-once). The glass composites them in its one draw. The first and the landed frame of a swipe are
-the resting picture; a layer that is not ready falls back to the live recording (ADR 0021 §2b,
-`BackdropLayers`). Under "See through: One layer" a glass with glass above it shows the stored frame, so the glass
-above sees it but not through it, at rest too.
+A Live glass surface's backdrop, at rest and while the pages move alike, as a short stack of
+pictures that each refresh on their own trigger: the **ground** (the stored pre-blurred wallpaper
+frame at the parallax offset, or a live scene's frame at its glass rate), the **pages** (while the
+pages move, the pages under the dock or a pinned float, captured blurred as the swipe starts and
+moved by their travel; at rest they are in the local layer) and the **local** layer (everything
+else beneath the surface, drawn from the views themselves and blurred). The glass composites them
+in its one draw, so the first, every and the landed frame of a swipe are one composition and a
+landing has nothing to swap (ADR 0029 §3, `BackdropLayers`).
 _Avoid_: frozen glass, page snapshot, freeze frame
-_ADR 0029 (accepted, not yet built): a Live glass surface always draws these layers, at rest too, and "See through: One layer" is removed._
 
 **Ambient effect**:
 A built-in shader effect that animates continuously rather than in answer to something. It is off
@@ -587,7 +585,7 @@ The time or frame count after which a **Hold** releases on its own because its s
 come. A backstop is a fail-safe, not a schedule: the design is that the signal arrives first, and
 every backstop that releases a hold is written to the motion log by name so it can be counted.
 _Avoid_: timeout (a timeout is an error; a backstop keeps the screen alive), fallback delay
-_ADR 0028 (accepted, not yet built): a release by backstop is counted by name, and an unexpected backstop counts against the release bar._
+Every Hold's release is counted by name and reason in the counter table, and a backstop release also leaves a ring line. _ADR 0028: an unexpected backstop counts against the release bar; the waits that are not yet Holds (the keyboard's gates, the apps row's settles) join as their steps land._
 
 
 **Event effect**:
@@ -650,12 +648,16 @@ A **Hold** that keeps a window from drawing until the first frame is right: the 
 gate, the first-draw gate. A gate's **Backstop** is short, because a gate that stays shut is a
 black home screen.
 _Avoid_: block, freeze
-_ADR 0028 (accepted, not yet built): the keyboard reveal gate is deleted, and the window's first frame after a relaunch is the one gate left; nothing else cancels a draw._
+The window's first frame after a relaunch is a gate on the frame pipeline: the relaunch reveal holds it for the surface it carried, with frame-count and time backstops. The first-draw gate waits through the **First-layout helper**. _ADR 0028 (partly built): the keyboard reveal gate and close correction are deleted in step 3, after which nothing else cancels a draw._
 
 **Glass service**:
 The one registry every glass surface joins. An entry names its element (the look cells it reads), the view it draws in, the kind it wants and a budget priority (dock, then floats, then widgets); the service owns the granted kind, the layers, refresh, commit order and release. There are four kinds: **Wallpaper** (the stored pre-blurred frame), **Snapshot**, **Live**, and **Compositor** (the keyboard's frost over the X11 screen on the display window, falling back to Wallpaper). A surface keeps one picture for its life, and its kind changes only on a policy event (the Live blur switch, battery saver, a memory trim, a slot freeing).
 _Avoid_: backdrop service (the 0021 name), blur manager
-_ADR 0029 (accepted, not yet built): this entry describes the planned service; the app as built has separate glass mechanisms and three kinds._
+_ADR 0029 (accepted, partly built): the registry, its four kinds, the Live core and the commit as the frame table's last step are built, and the dock, floats and widgets have joined (`com.termux.app.glass`); pane slabs, panels, bars, the foot and the Compositor kind join in later steps._
+
+**Guard**:
+One of three checks every layer's writer runs while the motion log is on: a **foreign writer** (a property the writer owns was changed by someone else), **landing wrote** (the landing frame changed something) and **crossing laid out** (a layout request from a pose writer, or one a pre-draw step made late in the frame, which draws the new look on the old layout). A guard logs and counts in the **Counter table** and never crashes.
+_Avoid_: assertion, invariant check (an invariant is a motion-log rule over events; a guard watches a writer)
 
 **Hold**:
 A wait for one signal before something is let go: a layout the pass booked, a view's first draw,
@@ -663,7 +665,15 @@ a surface's first frame after a swap, the settle of a return. A hold is named, i
 by the signal it waits for or by its **Backstop**, and says which of the two released it. A hold
 that is superseded by a newer one is a no-op when it fires.
 _Avoid_: wait, timer, delay, debounce (a debounce coalesces repeats; it waits for nothing)
-_ADR 0028 (accepted, not yet built): a hold is named state in the frame's snapshot; the waiting element stays at its before-pose, the rest of the window keeps drawing, and each release logs signal, landing or backstop._
+A hold is the `window.Hold` type: a name, a backstop, and a release that logs signal, landing or backstop and counts under `hold:<name>:<reason>`. The waiting element stays at its before-pose and the rest of the window keeps drawing. The X11 surface's cover, swap and size settling and the window-foreground reply are Holds today. _ADR 0028 (partly built): the hold as state in the frame's snapshot, and the wallpaper colours callback as a Hold, wait for the steps that build the snapshot and the editor's draft._
+
+**Counter table**:
+The tally of every hold release, guard hit and invariant, one line per name with its count, first and last time and last detail. It lives outside the motion log's ring, so it survives the ring rolling over; `launcherctl motion-log dump` ends with it after a `--- counters ---` line and `motion-log clear` resets it. It counts only while the motion log is on. The 2.0 release bar reads it: every guard and an unexpected backstop at zero after a day of use.
+_Avoid_: stats, metrics
+
+**First-layout helper**:
+The one shared way for a sheet, popup, widget or gate to wait for its own first layout or draw (`window.FirstLayout`): it runs a callback in the next pre-draw pass (or after the next draw or layout), never cancels a draw and lets go of its listener. A wait on something delivered late is a **Hold** instead.
+_Avoid_: pre-draw listener (the helper is the only code besides the frame pipeline that registers one)
 
 
 **Lazy mode**:

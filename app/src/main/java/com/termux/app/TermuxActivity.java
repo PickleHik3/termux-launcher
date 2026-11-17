@@ -1686,6 +1686,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.window.FramePipeline();
 
     /**
+     * The glass service (ADR 0029): the dock, the floats and the widgets register their glass
+     * here and are granted a kind; its commit is the frame table's last step.
+     */
+    private final com.termux.app.glass.GlassService mGlass =
+        new com.termux.app.glass.GlassService(mFrames);
+    /** The dock's element in the glass registry. */
+    private static final String DOCK_GLASS = "dock";
+    /** The dock's glass kind moved: its backdrop is dressed again. */
+    private final com.termux.app.glass.GlassService.Redress mDockGlassRedress =
+        kind -> this.mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
+
+    /**
      * The accessory chrome — glass, blur, frost and backdrops for the dock, the in-app keyboard,
      * the under-pill nav strip, the top pane, the palette and the drawer plane. The Activity keeps
      * only the view slots and the lifecycle forwarding; everything the module needs from here goes
@@ -1953,9 +1965,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         registerRotationListener();
         setContentView(R.layout.activity_termux);
         mFrames.attach(findViewById(R.id.activity_termux_root_view));
+        // The bottom stack's writer is a step of the frame table, on the pipeline's guards.
+        mStackRenderer.attach(mFrames);
         mFrames.setLog((event, detail) -> {
             if (com.termux.app.chrome.MotionLog.enabled) com.termux.app.chrome.MotionLog.log(event, detail);
         });
+        // Battery saver is a Live policy input: the next apply reads it and the kinds move at once.
+        mGlass.watchPowerSave(this, () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
         com.termux.app.chrome.PanelBackdrop.install(getWindow().getDecorView(), mPanelBackdropSource);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
@@ -2531,6 +2547,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onResume() {
         super.onResume();
+        // Back after a trim: a policy event, so the Live kinds return at once.
+        mGlass.setMemoryShort(false);
         mHomePress.onResume();
         Logger.logVerbose(LOG_TAG, "onResume");
         mHomePill.refresh();
@@ -4334,6 +4352,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncFancierGlassLook() {
         com.termux.app.chrome.GlassRefraction.Look look = currentFancierGlassLook();
         boolean live = currentLiveBlur(look != null);
+        // A policy event for the glass service when it moved: every Live kind follows at once.
+        mGlass.setLiveOn(live);
         if (java.util.Objects.equals(look, mFancierGlassLook) && live == mLiveBlur) return;
         mFancierGlassLook = look;
         if (live != mLiveBlur) {
@@ -4363,26 +4383,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private android.graphics.drawable.Drawable liveDockPicture(@NonNull ImageView backdrop,
                                                                int blurRadiusDp) {
-        com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, blurRadiusDp);
+        com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, blurRadiusDp,
+            com.termux.app.chrome.LiveBackdrop.RANK_CHROME, DOCK_GLASS, mDockGlassRedress);
         return picture == null ? null : picture.drawable();
     }
 
+    /** A float's or a widget's element in the glass registry: its slab's own name. */
+    @NonNull
+    private static String glassElement(@NonNull String kind, @NonNull View slab) {
+        return kind + "@" + Integer.toHexString(System.identityHashCode(slab));
+    }
+
+    /** {@code redress} as the glass service tells it; null for none. */
+    @Nullable
+    private static com.termux.app.glass.GlassService.Redress glassRedress(
+            @Nullable Runnable redress) {
+        return redress == null ? null : kind -> redress.run();
+    }
+
     /**
-     * {@code surface}'s live picture at {@code blurRadiusDp}, the recorder made on first use; null,
-     * and any picture it had dropped, while Live is off, or when the recorder is full.
+     * {@code surface}'s live picture at {@code blurRadiusDp} and {@code rank} in the budget's
+     * order, the recorder made on first use. The surface registers as {@code element} with the
+     * glass service the first time; null, and any picture it had dropped, while its granted kind
+     * is not Live.
      */
     @Nullable
     private com.termux.app.chrome.LivePicture attachLivePicture(@NonNull View surface,
-                                                                int blurRadiusDp) {
-        return attachLivePicture(surface, blurRadiusDp,
-            com.termux.app.chrome.LiveBackdrop.RANK_CHROME);
-    }
-
-    /** {@link #attachLivePicture(View, int)} at {@code rank} in the budget's order. */
-    @Nullable
-    private com.termux.app.chrome.LivePicture attachLivePicture(@NonNull View surface,
-                                                                int blurRadiusDp, int rank) {
-        if (!mLiveBlur) {
+            int blurRadiusDp, int rank, @NonNull String element,
+            @Nullable com.termux.app.glass.GlassService.Redress redress) {
+        com.termux.app.glass.GlassKind kind = mGlass.grantedTo(element, surface);
+        if (kind == null) {
+            int priority = rank == com.termux.app.chrome.LiveBackdrop.RANK_WIDGET
+                ? com.termux.app.glass.GlassEntry.PRIORITY_WIDGET
+                : rank == com.termux.app.chrome.LiveBackdrop.RANK_FLOAT
+                ? com.termux.app.glass.GlassEntry.PRIORITY_FLOAT
+                : com.termux.app.glass.GlassEntry.PRIORITY_DOCK;
+            kind = mGlass.register(new com.termux.app.glass.GlassEntry(element, surface,
+                com.termux.app.glass.GlassKind.LIVE, priority), redress);
+        }
+        if (kind != com.termux.app.glass.GlassKind.LIVE) {
             if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);
             return null;
         }
@@ -4391,9 +4430,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The picture takes the stored frames' Vibrancy and frame tint, so a hand-off never shows.
         com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
         recorder.setStoredBake(cache.bakedVibrancy(), cache.bakedFrameTint());
-        recorder.setSeeThrough(mPreferences != null && mPreferences.isGlassSeeThroughOne()
-            ? com.termux.app.chrome.BackdropLayers.SeeThrough.ONE
-            : com.termux.app.chrome.BackdropLayers.SeeThrough.ALL);
         return recorder.attach(surface,
             blurRadiusDp * getResources().getDisplayMetrics().density, rank);
     }
@@ -4405,6 +4441,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View root = findViewById(R.id.terminal_root_container);
             if (!(root instanceof ViewGroup)) return null;
             mLiveBackdrop = new com.termux.app.chrome.LiveBackdrop((ViewGroup) root);
+            // Recorded by the glass commit, the frame table's last step.
+            mLiveBackdrop.setService(mGlass);
+            mGlass.setLiveCore(mLiveBackdrop);
             // A swipe holds the wall's pages in a page layer of their own under live glass.
             View wall = findViewById(R.id.terminal_pane_wall);
             if (wall instanceof com.termux.app.chrome.LiveBackdrop.Wall) {
@@ -5578,7 +5617,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         reflection.attachStrip(null, 0f, 0f);
         boolean live = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
             && mFancierGlassLook != null;
-        reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], rowAt[1] - hostAt[1],
+        reflection.update(card, mPeekRow, rowAt[0] - hostAt[0],
+            rowAt[1] - hostAt[1] + mStackRenderer.rowsOverHostPx(),
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
     }
 
@@ -6890,6 +6930,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             backdrop.setRenderEffect(null);
         }
         if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
+        mGlass.unregister(DOCK_GLASS);
         backdrop.setImageDrawable(null);
         backdrop.setVisibility(View.GONE);
         // No frame: the dock's content stands on the page's dim again.
@@ -9543,6 +9584,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The keyboard going up or down, or the dock lifting, does not always lay the dock host out
         // again, yet it decides whether the Peek card may stand: read it again before the next draw.
         if (mPeekWatchedHost != null) schedulePeekRefresh();
+        // The stack's transforms for this rest: written only where they differ from the last.
+        mStackRenderer.applyAtRest();
     }
 
     /**
@@ -10352,124 +10395,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The accessory stack's one translationY, which two things own a share of: the system IME's
      * lift, and the wall's travel sliding the dock and keyboard between two places' states. Each
-     * writes its own share and this sums them, so neither undoes the other.
-     *
-     * <p>While the travel has the stack below where it is laid out, the part that has slid past
-     * the stack's own laid-out bottom is clipped away: the root lets its children draw outside it,
-     * and a keyboard sliding off would otherwise draw across the navigation bar on its way out.
+     * writes its own share and the stack's renderer sums them, so neither undoes the other; it
+     * also cuts the stack and the keyboard where the travel slides them past their laid-out
+     * bottoms, and holds the bands under the keyboard up by the keyboard's share
+     * ({@link com.termux.app.place.StackScene}).
      */
     private void applyAccessoryStackTranslation() {
-        View accessoryContainer = hotView(R.id.accessory_stack_container);
-        if (accessoryContainer == null) {
-            return;
-        }
-        float translationY = mDockTravelTranslationPx - mDockImeLiftPx;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
             Trace.setCounter("Wall.stackTranslationPx", Math.round(mDockTravelTranslationPx));
-        if (accessoryContainer.getTranslationY() != translationY) {
-            accessoryContainer.setTranslationY(translationY);
-            // The dock's and the keyboard's glass sample the wallpaper through this translation
-            // (mAccessoryStackLift); a transform alone redraws nothing, so they are re-aimed here.
-            View backdrop = hotView(R.id.accessory_blur_backdrop);
-            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-            View keyboardHost = hotView(R.id.inapp_keyboard_view_host);
-            if (keyboardHost != null && keyboardHost.getBackground() != null) keyboardHost.invalidate();
-            View under = hotView(R.id.accessory_under_keyboard_stack);
-            if (under != null && under.getBackground() != null) under.invalidate();
-        }
-        applyUnderKeyboardTravel();
-        int travel = Math.round(Math.max(0f, mDockTravelTranslationPx));
-        if (travel <= 0) {
-            if (accessoryContainer.getClipBounds() != null) accessoryContainer.setClipBounds(null);
-            return;
-        }
-        // Generous above and to the sides: the stack's glow and ripple layers draw outside it on
-        // purpose, and only the bottom edge is the one being cut.
-        int width = Math.max(1, accessoryContainer.getWidth());
-        // The height it is about to be laid out at: a pre-roll has just written it, and the
-        // traversal that applies it runs before this frame draws.
-        ViewGroup.LayoutParams params = accessoryContainer.getLayoutParams();
-        int height = params != null && params.height > 0 ? params.height
-            : Math.max(0, accessoryContainer.getHeight());
-        mTmpTravelClip.set(-width, -Math.max(height, getResources().getDisplayMetrics().heightPixels),
-            2 * width, Math.max(0, height - travel));
-        accessoryContainer.setClipBounds(mTmpTravelClip);
+        mStackRenderer.setTravel(mDockTravelTranslationPx, mKeyboardTravelSharePx, mDockImeLiftPx);
     }
 
     /**
-     * How far the keyboard column's bottom stands under the keyboard: the bands under it with
-     * their air, and the column's own padding.
+     * The bottom stack's one writer of transforms (the travel, the IME's lift, the sink, the
+     * slide and the plank's slab, composed), reading the stack's views through the activity.
      */
-    private static int belowKeyboardInColumnPx(@NonNull View column, @Nullable View under) {
-        int below = column.getPaddingBottom();
-        if (under == null || under.getVisibility() == View.GONE || under.getParent() != column)
-            return below;
-        below += under.getHeight();
-        ViewGroup.LayoutParams params = under.getLayoutParams();
-        if (params instanceof ViewGroup.MarginLayoutParams) {
-            below += ((ViewGroup.MarginLayoutParams) params).topMargin
-                + ((ViewGroup.MarginLayoutParams) params).bottomMargin;
+    private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
+        @Nullable @Override public View view(int id) {
+            return hotView(id);
         }
-        return below;
-    }
-
-    /** The accessory stack's bottom padding: what stands between its column and its bottom. */
-    private int accessoryStackPaddingBottomPx() {
-        View container = hotView(R.id.accessory_stack_container);
-        return container == null ? 0 : container.getPaddingBottom();
-    }
-
-    /** Scratch for the travel clip; setClipBounds copies it. */
-    private final Rect mTmpTravelClip = new Rect();
-    /** Scratch for the keyboard's own clip while it rises from behind the bands under it. */
-    private final Rect mTmpKeyboardTravelClip = new Rect();
-
-    /**
-     * The bands standing under the keyboard ({@code accessory_under_keyboard_stack}) while the
-     * keyboard travels: the stack slides the keyboard down by its share of the travel, and the
-     * bands under it would go with it; they are held back up by that share instead, so they stay
-     * on the bottom edge and the keyboard rises out from between them and the dock rows, clipped
-     * where the bands begin. The dock's own share still takes them with it. Nothing to do, and
-     * nothing left behind, while no band stands there or the keyboard is not in the column.
-     */
-    private void applyUnderKeyboardTravel() {
-        View under = hotView(R.id.accessory_under_keyboard_stack);
-        View keyboard = hotView(R.id.inapp_keyboard_container);
-        View column = hotView(R.id.accessory_keyboard_column);
-        boolean inColumn = keyboard != null && keyboard.getVisibility() != View.GONE
-            && column != null && keyboard.getParent() == column;
-        boolean holds = under != null && mDockRows.underKeyboardBandsShown() && inColumn;
-        float share = holds ? Math.max(0f, mKeyboardTravelSharePx) : 0f;
-        if (under != null && under.getTranslationY() != -share) {
-            under.setTranslationY(-share);
-            // Its sheet samples the wallpaper where it is drawn; a transform alone redraws nothing.
-            if (under.getBackground() != null) under.invalidate();
+        @Override public int keyboardDesiredHeightPx() {
+            return mKeyboardGeometry == null ? 0 : mKeyboardGeometry.desiredHeightPx();
         }
-        if (keyboard == null) return;
-        // The keyboard is also cut where it slides past its column's laid-out bottom, not only the
-        // stack's: with the dock's foot the stack reaches the screen's edge and the column stands
-        // the foot's band above it, so the tail of a crossing to a keyboard-down page would show
-        // the slid keyboard's top row under the gesture pill (BottomInsets#keyboardTravelHiddenPx).
-        int hidden = inColumn ? com.termux.app.place.BottomInsets.keyboardTravelHiddenPx(
-                mDockTravelTranslationPx, share, belowKeyboardInColumnPx(column, under),
-                accessoryStackPaddingBottomPx())
-            : Math.round(share);
-        if (hidden <= 0) {
-            if (keyboard.getClipBounds() != null) keyboard.setClipBounds(null);
-            return;
+        @Override public boolean underKeyboardBandsShown() {
+            return mDockRows != null && mDockRows.underKeyboardBandsShown();
         }
-        // Generous to the sides and above, as the stack's own clip is: only the bottom is cut. A
-        // keyboard pre-rolled this frame has not been laid out yet and has no width of its own.
-        int width = Math.max(keyboard.getWidth(), getResources().getDisplayMetrics().widthPixels);
-        // The height it is about to be laid out at: a pre-roll has just measured it, and the
-        // traversal that lays it out runs before this frame draws.
-        int measured = mKeyboardGeometry.desiredHeightPx();
-        int height = measured > 0 ? measured : Math.max(0, keyboard.getHeight());
-        mTmpKeyboardTravelClip.set(-width, -Math.max(height,
-            getResources().getDisplayMetrics().heightPixels), 2 * width,
-            Math.max(0, height - hidden));
-        keyboard.setClipBounds(mTmpKeyboardTravelClip);
-    }
+        @Override public boolean keyboardShown() {
+            return isInAppKeyboardShown();
+        }
+        @Override public boolean othersOwnStack() {
+            return mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive();
+        }
+    });
 
     /**
      * The bottom inset the root, which fits the system windows, pads itself by
@@ -10817,6 +10774,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         clearInAppKeyboardBackdrop();
         clearAccessoryRenderEffectBackdrop();
         if (mLiveBackdrop != null) mLiveBackdrop.releaseAll();
+        // A policy event: no surface is Live again until the window comes back.
+        mGlass.setMemoryShort(true);
     }
 
     /** Drop every session's kitty animation frames, keeping the still image each rests on. */
@@ -10888,6 +10847,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // with the Activity rather than outlive it.
         com.termux.app.terminal.TerminalKeyInspector.close();
         mChrome.onDestroy();
+        mGlass.watchPowerSave(this, null);
         mFrames.destroy();
         unregisterPreferredHomeChangeReceiver();
         cancelVoiceInput();
@@ -11015,18 +10975,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View root = findViewById(R.id.activity_termux_root_view);
         // The first frame drawn is the editor as it stood, not the plain home with the editor
         // cut in after: the window waits for it, with a time and a frame backstop.
-        final com.termux.app.surfaces.RelaunchReveal.Gate reveal =
-            com.termux.app.surfaces.RelaunchReveal.holdFirstDraw(getWindow().getDecorView(), true);
+        final com.termux.app.window.Hold reveal =
+            com.termux.app.surfaces.RelaunchReveal.hold(mFrames, true);
         Runnable open = () -> {
             if (isFinishing() || isDestroyed() || mAppearance.isOpen()
                 || !mAppearanceHandover.claim(carried)) {
-                if (reveal != null) reveal.release();
+                if (reveal != null) reveal.signal();
                 return;
             }
-            if (mAppearance.reopen(carried, reveal == null ? null : reveal::release))
+            if (mAppearance.reopen(carried, reveal == null ? null : reveal::signal))
                 mAppearanceFromSettings = fromSettings;
             else if (reveal != null)
-                reveal.release();
+                reveal.signal();
         };
         if (root != null) root.post(open);
         else open.run();
@@ -23657,6 +23617,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final class DockControllerHost implements com.termux.app.dock.DockController.Host {
 
+        @NonNull @Override public StackRenderer stackRenderer() {
+            return mStackRenderer;
+        }
+
         @Nullable
         @Override
         public <T extends View> T findViewById(int id) {
@@ -24053,6 +24017,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final class CrossingViewsHost implements com.termux.app.place.CrossingViews.Host {
 
+        @NonNull @Override public StackRenderer stackRenderer() {
+            return mStackRenderer;
+        }
+
         @Nullable
         @Override
         public View hotView(int id) {
@@ -24403,6 +24371,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mCrossing.land(landed != null ? landed : shownEndpointPageOf(page),
                     arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
+            // The stack's next frame is the landing's: it should write nothing new.
+            mStackRenderer.onLanding();
             // A keyboard a pictured dip put away comes back where the wall came back.
             landKeyboardPicturedAway(page, left);
             Trace.endSection();
@@ -26070,12 +26040,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public boolean liveBlur() { return mLiveBlur; }
             @Nullable @Override
             public com.termux.app.chrome.LivePicture attachWidgetLiveGlass(@NonNull View slab,
-                                                                           int blurDp) {
+                    int blurDp, @Nullable Runnable redress) {
+                String element = glassElement("widget", slab);
                 return attachLivePicture(slab, blurDp,
-                    com.termux.app.chrome.LiveBackdrop.RANK_WIDGET);
+                    com.termux.app.chrome.LiveBackdrop.RANK_WIDGET, element,
+                    mGlass.grantedTo(element, slab) == null ? glassRedress(redress) : null);
             }
             @Override public void detachWidgetLiveGlass(@NonNull View slab) {
                 if (mLiveBackdrop != null) mLiveBackdrop.detach(slab);
+                mGlass.unregister(glassElement("widget", slab));
             }
             @Override public void openSurfaceEditor() {
                 TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
@@ -29450,29 +29423,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the one a widened parting has just asked for. The 160 ms backstop is the keyboard reveal
      * gate's, for the same reason — a layout that never comes must not swallow the pad.
      */
-    private final class DisplayTouchpadWait implements View.OnLayoutChangeListener, Runnable {
+    private final class DisplayTouchpadWait {
 
         @NonNull private final View mKeyboardView;
+        @NonNull private final com.termux.app.window.FirstLayout.Handle mLayoutWait;
 
         DisplayTouchpadWait(@NonNull View keyboardView) {
             mKeyboardView = keyboardView;
-            keyboardView.addOnLayoutChangeListener(this);
-            keyboardView.postDelayed(this, 160L);
+            mLayoutWait = com.termux.app.window.FirstLayout.afterNextLayout(keyboardView, 160L, this::onLaidOut);
         }
 
         boolean follows(@NonNull View keyboardView) {
             return mKeyboardView == keyboardView;
         }
 
-        @Override
-        public void onLayoutChange(View v, int l, int t, int r, int b,
-                                   int ol, int ot, int or, int ob) {
-            // The resume adds a view, which a layout pass is no place to do.
-            v.post(this);
-        }
-
-        @Override
-        public void run() {
+        private void onLaidOut() {
             if (mDisplayTouchpadWait != this) return;
             release();
             syncDisplayTouchpad();
@@ -29480,8 +29445,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         void release() {
             if (mDisplayTouchpadWait == this) mDisplayTouchpadWait = null;
-            mKeyboardView.removeOnLayoutChangeListener(this);
-            mKeyboardView.removeCallbacks(this);
+            mLayoutWait.cancel();
         }
     }
 
@@ -32727,14 +32691,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
         // A float's glass blurs what is beneath it at the terminal glass's own radius.
         @Nullable @Override
-        public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
+        public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
+                                                                 @Nullable Runnable redress) {
+            String element = glassElement("float", slab);
             return attachLivePicture(slab,
                 mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0,
-                com.termux.app.chrome.LiveBackdrop.RANK_FLOAT);
+                com.termux.app.chrome.LiveBackdrop.RANK_FLOAT, element,
+                mGlass.grantedTo(element, slab) == null ? glassRedress(redress) : null);
         }
 
         @Override public void detachLiveGlass(@NonNull View slab) {
             if (mLiveBackdrop != null) mLiveBackdrop.detach(slab);
+            mGlass.unregister(glassElement("float", slab));
         }
 
         // Live windows while swiping: the row's windows beside the one in front. None under

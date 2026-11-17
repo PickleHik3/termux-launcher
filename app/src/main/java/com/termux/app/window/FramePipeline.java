@@ -10,6 +10,7 @@ import android.view.ViewTreeObserver;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.function.LongSupplier;
 
 /**
@@ -45,8 +46,19 @@ public final class FramePipeline {
         void log(@NonNull String event, @NonNull String detail);
     }
 
+    /** Counter name of each step run late (in the pre-draw pass), built once. */
+    private static final String[] LATE_KEYS = lateKeys();
+
     private final Runnable[] mSteps = new Runnable[FrameStep.TABLE.length];
+    private final FrameGuards mGuards = new FrameGuards();
+    /** Holds on the first frame (the relaunch reveal); open ones keep that draw back. */
+    private final ArrayList<Hold> mFirstFrameHolds = new ArrayList<>(1);
+    private int mFirstFrameAttempts;
     private int mDirty;
+    /** Steps run on every drawn frame without asking for one ({@link #arm}). */
+    private int mArmed;
+    /** The steps that run only in the pre-draw hook ({@link FrameStep#drawStep}). */
+    private static final int DRAW_STEPS = drawSteps();
     @NonNull private final LongSupplier mClock;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     @Nullable private Log mLog;
@@ -87,6 +99,34 @@ public final class FramePipeline {
         mLog = log;
     }
 
+    /** The guards every writer in the table runs while the motion log is on. */
+    @NonNull
+    public FrameGuards guards() {
+        return mGuards;
+    }
+
+    /**
+     * Keeps the window's first frame from drawing while the returned {@link Hold} is open: the one
+     * hold in the pipeline that cancels a draw (ADR 0028 section 4), for the first frame after a
+     * relaunch that must show the surface it carried. It ends by its signal or its backstops
+     * ({@code backstopMs} and {@code maxFrames} frames declined), so a held window can never stay
+     * black. Null when the first frame is already behind (nothing is held then).
+     */
+    @Nullable
+    public Hold holdFirstFrame(@NonNull String name, long backstopMs, int maxFrames) {
+        View root = mRoot;
+        if (mDestroyed || root == null || mFirstFrameDrawn) return null;
+        Hold hold = Hold.take(name, backstopMs, maxFrames, mClock);
+        // The time backstop holds even when no frame comes to ask; a release asks for the frame.
+        hold.onRelease(() -> {
+            View r = mRoot;
+            if (r != null) r.invalidate();
+        });
+        hold.armBackstop(mHandler);
+        mFirstFrameHolds.add(hold);
+        return hold;
+    }
+
     /**
      * Hooks the window's root: the pipeline's one pre-draw listener goes on it. A root not yet
      * attached has its first frame ahead, which the pipeline may hold; null unhooks.
@@ -112,6 +152,22 @@ public final class FramePipeline {
     }
 
     /**
+     * Arms {@code step} to run in the pre-draw hook of every frame that draws, or disarms it. An
+     * armed step never asks for a frame itself, so at rest, with nothing drawing, it costs
+     * nothing: for work that must see every drawn frame (the glass commit re-recording what moved
+     * beneath a Live surface).
+     */
+    public void arm(@NonNull FrameStep step, boolean armed) {
+        int bit = 1 << step.ordinal();
+        mArmed = armed ? mArmed | bit : mArmed & ~bit;
+    }
+
+    /** Whether {@code step} is armed. */
+    public boolean isArmed(@NonNull FrameStep step) {
+        return (mArmed & (1 << step.ordinal())) != 0;
+    }
+
+    /**
      * Runs the whole table once, now, in order, for a caller that needs the result before the next
      * frame (a pass already in the frame's animation phase, pause, a test). {@code who} names the
      * caller in the log.
@@ -129,7 +185,7 @@ public final class FramePipeline {
             return;
         }
         mDirty = allSteps();
-        runTable();
+        runTable(true, false);
     }
 
     /** Whether the root's first frame is still ahead (or being held). */
@@ -160,6 +216,10 @@ public final class FramePipeline {
     public void destroy() {
         mDestroyed = true;
         mDirty = 0;
+        for (int i = mFirstFrameHolds.size() - 1; i >= 0; i--) {
+            mFirstFrameHolds.get(i).release(Hold.LANDING, "destroyed");
+        }
+        mFirstFrameHolds.clear();
         unhook();
         mRoot = null;
         mFirstFrameDrawn = true;
@@ -198,7 +258,12 @@ public final class FramePipeline {
         mAnimationBooked = false;
         mPostBooked = false;
         if (mDestroyed || mDirty == 0) return;
-        runTable();
+        View root = mRoot;
+        boolean framed = root != null && root.isAttachedToWindow();
+        // Without a window the post stands in for the whole frame, the draw steps too.
+        runTable(!framed, false);
+        // A draw step waits for the pre-draw hook: make sure this frame draws.
+        if (framed && (mDirty & DRAW_STEPS) != 0 && !mDestroyed) root.invalidate();
     }
 
     /** The one pre-draw hook. Runs the table only on a frame an input marked dirty. */
@@ -206,21 +271,42 @@ public final class FramePipeline {
         View root = mRoot;
         if (mDestroyed || root == null) return true;
         if (mFirstFrameDrawn) {
-            if (mDirty != 0) runTable();
+            mDirty |= mArmed;
+            // After the animation phase: what runs here draws on this frame's layout.
+            if (mDirty != 0) runTable(true, true);
             return true;
         }
-        // The window's first frame: the whole table runs, whatever was asked.
+        // The window's first frame: the whole table runs, whatever was asked (a held frame past
+        // the first few runs only what was asked since, so a long relaunch hold costs no table).
         boolean laidOutBefore = root.isLayoutRequested();
         mInFirstFrame = true;
         try {
-            mDirty = allSteps();
-            runTable();
+            if (mFirstFrameAttempts++ <= FIRST_FRAME_MAX_HELD) mDirty = allSteps();
+            mDirty |= mArmed;
+            runTable(true, false);
         } finally {
             mInFirstFrame = false;
         }
+        boolean relaunchHeld = false;
+        boolean relaunchBackstop = false;
+        for (int i = mFirstFrameHolds.size() - 1; i >= 0; i--) {
+            Hold hold = mFirstFrameHolds.get(i);
+            if (hold.isOpen() && hold.onFrame()) {
+                relaunchHeld = true;
+                continue;
+            }
+            if (Hold.BACKSTOP.equals(hold.releaseReason())) {
+                mFirstFrameBackstops++;
+                relaunchBackstop = true;
+            }
+            mFirstFrameHolds.remove(i);
+        }
+        // The one draw a hold cancels: the first frame after a relaunch waits for the surface it
+        // carried. Its backstops (frames and time) are on the hold itself.
+        if (relaunchHeld) return false;
         boolean tableLaidOut = !laidOutBefore && root.isLayoutRequested();
         if (!tableLaidOut) {
-            releaseFirstFrame("signal");
+            releaseFirstFrame(relaunchBackstop ? "backstop relaunch" : "signal");
             return true;
         }
         long now = mClock.getAsLong();
@@ -245,11 +331,21 @@ public final class FramePipeline {
 
     private void releaseFirstFrame(@NonNull String reason) {
         mFirstFrameDrawn = true;
+        if (Counters.enabled) {
+            Counters.count(reason.startsWith("backstop") ? "first-frame:backstop" : "first-frame:signal", reason);
+        }
         Log log = mLog;
         if (log != null) log.log(LOG_FIRST_FRAME, reason);
     }
 
-    private void runTable() {
+    /**
+     * Runs the dirty steps in table order. {@code preDraw} when the frame's layout has settled
+     * (the pre-draw hook, a flush, a frame with no window), else the draw steps stay dirty for the
+     * pre-draw hook of this frame. {@code late} marks a run in the pre-draw pass after the frame's
+     * layout: a step that asks for a layout there draws one frame of its new look on the old
+     * layout, which the guards count so a device shows whether it happens.
+     */
+    private void runTable(boolean preDraw, boolean late) {
         if (mRunning) return;
         unbook();
         mRunning = true;
@@ -258,19 +354,49 @@ public final class FramePipeline {
             for (int i = 0; i < mSteps.length; i++) {
                 int bit = 1 << i;
                 if ((mDirty & bit) == 0) continue;
+                if (!preDraw && (DRAW_STEPS & bit) != 0) continue;
                 mDirty &= ~bit;
                 Runnable step = mSteps[i];
-                if (step != null && !mDestroyed) step.run();
+                if (step == null || mDestroyed) continue;
+                if (late) runLate(i, step);
+                else step.run();
             }
         } finally {
             mRunning = false;
             Trace.endSection();
         }
-        // A step that asked again from inside the table gets the next frame.
-        if (mDirty != 0 && !mDestroyed) bookFrame();
+        // A step that asked again from inside the table gets the next frame; a draw step left for
+        // this frame's pre-draw hook does not book another.
+        if ((preDraw ? mDirty : mDirty & ~DRAW_STEPS) != 0 && !mDestroyed) bookFrame();
+    }
+
+    private void runLate(int index, @NonNull Runnable step) {
+        View root = mRoot;
+        boolean laidOutBefore = root != null && root.isLayoutRequested();
+        step.run();
+        if (!Counters.enabled) return;
+        Counters.count(LATE_KEYS[index], null);
+        if (root != null && !laidOutBefore && root.isLayoutRequested()) {
+            mGuards.layoutRequested(FrameStep.TABLE[index].name(),
+                "late in pre-draw: new look drawn on the old layout");
+        }
+    }
+
+    private static String[] lateKeys() {
+        String[] keys = new String[FrameStep.TABLE.length];
+        for (int i = 0; i < keys.length; i++) keys[i] = "pre-draw-step:" + FrameStep.TABLE[i].name();
+        return keys;
     }
 
     private static int allSteps() {
         return (1 << FrameStep.TABLE.length) - 1;
+    }
+
+    private static int drawSteps() {
+        int bits = 0;
+        for (FrameStep step : FrameStep.TABLE) {
+            if (step.drawStep()) bits |= 1 << step.ordinal();
+        }
+        return bits;
     }
 }

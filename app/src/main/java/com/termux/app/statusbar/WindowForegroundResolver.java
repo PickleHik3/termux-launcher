@@ -187,6 +187,8 @@ public final class WindowForegroundResolver {
     private volatile long mLastPrivilegedAt = Long.MIN_VALUE / 2;
     private boolean mInFlight;
     private long mInFlightSince;
+    /** The wait for the reading: named, so a poll that only ever ends on its backstop shows. */
+    @Nullable private com.termux.app.window.Hold mInFlightHold;
 
     public WindowForegroundResolver(@Nullable Listener listener) {
         mListener = listener;
@@ -211,6 +213,9 @@ public final class WindowForegroundResolver {
         if (mInFlight && nowMs - mInFlightSince < IN_FLIGHT_TIMEOUT_MS) return;
         if (nowMs - mLastRunAt < MIN_INTERVAL_MS) return;
 
+        // Here a poll still in flight has been past its timeout: it is abandoned, not waited on.
+        if (mInFlightHold != null) mInFlightHold.release(com.termux.app.window.Hold.BACKSTOP, null);
+        mInFlightHold = com.termux.app.window.Hold.takeQuiet("foreground-poll", IN_FLIGHT_TIMEOUT_MS);
         mLastRunAt = nowMs;
         mInFlight = true;
         mInFlightSince = nowMs;
@@ -243,6 +248,7 @@ public final class WindowForegroundResolver {
     /** Applies a reading on the main thread, where the cache is read, and ends the poll. */
     private void deliver(@Nullable String output, @NonNull List<Integer> asked, long nowMs) {
         mMainHandler.post(() -> {
+            if (mInFlightHold != null) mInFlightHold.signal();
             mInFlight = false;
             boolean changed = output != null && applyOutput(output, asked, nowMs);
             if (changed && mListener != null) mListener.onForegroundResolved();

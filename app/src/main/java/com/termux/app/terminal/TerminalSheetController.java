@@ -1218,44 +1218,34 @@ public final class TerminalSheetController
             // Travel is the card's own width, which is only known once it has been laid out, so
             // the drawer waits a frame rather than guessing at it.
             card.setAlpha(1f);
-            card.getViewTreeObserver().addOnPreDrawListener(
-                new android.view.ViewTreeObserver.OnPreDrawListener() {
-                    @Override public boolean onPreDraw() {
-                        card.getViewTreeObserver().removeOnPreDrawListener(this);
-                        card.setTranslationX(TerminalDrawerMetrics.enterTranslationX(
-                            card.getWidth(), isRtl()));
-                        clipSlidingDrawer(card);
-                        card.animate().translationX(0f).setDuration(DRAWER_ENTER_DURATION_MS)
-                            .setInterpolator(EMPHASIZED_DECELERATE)
-                            .setUpdateListener(animation -> clipSlidingDrawer(card))
-                            .withEndAction(() -> {
-                                card.animate().setUpdateListener(null);
-                                card.setClipBounds(null);
-                                restLiveBlur();
-                            })
-                            .start();
-                        return true;
-                    }
-                });
+            com.termux.app.window.FirstLayout.beforeNextDraw(card, () -> {
+                card.setTranslationX(TerminalDrawerMetrics.enterTranslationX(
+                    card.getWidth(), isRtl()));
+                clipSlidingDrawer(card);
+                card.animate().translationX(0f).setDuration(DRAWER_ENTER_DURATION_MS)
+                    .setInterpolator(EMPHASIZED_DECELERATE)
+                    .setUpdateListener(animation -> clipSlidingDrawer(card))
+                    .withEndAction(() -> {
+                        card.animate().setUpdateListener(null);
+                        card.setClipBounds(null);
+                        restLiveBlur();
+                    })
+                    .start();
+            });
             return;
         }
         if (foot) {
             // A foot panel peeks out of the terminal's bottom edge, so it rises rather than
             // appears: the travel is its own height, which is only known once it has been laid out.
             card.setAlpha(0f);
-            card.getViewTreeObserver().addOnPreDrawListener(
-                new android.view.ViewTreeObserver.OnPreDrawListener() {
-                    @Override public boolean onPreDraw() {
-                        card.getViewTreeObserver().removeOnPreDrawListener(this);
-                        card.setAlpha(1f);
-                        card.setTranslationY(card.getHeight());
-                        card.animate().translationY(0f).setDuration(ENTER_DURATION_MS)
-                            .setInterpolator(new PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
-                            .withEndAction(TerminalSheetController.this::restLiveBlur)
-                            .start();
-                        return true;
-                    }
-                });
+            com.termux.app.window.FirstLayout.beforeNextDraw(card, () -> {
+                card.setAlpha(1f);
+                card.setTranslationY(card.getHeight());
+                card.animate().translationY(0f).setDuration(ENTER_DURATION_MS)
+                    .setInterpolator(new PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+                    .withEndAction(this::restLiveBlur)
+                    .start();
+            });
             return;
         }
         com.termux.app.chrome.GlassMotionPlayer.enter(card, mHost.glassMotion(),

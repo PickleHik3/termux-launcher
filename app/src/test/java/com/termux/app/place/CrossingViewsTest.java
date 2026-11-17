@@ -91,6 +91,15 @@ public class CrossingViewsTest {
     /** The activity's side: its views by id, and what the adapter hands it, recorded. */
     private static final class FakeHost implements CrossingViews.Host {
         final SparseArray<View> views = new SparseArray<>();
+        /** The stack's one writer, over these views. */
+        final com.termux.app.StackRenderer renderer = new com.termux.app.StackRenderer(
+            new com.termux.app.StackRenderer.Views() {
+                @Nullable @Override public View view(int id) { return views.get(id); }
+                @Override public int keyboardDesiredHeightPx() { return 0; }
+                @Override public boolean underKeyboardBandsShown() { return false; }
+                @Override public boolean keyboardShown() { return false; }
+            });
+        @NonNull @Override public com.termux.app.StackRenderer stackRenderer() { return renderer; }
         float dockPx = Float.NaN, keyboardPx = Float.NaN, barX = Float.NaN;
         int coverPx = -1, preSizePx = -1;
         final List<PaneWallPage> preRolls = new ArrayList<>();

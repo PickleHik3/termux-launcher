@@ -4,6 +4,7 @@ import android.app.Application;
 import android.os.Build;
 import android.view.View;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -18,6 +19,8 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -44,6 +47,12 @@ public class FramePipelineTest {
         frames.setLog((event, detail) -> log.add(event + " " + detail));
     }
 
+    @After
+    public void tearDown() {
+        Counters.enable(false, null);
+        Counters.clear();
+    }
+
     private static ShadowLooper mainLooper() {
         return Shadows.shadowOf(RuntimeEnvironment.getApplication().getMainLooper());
     }
@@ -67,6 +76,52 @@ public class FramePipelineTest {
     @Test
     public void theChromeCommitIsTheTablesFirstStep() {
         assertEquals(0, FrameStep.CHROME_COMMIT.ordinal());
+    }
+
+    @Test
+    public void theGlassCommitIsTheTablesLastStep() {
+        assertEquals(FrameStep.TABLE.length - 1, FrameStep.GLASS_COMMIT.ordinal());
+    }
+
+    @Test
+    public void theGlassCommitRunsAfterTheChromeCommitInOneFrame() {
+        List<String> order = new ArrayList<>();
+        chromeStep = () -> order.add("chrome");
+        frames.bind(FrameStep.GLASS_COMMIT, () -> order.add("glass"));
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        order.clear();
+
+        frames.requestFrame(FrameStep.GLASS_COMMIT);
+        frames.requestFrame(FrameStep.CHROME_COMMIT);
+        assertTrue(draws(root));
+
+        assertEquals(java.util.Arrays.asList("chrome", "glass"), order);
+    }
+
+    @Test
+    public void anArmedStepRunsOnEveryDrawnFrameAndAsksForNone() {
+        int[] glassRuns = {0};
+        frames.bind(FrameStep.GLASS_COMMIT, () -> glassRuns[0]++);
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        mainLooper().idle();
+        glassRuns[0] = 0;
+        int chromeBefore = chromeRuns;
+
+        frames.arm(FrameStep.GLASS_COMMIT, true);
+        assertFalse("arming asks for no frame", frames.isFrameBooked());
+        assertTrue(draws(root));
+        assertTrue(draws(root));
+        assertEquals(2, glassRuns[0]);
+        assertFalse("nothing is booked at rest", frames.isFrameBooked());
+        assertEquals("the chrome commit is not run by it", chromeBefore, chromeRuns);
+
+        frames.arm(FrameStep.GLASS_COMMIT, false);
+        assertTrue(draws(root));
+        assertEquals(2, glassRuns[0]);
     }
 
     @Test
@@ -216,6 +271,140 @@ public class FramePipelineTest {
         mainLooper().idle();
 
         assertEquals(2, chromeRuns);
+    }
+
+    @Test
+    public void aRelaunchHoldKeepsTheFirstFrameBackUntilItsSignal() {
+        View root = newRoot();
+        frames.attach(root);
+        root.layout(0, 0, 10, 10);
+        Hold hold = frames.holdFirstFrame("relaunch-reveal", 300L, 40);
+        assertNotNull(hold);
+
+        assertFalse("held", draws(root));
+        assertFalse("still held", draws(root));
+        assertTrue(frames.isBeforeFirstFrame());
+        hold.signal();
+
+        assertTrue("drawn once released", draws(root));
+        assertFalse(frames.isBeforeFirstFrame());
+        assertEquals(0, frames.firstFrameBackstops());
+        assertEquals(FramePipeline.LOG_FIRST_FRAME + " signal", log.get(log.size() - 1));
+    }
+
+    @Test
+    public void aRelaunchHoldNeverOutlastsItsFrameBackstop() {
+        View root = newRoot();
+        frames.attach(root);
+        root.layout(0, 0, 10, 10);
+        Hold hold = frames.holdFirstFrame("relaunch-reveal", 300L, 3);
+
+        assertFalse(draws(root));
+        assertFalse(draws(root));
+        assertFalse(draws(root));
+        assertTrue("the fourth frame draws", draws(root));
+
+        assertEquals(Hold.BACKSTOP, hold.releaseReason());
+        assertEquals(1, frames.firstFrameBackstops());
+        assertEquals(FramePipeline.LOG_FIRST_FRAME + " backstop relaunch", log.get(log.size() - 1));
+    }
+
+    @Test
+    public void aRelaunchHoldNeverOutlastsItsTimeBackstop() {
+        View root = newRoot();
+        frames.attach(root);
+        root.layout(0, 0, 10, 10);
+        Hold hold = frames.holdFirstFrame("relaunch-reveal", 300L, 40);
+
+        assertFalse(draws(root));
+        now += 300L;
+
+        assertTrue(draws(root));
+        assertEquals(Hold.BACKSTOP, hold.releaseReason());
+    }
+
+    @Test
+    public void aRelaunchHoldReleasedByItsTimerWithNoFrameAsksForOne() {
+        View root = newRoot();
+        frames.attach(root);
+        Hold hold = frames.holdFirstFrame("relaunch-reveal", 300L, 40);
+
+        mainLooper().idleFor(java.time.Duration.ofMillis(301));
+
+        assertFalse(hold.isOpen());
+        assertEquals(Hold.BACKSTOP, hold.releaseReason());
+    }
+
+    @Test
+    public void thereIsNoFirstFrameToHoldOnceItHasDrawn() {
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+
+        assertNull(frames.holdFirstFrame("relaunch-reveal", 300L, 40));
+        assertNull("nor without a window", new FramePipeline(() -> now)
+            .holdFirstFrame("relaunch-reveal", 300L, 40));
+    }
+
+    @Test
+    public void aStepThatLaysOutLateInTheFrameIsCountedByTheGuard() {
+        Counters.enable(true, null);
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        root.layout(0, 0, 10, 10);
+        chromeStep = root::requestLayout;
+
+        frames.requestFrame(FrameStep.CHROME_COMMIT);
+        assertTrue("never cancels the draw", draws(root));
+
+        assertEquals(1, Counters.countOf("pre-draw-step:CHROME_COMMIT"));
+        assertEquals(1, Counters.countOf(FrameGuards.CROSSING_LAID_OUT));
+    }
+
+    @Test
+    public void aLateStepThatLaysOutNothingIsOnlyCounted() {
+        Counters.enable(true, null);
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        root.layout(0, 0, 10, 10);
+
+        frames.requestFrame(FrameStep.CHROME_COMMIT);
+        draws(root);
+
+        assertEquals(1, Counters.countOf("pre-draw-step:CHROME_COMMIT"));
+        assertEquals(0, Counters.countOf(FrameGuards.CROSSING_LAID_OUT));
+    }
+
+    @Test
+    public void aStepInTheAnimationPhaseIsNotLate() {
+        Counters.enable(true, null);
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        root.layout(0, 0, 10, 10);
+        chromeStep = root::requestLayout;
+
+        frames.requestFrame(FrameStep.CHROME_COMMIT);
+        mainLooper().idle();
+
+        assertEquals(0, Counters.countOf("pre-draw-step:CHROME_COMMIT"));
+        assertEquals(0, Counters.countOf(FrameGuards.CROSSING_LAID_OUT));
+    }
+
+    @Test
+    public void guardsCountNothingWhileTheMotionLogIsOff() {
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        root.layout(0, 0, 10, 10);
+        chromeStep = root::requestLayout;
+
+        frames.requestFrame(FrameStep.CHROME_COMMIT);
+        draws(root);
+
+        assertTrue(Counters.lines().isEmpty());
     }
 
     @Test
