@@ -1678,6 +1678,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             if (cell == null) return;
             cell.setTranslationX(translationX);
             cell.setTranslationY(translationY);
+            // The carried cell draws over its neighbours by child order; the 8 dp lift is its shadow.
+            com.termux.app.window.WindowLayers.raiseWithin(cell);
             cell.setTranslationZ(dp(8));
         }
         placeCarried(rawX, rawY);

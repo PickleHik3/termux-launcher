@@ -58,6 +58,17 @@ public final class WindowLayers {
         return host != null ? host : frame;
     }
 
+    /**
+     * Where the editor's card sheet, bar and hints go: the panel host inside the editor layer, whose
+     * children cast their shadows with elevation while the picker's host, added after it in the
+     * layer, stands over them by child order. The editor host, or the frame, when there is none.
+     */
+    @NonNull
+    public static ViewGroup panelHostIn(@NonNull ViewGroup frame) {
+        ViewGroup panel = group(frame.findViewById(R.id.editor_panel_host));
+        return panel != null ? panel : hostIn(frame, WindowLayer.EDITOR);
+    }
+
     /** Adds {@code view} to {@code layer}'s host; false when there is no host to add it to. */
     public static boolean add(@NonNull IntFunction<View> finder, @NonNull WindowLayer layer,
                               @NonNull View view, @NonNull ViewGroup.LayoutParams params) {

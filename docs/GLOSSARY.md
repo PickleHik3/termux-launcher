@@ -418,7 +418,7 @@ _Avoid_: pill (the dictation control), window pill, run strip entry, float chip
 **Window layer**:
 One of the six named layers of the launcher's window, back to front: ground (wallpaper, live scene, the X11 surface), pages, chrome, sheets, editor and notices. The layer's number is the only Z between layers; inside a layer the order is child order, and elevation only draws shadows. Not an **open layer**, which lives in the sheets window layer.
 _Avoid_: layer (on its own), z-level, overlay
-_Built so far: every top-level view stands in a layer's host (ground, chrome, sheets inside the launcher's shell; editor and notices beside it), runtime views join their host through `WindowLayers`, and `bringToFront` is gone. The shell's body holds the pages and, until the stacks move, the chrome laid out against them; elevation still orders children inside a layer in a few places (ADR 0028)._
+_Built so far: every top-level view stands in a layer's host (ground, chrome, sheets inside the launcher's shell; editor and notices beside it), runtime views join their host through `WindowLayers`, and `bringToFront` is gone. The shell's body holds the pages and, until the stacks move, the chrome laid out against them; elevation orders nothing but the A-Z row and the edge stacks, which the row rebuild (#260) replaces; every other elevation draws a shadow (ADR 0028)._
 
 **Workspace**:
 The terminal half of the wall, right of Home: the current session's windows, then the display

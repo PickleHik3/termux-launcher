@@ -1032,6 +1032,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         chip.setPressed(false);
         chip.setScaleX(LIFT_SCALE);
         chip.setScaleY(LIFT_SCALE);
+        // Over its neighbours by draw order; the lift is the chip's shadow.
+        mTabs.setDrawnLast(chip);
         chip.setTranslationZ(dpF(LIFT_ELEVATION_DP));
         com.termux.app.haptics.Haptics.tick(this, android.view.HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
@@ -1168,6 +1170,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private void resetChipTransforms() {
+        mTabs.setDrawnLast(null);
         for (int i = 0; i < mTabs.getChildCount(); i++) {
             View child = mTabs.getChildAt(i);
             child.setTranslationX(0f);
@@ -2526,6 +2529,26 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         private float mCloseFraction;
         /** How far the chips after the segment are currently pushed, so an offset never doubles. */
         private int mAppliedShiftPx;
+
+        /** The chip drawn over its neighbours (the lifted one, until it has settled), or null. */
+        @Nullable private View mDrawnLast;
+
+        /** Draws {@code chip} after the others, whatever its place in the row. */
+        void setDrawnLast(@Nullable View chip) {
+            if (mDrawnLast == chip) return;
+            mDrawnLast = chip;
+            // Only while a chip is out of its place: the row draws in plain child order at rest.
+            setChildrenDrawingOrderEnabled(chip != null);
+            invalidate();
+        }
+
+        @Override
+        protected int getChildDrawingOrder(int childCount, int drawingPosition) {
+            int at = mDrawnLast == null ? -1 : indexOfChild(mDrawnLast);
+            if (at < 0 || at >= childCount) return drawingPosition;
+            if (drawingPosition < at) return drawingPosition;
+            return drawingPosition == childCount - 1 ? at : drawingPosition + 1;
+        }
 
         SelectionStrip(@NonNull Context context) {
             super(context);

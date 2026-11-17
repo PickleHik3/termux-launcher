@@ -1641,7 +1641,23 @@ public final class WidgetPaneView extends FrameLayout
         // slides goes over it, whichever of the two pages that is.
         boolean under = effect == HomePageTransition.STACK ? position < 0f
             : effect == HomePageTransition.DEPTH && position > 0f;
-        layer.setTranslationZ(under ? -1f : 0f);
+        placeNeighbour(layer, under);
+    }
+
+    /**
+     * The neighbour layer's place in the child order: just under the page's grid while it is the
+     * page that sinks, just over it otherwise. Only moves it when the answer changed (a swipe that
+     * turns round), and by detaching and attaching, so nothing leaves the window or lays out.
+     */
+    @androidx.annotation.VisibleForTesting
+    void placeNeighbour(@NonNull WidgetGridView layer, boolean under) {
+        int at = indexOfChild(layer);
+        int gridAt = indexOfChild(grid);
+        if (at < 0 || gridAt < 0 || (under ? at < gridAt : at > gridAt)) return;
+        ViewGroup.LayoutParams params = layer.getLayoutParams();
+        detachViewFromParent(layer);
+        attachViewToParent(layer, under ? indexOfChild(grid) : indexOfChild(grid) + 1, params);
+        invalidate();
     }
 
     private void bindNeighbour(int page) {

@@ -332,22 +332,34 @@ public class AppearanceSurfaceControllerTest {
     @Test
     public void thePickerFallsOverTheCardSheetAndLetsItsTouchesThrough() {
         ViewGroup content = activity.findViewById(android.R.id.content);
+        // The editor layer as the window has it: the panel host holds the sheet, the picker's host
+        // is added after it, and no Z orders them.
+        android.widget.FrameLayout editorLayer = new android.widget.FrameLayout(activity);
+        editorLayer.setId(com.termux.R.id.window_layer_editor);
+        android.widget.FrameLayout panels = new android.widget.FrameLayout(activity);
+        panels.setId(com.termux.R.id.editor_panel_host);
+        editorLayer.addView(panels);
+        content.addView(editorLayer);
         View sheet = new View(activity);
         sheet.setElevation(12f);
-        content.addView(sheet);
+        panels.addView(sheet);
         openPicker();
         View hostView = activity.findViewById(com.termux.R.id.appearance_surface_host);
         assertNotNull(hostView);
-        assertTrue(hostView.getZ() > sheet.getZ());
+        assertEquals(editorLayer, hostView.getParent());
+        assertTrue("over the sheet's host by child order",
+            editorLayer.indexOfChild(hostView) > editorLayer.indexOfChild(panels));
+        assertEquals("no Z orders it", 0f, hostView.getTranslationZ(), 0f);
 
         surface.onBack();
         assertFalse(hostView.isClickable());
-        assertTrue("drawn over the sheet while it falls", hostView.getZ() > sheet.getZ());
+        assertTrue("drawn over the sheet while it falls",
+            editorLayer.indexOfChild(hostView) > editorLayer.indexOfChild(panels));
         assertFalse("a touch goes on to the sheet", hostView.dispatchTouchEvent(
             android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0)));
 
         settle();
-        assertEquals("down, it rests at the sheet's level", 0f, hostView.getTranslationZ(), 0f);
+        assertEquals("down, it rests flat", 0f, hostView.getTranslationZ(), 0f);
     }
 
     @Test

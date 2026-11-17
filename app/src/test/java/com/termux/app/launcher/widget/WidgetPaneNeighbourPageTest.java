@@ -107,6 +107,29 @@ public class WidgetPaneNeighbourPageTest {
         assertEquals(shift, pane.grid().getTranslationX(), 1f);
     }
 
+    @Test public void theSinkingPageStandsUnderTheGridByChildOrderAndNoZ() {
+        setUp();
+        int w = pane.getWidth();
+        float y = pane.getHeight() / 2f;
+        float x0 = w * 7f / 8f;
+        touch(MotionEvent.ACTION_DOWN, 1000L, x0, y);
+        touch(MotionEvent.ACTION_MOVE, 1016L, x0 - w / 4f, y + 1);
+        WidgetGridView layer = pane.neighbourGrid();
+        assertNotNull(layer);
+        assertEquals(0f, layer.getTranslationZ(), 0f);
+        assertTrue("over the grid while it slides",
+            pane.indexOfChild(layer) > pane.indexOfChild(pane.grid()));
+        pane.placeNeighbour(layer, true);
+        assertTrue("under the grid while it sinks",
+            pane.indexOfChild(layer) < pane.indexOfChild(pane.grid()));
+        assertEquals(0f, layer.getTranslationZ(), 0f);
+        pane.placeNeighbour(layer, true);
+        assertTrue(pane.indexOfChild(layer) < pane.indexOfChild(pane.grid()));
+        pane.placeNeighbour(layer, false);
+        assertTrue(pane.indexOfChild(layer) > pane.indexOfChild(pane.grid()));
+        assertSame(pane, layer.getParent());
+    }
+
     @Test public void slideKeepsTheGridTheFloatsAndTheNeighbourInLockstepFromTheFirstMove() {
         setUp();
         Pinned pinned = new Pinned(activity);
