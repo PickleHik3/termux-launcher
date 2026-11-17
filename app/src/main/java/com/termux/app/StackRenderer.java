@@ -43,6 +43,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         boolean underKeyboardBandsShown();
         /** Whether the in-app keyboard is up: the plank then tilts the glass host alone. */
         boolean keyboardShown();
+        /**
+         * The in-app keyboard's laid-out height while it stands laid out but down, else 0: the
+         * stack stands this much lower at rest ({@link StackScene#keyboardTranslationPx}).
+         */
+        default int keyboardDownLaidOutPx() {
+            return 0;
+        }
         /** Whether the app drawer or an editor owns the stack's transforms for now. */
         default boolean othersOwnStack() {
             return false;
@@ -74,6 +81,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private boolean mLandingPending;
 
     private final StackScene.Motion mMotion = new StackScene.Motion();
+    /** The motion the scene is asked for: the crossing's with the resting keyboard's share added. */
+    private final StackScene.Motion mEffective = new StackScene.Motion();
     private final StackGeometry mGeometry = new StackGeometry();
     private final StackScene.Frame mFrame = new StackScene.Frame();
     private float mSlideX;
@@ -249,7 +258,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mLandingPending = false;
         if (guard != null) guard.check();
         readGeometry(container);
-        StackScene.at(null, null, 0f, mMotion, mGeometry, mFrame);
+        StackScene.withKeyboardRest(mMotion,
+            StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx()), mEffective);
+        StackScene.at(null, null, 0f, mEffective, mGeometry, mFrame);
         mPlankTarget = plankTarget();
 
         boolean containerMoved = writeTy(StackScene.V_CONTAINER, container,

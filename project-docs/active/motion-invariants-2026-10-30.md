@@ -34,6 +34,8 @@ names are used instead.
 | 5 | The status bar's reveal | the crossing's frame, on the same curve as pair 4 | done | `PlaceChromeTravelTest`, `KeyboardFollowsSeamTest` |
 | 6 | A still's size vs the live view | `PageStillPolicy` (not a keyboard number) | unchanged | `PageStillsTest` |
 | 7 | Frame tint in a crossing vs at rest | `GlassFrameTint.of` (not a keyboard number) | unchanged | `GlassFrameTintTest` |
+
+D1-A step 1 (wave 2): the docked in-app keyboard is never GONE while it is on; down is the stack's translation, `StackScene.keyboardTranslationPx` = `(1 - reveal) * laidOutHeight`, read by the rest (`StackRenderer` adds it for a laid-out, down keyboard) and by the crossing (`StackScene.travel`), so the crossing's end is the landing's rest and a landing writes nothing for the keyboard. The terminal's room stays today's through a temporary rule (the container is the keyboard taller while it is down, the content reaches past its top by the same, `StackScene.containerHeightPx` / `contentOverlapPx`; step 3 removes it). Pinned by `KeyboardLaidOutParityTest`, `StackRendererTest`, `KeyboardGeometryChoreographerTest`.
 | 8 | Held overlap | goes with pair 1 | unchanged (`PlaceChromeTravel.heldOverlapPx` vs `StackLayout`) | `PlaceChromeTravelTest` |
 
 The guards of [ADR 0028](../../docs/adr/0028-one-frame-pipeline-a-view-property-has-one-writer.md)

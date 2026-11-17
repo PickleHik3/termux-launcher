@@ -329,7 +329,61 @@ public class KeyboardGeometryChoreographerTest {
     // -------------------------------------------------------------------- close path
 
     @Test
+    public void aDownKeyboardStaysLaidOutAndNeverGoesGone() {
+        mSurface.glassSurface = true;
+        mSurface.blurEnabled = true;
+        mSurface.backdropReady = true;
+        mChoreographer.onVisibilityRequested(true);
+        mSurface.log.clear();
+        int rests = mSurface.stackRests;
+
+        mChoreographer.onVisibilityRequested(false);
+
+        assertEquals("down is the scene's translation, not GONE", View.VISIBLE,
+            mSurface.keyboardContainer.getVisibility());
+        assertEquals("the stack's renderer is asked for the rest", rests + 1, mSurface.stackRests);
+        assertTrue(mChoreographer.isCloseGeometryPending());
+        assertNotNull("the close correction is kept", mChoreographer.closePreDrawListener());
+        assertEquals(List.of("invalidateTransitionCrops", "onKeyboardClosed"), mSurface.log);
+
+        // A second hide while down changes nothing and arms nothing again.
+        mSurface.log.clear();
+        mChoreographer.onVisibilityRequested(false);
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
+        assertFalse(mSurface.log.contains("invalidateTransitionCrops"));
+    }
+
+    @Test
+    public void aKeyboardThatWasNeverShownIsPutDownLaidOutNotGone() {
+        assertEquals(View.GONE, mSurface.keyboardContainer.getVisibility());
+
+        mChoreographer.onVisibilityRequested(false);
+
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
+    }
+
+    @Test
+    public void aShowFromDownIsStillAnOpenThatTheRevealGateGuards() {
+        mSurface.glassSurface = true;
+        mSurface.blurEnabled = true;
+        mSurface.backdropReady = false;
+        mChoreographer.onVisibilityRequested(true);
+        mChoreographer.forceRevealNow();
+        mChoreographer.onVisibilityRequested(false);
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
+
+        mChoreographer.onVisibilityRequested(true);
+
+        assertTrue("laid out is not backdrop-ready: the gate still waits",
+            mChoreographer.isOpenRevealPending());
+        assertNotNull(mChoreographer.openPreDrawListener());
+        assertEquals(View.INVISIBLE, mSurface.keyboardContainer.getVisibility());
+    }
+
+    @Test
     public void closeGoesGoneAndKeepsTheSeamCoveredUntilDockOnlyLayoutIsObserved() {
+        // The keyboard off, floating or not the input: put away as it always was.
+        mSurface.staysLaidOut = false;
         mSurface.glassSurface = true;
         mSurface.blurEnabled = true;
         mSurface.backdropReady = true;
@@ -669,6 +723,9 @@ public class KeyboardGeometryChoreographerTest {
         boolean dockBackdropSafe = true;
         boolean keyboardShown = true;
         boolean activityAlive = true;
+        /** The docked in-app keyboard stays laid out while down (D1-A); false is today's GONE. */
+        boolean staysLaidOut = true;
+        int stackRests;
         /** The next dress changes the host's margins or padding. */
         boolean redressPending;
         int dressPasses;
@@ -682,6 +739,16 @@ public class KeyboardGeometryChoreographerTest {
             accessoryContainer = new View(context);
             accessoryContainer.setLayoutParams(new ViewGroup.LayoutParams(1080, 0));
             metrics = context.getResources().getDisplayMetrics();
+        }
+
+        @Override
+        public boolean keyboardStaysLaidOut() {
+            return staysLaidOut;
+        }
+
+        @Override
+        public void requestStackRest() {
+            stackRests++;
         }
 
         @Nullable

@@ -314,7 +314,7 @@ public final class PlaceChromeTravel {
      */
     public static float stackTranslationPx(float keyboardReveal, float dockReveal,
                                            int keyboardLaidOutPx, int dockLaidOutPx) {
-        float keyboard = Math.max(0, keyboardLaidOutPx) * (1f - clamp01(keyboardReveal));
+        float keyboard = StackScene.keyboardTranslationPx(keyboardReveal, keyboardLaidOutPx);
         float dock = Math.max(0, dockLaidOutPx) * (1f - clamp01(dockReveal));
         return keyboard + dock;
     }

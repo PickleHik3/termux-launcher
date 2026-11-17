@@ -200,6 +200,14 @@ public final class CrossingController {
         /** The keyboard's height as the stack lays it out; 0 while it is down or floating. */
         int travelKeyboardLaidOutPx();
 
+        /**
+         * The keyboard's height the stack's container is laid out taller by while the keyboard is
+         * down (D1-A); 0 otherwise. The dock's rows are the container less this.
+         */
+        default int keyboardDownLaidOutPx() {
+            return 0;
+        }
+
         /** The IME's lift, px. */
         int imeLiftPx();
 
@@ -1136,7 +1144,8 @@ public final class CrossingController {
         if (stack == null) return 0;
         ViewGroup.LayoutParams params = stack.getLayoutParams();
         int height = params != null && params.height > 0 ? params.height : 0;
-        return com.termux.app.place.PlaceChromeTravel.dockRowsLaidOutPx(height, keyboardPx,
+        return com.termux.app.place.PlaceChromeTravel.dockRowsLaidOutPx(height,
+            keyboardPx + Math.max(0, mHost.keyboardDownLaidOutPx()),
             mHost.bottomStatusBandPx());
     }
 

@@ -104,7 +104,46 @@ public final class StackScene {
         if (!folds) out.sink(rowsSink ? rowsPx * (1f - clamp01(dockReveal)) : 0f);
         out.dockTravelPx = PlaceChromeTravel.stackTranslationPx(keyboardReveal,
             rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
-        out.keyboardSharePx = keyboardPx * (1f - clamp01(keyboardReveal));
+        out.keyboardSharePx = keyboardTranslationPx(keyboardReveal, keyboardPx);
+    }
+
+    /**
+     * How far down the keyboard is drawn from where it is laid out, the one number the rest and
+     * the crossing both read (D1-A): {@code (1 - reveal) * laidOutPx}. The in-app keyboard stays
+     * laid out while it is down, so a down keyboard (reveal 0) is this translation at rest, a
+     * crossing's frame is it at the seam's reveal, and the crossing's end equals the rest it lands
+     * on. The stack's translation carries the dock with it, which is why the bands under the
+     * keyboard are held up by the same share ({@link #transforms}).
+     */
+    public static float keyboardTranslationPx(float keyboardReveal, int laidOutPx) {
+        return Math.max(0, laidOutPx) * (1f - clamp01(keyboardReveal));
+    }
+
+    /**
+     * Adds the resting keyboard's share ({@link #keyboardTranslationPx}) to a crossing's motion
+     * into {@code out}: a keyboard that is down never takes part in a crossing's own travel (the
+     * crossing brings it up first), so the two never count the same pixels twice.
+     */
+    public static void withKeyboardRest(@NonNull Motion in, float restSharePx, @NonNull Motion out) {
+        out.set(in);
+        if (restSharePx <= 0f) return;
+        out.dockTravelPx += restSharePx;
+        out.keyboardSharePx += restSharePx;
+    }
+
+    /**
+     * The room the terminal keeps while the keyboard is laid out but down. D1-A step 3 removes
+     * this: the stack's container is as tall as both rests need, and the content gives it back
+     * as a reach past its top, so the room is today's keyboard-down room ({@code downPx} of the
+     * container is the keyboard's, which a content that stands above the container would lose).
+     */
+    public static int containerHeightPx(int stackHeightPx, int keyboardDownLaidOutPx) {
+        return Math.max(0, stackHeightPx) + Math.max(0, keyboardDownLaidOutPx);
+    }
+
+    /** The reach the content keeps past the container's top; see {@link #containerHeightPx}. */
+    public static int contentOverlapPx(int overlapPx, int keyboardDownLaidOutPx) {
+        return Math.max(0, overlapPx) + Math.max(0, keyboardDownLaidOutPx);
     }
 
     /**

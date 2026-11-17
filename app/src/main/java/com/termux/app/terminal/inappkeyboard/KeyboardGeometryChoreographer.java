@@ -98,6 +98,18 @@ public final class KeyboardGeometryChoreographer {
             return false;
         }
 
+        /**
+         * Whether the docked in-app keyboard stays laid out while it is down (D1-A): the in-app
+         * keyboard is on, it is not switched off, not floating, and the system IME is not the
+         * input. Then "down" is the stack scene's translation, never GONE.
+         */
+        default boolean keyboardStaysLaidOut() {
+            return false;
+        }
+
+        /** The keyboard went up or down while laid out: the stack's renderer writes its rest. */
+        default void requestStackRest() {}
+
         /** The keyboard view currently attached to the host, or null while detached. */
         @Nullable View attachedKeyboardView();
 
@@ -177,6 +189,8 @@ public final class KeyboardGeometryChoreographer {
 
     /** Keeps a unified glass keyboard hidden until the expanded dock+keyboard crop is installed. */
     private boolean mPendingOpenReveal;
+    /** The keyboard is down but still laid out ({@link Surface#keyboardStaysLaidOut}). */
+    private boolean mDownLaidOut;
     /** Keeps the under-pill glass covering stale close geometry until dock-only layout settles. */
     private boolean mPendingCloseGeometry;
     private int mOpenRevealBlockedFrames;
@@ -505,7 +519,8 @@ public final class KeyboardGeometryChoreographer {
             return;
         }
         if (visible) {
-            boolean openingFromGone = keyboardContainer.getVisibility() == View.GONE;
+            boolean openingFromGone = keyboardContainer.getVisibility() == View.GONE || mDownLaidOut;
+            mDownLaidOut = false;
             removeClosePreDrawCorrection();
             if (openingFromGone)
                 mSurface.invalidateTransitionCrops();
@@ -520,6 +535,7 @@ public final class KeyboardGeometryChoreographer {
                 keyboardContainer.setVisibility(View.VISIBLE);
                 mSurface.requestApplyThisFrame();
                 if (openingFromGone) mSurface.requestAccessoryRenderSync();
+                mSurface.requestStackRest();
                 return;
             }
             ChromeSpec state = mSurface.buildChromeSpec();
@@ -537,7 +553,25 @@ public final class KeyboardGeometryChoreographer {
             if (deferReveal) {
                 installOpenPreDrawGate();
             }
+            mSurface.requestStackRest();
+        } else if (mSurface.keyboardStaysLaidOut()) {
+            // Down is the scene's translation: the container is never put away, so it is measured
+            // and laid out at its full height and a landing writes nothing for it (D1-A).
+            boolean closing = !mDownLaidOut;
+            if (closing)
+                mSurface.invalidateTransitionCrops();
+            mPendingOpenReveal = false;
+            removeOpenPreDrawGate();
+            mPendingCloseGeometry = closing;
+            mDownLaidOut = true;
+            if (keyboardContainer.getVisibility() != View.VISIBLE)
+                keyboardContainer.setVisibility(View.VISIBLE);
+            mSurface.onKeyboardClosed();
+            mSurface.requestStackRest();
+            if (closing)
+                installClosePreDrawCorrection();
         } else {
+            mDownLaidOut = false;
             boolean closingToGone = keyboardContainer.getVisibility() != View.GONE;
             if (closingToGone)
                 mSurface.invalidateTransitionCrops();

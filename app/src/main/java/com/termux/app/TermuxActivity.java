@@ -9829,6 +9829,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     GeometryScheduler.ResizePolicy.NOW);
             }
 
+            @Override public boolean keyboardStaysLaidOut() {
+                return TermuxActivity.this.keyboardStaysLaidOut();
+            }
+
+            @Override public void requestStackRest() {
+                mStackRenderer.applyAtRest();
+            }
+
             @Override public boolean keyboardGlassSurface() {
                 return isInAppKeyboardGlassSurface();
             }
@@ -10545,6 +10553,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         @Override public boolean keyboardShown() {
             return isInAppKeyboardShown();
+        }
+        @Override public int keyboardDownLaidOutPx() {
+            return isInAppKeyboardShown() ? 0 : mKeyboardDownLaidOutPx;
         }
         @Override public boolean othersOwnStack() {
             return mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive();
@@ -17204,7 +17215,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockFootPx = bottomInsets.dockFootPx;
         applyDockFootLayout(accessoryStackContainer, bottomInsets);
         int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
-        int combinedHeight = stack.stackHeightPx + bottomInsets.stackExtraHeightPx;
+        // The in-app keyboard stays laid out while it is down (D1-A): the container is as tall as
+        // the keyboard-up stack, and the scene translates it down (StackScene#keyboardTranslationPx).
+        int keyboardDownPx = !state.keyboardShown && stack.stackShown && keyboardStaysLaidOut()
+            && findViewById(R.id.inapp_keyboard_container) != null
+            && findViewById(R.id.inapp_keyboard_container).getVisibility() != View.GONE
+            ? mKeyboardGeometry.measureHeightPx() : 0;
+        boolean keyboardDownChanged = keyboardDownPx != mKeyboardDownLaidOutPx;
+        mKeyboardDownLaidOutPx = keyboardDownPx;
+        int combinedHeight = com.termux.app.place.StackScene.containerHeightPx(
+            stack.stackHeightPx + bottomInsets.stackExtraHeightPx, keyboardDownPx);
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
         // taller glass instead of hugging its bottom edge.
         int flushBottomInsetPx = bottomInsets.stackPaddingPx;
@@ -17225,8 +17245,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         );
         // A pass that moves the stack's bottom (the foot coming or going, its height, its padding)
         // while the travel holds it below its layout re-cuts the travel's clips for that bottom.
-        if ((flushInsetChanged || accessoryHeightChanged || accessoryMarginChanged)
-            && mDockTravelTranslationPx > 0f) {
+        if ((flushInsetChanged || accessoryHeightChanged || accessoryMarginChanged
+            || keyboardDownChanged) && (mDockTravelTranslationPx > 0f || keyboardDownPx > 0
+            || keyboardDownChanged)) {
             applyAccessoryStackTranslation();
         }
         // Home floats are laid out between the status bar and the dock, and lifted over the
@@ -17255,8 +17276,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
                 stack.homeGridDockReservePx);
         }
+        // D1-A step 3 removes this: the room stays today's while the container is as tall as the
+        // keyboard-up stack, so the content reaches past the container's top by the keyboard's height.
         boolean overlapChanged = applyContentBottomMargin(stack.contentEdgeGapPx,
-            stack.contentOverlapPx);
+            com.termux.app.place.StackScene.contentOverlapPx(stack.contentOverlapPx,
+                keyboardDownPx));
+        overlapChanged |= applyAboveStackReach(keyboardDownPx);
         boolean contentReservationChanged =
             stack.contentReservationPx != appliedContentReservationPx();
         mAppliedStack = stack;
@@ -17353,6 +17378,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         marginParams.bottomMargin = bottomMargin;
         content.setLayoutParams(marginParams);
         return true;
+    }
+
+    /** The keyboard's height the stack's container is laid out taller by while it is down. */
+    private int mKeyboardDownLaidOutPx;
+    /** How far the views that stand above the container reach past its top (the same height). */
+    private int mAboveStackReachPx;
+
+    /**
+     * The find strip and the A-Z labels stand above the stack's container; its top is the
+     * keyboard's height higher while the keyboard is laid out but down, so they reach back down by
+     * it and stand where they stood. D1-A step 3 removes this.
+     */
+    private boolean applyAboveStackReach(int reachPx) {
+        if (reachPx == mAboveStackReachPx) return false;
+        int delta = reachPx - mAboveStackReachPx;
+        mAboveStackReachPx = reachPx;
+        boolean changed = false;
+        for (int id : new int[] {R.id.terminal_find_bar_host, R.id.apps_bar_az_label_overlay}) {
+            View view = findViewById(id);
+            if (view == null || !(view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
+                continue;
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
+            params.bottomMargin -= delta;
+            view.setLayoutParams(params);
+            changed = true;
+        }
+        return changed;
+    }
+
+    /** Whether the docked in-app keyboard stays laid out while it is down (D1-A). */
+    private boolean keyboardStaysLaidOut() {
+        return mInAppKeyboard != null && mInAppKeyboard.isEnabled() && !mInAppKeyboard.isTurnedOff()
+            && !mInAppKeyboard.isExternalTextInputActive() && !isKeyboardFloating();
     }
 
     private int resolveTerminalFlushDockPaddingPx(int accessoryContentHeightPx,
@@ -24431,6 +24489,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int keyboardMeasureHeightPx() { return mKeyboardGeometry.measureHeightPx(); }
         @Override public int keyboardDesiredHeightPx() { return mKeyboardGeometry.desiredHeightPx(); }
         @Override public int travelKeyboardLaidOutPx() { return TermuxActivity.this.travelKeyboardLaidOutPx(); }
+        @Override public int keyboardDownLaidOutPx() { return mKeyboardDownLaidOutPx; }
         @Override public int imeLiftPx() { return mImeLiftPx; }
         @Override public int appliedToolbarHeightPx() { return TermuxActivity.this.appliedToolbarHeightPx(); }
         @Override public int measuredExtraKeysRowPx() { return TermuxActivity.this.measuredExtraKeysRowPx(); }

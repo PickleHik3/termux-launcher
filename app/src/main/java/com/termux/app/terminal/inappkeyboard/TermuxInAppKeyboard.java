@@ -351,6 +351,9 @@ public final class TermuxInAppKeyboard {
         } else {
             setContainerVisible(false);
         }
+        // Down, the keyboard is still laid out (D1-A): put the container there now, not at the first hide.
+        if (mEnabled && !mVisible)
+            setContainerVisible(false);
     }
 
     public void onStart() {
@@ -1487,6 +1490,8 @@ public final class TermuxInAppKeyboard {
         destroyKeyPopup();
         mKeyboardView = null;
         mKeyEventHandler = null;
+        // Off, the container is put away as it always was (the hide above ran while it was on).
+        setContainerVisible(false);
 
         TerminalView terminalView = mHost.getTerminalView();
         if (terminalView != null)
