@@ -184,6 +184,10 @@ public final class DockRows {
     @Nullable private DockLayout mLayout;
     private boolean mShelfShown;
     private boolean mStatusBarShown;
+    private boolean mKeyboardLaidOut;
+    /** The side in front, and whose lane each of APPS, AZ and EXTRA_KEYS is (null: the stack's). */
+    @NonNull private com.termux.app.page.Side mFrontSide = com.termux.app.page.Side.WORKSPACE;
+    @NonNull private final com.termux.app.page.Side[] mLaneSides = new com.termux.app.page.Side[3];
     /** The other side's applied rest, which sizes the rows only that side shows; null for none. */
     @Nullable private DockLayout mOtherLayout;
 
@@ -258,7 +262,9 @@ public final class DockRows {
         Shown shown = presence(chrome, mStatusBarShown && statusBarOnBottomEdge, glassOnNavStrip,
             mShown.underKeyboard, mViews.pageTicksAreTheDocks(), surfaceOf(mLayout));
         announce(shown);
-        mViews.setStackShown(shown.stack);
+        // The in-app keyboard stays laid out while down (D1-A): the container it stands in stays
+        // laid out with it, though no row or status bar keeps the stack "shown" for readers.
+        mViews.setStackShown(shown.stack || mKeyboardLaidOut);
         mViews.setDockGlassShown(shown.dockGlass);
         mViews.setSurfaceShown(shown.surfaceHost);
         mViews.setRowShown(Element.APPS, shown.apps || (union != null && union.apps));
@@ -337,6 +343,48 @@ public final class DockRows {
     /** Whether {@code element}'s row is on screen in the dock's stack. */
     public boolean isRowOnScreen(@NonNull Element element) {
         return mShown.rowOnScreen(element);
+    }
+
+    /**
+     * Whose lane each lane-capable row is, with {@code front} in front; a null side is a row of
+     * the shared stack. Read by {@link #dressFor}; taken by the next {@link
+     * com.termux.app.dock.DockDress#applyDockLayout} pass.
+     */
+    public void setLanes(@NonNull com.termux.app.page.Side front,
+                         @Nullable com.termux.app.page.Side apps,
+                         @Nullable com.termux.app.page.Side az,
+                         @Nullable com.termux.app.page.Side extraKeys) {
+        mFrontSide = front;
+        mLaneSides[0] = apps;
+        mLaneSides[1] = az;
+        mLaneSides[2] = extraKeys;
+    }
+
+    /**
+     * The layout that dresses {@code row}: its own side's while it is a lane of the side that is
+     * not in front ({@link LaneDress}), else {@code front}.
+     */
+    @NonNull
+    public DockLayout dressFor(@NonNull Element row, @NonNull DockLayout front) {
+        int i = row == Element.APPS ? 0 : row == Element.AZ ? 1 : row == Element.EXTRA_KEYS ? 2 : -1;
+        return i < 0 ? front : LaneDress.layoutFor(mLaneSides[i], mFrontSide, front, mOtherLayout);
+    }
+
+    /** Whether {@code row} is a lane of the side that is not in front. */
+    public boolean isOtherSidesLane(@NonNull Element row) {
+        int i = row == Element.APPS ? 0 : row == Element.AZ ? 1 : row == Element.EXTRA_KEYS ? 2 : -1;
+        return i >= 0 && mLaneSides[i] != null && mLaneSides[i] != mFrontSide
+            && mOtherLayout != null;
+    }
+
+    /**
+     * Whether the in-app keyboard stays laid out while down ({@code TermuxActivity
+     * #keyboardStaysLaidOut}): the stack's container then stays laid out even when nothing else
+     * puts the stack up. {@link #stackShown} is not changed by it. Taken by the next
+     * {@link #apply}.
+     */
+    public void setKeyboardLaidOut(boolean laidOut) {
+        mKeyboardLaidOut = laidOut;
     }
 
     /** Whether the accessory stack is up. */

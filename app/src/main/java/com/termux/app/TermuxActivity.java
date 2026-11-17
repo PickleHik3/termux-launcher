@@ -9571,6 +9571,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // while its source is still on screen. Under the navigation strip's glass a Docked dock's
         // own sheet stands down.
         Trace.beginSection("Chrome.dockRows");
+        View laidOutKeyboard = findViewById(R.id.inapp_keyboard_container);
+        mDockRows.setKeyboardLaidOut(keyboardStaysLaidOut() && laidOutKeyboard != null
+            && laidOutKeyboard.getVisibility() != View.GONE);
         mDockRows.apply(state, mStatusBar.statusBarEdge() == PlaceLayout.Edge.BOTTOM,
             useDecorSurface && !mDock.dockFloats(), dockRowsUnion());
         Trace.endSection();
@@ -13615,18 +13618,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (keys == null || keys.getWidth() <= 0 || keys.getHeight() <= 0) return;
         // A look-only crossing is drifting these inks from what rest kept (beginLegendBlend).
         if (mLegendBlendOn) return;
-        mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
+        // The bar is the Workspace's: while it stands as that lane with Home in front it is
+        // inked from the Workspace's own look, as it will be on landing, and the Home page's
+        // kept face is not recorded for it.
+        boolean otherSidesLane = mDockRows.isOtherSidesLane(Element.EXTRA_KEYS)
+            && mPreferences != null;
+        if (!otherSidesLane)
+            mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.DOCK, dockOpacity);
         // Where the row rests, not where a crossing's travel has it: the keys rise in the ink
         // they land in (GlassAnchor#layoutRectOnScreen).
         com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(keys, mExtraKeysInkRect,
             mExtraKeysInkLocation, mDockInkRootScratch);
-        int face = mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mExtraKeysInkRect);
+        int face;
+        if (otherSidesLane) {
+            // The face under the glass of the Workspace's own look, without touching the dock
+            // band's shared note (the Home page's glass is what that holds).
+            int lookId = lookIdOf(endpointPageOf(com.termux.app.wall.PaneWallPage.TERMINAL));
+            face = mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, mExtraKeysInkRect,
+                mPreferences.getAppBarOpacity(lookId) / 100f,
+                mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)));
+        } else {
+            face = mChrome.ink().faceUnder(GlassBackdropCache.Band.DOCK, mExtraKeysInkRect);
+        }
         int theme = ThemeUtils.getSystemAttrColor(keys.getContext(),
             ExtraKeysPageView.ATTR_BUTTON_TEXT_COLOR, ExtraKeysPageView.DEFAULT_BUTTON_TEXT_COLOR);
         int ink = GlassInk.faceInk(face, theme,
             mChrome.ink().target(OnGlass.TARGET_BODY_TEXT));
         mExtraKeysInk = ink;
-        recordDockLegibility(face);
+        if (!otherSidesLane) recordDockLegibility(face);
         applyExtraKeysInk(ink);
     }
 
@@ -13728,7 +13747,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             store.peek(thereKey, com.termux.app.glass.LegibilityBand.DOCK);
         if (from != null && to != null) {
             View keys = getVisibleExtraKeys();
-            if (keys != null) {
+            // The bar is the Workspace's and wears its own look on either side of the seam: only
+            // a crossing between two Workspace pages drifts it.
+            if (keys != null && !here.isHome() && !there.isHome()) {
                 int theme = ThemeUtils.getSystemAttrColor(keys.getContext(),
                     ExtraKeysPageView.ATTR_BUTTON_TEXT_COLOR,
                     ExtraKeysPageView.DEFAULT_BUTTON_TEXT_COLOR);
@@ -17264,6 +17285,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (terminalOnScreen && !state.keyboardShown && !mCrossing.crossing())
             mTerminalRestFlushPaddingPx = stack.flushPaddingPx;
 
+        noteLanes(stackIn.dock);
         boolean dockMoved = mDock.applyDockLayout(stack.dock, stackIn.dock.arrangement);
         dockMoved |= applyUnderKeyboardBandAir(stack.underKeyboardTopMarginPx,
             stack.underKeyboardBottomMarginPx);
@@ -17281,10 +17303,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
         // The in-app keyboard stays laid out while it is down (D1-A): the container is as tall as
         // the keyboard-up stack, and the scene translates it down (StackScene#keyboardTranslationPx).
-        int keyboardDownPx = !state.keyboardShown && stack.stackShown && keyboardStaysLaidOut()
+        // Also while nothing else keeps the stack up (the keyboard alone on it): the container
+        // stays laid out for the keyboard, as it does with rows.
+        int keyboardDownPx = !state.keyboardShown && keyboardStaysLaidOut()
             && findViewById(R.id.inapp_keyboard_container) != null
             && findViewById(R.id.inapp_keyboard_container).getVisibility() != View.GONE
             ? mKeyboardGeometry.measureHeightPx() : 0;
+        // A container that stands where the content used to end (the stack was away, so nothing
+        // anchored it) takes its bottom margin from the room: the content and the views above
+        // the stack reach past its top by that as well, so the room is today's. D1-A step 3
+        // removes this.
+        int aloneMarginReachPx = keyboardDownPx > 0 && !stack.stackShown ? accessoryBottomMarginPx : 0;
         boolean keyboardDownChanged = keyboardDownPx != mKeyboardDownLaidOutPx;
         mKeyboardDownLaidOutPx = keyboardDownPx;
         // The band stands at the union of both sides' rests: as much taller as the other side's
@@ -17350,8 +17379,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keyboard-up stack, so the content reaches past the container's top by the keyboard's height.
         boolean overlapChanged = applyContentBottomMargin(stack.contentEdgeGapPx,
             com.termux.app.place.StackScene.contentOverlapPx(stack.contentOverlapPx,
-                keyboardDownPx, laneSlackPx));
-        overlapChanged |= applyAboveStackReach(keyboardDownPx + laneSlackPx);
+                keyboardDownPx + aloneMarginReachPx, laneSlackPx));
+        overlapChanged |= applyAboveStackReach(keyboardDownPx + aloneMarginReachPx + laneSlackPx);
         boolean contentReservationChanged =
             stack.contentReservationPx != appliedContentReservationPx();
         mAppliedStack = stack;
@@ -17496,9 +17525,50 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Hands Dock rows the other side's rest and whose lane each row is, before the pass applies
+     * the dock: the rows only that side shows are sized by that rest, and every lane row is
+     * dressed from its own side's layout (LaneDress), whichever side is in front. Nothing here
+     * moves with a page change that keeps the same two layouts.
+     */
+    private void noteLanes(@NonNull com.termux.app.dock.DockGeometry.Snapshot snapshot) {
+        boolean frontHome = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
+        com.termux.app.page.Side frontSide = com.termux.app.page.Side.of(frontHome);
+        PlaceLayout other = frontHome ? workspacePlaceLayout() : homePlaceLayout();
+        PlaceLayout front = arrangement().layout();
+        if (other == null || !com.termux.app.place.StackLanes.hasLanes(front, other, frontSide)) {
+            mDockRows.setOtherLayout(null);
+            mDockRows.setLanes(frontSide, null, null, null);
+            return;
+        }
+        com.termux.app.wall.PageRef otherPage = frontHome
+            ? com.termux.app.wall.PageRef.TERMINAL : com.termux.app.wall.PageRef.HOME;
+        mDockRows.setOtherLayout(com.termux.app.dock.DockGeometry.compute(
+            snapshot.restOf(otherPage)));
+        PlaceLayout home = frontHome ? front : other;
+        PlaceLayout workspace = frontHome ? other : front;
+        mDockRows.setLanes(frontSide,
+            laneSideOf(Element.APPS, front, other, home, workspace),
+            laneSideOf(Element.AZ, front, other, home, workspace),
+            laneSideOf(Element.EXTRA_KEYS, front, other, home, workspace));
+    }
+
+    /** The side whose lane {@code element} is in the band over the keyboard; null for the stack's. */
+    @Nullable
+    private static com.termux.app.page.Side laneSideOf(@NonNull Element element,
+            @NonNull PlaceLayout front, @NonNull PlaceLayout other,
+            @NonNull PlaceLayout home, @NonNull PlaceLayout workspace) {
+        if (com.termux.app.place.StackLanes.resolve(element, front, other)
+                != com.termux.app.place.StackLanes.Where.BOTTOM_OVER
+            || com.termux.app.place.StackLanes.conflicts(element, front, other)) return null;
+        int lane = com.termux.app.place.StackLanes.laneOf(element, home, workspace);
+        return lane == com.termux.app.place.StackLanes.HOME ? com.termux.app.page.Side.HOME
+            : lane == com.termux.app.place.StackLanes.WORKSPACE ? com.termux.app.page.Side.WORKSPACE
+            : null;
+    }
+
+    /**
      * How much taller the other side's rows at rest stand over the keyboard than the front side's,
-     * 0 while the layouts have no lane; also hands Dock rows the other side's rest, which sizes
-     * the rows only that side shows.
+     * 0 while the layouts have no lane.
      */
     private int laneSlackPx(@NonNull com.termux.app.dock.DockGeometry.Snapshot snapshot,
                             int measuredToolbarPx) {
@@ -17507,15 +17577,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout front = arrangement().layout();
         if (other == null || !com.termux.app.place.StackLanes.hasLanes(front, other,
                 com.termux.app.page.Side.of(frontHome))) {
-            mDockRows.setOtherLayout(null);
             return 0;
         }
         com.termux.app.wall.PageRef frontPage = frontHome
             ? com.termux.app.wall.PageRef.HOME : com.termux.app.wall.PageRef.TERMINAL;
         com.termux.app.wall.PageRef otherPage = frontHome
             ? com.termux.app.wall.PageRef.TERMINAL : com.termux.app.wall.PageRef.HOME;
-        mDockRows.setOtherLayout(com.termux.app.dock.DockGeometry.compute(
-            snapshot.restOf(otherPage)));
         return com.termux.app.place.StackLanes.slackPx(
             com.termux.app.place.StackLayout.restRowsPx(
                 new com.termux.app.place.StackLayout.RestInput(snapshot, frontPage)

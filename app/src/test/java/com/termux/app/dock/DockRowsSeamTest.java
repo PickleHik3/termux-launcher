@@ -517,4 +517,53 @@ public class DockRowsSeamTest {
         rows.applyLayout(bare);
         assertEquals(home.appsBarHeightPx, (int) views.heights.get(Element.APPS));
     }
+
+    // ---- D1-A step 2b: a lane wears its own side's layout; a keyboard alone keeps the stack ----
+
+    @Test
+    public void aLaneRowWearsItsOwnSidesLayoutWhicheverSideIsInFront() {
+        Snapshot.Builder device = device(half(HOME, DockStyle.GLASS_TRAY),
+            half(WINDOW, DockStyle.GLASS_TRAY));
+        DockLayout home = rest(device, PageRef.HOME);
+        DockLayout window = rest(device, PageRef.TERMINAL);
+        assertTrue("the fixture's two sides must differ for this to prove anything",
+            home != window);
+
+        // Home in front: the Workspace's extra-keys bar is a lane, the window's rest the other.
+        DockRows homeFront = new DockRows(new FakeViews());
+        homeFront.setOtherLayout(window);
+        homeFront.setLanes(com.termux.app.page.Side.HOME, null, null,
+            com.termux.app.page.Side.WORKSPACE);
+        // The Workspace in front: the same bar is the front's own.
+        DockRows windowFront = new DockRows(new FakeViews());
+        windowFront.setOtherLayout(home);
+        windowFront.setLanes(com.termux.app.page.Side.WORKSPACE, null, null,
+            com.termux.app.page.Side.WORKSPACE);
+
+        assertSame(window, homeFront.dressFor(Element.EXTRA_KEYS, home));
+        assertSame(window, windowFront.dressFor(Element.EXTRA_KEYS, window));
+        assertTrue(homeFront.isOtherSidesLane(Element.EXTRA_KEYS));
+        assertFalse(windowFront.isOtherSidesLane(Element.EXTRA_KEYS));
+        // A row of the shared stack wears the front layout.
+        assertSame(home, homeFront.dressFor(Element.APPS, home));
+        assertSame(window, windowFront.dressFor(Element.APPS, window));
+        // A page change alone (same two layouts) changes no lane row's dress.
+        assertSame(homeFront.dressFor(Element.EXTRA_KEYS, home),
+            windowFront.dressFor(Element.EXTRA_KEYS, window));
+    }
+
+    @Test
+    public void aKeyboardLaidOutAloneKeepsTheStacksContainerWithoutShowingTheStack() {
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        rows.setKeyboardLaidOut(true);
+        rows.apply(chrome(WINDOW_BARE, false), false, false);
+        assertTrue("the container stays laid out for the down keyboard", views.stack);
+        assertFalse("what readers ask still says the stack has nothing to show",
+            rows.stackShown());
+
+        rows.setKeyboardLaidOut(false);
+        rows.apply(chrome(WINDOW_BARE, false), false, false);
+        assertFalse(views.stack);
+    }
 }
