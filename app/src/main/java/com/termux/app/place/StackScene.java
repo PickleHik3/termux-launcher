@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.StackMaterial;
 import com.termux.app.chrome.StackMaterial.RegionLook;
+import com.termux.app.page.Side;
 
 /**
  * Everything the bottom stack shows on one frame, as one pure function of the crossing's two
@@ -152,6 +153,14 @@ public final class StackScene {
         public int inkArgb;
         public int topology;
 
+        /**
+         * Each side's rows ({@link Side}, by ordinal): drawn this far across from where they are
+         * laid out, riding with their side ({@link #sideSlide}), and this far down, so they stand
+         * on the keyboard's top as it is drawn. Across is 0 for a frame without ends.
+         */
+        public final float[] sideTx = new float[Side.COUNT];
+        public final float[] sideTy = new float[Side.COUNT];
+
         public Frame() {
             for (int i = 0; i < StackEnd.REGION_COUNT; i++) look[i] = new RegionLook();
         }
@@ -189,6 +198,9 @@ public final class StackScene {
         public boolean sameAs(@NonNull Frame o) {
             if (!sameTransforms(o) || topology != o.topology || inkArgb != o.inkArgb
                 || stripAlpha != o.stripAlpha) return false;
+            for (int s = 0; s < Side.COUNT; s++) {
+                if (sideTx[s] != o.sideTx[s] || sideTy[s] != o.sideTy[s]) return false;
+            }
             for (int r = 0; r < StackEnd.REGION_COUNT; r++) {
                 boolean shows = visible(r);
                 if (shows != o.visible(r)) return false;
@@ -219,7 +231,53 @@ public final class StackScene {
                           @NonNull Frame out) {
         transforms(motion, live, out);
         regions(from, to, materialShare(p), live, out);
+        sides(from, to, p, live, out);
     }
+
+    /**
+     * How far Home's side stands off the screen at progress {@code p} from {@code from}'s side to
+     * {@code to}'s, in walls: 0 while Home is in front, 1 once it has slid away to the left of the
+     * seam. Within one side it never moves.
+     */
+    public static float homeHidden(@NonNull Side from, @NonNull Side to, float p) {
+        if (from == to) return from == Side.HOME ? 0f : 1f;
+        float q = clamp01(p);
+        return from == Side.HOME ? q : 1f - q;
+    }
+
+    /**
+     * {@code side}'s rows drawn this far across at progress {@code p} on a wall {@code widthPx}
+     * wide: Home's to the left of the seam, the Workspace's to its right, one wall apart.
+     */
+    public static float sideSlide(@NonNull Side side, @NonNull Side from, @NonNull Side to,
+                                  float p, int widthPx) {
+        float hidden = homeHidden(from, to, p);
+        return side == Side.HOME ? -hidden * widthPx : (1f - hidden) * widthPx;
+    }
+
+    /**
+     * Each side's rows (ADR 0030 section 4): across with their side, and down to the keyboard's
+     * top as the frame draws it, so no row hangs over a sinking keyboard. Rows carry no glass;
+     * the slab under them is the shared stack's. Not written to views yet (see #260's report).
+     */
+    private static void sides(@Nullable StackEnd from, @Nullable StackEnd to, float p,
+                              @NonNull StackGeometry g, @NonNull Frame out) {
+        int rowsBottom = g.layerTopPx[StackGeometry.ROWS] + g.layerHeightPx[StackGeometry.ROWS];
+        boolean onKeyboard = g.keyboardPresent && g.keyboardInColumn
+            && g.layerPresent[StackGeometry.ROWS];
+        float ty = onKeyboard ? out.regionTop[StackEnd.KEYBOARD] - rowsBottom : 0f;
+        for (int s = 0; s < Side.COUNT; s++) {
+            out.sideTy[s] = ty;
+            out.sideTx[s] = 0f;
+        }
+        if (from == null || to == null) return;
+        Side a = Side.of(from.page.isHome());
+        Side b = Side.of(to.page.isHome());
+        int width = Math.max(0, g.containerWidthPx);
+        for (Side side : SIDES) out.sideTx[side.ordinal()] = sideSlide(side, a, b, p, width);
+    }
+
+    private static final Side[] SIDES = Side.values();
 
     /**
      * How far a region both ends have has blended toward the arriving end at progress {@code p}
