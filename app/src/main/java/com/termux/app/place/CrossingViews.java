@@ -187,7 +187,8 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         float share = crossing.foldShare();
         if (Float.isNaN(share)) return;
         View rowStack = mHost.hotView(R.id.accessory_row_stack);
-        View keys = mHost.hotView(R.id.terminal_toolbar_host);
+        View keys = mHost.hotView(com.termux.app.dock.SideRowViews.id(Element.EXTRA_KEYS,
+            com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST));
         boolean keysInStack = rowStack != null && keys != null && keys.getParent() == rowStack
             && mHost.extraKeysRowOnScreen();
         if (!keysInStack) {
@@ -255,10 +256,16 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         mSideAlpha = sideAlpha;
         setTravelAlpha(R.id.terminal_status_row, statusAlpha);
         setTravelAlpha(R.id.terminal_status_lens, statusAlpha);
-        setTravelAlpha(R.id.place_apps_bar_host, sideAlpha);
-        setTravelAlpha(R.id.place_extra_keys_host, sideAlpha);
-        setTravelAlpha(R.id.place_az_bar_host, sideAlpha);
+        setTravelAlpha(edgeHost(Element.APPS), sideAlpha);
+        setTravelAlpha(edgeHost(Element.EXTRA_KEYS), sideAlpha);
+        setTravelAlpha(edgeHost(Element.AZ), sideAlpha);
         setTravelAlpha(R.id.place_off_dock_plank_host, sideAlpha);
+    }
+
+    /** {@code element}'s portable host on a side edge, through its side. */
+    private static int edgeHost(@NonNull Element element) {
+        return com.termux.app.dock.SideRowViews.id(element,
+            com.termux.app.dock.SideRowViews.Part.EDGE_HOST);
     }
 
     private void setTravelAlpha(int viewId, float alpha) {

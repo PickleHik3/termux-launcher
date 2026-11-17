@@ -15986,8 +15986,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             dockIndicator.setVerticalForm(false);
             // The dock's own pair follows the same rule as the portable host's: the ticks stand
             // on the row's outer side unless the row is the band next to the canvas.
-            orderAppsBarBands(findViewById(R.id.apps_bar_row_host),
-                findViewById(R.id.apps_bar_viewpager), dockIndicator,
+            orderAppsBarBands(findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST)),
+                findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.ROW)), dockIndicator,
                 !PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM,
                     isAppsRowNextToCanvas(layout)));
         }
@@ -16382,18 +16384,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private View edgeStackHost(@NonNull Element element, @NonNull PlaceLayout.Edge edge) {
         boolean bottom = edge == PlaceLayout.Edge.BOTTOM;
-        switch (element) {
-            case STATUS:
-                return findViewById(R.id.terminal_window_bar_host);
-            case AZ:
-                return findViewById(bottom ? R.id.apps_bar_az_host : R.id.place_az_bar_host);
-            case EXTRA_KEYS:
-                return findViewById(
-                    bottom ? R.id.terminal_toolbar_host : R.id.place_extra_keys_host);
-            case APPS:
-            default:
-                return findViewById(bottom ? R.id.apps_bar_row_host : R.id.place_apps_bar_host);
-        }
+        if (element == Element.STATUS) return findViewById(R.id.terminal_window_bar_host);
+        // A row's host, through the side that owns it.
+        return findViewById(com.termux.app.dock.SideRowViews.id(element, bottom
+            ? com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST
+            : com.termux.app.dock.SideRowViews.Part.EDGE_HOST));
     }
 
     /**

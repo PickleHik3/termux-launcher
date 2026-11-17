@@ -23,6 +23,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.dock.SideRowViews;
 import com.termux.app.AzScrubRowView;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.haptics.Haptics;
@@ -120,10 +121,16 @@ public final class SurfaceLongPress {
     /** The surfaces each target is made of, in the route's priority order. */
     private static final int[] KEYBOARD_IDS = {R.id.inapp_keyboard_container};
     private static final int[] STATUS_IDS = {R.id.terminal_window_bar_host};
-    private static final int[] AZ_IDS = {R.id.place_az_bar_host, R.id.apps_bar_az_row};
-    private static final int[] EXTRA_KEYS_IDS = {R.id.place_extra_keys_host,
-        R.id.terminal_toolbar_host};
-    private static final int[] APPS_IDS = {R.id.apps_bar_row_host, R.id.place_apps_bar_host};
+    // The rows, found through the side that owns them (SideRowViews).
+    private static final int[] AZ_IDS = {
+        SideRowViews.id(Element.AZ, SideRowViews.Part.EDGE_HOST),
+        SideRowViews.id(Element.AZ, SideRowViews.Part.ROW)};
+    private static final int[] EXTRA_KEYS_IDS = {
+        SideRowViews.id(Element.EXTRA_KEYS, SideRowViews.Part.EDGE_HOST),
+        SideRowViews.id(Element.EXTRA_KEYS, SideRowViews.Part.BOTTOM_HOST)};
+    private static final int[] APPS_IDS = {
+        SideRowViews.id(Element.APPS, SideRowViews.Part.BOTTOM_HOST),
+        SideRowViews.id(Element.APPS, SideRowViews.Part.EDGE_HOST)};
     private static final int[] DOCK_FRAME_IDS = {R.id.accessory_stack_container,
         R.id.place_off_dock_plank_host};
 

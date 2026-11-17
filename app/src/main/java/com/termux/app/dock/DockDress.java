@@ -415,7 +415,7 @@ final class DockDress {
         float wallFrom = mHost.appliedWallStripReveal();
         if ((from == target && wallFrom == wallTarget) || mHost.isReducedMotionEnabled()) return false;
         View stack = mHost.findViewById(R.id.accessory_stack_container);
-        View rowHost = mHost.findViewById(R.id.apps_bar_row_host);
+        View rowHost = mHost.findViewById(appsRow(SideRowViews.Part.BOTTOM_HOST));
         if (stack == null || rowHost == null || !mHost.dockRows().stackShown()
             || !mHost.dockRows().isRowOnScreen(Element.APPS) || stack.getHeight() <= 0
             || rowHost.getParent() != mHost.findViewById(R.id.accessory_row_stack)) return false;
@@ -574,7 +574,7 @@ final class DockDress {
             mAppliedAzRowCrownPaddingPx = layout.azRowCrownPaddingPx;
             mHost.azScrubRowView().setCrownPaddingPx(layout.azRowCrownPaddingPx);
         }
-        moved |= mHost.updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
+        moved |= mHost.updateViewBottomMargin(appsRow(SideRowViews.Part.ROW), 0);
         moved |= applyDockRowHorizontalInsets(layout);
         moved |= mHost.syncPromptLineField(layout);
         moved |= mHost.syncWallStripRow(layout);
@@ -609,6 +609,11 @@ final class DockDress {
      * @param layout the dock being applied — not one computed afresh off the stored arrangement,
      *               which the row's air now depends on through its place in the stack
      */
+    /** Home's apps row's {@code part}, through its side. */
+    private static int appsRow(@NonNull SideRowViews.Part part) {
+        return SideRowViews.id(Element.APPS, part);
+    }
+
     boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
         int surfaceInset = layout.horizontalInsetPx;
         int contentInset = layout.capsule ? layout.capsuleContentInsetPx : surfaceInset;
@@ -633,11 +638,13 @@ final class DockDress {
         // The find strip is dock furniture: it spans exactly the dock's own width, whichever style
         // is set, so it reads as the bar's top edge rather than as a floating panel.
         boolean moved = updateViewHorizontalMargins(R.id.terminal_find_bar_host, surfaceInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_viewpager, appsContentInset);
+        moved |= updateViewHorizontalMargins(appsRow(SideRowViews.Part.ROW), appsContentInset);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_indicator_band, contentInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_row, contentInset);
-        moved |= updateViewHorizontalMargins(R.id.terminal_toolbar_view_pager, extraKeysInset);
-        moved |= mHost.updateViewPadding(mHost.findViewById(R.id.apps_bar_viewpager), 0,
+        moved |= updateViewHorizontalMargins(SideRowViews.id(Element.AZ, SideRowViews.Part.ROW),
+            contentInset);
+        moved |= updateViewHorizontalMargins(
+            SideRowViews.id(Element.EXTRA_KEYS, SideRowViews.Part.ROW), extraKeysInset);
+        moved |= mHost.updateViewPadding(mHost.findViewById(appsRow(SideRowViews.Part.ROW)), 0,
             appsTopPadding, 0, appsBottomPadding);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_underlay, surfaceInset);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_overlay, surfaceInset);
@@ -646,7 +653,8 @@ final class DockDress {
         // the bar is inset from the dock edges, so the off-screen page's edge (the "❮" button)
         // peeked into the visible page. Its pages sit side by side, so hard-clip the bar to its
         // own rectangular bounds via clipToOutline.
-        View toolbarPager = mHost.findViewById(R.id.terminal_toolbar_view_pager);
+        View toolbarPager = mHost.findViewById(
+            SideRowViews.id(Element.EXTRA_KEYS, SideRowViews.Part.ROW));
         if (toolbarPager instanceof ViewGroup) {
             ((ViewGroup) toolbarPager).setClipChildren(true);
             ((ViewGroup) toolbarPager).setClipToPadding(true);
