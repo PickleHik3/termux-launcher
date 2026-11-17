@@ -65,11 +65,18 @@ public final class RowsLandingGuard {
         mPending = true;
     }
 
-    /** A chrome commit ended: a landing's is checked once, the others pass. */
+    /**
+     * A chrome commit ended: what it wrote to the rows is this writer's (a crossing's commits
+     * switch rows before the landing), and a landing's commit is checked once.
+     */
     public void afterCommit() {
         FrameGuards guards = mGuards;
         FrameGuards.Writer writer = mWriter;
-        if (!mPending || guards == null || writer == null) return;
+        if (guards == null || writer == null) return;
+        if (!mPending) {
+            for (int slot = 0; slot < mSlots; slot++) writer.wrote(slot);
+            return;
+        }
         mPending = false;
         if (!mAllowed) guards.setLanding(true);
         for (int slot = 0; slot < mSlots; slot++) writer.wrote(slot);
