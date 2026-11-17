@@ -3262,7 +3262,9 @@ public class LauncherCtlApiServer {
             "\n" +
             "With Settings > Debugging > Motion log on, the launcher notes page changes and\n" +
             "resizes, one line each with its uptime in milliseconds. dump prints the last 2,000\n" +
-            "lines; clear empties them.\n" +
+            "lines, then a --- counters --- line and the counter table (every hold and guard with\n" +
+            "its count, first and last time and last detail, kept past the 2,000); clear empties\n" +
+            "both.\n" +
             "EOF\n" +
             "      ;;\n" +
             "    look) cat <<'EOF'\n" +

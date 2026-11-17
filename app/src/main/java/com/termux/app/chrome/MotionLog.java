@@ -7,6 +7,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.window.Counters;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.view.TerminalView;
 
@@ -41,6 +42,9 @@ public final class MotionLog {
 
     private static final ArrayDeque<String> BUFFER = new ArrayDeque<>();
 
+    /** Delimits the counter table after the ring in a dump. */
+    public static final String COUNTERS_HEADER = "--- counters ---";
+
     private MotionLog() {
     }
 
@@ -74,7 +78,10 @@ public final class MotionLog {
             BUFFER.addLast(line);
         }
         Log.d(TAG, line);
-        if (INVARIANT.equals(event)) return;
+        if (INVARIANT.equals(event)) {
+            countInvariant(kv);
+            return;
+        }
         List<MotionInvariants.Violation> broken;
         synchronized (BUFFER) {
             if (sInvariants == null) sInvariants = new MotionInvariants();
@@ -84,6 +91,22 @@ public final class MotionLog {
             sInvariantCount.incrementAndGet();
             record(uptimeMs, INVARIANT, v.toString());
         }
+    }
+
+    /** An invariant is tallied by its name (the first word) in the table the ring's rollover spares. */
+    private static void countInvariant(@Nullable String kv) {
+        String text = kv == null ? "" : kv;
+        int space = text.indexOf(' ');
+        Counters.count(space < 0 ? text : text.substring(0, space), space < 0 ? "" : text.substring(space + 1));
+    }
+
+    /**
+     * The counter table (holds, guards, invariants), one line per name. It outlives the ring and
+     * is reset by {@link #clear}; the dump ends with it under {@link #COUNTERS_HEADER}.
+     */
+    @NonNull
+    public static List<String> counterLines() {
+        return Counters.lines();
     }
 
     /** Lets a crossing's window close when no event follows its settle; posted once per settle. */
@@ -128,11 +151,13 @@ public final class MotionLog {
             sInvariants = null;
             sInvariantCount.set(0);
         }
+        Counters.clear();
     }
 
     /** Turns the log on or off, here and in the terminal view's own events. */
     public static void setEnabled(boolean on) {
         enabled = on;
+        Counters.enable(on, on ? MotionLog::log : null);
         TerminalView.sMotionLogEnabled = on;
         TerminalView.setMotionSink(on ? MotionLog::log : null);
     }
