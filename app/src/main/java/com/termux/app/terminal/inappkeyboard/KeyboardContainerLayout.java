@@ -45,6 +45,27 @@ public class KeyboardContainerLayout extends LinearLayout {
         return mTouchRefused;
     }
 
+    // TEMPORARY (tag WRS3C): who writes this view's clip bounds, for the foreign-writer line on a
+    // return from the background. Reverted in its own commit.
+    @Override public void setClipBounds(android.graphics.Rect clipBounds) {
+        android.graphics.Rect now = getClipBounds();
+        boolean same = clipBounds == null ? now == null : clipBounds.equals(now);
+        if (!same) {
+            StackTraceElement[] trace = new Throwable().getStackTrace();
+            StringBuilder frames = new StringBuilder();
+            for (int i = 1; i < Math.min(trace.length, 7); i++) {
+                frames.append(' ').append(trace[i].getClassName().replaceAll("^.*\\.", ""))
+                    .append('.').append(trace[i].getMethodName()).append(':')
+                    .append(trace[i].getLineNumber());
+            }
+            android.util.Log.d("WRS3C", "keyboard clip uptime=" + android.os.SystemClock.uptimeMillis()
+                + " from=" + now + " to=" + clipBounds + " refused=" + mTouchRefused
+                + " visibility=" + getVisibility() + " attached=" + isAttachedToWindow()
+                + " frames:" + frames);
+        }
+        super.setClipBounds(clipBounds);
+    }
+
     @Override public boolean dispatchTouchEvent(MotionEvent event) {
         return !mTouchRefused && super.dispatchTouchEvent(event);
     }
