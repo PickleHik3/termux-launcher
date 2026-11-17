@@ -28702,7 +28702,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A slide across the seam stands the other half's rows or bar for its length: the floats
         // keep the room they had, and the settle's pass gives them the new one.
         if (!com.termux.app.terminal.HomeFloatPolicy.obstructionsMayMove(mCrossing.crossing(),
-            mCrossing.seam().layout() != null)) return;
+            mCrossing.seam().layout() != null,
+            mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS)) return;
         View stack = findViewById(R.id.accessory_stack_container);
         View root = findViewById(R.id.activity_termux_root_view);
         if (stack == null || root == null) return;

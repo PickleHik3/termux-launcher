@@ -278,9 +278,14 @@ public final class HomeFloatPolicy {
      *
      * @param crossing a crossing has begun and not landed
      * @param seamStandsLayout the seam has laid the other half's rows out for its length
+     * @param homeFront Home is the committed page: the stack and the keyboard the pass reads are
+     *     Home's. With the Workspace in front they are its (its keyboard, its rows), and a float,
+     *     hidden there, would take a size from them that its shell is resized to the moment a
+     *     crossing shows it again
      */
-    public static boolean obstructionsMayMove(boolean crossing, boolean seamStandsLayout) {
-        return !crossing && !seamStandsLayout;
+    public static boolean obstructionsMayMove(boolean crossing, boolean seamStandsLayout,
+                                              boolean homeFront) {
+        return !crossing && !seamStandsLayout && homeFront;
     }
 
     public static boolean shownOn(int floatPage, boolean minimised, int page) {

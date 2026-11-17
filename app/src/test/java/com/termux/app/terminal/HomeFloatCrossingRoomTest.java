@@ -14,15 +14,20 @@ import org.junit.Test;
 public class HomeFloatCrossingRoomTest {
 
     @Test public void aCrossingLeavesTheFloatsRoomAlone() {
-        assertFalse(HomeFloatPolicy.obstructionsMayMove(true, false));
-        assertFalse(HomeFloatPolicy.obstructionsMayMove(true, true));
+        assertFalse(HomeFloatPolicy.obstructionsMayMove(true, false, true));
+        assertFalse(HomeFloatPolicy.obstructionsMayMove(true, true, true));
+        assertFalse(HomeFloatPolicy.obstructionsMayMove(true, false, false));
     }
 
     @Test public void theSeamsLayoutAloneLeavesItAlone() {
-        assertFalse(HomeFloatPolicy.obstructionsMayMove(false, true));
+        assertFalse(HomeFloatPolicy.obstructionsMayMove(false, true, true));
+    }
+
+    @Test public void whatCoversTheWorkspaceIsNotWhatCoversHome() {
+        assertFalse(HomeFloatPolicy.obstructionsMayMove(false, false, false));
     }
 
     @Test public void atRestTheFloatsRoomFollowsWhatCoversIt() {
-        assertTrue(HomeFloatPolicy.obstructionsMayMove(false, false));
+        assertTrue(HomeFloatPolicy.obstructionsMayMove(false, false, true));
     }
 }
