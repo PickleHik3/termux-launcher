@@ -173,6 +173,50 @@ public class EditorDraftTest {
         assertFalse("the draft holds none of it", mDraft.isDirty());
     }
 
+    @Test
+    public void theSavedCustomAloneIsNothingToSave() {
+        mEditor.setSurfaceCustomPreset("{\"look\":1}");
+        assertTrue(mDraft.isDirty());
+        assertFalse(mDraft.isDirtyIgnoring(AppearanceDraft.BOOKKEEPING_KEYS));
+
+        mEditor.lookGrid().write(OPACITY, 90);
+        assertTrue(mDraft.isDirtyIgnoring(AppearanceDraft.BOOKKEEPING_KEYS));
+    }
+
+    @Test
+    public void undoDropsTheDraftAndTheSessionGoesOn() {
+        mEditor.lookGrid().write(OPACITY, 90);
+
+        mDraft.reset();
+
+        assertTrue(mDraft.isOpen());
+        assertEquals(40, mLive.lookGrid().value(OPACITY));
+        mEditor.lookGrid().write(FROST, 3);
+        assertEquals(3, mLive.lookGrid().value(FROST));
+    }
+
+    @Test
+    public void aStartDropsADraftNoSessionOwnsButKeepsOneARelaunchCarries() {
+        mEditor.lookGrid().write(OPACITY, 90);
+
+        AppearanceDraft.dropUnowned(mLive, true);
+        assertTrue("a relaunch carries the session on", mDraft.isOpen());
+        assertEquals(90, mLive.lookGrid().value(OPACITY));
+
+        AppearanceDraft.dropUnowned(mLive, false);
+        assertFalse(mDraft.isOpen());
+        assertEquals(40, mLive.lookGrid().value(OPACITY));
+    }
+
+    @Test
+    public void aStartForgetsTheEntryStoreAnOlderBuildKept() {
+        mStore.edit().putString(AppearanceDraft.LEGACY_ENTRY_KEY, "{}").commit();
+
+        AppearanceDraft.dropUnowned(mLive, false);
+
+        assertFalse(mStore.contains(AppearanceDraft.LEGACY_ENTRY_KEY));
+    }
+
     private int storedOpacity() {
         return mStore.getInt(LookGrid.key(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE), -1);
     }

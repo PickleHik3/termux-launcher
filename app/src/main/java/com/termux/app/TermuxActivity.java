@@ -1934,9 +1934,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Load preferences BEFORE setting theme (needed to check wallpaper preference)
         mPreferences = buildPlaceScopedPreferences(false);
-        // An Appearance editor session the process died in leaves its entry state behind: it is
-        // put back before anything reads the look, unless a relaunch carries that session on.
-        com.termux.app.surfaces.AppearanceEntryStore.restoreLeftover(this, mPreferences,
+        // A draft an Appearance editor session left open is dropped before anything reads the
+        // look, unless a relaunch carries that session on.
+        com.termux.app.surfaces.AppearanceDraft.dropUnowned(mPreferences,
             mAppearanceHandover.pending() != null);
         // Before any chrome is built: every label reads the shared Text size as it is made.
         com.termux.app.theme.TextScale.sync(mPreferences);
@@ -1958,7 +1958,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
         if (mPreferences == null) {
             mPreferences = buildPlaceScopedPreferences(true);
-            com.termux.app.surfaces.AppearanceEntryStore.restoreLeftover(this, mPreferences,
+            com.termux.app.surfaces.AppearanceDraft.dropUnowned(mPreferences,
                 mAppearanceHandover.pending() != null);
             com.termux.app.theme.TextScale.sync(mPreferences);
         }

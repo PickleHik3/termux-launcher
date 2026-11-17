@@ -98,10 +98,20 @@ public final class PreferenceDraft implements SharedPreferences {
 
     /** Whether a held value differs from what the store holds now. */
     public boolean isDirty() {
+        return isDirtyIgnoring(java.util.Collections.<String>emptySet());
+    }
+
+    /**
+     * {@link #isDirty} leaving out {@code ignored} keys: bookkeeping a session writes beside what
+     * the user changed, which Done stores and Discard drops but which is nothing to save.
+     */
+    public boolean isDirtyIgnoring(@NonNull Set<String> ignored) {
         if (mHeld.isEmpty())
             return false;
         Map<String, ?> stored = mStore.getAll();
         for (Map.Entry<String, Object> entry : mHeld.entrySet()) {
+            if (ignored.contains(entry.getKey()))
+                continue;
             Object held = entry.getValue();
             Object was = stored.get(entry.getKey());
             if (held == REMOVED ? was != null : !Objects.equals(held, was))
@@ -121,6 +131,11 @@ public final class PreferenceDraft implements SharedPreferences {
             editor.apply();
         }
         end();
+    }
+
+    /** Drops everything held and goes on: Undo inside a session. The store is not written. */
+    public void reset() {
+        mHeld.clear();
     }
 
     /** Drops everything held, writing nothing: the store is as it was, apart from outside writes. */
