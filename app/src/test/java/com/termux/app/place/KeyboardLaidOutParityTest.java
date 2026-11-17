@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.dock.DockGeometry;
 import com.termux.app.wall.PageRef;
 
 import org.junit.Test;
@@ -115,6 +116,34 @@ public class KeyboardLaidOutParityTest {
                 last = motion.keyboardSharePx;
             }
             assertEquals(StackScene.keyboardTranslationPx(0f, kb), last, 0f);
+        }
+    }
+
+    /**
+     * The container's height at a crossing's last frame is its height at the landing: the flush
+     * padding a pass stands the stack with is the arriving place's rest value while a crossing is
+     * live, never one read off the terminal's live (pre-sized, displaced) geometry, which differed
+     * from the rest's by a few px on the emulator (Home 2 to Terminal, keyboard down).
+     */
+    @Test public void theFlushPaddingAtACrossingsLastFrameIsTheRestsAtTheLanding() {
+        final int restFlush = 0;
+        final int liveMidCrossing = 5;
+        StackLayout.FlushRule live = (content, margin) -> liveMidCrossing;
+        for (boolean floating : BOOLS) {
+            StackLayout.Input crossing = f.pass(PageRef.TERMINAL, false, floating);
+            crossing.flush = (content, margin) ->
+                StackLayout.flushPx(true, restFlush, live, content, margin);
+            StackLayout.Input landing = f.pass(PageRef.TERMINAL, false, floating);
+            landing.flush = (content, margin) -> restFlush;
+            StackLayout.Result a = StackLayout.layout(crossing, new DockGeometry());
+            StackLayout.Result b = StackLayout.layout(landing, new DockGeometry());
+            String what = f + (floating ? ", Floating" : ", Docked");
+            assertEquals(what, b.flushPaddingPx, a.flushPaddingPx);
+            assertEquals(what, b.stackHeightPx, a.stackHeightPx);
+            assertEquals(what, b.flushBottomInsetPx, a.flushBottomInsetPx);
+            // At rest the live reading is the one used.
+            assertEquals(what, live.paddingPx(100, 10),
+                StackLayout.flushPx(false, restFlush, live, 100, 10));
         }
     }
 

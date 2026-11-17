@@ -242,6 +242,17 @@ public final class StackLayout {
     }
 
     /** The stack's height: its rows, the terminal's padding and the keyboard. */
+    /**
+     * The flush padding a pass stands the stack with. While a crossing is live it is the arriving
+     * place's rest value ({@code restFlushPx}): the live reading comes off the terminal's
+     * geometry, which a crossing has pre-sized and displaced, and differs from the rest's by a few
+     * px, so the container's height would change on the landing frame. At rest, the live reading.
+     */
+    public static int flushPx(boolean crossing, int restFlushPx, @NonNull FlushRule live,
+                              int contentPx, int marginPx) {
+        return crossing ? Math.max(0, restFlushPx) : live.paddingPx(contentPx, marginPx);
+    }
+
     public static int stackHeightPx(int dockContentHeightPx, int flushPaddingPx,
                                     int keyboardHeightPx) {
         return Math.max(0, dockContentHeightPx)

@@ -17191,7 +17191,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             stackDressPage() == com.termux.app.wall.PaneWallPage.TERMINAL;
         stackIn.flushAllowed = visiblePaneCount() <= 1 && !activePaneFloating && !isImeVisible()
             && terminalOnScreen;
-        stackIn.flush = this::resolveTerminalFlushDockPaddingPx;
+        stackIn.flush = mPassFlushRule;
         com.termux.app.place.StackLayout.Result stack =
             com.termux.app.place.StackLayout.layout(stackIn, mDock.dockGeometry());
         // The last pass's squeeze, an input to every snapshot asked between two passes.
@@ -17379,6 +17379,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         content.setLayoutParams(marginParams);
         return true;
     }
+
+    /** The pass's flush rule: the rest value while a crossing is live (StackLayout#flushPx). */
+    private final com.termux.app.place.StackLayout.FlushRule mLiveFlushRule =
+        this::resolveTerminalFlushDockPaddingPx;
+    private final com.termux.app.place.StackLayout.FlushRule mPassFlushRule =
+        (content, margin) -> com.termux.app.place.StackLayout.flushPx(mCrossing.crossing(),
+            mTerminalRestFlushPaddingPx, mLiveFlushRule, content, margin);
 
     /** The keyboard's height the stack's container is laid out taller by while it is down. */
     private int mKeyboardDownLaidOutPx;
