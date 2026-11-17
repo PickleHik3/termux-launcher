@@ -257,10 +257,9 @@ public final class PaneGlass {
      * such move has to re-aim the matrix.
      *
      * <p>A wall page sliding is not a layout move — the wall translates its pages — and this
-     * listener never sees it. The wall's owner re-aims every slab per frame of a slide instead
-     * ({@code onWallMoved} on the pages, {@code invalidatePaneGlassPositions} on the terminal),
-     * and the slab reads the page's translation off the wall itself, so the frost stays glued to
-     * the wallpaper while the page travels over it.</p>
+     * listener never sees it. The glass service asks every registered slab on each frame that
+     * draws ({@code SlabAim}), and the slab reads the page's translation off the wall itself, so
+     * the frost stays glued to the wallpaper while the page travels over it.</p>
      */
     public static void followLayout(@Nullable PaneGlassBackdropView backdrop) {
         if (backdrop == null) return;

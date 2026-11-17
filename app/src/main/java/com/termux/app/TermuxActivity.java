@@ -1970,8 +1970,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         // Battery saver is a Live policy input: the next apply reads it and the kinds move at once.
         mGlass.watchPowerSave(this, () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
-        com.termux.app.chrome.PanelBackdrop.install(getWindow().getDecorView(), mPanelBackdropSource);
-        com.termux.app.glass.GlassService.install(getWindow().getDecorView(), mGlass);
+        View panelDecor = getWindow().getDecorView();
+        com.termux.app.chrome.PanelBackdrop.install(panelDecor, mPanelBackdropSource);
+        com.termux.app.glass.GlassService.install(panelDecor, mGlass);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
         // to right in every locale. Reading-order overlays added here (help, tour, notices, the
@@ -4572,10 +4573,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
-        if (!pagesReaimed && mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+        // The pane slabs and the tab are re-aimed by the glass service on every frame that draws
+        // (SlabAim), so only the pages' own widgets are told here.
         if (!pagesReaimed && mPaneWallController != null) {
             if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().onWallMoved();
-            if (mPaneWallController.displayWindow() != null) mPaneWallController.displayWindow().onWallMoved();
         }
         if (mParallaxFrostViews == null) {
             mParallaxFrostViews = new View[] {
@@ -25354,8 +25355,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // are the pane host's less the stroke's air on every side, so the two share
                     // a centre and one scale about it keeps the line where it frames the page.
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
-                    // The slabs' wallpaper stays on the screen while their page sinks under it.
-                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+                    // The slabs' wallpaper stays on the screen while their page sinks under it:
+                    // the glass service re-aims them in the frame the sink draws in.
                     View borderView = hotView(R.id.terminal_border_overlay);
                     if (borderView == null) return;
                     borderView.setPivotX(borderView.getWidth() / 2f);
@@ -25364,7 +25365,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     borderView.setScaleY(scale);
                 }
                 @Override public void onPagePoseChanged() {
-                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+                    // Nothing to push: the slabs follow their page's pose through the glass
+                    // service's commit (SlabAim).
                 }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
@@ -25421,13 +25423,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The dock, the keyboard and the status bar's content travel with the wall
                     // between the two places' states, as transforms only.
                     mCrossingController.syncChromeTravel(offsetPx);
-                    // The wallpaper pans with the wall, and every glass surface follows it; the
-                    // terminal's slabs re-aim whether or not it panned, since the page they sit
-                    // on moved over a wallpaper that did not go with it. Aimed once: the wall's
-                    // controller has re-aimed the other pages already, and the slabs are here.
+                    // The wallpaper pans with the wall, and every glass surface follows it. The
+                    // slabs, on the terminal's page or any other, re-aim in the frame the wall
+                    // moved in whether or not the wallpaper panned: the glass service asks each
+                    // of them at the commit (SlabAim), so nothing is pushed to them here.
                     Trace.beginSection("Wall.parallax");
                     syncWallpaperParallax(true);
-                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
                     Trace.endSection();
                     // The wall moved at all, so the terminal may be sliding back into the frame:
                     // any pane whose screen changed while it was away is drawn now, before the

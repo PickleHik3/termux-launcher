@@ -169,11 +169,6 @@ public class AssistantPageView extends PaneContentFrame {
         return false;
     }
 
-    /** The wall moved this page, or the wallpaper panned under it: the slab re-aims. */
-    public void onWallMoved() {
-        glass.invalidateGlassPosition();
-    }
-
     /** How much of the page's rim the wall's slide leaves showing. */
     public void setOutlineTravelAlpha(float alpha) {
         rim.setTravelAlpha(alpha);

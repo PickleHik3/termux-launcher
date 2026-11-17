@@ -1630,17 +1630,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         }
     }
 
-    /**
-     * The wall moved this page, or the wallpaper panned under it: the slab and the corner arcs
-     * re-aim at whatever is behind them now. Per frame of a slide, so nothing here but invalidates.
-     */
-    public void onWallMoved() {
-        if (mGlass != null) mGlass.invalidateGlassPosition();
-        if (mEmptyGlass != null) mEmptyGlass.invalidateGlassPosition();
-        if (mCornerMask != null) mCornerMask.invalidateGlassPosition();
-        if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
-    }
-
     /** How much of the page's rim the wall's slide leaves showing; see PaneWallPolicy#outlineAlpha. */
     public void setOutlineTravelAlpha(float alpha) {
         mRim.setTravelAlpha(alpha);

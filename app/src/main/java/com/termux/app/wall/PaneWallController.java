@@ -1495,10 +1495,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     private void reaimPages() {
         if (mWidgetsPage != null) mWidgetsPage.onWallMoved();
-        if (mDisplayWindow != null) mDisplayWindow.onWallMoved();
-        if (mAssistantView instanceof com.termux.app.assistant.AssistantPageView) {
-            ((com.termux.app.assistant.AssistantPageView) mAssistantView).onWallMoved();
-        }
     }
 
     @Override

@@ -290,6 +290,8 @@ public final class PaneControlsView extends View {
     private final GlassAnchor.Placement mPlacement = new GlassAnchor.Placement();
     /** The wallpaper's live x-offset the frost follows, or null while nothing pans. */
     @Nullable private com.termux.app.chrome.WallpaperParallax mParallax;
+    /** Draws the tab's frost again on any frame its page moved: the glass service asks, nobody pushes. */
+    private final com.termux.app.chrome.SlabAim mSlabAim = new com.termux.app.chrome.SlabAim(this);
     @Nullable private ColorFilter mFrostFilter;
     /** The sink dim the frost paint's filter last undid; 255 for the plain frost. */
     private int mFilterKeptBrightness = 0xFF;
@@ -488,6 +490,7 @@ public final class PaneControlsView extends View {
             return;
         }
         mParallax = parallax;
+        mSlabAim.setParallax(parallax);
         mLook = look;
         if (live != mFrostFrame || mFrostShader == null) {
             // CLAMP and a shader, as every other glass surface here draws the same frame: it does
@@ -993,7 +996,14 @@ public final class PaneControlsView extends View {
      * cut short is a tab that is out.
      */
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mSlabAim.attach();
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
+        mSlabAim.detach();
         landMotion();
         super.onDetachedFromWindow();
     }

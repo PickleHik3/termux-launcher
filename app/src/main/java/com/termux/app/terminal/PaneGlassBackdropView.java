@@ -25,6 +25,7 @@ import com.termux.app.chrome.GlassMotionLight;
 import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.chrome.LiveGlassEffect;
 import com.termux.app.chrome.LivePicture;
+import com.termux.app.chrome.SlabAim;
 import com.termux.app.chrome.WallpaperParallax;
 import com.termux.app.chrome.scene.LiveSceneFrame;
 
@@ -166,6 +167,12 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      * copied in, so every slab samples the frame at the same offset the backdrop draws it at.
      */
     @Nullable private WallpaperParallax mParallax;
+    /**
+     * Registers this slab with the window's glass service while attached: the glass commit draws it
+     * again on any frame its page moved or the wallpaper panned, so no owner pushes a re-aim for
+     * a wall slide, a sink, a tilt or the wallpaper's offset.
+     */
+    @NonNull private final SlabAim mSlabAim = new SlabAim(this);
     /** The parallax the matrix was last aimed for, in px. */
     private float mLastParallax;
     /** The shader the aim was last written for; a rebind of the paint needs its own matrix. */
@@ -926,6 +933,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        mSlabAim.attach();
         if (mVeilSource == null) return;
         mVeilSource.paneGlassPark(this, false);
         // Asked again only when its rect or the generation moved; else the kept answer stands.
@@ -935,6 +943,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        mSlabAim.detach();
         // The pane stops counting but keeps its answer for its return (onAttachedToWindow).
         if (mVeilSource != null) mVeilSource.paneGlassPark(this, true);
         // A slab that comes back starts from rest, never from the bend it left with.
@@ -953,8 +962,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     }
 
     /**
-     * Re-aim on the next draw; call after this slab has moved, or after its page did — a slide,
-     * the sink, the plank's tilt — since a transform alone never redraws a child.
+     * Re-aim on the next draw; call after this slab has moved in a way its own frame cannot see
+     * (a float dragged by its container's params, a FLIP move). A page's slide, sink or tilt and the
+     * wallpaper's pan need no call: the glass service sees them on every drawn frame ({@link SlabAim}).
      */
     public void invalidateGlassPosition() {
         mAimStale = true;
@@ -969,6 +979,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     public void setParallax(@Nullable WallpaperParallax parallax) {
         if (mParallax == parallax) return;
         mParallax = parallax;
+        mSlabAim.setParallax(parallax);
         invalidateGlassPosition();
     }
 
