@@ -307,7 +307,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
             ? new java.lang.ref.WeakReference<>(current) : null;
         open = true;
         behavior = ModalSheetSlide.armExpanded(sheet, behavior, behaviorCallback);
-        setVisibility(VISIBLE); bringToFront();
+        setVisibility(VISIBLE); com.termux.app.window.WindowLayers.raiseWithin(this);
         if (slide.isRunning()) {
             slide.slideIn(null);
         } else {

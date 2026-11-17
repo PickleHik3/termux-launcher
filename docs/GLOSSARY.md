@@ -418,7 +418,7 @@ _Avoid_: pill (the dictation control), window pill, run strip entry, float chip
 **Window layer**:
 One of the six named layers of the launcher's window, back to front: ground (wallpaper, live scene, the X11 surface), pages, chrome, sheets, editor and notices. The layer's number is the only Z between layers; inside a layer the order is child order, and elevation only draws shadows. Not an **open layer**, which lives in the sheets window layer.
 _Avoid_: layer (on its own), z-level, overlay
-_ADR 0028 (accepted, not yet built): the app as built orders views by layout order and elevation values._
+_Built so far: every top-level view stands in a layer's host (ground, chrome, sheets inside the launcher's shell; editor and notices beside it), runtime views join their host through `WindowLayers`, and `bringToFront` is gone. The shell's body holds the pages and, until the stacks move, the chrome laid out against them; elevation still orders children inside a layer in a few places (ADR 0028)._
 
 **Workspace**:
 The terminal half of the wall, right of Home: the current session's windows, then the display
@@ -737,8 +737,10 @@ what has no surface (the Look slider, wallpaper, theme, icon pack, text size, fu
 orientation, Undo, Done; that bar is the **editor bar**, never the Pill, which is the dictation
 card). It edits the half the frame shows. Users never meet Base, inherit or
 follow: a moved slider is the surface's own value, marked by a dot, and **Reset** in the card menu
-puts it back on the Look. Undo steps back and Done keeps the changes. Every door to it is named
-Appearance and opens on that door's object.
+puts it back on the Look. Every edit goes into one **draft** shown over the saved values: Undo and
+Discard drop the draft, Done saves it once, and a look set from outside while the editor is open
+(`launcherctl look`) shows at once and survives both. Every door to it is named Appearance and
+opens on that door's object.
 _Avoid_: surface editor, look editor, Look page, Layout page (the 2026-10-24 merge removed the pages), style editor
 
 **Corner tab**:

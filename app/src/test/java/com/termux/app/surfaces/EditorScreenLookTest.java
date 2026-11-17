@@ -245,7 +245,10 @@ public class EditorScreenLookTest {
         moveHomeOpacity(editor, 33);
         assertNull(CardCustoms.raw(preferences.getSharedPreferences()));
         tapLook(editor, SOLID);
-        assertNotNull(CardCustoms.raw(preferences.getSharedPreferences()));
+        // Held in the draft: the store has none until Done.
+        assertNotNull(CardCustoms.raw(com.termux.shared.settings.preferences.SharedPreferencesPreview
+            .readsFor(preferences.getSharedPreferences())));
+        assertNull(CardCustoms.raw(preferences.getSharedPreferences()));
         editor.undo();
         assertNull("the slot is as it was at open",
             CardCustoms.raw(preferences.getSharedPreferences()));

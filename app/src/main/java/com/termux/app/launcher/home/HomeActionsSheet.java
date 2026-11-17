@@ -255,7 +255,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         open = true;
         if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);
         setVisibility(VISIBLE);
-        bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(this);
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;
@@ -279,7 +279,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         open = true;
         if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);
         setVisibility(VISIBLE);
-        bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(this);
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;

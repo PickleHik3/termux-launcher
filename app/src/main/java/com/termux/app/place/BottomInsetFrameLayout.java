@@ -14,12 +14,14 @@ import com.termux.app.chrome.LiveBackdrop;
 
 /**
  * The content container: it keeps its bottom padding ({@link BottomInsets#keptPx}) clear for every
- * child but one, the stack's layout ({@link #setReachingChild}), which it measures and lays out
- * down to its own bottom edge so the dock's surface can reach the screen's bottom (ADR 0018 §1).
+ * child but two, the stack's layout ({@link #setReachingChild}) and the sheets layer
+ * ({@link #setReachingLayer}), which it measures and lays out down to its own bottom edge so the
+ * dock's surface and the sheets can reach the screen's bottom (ADR 0018 §1).
  */
 public class BottomInsetFrameLayout extends FrameLayout implements LiveBackdrop.Container {
 
     @Nullable private View mReaching;
+    @Nullable private View mReachingLayer;
 
     public BottomInsetFrameLayout(@NonNull Context context) {
         super(context);
@@ -41,10 +43,21 @@ public class BottomInsetFrameLayout extends FrameLayout implements LiveBackdrop.
         requestLayout();
     }
 
+    /** The sheets layer's host: reaches the bottom edge like the stack's layout, whatever it holds. */
+    public void setReachingLayer(@Nullable View layer) {
+        if (mReachingLayer == layer) return;
+        mReachingLayer = layer;
+        requestLayout();
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        View child = reaching();
+        reachMeasure(reaching());
+        reachMeasure(reachingOf(mReachingLayer));
+    }
+
+    private void reachMeasure(@Nullable View child) {
         if (child == null) return;
         MarginLayoutParams params = (MarginLayoutParams) child.getLayoutParams();
         int height = Math.max(0, getMeasuredHeight() - getPaddingTop() - params.topMargin
@@ -57,7 +70,11 @@ public class BottomInsetFrameLayout extends FrameLayout implements LiveBackdrop.
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        View child = reaching();
+        reachLayout(reaching());
+        reachLayout(reachingOf(mReachingLayer));
+    }
+
+    private void reachLayout(@Nullable View child) {
         if (child == null) return;
         int childBottom = child.getTop() + child.getMeasuredHeight();
         if (child.getBottom() != childBottom)
@@ -78,7 +95,11 @@ public class BottomInsetFrameLayout extends FrameLayout implements LiveBackdrop.
 
     @Nullable
     private View reaching() {
-        View child = mReaching;
+        return reachingOf(mReaching);
+    }
+
+    @Nullable
+    private View reachingOf(@Nullable View child) {
         if (child == null || child.getParent() != this || child.getVisibility() == GONE
             || getPaddingBottom() <= 0
             || child.getLayoutParams().height != ViewGroup.LayoutParams.MATCH_PARENT)

@@ -68,7 +68,7 @@ public final class WallPagesStore {
 
         @Override public void watch(@NonNull final Runnable changed) {
             watcher = (p, key) -> { if (KEY_STATE.equals(key)) changed.run(); };
-            prefs.registerOnSharedPreferenceChangeListener(watcher);
+            com.termux.shared.settings.preferences.PreferenceDraft.listen(prefs, watcher);
         }
     }
 

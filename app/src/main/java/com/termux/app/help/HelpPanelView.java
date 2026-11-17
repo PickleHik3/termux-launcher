@@ -132,7 +132,7 @@ public final class HelpPanelView extends FrameLayout {
 
     public void show() {
         setVisibility(VISIBLE);
-        bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(this);
         requestFocus();
         // Asked for rather than waited on: the keyboard's inset is what the body has to clear.
         requestApplyInsets();

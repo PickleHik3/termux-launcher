@@ -2,10 +2,22 @@
      status strip), placed by absolute geometry, so it never mirrors: it stays left to right in
      every locale. Reading-order surfaces inside it (the sheet plane below) opt back in with
      layoutDirection="locale". -->
-<com.termux.app.terminal.TermuxActivityRootView
+<!-- The window root (ADR 0028 section 6): the one view the content view holds, same bounds. The
+     launcher's shell stands in it, with ground, pages, chrome and sheets inside; the editor and the
+     notices stand beside the shell in their own hosts, so the Appearance editor scaling the shell to
+     a miniature never scales them. Nothing is added to the window decor or beside this root. -->
+<FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/window_layers_root"
+    android:layoutDirection="ltr"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+<com.termux.app.terminal.TermuxActivityRootView
     android:id="@+id/activity_termux_root_view"
     android:layoutDirection="ltr"
     android:layout_width="match_parent"
@@ -20,6 +32,14 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+        <!-- Layer 0, GROUND (ADR 0028 section 6): what the shell draws behind its content. -->
+        <com.termux.app.chrome.LiveBackdropFrameLayout
+            android:id="@+id/window_layer_ground"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:clipChildren="false"
             android:clipToPadding="false">
 
@@ -91,6 +111,8 @@
             android:layout_gravity="top"
             android:importantForAccessibility="no"
             android:visibility="gone" />
+
+        </com.termux.app.chrome.LiveBackdropFrameLayout>
 
         <com.termux.app.chrome.LiveBackdropRelativeLayout
             android:id="@+id/activity_termux_root_relative_layout"
@@ -1074,6 +1096,16 @@
             android:layout_alignParentBottom="true"
             android:visibility="gone" />
 
+        <com.termux.app.LauncherAzGestureFxView
+            android:id="@+id/apps_bar_az_label_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentTop="true"
+            android:layout_above="@id/accessory_stack_container"
+            android:layout_alignWithParentIfMissing="true"
+            android:clickable="false"
+            android:focusable="false"
+            android:visibility="gone" />
         <!-- Where the keyboard goes when the place's keyboard type is Floating: the whole content
              region, so the frame inside it can be dragged anywhere and still be touchable, and
              deliberately not clickable, so everything outside the frame reaches the place under it.
@@ -1088,13 +1120,22 @@
             android:focusable="false"
             android:clipChildren="false"
             android:clipToPadding="false"
-            android:elevation="14dp"
+            android:visibility="gone" />
+
+        <!-- Scrollback find strip: one text line above the dock, so the transcript it searches
+             stays on screen with its matches lit. Filled by TerminalFindCoordinator. -->
+        <FrameLayout
+            android:id="@+id/terminal_find_bar_host"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_above="@id/accessory_stack_container"
+            android:layout_alignWithParentIfMissing="true"
             android:visibility="gone" />
 
         <!-- The Appearance editor's tap layer. It covers the whole frame while the editor is up,
              so nothing under it - the terminal, the dock's apps, the keyboard's keys - receives a
              touch; each group below is laid in code over its element's measured rect, and a tap on
-             one selects that element. Elevated over the floating keyboard's host so a floating
+             one selects that element. Last in the body, so it stands over the floating keyboard's host and a floating
              keyboard is a tap target too, not a keyboard. -->
         <FrameLayout
             android:id="@+id/surface_tuning_gesture_overlay"
@@ -1102,7 +1143,6 @@
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
             android:layout_alignParentBottom="true"
-            android:elevation="18dp"
             android:visibility="gone">
 
             <!-- The bare wallpaper: first child and the whole frame, so every element's group
@@ -1165,28 +1205,15 @@
                 android:visibility="gone" />
         </FrameLayout>
 
-        <!-- Scrollback find strip: one text line above the dock, so the transcript it searches
-             stays on screen with its matches lit. Filled by TerminalFindCoordinator. -->
-        <FrameLayout
-            android:id="@+id/terminal_find_bar_host"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_above="@id/accessory_stack_container"
-            android:layout_alignWithParentIfMissing="true"
-            android:elevation="16dp"
-            android:visibility="gone" />
-
-        <com.termux.app.LauncherAzGestureFxView
-            android:id="@+id/apps_bar_az_label_overlay"
+        </com.termux.app.chrome.LiveBackdropRelativeLayout>
+        <!-- Layer 2, CHROME (ADR 0028 section 6): the layers that stand over the body. -->
+        <com.termux.app.chrome.LiveBackdropFrameLayout
+            android:id="@+id/window_layer_chrome"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_alignParentTop="true"
-            android:layout_above="@id/accessory_stack_container"
-            android:layout_alignWithParentIfMissing="true"
-            android:clickable="false"
-            android:focusable="false"
-            android:visibility="gone" />
-        </com.termux.app.chrome.LiveBackdropRelativeLayout>
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
         <!-- The Home pill's layer: Home's extra keys as a small floating glass pill. Full size, no
              background, and it claims a touch only when the down lands on the pill or its chip.
              It sits just before the app drawer so the drawer, the palette and the sheets draw
@@ -1210,6 +1237,19 @@
             android:focusable="false"
             android:clipChildren="false"
             android:clipToPadding="false" />
+
+        </com.termux.app.chrome.LiveBackdropFrameLayout>
+
+        <!-- Layer 3, SHEETS: the drawer, the palette, the terminal sheet and what opens on them, and
+             the rename chip (a rename can start from a sheet, so the chip is the host's last child).
+             The one host that reaches the screen's bottom edge with the stack's layout: sheets run
+             under the gesture pill (BottomInsetFrameLayout.setReachingLayer). -->
+        <com.termux.app.chrome.LiveBackdropFrameLayout
+            android:id="@+id/window_layer_sheets"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false">
 
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
@@ -1364,8 +1404,9 @@
             android:layout_height="match_parent"
             android:clickable="false"
             android:focusable="false"
-            android:elevation="20dp"
             android:visibility="gone" />
+
+        </com.termux.app.chrome.LiveBackdropFrameLayout>
 
     </com.termux.app.place.BottomInsetFrameLayout>
 
@@ -1383,3 +1424,22 @@
     </FrameLayout>
 
 </com.termux.app.terminal.TermuxActivityRootView>
+
+    <!-- Layer 4, EDITOR: the Appearance editor's card sheet, bar and picker, and the setup sheet.
+         Beside the shell, not in it: the editor scales the shell. -->
+    <FrameLayout
+        android:id="@+id/window_layer_editor"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false" />
+
+    <!-- Layer 5, NOTICES: notices, the reset cards, the help overlay and the transient popups. -->
+    <FrameLayout
+        android:id="@+id/window_layer_notices"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false" />
+
+</FrameLayout>
