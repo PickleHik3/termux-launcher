@@ -151,8 +151,10 @@ Raise these if you think they are wrong; do not silently undo them.
 - The Sessions sidebar is legacy: no Sessions tab in the editor, no dot tab badges.
 - The Appearance editor commits only on Done. Its card sheet is always present at peek, half or
   full (no ✕); Back above peek collapses to peek, at peek it goes through the unsaved-changes
-  dialog; dirtiness compares against the entry snapshot. Views raised over the editor need a Z
-  above the sheet's elevation; `bringToFront` alone draws under.
+  dialog; dirtiness compares against the entry snapshot. A view's place in Z is its window layer
+  (ground, pages, chrome, sheets, editor, notices, back to front; `WindowLayer`): runtime views
+  join their layer's host through `WindowLayers`, never the window decor or the content view;
+  elevation only draws a shadow and `bringToFront` is not used.
 - The editor collapses the status pane on entry, so a status-pane control draws its own preview.
 - A stored `-1` corner radius means "follow the style", resolved only in
   `resolveAutoCornerRadiusDp`. Never give `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
