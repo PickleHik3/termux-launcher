@@ -3,6 +3,8 @@ package com.termux.app.glass;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.window.WindowLayer;
+
 import java.util.ArrayList;
 
 /**
@@ -14,9 +16,14 @@ import java.util.ArrayList;
  * memory trim, the Compositor's availability, or a Live slot freeing. Motion, a landing and what
  * sits above a surface are not inputs, so they can never change a kind.</p>
  *
- * <p>At most {@link #LIVE_SLOTS} surfaces are Live. A surface registered when every slot is taken
- * takes the slot of the newest Live surface of a worse priority, which drops to Wallpaper; with
- * none worse it is Wallpaper until a slot frees.</p>
+ * <p>At most {@link #LIVE_SLOTS} surfaces are Live, whatever they are: the dock, a panel, a float
+ * or a widget all take one of the same slots, so nothing else can push a surface off Live. A
+ * surface registered when every slot is taken takes the slot of the newest Live surface of a worse
+ * priority, which drops to Wallpaper; with none worse it is Wallpaper until a slot frees.</p>
+ *
+ * <p>Entries come out back to front in the window's layer order ({@link WindowLayer}); inside a
+ * layer, the worse priority first, then the order of registration. That is the order the glass
+ * commit walks. The budget is a different order, best priority first, and is kept separately.</p>
  */
 public final class GlassRegistry {
 
@@ -35,8 +42,10 @@ public final class GlassRegistry {
         }
     }
 
-    /** Back to front: worse priority first, then the order of registration. */
+    /** Commit order, back to front: layer, then worse priority first, then registration order. */
     @NonNull private final ArrayList<Slot> mSlots = new ArrayList<>();
+    /** Budget order: best priority first, then registration order. */
+    @NonNull private final ArrayList<Slot> mBudget = new ArrayList<>();
     private long mNextOrder;
     private boolean mLiveOn;
     private boolean mMemoryShort;
@@ -49,10 +58,16 @@ public final class GlassRegistry {
     public boolean register(@NonNull GlassEntry entry) {
         if (indexOf(entry.element) >= 0) return false;
         Slot slot = new Slot(entry, mNextOrder++);
-        // Back to front: after every entry of its priority or a worse one.
+        // Back to front: after every entry of an earlier layer, and of this layer's priority or a worse one.
         int at = 0;
-        while (at < mSlots.size() && mSlots.get(at).entry.priority >= entry.priority) at++;
+        while (at < mSlots.size() && behind(mSlots.get(at).entry, entry)) at++;
         mSlots.add(at, slot);
+        // Budget order: after every entry of its priority or a better one (it is the newest).
+        int budgetAt = 0;
+        while (budgetAt < mBudget.size() && mBudget.get(budgetAt).entry.priority <= entry.priority) {
+            budgetAt++;
+        }
+        mBudget.add(budgetAt, slot);
         GlassKind kind = grantable(entry.wants);
         if (kind == GlassKind.LIVE && liveCount() >= LIVE_SLOTS) {
             Slot evict = newestLiveWorseThan(entry.priority);
@@ -72,6 +87,7 @@ public final class GlassRegistry {
         int at = indexOf(element);
         if (at < 0) return false;
         Slot gone = mSlots.remove(at);
+        mBudget.remove(gone);
         if (gone.granted == GlassKind.LIVE) regrant();
         return true;
     }
@@ -120,8 +136,9 @@ public final class GlassRegistry {
     }
 
     /**
-     * The entry at {@code index} in commit order, back to front: widgets on the pages, then the
-     * floating windows over them, then the dock in the chrome.
+     * The entry at {@code index} in commit order, back to front: the window's layers in their
+     * table's order (the ground's frost, the pages' slabs, widgets and floats, the chrome's dock,
+     * the sheets' panels).
      */
     @NonNull
     public GlassEntry entryAt(int index) {
@@ -153,6 +170,15 @@ public final class GlassRegistry {
         return false;
     }
 
+    /** How many entries ask to be visited on every drawn frame ({@link GlassEntry#frame}). */
+    public int frameCount() {
+        int count = 0;
+        for (int i = 0; i < mSlots.size(); i++) {
+            if (mSlots.get(i).entry.frame != null) count++;
+        }
+        return count;
+    }
+
     /** How many surfaces are granted Live. */
     public int liveCount() {
         int count = 0;
@@ -180,38 +206,36 @@ public final class GlassRegistry {
     /** Every entry granted again in budget order: best priority first, oldest first within it. */
     private void regrant() {
         int live = 0;
-        for (int priority = GlassEntry.PRIORITY_DOCK; priority <= GlassEntry.PRIORITY_WIDGET;
-             priority++) {
-            for (int i = 0; i < mSlots.size(); i++) {
-                Slot slot = mSlots.get(i);
-                if (slot.entry.priority != priority) continue;
-                GlassKind kind = grantable(slot.entry.wants);
-                if (kind == GlassKind.LIVE) {
-                    if (live < LIVE_SLOTS) live++;
-                    else kind = GlassKind.WALLPAPER;
-                }
-                if (kind != slot.granted) {
-                    slot.granted = kind;
-                    slot.changed = true;
-                }
+        for (int i = 0; i < mBudget.size(); i++) {
+            Slot slot = mBudget.get(i);
+            GlassKind kind = grantable(slot.entry.wants);
+            if (kind == GlassKind.LIVE) {
+                if (live < LIVE_SLOTS) live++;
+                else kind = GlassKind.WALLPAPER;
+            }
+            if (kind != slot.granted) {
+                slot.granted = kind;
+                slot.changed = true;
             }
         }
     }
 
     @Nullable
     private Slot newestLiveWorseThan(int priority) {
-        // Back to front puts the worst priority first and its newest last within its run.
-        Slot found = null;
-        for (int i = 0; i < mSlots.size(); i++) {
-            Slot slot = mSlots.get(i);
+        // The budget's last entries are the worst priority, newest last.
+        for (int i = mBudget.size() - 1; i >= 0; i--) {
+            Slot slot = mBudget.get(i);
             if (slot.entry.priority <= priority) break;
-            if (slot.granted != GlassKind.LIVE) continue;
-            if (found == null || slot.entry.priority > found.entry.priority
-                || (slot.entry.priority == found.entry.priority && slot.order > found.order)) {
-                found = slot;
-            }
+            if (slot.granted == GlassKind.LIVE) return slot;
         }
-        return found;
+        return null;
+    }
+
+    /** Whether {@code held} is drawn behind {@code added} (and so stands before it in commit order). */
+    private static boolean behind(@NonNull GlassEntry held, @NonNull GlassEntry added) {
+        int layers = held.layer.number() - added.layer.number();
+        if (layers != 0) return layers < 0;
+        return held.priority >= added.priority;
     }
 
     private int indexOf(@NonNull String element) {

@@ -1974,7 +1974,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mGlass.watchPowerSave(this, () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
         // The tint sampler is the glass service's store of legibility corrections (ADR 0029 section 9).
         mChrome.ink().attachLegibility(mGlass.legibility());
-        com.termux.app.chrome.PanelBackdrop.install(getWindow().getDecorView(), mPanelBackdropSource);
+        View panelDecor = getWindow().getDecorView();
+        com.termux.app.chrome.PanelBackdrop.install(panelDecor, mPanelBackdropSource);
+        com.termux.app.glass.GlassService.install(panelDecor, mGlass);
         // The window's content root holds the shell and every overlay placed over it by absolute
         // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
         // to right in every locale. Reading-order overlays added here (help, tour, notices, the
@@ -4424,8 +4426,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : rank == com.termux.app.chrome.LiveBackdrop.RANK_FLOAT
                 ? com.termux.app.glass.GlassEntry.PRIORITY_FLOAT
                 : com.termux.app.glass.GlassEntry.PRIORITY_DOCK;
+            // The dock stands in the chrome layer; floats and widgets on the pages.
             kind = mGlass.register(new com.termux.app.glass.GlassEntry(element, surface,
-                com.termux.app.glass.GlassKind.LIVE, priority), redress);
+                com.termux.app.glass.GlassKind.LIVE, priority,
+                priority == com.termux.app.glass.GlassEntry.PRIORITY_DOCK
+                    ? com.termux.app.window.WindowLayer.CHROME
+                    : com.termux.app.window.WindowLayer.PAGES, null), redress);
         }
         if (kind != com.termux.app.glass.GlassKind.LIVE) {
             if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);
@@ -4482,8 +4488,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return liveBackdrop();
             }
 
-            @Override public boolean liveBlur() {
-                return mLiveBlur;
+            @Nullable @Override public com.termux.app.glass.GlassService glass() {
+                return mGlass;
             }
         };
 
@@ -4575,10 +4581,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
-        if (!pagesReaimed && mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+        // The pane slabs and the tab are re-aimed by the glass service on every frame that draws
+        // (SlabAim), so only the pages' own widgets are told here.
         if (!pagesReaimed && mPaneWallController != null) {
             if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().onWallMoved();
-            if (mPaneWallController.displayWindow() != null) mPaneWallController.displayWindow().onWallMoved();
         }
         if (mParallaxFrostViews == null) {
             mParallaxFrostViews = new View[] {
@@ -8221,31 +8227,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return false;
     }
 
-    /** The frost under the keyboard on a Display page; made on first use, see {@link #frostKeyboardOverDisplay}. */
-    @Nullable private com.termux.app.chrome.DisplayKeyboardBlur mKeyboardFrost;
+    /** The frost under the keyboard on a Display page (the glass service's Compositor kind); made on first use. */
+    @Nullable private com.termux.app.chrome.KeyboardFrost mKeyboardFrost;
 
     /**
-     * Puts the compositor's blur under the keyboard's bed at the Display-pages look's Frost, or
-     * leaves the bed see-through where Android does not blur windows now
-     * ({@link com.termux.app.chrome.DisplayKeyboardBlurPolicy}). Never waits on the blur: the bed
-     * is already painted, and a layer that cannot be made only leaves it unfrosted.
+     * Says where the keyboard's bed is over the display and what its Frost is; the glass service
+     * grants the compositor's blur under it, or leaves the bed see-through
+     * ({@link com.termux.app.chrome.KeyboardFrost}).
      */
     private void frostKeyboardOverDisplay(@NonNull View surfaceHost, float cornerPx) {
         if (mPreferences == null) return;
         if (mKeyboardFrost == null) {
-            // Battery saver, or the blur setting, turned over while the keyboard is up: the next
-            // pass decides again.
-            mKeyboardFrost = new com.termux.app.chrome.DisplayKeyboardBlur(this,
-                () -> mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME));
+            mKeyboardFrost = new com.termux.app.chrome.KeyboardFrost(this, mGlass);
         }
-        mKeyboardFrost.want();
-        android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
-        int radiusPx = com.termux.app.chrome.DisplayKeyboardBlurPolicy.blurRadiusPx(
-            Build.VERSION.SDK_INT, mKeyboardFrost.crossWindowBlurEnabled(),
-            power != null && power.isPowerSaveMode(),
+        mKeyboardFrost.show(surfaceHost, displayView(),
             mPreferences.getInAppKeyboardBlurRadius(stackLookPage()),
-            getResources().getDisplayMetrics().density);
-        mKeyboardFrost.show(surfaceHost, displayView(), radiusPx, cornerPx);
+            getResources().getDisplayMetrics().density, cornerPx);
     }
 
     /** Takes the frost under the keyboard away and frees it; safe when there is none. */
@@ -25527,8 +25524,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // are the pane host's less the stroke's air on every side, so the two share
                     // a centre and one scale about it keeps the line where it frames the page.
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
-                    // The slabs' wallpaper stays on the screen while their page sinks under it.
-                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+                    // The slabs' wallpaper stays on the screen while their page sinks under it:
+                    // the glass service re-aims them in the frame the sink draws in.
                     View borderView = hotView(R.id.terminal_border_overlay);
                     if (borderView == null) return;
                     borderView.setPivotX(borderView.getWidth() / 2f);
@@ -25537,7 +25534,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     borderView.setScaleY(scale);
                 }
                 @Override public void onPagePoseChanged() {
-                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+                    // Nothing to push: the slabs follow their page's pose through the glass
+                    // service's commit (SlabAim).
                 }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
@@ -25594,13 +25592,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The dock, the keyboard and the status bar's content travel with the wall
                     // between the two places' states, as transforms only.
                     mCrossingController.syncChromeTravel(offsetPx);
-                    // The wallpaper pans with the wall, and every glass surface follows it; the
-                    // terminal's slabs re-aim whether or not it panned, since the page they sit
-                    // on moved over a wallpaper that did not go with it. Aimed once: the wall's
-                    // controller has re-aimed the other pages already, and the slabs are here.
+                    // The wallpaper pans with the wall, and every glass surface follows it. The
+                    // slabs, on the terminal's page or any other, re-aim in the frame the wall
+                    // moved in whether or not the wallpaper panned: the glass service asks each
+                    // of them at the commit (SlabAim), so nothing is pushed to them here.
                     Trace.beginSection("Wall.parallax");
                     syncWallpaperParallax(true);
-                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
                     Trace.endSection();
                     // The wall moved at all, so the terminal may be sliding back into the frame:
                     // any pane whose screen changed while it was away is drawn now, before the

@@ -838,7 +838,7 @@ public final class TerminalSheetController
         ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
         View blur = mHost.findView(R.id.terminal_sheet_blur);
         if (mBackdrop == null && blur instanceof ImageView) {
-            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur);
+            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, "sheet");
         }
         if (allBare()) {
             // Every open card asked for no backdrop, so the plane draws nothing of its own and what
