@@ -12784,18 +12784,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxUnderlayView.setDarkThemeActive(isNightThemeActive());
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                mLauncherAzGestureFxUnderlayView.setElevation(0f);
-                mLauncherAzGestureFxUnderlayView.setTranslationZ(-dpToPx(8));
-            }
         }
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxOverlayView.setDarkThemeActive(isNightThemeActive());
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                mLauncherAzGestureFxOverlayView.setElevation(dpToPx(30));
-                mLauncherAzGestureFxOverlayView.setTranslationZ(dpToPx(30));
-            }
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
             mLauncherAzGestureFxLabelOverlayView.setColors(orbColor, edgeColor);
@@ -12803,18 +12795,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherAzGestureFxLabelOverlayView.setFocusedAppPreviewLabelEnabled(
                 mPreferences != null && mPreferences.isAppLauncherDisplayAppNamesEnabled()
             );
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                mLauncherAzGestureFxLabelOverlayView.setElevation(dpToPx(40));
-                mLauncherAzGestureFxLabelOverlayView.setTranslationZ(dpToPx(40));
-            }
         }
         updateAzOverflowAffordance();
         mAzScrubRowView.setBackgroundColor(Color.TRANSPARENT);
         com.termux.app.window.WindowLayers.raiseWithin(mAzScrubRowView);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            mAzScrubRowView.setElevation(dpToPx(24));
-            mAzScrubRowView.setTranslationZ(dpToPx(24));
-        }
         if (mAzScrubRowView.getParent() instanceof ViewGroup) {
             ViewGroup parent = (ViewGroup) mAzScrubRowView.getParent();
             parent.setClipChildren(false);

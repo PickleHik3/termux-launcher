@@ -719,6 +719,17 @@
             android:clipToPadding="false"
             android:visibility="gone">
 
+            <!-- First child: it draws behind the dock's glass (child order, not Z). -->
+            <com.termux.app.LauncherAzGestureFxView
+                android:id="@+id/apps_bar_az_fx_underlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_above="@id/accessory_keyboard_column"
+                android:layout_alignWithParentIfMissing="true"
+                android:clickable="false"
+                android:focusable="false"
+                android:visibility="gone" />
+
             <!-- The shelf under a floating Glass tray: a contact shadow and a faint glow on the
                  wallpaper below the slab. Behind the glass host, which it follows; drawn below
                  its own bounds, which nothing above it clips. Shown only where the dock's glass
@@ -783,16 +794,6 @@
                     android:layout_gravity="center"
                     android:visibility="gone" />
             </com.termux.app.DockSurfaceHostLayout>
-
-            <com.termux.app.LauncherAzGestureFxView
-                android:id="@+id/apps_bar_az_fx_underlay"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_above="@id/accessory_keyboard_column"
-                android:layout_alignWithParentIfMissing="true"
-                android:clickable="false"
-                android:focusable="false"
-                android:visibility="gone" />
 
             <!-- The whole bottom edge: the pinned apps, the alphabets index, the extra keys and —
                  when the place stands it here — the status bar, in the order
@@ -871,15 +872,6 @@
                     android:clipChildren="false"
                     android:clipToPadding="false">
 
-                    <com.termux.app.AzScrubRowView
-                        android:id="@+id/apps_bar_az_row"
-                        android:layout_width="match_parent"
-                        android:layout_height="19dp"
-                        android:gravity="center_vertical"
-                        android:textColor="?attr/termuxColorOnSurfaceVariant"
-                        android:elevation="10dp"
-                        android:visibility="gone" />
-
                     <!-- Keybind hint row: takes the A-Z row's exact slot while a Ctrl+Alt prefix is
                          latched, so the hints cost no terminal space at all. Chips are built in
                          TermuxActivity.showKeybindHintDockRow(). -->
@@ -887,9 +879,16 @@
                         android:id="@+id/keybind_hint_dock_row"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:elevation="11dp"
                         android:scrollbars="none"
                         android:clickable="true"
+                        android:visibility="gone" />
+
+                    <com.termux.app.AzScrubRowView
+                        android:id="@+id/apps_bar_az_row"
+                        android:layout_width="match_parent"
+                        android:layout_height="19dp"
+                        android:gravity="center_vertical"
+                        android:textColor="?attr/termuxColorOnSurfaceVariant"
                         android:visibility="gone" />
                 </FrameLayout>
 
@@ -908,16 +907,6 @@
                         android:background="@android:color/transparent"/>
                 </FrameLayout>
             </com.termux.app.place.EdgeStackView>
-
-            <com.termux.app.LauncherAzGestureFxView
-                android:id="@+id/apps_bar_az_fx_overlay"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_above="@id/accessory_keyboard_column"
-                android:layout_alignWithParentIfMissing="true"
-                android:clickable="false"
-                android:focusable="false"
-                android:visibility="gone" />
 
             <!-- The keyboard and the bands standing under it, bottom-anchored as one column: the
                  keyboard on top and accessory_under_keyboard_stack below it, so the bands a place
@@ -1080,6 +1069,16 @@
                     android:clipToPadding="false"
                     android:visibility="gone" />
             </LinearLayout>
+            <!-- Last child: the orb and the edge bloom draw over the keyboard (child order, not Z). -->
+            <com.termux.app.LauncherAzGestureFxView
+                android:id="@+id/apps_bar_az_fx_overlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_above="@id/accessory_keyboard_column"
+                android:layout_alignWithParentIfMissing="true"
+                android:clickable="false"
+                android:focusable="false"
+                android:visibility="gone" />
         </com.termux.app.chrome.LiveBackdropRelativeLayout>
 
         <!-- The minimised A–Z index: a half-pill tab flush against the screen's side, outside the
@@ -1096,16 +1095,6 @@
             android:layout_alignParentBottom="true"
             android:visibility="gone" />
 
-        <com.termux.app.LauncherAzGestureFxView
-            android:id="@+id/apps_bar_az_label_overlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_alignParentTop="true"
-            android:layout_above="@id/accessory_stack_container"
-            android:layout_alignWithParentIfMissing="true"
-            android:clickable="false"
-            android:focusable="false"
-            android:visibility="gone" />
         <!-- Where the keyboard goes when the place's keyboard type is Floating: the whole content
              region, so the frame inside it can be dragged anywhere and still be touchable, and
              deliberately not clickable, so everything outside the frame reaches the place under it.
@@ -1205,6 +1194,17 @@
                 android:visibility="gone" />
         </FrameLayout>
 
+        <!-- Last in the body: the A-Z scrub's labels draw over everything in it (child order, not Z). -->
+        <com.termux.app.LauncherAzGestureFxView
+            android:id="@+id/apps_bar_az_label_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentTop="true"
+            android:layout_above="@id/accessory_stack_container"
+            android:layout_alignWithParentIfMissing="true"
+            android:clickable="false"
+            android:focusable="false"
+            android:visibility="gone" />
         </com.termux.app.chrome.LiveBackdropRelativeLayout>
         <!-- Layer 2, CHROME (ADR 0028 section 6): the layers that stand over the body. -->
         <com.termux.app.chrome.LiveBackdropFrameLayout
@@ -1432,7 +1432,18 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipChildren="false"
-        android:clipToPadding="false" />
+        android:clipToPadding="false">
+
+        <!-- The card sheet, the bar and their hints, whose elevations cast their shadows inside
+             this host: the picker's host is added after it in the layer, so it stands over them
+             by child order, not Z. -->
+        <FrameLayout
+            android:id="@+id/editor_panel_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false" />
+    </FrameLayout>
 
     <!-- Layer 5, NOTICES: notices, the reset cards, the help overlay and the transient popups. -->
     <FrameLayout
