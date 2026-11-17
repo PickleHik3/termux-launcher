@@ -293,7 +293,7 @@ public final class AppearanceSurfaceController {
     public interface Host {
         @NonNull Context context();
 
-        /** {@code android.R.id.content}; null before it exists. */
+        /** The window root the editor's host and backdrop stand in; null before it exists. */
         @Nullable ViewGroup content();
 
         /**
@@ -1095,8 +1095,9 @@ public final class AppearanceSurfaceController {
         view = new SurfaceHostView(mHost.context());
         view.setId(R.id.appearance_surface_host);
         view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
-        content.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR).addView(view,
+            new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
         final FrameLayout host = view;
         ViewCompat.setOnApplyWindowInsetsListener(host, (v, insets) -> {
             padPages(host, insets);
@@ -1120,10 +1121,8 @@ public final class AppearanceSurfaceController {
             ((SurfaceHostView) view).mPassThrough = false;
         view.setClickable(takes);
         view.setFocusable(takes);
-        if (takes)
-            view.bringToFront();
-        // Draw order goes by Z before child order: the card sheet and the editor bar have
-        // elevation, so bringToFront alone leaves them over the picker and its Choose photo.
+        // The card sheet and the editor bar have elevation and draw over a sibling without it, so
+        // the host out-lifts them while it takes touches: the one Z inside the editor layer.
         view.setTranslationZ(takes ? siblingsTopZ(view) + 1f : 0f);
     }
 

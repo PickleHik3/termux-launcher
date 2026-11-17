@@ -821,7 +821,7 @@ public final class SheetsController {
             return true;
         }
         Activity activity = mHost.activity();
-        android.view.ViewGroup content = activity.findViewById(android.R.id.content);
+        android.view.ViewGroup content = com.termux.app.window.WindowLayers.host(activity, com.termux.app.window.WindowLayer.SHEETS);
         if (content == null) return false;
         if (mTerminalActionsSheet == null) {
             mTerminalActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(activity,
@@ -863,7 +863,7 @@ public final class SheetsController {
 
     public void showHomeActionsSheet(float rawX, float rawY) {
         Activity activity = mHost.activity();
-        android.view.ViewGroup content = activity.findViewById(android.R.id.content);
+        android.view.ViewGroup content = com.termux.app.window.WindowLayers.host(activity, com.termux.app.window.WindowLayer.SHEETS);
         if (content == null) return;
         if (mHomeActionsSheet == null) {
             mHomeActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(activity,
