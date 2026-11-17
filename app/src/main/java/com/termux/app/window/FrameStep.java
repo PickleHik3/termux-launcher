@@ -16,6 +16,14 @@ public enum FrameStep {
     CHROME_COMMIT,
 
     /**
+     * The bottom stack's writer: the container's translation and clip, the rows' and the glass
+     * slab's sink and cut, the keyboard's clip, the bands under it and the plank's tilt, written
+     * from the stack's scene after the chrome commit has written the stack's structure. Its owned
+     * properties are on the guards.
+     */
+    STACK,
+
+    /**
      * The glass commit (ADR 0029 section 1), always last: the glass service re-dresses every
      * surface whose kind a policy event moved, back to front, then records the Live layers of
      * this frame. It reads the frame's laid-out places, so it runs only in the pre-draw hook of a
