@@ -42,6 +42,9 @@ public class CrossingTest {
 
     static final int WIDTH = 1000;
     static final float STEP = 0.02f;
+    /** The steepest the look's curve climbs per unit of the wall's way (a smoothstep over SeamFade's stretch). */
+    private static final float MAX_CURVE_SLOPE = 1.5f / (SeamFade.END - SeamFade.START);
+
     private static final float DENSITY = 2.625f;
     static final List<PaneWallPage> ROW =
         Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
@@ -211,7 +214,7 @@ public class CrossingTest {
 
         Frame frameAt(float fraction) {
             float offset = committed == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
-            return PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states, committed);
+            return PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states);
         }
 
         SeamCrossing.Answers step(float fraction) {
@@ -267,7 +270,7 @@ public class CrossingTest {
             drive.step(STEP);
             assertTrue(from + ": the crossing began", drive.crossing.crossing());
             assertArrayEquals(from + ": first frame", dressOf(restOf(from)), drive.dress());
-            drive.step(1f - PlaceChromeTravel.LANDING);
+            drive.step(SeamFade.END);
             assertArrayEquals(from + ": where the chrome lands", dressOf(restOf(across(from))),
                 drive.dress());
             drive.step(1f);
@@ -324,7 +327,7 @@ public class CrossingTest {
             int[] bound = new int[start.length];
             for (int i = 0; i < bound.length; i++)
                 bound[i] = (int) Math.ceil(Math.abs(end[i] - start[i]) * STEP
-                    / (1f - 2f * PlaceChromeTravel.LANDING)) + 1;
+                    * MAX_CURVE_SLOPE) + 1;
             List<Float> way = new ArrayList<>();
             for (int i = 1; i <= 25; i++) way.add(i * STEP);
             // A chip tapped mid-slide: the wall turns back toward the page it left...
@@ -353,21 +356,21 @@ public class CrossingTest {
 
     @Test
     public void theKeyboardTravelsWithTheHalfThatHasItOpen() {
-        // The window has it open and Home does not: it goes with the window, over the first
-        // half of the way out, and comes back with the window on the way in.
+        // The window has it open and Home does not: it goes with the window, on the look's curve both
+        // ways out and in.
         Drive out = new Drive(PaneWallPage.TERMINAL, true, false);
         for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
             float fraction = Math.min(1f, f);
             SeamCrossing.Answers answers = out.step(fraction);
             assertEquals("out at " + fraction,
-                1f - PlaceChromeTravel.keyboardHideFraction(fraction),
+                1f - StackScene.materialShare(fraction),
                 answers.keyboardReveal(), 1e-4f);
         }
         Drive in = new Drive(PaneWallPage.WIDGETS, false, true);
         for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
             float fraction = Math.min(1f, f);
             SeamCrossing.Answers answers = in.step(fraction);
-            assertEquals("in at " + fraction, PlaceChromeTravel.chromeFraction(fraction),
+            assertEquals("in at " + fraction, StackScene.materialShare(fraction),
                 answers.keyboardReveal(), 1e-4f);
         }
     }

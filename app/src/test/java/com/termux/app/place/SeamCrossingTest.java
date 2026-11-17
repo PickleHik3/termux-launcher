@@ -41,6 +41,9 @@ public class SeamCrossingTest {
     private static final int WIDTH = 1000;
     /** A slow drag's step: one frame per 2% of the way. */
     private static final float SLOW = 0.02f;
+    /** The steepest the look's curve climbs per unit of the wall's way (a smoothstep over SeamFade's stretch). */
+    private static final float MAX_CURVE_SLOPE = 1.5f / (SeamFade.END - SeamFade.START);
+
 
     /** Home and the Workspace's window beside it: the two halves of the wall. */
     private static final List<PaneWallPage> ROW =
@@ -196,7 +199,7 @@ public class SeamCrossingTest {
         /** The frame {@code fraction} of the way from the committed page to the other half. */
         Frame frameAt(float fraction) {
             float offset = committed == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
-            return PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states, committed);
+            return PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states);
         }
 
         Step step(float fraction) {
@@ -669,7 +672,7 @@ public class SeamCrossingTest {
                 step.frameKeyboardReveal, step.keyboardReveal, EPSILON);
             if (step.relayout) {
                 assertTrue("the rows are hidden at the swap, " + step.fraction,
-                    step.dockReveal <= 2f * SLOW / (1f - 2f * PlaceChromeTravel.LANDING) + EPSILON);
+                    step.dockReveal <= 2f * SLOW * MAX_CURVE_SLOPE + EPSILON);
             }
         }
         assertFalse(drive.barFirst);
@@ -931,7 +934,7 @@ public class SeamCrossingTest {
             if (step.restyle) {
                 assertTrue("a restyle is a layout pass at " + step.fraction, step.relayout);
                 assertTrue("the dock is hidden at the swap, " + step.fraction,
-                    step.dockReveal <= 2f * SLOW / (1f - 2f * PlaceChromeTravel.LANDING) + EPSILON);
+                    step.dockReveal <= 2f * SLOW * MAX_CURVE_SLOPE + EPSILON);
                 assertTrue("the keyboard is hidden at the swap, " + step.fraction,
                     step.keyboardReveal <= step.dockReveal + EPSILON);
                 assertTrue(step.stackDressPage != previous);
@@ -1517,7 +1520,7 @@ public class SeamCrossingTest {
                 assertTrue("the foot changes on a relayout frame, " + fraction, step.relayout);
             if (previous != null && previous != keyboard)
                 assertTrue("out of sight, " + fraction, step.dockReveal
-                    <= 2f * SLOW / (1f - 2f * PlaceChromeTravel.LANDING) + EPSILON);
+                    <= 2f * SLOW * MAX_CURVE_SLOPE + EPSILON);
             previous = keyboard;
             out.add(keyboard);
         }

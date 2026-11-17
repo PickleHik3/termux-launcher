@@ -36,8 +36,8 @@ public final class PaneWallPolicy {
      * The stretch of the way, from either rest, over which a page's outline fades. Each page draws
      * its own rounded frame, and mid-slide two of them showed side by side; the outlines go over
      * the first few percent of the slide and come back over the last, so there is one edge on
-     * screen while the wall moves and the resting look is untouched. Longer than the chrome's
-     * landing ({@code PlaceChromeTravel.LANDING}) so the fade reads as a fade and not a blink.
+     * screen while the wall moves and the resting look is untouched. A fade, not a blink: it
+     * is over well before the chrome starts to move ({@code SeamFade.START}).
      */
     public static final float OUTLINE_FADE_FRACTION = 0.12f;
 

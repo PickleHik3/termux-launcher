@@ -72,4 +72,16 @@ public class RowsLandingGuardTest {
         guard.afterCommit();
         assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
     }
+
+    /** A crossing's commit that switches rows before the landing is the rows' own write. */
+    @Test public void aCommitBeforeTheLandingIsNoForeignWrite() {
+        guard.onLanding(Side.WORKSPACE, Side.HOME, false);
+        guard.afterCommit();
+        rows.visibility[0] = 8f;
+        guard.afterCommit();
+        guard.onLanding(Side.HOME, Side.WORKSPACE, false);
+        guard.afterCommit();
+        assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
+        assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
+    }
 }

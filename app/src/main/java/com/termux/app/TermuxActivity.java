@@ -25592,8 +25592,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
                     // The wall moving again reads the settled state: a landing still waiting
-                    // for its post lands first.
-                    flushLandedFrameSettle();
+                    // for its post lands first. The offset coming back to rest on the frame the
+                    // wall settled is not that: its landed frame draws the chrome at the end of
+                    // its travel (progress 1, written by the travel below), and the landing
+                    // follows its post (LandedFrameSettle), outside this layout pass.
+                    // Called while the wall controller is still being built: null until then.
+                    com.termux.app.wall.PaneWallLayout movingWall =
+                        mPaneWallController != null ? mPaneWallController.wall() : null;
+                    if (offsetPx != 0f || (movingWall != null && movingWall.isMoving())) {
+                        flushLandedFrameSettle();
+                    }
                     Trace.beginSection("Wall.offsetChanged");
                     try {
                         onWallOffsetChangedTraced(offsetPx);

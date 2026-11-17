@@ -420,16 +420,14 @@ public class PaneWallCellsTest {
         float offset = WIDTH * 0.5f * Math.signum(wall.offsetPx());
         com.termux.app.place.PlaceChromeTravel.Frame frame =
             com.termux.app.place.PlaceChromeTravel.at(controller.slideCellKinds(),
-                controller.currentCellIndex(), offset, WIDTH, states, PaneWallPage.TERMINAL,
-                null);
+                controller.currentCellIndex(), offset, WIDTH, states, null);
         assertEquals(PaneWallPage.WIDGETS,
             com.termux.app.place.PlaceChromeTravel.arriving(frame, PaneWallPage.TERMINAL));
         assertTrue(frame.keyboardInPlay);
         // From the stand-off on, the frame is the Terminal's, never Home with itself.
         com.termux.app.place.PlaceChromeTravel.Frame first =
             com.termux.app.place.PlaceChromeTravel.at(controller.slideCellKinds(),
-                controller.currentCellIndex(), wall.offsetPx(), WIDTH, states,
-                PaneWallPage.TERMINAL, null);
+                controller.currentCellIndex(), wall.offsetPx(), WIDTH, states, null);
         assertEquals(1f, first.keyboardReveal, 0.001f);
         idle();
         assertEquals(1, on());
@@ -654,7 +652,7 @@ public class PaneWallCellsTest {
     /** The chrome's frame for where the wall stands now, read off the cells. */
     private com.termux.app.place.PlaceChromeTravel.Frame dress() {
         return com.termux.app.place.PlaceChromeTravel.at(controller.cellKinds(),
-            controller.currentCellIndex(), wall.offsetPx(), WIDTH, STATES, null, null);
+            controller.currentCellIndex(), wall.offsetPx(), WIDTH, STATES, null);
     }
 
     @Test public void aDragFromTheSecondHomeRunTowardTheTerminalDressesForTheTerminal() {

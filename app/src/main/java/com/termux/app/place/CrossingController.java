@@ -358,10 +358,6 @@ public final class CrossingController {
         mHost = host;
     }
 
-    /** The chrome's clock through a slide with no finger on it, under a turning transition. */
-    private final com.termux.app.place.ChromeSettle mChromeSettle =
-        new com.termux.app.place.ChromeSettle();
-
     // ---- The chrome travelling with the wall ------------------------------------------------
 
     /**
@@ -388,13 +384,6 @@ public final class CrossingController {
     private void doSyncChromeTravel(float offsetPx) {
         if (mHost.paneWallController() == null) return;
         com.termux.app.wall.PaneWallLayout wall = mHost.paneWallController().wall();
-        // With no finger on the wall, under a page transition that turns the pages, the chrome
-        // keeps the slide's clock to its last frame (ChromeSettle). Fed every frame, rests and
-        // finger frames included, so a slide never carries on from a stale one.
-        mChromeSettle.frame(offsetPx, wall.slideFromPx(), wall.getWidth(),
-            wall.pageTransition() != com.termux.app.launcher.home.HomePageTransition.SLIDE
-                && !wall.slidesAcrossSeam(),
-            mHost.currentWallPlace() == mHost.lastWallPage());
         // A crossing between two Home pages is Home's pager's (syncHomePagesTravel): a wall at
         // rest writes nothing over it. A gesture that carries on past the last Home page into the
         // wall lands it here, on the page in front, before the wall's own crossing begins.
@@ -420,25 +409,18 @@ public final class CrossingController {
         java.util.List<com.termux.app.wall.PaneWallPage> pages =
             mHost.placesOf(mHost.paneWallController().slideCellKinds());
         int cellAt = mHost.paneWallController().currentCellIndex();
-        // The committed place is named so its keyboard, going away, is put away over the first
-        // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
         // A slide toward another window of the Workspace stays on its place: the wall's offset
         // alone reads the previous window as Home, the place on the left.
-        com.termux.app.wall.PaneWallPage place = mHost.currentWallPlace();
         com.termux.app.place.PlaceChromeTravel.InnerPages inner =
             mHost.paneWallController()::showsInnerPage;
         // Each step of the frame is its own section (Travel.<step>), so a trace names what a slow
         // drag frame spent its time in.
         Trace.beginSection("Travel.frame");
-        float chromeOffsetPx = mChromeSettle.chromeOffsetPx();
+        // The keyboard, the dock and the status bar all read the wall's own offset: they follow the
+        // seam on the look's curve (PlaceChromeTravel#curve).
         com.termux.app.place.PlaceChromeTravel.Frame frame =
-            com.termux.app.place.PlaceChromeTravel.at(pages, cellAt, chromeOffsetPx,
-                mChromeSettle.keyboardOffsetPx(), wall.getWidth(), mHost.chromeRestStates(),
-                mHost.lastWallPage(), inner);
-        // The status bar rides with the Workspace's page, so it reads where the wall stands.
-        com.termux.app.place.PlaceChromeTravel.Frame wallFrame = chromeOffsetPx == offsetPx
-            ? frame : com.termux.app.place.PlaceChromeTravel.at(pages, cellAt, offsetPx,
-                wall.getWidth(), mHost.chromeRestStates(), mHost.lastWallPage(), inner);
+            com.termux.app.place.PlaceChromeTravel.at(pages, cellAt, offsetPx, wall.getWidth(),
+                mHost.chromeRestStates(), inner);
         Trace.endSection();
         // Across the seam, how the stack crosses and which half's dress it wears are read before
         // the keyboard's pre-roll, so a keyboard brought up for the other half is measured in it.
@@ -449,17 +431,17 @@ public final class CrossingController {
         // the dock's dress at the chrome's progress into the other half. A pictured dip moves on
         // the wall's own way (SeamCrossing#pictured).
         Trace.beginSection("Travel.answers");
-        com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame, wallFrame,
+        com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame,
             mHost.preferences() != null && mHost.chrome() != null, mHost.dockBandEaseRunning(),
             mHost.promptFieldUnderPalette());
         Trace.endSection();
         Trace.beginSection("Travel.blends");
         // The strip under the pill crosses from the one dress to the other with the finger.
-        mHost.syncNavStripFade(wallFrame);
+        mHost.syncNavStripFade(frame);
         // A stack whose halves differ only in look blends its glass with the wall.
         syncStackLookBlend(seam);
         // And the band behind the system bar with the bar's glass, by the same share.
-        mHost.syncTopBandFade(wallFrame);
+        mHost.syncTopBandFade(frame);
         // A band only one half's dock carries follows its page across the seam.
         mHost.syncSeamBandShare(seam);
         // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
@@ -534,7 +516,7 @@ public final class CrossingController {
         // the pages slide; it fades in place where it cannot ride (a bar on a side or the bottom
         // edge, or pages that turn).
         Trace.beginSection("Travel.status");
-        boolean barRides = mHost.syncStatusTravel(wallFrame, seam);
+        boolean barRides = mHost.syncStatusTravel(frame, seam);
         // A bar that stands still eases from one page's Margin to the other's with the wall.
         mHost.syncStatusMarginEase(seam);
         // Under a transition that turns the pages, a bar one end wears apart fades in place.

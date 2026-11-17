@@ -100,7 +100,7 @@ public class SeamTravelTest {
             // Committed to the terminal, the same frame is 1 - that far into the other half.
             float fromTerminal = SeamTravel.otherHalfProgress(terminalToHome(fraction),
                 PaneWallPage.TERMINAL);
-            assertEquals(PlaceChromeTravel.chromeFraction(fraction), fromHome, EPSILON);
+            assertEquals(StackScene.materialShare(fraction), fromHome, EPSILON);
             assertEquals(1f - fromHome, fromTerminal, EPSILON);
         }
     }
@@ -502,7 +502,7 @@ public class SeamTravelTest {
         for (float shift : new float[] {-300f, 300f}) {
             Frame frame = pager(shift);
             assertEquals(0.3f, frame.fraction, EPSILON);
-            float chrome = PlaceChromeTravel.chromeFraction(0.3f);
+            float chrome = StackScene.materialShare(0.3f);
             assertEquals(chrome, SeamTravel.otherEndProgress(frame, HOME_2), EPSILON);
             assertEquals("read from the arriving page", 1f - chrome,
                 SeamTravel.otherEndProgress(frame, HOME_3), EPSILON);
