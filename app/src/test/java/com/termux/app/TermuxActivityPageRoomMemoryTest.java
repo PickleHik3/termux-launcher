@@ -10,12 +10,12 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PageRoom;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallController;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.WallRow;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
@@ -74,18 +74,18 @@ public class TermuxActivityPageRoomMemoryTest {
         settle();
         assertEquals(!startUp, mKeyboard.isVisible());
 
-        mWall.goTo(PaneWallPage.WIDGETS, false);
+        mWall.goTo(PageKind.HOME, false);
         settle();
 
         int arriving =PageRoom.wallInsetPx(restOfTerminalPx(), bottomKeptPx());
         assertEquals("the Terminal's room is its arriving rest's, written at rest", arriving,
-            mWall.wall().pageBottomInsetPx(PaneWallPage.TERMINAL));
+            mWall.wall().pageBottomInsetPx(PageKind.TERMINAL));
     }
 
     private int restOfTerminalPx() {
         Object crossing = ReflectionHelpers.getField(mActivity, "mCrossingController");
         return ReflectionHelpers.callInstanceMethod(crossing, "travelRestReservationPx",
-            ReflectionHelpers.ClassParameter.from(PaneWallPage.class, PaneWallPage.TERMINAL));
+            ReflectionHelpers.ClassParameter.from(PageKind.class, PageKind.TERMINAL));
     }
 
     private int bottomKeptPx() {
@@ -136,9 +136,9 @@ public class TermuxActivityPageRoomMemoryTest {
         mKeyboard = ReflectionHelpers.getField(mActivity, "mInAppKeyboard");
         settle();
         // The first settle records nothing, so the wall's first move is made before the test's.
-        mWall.goTo(PaneWallPage.TERMINAL, false);
+        mWall.goTo(PageKind.TERMINAL, false);
         settle();
-        assertEquals(PaneWallPage.TERMINAL, mWall.currentPage());
+        assertEquals(PageKind.TERMINAL, mWall.currentPage());
         assertEquals(true, mKeyboard.isVisible());
     }
 

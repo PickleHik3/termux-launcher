@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.chrome.ChromeShade;
 import com.termux.app.chrome.WallpaperInk;
 import com.termux.app.launcher.widget.HomeLabelInk;
+import com.termux.app.page.PageKind;
 
 import java.util.function.IntSupplier;
 
@@ -40,8 +41,8 @@ public final class PageGlyphRowView extends View implements PageSwitchHitArea {
     private static final int STRONG_ALPHA = 0xE6000000;
     private static final int WEAK_ALPHA = 0x4D000000;
 
-    private static final PageSwitchModel.Kind[] KINDS =
-        PageSwitchModel.ROW.toArray(new PageSwitchModel.Kind[0]);
+    private static final PageKind[] KINDS =
+        PageSwitchModel.ROW.toArray(new PageKind[0]);
 
     private final PageGlyphPainter mPainter;
     private final float mDensity;

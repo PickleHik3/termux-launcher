@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
  * What the page switch panel shows and where each cell goes: one flat row with a cell per page,
@@ -15,15 +16,12 @@ import java.util.List;
  */
 public final class PageSwitchModel {
 
-    /** The four page kinds, in the order the row shows them. */
-    public enum Kind { HOME, TERMINAL, ASSISTANT, DISPLAY }
-
     /** The panel's row order; {@code kindNames} and the glyph row follow it. */
-    public static final List<Kind> ROW = Collections.unmodifiableList(
-        java.util.Arrays.asList(Kind.HOME, Kind.TERMINAL, Kind.ASSISTANT, Kind.DISPLAY));
+    public static final List<PageKind> ROW = Collections.unmodifiableList(
+        java.util.Arrays.asList(PageKind.HOME, PageKind.TERMINAL, PageKind.ASSISTANT, PageKind.DISPLAY));
 
     /** Where a kind sits in the panel's row. */
-    public static int rowIndex(@NonNull Kind kind) {
+    public static int rowIndex(@NonNull PageKind kind) {
         return ROW.indexOf(kind);
     }
 
@@ -54,18 +52,18 @@ public final class PageSwitchModel {
     }
 
     public static final class Cell {
-        @NonNull public final Kind kind;
+        @NonNull public final PageKind kind;
         /** 1-based within its kind for Home and Terminal; 0 for Assistant and Display. */
         public final int number;
         /** A Home page's name, a terminal window's label, the display's title; null when none. */
         @Nullable public final String title;
-        /** Kind, number and title as the panel names the cell: "Terminal 2 · htop". */
+        /** PageKind, number and title as the panel names the cell: "Terminal 2 · htop". */
         @NonNull public final String fullName;
         /** Where the user is. */
         public final boolean current;
         @NonNull public final Target target;
 
-        Cell(@NonNull Kind kind, int number, @Nullable String title, @NonNull String fullName,
+        Cell(@NonNull PageKind kind, int number, @Nullable String title, @NonNull String fullName,
              boolean current, @NonNull Target target) {
             this.kind = kind;
             this.number = number;
@@ -100,7 +98,7 @@ public final class PageSwitchModel {
         public boolean displayRunning;
         @Nullable public String displayTitle;
         /** The page kind the wall is on, and its page. */
-        @NonNull public Kind currentKind = Kind.HOME;
+        @NonNull public PageKind currentKind = PageKind.HOME;
         public int currentPageId = -1;
         /** Page-kind names in {@link #ROW} order. */
         @NonNull public String[] kindNames = {"Home", "Terminal", "Assistant", "Display"};
@@ -134,7 +132,7 @@ public final class PageSwitchModel {
     }
 
     /** Whether the row has a cell of this kind. */
-    public boolean shows(@NonNull Kind kind) {
+    public boolean shows(@NonNull PageKind kind) {
         switch (kind) {
             case HOME: return mInput.homeOffered && !mInput.homePageIds.isEmpty();
             case TERMINAL: return mInput.terminalPageId >= 0;
@@ -148,14 +146,14 @@ public final class PageSwitchModel {
      * the Home page the glyph goes to. Terminal: the current window's place. 0 for none and for
      * Assistant and Display.
      */
-    public int numberOf(@NonNull Kind kind) {
-        if (kind == Kind.HOME) {
-            int id = mInput.currentKind == Kind.HOME
+    public int numberOf(@NonNull PageKind kind) {
+        if (kind == PageKind.HOME) {
+            int id = mInput.currentKind == PageKind.HOME
                 ? mInput.currentPageId : homeTarget(mInput.homePageIds, mInput.defaultStartPageId);
             return mInput.homePageIds.indexOf(id) + 1;
         }
         // The window you would return to, whichever page is in front; 0 only with no windows.
-        if (kind == Kind.TERMINAL) return Math.max(0, mInput.currentTerminalWindow + 1);
+        if (kind == PageKind.TERMINAL) return Math.max(0, mInput.currentTerminalWindow + 1);
         return 0;
     }
 
@@ -195,44 +193,44 @@ public final class PageSwitchModel {
             for (int i = 0; i < in.homePageIds.size(); i++) {
                 int id = in.homePageIds.get(i);
                 String name = i < in.homePageLabels.size() ? in.homePageLabels.get(i) : null;
-                boolean current = in.currentKind == Kind.HOME && id == in.currentPageId;
-                cells.add(cell(in, Kind.HOME, i + 1, name, current,
+                boolean current = in.currentKind == PageKind.HOME && id == in.currentPageId;
+                cells.add(cell(in, PageKind.HOME, i + 1, name, current,
                     current ? new Target(Action.CLOSE, id, -1)
                         : new Target(Action.GO_PAGE, id, -1)));
             }
         }
         if (in.terminalPageId >= 0) {
             int count = in.terminalWindowLabels.size();
-            boolean onTerminal = in.currentKind == Kind.TERMINAL;
+            boolean onTerminal = in.currentKind == PageKind.TERMINAL;
             if (count == 0) {
-                cells.add(cell(in, Kind.TERMINAL, 1, null, onTerminal,
+                cells.add(cell(in, PageKind.TERMINAL, 1, null, onTerminal,
                     onTerminal ? new Target(Action.CLOSE, in.terminalPageId, -1)
                         : new Target(Action.GO_TERMINAL, in.terminalPageId, -1)));
             }
             for (int i = 0; i < count; i++) {
                 boolean current = onTerminal && i == in.currentTerminalWindow;
-                cells.add(cell(in, Kind.TERMINAL, i + 1,
+                cells.add(cell(in, PageKind.TERMINAL, i + 1,
                     plainLabel(in.terminalWindowLabels.get(i)), current,
                     current ? new Target(Action.CLOSE, in.terminalPageId, i)
                         : new Target(Action.GO_TERMINAL, in.terminalPageId, i)));
             }
         }
         if (in.assistantPageId >= 0) {
-            cells.add(pageCell(in, Kind.ASSISTANT, in.assistantPageId, null));
+            cells.add(pageCell(in, PageKind.ASSISTANT, in.assistantPageId, null));
         }
         if (in.displayRunning && in.displayPageId >= 0) {
-            cells.add(pageCell(in, Kind.DISPLAY, in.displayPageId, in.displayTitle));
+            cells.add(pageCell(in, PageKind.DISPLAY, in.displayPageId, in.displayTitle));
         }
         return new PageSwitchModel(in, cells);
     }
 
-    private static Cell pageCell(Input in, Kind kind, int pageId, @Nullable String title) {
+    private static Cell pageCell(Input in, PageKind kind, int pageId, @Nullable String title) {
         boolean current = pageId == in.currentPageId;
         return cell(in, kind, 0, title, current, current
             ? new Target(Action.CLOSE, pageId, -1) : new Target(Action.GO_PAGE, pageId, -1));
     }
 
-    private static Cell cell(Input in, Kind kind, int number, @Nullable String title,
+    private static Cell cell(Input in, PageKind kind, int number, @Nullable String title,
                              boolean current, Target target) {
         String shownTitle = title == null || title.isEmpty() ? null : title;
         StringBuilder name = new StringBuilder(in.kindNames[rowIndex(kind)]);

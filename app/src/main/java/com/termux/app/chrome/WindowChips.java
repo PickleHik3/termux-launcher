@@ -3,11 +3,11 @@ package com.termux.app.chrome;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
  * The window chips (ADR 0009, "The window chips"): one ordered list of the Workspace's row in row
@@ -112,7 +112,7 @@ public final class WindowChips<W> {
 
     private static final Meaning<?> NOTHING = new Meaning<>(Meaning.Action.NONE, -1, null, false);
 
-    private final PaneWallPage mPlace;
+    private final PageKind mPlace;
     private final boolean mRowShown;
     private final int mRowCount;
     private final int mRowCurrent;
@@ -129,7 +129,7 @@ public final class WindowChips<W> {
      * session is current) there is no row, and only the floats are chips. Floats follow with
      * {@link #addFloat}.
      */
-    public WindowChips(@Nullable PaneWallPage place, boolean rowShown, @NonNull List<W> rowWindows,
+    public WindowChips(@Nullable PageKind place, boolean rowShown, @NonNull List<W> rowWindows,
                        int rowCurrent) {
         mPlace = place;
         mRowShown = rowShown;
@@ -202,16 +202,16 @@ public final class WindowChips<W> {
      * Workspace's window row: from every place but the row itself (Home pages, Assistant, the
      * display), however far. Only a terminal window in front switches in place.
      */
-    public static boolean barWindowTravels(@Nullable PaneWallPage place) {
-        return place != PaneWallPage.TERMINAL;
+    public static boolean barWindowTravels(@Nullable PageKind place) {
+        return place != PageKind.TERMINAL;
     }
 
     /**
      * Whether a float's chip tapped from {@code place} first travels the wall Home: from every
      * place but a Home page.
      */
-    public static boolean floatTravels(@Nullable PaneWallPage place) {
-        return place != PaneWallPage.WIDGETS;
+    public static boolean floatTravels(@Nullable PageKind place) {
+        return place != PageKind.HOME;
     }
 
     /**

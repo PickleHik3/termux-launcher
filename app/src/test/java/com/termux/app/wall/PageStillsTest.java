@@ -16,6 +16,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 import com.termux.app.chrome.ChromeInk;
+import com.termux.app.page.PageKind;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -45,14 +46,14 @@ public class PageStillsTest {
 
     private static final class Host implements WallFacts, WallHome, WallDisplay {
         final WallTerminal terminal = new WallTerminal() {
-            @Override public int count() { return innerCount(PaneWallPage.TERMINAL); }
-            @Override public int index() { return innerIndex(PaneWallPage.TERMINAL); }
-            @Override public void show(int index) { showInnerPage(PaneWallPage.TERMINAL, index); }
+            @Override public int count() { return innerCount(PageKind.TERMINAL); }
+            @Override public int index() { return innerIndex(PageKind.TERMINAL); }
+            @Override public void show(int index) { showInnerPage(PageKind.TERMINAL, index); }
 
         };
-        @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
-        @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
-        @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
+        @Override public int count() { return innerCount(PageKind.HOME); }
+        @Override public int index() { return innerIndex(PageKind.HOME); }
+        @Override public void show(int index) { showInnerPage(PageKind.HOME, index); }
         @Override public void bindRun(int first, int last) { }
         @Override public int pressPage() { return 0; }
         @Override public float shiftFraction() { return 0f; }
@@ -65,14 +66,14 @@ public class PageStillsTest {
         @Override public WallPages wallPages() { return pages; }
         @Override public void bind(int pageId) { boundDisplay = pageId; }
         @Override public void landed(int pageId) { }
-        public int innerCount(PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? Math.max(1, pages.homePages().size()) : 1;
+        public int innerCount(PageKind page) {
+            return page == PageKind.HOME ? Math.max(1, pages.homePages().size()) : 1;
         }
-        public int innerIndex(PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? homePage : 0;
+        public int innerIndex(PageKind page) {
+            return page == PageKind.HOME ? homePage : 0;
         }
-        public void showInnerPage(PaneWallPage page, int index) {
-            if (page == PaneWallPage.WIDGETS) homePage = index;
+        public void showInnerPage(PageKind page, int index) {
+            if (page == PageKind.HOME) homePage = index;
         }
     }
 
@@ -92,14 +93,14 @@ public class PageStillsTest {
     /** [Home 1][Terminal 2][Home 3]: a Home run on each side of the Terminal page. */
     private static WallPages homeTerminalHome() {
         return WallPagesMigration.seed("home", 0, "home", 1)
-            .add(WallPages.PageKind.HOME, 2, null).pages;
+            .add(PageKind.HOME, 2, null).pages;
     }
 
     /** [Home 1][Terminal 2][Display 3][Display 4]. */
     private static WallPages twoDisplays() {
         WallPages pages = WallPagesMigration.seed("home", 0, "home", 1)
-            .add(WallPages.PageKind.DISPLAY, 2, null).pages;
-        return pages.add(WallPages.PageKind.DISPLAY, 3, null).pages;
+            .add(PageKind.DISPLAY, 2, null).pages;
+        return pages.add(PageKind.DISPLAY, 3, null).pages;
     }
 
     private void start(WallPages pages) {
@@ -120,8 +121,8 @@ public class PageStillsTest {
         controller.setHome(host);
         controller.setDisplay(host);
         controller.attachTerminalPage(terminal);
-        layout.setPageView(PaneWallPage.WIDGETS, widgets);
-        layout.setPageView(PaneWallPage.DISPLAY, display);
+        layout.setPageView(PageKind.HOME, widgets);
+        layout.setPageView(PageKind.DISPLAY, display);
         layout.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         layout.layout(0, 0, WIDTH, HEIGHT);
@@ -146,7 +147,7 @@ public class PageStillsTest {
     // ---- the policy, the same for every kind ------------------------------------------------
 
     @Test public void everyKindIsLiveWhereBoundElseItsPictureElseItsCard() {
-        for (PaneWallPage kind : PaneWallPage.values()) {
+        for (PageKind kind : PageKind.values()) {
             String k = kind.name();
             assertEquals(k, PageStillPolicy.Shows.LIVE, PageStillPolicy.shows(4, 4, true, true));
             assertEquals(k, PageStillPolicy.Shows.PICTURE,
@@ -291,12 +292,12 @@ public class PageStillsTest {
         assertSame(half, wall.pictureOf(4));
         assertSame(half, wall.cardOf(4).picture());
         // The display bound to the page: the same bitmap stays for the frame's still.
-        wall.bind(PaneWallPage.DISPLAY, 4);
+        wall.bind(PageKind.DISPLAY, 4);
         assertSame(half, wall.pictureOf(4));
         assertFalse(half.isRecycled());
         // The next capture replaces it: the old one is let go, the frame told first.
         Bitmap next = Bitmap.createBitmap(WIDTH / 2, HEIGHT / 2, Bitmap.Config.ARGB_8888);
-        wall.bind(PaneWallPage.DISPLAY, 3);
+        wall.bind(PageKind.DISPLAY, 3);
         wall.keepPicture(4, next);
         assertSame(next, wall.pictureOf(4));
         assertEquals(Collections.singletonList(half), dropped);

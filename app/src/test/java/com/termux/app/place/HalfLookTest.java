@@ -5,7 +5,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
@@ -107,29 +107,29 @@ public class HalfLookTest {
 
     @Test
     public void lookHalf_followsTheDressEachSurfaceWears() {
-        PaneWallPage home = PaneWallPage.WIDGETS;
-        PaneWallPage window = PaneWallPage.TERMINAL;
+        PageKind home = PageKind.HOME;
+        PageKind window = PageKind.TERMINAL;
         // At rest, every surface wears its committed half's look.
         for (SeamDress.Surface surface : SeamDress.Surface.values()) {
-            assertEquals(PaneWallPage.WIDGETS, SeamDress.lookPage(surface, home, home, false));
-            assertEquals(PaneWallPage.TERMINAL, SeamDress.lookPage(surface, window, window, false));
+            assertEquals(PageKind.HOME, SeamDress.lookPage(surface, home, home, false));
+            assertEquals(PageKind.TERMINAL, SeamDress.lookPage(surface, window, window, false));
         }
         // Mid-slide from Home: the stack wears the half whose rows it stands, the status bar the
         // Workspace's, the frame the committed half's.
-        assertEquals(PaneWallPage.TERMINAL,
+        assertEquals(PageKind.TERMINAL,
             SeamDress.lookPage(SeamDress.Surface.STACK, home, window, true));
-        assertEquals(PaneWallPage.WIDGETS,
+        assertEquals(PageKind.HOME,
             SeamDress.lookPage(SeamDress.Surface.STACK, home, home, true));
-        assertEquals(PaneWallPage.TERMINAL,
+        assertEquals(PageKind.TERMINAL,
             SeamDress.lookPage(SeamDress.Surface.STATUS, home, home, true));
-        assertEquals(PaneWallPage.WIDGETS,
+        assertEquals(PageKind.HOME,
             SeamDress.lookPage(SeamDress.Surface.FRAME, home, window, true));
     }
 
     @Test
     public void halfOf_namesThePagesHalf() {
-        assertEquals(PaneWallPage.WIDGETS, SeamDress.screenOf(PaneWallPage.WIDGETS));
-        assertEquals(PaneWallPage.TERMINAL, SeamDress.screenOf(PaneWallPage.TERMINAL));
+        assertEquals(PageKind.HOME, SeamDress.screenOf(PageKind.HOME));
+        assertEquals(PageKind.TERMINAL, SeamDress.screenOf(PageKind.TERMINAL));
     }
 
     /** The grid's page kinds are process-wide: none leaks into the next test class. */

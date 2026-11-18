@@ -12,6 +12,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 
 import com.termux.app.launcher.home.HomePageTransition;
+import com.termux.app.page.PageKind;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -58,9 +59,9 @@ public class SeamPageTurnTest {
         wall.addView(display);
         wall.setReducedMotion(true);
         wall.setPages(PaneWallPolicy.availablePages(false, true, true));
-        wall.setPageView(PaneWallPage.WIDGETS, widgets);
-        wall.setPageView(PaneWallPage.TERMINAL, terminal);
-        wall.setPageView(PaneWallPage.DISPLAY, display);
+        wall.setPageView(PageKind.HOME, widgets);
+        wall.setPageView(PageKind.TERMINAL, terminal);
+        wall.setPageView(PageKind.DISPLAY, display);
         wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         wall.layout(0, 0, WIDTH, HEIGHT);
@@ -77,7 +78,7 @@ public class SeamPageTurnTest {
     @Test
     public void underSlideHomeLeavesWithTheFingerFlat() {
         build(HomePageTransition.SLIDE);
-        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PageKind.HOME, false);
         assertFalse("at rest", wall.slidesAcrossSeam());
         wall.beginDrag();
         wall.dragTo(-300f);
@@ -94,7 +95,7 @@ public class SeamPageTurnTest {
         for (HomePageTransition effect : HomePageTransition.values()) {
             if (effect == HomePageTransition.SLIDE) continue;
             build(effect);
-            wall.goTo(PaneWallPage.WIDGETS, false);
+            wall.goTo(PageKind.HOME, false);
             wall.beginDrag();
             wall.dragTo(-300f);
             String why = effect.name();
@@ -110,7 +111,7 @@ public class SeamPageTurnTest {
     @Test
     public void theWorkspaceTurnsTowardHomeUnderCarousel() {
         build(HomePageTransition.CAROUSEL);
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         wall.beginDrag();
         wall.dragTo(300f);
         assertTrue(wall.slidesAcrossSeam());
@@ -120,7 +121,7 @@ public class SeamPageTurnTest {
     @Test
     public void betweenTheWorkspacesOwnPagesTheEffectStillTurnsThem() {
         build(HomePageTransition.DEPTH);
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         wall.beginDrag();
         wall.dragTo(-300f);
         assertFalse(wall.slidesAcrossSeam());

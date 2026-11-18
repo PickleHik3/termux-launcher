@@ -4,9 +4,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /**
  * Whether the keyboard comes up on a page (moved from the Home chrome policy's test): a window's
@@ -14,8 +14,8 @@ import org.junit.Test;
  */
 public class PlaceKeyboardTest {
 
-    private static final PaneWallPage HOME = PaneWallPage.WIDGETS;
-    private static final PaneWallPage WINDOW = PaneWallPage.TERMINAL;
+    private static final PageKind HOME = PageKind.HOME;
+    private static final PageKind WINDOW = PageKind.TERMINAL;
 
     @Test
     public void homeComesBackAsItWasLeftAndIsAlwaysUpWhileAlwaysOn() {
@@ -57,7 +57,7 @@ public class PlaceKeyboardTest {
         assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(HOME, false));
         assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(WINDOW, true));
         assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(WINDOW, false));
-        assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(PaneWallPage.DISPLAY, true));
+        assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(PageKind.DISPLAY, true));
     }
 
     @Test

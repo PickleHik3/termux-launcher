@@ -9,12 +9,11 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -65,7 +64,7 @@ public class CustomizationLayoutWriteTest {
     /** A–Z hidden on both kinds from a session opened on the Workspace. */
     private LayoutEditorPlan hideAzEverywhere() {
         assertAz(true, false);
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL,
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL,
             PlaceOrientation.PORTRAIT);
         for (LayoutVariant variant : BOTH)
             plan.setShownOnLayout(variant, Element.AZ, false);
@@ -88,12 +87,12 @@ public class CustomizationLayoutWriteTest {
     public void anElementHiddenInBothOrientationsStaysListedAndComesBack() {
         // Customization hides A–Z on Home in both orientations; Home's own list must still offer
         // it (switch off) and its switch must bring it back (the row once vanished).
-        LayoutEditorPlan customization = DraftedSession.enter(places, PaneWallPage.TERMINAL,
+        LayoutEditorPlan customization = DraftedSession.enter(places, PageKind.TERMINAL,
             PlaceOrientation.PORTRAIT);
         customization.setShownOnLayout(LayoutVariant.HOME, Element.AZ, false);
         assertFalse(places.kindShowsAny(PageKind.HOME, Element.AZ));
 
-        LayoutEditorPlan home = DraftedSession.enter(places, PaneWallPage.WIDGETS,
+        LayoutEditorPlan home = DraftedSession.enter(places, PageKind.HOME,
             PlaceOrientation.PORTRAIT);
         assertTrue("the Home list keeps the row",
             com.termux.app.chrome.DressResolver.wornOn(home.variant(), Element.AZ));
@@ -109,7 +108,7 @@ public class CustomizationLayoutWriteTest {
     public void theEditedOrientationIsWhatTheListsRead() {
         // Home's list hides A–Z in portrait only: Customization reads the edited orientation
         // (hidden), not "shown in either orientation" (which still said shown).
-        LayoutEditorPlan home = DraftedSession.enter(places, PaneWallPage.WIDGETS,
+        LayoutEditorPlan home = DraftedSession.enter(places, PageKind.HOME,
             PlaceOrientation.PORTRAIT);
         home.drop(com.termux.app.fragments.settings.MiniatureDragPolicy.Bar.of(Element.AZ), null);
         assertTrue(places.forVariant(LayoutVariant.HOME)
@@ -122,7 +121,7 @@ public class CustomizationLayoutWriteTest {
         hideAzEverywhere();
         // Done stores the draft; the next session opens on what was kept.
         DraftedSession.done(places);
-        LayoutEditorPlan next = DraftedSession.enter(places, PaneWallPage.WIDGETS,
+        LayoutEditorPlan next = DraftedSession.enter(places, PageKind.HOME,
             PlaceOrientation.PORTRAIT);
         assertAz(false, true);
         assertFalse(next.isDirty());

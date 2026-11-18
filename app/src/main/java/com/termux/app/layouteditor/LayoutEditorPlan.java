@@ -8,13 +8,13 @@ import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,14 +77,14 @@ public final class LayoutEditorPlan {
      * the session opened on, until the Home filter moves it. A second door ({@link #showPlace})
      * moves the picture and leaves it.
      */
-    @NonNull private PaneWallPage mDressedPage;
+    @NonNull private PageKind mDressedPage;
     /** The place the layout canvas draws and the live place behind the card; never a write target. */
-    @NonNull private PaneWallPage mPlace;
+    @NonNull private PageKind mPlace;
     /**
      * The window the Home filter hands back to when it is turned off: the window the editor was
      * opened over, or the terminal when it was opened over Home.
      */
-    @NonNull private PaneWallPage mWindowPlace;
+    @NonNull private PageKind mWindowPlace;
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
     /**
@@ -92,7 +92,7 @@ public final class LayoutEditorPlan {
      * session first reached it: the flags Discard puts back too (ADR 0015 §3).
      */
 
-    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
+    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PageKind place,
                              @NonNull PlaceOrientation deviceOrientation) {
         mRoot = places;
         mDresses = DressResolver.of(places);
@@ -101,7 +101,7 @@ public final class LayoutEditorPlan {
         mVariant = variant;
         mPlaces = places.forVariant(variant);
         mPlace = place;
-        mWindowPlace = place == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL : place;
+        mWindowPlace = place == PageKind.HOME ? PageKind.TERMINAL : place;
         mDeviceOrientation = deviceOrientation;
         // The editor opens on what the user is looking at; the toggle is how the other one is asked
         // for.
@@ -149,8 +149,8 @@ public final class LayoutEditorPlan {
 
     /** The kind of the page being dressed. */
     @NonNull
-    public com.termux.app.wall.WallPages.PageKind pageKind() {
-        return DressResolver.kindOf(mDressedPage);
+    public com.termux.app.page.PageKind pageKind() {
+        return DressResolver.dressKindOf(mDressedPage);
     }
 
 
@@ -164,7 +164,7 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
-                                         @NonNull PaneWallPage place,
+                                         @NonNull PageKind place,
                                          @NonNull PlaceOrientation deviceOrientation) {
         return new LayoutEditorPlan(places, place, deviceOrientation);
     }
@@ -182,7 +182,7 @@ public final class LayoutEditorPlan {
     }
 
     @NonNull
-    public PaneWallPage place() {
+    public PageKind place() {
         return mPlace;
     }
 
@@ -320,7 +320,7 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public Drop setKeyboardShown(boolean shown) {
-        boolean home = mDressedPage == PaneWallPage.WIDGETS;
+        boolean home = mDressedPage == PageKind.HOME;
         if ((home ? mRoot.isHomeKeyboardAlwaysOn() : mPlaces.isKeyboardShown()) == shown)
             return Drop.NONE;
         if (home)
@@ -501,15 +501,15 @@ public final class LayoutEditorPlan {
      * starting a session over, so what Discard puts back is still the arrangement the user first
      * opened the editor on. It changes the picture and the rows offered, never what is written.
      */
-    public void showPlace(@NonNull PaneWallPage place) {
+    public void showPlace(@NonNull PageKind place) {
         mPlace = place;
-        if (place != PaneWallPage.WIDGETS)
+        if (place != PageKind.HOME)
             mWindowPlace = place;
     }
 
     /** Whether the Home filter is on: the canvas is drawing a Home page. */
     public boolean showsHome() {
-        return mPlace == PaneWallPage.WIDGETS;
+        return mPlace == PageKind.HOME;
     }
 
     /**
@@ -522,8 +522,8 @@ public final class LayoutEditorPlan {
      * @return the place the canvas now shows, which the live wall is to stand on
      */
     @NonNull
-    public PaneWallPage showHome(boolean home) {
-        PaneWallPage place = home ? PaneWallPage.WIDGETS : mWindowPlace;
+    public PageKind showHome(boolean home) {
+        PageKind place = home ? PageKind.HOME : mWindowPlace;
         mPlace = place;
         mDressedPage = place;
         mVariant = dress().layout();

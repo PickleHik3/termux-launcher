@@ -79,7 +79,7 @@ public final class StatusBarController {
         /** The model's clip for these pieces. */
         @Nullable com.termux.app.chrome.LiveChromeShape.Clip chromeClipOf( @NonNull com.termux.app.place.ChromeShape.PieceId... ids);
         /** The dress {@code page} wears. */
-        @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PaneWallPage page);
+        @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.page.PageKind page);
         /** Corners, the one Floating radius, px, as {@code surface} wears it. */
         float layoutCornersPx(@NonNull com.termux.app.place.SeamDress.Surface surface);
         /** The page id whose look {@code surface} wears, and the Terminal's. */
@@ -654,8 +654,8 @@ public final class StatusBarController {
      */
     public boolean statusDressDiffersAcrossHalves() {
         if (mHost.preferences() == null) return false;
-        return !mHost.dressOf(com.termux.app.wall.PaneWallPage.WIDGETS).shape().equals(
-                mHost.dressOf(com.termux.app.wall.PaneWallPage.TERMINAL).shape())
+        return !mHost.dressOf(com.termux.app.page.PageKind.HOME).shape().equals(
+                mHost.dressOf(com.termux.app.page.PageKind.TERMINAL).shape())
             || !com.termux.app.place.HalfLook.read(mHost.preferences(), TermuxAppSharedPreferences.PAGE_WALL)
                 .statusEquals(com.termux.app.place.HalfLook.read(mHost.preferences(),
                     mHost.terminalLookPageId()));

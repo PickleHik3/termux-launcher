@@ -674,7 +674,7 @@ public final class ExtraKeysPageView extends ViewGroup {
      * What the page switcher key's cap draws: the current page's glyph and number. Compared before
      * anything repaints; the caps built later take it too.
      */
-    public void setPageSwitcherGlyph(@NonNull com.termux.app.wall.pageswitch.PageSwitchModel.Kind kind,
+    public void setPageSwitcherGlyph(@NonNull com.termux.app.page.PageKind kind,
                                      int number) {
         for (int i = 0; i < mCaps.size(); i++) {
             if (isPageSwitcherKey(mKeys.get(i))) mCaps.get(i).setPageGlyph(kind, number);

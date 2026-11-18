@@ -3,12 +3,12 @@ package com.termux.app.fragments.settings;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -199,7 +199,7 @@ public final class MiniatureDragPolicy {
      * to a place — even though no place currently withholds a bar from an edge.
      */
     @NonNull
-    public static Targets targets(@NonNull PaneWallPage place, @NonNull PlaceOrientation orientation,
+    public static Targets targets(@NonNull PageKind place, @NonNull PlaceOrientation orientation,
                                   @NonNull PlaceLayout layout, @NonNull Bar bar) {
         Element element = bar.element();
         // The tray is the bar's own rule, not a gap's: the A-Z index riding the pinned apps row is

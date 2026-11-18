@@ -6,12 +6,12 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
 import com.termux.app.place.SeamDress.StackDress;
 import com.termux.app.place.SeamDress.Surface;
 import com.termux.app.place.SeamTravel.DockPlan;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import org.junit.Test;
@@ -30,19 +30,19 @@ public class SeamDressTest {
     private static final float EPSILON = 1e-4f;
     private static final int WIDTH = 1000;
 
-    private static final List<PaneWallPage> ROW =
-        Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY);
+    private static final List<PageKind> ROW =
+        Arrays.asList(PageKind.HOME, PageKind.TERMINAL, PageKind.DISPLAY);
 
     private static final PlaceChromeTravel.States STATES = place -> new Rest(false, false,
-        place != PaneWallPage.WIDGETS);
+        place != PageKind.HOME);
 
     /** The frame {@code fraction} of the way from the terminal to Home, committed to the terminal. */
     private static Frame terminalToHome(float fraction) {
-        return PlaceChromeTravel.at(ROW, PaneWallPage.TERMINAL, fraction * WIDTH, WIDTH, STATES);
+        return PlaceChromeTravel.at(ROW, PageKind.TERMINAL, fraction * WIDTH, WIDTH, STATES);
     }
 
-    private static final PaneWallPage HOME = PaneWallPage.WIDGETS;
-    private static final PaneWallPage TERMINAL = PaneWallPage.TERMINAL;
+    private static final PageKind HOME = PageKind.HOME;
+    private static final PageKind TERMINAL = PageKind.TERMINAL;
 
     // ---- the stack's dress follows its rows
 
@@ -130,9 +130,9 @@ public class SeamDressTest {
     @Test
     public void theLookIsReadUnderThePageTheSurfaceStandsOn() {
         int wall = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.PAGE_WALL;
-        assertEquals(7, SeamDress.lookPageId(PaneWallPage.WIDGETS, 7, -1, 2));
-        assertEquals(wall, SeamDress.lookPageId(PaneWallPage.WIDGETS, -1, -1, 2));
-        assertEquals(5, SeamDress.lookPageId(PaneWallPage.TERMINAL, 7, 5, 2));
-        assertEquals(2, SeamDress.lookPageId(PaneWallPage.TERMINAL, 7, -1, 2));
+        assertEquals(7, SeamDress.lookPageId(PageKind.HOME, 7, -1, 2));
+        assertEquals(wall, SeamDress.lookPageId(PageKind.HOME, -1, -1, 2));
+        assertEquals(5, SeamDress.lookPageId(PageKind.TERMINAL, 7, 5, 2));
+        assertEquals(2, SeamDress.lookPageId(PageKind.TERMINAL, 7, -1, 2));
     }
 }

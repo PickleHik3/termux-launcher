@@ -3,8 +3,8 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.extrakeys.HomePillSpot;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 
 import java.util.Arrays;
@@ -41,7 +41,7 @@ public final class HomePillController {
         boolean switchOn();
 
         /** Where the wall has settled. */
-        @NonNull PaneWallPage settledPlace();
+        @NonNull PageKind settledPlace();
 
         /** Where the extra keys go now; the key set owner's answer. */
         @Nullable ExtraKeysTarget keyTarget();
@@ -142,7 +142,7 @@ public final class HomePillController {
      */
     public boolean shows() {
         if (!mHost.switchOn()) return false;
-        if (mHost.settledPlace() != PaneWallPage.WIDGETS) return false;
+        if (mHost.settledPlace() != PageKind.HOME) return false;
         if (mHost.keyTarget() != ExtraKeysTarget.HOME) return false;
         if (mHost.appDrawerOpen() || mHost.paletteOpen()) return false;
         if (mHost.layoutEditorActive() || mHost.surfaceEditorActive() || mHost.appearanceOpen()) return false;

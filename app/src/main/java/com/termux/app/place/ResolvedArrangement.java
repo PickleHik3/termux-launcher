@@ -5,9 +5,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import java.util.Objects;
@@ -132,7 +132,7 @@ public final class ResolvedArrangement {
 
     /**
      * {@code page} on {@code variant} in {@code style}: the layout the page wears ({@link
-     * PlaceLayoutStore#resolve(PlaceOrientation, LayoutVariant, PaneWallPage)}, so a Home page
+     * PlaceLayoutStore#resolve(PlaceOrientation, LayoutVariant, PageKind)}, so a Home page
      * leaves out what Home never wears), and the Dock design, Search field and Drawer tile that
      * layout holds.
      */

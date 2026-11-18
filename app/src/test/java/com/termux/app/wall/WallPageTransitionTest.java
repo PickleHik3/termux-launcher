@@ -13,6 +13,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 
 import com.termux.app.launcher.home.HomePageTransition;
+import com.termux.app.page.PageKind;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -190,9 +191,9 @@ public class WallPageTransitionTest {
         wall.addView(display);
         wall.setReducedMotion(true);
         wall.setPages(PaneWallPolicy.availablePages(false, true, true));
-        wall.setPageView(PaneWallPage.TERMINAL, terminal);
-        wall.setPageView(PaneWallPage.WIDGETS, widgets);
-        wall.setPageView(PaneWallPage.DISPLAY, display);
+        wall.setPageView(PageKind.TERMINAL, terminal);
+        wall.setPageView(PageKind.HOME, widgets);
+        wall.setPageView(PageKind.DISPLAY, display);
         wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         wall.layout(0, 0, WIDTH, HEIGHT);
@@ -266,7 +267,7 @@ public class WallPageTransitionTest {
     @Test
     public void aLiveDisplayPageSlidesWhileThePageBesideItTakesTheEffect() {
         build(HomePageTransition.FADE, true);
-        wall.goTo(PaneWallPage.DISPLAY, false);
+        wall.goTo(PageKind.DISPLAY, false);
         wall.beginDrag();
         wall.dragTo(300f);
         assertEquals(300f, display.getTranslationX(), 0f);
@@ -280,7 +281,7 @@ public class WallPageTransitionTest {
     @Test
     public void aPullIntoTheEndOfTheRowOnlySlides() {
         build(HomePageTransition.DEPTH, false);
-        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PageKind.HOME, false);
         wall.beginDrag();
         wall.dragTo(200f);
         assertTrue(wall.offsetPx() > 0f);

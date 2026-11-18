@@ -1,6 +1,5 @@
 package com.termux.app.chrome;
 
-import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -8,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import com.termux.app.chrome.WindowChips.Kind;
 import com.termux.app.chrome.WindowChips.Meaning;
 import com.termux.app.chrome.WindowChips.Surface;
+import com.termux.app.page.PageKind;
 
 import org.junit.Test;
 
@@ -27,14 +27,14 @@ public class WindowChipsTest {
 
     /** The row a, b with b in front, seen from the Workspace, and two floats f (minimised), g. */
     private static WindowChips<String> workspace() {
-        return new WindowChips<>(PaneWallPage.TERMINAL, true, AB, 1)
+        return new WindowChips<>(PageKind.TERMINAL, true, AB, 1)
             .addFloat("f", true, false)
             .addFloat("g", false, false);
     }
 
     /** The same seen from Home, g focused. */
     private static WindowChips<String> home() {
-        return new WindowChips<>(PaneWallPage.WIDGETS, true, AB, 1)
+        return new WindowChips<>(PageKind.HOME, true, AB, 1)
             .addFloat("f", true, false)
             .addFloat("g", false, true);
     }
@@ -67,14 +67,14 @@ public class WindowChipsTest {
     @Test
     public void noWindows_isNoRowChip() {
         WindowChips<String> alone =
-            new WindowChips<String>(PaneWallPage.TERMINAL, true, Collections.<String>emptyList(), 0);
+            new WindowChips<String>(PageKind.TERMINAL, true, Collections.<String>emptyList(), 0);
         assertTrue(alone.chips().isEmpty());
         assertEquals(0, alone.rowCount());
     }
 
     @Test
     public void noRow_leavesTheFloatsAlone_onHome() {
-        WindowChips<String> chips = new WindowChips<>(PaneWallPage.WIDGETS, false, AB, 0)
+        WindowChips<String> chips = new WindowChips<>(PageKind.HOME, false, AB, 0)
             .addFloat("f", false, false);
         assertEquals(0, chips.rowCount());
         List<WindowChips.Chip<String>> strip = chips.chips();
@@ -105,7 +105,7 @@ public class WindowChipsTest {
             assertFalse(chips.chips().get(3).minimised);
         }
         assertEquals("a float on no page is still a chip", 0,
-            new WindowChips<String>(PaneWallPage.WIDGETS, false, AB, 0).addFloat("h", true, false)
+            new WindowChips<String>(PageKind.HOME, false, AB, 0).addFloat("h", true, false)
                 .barChipOf("h"));
         assertEquals("a row window is not a float's chip", -1, workspace().barChipOf("a"));
         assertEquals(-1, workspace().barChipOf("nobody"));
@@ -130,7 +130,7 @@ public class WindowChipsTest {
 
     @Test
     public void noRow_theBarShowsTheFloatsAlone() {
-        List<WindowChips.Chip<String>> bar = new WindowChips<String>(PaneWallPage.WIDGETS, false, AB, 0)
+        List<WindowChips.Chip<String>> bar = new WindowChips<String>(PageKind.HOME, false, AB, 0)
             .addFloat("f", false, false).chips();
         assertEquals(1, bar.size());
         assertEquals("f", bar.get(0).window);
@@ -142,22 +142,22 @@ public class WindowChipsTest {
     public void theBarSelects_theRowsWindowInFront_heldToTheRow() {
         assertEquals("b's place", 1, workspace().selected(Surface.BAR));
         assertEquals("a's place", 0,
-            new WindowChips<String>(PaneWallPage.TERMINAL, true, AB, 0).selected(Surface.BAR));
-        assertEquals(1, new WindowChips<String>(PaneWallPage.TERMINAL, true, AB, 7).selected(Surface.BAR));
-        assertEquals(0, new WindowChips<String>(PaneWallPage.TERMINAL, true, AB, -2).selected(Surface.BAR));
+            new WindowChips<String>(PageKind.TERMINAL, true, AB, 0).selected(Surface.BAR));
+        assertEquals(1, new WindowChips<String>(PageKind.TERMINAL, true, AB, 7).selected(Surface.BAR));
+        assertEquals(0, new WindowChips<String>(PageKind.TERMINAL, true, AB, -2).selected(Surface.BAR));
     }
 
     @Test
     public void theBarSelects_theRowsWindowInFront_onHomeToo_andNothingWithoutARow() {
         assertEquals("b's place", 1, home().selected(Surface.BAR));
-        assertEquals(-1, new WindowChips<String>(PaneWallPage.TERMINAL, false, AB, 0).selected(Surface.BAR));
-        assertEquals(-1, new WindowChips<String>(PaneWallPage.WIDGETS, false, AB, 0)
+        assertEquals(-1, new WindowChips<String>(PageKind.TERMINAL, false, AB, 0).selected(Surface.BAR));
+        assertEquals(-1, new WindowChips<String>(PageKind.HOME, false, AB, 0)
             .addFloat("f", false, true).selected(Surface.BAR));
     }
 
     @Test
     public void theBar_neverSelectsAFloat_evenAFocusedOne() {
-        WindowChips<String> chips = new WindowChips<>(PaneWallPage.TERMINAL, true, AB, 0)
+        WindowChips<String> chips = new WindowChips<>(PageKind.TERMINAL, true, AB, 0)
             .addFloat("g", false, true);
         assertEquals(0, chips.selected(Surface.BAR));
     }
@@ -165,14 +165,14 @@ public class WindowChipsTest {
     @Test
     public void theStripsSelect_theFocusedFloat_elseTheRowsWindowInFront() {
         assertEquals("g", 3, home().selected(Surface.WALL_STRIP));
-        WindowChips<String> noFocus = new WindowChips<>(PaneWallPage.WIDGETS, true, AB, 1)
+        WindowChips<String> noFocus = new WindowChips<>(PageKind.HOME, true, AB, 1)
             .addFloat("f", true, false);
         assertEquals(1, noFocus.selected(Surface.WALL_STRIP));
-        WindowChips<String> focusedButMinimised = new WindowChips<>(PaneWallPage.WIDGETS, true, AB, 0)
+        WindowChips<String> focusedButMinimised = new WindowChips<>(PageKind.HOME, true, AB, 0)
             .addFloat("f", true, true);
         assertEquals(0, focusedButMinimised.selected(Surface.WALL_STRIP));
         assertEquals("no row, no float in focus", -1,
-            new WindowChips<String>(PaneWallPage.WIDGETS, false, AB, 0).addFloat("f", false, false)
+            new WindowChips<String>(PageKind.HOME, false, AB, 0).addFloat("f", false, false)
                 .selected(Surface.WALL_STRIP));
     }
 
@@ -294,33 +294,33 @@ public class WindowChipsTest {
 
     @Test
     public void aBarWindowTapTravelsFromEveryPlaceButTheWindowRow() {
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             WindowChips<String> chips = new WindowChips<>(place, true, AB, 1);
             boolean travels = chips.tap(Surface.BAR, 0).travel;
-            assertEquals(place.name(), place != PaneWallPage.TERMINAL, travels);
+            assertEquals(place.name(), place != PageKind.TERMINAL, travels);
             assertEquals(place.name(), travels, WindowChips.barWindowTravels(place));
         }
-        assertTrue(new WindowChips<>(PaneWallPage.ASSISTANT, true, AB, 1)
+        assertTrue(new WindowChips<>(PageKind.ASSISTANT, true, AB, 1)
             .tap(Surface.BAR, 0).travel);
-        assertTrue(new WindowChips<>(PaneWallPage.WIDGETS, true, AB, 1)
+        assertTrue(new WindowChips<>(PageKind.HOME, true, AB, 1)
             .tap(Surface.BAR, 0).travel);
-        assertFalse(new WindowChips<>(PaneWallPage.TERMINAL, true, AB, 1)
+        assertFalse(new WindowChips<>(PageKind.TERMINAL, true, AB, 1)
             .tap(Surface.BAR, 0).travel);
     }
 
     @Test
     public void aFloatTapTravelsFromEveryPlaceButHome_fromTheSameInput() {
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             WindowChips<String> chips = new WindowChips<>(place, true, AB, 1)
                 .addFloat("f", false, false);
-            assertEquals(place.name(), place != PaneWallPage.WIDGETS,
+            assertEquals(place.name(), place != PageKind.HOME,
                 chips.tap(Surface.BAR, 2).travel);
         }
     }
 
     @Test
     public void theWallStripAlwaysTravelsWhicheverPlace() {
-        for (PaneWallPage place : PaneWallPage.values())
+        for (PageKind place : PageKind.values())
             assertTrue(new WindowChips<>(place, true, AB, 1).tap(Surface.WALL_STRIP, 0).travel);
     }
 }

@@ -10,7 +10,7 @@ import android.os.Build;
 import android.widget.TextView;
 
 import com.google.android.material.color.MaterialColors;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -72,7 +72,7 @@ public class EditorLabelHintTest {
         EditorTestHarness harness = open(0xFFF3EFE6);
         harness.editor.done();
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        harness.editor.present(null, PaneWallPage.WIDGETS, null);
+        harness.editor.present(null, PageKind.HOME, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(DARK, label(harness).getCurrentTextColor());
     }
@@ -81,11 +81,11 @@ public class EditorLabelHintTest {
         EditorTestHarness harness = new EditorTestHarness(preferences, (method, args) -> {
             switch (method) {
                 case "editorWallpaperHintColor": return hint;
-                case "pageOnScreen": return PaneWallPage.WIDGETS;
+                case "pageOnScreen": return PageKind.HOME;
                 default: return null;
             }
         });
-        harness.editor.present(null, PaneWallPage.WIDGETS, null);
+        harness.editor.present(null, PageKind.HOME, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         return harness;
     }

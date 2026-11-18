@@ -7,8 +7,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -85,11 +85,11 @@ public class ContrastRowLiveTest {
         EditorTestHarness harness = new EditorTestHarness(preferences, (method, args) -> {
             switch (method) {
                 case "refreshTerminalPalette": paletteRefreshes++; return null;
-                case "pageOnScreen": return PaneWallPage.TERMINAL;
+                case "pageOnScreen": return PageKind.TERMINAL;
                 default: return null;
             }
         });
-        harness.editor.present(card, PaneWallPage.TERMINAL, null);
+        harness.editor.present(card, PageKind.TERMINAL, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(card, harness.editor.shownCard());
         return harness.editor;

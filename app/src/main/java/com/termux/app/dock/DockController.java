@@ -25,6 +25,7 @@ import com.termux.app.DockSurfaceHostLayout;
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.chrome.ChromeRenderer;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
@@ -33,7 +34,6 @@ import com.termux.app.place.ResolvedArrangement;
 import com.termux.app.place.SeamCrossing;
 import com.termux.app.place.layout.IconSize;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -130,19 +130,19 @@ public final class DockController {
         @Nullable PlaceLayoutStore placeLayoutStore();
         /** {@code page}'s resolved arrangement: its layout, Style, Dock design and toggles. */
         @NonNull ResolvedArrangement arrangementOf(@NonNull PageRef page);
-        @NonNull ResolvedArrangement arrangementOf(@NonNull PaneWallPage page);
+        @NonNull ResolvedArrangement arrangementOf(@NonNull PageKind page);
         /** The page {@code page} stands for in the arrangement (Home's page now, or the Terminal). */
-        @NonNull PageRef arrangedPageOf(@NonNull PaneWallPage page);
+        @NonNull PageRef arrangedPageOf(@NonNull PageKind page);
         /** The layout {@code page} wears. */
-        @NonNull LayoutVariant layoutOf(@NonNull PaneWallPage page);
+        @NonNull LayoutVariant layoutOf(@NonNull PageKind page);
         /** The arrangement store's revision. */
         int arrangementRevision();
         /** The icon size as it draws, capped by what the pinned apps fit at. */
         @NonNull IconSize drawnIconSize(@NonNull PlaceLayoutStore store);
         /** The page the chrome is committed to. */
-        @NonNull PaneWallPage lastWallPage();
+        @NonNull PageKind lastWallPage();
         /** The half whose rows the stack stands now. */
-        @NonNull PaneWallPage stackDressPage();
+        @NonNull PageKind stackDressPage();
         /** Whether the committed page's dock carries the Search field. */
         boolean committedSearchField();
         /** Whether the slab carries the field at rest. */
@@ -154,7 +154,7 @@ public final class DockController {
         float appliedPromptFieldReveal();
         float appliedWallStripReveal();
         /** The page whose half's rows the Drawer tile was last laid out for; null before one. */
-        @Nullable PaneWallPage drawerTileRowsPage();
+        @Nullable PageKind drawerTileRowsPage();
         /** Whether the status bar is compact, and the edge it stands on. */
         boolean isStatusBarCompact();
         @NonNull PlaceLayout.Edge statusBarEdge();
@@ -233,8 +233,8 @@ public final class DockController {
         /** The crossing's seam, which answers the committed and travelling designs mid-slide. */
         @NonNull SeamCrossing seam();
         /** The page a pictured dip dressed the slab for on its first frame; null otherwise. */
-        @Nullable PaneWallPage dockDesignTravelledTo();
-        void setDockDesignTravelledTo(@Nullable PaneWallPage page);
+        @Nullable PageKind dockDesignTravelledTo();
+        void setDockDesignTravelledTo(@Nullable PageKind page);
 
         // -------------------------------------------------------------- callbacks into the activity
 
@@ -439,13 +439,13 @@ public final class DockController {
     /** One snapshot of both halves for the dock's geometry, rows standing for {@code rowsPage}. */
     @NonNull
     public DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout arrangement,
-                                              @NonNull PaneWallPage rowsPage) {
+                                              @NonNull PageKind rowsPage) {
         return mDress.dockSnapshot(arrangement, rowsPage);
     }
 
     /** {@code page}'s half, memoised while its facts stand. */
     @NonNull
-    public DockGeometry.Half dockHalf(@NonNull PaneWallPage page,
+    public DockGeometry.Half dockHalf(@NonNull PageKind page,
                                       @NonNull PlaceOrientation orientation,
                                       @NonNull PlaceLayout fallbackLayout) {
         return mDress.dockHalf(page, orientation, fallbackLayout);
@@ -471,7 +471,7 @@ public final class DockController {
 
     /** The Dock design {@code page}'s slab wears (WornDockDesign). */
     @NonNull
-    public DockStyle wornDockDesign(@NonNull PaneWallPage page) {
+    public DockStyle wornDockDesign(@NonNull PageKind page) {
         return mDress.wornDockDesign(page);
     }
 
@@ -492,8 +492,8 @@ public final class DockController {
     }
 
     /** A settle from {@code from} to {@code to} that changes the dock's dress re-dresses it. */
-    public void restyleDockSurfaceForPageIfChanged(@NonNull PaneWallPage from,
-                                                   @NonNull PaneWallPage to) {
+    public void restyleDockSurfaceForPageIfChanged(@NonNull PageKind from,
+                                                   @NonNull PageKind to) {
         mDress.restyleDockSurfaceForPageIfChanged(from, to);
     }
 
@@ -535,7 +535,7 @@ public final class DockController {
 
     /** The store pinned to the layout {@code page}'s dock is dressed by. */
     @Nullable
-    public PlaceLayoutStore dockStoreOf(@NonNull PaneWallPage page) {
+    public PlaceLayoutStore dockStoreOf(@NonNull PageKind page) {
         return mDress.dockStoreOf(page);
     }
 

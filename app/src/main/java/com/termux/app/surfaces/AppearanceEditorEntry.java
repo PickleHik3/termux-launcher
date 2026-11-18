@@ -7,8 +7,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxActivity;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.SeamDress;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Every door into the Appearance editor from outside the launcher's window (appearance-and-
@@ -84,9 +84,9 @@ public final class AppearanceEditorEntry {
      * </pre>
      */
     @NonNull
-    public static PaneWallPage terminalMenuPlace(@Nullable PaneWallPage onScreen) {
-        return onScreen != null && onScreen != PaneWallPage.WIDGETS
-            ? onScreen : PaneWallPage.TERMINAL;
+    public static PageKind terminalMenuPlace(@Nullable PageKind onScreen) {
+        return onScreen != null && onScreen != PageKind.HOME
+            ? onScreen : PageKind.TERMINAL;
     }
 
     /** The card an intent's section names, or null for none. */

@@ -17,6 +17,7 @@ import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.Dress;
 import com.termux.app.chrome.LiveChromeShape;
 import com.termux.app.dock.DockRows;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.ChromeShape;
 import com.termux.app.place.Crossing;
 import com.termux.app.place.PlaceLayout;
@@ -27,7 +28,6 @@ import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.terminal.GeometryScheduler;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.wall.PaneWallController;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 
@@ -346,7 +346,7 @@ public class StatusBarControllerTest {
         @Nullable @Override public LiveChromeShape.Clip chromeClipOf(@NonNull ChromeShape.PieceId... ids) {
             return null;
         }
-        @NonNull @Override public Dress dressOf(@NonNull PaneWallPage page) {
+        @NonNull @Override public Dress dressOf(@NonNull PageKind page) {
             throw new UnsupportedOperationException();
         }
         @Override public float layoutCornersPx(@NonNull SeamDress.Surface surface) { return 0f; }

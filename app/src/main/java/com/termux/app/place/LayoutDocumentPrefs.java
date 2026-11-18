@@ -103,7 +103,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
     static Route route(@NonNull String key) {
         if (key.startsWith(LAYOUT)) return routeLayout(key.substring(LAYOUT.length()));
         if (key.startsWith(DRESS)) return routeDress(key.substring(DRESS.length()));
-        if (key.equals(PlaceLayoutStore.memoryKey(com.termux.app.wall.PaneWallPage.TERMINAL,
+        if (key.equals(PlaceLayoutStore.memoryKey(com.termux.app.page.PageKind.TERMINAL,
             LayoutsJson.KEYBOARD_OPEN)))
             return new Route(LayoutKind.TERMINAL, null, LayoutsJson.KEYBOARD_OPEN);
         // The Display's and the Assistant's remembered keyboard are their places' own, not the
@@ -240,7 +240,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
                 if (LayoutsJson.KEYBOARD_OPEN.equals(field)) {
                     if (kind == LayoutKind.TERMINAL)
                         all.put(PlaceLayoutStore.memoryKey(
-                                com.termux.app.wall.PaneWallPage.TERMINAL, field),
+                                com.termux.app.page.PageKind.TERMINAL, field),
                             layout.wide().get(field));
                 } else if (LayoutsJson.WIDE_FIELDS.contains(field)) {
                     // Shared fields read from Home alone: another kind's stale copy is not shown.

@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /**
  * The display window owns everything inside its edges: no border, pill box or seam band of the
@@ -96,9 +97,9 @@ public class BorderReachTest {
 
     @Test
     public void onlyTheDisplayWindowInFrontOwnsItsContent() {
-        assertTrue("a Display page", BorderReach.ownsContent(PaneWallPage.DISPLAY, true));
-        assertFalse("a terminal window", BorderReach.ownsContent(PaneWallPage.TERMINAL, true));
-        assertFalse("a Home page", BorderReach.ownsContent(PaneWallPage.WIDGETS, true));
+        assertTrue("a Display page", BorderReach.ownsContent(PageKind.DISPLAY, true));
+        assertFalse("a terminal window", BorderReach.ownsContent(PageKind.TERMINAL, true));
+        assertFalse("a Home page", BorderReach.ownsContent(PageKind.HOME, true));
     }
 
     /**
@@ -109,12 +110,12 @@ public class BorderReachTest {
      */
     @Test
     public void anIdleDisplayPageOwnsNothingAndPagesByAPlainSwipe() {
-        assertFalse(BorderReach.ownsContent(PaneWallPage.DISPLAY, false));
-        boolean gives = PaneWallPolicy.bodySwipePages(PaneWallPage.DISPLAY, false, false, false);
+        assertFalse(BorderReach.ownsContent(PageKind.DISPLAY, false));
+        boolean gives = PaneWallPolicy.bodySwipePages(PageKind.DISPLAY, false, false, false);
         assertTrue(gives);
         float[] c = new float[4];
         BorderDrag.Zone idle = zone(SCREENS[0], 12f, Foot.KEYBOARD_DOWN, true,
-            BorderReach.ownsContent(PaneWallPage.DISPLAY, false));
+            BorderReach.ownsContent(PageKind.DISPLAY, false));
         assertTrue(BorderReach.contentBounds(idle, c));
         float x = (c[0] + c[2]) / 2f;
         float y = (c[1] + c[3]) / 2f;

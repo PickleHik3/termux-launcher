@@ -3,6 +3,7 @@ package com.termux.app.wall;
 import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /**
  * Where the wallpaper sits under the wall. The spare width is spread over the whole row — Home
@@ -60,24 +61,24 @@ public class WallParallaxTest {
         // Home always has a page, even before its repository has counted any.
         assertEquals(1, WallParallax.rowCount(0, 0));
 
-        assertEquals(0, WallParallax.rowIndex(PaneWallPage.WIDGETS, 0, 2, 3));
-        assertEquals(1, WallParallax.rowIndex(PaneWallPage.WIDGETS, 1, 2, 3));
+        assertEquals(0, WallParallax.rowIndex(PageKind.HOME, 0, 2, 3));
+        assertEquals(1, WallParallax.rowIndex(PageKind.HOME, 1, 2, 3));
         assertEquals("window 1 sits right after the last Home page", 2,
-            WallParallax.rowIndex(PaneWallPage.TERMINAL, 0, 2, 3));
-        assertEquals(4, WallParallax.rowIndex(PaneWallPage.TERMINAL, 2, 2, 3));
+            WallParallax.rowIndex(PageKind.TERMINAL, 0, 2, 3));
+        assertEquals(4, WallParallax.rowIndex(PageKind.TERMINAL, 2, 2, 3));
     }
 
     @Test
     public void anIndexPastItsKindIsHeldAtTheKindsLastPage() {
-        assertEquals(1, WallParallax.rowIndex(PaneWallPage.WIDGETS, 7, 2, 3));
-        assertEquals(4, WallParallax.rowIndex(PaneWallPage.TERMINAL, 9, 2, 3));
-        assertEquals(0, WallParallax.rowIndex(PaneWallPage.WIDGETS, -1, 2, 3));
+        assertEquals(1, WallParallax.rowIndex(PageKind.HOME, 7, 2, 3));
+        assertEquals(4, WallParallax.rowIndex(PageKind.TERMINAL, 9, 2, 3));
+        assertEquals(0, WallParallax.rowIndex(PageKind.HOME, -1, 2, 3));
     }
 
     @Test
     public void aRowOfTheDisplayWindowAlonePutsItRightAfterHome() {
         assertEquals(3, WallParallax.rowCount(2, 1));
-        assertEquals(2, WallParallax.rowIndex(PaneWallPage.TERMINAL, 0, 2, 1));
+        assertEquals(2, WallParallax.rowIndex(PageKind.TERMINAL, 0, 2, 1));
     }
 
     // ---- rest positions: the whole spare over the row --------------------------------------------
@@ -116,10 +117,10 @@ public class WallParallaxTest {
     public void theRowsLastWindowIsAtThePicturesRightEdge() {
         // Two terminal windows and the display window last: five pages.
         int count = WallParallax.rowCount(2, 3);
-        int display = WallParallax.rowIndex(PaneWallPage.TERMINAL, 2, 2, 3);
+        int display = WallParallax.rowIndex(PageKind.TERMINAL, 2, 2, 3);
         assertEquals(SPARE, WallParallax.offsetPx(display, count, SPARE), EPS);
         // The window before it sits one step short of it.
-        int before = WallParallax.rowIndex(PaneWallPage.TERMINAL, 1, 2, 3);
+        int before = WallParallax.rowIndex(PageKind.TERMINAL, 1, 2, 3);
         assertEquals(SPARE * 3f / 4f, WallParallax.offsetPx(before, count, SPARE), EPS);
     }
 
@@ -142,8 +143,8 @@ public class WallParallaxTest {
     @Test
     public void theSeamIsCrossedWithoutAJump() {
         // Two Home pages and three windows: the last Home page is 1, window 1 is 2.
-        int lastHome = WallParallax.rowIndex(PaneWallPage.WIDGETS, 1, 2, 3);
-        int firstWindow = WallParallax.rowIndex(PaneWallPage.TERMINAL, 0, 2, 3);
+        int lastHome = WallParallax.rowIndex(PageKind.HOME, 1, 2, 3);
+        int firstWindow = WallParallax.rowIndex(PageKind.TERMINAL, 0, 2, 3);
         // A drag of 0.4 widths off the last Home page towards window 1...
         float dragging = WallParallax.slidePosition(lastHome, firstWindow, -432f, WIDTH);
         // ...commits: the wall re-bases the offset against the Workspace (offset += 1 width), and

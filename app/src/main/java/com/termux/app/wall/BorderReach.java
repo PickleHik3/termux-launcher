@@ -1,6 +1,7 @@
 package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
+import com.termux.app.page.PageKind;
 
 /**
  * How far the wall's border gestures may reach into the page in front, and where that page's
@@ -37,8 +38,8 @@ public final class BorderReach {
      * Home page and a Display page showing only its empty state do not: with no picture there,
      * the page shares its edges and a plain swipe on it pages ({@link PaneWallPolicy#bodySwipePages}).
      */
-    public static boolean ownsContent(@NonNull PaneWallPage page, boolean displayRunning) {
-        return page == PaneWallPage.DISPLAY && displayRunning;
+    public static boolean ownsContent(@NonNull PageKind page, boolean displayRunning) {
+        return page == PageKind.DISPLAY && displayRunning;
     }
 
     /** {@link #FRAME_STRIP_DP} in px. */

@@ -8,8 +8,8 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.look.LookStore;
 import com.termux.app.look.PageLook;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.WallPages.Page;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.ArrayList;

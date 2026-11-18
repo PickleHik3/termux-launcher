@@ -16,6 +16,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.graphics.PathParser;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 
 /**
  * Draws a page glyph (a stroked outline, tinted one colour) and, in the Home and Terminal glyphs,
@@ -31,7 +32,7 @@ public final class PageGlyphPainter {
     /** The text size the ink is measured at; every metric below is per unit of text size. */
     private static final float REFERENCE_SIZE = 100f;
 
-    private final Drawable[] mGlyphs = new Drawable[PageSwitchModel.Kind.values().length];
+    private final Drawable[] mGlyphs = new Drawable[PageKind.values().length];
     private final Paint mText = new Paint(Paint.ANTI_ALIAS_FLAG);
     /** Index 1..99 the numbers, index 0 "99+". */
     private final String[] mNumbers = new String[MAX_NUMBER + 1];
@@ -42,10 +43,10 @@ public final class PageGlyphPainter {
     private final float mCapHeight;
 
     public PageGlyphPainter(@NonNull Context context) {
-        mGlyphs[PageSwitchModel.Kind.HOME.ordinal()] = load(context, R.drawable.ic_page_home);
-        mGlyphs[PageSwitchModel.Kind.TERMINAL.ordinal()] = load(context, R.drawable.ic_page_terminal);
-        mGlyphs[PageSwitchModel.Kind.ASSISTANT.ordinal()] = load(context, R.drawable.ic_page_assistant);
-        mGlyphs[PageSwitchModel.Kind.DISPLAY.ordinal()] = load(context, R.drawable.ic_page_display);
+        mGlyphs[PageKind.HOME.ordinal()] = load(context, R.drawable.ic_page_home);
+        mGlyphs[PageKind.TERMINAL.ordinal()] = load(context, R.drawable.ic_page_terminal);
+        mGlyphs[PageKind.ASSISTANT.ordinal()] = load(context, R.drawable.ic_page_assistant);
+        mGlyphs[PageKind.DISPLAY.ordinal()] = load(context, R.drawable.ic_page_display);
         mStrokePaint.setStyle(Paint.Style.STROKE);
         mStrokePaint.setStrokeCap(Paint.Cap.ROUND);
         mStrokePaint.setStrokeJoin(Paint.Join.ROUND);
@@ -82,7 +83,7 @@ public final class PageGlyphPainter {
     }
 
     /** Draws {@code kind}'s glyph in the square at ({@code left}, {@code top}) of side {@code size}. */
-    public void draw(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
+    public void draw(@NonNull Canvas canvas, @NonNull PageKind kind, int number,
                      float left, float top, float size, int color) {
         drawGlyph(canvas, kind, left, top, size, color);
         drawNumber(canvas, kind, number, left, top, size, color);
@@ -95,7 +96,7 @@ public final class PageGlyphPainter {
      * glow, only the crisp ink. Plain strokes, so it draws the same on every renderer, from reused
      * paths and paint.
      */
-    public void drawFloating(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
+    public void drawFloating(@NonNull Canvas canvas, @NonNull PageKind kind, int number,
                              float left, float top, float size, int color, int glowColor) {
         if (Color.alpha(glowColor) != 0) {
             float unit = size / PageGlyphSlots.VIEWPORT;
@@ -122,7 +123,7 @@ public final class PageGlyphPainter {
     private static final int[] GLOW_ALPHA = {0x1C, 0x40, 0x70};
     private static final float STROKE_WIDTH = 1.65f;
     /**
-     * The glyphs' outlines as the drawables draw them, per kind in {@link PageSwitchModel.Kind}
+     * The glyphs' outlines as the drawables draw them, per kind in {@link PageKind}
      * order, for the glow passes; keep in step with {@code ic_page_*.xml}.
      */
     private static final String[][] PATH_DATA = {
@@ -138,7 +139,7 @@ public final class PageGlyphPainter {
     private final Path[][] mPaths = new Path[PATH_DATA.length][];
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    private void drawGlyph(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, float left,
+    private void drawGlyph(@NonNull Canvas canvas, @NonNull PageKind kind, float left,
                            float top, float size, int color) {
         Drawable d = mGlyphs[kind.ordinal()];
         if (d == null) return;
@@ -152,16 +153,16 @@ public final class PageGlyphPainter {
     }
 
     /** The number in its slot. */
-    private void drawNumber(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind, int number,
+    private void drawNumber(@NonNull Canvas canvas, @NonNull PageKind kind, int number,
                             float left, float top, float size, int color) {
         if (number <= 0) return;
         float cx, cy, slotW, slotH;
-        if (kind == PageSwitchModel.Kind.HOME) {
+        if (kind == PageKind.HOME) {
             cx = PageGlyphSlots.HOME_SLOT_CX;
             cy = PageGlyphSlots.HOME_SLOT_CY;
             slotW = PageGlyphSlots.HOME_SLOT_W;
             slotH = PageGlyphSlots.HOME_SLOT_H;
-        } else if (kind == PageSwitchModel.Kind.TERMINAL) {
+        } else if (kind == PageKind.TERMINAL) {
             cx = PageGlyphSlots.TERMINAL_SLOT_CX;
             cy = PageGlyphSlots.TERMINAL_SLOT_CY;
             slotW = PageGlyphSlots.TERMINAL_SLOT_W;

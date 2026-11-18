@@ -3,7 +3,7 @@ package com.termux.app.look;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.WallPages.PageKind;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.FrostStops;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.PageLookKeys;

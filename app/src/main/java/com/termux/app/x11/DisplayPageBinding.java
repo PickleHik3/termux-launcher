@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.DisplayPagePolicy;
 import com.termux.app.wall.PageStillPolicy;
 import com.termux.app.wall.PaneWallLayout;
@@ -129,7 +130,7 @@ public final class DisplayPageBinding implements WallDisplay {
             WallPages.Page page = mHost.page(pageId);
             PaneWallLayout wall = mHost.wall();
             if (mHost.isGone() || page == null || wall == null
-                    || page.kind != WallPages.PageKind.DISPLAY) {
+                    || page.kind != PageKind.DISPLAY) {
                 full.recycle();
                 return;
             }
@@ -220,7 +221,7 @@ public final class DisplayPageBinding implements WallDisplay {
     public void refreshCards() {
         List<String> bindings = new ArrayList<>();
         for (WallPages.Page p : mHost.pages()) {
-            if (p.kind == WallPages.PageKind.DISPLAY && p.binding != null) bindings.add(p.binding);
+            if (p.kind == PageKind.DISPLAY && p.binding != null) bindings.add(p.binding);
         }
         cards().refresh(bindings, () -> {
             if (!mHost.isGone()) applyStill();

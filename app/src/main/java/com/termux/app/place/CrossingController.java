@@ -52,16 +52,13 @@ public final class CrossingController {
         // ---- wall and pages --------------------------------------------------------
 
         /** The page the wall is committed to. */
-        @NonNull com.termux.app.wall.PaneWallPage lastWallPage();
+        @NonNull com.termux.app.page.PageKind lastWallPage();
 
         /** The place the wall has committed to, the Workspace's page read as the display's while it is in front. */
-        @NonNull com.termux.app.wall.PaneWallPage currentWallPlace();
+        @NonNull com.termux.app.page.PageKind currentWallPlace();
 
         /** The pane wall's controller; null before it is built. */
         @Nullable com.termux.app.wall.PaneWallController paneWallController();
-
-        /** The cells' kinds as places. */
-        @NonNull java.util.List<com.termux.app.wall.PaneWallPage> placesOf(@NonNull java.util.List<com.termux.app.wall.PaneWallPage> pages);
 
         /** The wall's pages. */
         com.termux.app.wall.WallPages wallPages();
@@ -114,19 +111,19 @@ public final class CrossingController {
         ResolvedArrangement arrangementOf(@NonNull com.termux.app.wall.PageRef page);
 
         /** {@code page}'s arrangement, the crossing's held one while it runs. */
-        ResolvedArrangement arrangementOf(@NonNull com.termux.app.wall.PaneWallPage page);
+        ResolvedArrangement arrangementOf(@NonNull com.termux.app.page.PageKind page);
 
         /** The revision the arrangements were resolved at. */
         int arrangementRevision();
 
         /** The half of the wall {@code page} is arranged in. */
-        com.termux.app.wall.PageRef arrangedPageOf(@NonNull com.termux.app.wall.PaneWallPage page);
+        com.termux.app.wall.PageRef arrangedPageOf(@NonNull com.termux.app.page.PageKind page);
 
         /** The page the crossing's end for {@code page} stands on. */
-        com.termux.app.wall.PageRef endpointPageOf(@NonNull com.termux.app.wall.PaneWallPage page);
+        com.termux.app.wall.PageRef endpointPageOf(@NonNull com.termux.app.page.PageKind page);
 
         /** The dress {@code page} wears. */
-        @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PaneWallPage page);
+        @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.page.PageKind page);
 
         /** The dress {@code page} wears. */
         @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PageRef page);
@@ -157,7 +154,7 @@ public final class CrossingController {
         com.termux.app.look.PageLook.Snapshot pageLookOf(@NonNull com.termux.app.wall.PageRef page);
 
         /** The page the stack's rows stand for. */
-        com.termux.app.wall.PaneWallPage stackDressPage();
+        com.termux.app.page.PageKind stackDressPage();
 
         /** The stack as the geometry pass last applied it; null before one. */
         @Nullable com.termux.app.place.StackLayout.Result appliedStack();
@@ -189,7 +186,7 @@ public final class CrossingController {
         boolean committedKeyboardVisible();
 
         /** Whether {@code place} brings its keyboard up on arrival. */
-        boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place);
+        boolean wantsKeyboardOnEnter(@NonNull com.termux.app.page.PageKind place);
 
         /** The keyboard's height as the pass measures it. */
         int keyboardMeasureHeightPx();
@@ -240,7 +237,7 @@ public final class CrossingController {
         // ---- dock ------------------------------------------------------------------
 
         /** One snapshot of both halves for the dock's geometry, rows standing for {@code rowsPage}. */
-        @NonNull com.termux.app.dock.DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout arrangement, @NonNull com.termux.app.wall.PaneWallPage rowsPage);
+        @NonNull com.termux.app.dock.DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout arrangement, @NonNull com.termux.app.page.PageKind rowsPage);
 
         /** {@code page}'s half of the dock's geometry. */
         @NonNull com.termux.app.dock.DockGeometry.Half dockHalf(@NonNull com.termux.app.wall.PageRef page, @NonNull PlaceOrientation orientation, @NonNull PlaceLayout fallbackLayout);
@@ -264,10 +261,10 @@ public final class CrossingController {
         float dockTravelTranslationPx();
 
         /** The place the slab's Dock design last travelled to; null for none. */
-        @Nullable com.termux.app.wall.PaneWallPage dockDesignTravelledTo();
+        @Nullable com.termux.app.page.PageKind dockDesignTravelledTo();
 
         /** The place the slab's Dock design travelled to. */
-        void setDockDesignTravelledTo(@Nullable com.termux.app.wall.PaneWallPage place);
+        void setDockDesignTravelledTo(@Nullable com.termux.app.page.PageKind place);
 
         /** The Peek card's listeners set on the rows laid out. */
         void syncPeekListeners();
@@ -308,7 +305,7 @@ public final class CrossingController {
         // ---- chrome travel state ---------------------------------------------------
 
         /** The rest {@code place}'s chrome leaves. */
-        com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(@NonNull com.termux.app.wall.PaneWallPage place);
+        com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(@NonNull com.termux.app.page.PageKind place);
 
         /** The rests as the travel frame asks for them, bound once. */
         com.termux.app.place.PlaceChromeTravel.States chromeRestStates();
@@ -331,7 +328,7 @@ public final class CrossingController {
         // ---- settle and layout passes ----------------------------------------------
 
         /** Settles the chrome on {@code page}, landed on {@code landed}. */
-        void settlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page, @Nullable com.termux.app.wall.PageRef landed);
+        void settlePlaceChrome(@NonNull com.termux.app.page.PageKind page, @Nullable com.termux.app.wall.PageRef landed);
 
         /** The place's layout pass run now. */
         void syncPlaceLayout();
@@ -396,8 +393,8 @@ public final class CrossingController {
         // The cells' kinds around the current cell, so a slide between two cells of a kind's
         // pages and the one beside reads the arriving cell's dress (ADR 0016 section 3). A far
         // jump reads the page it left beside the arriving one, as its slide shows it.
-        java.util.List<com.termux.app.wall.PaneWallPage> pages =
-            mHost.placesOf(mHost.paneWallController().slideCellKinds());
+        java.util.List<com.termux.app.page.PageKind> pages =
+            mHost.paneWallController().slideCellKinds();
         int cellAt = mHost.paneWallController().currentCellIndex();
         // A slide toward another window of the Workspace stays on its place: the wall's offset
         // alone reads the previous window as Home, the place on the left.
@@ -620,16 +617,16 @@ public final class CrossingController {
         if (mHost.isReducedMotionEnabled() || com.termux.app.AnimationSpeed.multiplier(mHost.context()) <= 0f)
             return false;
         com.termux.app.wall.PaneWallLayout wall = mHost.paneWallController().wall();
-        if (mHost.lastWallPage() != com.termux.app.wall.PaneWallPage.WIDGETS || wall.isMoving()
+        if (mHost.lastWallPage() != com.termux.app.page.PageKind.HOME || wall.isMoving()
             || mHost.keyboardSwipeTravel() || mHost.isAppDrawerEngaged() || mHost.surfaceEditorActive()
             || mHost.appliedContentReservationPx() < 0 || mCrossing.crossing()) return false;
         PlaceLayoutStore store = mHost.placeLayoutStore();
         if (store == null) return false;
         PlaceOrientation orientation = mHost.currentPlaceOrientation();
         com.termux.app.wall.PageRef herePage =
-            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, hereId);
+            com.termux.app.wall.PageRef.of(com.termux.app.page.PageKind.HOME, hereId);
         com.termux.app.wall.PageRef therePage =
-            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, thereId);
+            com.termux.app.wall.PageRef.of(com.termux.app.page.PageKind.HOME, thereId);
         // The cheap refusals first (SeamCrossing#crosses): two Home pages on one layout arrange
         // alike, and two that dress the dock or the search field apart flip; neither crosses.
         if (mHost.dressLayoutOf(herePage) == mHost.dressLayoutOf(therePage)) return false;
@@ -645,7 +642,7 @@ public final class CrossingController {
         boolean keyboardUp = mHost.committedKeyboardVisible() && !mHost.isKeyboardFloating();
         // Both ends' docks at rest from one snapshot, the arriving page's as its second Home half.
         com.termux.app.dock.DockGeometry.Snapshot rests =
-            mHost.dockSnapshot(hereLayout, com.termux.app.wall.PaneWallPage.WIDGETS).toBuilder()
+            mHost.dockSnapshot(hereLayout, com.termux.app.page.PageKind.HOME).toBuilder()
                 .otherHome(mHost.dockHalf(therePage, orientation, thereLayout))
                 .build();
         com.termux.app.dock.DockLayout hereRest =
@@ -664,7 +661,7 @@ public final class CrossingController {
                 keyboardUp);
         // Two Home pages that dress alike are a plain flip.
         if (!com.termux.app.place.SeamCrossing.crosses(here, there)) return false;
-        mHomeCrossRest = mHost.chromeRestOf(com.termux.app.wall.PaneWallPage.WIDGETS);
+        mHomeCrossRest = mHost.chromeRestOf(com.termux.app.page.PageKind.HOME);
         mHomeCrossHereId = hereId;
         mHomeCrossThereId = thereId;
         // A bar only one of them wears rides with its page while Home's pages slide flat, and
@@ -724,8 +721,8 @@ public final class CrossingController {
         mHomeCrossHereId = -1;
         mHomeCrossThereId = -1;
         mHomeCrossRest = null;
-        mHost.settlePlaceChrome(com.termux.app.wall.PaneWallPage.WIDGETS,
-            com.termux.app.wall.PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, landedId));
+        mHost.settlePlaceChrome(com.termux.app.page.PageKind.HOME,
+            com.termux.app.wall.PageRef.of(com.termux.app.page.PageKind.HOME, landedId));
         // Landed on the other page: its layout is applied now, even where a re-arrangement that
         // waited for the settle (onWidgetPageRendered) already ran under the crossing's hold and
         // noted the variant applied.
@@ -744,7 +741,7 @@ public final class CrossingController {
      * out over Home is dressed for it now. Every frame after is the crossing's to answer.
      */
     private void readSeamTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
-        com.termux.app.wall.PaneWallPage other =
+        com.termux.app.page.PageKind other =
             com.termux.app.place.SeamTravel.otherHalfPage(frame, mHost.lastWallPage());
         PlaceLayoutStore store = mHost.placeLayoutStore();
         if (store == null) return;
@@ -851,7 +848,7 @@ public final class CrossingController {
         in.statusBand = mHost::bottomStatusBandAtRestPx;
         in.imeLiftPx = mHost.imeLiftPx();
         in.keyboardShown = mHost.inAppKeyboard() != null && mHost.inAppKeyboard().isEnabled()
-            && mHost.wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS);
+            && mHost.wantsKeyboardOnEnter(com.termux.app.page.PageKind.HOME);
         ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
             com.termux.app.place.StackLayout.restGridDockReservePx(in, homeRest));
     }
@@ -904,7 +901,7 @@ public final class CrossingController {
                 // rests and the settle has nothing to re-dress
                 // (SeamCrossing#stackDesign), whether a finger, a home press or a tap started it.
                 if (seam.restyle()) {
-                    com.termux.app.wall.PaneWallPage wears =
+                    com.termux.app.page.PageKind wears =
                         mCrossing.seam().stackDesignApart() ? mCrossing.seam().other() : null;
                     if (wears != mHost.dockDesignTravelledTo()) {
                         mHost.setDockDesignTravelledTo(wears);
@@ -999,7 +996,7 @@ public final class CrossingController {
      * nothing left to move. The terminal's dock padding is known only for the place on screen and
      * is a fraction of a row; arriving on the terminal, the settle takes it as it always has.
      */
-    public int travelRoomChangePx(@NonNull com.termux.app.wall.PaneWallPage arriving) {
+    public int travelRoomChangePx(@NonNull com.termux.app.page.PageKind arriving) {
         if (mCrossing.knowsRoomToward(arriving)) return mCrossing.roomChangePx();
         mCrossing.roomChange(arriving, travelRestReservationPx(mHost.lastWallPage())
             - travelRestReservationPx(arriving));
@@ -1007,7 +1004,7 @@ public final class CrossingController {
     }
 
     /** The room a place's chrome leaves the content at rest, from the stack as it stands. */
-    public int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place) {
+    public int travelRestReservationPx(@NonNull com.termux.app.page.PageKind place) {
         com.termux.app.place.PlaceChromeTravel.Rest rest = mHost.chromeRestOf(place);
         return travelRestReservationPx(place, rest.keyboardReveal() > 0f);
     }
@@ -1019,7 +1016,7 @@ public final class CrossingController {
      * committed. Read off the half on screen, the Terminal's rest from Home came out an extra-keys
      * row short, and its landing resized the grid a second time.
      */
-    public int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
+    public int travelRestReservationPx(@NonNull com.termux.app.page.PageKind place,
                                         boolean keyboardShown) {
         com.termux.app.wall.PageRef side = mHost.arrangedPageOf(place);
         com.termux.app.dock.DockGeometry.Snapshot snapshot =
@@ -1044,7 +1041,7 @@ public final class CrossingController {
         // The Terminal's flush padding is part of its rest: the applied one while it is the place,
         // else the one it last rested with, so Home's terminal page and the slide back are laid
         // out at the height the landing settles at, not one padding taller.
-        in.flushPaddingPx = place != com.termux.app.wall.PaneWallPage.TERMINAL || keyboardShown ? 0
+        in.flushPaddingPx = place != com.termux.app.page.PageKind.TERMINAL || keyboardShown ? 0
             : place == mHost.lastWallPage()
                 ? (mHost.appliedStack() != null ? mHost.appliedStack().flushPaddingPx : 0)
                 : mHost.terminalRestFlushPaddingPx();

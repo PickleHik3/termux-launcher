@@ -2,8 +2,8 @@ package com.termux.app.place;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.app.page.PageKind;
 
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Where each page of the wall starts at the top, so a slide across the seam between Home and
@@ -37,9 +37,9 @@ public final class PageTopInsets {
      * has Home's page at its own top from its first frame. Only a wall resting on a Workspace page
      * keeps the canvas below the bar.
      */
-    public static boolean canvasReachesUnderBar(@NonNull PaneWallPage committed,
+    public static boolean canvasReachesUnderBar(@NonNull PageKind committed,
                                                 boolean wallAtRest) {
-        return committed == PaneWallPage.WIDGETS || !wallAtRest;
+        return committed == PageKind.HOME || !wallAtRest;
     }
 
     /**
@@ -51,8 +51,8 @@ public final class PageTopInsets {
      *
      * @param wallPage the kind of the page whose cell the wall is on
      */
-    public static boolean wallAtRestOn(@NonNull PaneWallPage committed, boolean wallMoving,
-                                       float wallOffsetPx, @Nullable PaneWallPage wallPage) {
+    public static boolean wallAtRestOn(@NonNull PageKind committed, boolean wallMoving,
+                                       float wallOffsetPx, @Nullable PageKind wallPage) {
         return !wallMoving && wallOffsetPx == 0f && wallPage == committed;
     }
 
@@ -108,9 +108,9 @@ public final class PageTopInsets {
      * #homeTopInsetPx}); every Workspace page —
      * {@code null} is one the wall does not know, the display window's — at the Workspace's inset.
      */
-    public static int pageTopInsetPx(@Nullable PaneWallPage page, int workspaceTopInsetPx,
+    public static int pageTopInsetPx(@Nullable PageKind page, int workspaceTopInsetPx,
                                      int homeTopInsetPx) {
-        if (page == PaneWallPage.WIDGETS) return Math.max(0, homeTopInsetPx);
+        if (page == PageKind.HOME) return Math.max(0, homeTopInsetPx);
         return Math.max(0, workspaceTopInsetPx);
     }
 
@@ -119,7 +119,7 @@ public final class PageTopInsets {
      * canvas started before it reached under the bar, so the body never shows under the bar on
      * the Workspace — the canvas's reach while the chrome is committed to a window, 0 on Home.
      */
-    public static int bodySurfaceTopPx(@NonNull PaneWallPage committed, int canvasReachPx) {
-        return committed == PaneWallPage.WIDGETS ? 0 : Math.max(0, canvasReachPx);
+    public static int bodySurfaceTopPx(@NonNull PageKind committed, int canvasReachPx) {
+        return committed == PageKind.HOME ? 0 : Math.max(0, canvasReachPx);
     }
 }

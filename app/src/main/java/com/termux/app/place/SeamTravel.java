@@ -3,10 +3,10 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.List;
 
@@ -50,8 +50,8 @@ public final class SeamTravel {
     }
 
     /** Whether two pages are on different halves of the wall: one a Home page, one a window. */
-    public static boolean crosses(@NonNull PaneWallPage a, @NonNull PaneWallPage b) {
-        return (a == PaneWallPage.WIDGETS) != (b == PaneWallPage.WIDGETS);
+    public static boolean crosses(@NonNull PageKind a, @NonNull PageKind b) {
+        return (a == PageKind.HOME) != (b == PageKind.HOME);
     }
 
     /**
@@ -59,8 +59,8 @@ public final class SeamTravel {
      * frame stays on the committed page's half.
      */
     @Nullable
-    public static PaneWallPage otherHalfPage(@NonNull Frame frame,
-                                             @NonNull PaneWallPage committed) {
+    public static PageKind otherHalfPage(@NonNull Frame frame,
+                                             @NonNull PageKind committed) {
         if (crosses(frame.toward, committed)) return frame.toward;
         if (crosses(frame.from, committed)) return frame.from;
         return null;
@@ -71,7 +71,7 @@ public final class SeamTravel {
      * toward its side on that half; 0 on a frame wholly on the committed half and 1 on one wholly
      * on the other. One number for both directions, so a drag that reverses reads it back down.
      */
-    public static float otherHalfProgress(@NonNull Frame frame, @NonNull PaneWallPage committed) {
+    public static float otherHalfProgress(@NonNull Frame frame, @NonNull PageKind committed) {
         boolean fromOther = crosses(frame.from, committed);
         boolean towardOther = crosses(frame.toward, committed);
         if (fromOther == towardOther) return fromOther ? 1f : 0f;
@@ -80,7 +80,7 @@ public final class SeamTravel {
 
     /**
      * Whether two ends are different pages a crossing runs between (#173 slice E): pages of the
-     * two halves ({@link #crosses(PaneWallPage, PaneWallPage)}), or two Home pages whose ids are
+     * two halves ({@link #crosses(PageKind, PageKind)}), or two Home pages whose ids are
      * both said and differ. Two windows, or a page with no id said beside one of its kind, are
      * not.
      */
@@ -89,9 +89,9 @@ public final class SeamTravel {
     }
 
     /** Whether the side {@code kind}, {@code id} of a frame is on another page than {@code end}. */
-    private static boolean differs(@NonNull PaneWallPage kind, int id, @NonNull PageRef end) {
+    private static boolean differs(@NonNull PageKind kind, int id, @NonNull PageRef end) {
         if (crosses(kind, end.kind)) return true;
-        return kind == PaneWallPage.WIDGETS && end.isHome() && id >= 0 && end.id >= 0
+        return kind == PageKind.HOME && end.isHome() && id >= 0 && end.id >= 0
             && id != end.id;
     }
 
@@ -156,7 +156,7 @@ public final class SeamTravel {
      * the wall's own way rather than the chrome's curve, so it moves over the stretch at either end
      * ({@link SeamFade#START}) where the chrome rests.
      */
-    public static float otherHalfFraction(@NonNull Frame frame, @NonNull PaneWallPage committed) {
+    public static float otherHalfFraction(@NonNull Frame frame, @NonNull PageKind committed) {
         boolean fromOther = crosses(frame.from, committed);
         boolean towardOther = crosses(frame.toward, committed);
         if (fromOther == towardOther) return fromOther ? 1f : 0f;
@@ -265,8 +265,8 @@ public final class SeamTravel {
      * right on a frame between two Home pages, the side the Workspace stands on in the row.
      */
     public static float workspaceScreenXPx(@NonNull Frame frame, int widthPx) {
-        boolean fromWorkspace = frame.from != PaneWallPage.WIDGETS;
-        boolean towardWorkspace = frame.toward != PaneWallPage.WIDGETS;
+        boolean fromWorkspace = frame.from != PageKind.HOME;
+        boolean towardWorkspace = frame.toward != PageKind.HOME;
         if (fromWorkspace && towardWorkspace) return 0f;
         if (!fromWorkspace && !towardWorkspace) return widthPx;
         // The far side of a frame stands one width to the right of the near one.

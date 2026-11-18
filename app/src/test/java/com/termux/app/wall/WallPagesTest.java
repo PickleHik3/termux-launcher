@@ -6,8 +6,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.WallPages.Error;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.app.wall.WallPages.Result;
 import com.termux.app.wall.WallPages.Stop;
 
@@ -514,7 +514,7 @@ public class WallPagesTest {
     public void parallaxRowReadsTheStopsInAnyOrder() {
         WallPages p = three();
         for (int w = 0; w < 3; w++) {
-            assertEquals(WallParallax.rowIndex(PaneWallPage.TERMINAL, w, 2, 3),
+            assertEquals(WallParallax.rowIndex(PageKind.TERMINAL, w, 2, 3),
                 WallParallax.rowIndex(p, Stop.window(3, w), 3));
         }
         assertEquals(WallParallax.rowCount(2, 3), WallParallax.rowCount(p, 3));

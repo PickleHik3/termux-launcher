@@ -6,18 +6,18 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.wall.WallPages.PageKind;
 
 import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
  * Display pages as wall slots (ADR 0015, A3b), the pure layer: the slots keep Display pages when
  * asked, the one display view binds to one Display slot by the Home frame's rule, the built
- * window holds only that slot for {@link PaneWallPage#DISPLAY}, and each Display page shows live,
+ * window holds only that slot for {@link PageKind#DISPLAY}, and each Display page shows live,
  * its picture, or its card.
  */
 public class DisplayPagePolicyTest {

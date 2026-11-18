@@ -22,6 +22,7 @@ import com.termux.app.chrome.ChromeSpec;
 import com.termux.app.chrome.TestChromeRenderers;
 import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.ChromeShape;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
@@ -35,7 +36,6 @@ import com.termux.app.place.ResolvedArrangement;
 import com.termux.app.place.SeamCrossing;
 import com.termux.app.place.layout.IconSize;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
@@ -297,7 +297,7 @@ public class DockControllerTest {
         mHost.chrome = TestChromeRenderers.overFakeSurfaces(RuntimeEnvironment.getApplication());
         mHost.design = DockStyle.GLASS_TRAY;
         mHost.terminalDesign = DockStyle.GLASS_TRAY;
-        mDock.restyleDockSurfaceForPageIfChanged(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        mDock.restyleDockSurfaceForPageIfChanged(PageKind.HOME, PageKind.TERMINAL);
         assertEquals("no restyle", 0, mHost.barHeightPasses);
         assertEquals(0, mHost.toolbarPasses);
         assertFalse(mDock.slabWears(DockStyle.GLASS_TRAY, false));
@@ -308,8 +308,8 @@ public class DockControllerTest {
         mHost.chrome = TestChromeRenderers.overFakeSurfaces(RuntimeEnvironment.getApplication());
         mHost.design = DockStyle.GLASS_TRAY;
         mHost.terminalDesign = DockStyle.LENS_BEADS;
-        mHost.lastPage = PaneWallPage.TERMINAL;
-        mDock.restyleDockSurfaceForPageIfChanged(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        mHost.lastPage = PageKind.TERMINAL;
+        mDock.restyleDockSurfaceForPageIfChanged(PageKind.HOME, PageKind.TERMINAL);
         assertEquals("one restyle", 1, mHost.barHeightPasses);
         assertEquals(1, mHost.toolbarPasses);
         assertTrue("dressed for the page landed on", mDock.slabWears(DockStyle.LENS_BEADS, false));
@@ -319,7 +319,7 @@ public class DockControllerTest {
     public void aSettleNeedsPreferencesAndTheChrome() {
         mHost.design = DockStyle.GLASS_TRAY;
         mHost.terminalDesign = DockStyle.LENS_BEADS;
-        mDock.restyleDockSurfaceForPageIfChanged(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        mDock.restyleDockSurfaceForPageIfChanged(PageKind.HOME, PageKind.TERMINAL);
         assertEquals("no chrome yet", 0, mHost.barHeightPasses);
     }
 
@@ -349,7 +349,7 @@ public class DockControllerTest {
 
         mHost.design = DockStyle.GLASS_TRAY;
         mHost.terminalDesign = DockStyle.LENS_BEADS;
-        mDock.restyleDockSurfaceForPageIfChanged(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+        mDock.restyleDockSurfaceForPageIfChanged(PageKind.HOME, PageKind.TERMINAL);
         assertFalse("the settle lands the geometry at once", mDock.dockBandEaseRunning());
         assertEquals("and restyles once", 1, mHost.barHeightPasses);
     }
@@ -551,7 +551,7 @@ public class DockControllerTest {
         float share = Float.NaN;
         @NonNull DockStyle design = DockStyle.LENS_BEADS;
         @Nullable DockStyle terminalDesign;
-        @NonNull PaneWallPage lastPage = PaneWallPage.WIDGETS;
+        @NonNull PageKind lastPage = PageKind.HOME;
         @NonNull PlaceLayout layout = HOME;
         @Nullable View surfaceHost;
         final SparseArray<View> views = new SparseArray<>();
@@ -569,7 +569,7 @@ public class DockControllerTest {
         @Nullable PlaceLayoutStore store;
         @Nullable TermuxAppSharedPreferences prefsStore;
         @Nullable ChromeRenderer chrome;
-        @Nullable PaneWallPage travelledTo;
+        @Nullable PageKind travelledTo;
         boolean reducedMotion;
         boolean drawerEngaged;
         boolean keyboardShown;
@@ -650,30 +650,30 @@ public class DockControllerTest {
         @Nullable @Override public TermuxAppSharedPreferences preferences() { return prefsStore; }
         @Nullable @Override public PlaceLayoutStore placeLayoutStore() { return store; }
         @NonNull @Override public ResolvedArrangement arrangementOf(@NonNull PageRef page) {
-            return arranged(page.isHome() ? design : designOf(PaneWallPage.TERMINAL), page);
+            return arranged(page.isHome() ? design : designOf(PageKind.TERMINAL), page);
         }
-        @NonNull @Override public ResolvedArrangement arrangementOf(@NonNull PaneWallPage page) {
+        @NonNull @Override public ResolvedArrangement arrangementOf(@NonNull PageKind page) {
             return arranged(designOf(page), arrangedPageOf(page));
         }
-        private DockStyle designOf(PaneWallPage page) {
-            return page == PaneWallPage.TERMINAL && terminalDesign != null ? terminalDesign : design;
+        private DockStyle designOf(PageKind page) {
+            return page == PageKind.TERMINAL && terminalDesign != null ? terminalDesign : design;
         }
         private ResolvedArrangement arranged(DockStyle style, PageRef page) {
             return ResolvedArrangement.of(HOME, LayoutStyle.DOCKED, style, false, false,
                 PlaceOrientation.PORTRAIT, LayoutVariant.HOME, page);
         }
-        @NonNull @Override public PageRef arrangedPageOf(@NonNull PaneWallPage page) {
-            return page == PaneWallPage.TERMINAL ? PageRef.TERMINAL : PageRef.HOME;
+        @NonNull @Override public PageRef arrangedPageOf(@NonNull PageKind page) {
+            return page == PageKind.TERMINAL ? PageRef.TERMINAL : PageRef.HOME;
         }
-        @NonNull @Override public LayoutVariant layoutOf(@NonNull PaneWallPage page) {
+        @NonNull @Override public LayoutVariant layoutOf(@NonNull PageKind page) {
             return LayoutVariant.HOME;
         }
         @Override public int arrangementRevision() { return 0; }
         @NonNull @Override public IconSize drawnIconSize(@NonNull PlaceLayoutStore store) {
             return IconSize.XL;
         }
-        @NonNull @Override public PaneWallPage lastWallPage() { return lastPage; }
-        @NonNull @Override public PaneWallPage stackDressPage() {
+        @NonNull @Override public PageKind lastWallPage() { return lastPage; }
+        @NonNull @Override public PageKind stackDressPage() {
             if (recomputeTrips) throw new Recomputed();
             return lastPage;
         }
@@ -683,7 +683,7 @@ public class DockControllerTest {
         @Override public float wallStripReveal() { return 0f; }
         @Override public float appliedPromptFieldReveal() { return 0f; }
         @Override public float appliedWallStripReveal() { return 0f; }
-        @Nullable @Override public PaneWallPage drawerTileRowsPage() { return lastPage; }
+        @Nullable @Override public PageKind drawerTileRowsPage() { return lastPage; }
         @Override public boolean isStatusBarCompact() { return false; }
         @NonNull @Override public PlaceLayout.Edge statusBarEdge() { return Edge.TOP; }
         @Override public int halfRedressCount() { return 0; }
@@ -721,8 +721,8 @@ public class DockControllerTest {
         @Nullable @Override public Drawable deckSlabOr(@Nullable Drawable glass) { return glass; }
         @Override public float beadShare() { return share; }
         @NonNull @Override public SeamCrossing seam() { return seam; }
-        @Nullable @Override public PaneWallPage dockDesignTravelledTo() { return travelledTo; }
-        @Override public void setDockDesignTravelledTo(@Nullable PaneWallPage page) {
+        @Nullable @Override public PageKind dockDesignTravelledTo() { return travelledTo; }
+        @Override public void setDockDesignTravelledTo(@Nullable PageKind page) {
             travelledTo = page;
         }
         @Override public void syncFrameBeadCut() { }

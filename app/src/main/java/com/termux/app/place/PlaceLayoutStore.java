@@ -13,6 +13,7 @@ import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.DrawerTilePolicy;
 import com.termux.app.dock.WallStripRowPolicy;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -20,8 +21,6 @@ import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.layout.LayoutsJson;
 import com.termux.app.place.layout.SharedChromeFold;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
@@ -51,7 +50,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>One layout dresses both halves of the wall (ADR 0009): a Home page wears the Workspace's
  * layout, normal or minimal, less what Home leaves out ({@link #resolve(PlaceOrientation,
- * PaneWallPage)}), unless Home holds a <b>Home layout</b> of its own ({@link #hasHomeLayout},
+ * PageKind)}), unless Home holds a <b>Home layout</b> of its own ({@link #hasHomeLayout},
  * {@code place.home_layout}). That is a third arrangement ({@link LayoutVariant#HOME}), under
  * {@code layout.home.<portrait|landscape>.<key>}: the status bar, the dock's rows and the keyboard
  * are its elements, so the extra keys always resolve put away there. Turned on, it
@@ -536,7 +535,7 @@ public final class PlaceLayoutStore {
      * (normal or minimal) on a window, the normal one or Home's own on a Home page while it holds a Home layout.
      */
     @NonNull
-    public LayoutVariant variantFor(@NonNull PaneWallPage page) {
+    public LayoutVariant variantFor(@NonNull PageKind page) {
         if (mDresses == null) mDresses = DressResolver.of(this);
         return mDresses.layoutOf(page);
     }
@@ -544,7 +543,7 @@ public final class PlaceLayoutStore {
     /**
      * The variant {@code page} is arranged by, read for its own id (#173 slice E): another Home
      * page's own layout while a different one is in front, so a crossing between the two resolves
-     * each end for its page. A page with no id said reads as {@link #variantFor(PaneWallPage)}.
+     * each end for its page. A page with no id said reads as {@link #variantFor(PageKind)}.
      */
     @NonNull
     public LayoutVariant variantFor(@NonNull PageRef page) {
@@ -673,15 +672,15 @@ public final class PlaceLayoutStore {
 
     /**
      * The id of the page {@code page} stands for on screen: the Home page in front for {@link
-     * PaneWallPage#WIDGETS}, the bound Display page for {@link PaneWallPage#DISPLAY}, the
+     * PageKind#HOME}, the bound Display page for {@link PageKind#DISPLAY}, the
      * Terminal page for a terminal window; -1 where the launcher has not said.
      */
-    public int shownPageId(@NonNull PaneWallPage page) {
+    public int shownPageId(@NonNull PageKind page) {
         ShownPages pages = mShownPages.get();
         if (pages == null) return -1;
-        if (page == PaneWallPage.WIDGETS) return pages.homePageInFront();
-        if (page == PaneWallPage.DISPLAY) return pages.displayPage();
-        if (page == PaneWallPage.ASSISTANT) return pages.assistantPage();
+        if (page == PageKind.HOME) return pages.homePageInFront();
+        if (page == PageKind.DISPLAY) return pages.displayPage();
+        if (page == PageKind.ASSISTANT) return pages.assistantPage();
         return pages.terminalPage();
     }
 
@@ -983,10 +982,10 @@ public final class PlaceLayoutStore {
     /**
      * The layout {@code page} wears in an orientation, as its dress has it: the variant {@link
      * #variantFor} names, resolved for that page ({@link #resolve(PlaceOrientation,
-     * LayoutVariant, PaneWallPage)}).
+     * LayoutVariant, PageKind)}).
      */
     @NonNull
-    public PlaceLayout resolve(@NonNull PlaceOrientation orientation, @NonNull PaneWallPage page) {
+    public PlaceLayout resolve(@NonNull PlaceOrientation orientation, @NonNull PageKind page) {
         return resolve(orientation, variantFor(page), page);
     }
 
@@ -1000,13 +999,13 @@ public final class PlaceLayoutStore {
      */
     @NonNull
     public PlaceLayout resolve(@NonNull PlaceOrientation orientation,
-                               @NonNull LayoutVariant variant, @NonNull PaneWallPage page) {
+                               @NonNull LayoutVariant variant, @NonNull PageKind page) {
         PlaceLayoutStore layout = forVariant(variant);
         PlaceLayout resolved = layout.resolve(orientation);
-        if (page != PaneWallPage.WIDGETS || variant.isHomeKind()) return resolved;
+        if (page != PageKind.HOME || variant.isHomeKind()) return resolved;
         // A Home page on the shared arrangement shows what the Home kind shows, whatever the
         // shared layout's own kind does.
-        PageKind kind = DressResolver.kindOf(page);
+        PageKind kind = DressResolver.dressKindOf(page);
         for (Element element : Element.values()) {
             Slot slot = resolved.slot(element);
             // Home's extra-keys key means the floating Home pill, so the stack never docks the bar.
@@ -1825,11 +1824,11 @@ public final class PlaceLayoutStore {
      * the one thing the places still keep apart: Home, the terminal and the display each remember
      * their own.
      */
-    public boolean wasKeyboardOpen(@NonNull PaneWallPage place) {
+    public boolean wasKeyboardOpen(@NonNull PageKind place) {
         return mStore != null && mStore.getBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), false);
     }
 
-    public void setKeyboardOpen(@NonNull PaneWallPage place, boolean open) {
+    public void setKeyboardOpen(@NonNull PageKind place, boolean open) {
         writeBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), open);
     }
 
@@ -1926,10 +1925,9 @@ public final class PlaceLayoutStore {
 
     @VisibleForTesting
     @NonNull
-    static String placeKey(@NonNull PaneWallPage place) {
-        // The widget grid is the home screen everywhere a user can see it; only the enum says
-        // WIDGETS.
-        return place == PaneWallPage.WIDGETS ? "home" : place.name().toLowerCase(Locale.ROOT);
+    static String placeKey(@NonNull PageKind place) {
+        // The widget grid is the home screen everywhere a user can see it.
+        return place == PageKind.HOME ? "home" : place.name().toLowerCase(Locale.ROOT);
     }
 
     /** Where the normal arrangement keeps one value for one orientation. */
@@ -2062,7 +2060,7 @@ public final class PlaceLayoutStore {
     /** Where a place kept its own copy of an arrangement value, before version 6 shared them. */
     @VisibleForTesting
     @NonNull
-    static String legacyArrangementKey(@NonNull PaneWallPage place,
+    static String legacyArrangementKey(@NonNull PageKind place,
                                        @NonNull PlaceOrientation orientation,
                                        @NonNull String key) {
         return PREFIX + placeKey(place) + "." + orientation.storageValue() + "." + key;
@@ -2070,14 +2068,14 @@ public final class PlaceLayoutStore {
 
     @VisibleForTesting
     @NonNull
-    static String memoryKey(@NonNull PaneWallPage place, @NonNull String key) {
+    static String memoryKey(@NonNull PageKind place, @NonNull String key) {
         return PREFIX + placeKey(place) + "." + key;
     }
 
     /** Where a place kept its own value for a shared look key, before version 6 folded them. */
     @VisibleForTesting
     @NonNull
-    static String legacyLookKey(@NonNull PaneWallPage place, @NonNull String key) {
+    static String legacyLookKey(@NonNull PageKind place, @NonNull String key) {
         return PREFIX + placeKey(place) + LEGACY_LOOK_INFIX + key;
     }
 
@@ -2539,13 +2537,13 @@ public final class PlaceLayoutStore {
      * terminal that never stored one defers to the display's. Every place's own flag then goes.
      */
     private void migrateToOneMinimalMode(@NonNull SharedPreferences.Editor editor) {
-        String terminal = memoryKey(PaneWallPage.TERMINAL, KEY_MINIMAL);
-        String display = memoryKey(PaneWallPage.DISPLAY, KEY_MINIMAL);
+        String terminal = memoryKey(PageKind.TERMINAL, KEY_MINIMAL);
+        String display = memoryKey(PageKind.DISPLAY, KEY_MINIMAL);
         Boolean minimal = null;
         if (mStore.contains(terminal)) minimal = mStore.getBoolean(terminal, false);
         else if (mStore.contains(display)) minimal = mStore.getBoolean(display, false);
         if (minimal != null) editor.putBoolean(minimalKey(), minimal);
-        for (PaneWallPage place : PaneWallPage.values())
+        for (PageKind place : PageKind.values())
             editor.remove(memoryKey(place, KEY_MINIMAL));
     }
 
@@ -2573,7 +2571,7 @@ public final class PlaceLayoutStore {
                     mStore.getString(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE, null),
                     RowPlacement.LEFT);
                 if (!side.isOnSide()) side = RowPlacement.LEFT;
-                for (PaneWallPage place : PaneWallPage.values()) {
+                for (PageKind place : PageKind.values()) {
                     editor.putString(legacyArrangementKey(place, PlaceOrientation.LANDSCAPE,
                         KEY_APPS_ROW), side.storageValue());
                 }
@@ -2585,7 +2583,7 @@ public final class PlaceLayoutStore {
                     mStore.getString(TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, null), RowPlacement.BOTTOM);
                 if (side == RowPlacement.HIDDEN) side = RowPlacement.BOTTOM;
                 for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                    editor.putString(legacyArrangementKey(PaneWallPage.DISPLAY, orientation,
+                    editor.putString(legacyArrangementKey(PageKind.DISPLAY, orientation,
                         KEY_EXTRA_KEYS), side.storageValue());
                 }
             }
@@ -2595,7 +2593,7 @@ public final class PlaceLayoutStore {
             editor.remove(LEGACY_KEY_X11_HIDE_STATUS_BAR);
 
             if (mStore.contains(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN)) {
-                editor.putBoolean(memoryKey(PaneWallPage.DISPLAY, KEY_KEYBOARD_OPEN),
+                editor.putBoolean(memoryKey(PageKind.DISPLAY, KEY_KEYBOARD_OPEN),
                     mStore.getBoolean(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN, false));
                 editor.remove(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN);
             }
@@ -2606,7 +2604,7 @@ public final class PlaceLayoutStore {
                 // that migrated before version 5 kept it under the place's memory key, and the
                 // step below folds that one; writing it here as well would leave the old key
                 // behind, since every removal an editor carries is applied before every put.
-                for (PaneWallPage place : PaneWallPage.values()) {
+                for (PageKind place : PageKind.values()) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
                         editor.putBoolean(legacyArrangementKey(place, orientation,
                             KEY_STATUS_COMPACT), compact);
@@ -2620,7 +2618,7 @@ public final class PlaceLayoutStore {
             // placement. A master that was off becomes Hidden everywhere, once; resolve() has no
             // more use for the master afterwards.
             if (!mPreferences.isAppLauncherAppsRowEnabled()) {
-                for (PaneWallPage place : PaneWallPage.values()) {
+                for (PageKind place : PageKind.values()) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
                         editor.putString(legacyArrangementKey(place, orientation, KEY_APPS_ROW),
                             RowPlacement.HIDDEN.storageValue());
@@ -2628,7 +2626,7 @@ public final class PlaceLayoutStore {
                 }
             }
             if (!mPreferences.isAppLauncherExtraKeysRowEnabled()) {
-                for (PaneWallPage place : PaneWallPage.values()) {
+                for (PageKind place : PageKind.values()) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
                         editor.putString(legacyArrangementKey(place, orientation, KEY_EXTRA_KEYS),
                             RowPlacement.HIDDEN.storageValue());
@@ -2645,7 +2643,7 @@ public final class PlaceLayoutStore {
             // place's own look override where it had taken one. A value nobody ever set is left
             // unwritten — the read still answers with the shipped default, and pinning it would
             // freeze a default that still moves with the dock's style.
-            for (PaneWallPage place : PaneWallPage.values()) {
+            for (PageKind place : PageKind.values()) {
                 String dockOverride = legacyLookKey(place, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
                 Float dock = storedFloat(dockOverride);
                 if (dock == null) dock = storedFloat(TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
@@ -2686,7 +2684,7 @@ public final class PlaceLayoutStore {
             // BOTH orientations are seeded with the one value the place had, so nobody is asked
             // again for a choice they have already made. Only a place that never stored one is
             // left unwritten, which is the one case the landscape default is allowed to answer.
-            for (PaneWallPage place : PaneWallPage.values()) {
+            for (PageKind place : PageKind.values()) {
                 String legacy = memoryKey(place, KEY_STATUS_COMPACT);
                 if (!mStore.contains(legacy)) continue;
                 boolean compact = mStore.getBoolean(legacy, false);
@@ -2720,19 +2718,19 @@ public final class PlaceLayoutStore {
             for (String key : FOLDED_KEYS) {
                 Object seed = all.get(legacyArrangementKey(sourceOf(key), orientation, key));
                 if (seed != null) put(editor, layoutKey(orientation, key), seed);
-                for (PaneWallPage place : PaneWallPage.values())
+                for (PageKind place : PageKind.values())
                     editor.remove(legacyArrangementKey(place, orientation, key));
             }
         }
-        for (PaneWallPage place : PaneWallPage.values())
+        for (PageKind place : PageKind.values())
             editor.remove(memoryKey(place, LEGACY_KEY_KEYBOARD_ON_ENTER));
         // A Home memory from before version 6 is stale: Home starts its own memory closed.
-        editor.remove(memoryKey(PaneWallPage.WIDGETS, KEY_KEYBOARD_OPEN));
+        editor.remove(memoryKey(PageKind.HOME, KEY_KEYBOARD_OPEN));
 
         for (Map.Entry<String, ?> entry : all.entrySet()) {
-            PaneWallPage owner = ownerOfLegacyLookKey(entry.getKey());
+            PageKind owner = ownerOfLegacyLookKey(entry.getKey());
             if (owner == null) continue;
-            if (owner == PaneWallPage.TERMINAL && entry.getValue() != null) {
+            if (owner == PageKind.TERMINAL && entry.getValue() != null) {
                 String shared = entry.getKey().substring(
                     (PREFIX + placeKey(owner) + LEGACY_LOOK_INFIX).length());
                 put(editor, shared, entry.getValue());
@@ -2743,23 +2741,23 @@ public final class PlaceLayoutStore {
 
     /** The place whose copy of an arrangement value is the one every place shares from version 6. */
     @NonNull
-    private static PaneWallPage sourceOf(@NonNull String key) {
+    private static PageKind sourceOf(@NonNull String key) {
         switch (key) {
             case KEY_WIDGET_COLUMNS:
             case KEY_WIDGET_ROWS:
-                return PaneWallPage.WIDGETS;
+                return PageKind.HOME;
             case KEY_KEYBOARD_MODE:
-                return PaneWallPage.DISPLAY;
+                return PageKind.DISPLAY;
             default:
-                return PaneWallPage.TERMINAL;
+                return PageKind.TERMINAL;
         }
     }
 
     /** The place a stored per-place look key belonged to, or null for any other key. */
     @Nullable
-    private static PaneWallPage ownerOfLegacyLookKey(@NonNull String key) {
+    private static PageKind ownerOfLegacyLookKey(@NonNull String key) {
         if (!key.startsWith(PREFIX)) return null;
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             if (key.startsWith(PREFIX + placeKey(place) + LEGACY_LOOK_INFIX)) return place;
         }
         return null;

@@ -11,11 +11,10 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.layout.LayoutKind;
 import com.termux.app.place.layout.LayoutStore;
 import com.termux.app.place.layout.LayoutsJson;
-import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -66,22 +65,22 @@ public class WorkspaceLayoutTest {
     @Test
     public void eachPlaceKeepsItsOwnRememberedKeyboard() {
         assertSame(LayoutKind.TERMINAL, LayoutDocumentPrefs.route(PlaceLayoutStore.memoryKey(
-            PaneWallPage.TERMINAL, LayoutsJson.KEYBOARD_OPEN)).kind);
+            PageKind.TERMINAL, LayoutsJson.KEYBOARD_OPEN)).kind);
         assertNull(LayoutDocumentPrefs.route(PlaceLayoutStore.memoryKey(
-            PaneWallPage.DISPLAY, LayoutsJson.KEYBOARD_OPEN)));
+            PageKind.DISPLAY, LayoutsJson.KEYBOARD_OPEN)));
         assertNull(LayoutDocumentPrefs.route(PlaceLayoutStore.memoryKey(
-            PaneWallPage.ASSISTANT, LayoutsJson.KEYBOARD_OPEN)));
-        store.setKeyboardOpen(PaneWallPage.ASSISTANT, true);
-        assertTrue(store.wasKeyboardOpen(PaneWallPage.ASSISTANT));
-        assertFalse(store.wasKeyboardOpen(PaneWallPage.TERMINAL));
-        assertFalse(store.wasKeyboardOpen(PaneWallPage.DISPLAY));
+            PageKind.ASSISTANT, LayoutsJson.KEYBOARD_OPEN)));
+        store.setKeyboardOpen(PageKind.ASSISTANT, true);
+        assertTrue(store.wasKeyboardOpen(PageKind.ASSISTANT));
+        assertFalse(store.wasKeyboardOpen(PageKind.TERMINAL));
+        assertFalse(store.wasKeyboardOpen(PageKind.DISPLAY));
     }
 
     @Test
     public void everyWorkspacePageWearsTheWorkspacesLayoutAndDress() {
-        assertSame(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.TERMINAL));
-        assertSame(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.DISPLAY));
-        assertSame(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.ASSISTANT));
+        assertSame(LayoutVariant.NORMAL, store.variantFor(PageKind.TERMINAL));
+        assertSame(LayoutVariant.NORMAL, store.variantFor(PageKind.DISPLAY));
+        assertSame(LayoutVariant.NORMAL, store.variantFor(PageKind.ASSISTANT));
         // A change of what the Workspace shows, made from the Assistant page, shows everywhere.
         boolean shown = !store.kindShows(PageKind.TERMINAL, PlaceOrientation.PORTRAIT,
             Element.APPS);
@@ -91,10 +90,10 @@ public class WorkspaceLayoutTest {
             assertEquals(kind.name(), shown,
                 store.kindShows(kind, PlaceOrientation.PORTRAIT, Element.APPS));
         }
-        assertEquals(store.resolve(PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL),
-            store.resolve(PlaceOrientation.PORTRAIT, PaneWallPage.ASSISTANT));
-        assertEquals(store.resolve(PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL),
-            store.resolve(PlaceOrientation.PORTRAIT, PaneWallPage.DISPLAY));
+        assertEquals(store.resolve(PlaceOrientation.PORTRAIT, PageKind.TERMINAL),
+            store.resolve(PlaceOrientation.PORTRAIT, PageKind.ASSISTANT));
+        assertEquals(store.resolve(PlaceOrientation.PORTRAIT, PageKind.TERMINAL),
+            store.resolve(PlaceOrientation.PORTRAIT, PageKind.DISPLAY));
     }
 
     /** An old install's own Display and Assistant documents are read by nothing and kept. */

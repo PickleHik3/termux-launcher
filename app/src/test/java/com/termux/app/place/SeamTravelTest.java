@@ -6,12 +6,12 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.SeamTravel.DockPlan;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -31,20 +31,20 @@ public class SeamTravelTest {
     private static final int WIDTH = 1000;
 
     /** The row as it stands: Home pages on the left, the Workspace's windows on the right. */
-    private static final List<PaneWallPage> ROW =
-        Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY);
+    private static final List<PageKind> ROW =
+        Arrays.asList(PageKind.HOME, PageKind.TERMINAL, PageKind.DISPLAY);
 
     private static final PlaceChromeTravel.States STATES = place -> new Rest(false, false,
-        place != PaneWallPage.WIDGETS);
+        place != PageKind.HOME);
 
     /** The frame with the wall {@code fraction} of the way from Home to the terminal. */
     private static Frame homeToTerminal(float fraction) {
-        return PlaceChromeTravel.at(ROW, PaneWallPage.WIDGETS, -fraction * WIDTH, WIDTH, STATES);
+        return PlaceChromeTravel.at(ROW, PageKind.HOME, -fraction * WIDTH, WIDTH, STATES);
     }
 
     /** The same frame, read from the terminal's side: the commit at release does not move it. */
     private static Frame terminalToHome(float fraction) {
-        return PlaceChromeTravel.at(ROW, PaneWallPage.TERMINAL, (1f - fraction) * WIDTH, WIDTH,
+        return PlaceChromeTravel.at(ROW, PageKind.TERMINAL, (1f - fraction) * WIDTH, WIDTH,
             STATES);
     }
 
@@ -86,20 +86,20 @@ public class SeamTravelTest {
 
     @Test
     public void onlyAFrameBetweenHomeAndAWindowCrosses() {
-        assertTrue(SeamTravel.crosses(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL));
-        assertTrue(SeamTravel.crosses(PaneWallPage.DISPLAY, PaneWallPage.WIDGETS));
-        assertFalse(SeamTravel.crosses(PaneWallPage.TERMINAL, PaneWallPage.DISPLAY));
-        assertFalse(SeamTravel.crosses(PaneWallPage.WIDGETS, PaneWallPage.WIDGETS));
+        assertTrue(SeamTravel.crosses(PageKind.HOME, PageKind.TERMINAL));
+        assertTrue(SeamTravel.crosses(PageKind.DISPLAY, PageKind.HOME));
+        assertFalse(SeamTravel.crosses(PageKind.TERMINAL, PageKind.DISPLAY));
+        assertFalse(SeamTravel.crosses(PageKind.HOME, PageKind.HOME));
     }
 
     @Test
     public void progressIntoTheOtherHalfIsOneNumberFromEitherSide() {
         for (float fraction : new float[] {0f, 0.08f, 0.25f, 0.5f, 0.75f, 0.92f, 1f}) {
             float fromHome = SeamTravel.otherHalfProgress(homeToTerminal(fraction),
-                PaneWallPage.WIDGETS);
+                PageKind.HOME);
             // Committed to the terminal, the same frame is 1 - that far into the other half.
             float fromTerminal = SeamTravel.otherHalfProgress(terminalToHome(fraction),
-                PaneWallPage.TERMINAL);
+                PageKind.TERMINAL);
             assertEquals(StackScene.materialShare(fraction), fromHome, EPSILON);
             assertEquals(1f - fromHome, fromTerminal, EPSILON);
         }
@@ -107,12 +107,12 @@ public class SeamTravelTest {
 
     @Test
     public void aFrameOnTheCommittedHalfHasNoOtherSide() {
-        Frame windows = PlaceChromeTravel.at(ROW, PaneWallPage.TERMINAL, -0.4f * WIDTH, WIDTH,
+        Frame windows = PlaceChromeTravel.at(ROW, PageKind.TERMINAL, -0.4f * WIDTH, WIDTH,
             STATES);
-        assertNull(SeamTravel.otherHalfPage(windows, PaneWallPage.TERMINAL));
-        assertEquals(0f, SeamTravel.otherHalfProgress(windows, PaneWallPage.TERMINAL), EPSILON);
-        assertSame(PaneWallPage.TERMINAL,
-            SeamTravel.otherHalfPage(homeToTerminal(0.3f), PaneWallPage.WIDGETS));
+        assertNull(SeamTravel.otherHalfPage(windows, PageKind.TERMINAL));
+        assertEquals(0f, SeamTravel.otherHalfProgress(windows, PageKind.TERMINAL), EPSILON);
+        assertSame(PageKind.TERMINAL,
+            SeamTravel.otherHalfPage(homeToTerminal(0.3f), PageKind.HOME));
     }
 
     // ---- the dock -----------------------------------------------------------------------------
@@ -288,35 +288,35 @@ public class SeamTravelTest {
                 SeamTravel.workspaceScreenXPx(terminalToHome(fraction), WIDTH), 0.5f);
         }
         // Between two windows the bar stays put; past Home it is off to the right.
-        Frame windows = PlaceChromeTravel.at(ROW, PaneWallPage.TERMINAL, -0.4f * WIDTH, WIDTH,
+        Frame windows = PlaceChromeTravel.at(ROW, PageKind.TERMINAL, -0.4f * WIDTH, WIDTH,
             STATES);
         assertEquals(0f, SeamTravel.workspaceScreenXPx(windows, WIDTH), EPSILON);
-        Frame home = PlaceChromeTravel.rest(PaneWallPage.WIDGETS, STATES.restOf(PaneWallPage.WIDGETS));
+        Frame home = PlaceChromeTravel.rest(PageKind.HOME, STATES.restOf(PageKind.HOME));
         assertEquals(WIDTH, SeamTravel.workspaceScreenXPx(home, WIDTH), EPSILON);
-        Frame terminal = PlaceChromeTravel.rest(PaneWallPage.TERMINAL,
-            STATES.restOf(PaneWallPage.TERMINAL));
+        Frame terminal = PlaceChromeTravel.rest(PageKind.TERMINAL,
+            STATES.restOf(PageKind.TERMINAL));
         assertEquals(0f, SeamTravel.workspaceScreenXPx(terminal, WIDTH), EPSILON);
     }
 
     // ---- Between two Home pages (#173 slice E) ----
 
-    private static final PageRef HOME_2 = PageRef.of(PaneWallPage.WIDGETS, 2);
-    private static final PageRef HOME_3 = PageRef.of(PaneWallPage.WIDGETS, 3);
+    private static final PageRef HOME_2 = PageRef.of(PageKind.HOME, 2);
+    private static final PageRef HOME_3 = PageRef.of(PageKind.HOME, 3);
 
     /** Home's pager with page 2 in front, shifted {@code shiftPx}, page 3 coming in. */
     private static Frame pager(float shiftPx) {
-        return PlaceChromeTravel.homePages(STATES.restOf(PaneWallPage.WIDGETS), 2, 3, shiftPx,
+        return PlaceChromeTravel.homePages(STATES.restOf(PageKind.HOME), 2, 3, shiftPx,
             WIDTH);
     }
 
     @Test
     public void twoHomePagesCrossOnlyWhereBothIdsAreSaidAndDiffer() {
         assertTrue(SeamTravel.crosses(HOME_2, HOME_3));
-        assertFalse(SeamTravel.crosses(HOME_2, PageRef.of(PaneWallPage.WIDGETS, 2)));
+        assertFalse(SeamTravel.crosses(HOME_2, PageRef.of(PageKind.HOME, 2)));
         assertFalse("a Home page with no id said", SeamTravel.crosses(HOME_2, PageRef.HOME));
         assertTrue(SeamTravel.crosses(HOME_2, PageRef.TERMINAL));
         assertFalse("two windows", SeamTravel.crosses(PageRef.TERMINAL,
-            PageRef.of(PaneWallPage.DISPLAY)));
+            PageRef.of(PageKind.DISPLAY)));
     }
 
     @Test
@@ -330,7 +330,7 @@ public class SeamTravelTest {
                 SeamTravel.otherEndProgress(frame, HOME_3), EPSILON);
             assertEquals(0.3f, SeamTravel.otherEndFraction(frame, HOME_2), EPSILON);
             // By half it never leaves Home: the kinds alone cannot tell the pages apart.
-            assertEquals(0f, SeamTravel.otherHalfProgress(frame, PaneWallPage.WIDGETS), EPSILON);
+            assertEquals(0f, SeamTravel.otherHalfProgress(frame, PageKind.HOME), EPSILON);
         }
         Frame rest = pager(0f);
         assertEquals(0f, SeamTravel.otherEndProgress(rest, HOME_2), EPSILON);
@@ -342,11 +342,11 @@ public class SeamTravelTest {
         for (float fraction = 0f; fraction <= 1f; fraction += 0.05f) {
             Frame out = homeToTerminal(fraction);
             Frame back = terminalToHome(fraction);
-            assertEquals(SeamTravel.otherHalfProgress(out, PaneWallPage.WIDGETS),
+            assertEquals(SeamTravel.otherHalfProgress(out, PageKind.HOME),
                 SeamTravel.otherEndProgress(out, HOME_2), EPSILON);
-            assertEquals(SeamTravel.otherHalfFraction(out, PaneWallPage.WIDGETS),
+            assertEquals(SeamTravel.otherHalfFraction(out, PageKind.HOME),
                 SeamTravel.otherEndFraction(out, HOME_2), EPSILON);
-            assertEquals(SeamTravel.otherHalfProgress(back, PaneWallPage.TERMINAL),
+            assertEquals(SeamTravel.otherHalfProgress(back, PageKind.TERMINAL),
                 SeamTravel.otherEndProgress(back, PageRef.TERMINAL), EPSILON);
         }
     }
@@ -364,7 +364,7 @@ public class SeamTravelTest {
         assertEquals(300f, SeamTravel.endScreenXPx(right, HOME_2, WIDTH), EPSILON);
         assertEquals(-700f, SeamTravel.endScreenXPx(right, HOME_3, WIDTH), EPSILON);
         // A page the frame does not show, or the arriving one at rest, is out of sight.
-        assertEquals(WIDTH, SeamTravel.endScreenXPx(left, PageRef.of(PaneWallPage.WIDGETS, 7),
+        assertEquals(WIDTH, SeamTravel.endScreenXPx(left, PageRef.of(PageKind.HOME, 7),
             WIDTH), EPSILON);
         assertEquals(WIDTH, SeamTravel.endScreenXPx(pager(0f), HOME_3, WIDTH), EPSILON);
     }

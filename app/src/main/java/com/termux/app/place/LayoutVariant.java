@@ -2,9 +2,9 @@ package com.termux.app.place;
 
 import androidx.annotation.NonNull;
 
-import com.termux.app.wall.WallPages.PageKind;
 
 import java.util.concurrent.ConcurrentHashMap;
+import com.termux.app.page.PageKind;
 
 /**
  * Which of the launcher's saved arrangements a layout belongs to. The shared layout has two, the

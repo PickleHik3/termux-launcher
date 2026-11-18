@@ -4,10 +4,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.extrakeys.ExtraKeyModifiers;
 import com.termux.app.terminal.extrakeys.ExtraKeysBarView;
 import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 import com.termux.shared.termux.extrakeys.SpecialButton;
@@ -23,7 +23,7 @@ import java.util.Set;
 public final class ExtraKeySetController {
 
     public interface Host {
-        @NonNull PaneWallPage settledPlace();
+        @NonNull PageKind settledPlace();
 
         boolean homeFloatFocused();
 

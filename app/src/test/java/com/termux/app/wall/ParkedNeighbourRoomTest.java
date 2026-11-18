@@ -15,6 +15,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import com.termux.app.page.PageKind;
 
 /**
  * A live neighbour parked beside the Workspace page ({@code GONE}) is laid out at the page's size
@@ -42,15 +43,15 @@ public class ParkedNeighbourRoomTest {
         wall.addView(terminal);
         wall.setReducedMotion(true);
         wall.setPages(PaneWallPolicy.availablePages(true, false, false));
-        wall.setPageView(PaneWallPage.TERMINAL, terminal);
+        wall.setPageView(PageKind.TERMINAL, terminal);
         previous = new FrameLayout(activity);
         previous.addView(new View(activity));
         next = new FrameLayout(activity);
         next.addView(new View(activity));
         wall.setInnerNeighbourViews(previous, next, null);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean hasInnerPage(PaneWallPage page, int s) {
-                return page == PaneWallPage.TERMINAL;
+            @Override public boolean hasInnerPage(PageKind page, int s) {
+                return page == PageKind.TERMINAL;
             }
         });
         layOut();
@@ -75,7 +76,7 @@ public class ParkedNeighbourRoomTest {
 
     @Test
     public void aChromeChangeAtRestResizesTheParkedNeighbours() {
-        wall.setPageBottomInsetPx(PaneWallPage.TERMINAL, 300);
+        wall.setPageBottomInsetPx(PageKind.TERMINAL, 300);
         layOut();
         assertEquals(View.GONE, previous.getVisibility());
         assertEquals(View.GONE, next.getVisibility());
@@ -86,7 +87,7 @@ public class ParkedNeighbourRoomTest {
 
     @Test
     public void aCrossingLaysTheNeighboursOutAtTheSizeTheyAlreadyHave() {
-        wall.setPageBottomInsetPx(PaneWallPage.TERMINAL, 300);
+        wall.setPageBottomInsetPx(PageKind.TERMINAL, 300);
         layOut();
         int previousHeight = previous.getHeight();
         int nextHeight = next.getHeight();

@@ -5,10 +5,10 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.pageswitch.PageSwitchModel.Action;
 import com.termux.app.wall.pageswitch.PageSwitchModel.Cell;
 import com.termux.app.wall.pageswitch.PageSwitchModel.Input;
-import com.termux.app.wall.pageswitch.PageSwitchModel.Kind;
 
 import org.junit.Test;
 
@@ -30,7 +30,7 @@ public class PageSwitchModelTest {
         in.displayPageId = 4;
         in.displayRunning = true;
         in.displayTitle = "XFCE";
-        in.currentKind = Kind.HOME;
+        in.currentKind = PageKind.HOME;
         in.currentPageId = 1;
         return in;
     }
@@ -53,30 +53,30 @@ public class PageSwitchModelTest {
     @Test public void terminalOnlyDropsHome() {
         Input in = wall();
         in.homeOffered = false;
-        in.currentKind = Kind.TERMINAL;
+        in.currentKind = PageKind.TERMINAL;
         in.currentPageId = 3;
         in.currentTerminalWindow = 0;
         PageSwitchModel m = PageSwitchModel.build(in);
-        assertFalse(m.shows(Kind.HOME));
+        assertFalse(m.shows(PageKind.HOME));
         assertEquals(4, m.cells().size());
-        assertEquals(Kind.TERMINAL, m.cells().get(0).kind);
+        assertEquals(PageKind.TERMINAL, m.cells().get(0).kind);
     }
 
     @Test public void assistantOffDropsItsCell() {
         Input in = wall();
         in.assistantPageId = -1;
         PageSwitchModel m = PageSwitchModel.build(in);
-        assertFalse(m.shows(Kind.ASSISTANT));
+        assertFalse(m.shows(PageKind.ASSISTANT));
         assertEquals(5, m.cells().size());
-        assertEquals(Kind.DISPLAY, m.cells().get(4).kind);
+        assertEquals(PageKind.DISPLAY, m.cells().get(4).kind);
     }
 
     @Test public void aDisplayThatIsNotRunningDropsItsCell() {
         Input in = wall();
         in.displayRunning = false;
         PageSwitchModel m = PageSwitchModel.build(in);
-        assertFalse(m.shows(Kind.DISPLAY));
-        assertEquals(Kind.ASSISTANT, m.cells().get(m.cells().size() - 1).kind);
+        assertFalse(m.shows(PageKind.DISPLAY));
+        assertEquals(PageKind.ASSISTANT, m.cells().get(m.cells().size() - 1).kind);
     }
 
     @Test public void fullNamesCarryKindNumberAndTitle() {
@@ -102,16 +102,17 @@ public class PageSwitchModelTest {
     }
 
     @Test public void theRowOrderIsHomeTerminalAssistantDisplay() {
-        assertEquals(java.util.Arrays.asList(PageSwitchModel.Kind.HOME,
-            PageSwitchModel.Kind.TERMINAL, PageSwitchModel.Kind.ASSISTANT,
-            PageSwitchModel.Kind.DISPLAY), PageSwitchModel.ROW);
-        assertEquals(3, PageSwitchModel.rowIndex(PageSwitchModel.Kind.DISPLAY));
+        assertEquals(java.util.Arrays.asList(PageKind.HOME,
+            PageKind.TERMINAL, PageKind.ASSISTANT,
+            PageKind.DISPLAY), PageSwitchModel.ROW);
+        assertEquals(3, PageSwitchModel.rowIndex(PageKind.DISPLAY));
     }
 
     @Test public void displayIsNamedFromTheDisplayKindName() {
         Input in = wall();
         in.kindNames = new String[] {"H", "T", "A", "Disp"};
-        assertEquals("Disp", cells(in).get(4).fullName);
+        assertEquals("Disp · XFCE", cells(in).get(5).fullName);
+        assertEquals("A", cells(in).get(4).fullName);
     }
 
     @Test public void theCurrentCellClosesAndTheOthersGo() {
@@ -132,7 +133,7 @@ public class PageSwitchModelTest {
 
     @Test public void onTerminalOnlyTheCurrentWindowIsCurrent() {
         Input in = wall();
-        in.currentKind = Kind.TERMINAL;
+        in.currentKind = PageKind.TERMINAL;
         in.currentPageId = 3;
         in.currentTerminalWindow = 1;
         PageSwitchModel m = PageSwitchModel.build(in);
@@ -150,7 +151,7 @@ public class PageSwitchModelTest {
         assertEquals("Terminal 1", cell.fullName);
         assertEquals(Action.GO_TERMINAL, cell.target.action);
         assertEquals(-1, cell.target.index);
-        in.currentKind = Kind.TERMINAL;
+        in.currentKind = PageKind.TERMINAL;
         in.currentPageId = 3;
         PageSwitchModel on = PageSwitchModel.build(in);
         assertEquals(Action.CLOSE, on.cells().get(2).target.action);
@@ -159,10 +160,10 @@ public class PageSwitchModelTest {
 
     @Test public void assistantAndDisplayCloseWhenCurrent() {
         Input in = wall();
-        in.currentKind = Kind.ASSISTANT;
+        in.currentKind = PageKind.ASSISTANT;
         in.currentPageId = 5;
         assertEquals(Action.CLOSE, cells(in).get(4).target.action);
-        in.currentKind = Kind.DISPLAY;
+        in.currentKind = PageKind.DISPLAY;
         in.currentPageId = 4;
         PageSwitchModel m = PageSwitchModel.build(in);
         assertEquals(Action.CLOSE, m.cells().get(5).target.action);
@@ -178,21 +179,21 @@ public class PageSwitchModelTest {
     @Test public void numberOfReadsTheCurrentHomePageAndWindow() {
         Input in = wall();
         in.currentPageId = 2;
-        assertEquals(2, PageSwitchModel.build(in).numberOf(Kind.HOME));
-        assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.TERMINAL));
-        assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.ASSISTANT));
-        assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.DISPLAY));
-        in.currentKind = Kind.TERMINAL;
+        assertEquals(2, PageSwitchModel.build(in).numberOf(PageKind.HOME));
+        assertEquals(0, PageSwitchModel.build(in).numberOf(PageKind.TERMINAL));
+        assertEquals(0, PageSwitchModel.build(in).numberOf(PageKind.ASSISTANT));
+        assertEquals(0, PageSwitchModel.build(in).numberOf(PageKind.DISPLAY));
+        in.currentKind = PageKind.TERMINAL;
         in.currentPageId = 3;
         in.currentTerminalWindow = 1;
         PageSwitchModel m = PageSwitchModel.build(in);
-        assertEquals(2, m.numberOf(Kind.TERMINAL));
+        assertEquals(2, m.numberOf(PageKind.TERMINAL));
         // Off Home the glyph holds the Home page it goes to: the one the app starts on.
-        assertEquals(1, m.numberOf(Kind.HOME));
+        assertEquals(1, m.numberOf(PageKind.HOME));
         in.defaultStartPageId = 2;
-        assertEquals(2, PageSwitchModel.build(in).numberOf(Kind.HOME));
+        assertEquals(2, PageSwitchModel.build(in).numberOf(PageKind.HOME));
         in.homePageIds = Collections.emptyList();
-        assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.HOME));
+        assertEquals(0, PageSwitchModel.build(in).numberOf(PageKind.HOME));
     }
 
     @Test public void terminalGlyphHoldsItsWindowWhileHomeIsInFront() {
@@ -200,11 +201,11 @@ public class PageSwitchModelTest {
         in.terminalWindowLabels = Arrays.asList("a", "b", "c");
         in.currentTerminalWindow = 2;
         PageSwitchModel m = PageSwitchModel.build(in);
-        assertEquals(1, m.numberOf(Kind.HOME));
-        assertEquals(3, m.numberOf(Kind.TERMINAL));
+        assertEquals(1, m.numberOf(PageKind.HOME));
+        assertEquals(3, m.numberOf(PageKind.TERMINAL));
         // Empty only when there really are no windows.
         in.currentTerminalWindow = -1;
-        assertEquals(0, PageSwitchModel.build(in).numberOf(Kind.TERMINAL));
+        assertEquals(0, PageSwitchModel.build(in).numberOf(PageKind.TERMINAL));
     }
 
     @Test public void homeTargetPrefersTheStartPageElseTheFirst() {

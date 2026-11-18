@@ -10,11 +10,11 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.app.wall.WallPages;
 import com.termux.shared.termux.settings.preferences.PageLookKeys;
@@ -90,7 +90,7 @@ public class EditorScreenLookTest {
     @Test
     public void customComesBackAfterALookInTheSameVisit() {
         setUpCustom();
-        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
         tapLook(editor, SOLID);
@@ -104,13 +104,13 @@ public class EditorScreenLookTest {
     @Test
     public void customComesBackAfterALookWasKeptWithDone() {
         setUpCustom();
-        SurfaceEditorController first = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+        SurfaceEditorController first = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         tapLook(first, SOLID);
         first.done();
 
         // The next visit opens on Solid; its Custom chip is the user's own look again.
-        SurfaceEditorController second = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+        SurfaceEditorController second = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         assertEquals(SOLID, model(second).value(Row.LOOK));
         tapLook(second, AppearanceLooks.CUSTOM_STOP);
@@ -120,7 +120,7 @@ public class EditorScreenLookTest {
 
     @Test
     public void aSliderMovedOffALookIsCustomAndSavedWhenItLeaves() {
-        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         assertEquals(FROST, model(editor).value(Row.LOOK));
         model(editor).onValue(Row.OPACITY, 33, false);
@@ -138,7 +138,7 @@ public class EditorScreenLookTest {
     public void aCustomLookAtOpenIsSavedAndUndoPutsTheSlotBack() {
         setUpCustom();
         assertNull(SurfacePresets.custom(preferences));
-        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         assertNotNull("saved at open", SurfacePresets.custom(preferences));
 
@@ -150,14 +150,14 @@ public class EditorScreenLookTest {
 
     @Test
     public void aLookOnCustomizationReachesEveryPage() {
-        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.TERMINAL,
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         assertFalse("Customization stands on Global", model(editor).scopeOnPage());
         assertEquals(FROST, model(editor).value(Row.LOOK));
         tapLook(editor, SOLID);
 
         assertTrue("the wall wears Solid", SurfacePresets.wornOn(preferences, preset("solid"),
-            PaneWallPage.WIDGETS));
+            PageKind.HOME));
         assertFalse(SurfacePresets.holdsPageLook(preferences, TERMINAL_PAGE));
         assertFalse(SurfacePresets.holdsPageLook(preferences, HOME_PAGE));
         assertEquals(SOLID, model(editor).value(Row.LOOK));
@@ -165,7 +165,7 @@ public class EditorScreenLookTest {
 
     @Test
     public void aLookOnTheWorkspaceLandsOnTerminalAndDisplayPages() {
-        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL,
+        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         tapLook(editor, SOLID);
         int[] solid = GlassRows.lookCell(SOLID);
@@ -178,7 +178,7 @@ public class EditorScreenLookTest {
                     grid.value(new LookGrid.Key(properties[i], null, kind)));
         assertFalse("Home pages are left", grid.has(LookGrid.Property.OPACITY, null, LookGrid.Kind.HOME));
         assertTrue("the wall still wears Frost",
-            SurfacePresets.wornOn(preferences, preset("frost"), PaneWallPage.WIDGETS));
+            SurfacePresets.wornOn(preferences, preset("frost"), PageKind.HOME));
         assertEquals(SOLID, model(editor).value(Row.LOOK));
 
         ReflectionHelpers.callInstanceMethod(editor, "resetCard");
@@ -200,7 +200,7 @@ public class EditorScreenLookTest {
 
     @Test
     public void aCardCustomComesBackAfterALookInTheSameVisit() {
-        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME, HOME_PAGE);
         moveHomeOpacity(editor, 33);
         assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
         tapLook(editor, SOLID);
@@ -212,12 +212,12 @@ public class EditorScreenLookTest {
 
     @Test
     public void aCardCustomComesBackAfterALookWasKeptWithDone() {
-        SurfaceEditorController first = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        SurfaceEditorController first = open(EditorCard.HOME, PageKind.HOME, HOME_PAGE);
         moveHomeOpacity(first, 33);
         tapLook(first, SOLID);
         first.done();
 
-        SurfaceEditorController second = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        SurfaceEditorController second = open(EditorCard.HOME, PageKind.HOME, HOME_PAGE);
         assertEquals(SOLID, model(second).value(Row.LOOK));
         tapLook(second, AppearanceLooks.CUSTOM_STOP);
         assertEquals(33, homeOpacity());
@@ -225,13 +225,13 @@ public class EditorScreenLookTest {
 
     @Test
     public void aCardCustomIsKeptPerCard() {
-        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME, HOME_PAGE);
         moveHomeOpacity(editor, 33);
         tapLook(editor, SOLID);
         editor.done();
 
         // The Workspace card never had a Custom: its chip writes nothing.
-        SurfaceEditorController workspace = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL,
+        SurfaceEditorController workspace = open(EditorCard.WORKSPACE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         tapLook(workspace, SOLID);
         tapLook(workspace, AppearanceLooks.CUSTOM_STOP);
@@ -241,7 +241,7 @@ public class EditorScreenLookTest {
 
     @Test
     public void undoPutsACardsSavedCustomBackAsItWasAtOpen() {
-        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME, HOME_PAGE);
         moveHomeOpacity(editor, 33);
         assertNull(CardCustoms.raw(preferences.getSharedPreferences()));
         tapLook(editor, SOLID);
@@ -257,7 +257,7 @@ public class EditorScreenLookTest {
 
     @Test
     public void aLookOnHomeLandsOnHomePagesAlone() {
-        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE);
+        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME, HOME_PAGE);
         tapLook(editor, SOLID);
         LookGrid grid = preferences.lookGrid();
         assertTrue(grid.has(LookGrid.Property.OPACITY, null, LookGrid.Kind.HOME));
@@ -267,7 +267,7 @@ public class EditorScreenLookTest {
 
     @Test
     public void eachScreenCardsLookRowIsItsOwnHalfWhateverTheFrameShows() {
-        for (PaneWallPage frame : PaneWallPage.values()) {
+        for (PageKind frame : PageKind.values()) {
             assertEquals(TermuxAppSharedPreferences.PAGE_WALL, EditorRows.pageFor(EditorCard.HOME, Row.LOOK));
             assertEquals(TermuxAppSharedPreferences.PAGE_WALL,
                 EditorRows.pageFor(EditorCard.WORKSPACE, Row.LOOK));
@@ -302,10 +302,10 @@ public class EditorScreenLookTest {
     // ------------------------------------------------------------------------------- the drive
 
     /** {@code card} up on {@code place}; the wall is a Home page and the Terminal page. */
-    private SurfaceEditorController open(EditorCard card, PaneWallPage place, int pageInFront) {
+    private SurfaceEditorController open(EditorCard card, PageKind place, int pageInFront) {
         List<WallPages.Page> pages = Arrays.asList(
-            new WallPages.Page(HOME_PAGE, WallPages.PageKind.HOME, "Home 1", null),
-            new WallPages.Page(TERMINAL_PAGE, WallPages.PageKind.TERMINAL, "Terminal", null));
+            new WallPages.Page(HOME_PAGE, PageKind.HOME, "Home 1", null),
+            new WallPages.Page(TERMINAL_PAGE, PageKind.TERMINAL, "Terminal", null));
         EditorTestHarness harness = new EditorTestHarness(preferences, (method, args) -> {
             switch (method) {
                 case "pageOnScreen": return place;

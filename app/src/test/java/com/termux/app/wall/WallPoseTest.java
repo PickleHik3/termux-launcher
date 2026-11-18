@@ -18,6 +18,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import com.termux.app.page.PageKind;
 
 /** The wall's pose is state the controller writes and tells its readers, one bit per part. */
 @RunWith(RobolectricTestRunner.class)
@@ -51,7 +52,7 @@ public class WallPoseTest {
         controller.attachTerminalPage(terminal);
         FrameLayout widgets = new FrameLayout(activity);
         layout.addView(widgets);
-        layout.setPageView(PaneWallPage.WIDGETS, widgets);
+        layout.setPageView(PageKind.HOME, widgets);
         activity.setContentView(layout);
         layout.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(1500, View.MeasureSpec.EXACTLY));
@@ -100,13 +101,13 @@ public class WallPoseTest {
     }
 
     @Test public void aTerminalSinkReachesTheReaderAndAWidgetsSinkDoesNot() {
-        controller.onPageSinkChanged(PaneWallPage.TERMINAL, 0.9f);
+        controller.onPageSinkChanged(PageKind.TERMINAL, 0.9f);
         assertEquals(1, reader.calls);
         assertEquals(WallPose.SINK, reader.lastChanged);
         assertEquals(0.9f, controller.pose().terminalSinkScale(), 0f);
 
         reader.clear();
-        controller.onPageSinkChanged(PaneWallPage.WIDGETS, 0.8f);
+        controller.onPageSinkChanged(PageKind.HOME, 0.8f);
         assertEquals("only the Terminal page's sink is a pose", 0, reader.calls);
         assertEquals(0.9f, controller.pose().terminalSinkScale(), 0f);
     }

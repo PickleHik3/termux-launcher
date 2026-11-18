@@ -9,7 +9,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
-import com.termux.app.wall.WallPages.PageKind;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -18,6 +17,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import android.app.Application;
+import com.termux.app.page.PageKind;
 
 /** The one-time seeding of the page list from Start in, the default Home page and Use as. */
 @RunWith(RobolectricTestRunner.class)

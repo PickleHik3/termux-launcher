@@ -94,10 +94,10 @@ public class LayoutUpgradeMatrixTest {
             new com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences(app, prefs, null));
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             assertFalse(orientation + ": Home shows no apps row",
-                store.kindShows(com.termux.app.wall.WallPages.PageKind.HOME, orientation,
+                store.kindShows(com.termux.app.page.PageKind.HOME, orientation,
                     com.termux.app.place.Element.APPS));
             assertTrue(orientation + ": the Terminal keeps its dock",
-                store.kindShows(com.termux.app.wall.WallPages.PageKind.TERMINAL, orientation,
+                store.kindShows(com.termux.app.page.PageKind.TERMINAL, orientation,
                     com.termux.app.place.Element.APPS));
         }
     }

@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.WallPages;
 import com.termux.app.wall.WallPagesMigration;
 
@@ -47,7 +48,7 @@ public class AssistantEntryTest {
         }
         @Override public int addAssistantPage(int afterId) {
             if (refuseAdd) return -1;
-            WallPages.Result added = pages.add(WallPages.PageKind.ASSISTANT,
+            WallPages.Result added = pages.add(PageKind.ASSISTANT,
                 pages.page(afterId) != null ? afterId : WallPages.END, null);
             if (!added.ok()) return -1;
             pages = added.pages;
@@ -79,7 +80,7 @@ public class AssistantEntryTest {
     }
 
     @Test public void withThePageOnTheWallItGoesThereAnimatedAndAddsNothing() {
-        WallPages.Result added = wall().add(WallPages.PageKind.ASSISTANT, 1, null);
+        WallPages.Result added = wall().add(PageKind.ASSISTANT, 1, null);
         FakeHost host = new FakeHost(added.pages, 3);
 
         assertEquals(AssistantEntry.Outcome.WENT, AssistantEntry.open(host));

@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
  * Which stretches the row has, and where a horizontal drag lands. Pure and tested; the layout is
@@ -53,12 +54,12 @@ public final class PaneWallPolicy {
      * @param displayEnabled the embedded display is built into this edition and switched on
      */
     @NonNull
-    public static List<PaneWallPage> availablePages(boolean terminalOnly, boolean widgetsEnabled,
+    public static List<PageKind> availablePages(boolean terminalOnly, boolean widgetsEnabled,
                                                     boolean displayEnabled) {
-        List<PaneWallPage> pages = new ArrayList<>(3);
-        if (widgetsEnabled && !terminalOnly) pages.add(PaneWallPage.WIDGETS);
-        pages.add(PaneWallPage.TERMINAL);
-        if (displayEnabled) pages.add(PaneWallPage.DISPLAY);
+        List<PageKind> pages = new ArrayList<>(3);
+        if (widgetsEnabled && !terminalOnly) pages.add(PageKind.HOME);
+        pages.add(PageKind.TERMINAL);
+        if (displayEnabled) pages.add(PageKind.DISPLAY);
         return Collections.unmodifiableList(pages);
     }
 
@@ -73,23 +74,11 @@ public final class PaneWallPolicy {
      * @param hasWindow the current session's row has at least one window, the display's included
      */
     @NonNull
-    public static List<PaneWallPage> rowPages(boolean hasWindow) {
-        List<PaneWallPage> pages = new ArrayList<>(2);
-        pages.add(PaneWallPage.WIDGETS);
-        if (hasWindow) pages.add(PaneWallPage.TERMINAL);
+    public static List<PageKind> rowPages(boolean hasWindow) {
+        List<PageKind> pages = new ArrayList<>(2);
+        pages.add(PageKind.HOME);
+        if (hasWindow) pages.add(PageKind.TERMINAL);
         return Collections.unmodifiableList(pages);
-    }
-
-    /** The wall's page kind of a page of the list: Home pages are shown by the widgets' view. */
-    @NonNull
-    public static PaneWallPage kindOf(@NonNull WallPages.PageKind kind) {
-        switch (kind) {
-            case HOME: return PaneWallPage.WIDGETS;
-            case DISPLAY: return PaneWallPage.DISPLAY;
-            case ASSISTANT: return PaneWallPage.ASSISTANT;
-            case TERMINAL:
-            default: return PaneWallPage.TERMINAL;
-        }
     }
 
     /**
@@ -98,14 +87,14 @@ public final class PaneWallPolicy {
      * one dress, and a slide between two of them is no crossing of the seam. The one test every
      * chrome decision that used to read "not Home" asks.
      */
-    public static boolean isWorkspacePlace(@Nullable PaneWallPage page) {
-        return page == PaneWallPage.TERMINAL || page == PaneWallPage.DISPLAY
-            || page == PaneWallPage.ASSISTANT;
+    public static boolean isWorkspacePlace(@Nullable PageKind page) {
+        return page == PageKind.TERMINAL || page == PageKind.DISPLAY
+            || page == PageKind.ASSISTANT;
     }
 
     /** Whether {@code page} is a Home page. */
-    public static boolean isHomePlace(@Nullable PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS;
+    public static boolean isHomePlace(@Nullable PageKind page) {
+        return page == PageKind.HOME;
     }
 
     /**
@@ -113,7 +102,7 @@ public final class PaneWallPolicy {
      * {@code page}'s bar: on every place, the Assistant page's included. A chip there is a way
      * out to a window, and a tap travels the wall to it.
      */
-    public static boolean showsWindowChips(@Nullable PaneWallPage page) {
+    public static boolean showsWindowChips(@Nullable PageKind page) {
         return true;
     }
 
@@ -125,11 +114,11 @@ public final class PaneWallPolicy {
      * Home pages page by their own plain swipe, and a running display's picture takes every touch:
      * it pages only by its border.
      */
-    public static boolean bodySwipePages(@NonNull PaneWallPage page, boolean terminalGivesAway,
+    public static boolean bodySwipePages(@NonNull PageKind page, boolean terminalGivesAway,
                                          boolean assistantGivesAway, boolean displayRunning) {
-        if (page == PaneWallPage.TERMINAL) return terminalGivesAway;
-        if (page == PaneWallPage.ASSISTANT) return assistantGivesAway;
-        if (page == PaneWallPage.DISPLAY) return !displayRunning;
+        if (page == PageKind.TERMINAL) return terminalGivesAway;
+        if (page == PageKind.ASSISTANT) return assistantGivesAway;
+        if (page == PageKind.DISPLAY) return !displayRunning;
         return false;
     }
 
@@ -140,8 +129,8 @@ public final class PaneWallPolicy {
 
     /** The stretch the home press lands on, and where a page taken away hands the wall: Home. */
     @NonNull
-    public static PaneWallPage homePage() {
-        return PaneWallPage.WIDGETS;
+    public static PageKind homePage() {
+        return PageKind.HOME;
     }
 
     /**
@@ -157,24 +146,24 @@ public final class PaneWallPolicy {
      * opening's Margin: two Margins of air, and the caps worked out on a grid a Margin narrower.
      * {@code null} is a page the wall does not know, kept at the opening: the display window's.
      */
-    public static int pageInsetPx(@Nullable PaneWallPage page, int terminalMarginPx,
+    public static int pageInsetPx(@Nullable PageKind page, int terminalMarginPx,
                                   int terminalFrameAirPx) {
-        if (page == PaneWallPage.TERMINAL) return terminalMarginPx;
+        if (page == PageKind.TERMINAL) return terminalMarginPx;
         if (page == homePage()) return 0;
         return Math.max(0, terminalMarginPx - Math.max(0, terminalFrameAirPx));
     }
 
     /**
-     * {@link #pageInsetPx(PaneWallPage, int, int)} with the Assistant page's own pane: it stands
+     * {@link #pageInsetPx(PageKind, int, int)} with the Assistant page's own pane: it stands
      * {@link #ASSISTANT_SIDE_INSET_DP} in on the sides and {@link #ASSISTANT_END_INSET_DP} at the
      * top and bottom, whatever the Workspace's Margin (sheet 01: x 12..400, bottom gap 8). The one
      * owner of that geometry; the page's view adds no margins of its own.
      *
      * @param side true for the left and right edges, false for the top and bottom
      */
-    public static int pageInsetPx(@Nullable PaneWallPage page, int terminalMarginPx,
+    public static int pageInsetPx(@Nullable PageKind page, int terminalMarginPx,
                                   int terminalFrameAirPx, boolean side, float density) {
-        if (page == PaneWallPage.ASSISTANT) {
+        if (page == PageKind.ASSISTANT) {
             return Math.round((side ? ASSISTANT_SIDE_INSET_DP : ASSISTANT_END_INSET_DP) * density);
         }
         return pageInsetPx(page, terminalMarginPx, terminalFrameAirPx);
@@ -185,7 +174,7 @@ public final class PaneWallPolicy {
      * the left and the Workspace on the right, so it never does. Kept so the arithmetic below
      * reads the same for a line of any length.
      */
-    public static boolean isRing(@NonNull List<PaneWallPage> pages) {
+    public static boolean isRing(@NonNull List<PageKind> pages) {
         return false;
     }
 
@@ -195,8 +184,8 @@ public final class PaneWallPolicy {
      * are simply skipped, so a two-page wall has no dead swipe.
      */
     @NonNull
-    public static PaneWallPage neighbour(@NonNull List<PaneWallPage> pages,
-                                         @NonNull PaneWallPage page, int steps) {
+    public static PageKind neighbour(@NonNull List<PageKind> pages,
+                                         @NonNull PageKind page, int steps) {
         return neighbourAt(pages, pages.indexOf(page), steps, page);
     }
 
@@ -207,8 +196,8 @@ public final class PaneWallPolicy {
      * stand in several cells and only the index says which one the wall is on.
      */
     @NonNull
-    public static PaneWallPage neighbourAt(@NonNull List<PaneWallPage> pages, int index,
-                                           int steps, @NonNull PaneWallPage fallback) {
+    public static PageKind neighbourAt(@NonNull List<PageKind> pages, int index,
+                                           int steps, @NonNull PageKind fallback) {
         if (index < 0 || index >= pages.size()) return fallback;
         int count = pages.size();
         int target = isRing(pages)
@@ -224,17 +213,17 @@ public final class PaneWallPolicy {
      * two-page wall it is the single other page, on whichever side it is.
      */
     @NonNull
-    public static List<PaneWallPage> tiles(@NonNull List<PaneWallPage> pages,
-                                           @NonNull PaneWallPage current) {
-        List<PaneWallPage> result = new ArrayList<>(pages.size());
-        for (PaneWallPage page : pages) if (page != current) result.add(page);
+    public static List<PageKind> tiles(@NonNull List<PageKind> pages,
+                                           @NonNull PageKind current) {
+        List<PageKind> result = new ArrayList<>(pages.size());
+        for (PageKind page : pages) if (page != current) result.add(page);
         result.sort((a, b) -> Integer.compare(pages.indexOf(a), pages.indexOf(b)));
         return Collections.unmodifiableList(result);
     }
 
     /** True while a swipe in {@code steps}'s direction has somewhere to go. */
-    public static boolean hasNeighbour(@NonNull List<PaneWallPage> pages,
-                                       @NonNull PaneWallPage page, int steps) {
+    public static boolean hasNeighbour(@NonNull List<PageKind> pages,
+                                       @NonNull PageKind page, int steps) {
         return neighbour(pages, page, steps) != page;
     }
 
@@ -308,8 +297,8 @@ public final class PaneWallPolicy {
      * Whether the wall already rests on Home page one: a Home page in front, still, whose global
      * Home index is 0 ({@code homeIndex} is -1 when it is unknown).
      */
-    public static boolean restsOnHomePageOne(@NonNull PaneWallPage current, boolean moving, int homeIndex) {
-        return current == PaneWallPage.WIDGETS && !moving && homeIndex == 0;
+    public static boolean restsOnHomePageOne(@NonNull PageKind current, boolean moving, int homeIndex) {
+        return current == PageKind.HOME && !moving && homeIndex == 0;
     }
 
     /**
@@ -374,8 +363,8 @@ public final class PaneWallPolicy {
      * Whether the wall standing {@code offsetPx} from {@code current}'s rest shows two places: a
      * drag into a line's outer edge shows the page alone, resisting, and its outline stays.
      */
-    public static boolean blendsPlaces(@NonNull List<PaneWallPage> pages,
-                                       @NonNull PaneWallPage current, float offsetPx) {
+    public static boolean blendsPlaces(@NonNull List<PageKind> pages,
+                                       @NonNull PageKind current, float offsetPx) {
         if (offsetPx == 0f || Float.isNaN(offsetPx)) return false;
         // Pages sitting to the right of their rest show the place to the left of the current one.
         return hasNeighbour(pages, current, offsetPx > 0f ? -1 : 1);
@@ -394,8 +383,8 @@ public final class PaneWallPolicy {
      * window for it before asking here.
      */
     @Nullable
-    public static PaneWallPage parsePage(@NonNull List<PaneWallPage> pages,
-                                         @NonNull PaneWallPage current, @Nullable String name) {
+    public static PageKind parsePage(@NonNull List<PageKind> pages,
+                                         @NonNull PageKind current, @Nullable String name) {
         if (name == null) return null;
         String value = name.trim().toLowerCase(java.util.Locale.ROOT);
         switch (value) {
@@ -405,10 +394,10 @@ public final class PaneWallPolicy {
                 return neighbour(pages, current, 1);
             case "home":
             case "widgets":
-                return pages.contains(PaneWallPage.WIDGETS) ? PaneWallPage.WIDGETS : null;
+                return pages.contains(PageKind.HOME) ? PageKind.HOME : null;
             case "workspace":
             case "terminal":
-                return pages.contains(PaneWallPage.TERMINAL) ? PaneWallPage.TERMINAL : null;
+                return pages.contains(PageKind.TERMINAL) ? PageKind.TERMINAL : null;
             default:
                 return null;
         }

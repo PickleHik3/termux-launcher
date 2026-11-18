@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.FrostStops;
 
 import org.junit.Test;
@@ -28,7 +29,7 @@ public class DockSpecTest {
 
     private static DockSpec.Input pong(DockStyle design, boolean floating, boolean keyboard) {
         DockSpec.Input in = new DockSpec.Input();
-        in.kind = DockSpec.PageKind.HOME;
+        in.kind = PageKind.HOME;
         in.design = design;
         in.floatingStyle = floating;
         in.keyboardShown = keyboard;
@@ -151,7 +152,7 @@ public class DockSpecTest {
     public void terminalKindWearsItsOwnDesignWhateverTheKeyboard() {
         for (boolean keyboard : new boolean[] {false, true}) {
             DockSpec.Input in = pong(DockStyle.GLASS_TRAY, false, keyboard);
-            in.kind = DockSpec.PageKind.TERMINAL;
+            in.kind = PageKind.TERMINAL;
             assertEquals(DockStyle.GLASS_TRAY, DockSpec.of(in).design);
         }
     }
@@ -160,7 +161,7 @@ public class DockSpecTest {
     @Test
     public void terminalPeekOverTheKeyboardKeepsTheTraySlab() {
         DockSpec.Input in = pong(DockStyle.PEEK_GLASS, true, true);
-        in.kind = DockSpec.PageKind.TERMINAL;
+        in.kind = PageKind.TERMINAL;
         DockSpec spec = DockSpec.of(in);
         assertEquals(DockStyle.PEEK_GLASS, spec.design);
         assertNull(spec.card);
@@ -188,7 +189,7 @@ public class DockSpecTest {
     /** Parity: whenever the foot exists the surface ends on the screen's edge with a seam. */
     @Test
     public void footImpliesScreenBottomAndSeamEverywhere() {
-        for (DockSpec.PageKind kind : DockSpec.PageKind.values())
+        for (PageKind kind : PageKind.values())
             for (DockStyle design : DockStyle.CHOICES)
                 for (boolean floating : new boolean[] {false, true})
                     for (boolean keyboard : new boolean[] {false, true})

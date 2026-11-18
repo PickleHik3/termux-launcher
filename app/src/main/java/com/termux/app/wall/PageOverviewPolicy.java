@@ -1,6 +1,7 @@
 package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
+import com.termux.app.page.PageKind;
 
 /**
  * The page overview's rules (Launcher3's overview for this wall): one strip of cards, one per
@@ -104,10 +105,10 @@ public final class PageOverviewPolicy {
             return WallRow.homePage(n);
         }
         if (position >= 0 && position < strip.size() && strip.get(position) == Kind.DISPLAY) {
-            return new WallRow.Position(PaneWallPage.DISPLAY, 0);
+            return new WallRow.Position(PageKind.DISPLAY, 0);
         }
         if (position >= 0 && position < strip.size() && strip.get(position) == Kind.ASSISTANT) {
-            return new WallRow.Position(PaneWallPage.ASSISTANT, 0);
+            return new WallRow.Position(PageKind.ASSISTANT, 0);
         }
         return WallRow.window(Math.max(0, frontWindow));
     }

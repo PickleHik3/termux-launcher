@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 
 /**
  * What a crossing moves ({@link Crossing}'s adapter), and the last values it wrote, so a frame that
@@ -38,7 +38,7 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         /** The travel cover the pane controller holds for the window in front. */
         void coverWindowInFront(int px);
         /** The in-app keyboard brought up below the screen for {@code target}'s half, quietly. */
-        void preRollKeyboard(@NonNull PaneWallPage target);
+        void preRollKeyboard(@NonNull PageKind target);
         /** The dock's pinned row; null before it is inflated. */
         @Nullable SuggestionBarView dockRow();
         /** One of the row's icons was drawn again: the reflection shows it as the icon does. */
@@ -75,7 +75,7 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
     }
 
     @Override
-    public void preRoll(@NonNull PaneWallPage target) {
+    public void preRoll(@NonNull PageKind target) {
         mHost.preRollKeyboard(target);
     }
 

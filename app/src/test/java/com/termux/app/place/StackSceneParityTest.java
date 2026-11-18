@@ -7,8 +7,8 @@ import androidx.annotation.NonNull;
 
 import com.termux.app.chrome.StackMaterial;
 import com.termux.app.chrome.StackMaterial.RegionLook;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -193,7 +193,7 @@ public class StackSceneParityTest {
         @Override public void alpha(float status, float side) {}
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}
-        @Override public void preRoll(@NonNull PaneWallPage target) {}
+        @Override public void preRoll(@NonNull PageKind target) {}
     }
 
     // ---- Parity with today -----------------------------------------------------------------
@@ -417,8 +417,8 @@ public class StackSceneParityTest {
         StackScene.Motion motion = new StackScene.Motion();
         StackScene.Frame frame = new StackScene.Frame();
         StackScene.Frame rest = new StackScene.Frame();
-        PageRef home2 = PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, 2);
-        PageRef display = PageRef.of(com.termux.app.wall.PaneWallPage.DISPLAY, 7);
+        PageRef home2 = PageRef.of(com.termux.app.page.PageKind.HOME, 2);
+        PageRef display = PageRef.of(com.termux.app.page.PageKind.DISPLAY, 7);
         PageRef[][] pairs = {{PageRef.HOME, home2}, {PageRef.TERMINAL, display}};
         for (PageRef[] pair : pairs) for (boolean floating : BOOLS) for (boolean up : BOOLS) {
             StackEnd from = end(pair[0], up, floating);

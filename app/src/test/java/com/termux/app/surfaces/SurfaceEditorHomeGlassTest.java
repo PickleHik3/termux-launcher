@@ -8,8 +8,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
@@ -74,13 +74,13 @@ public class SurfaceEditorHomeGlassTest {
     @Test
     public void theStripReadsHomesCellOverBase() {
         grid().write(LookGrid.Property.OPACITY, null, HOME, 33);
-        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS);
+        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME);
         assertEquals(33, model(editor).value(Row.OPACITY));
     }
 
     @Test
     public void homeWritesHomePagesAndLeavesBase() {
-        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS);
+        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME);
         model(editor).onValue(Row.OPACITY, 55, false);
         assertEquals(55, grid().value(LookGrid.Property.OPACITY, null, HOME));
         assertEquals("Base is Customization's", 92,
@@ -91,7 +91,7 @@ public class SurfaceEditorHomeGlassTest {
 
     @Test
     public void workspaceWritesTerminalAndDisplayPages() {
-        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
+        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PageKind.TERMINAL);
         model(editor).onValue(Row.OPACITY, 44, false);
         model(editor).onValue(Row.FROST, 70, false);
         model(editor).onReleased(Row.FROST);
@@ -109,7 +109,7 @@ public class SurfaceEditorHomeGlassTest {
     public void customizationWritesBaseAndResetsTheDocksOwn() {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_WALL, 30);
-        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.WIDGETS);
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.HOME);
         model(editor).onValue(Row.OPACITY, 61, false);
         assertEquals(61, grid().value(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE));
         // Last change wins (developer, 2026-11-04): the dock follows Base again.
@@ -125,7 +125,7 @@ public class SurfaceEditorHomeGlassTest {
     public void homesWriteResetsTheDocksOwnValueOnHomeAlone() {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL,
             30);
-        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS);
+        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME);
         model(editor).onValue(Row.OPACITY, 70, false);
         // Last change wins (developer, 2026-11-04): the dock follows Home on Home pages and keeps
         // its 30 on the Workspace's.
@@ -137,7 +137,7 @@ public class SurfaceEditorHomeGlassTest {
 
     @Test
     public void resetHomeClearsHomePagesCellsAlone() {
-        SurfaceEditorController editor = open(EditorCard.HOME, PaneWallPage.WIDGETS);
+        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME);
         model(editor).onValue(Row.OPACITY, 50, false);
         model(editor).onValue(Row.FROST, 70, false);
         model(editor).onReleased(Row.FROST);
@@ -156,7 +156,7 @@ public class SurfaceEditorHomeGlassTest {
 
     // ------------------------------------------------------------------------------- the drive
 
-    private SurfaceEditorController open(EditorCard card, PaneWallPage place) {
+    private SurfaceEditorController open(EditorCard card, PageKind place) {
         EditorTestHarness harness = new EditorTestHarness(preferences, null);
         harness.editor.present(card, place, null);
         assertEquals("the card is up when present returns", card,

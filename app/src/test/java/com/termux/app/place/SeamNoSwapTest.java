@@ -9,11 +9,11 @@ import androidx.annotation.NonNull;
 import com.termux.app.chrome.Dress;
 import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.WallPages;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
@@ -42,8 +42,8 @@ public class SeamNoSwapTest {
     /** The steepest the look's curve climbs per unit of the wall's way, as the seam's own tests. */
     private static final float MAX_CURVE_SLOPE = 1.5f / (SeamFade.END - SeamFade.START);
 
-    private static final List<PaneWallPage> ROW =
-        Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+    private static final List<PageKind> ROW =
+        Arrays.asList(PageKind.HOME, PageKind.TERMINAL);
 
     private static final WallShape DOCKED = WallShape.of(LayoutStyle.DOCKED, 12, 8);
     private static final WallShape FLOATING = WallShape.of(LayoutStyle.FLOATING, 26, 4);
@@ -102,20 +102,20 @@ public class SeamNoSwapTest {
         }
 
         @Override public boolean minimal() { return false; }
-        @Override public int pageIdOf(@NonNull PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? 2 : 1;
+        @Override public int pageIdOf(@NonNull PageKind page) {
+            return page == PageKind.HOME ? 2 : 1;
         }
         @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant variant) {
             return DockStyle.GLASS_TRAY;
         }
         @Override public boolean searchField(@NonNull LayoutVariant variant) { return false; }
         @Override public boolean drawerTile(@NonNull LayoutVariant variant) { return false; }
-        @Override public boolean shows(@NonNull WallPages.PageKind kind, @NonNull Element element) {
+        @Override public boolean shows(@NonNull PageKind kind, @NonNull Element element) {
             return true;
         }
         @NonNull @Override public WallShape shape() { return window; }
-        @NonNull @Override public WallShape shape(@NonNull WallPages.PageKind kind) {
-            return kind == WallPages.PageKind.HOME ? home : window;
+        @NonNull @Override public WallShape shape(@NonNull PageKind kind) {
+            return kind == PageKind.HOME ? home : window;
         }
     }
 
@@ -162,11 +162,11 @@ public class SeamNoSwapTest {
         };
     }
 
-    private static SeamCrossing.Endpoint end(Dressing d, Pair pair, PaneWallPage page,
+    private static SeamCrossing.Endpoint end(Dressing d, Pair pair, PageKind page,
                                              boolean keyboardUp) {
         DressResolver dresses = new DressResolver(new Stored(d.homeShape, d.windowShape));
         Dress dress = dresses.dressOf(page);
-        boolean home = page == PaneWallPage.WIDGETS;
+        boolean home = page == PageKind.HOME;
         SeamDress.StackDress stack = SeamDress.StackDress.of(dress.shape(),
             home ? d.homeDock : d.windowDock, home ? d.homeKeyboard : d.windowKeyboard,
             home ? d.homeChin : d.windowChin, home ? d.homeLook : d.windowLook);
@@ -181,10 +181,10 @@ public class SeamNoSwapTest {
         boolean relayout, restyle, hasLayout;
     }
 
-    private static Sample[] run(Dressing d, Pair pair, PaneWallPage from, boolean fromKeyboard,
+    private static Sample[] run(Dressing d, Pair pair, PageKind from, boolean fromKeyboard,
                                 boolean toKeyboard) {
-        PaneWallPage to = from == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL
-            : PaneWallPage.WIDGETS;
+        PageKind to = from == PageKind.HOME ? PageKind.TERMINAL
+            : PageKind.HOME;
         SeamCrossing.Endpoint here = end(d, pair, from, fromKeyboard);
         SeamCrossing.Endpoint there = end(d, pair, to, toKeyboard);
         SeamCrossing crossing = new SeamCrossing();
@@ -195,9 +195,9 @@ public class SeamNoSwapTest {
         boolean begun = false;
         for (int i = 0; i <= n; i++) {
             float fraction = i * STEP;
-            float offset = from == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
+            float offset = from == PageKind.HOME ? -fraction * WIDTH : fraction * WIDTH;
             Frame frame = PlaceChromeTravel.at(ROW, from, offset, WIDTH, states);
-            PaneWallPage other = SeamTravel.otherHalfPage(frame, from);
+            PageKind other = SeamTravel.otherHalfPage(frame, from);
             boolean beginsNow = other != null && !begun;
             if (beginsNow) {
                 crossing.begin(here, there, SeamCrossing.Stage.of(false, () -> false, false));
@@ -225,15 +225,15 @@ public class SeamNoSwapTest {
     }
 
     private interface Each {
-        void at(String what, Dressing d, Pair pair, PaneWallPage from, boolean fromKeyboard,
+        void at(String what, Dressing d, Pair pair, PageKind from, boolean fromKeyboard,
                 boolean toKeyboard);
     }
 
     private static void forEveryCase(Each each) {
         boolean[][] keyboards = {{true, true}, {true, false}, {false, true}};
         for (Dressing d : dressings()) for (Pair pair : pairs())
-            for (PaneWallPage from : new PaneWallPage[] {PaneWallPage.WIDGETS,
-                PaneWallPage.TERMINAL})
+            for (PageKind from : new PageKind[] {PageKind.HOME,
+                PageKind.TERMINAL})
                 for (boolean[] kb : keyboards)
                     each.at(d.name + " / " + pair.name + " / from " + from + " keyboard "
                         + kb[0] + "->" + kb[1], d, pair, from, kb[0], kb[1]);

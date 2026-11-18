@@ -7,12 +7,12 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,7 +42,7 @@ public final class LayoutEditorController {
         @Nullable PlaceLayoutStore places();
 
         /** The place the chrome on screen belongs to: what an unnamed door opens the editor on. */
-        @NonNull PaneWallPage placeOnScreen();
+        @NonNull PageKind placeOnScreen();
 
         /** The orientation the phone is in, which is the only one the live place can follow. */
         @NonNull PlaceOrientation placeOrientation();
@@ -57,13 +57,13 @@ public final class LayoutEditorController {
          * Bring the pane wall to the place the editor is open on and hold its gestures, or hand
          * them back.
          */
-        void holdPaneWallOnPlace(@NonNull PaneWallPage place, boolean held);
+        void holdPaneWallOnPlace(@NonNull PageKind place, boolean held);
 
         /**
          * Slide the held wall to {@code place}, the way the wall slides between its halves, and
          * keep its gestures held. Jumps where the host cannot slide.
          */
-        default void slidePaneWallToPlace(@NonNull PaneWallPage place) {
+        default void slidePaneWallToPlace(@NonNull PageKind place) {
             holdPaneWallOnPlace(place, true);
         }
     }
@@ -89,7 +89,7 @@ public final class LayoutEditorController {
 
     /** The place the session is open on, or null while it is not. */
     @Nullable
-    public PaneWallPage editedPlace() {
+    public PageKind editedPlace() {
         return mPlan == null ? null : mPlan.place();
     }
 
@@ -115,11 +115,11 @@ public final class LayoutEditorController {
      *
      * @return false where there is no store to edit yet
      */
-    public boolean begin(@Nullable PaneWallPage place) {
+    public boolean begin(@Nullable PageKind place) {
         PlaceLayoutStore places = mHost.places();
         if (places == null)
             return false;
-        PaneWallPage target = place != null ? place : mHost.placeOnScreen();
+        PageKind target = place != null ? place : mHost.placeOnScreen();
         if (mPlan == null) {
             mPlan = LayoutEditorPlan.enter(places, target, mHost.placeOrientation());
         } else {
@@ -151,7 +151,7 @@ public final class LayoutEditorController {
         if (mPlan == null)
             return;
         relayHeldWrites();
-        PaneWallPage place = mPlan.place();
+        PageKind place = mPlan.place();
         mPlan = null;
         mHost.holdPaneWallOnPlace(place, false);
     }
@@ -188,7 +188,7 @@ public final class LayoutEditorController {
             else mHost.holdPaneWallOnPlace(plan.place(), true);
             return;
         }
-        PaneWallPage place = plan.showHome(home);
+        PageKind place = plan.showHome(home);
         if (animate) mHost.slidePaneWallToPlace(place);
         else mHost.holdPaneWallOnPlace(place, true);
         if (mOnPlaceShown != null)
@@ -214,7 +214,7 @@ public final class LayoutEditorController {
 
     /** The kind of the page the chip is about, or null with no session. */
     @Nullable
-    public com.termux.app.wall.WallPages.PageKind pageLayoutKind() {
+    public com.termux.app.page.PageKind pageLayoutKind() {
         return mPlan == null ? null : mPlan.pageKind();
     }
 

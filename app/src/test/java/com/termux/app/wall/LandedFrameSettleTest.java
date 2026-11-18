@@ -6,28 +6,29 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 public class LandedFrameSettleTest {
 
     @Test
     public void onlyASlidesLastFrameIntoADrawingWindowDefers() {
-        assertTrue(LandedFrameSettle.defers(true, true, PaneWallPage.TERMINAL));
-        assertTrue(LandedFrameSettle.defers(true, true, PaneWallPage.WIDGETS));
+        assertTrue(LandedFrameSettle.defers(true, true, PageKind.TERMINAL));
+        assertTrue(LandedFrameSettle.defers(true, true, PageKind.HOME));
         // A jump, reduced motion or a page taken away at rest settles at once.
-        assertFalse(LandedFrameSettle.defers(false, true, PaneWallPage.TERMINAL));
+        assertFalse(LandedFrameSettle.defers(false, true, PageKind.TERMINAL));
         // No window drawing frames: nothing would run the post.
-        assertFalse(LandedFrameSettle.defers(true, false, PaneWallPage.TERMINAL));
+        assertFalse(LandedFrameSettle.defers(true, false, PageKind.TERMINAL));
         // The display's landing reads the settle's attachment straight after it.
-        assertFalse(LandedFrameSettle.defers(true, true, PaneWallPage.DISPLAY));
+        assertFalse(LandedFrameSettle.defers(true, true, PageKind.DISPLAY));
     }
 
     @Test
     public void aHeldSettleIsTakenOnceAndThePostFindsNothingLeft() {
         LandedFrameSettle settle = new LandedFrameSettle();
-        assertNull(settle.hold(PaneWallPage.TERMINAL));
+        assertNull(settle.hold(PageKind.TERMINAL));
         assertTrue(settle.pending());
         // A drag beginning before the post runs takes it first.
-        assertEquals(PaneWallPage.TERMINAL, settle.take());
+        assertEquals(PageKind.TERMINAL, settle.take());
         assertFalse(settle.pending());
         // The post then runs nothing.
         assertNull(settle.take());
@@ -36,15 +37,15 @@ public class LandedFrameSettleTest {
     @Test
     public void aSecondLandingHandsTheFirstBackToRunFirst() {
         LandedFrameSettle settle = new LandedFrameSettle();
-        settle.hold(PaneWallPage.WIDGETS);
-        assertEquals(PaneWallPage.WIDGETS, settle.hold(PaneWallPage.TERMINAL));
-        assertEquals(PaneWallPage.TERMINAL, settle.take());
+        settle.hold(PageKind.HOME);
+        assertEquals(PageKind.HOME, settle.hold(PageKind.TERMINAL));
+        assertEquals(PageKind.TERMINAL, settle.take());
     }
 
     @Test
     public void droppedSettleRunsNowhere() {
         LandedFrameSettle settle = new LandedFrameSettle();
-        settle.hold(PaneWallPage.WIDGETS);
+        settle.hold(PageKind.HOME);
         settle.drop();
         assertFalse(settle.pending());
         assertNull(settle.take());

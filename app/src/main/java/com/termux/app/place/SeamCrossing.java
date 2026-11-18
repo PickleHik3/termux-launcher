@@ -8,11 +8,11 @@ import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.LensBeadGeometry;
 import com.termux.app.dock.WornDockDesign;
 import com.termux.app.look.PageLook;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.SeamTravel.DockPlan;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * One crossing of the seam between the wall's halves, Home and the Workspace's window beside it,
@@ -308,12 +308,12 @@ public final class SeamCrossing {
         boolean bandsMoved;
         boolean laidOut;
         boolean barTravelled;
-        @Nullable PaneWallPage dressedFor;
+        @Nullable PageKind dressedFor;
         boolean dressDiffered;
         boolean shapeDiffered;
         /** Whether the halves were apart in look, which the crossing blended with the wall. */
         boolean lookBlended;
-        @Nullable PaneWallPage committedKind;
+        @Nullable PageKind committedKind;
         /** Whether a half's own band was eased: a slide that came back lays the dock out whole. */
         public boolean bandsMoved() {
             return bandsMoved;
@@ -334,7 +334,7 @@ public final class SeamCrossing {
          * a slide that came back past the swap without a frame there to undo it (the drawer or
          * reduced motion took the last frames). It is dressed back as the settle puts it on screen.
          */
-        public boolean redressesBack(@NonNull PaneWallPage landed) {
+        public boolean redressesBack(@NonNull PageKind landed) {
             return dressDiffered && dressedFor != null && SeamTravel.crosses(dressedFor, landed);
         }
 
@@ -344,7 +344,7 @@ public final class SeamCrossing {
          * commit then has nothing to show the landed frame that the slide has not already shown,
          * so its whole re-dress may follow that frame instead of holding it.
          */
-        public boolean stackDressedFor(@NonNull PaneWallPage landed) {
+        public boolean stackDressedFor(@NonNull PageKind landed) {
             return dressDiffered && dressedFor != null && !SeamTravel.crosses(dressedFor, landed);
         }
 
@@ -355,7 +355,7 @@ public final class SeamCrossing {
          * {@link #stackDressedFor}, the landing's re-dress has nothing to show that frame and
          * follows it instead of holding it. A slide that came back commits nothing.
          */
-        public boolean lookBlendedOnto(@NonNull PaneWallPage landed) {
+        public boolean lookBlendedOnto(@NonNull PageKind landed) {
             return lookBlended && committedKind != null && SeamTravel.crosses(committedKind, landed);
         }
 
@@ -373,7 +373,7 @@ public final class SeamCrossing {
     private static final class Run {
         // ---- What a crossing reads once, as it begins ----
 
-        @Nullable PaneWallPage committed;
+        @Nullable PageKind committed;
         /** The two ends as pages: their kinds and their ids (#173 slice E). */
         @Nullable PageRef committedEnd, otherEnd;
         /** Whether both ends are pages of one kind: a crossing between two Home pages. */
@@ -386,7 +386,7 @@ public final class SeamCrossing {
         @Nullable PageRef barEnd;
         boolean barFades;
         /** The other half's page, its layout, and the dock's plan for the crossing. */
-        @Nullable PaneWallPage other;
+        @Nullable PageKind other;
         @Nullable PlaceLayout otherLayout;
         @NonNull DockPlan plan = DockPlan.NONE;
         /**
@@ -427,11 +427,11 @@ public final class SeamCrossing {
         /** Whether the arrangement stands the other half's dock rows, and its bar. */
         boolean dockShown, statusShown;
         /** The page whose half the stack wears; null while it wears the committed page's. */
-        @Nullable PaneWallPage stackDressPage;
+        @Nullable PageKind stackDressPage;
         /** The stack changed halves while they dress it differently: the next pass dresses it. */
         boolean restylePending;
         /** The page the bar is dressed for while it rides; null otherwise. */
-        @Nullable PaneWallPage barPage;
+        @Nullable PageKind barPage;
         /** How far the slide has come toward the other half while the halves' bands differ; NaN otherwise. */
         float bandProgress = Float.NaN;
         /** Whether the wall has come to rest: the crossing is held only for the page's commit. */
@@ -579,7 +579,7 @@ public final class SeamCrossing {
      * after the {@link #begin} that started the crossing.
      */
     public boolean barTakesWorkspaceDressFirst() {
-        return mRun.shapeDiffers && mRun.committed == PaneWallPage.WIDGETS && !mRun.oneKind
+        return mRun.shapeDiffers && mRun.committed == PageKind.HOME && !mRun.oneKind
             && !mRun.barStill;
     }
 
@@ -609,8 +609,8 @@ public final class SeamCrossing {
                          boolean bandEaseRuns, boolean fieldUnderPalette) {
         Answers answers = mAnswers;
         answers.clear(frame.dockReveal, frame.keyboardReveal);
-        PaneWallPage committed = mRun.committed;
-        PaneWallPage other = mRun.other;
+        PageKind committed = mRun.committed;
+        PageKind other = mRun.other;
         PageRef committedEnd = mRun.committedEnd;
         if (committed == null || other == null || committedEnd == null) return answers;
         // Read by end: a frame of the wall names its sides by kind and reads as by half; a frame
@@ -618,8 +618,8 @@ public final class SeamCrossing {
         float progress = SeamTravel.otherEndProgress(frame, committedEnd);
         float dressProgress = progress;
         // Which half's dress the stack wears, noting a change for this frame's pass.
-        PaneWallPage stackPage = SeamDress.stackPage(committed, other, mRun.plan, dressProgress);
-        PaneWallPage dressPage = stackPage == committed ? null : stackPage;
+        PageKind stackPage = SeamDress.stackPage(committed, other, mRun.plan, dressProgress);
+        PageKind dressPage = stackPage == committed ? null : stackPage;
         if (dressPage != mRun.stackDressPage) {
             mRun.stackDressPage = dressPage;
             if (mRun.dressDiffers) mRun.restylePending = true;
@@ -718,12 +718,12 @@ public final class SeamCrossing {
             return rides;
         }
         boolean rides = hostCanRide && mRun.other != null && mRun.barRides
-            && (frame.from == PaneWallPage.WIDGETS || frame.toward == PaneWallPage.WIDGETS);
-        PaneWallPage barPage = null;
+            && (frame.from == PageKind.HOME || frame.toward == PageKind.HOME);
+        PageKind barPage = null;
         if (rides) {
-            barPage = frame.toward != PaneWallPage.WIDGETS ? frame.toward
-                : frame.from != PaneWallPage.WIDGETS ? frame.from
-                : mRun.committed == PaneWallPage.WIDGETS ? null : mRun.committed;
+            barPage = frame.toward != PageKind.HOME ? frame.toward
+                : frame.from != PageKind.HOME ? frame.from
+                : mRun.committed == PageKind.HOME ? null : mRun.committed;
         }
         mAnswers.barRedressed = barPage != mRun.barPage;
         mRun.barPage = barPage;
@@ -827,7 +827,7 @@ public final class SeamCrossing {
     public boolean barRideWearsOther() {
         if (mRun.other == null) return false;
         if (mRun.oneKind) return mRun.barEnd != null && mRun.barEnd.equals(mRun.otherEnd);
-        return mRun.committed == PaneWallPage.WIDGETS;
+        return mRun.committed == PageKind.HOME;
     }
 
     /**
@@ -858,7 +858,7 @@ public final class SeamCrossing {
      * ({@link #footKeyboardUp}) until the live keyboard comes to agree with it.
      */
     @NonNull
-    public Landing land(@Nullable PaneWallPage landed) {
+    public Landing land(@Nullable PageKind landed) {
         Run run = mRun;
         mLandedFootKeyboard = landed != null && run.other == landed && !run.landed
             && rowsHoldFoot(run) ? run.otherKeyboardUp : null;
@@ -943,7 +943,7 @@ public final class SeamCrossing {
 
     /** The other half's page the crossing was begun for; null while none runs. */
     @Nullable
-    public PaneWallPage other() {
+    public PageKind other() {
         return mRun.other;
     }
 
@@ -980,7 +980,7 @@ public final class SeamCrossing {
      * ({@link SeamDress#stackPage}); null while it wears the committed page's, always at rest.
      */
     @Nullable
-    public PaneWallPage stackDressPage() {
+    public PageKind stackDressPage() {
         return mRun.stackDressPage;
     }
 
@@ -988,7 +988,7 @@ public final class SeamCrossing {
      * Whether the stack wears a dress apart from the frame's, which stays {@code committed}'s:
      * mid-slide, once it stands the rows of a half that shapes it differently.
      */
-    public boolean stackDressedApart(@NonNull PaneWallPage committed) {
+    public boolean stackDressedApart(@NonNull PageKind committed) {
         return mRun.shapeDiffers && mRun.stackDressPage != null
             && SeamTravel.crosses(mRun.stackDressPage, committed);
     }

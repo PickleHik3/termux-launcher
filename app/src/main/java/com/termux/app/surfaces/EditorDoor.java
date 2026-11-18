@@ -5,9 +5,9 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.Locale;
+import com.termux.app.page.PageKind;
 
 /**
  * Every door into the Appearance editor, and the card each one opens (editor-redesign §5, the
@@ -111,7 +111,7 @@ public enum EditorDoor {
      *     intent's section); only those doors read it
      */
     @Nullable
-    public EditorCard cardFor(@Nullable PaneWallPage onScreen, @Nullable EditorCard named) {
+    public EditorCard cardFor(@Nullable PageKind onScreen, @Nullable EditorCard named) {
         switch (this) {
             case HOME_SHEET_APPEARANCE:
             case SETTINGS_HOME:
@@ -137,7 +137,7 @@ public enum EditorDoor {
                 return EditorCard.STATUS;
             case EDITOR_PAGE_LABEL:
             case EDITOR_PAGE_SWIPE:
-                return onScreen == PaneWallPage.WIDGETS ? EditorCard.HOME : EditorCard.WORKSPACE;
+                return onScreen == PageKind.HOME ? EditorCard.HOME : EditorCard.WORKSPACE;
             case PANE_CONTROLS:
                 // The Terminal or Display pane corner opens the Workspace (overhaul §1).
                 return EditorCard.WORKSPACE;
@@ -171,8 +171,8 @@ public enum EditorDoor {
 
     /** The card of the screen {@code page} is on: Home's on Home, the Workspace's elsewhere. */
     @NonNull
-    static EditorCard screenCard(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? EditorCard.HOME : EditorCard.WORKSPACE;
+    static EditorCard screenCard(@NonNull PageKind page) {
+        return page == PageKind.HOME ? EditorCard.HOME : EditorCard.WORKSPACE;
     }
 
     /**
@@ -181,14 +181,14 @@ public enum EditorDoor {
      * {@code place}, null for the page on screen.
      */
     @Nullable
-    public static PaneWallPage placeFor(@Nullable EditorCard card, @Nullable PaneWallPage place,
-                                        @Nullable PaneWallPage onScreen) {
+    public static PageKind placeFor(@Nullable EditorCard card, @Nullable PageKind place,
+                                        @Nullable PageKind onScreen) {
         if (place != null || card == null)
             return place;
         if (onScreen != null && card.standsOn(onScreen))
             return null;
-        if (card == EditorCard.HOME) return PaneWallPage.WIDGETS;
-        if (card == EditorCard.TERMINAL || card == EditorCard.WORKSPACE) return PaneWallPage.TERMINAL;
+        if (card == EditorCard.HOME) return PageKind.HOME;
+        if (card == EditorCard.TERMINAL || card == EditorCard.WORKSPACE) return PageKind.TERMINAL;
         return null;
     }
 
@@ -197,15 +197,15 @@ public enum EditorDoor {
      * the terminal's over a terminal, the editor at rest over the display.
      */
     @Nullable
-    static EditorCard pageCard(@Nullable PaneWallPage page) {
-        if (page == PaneWallPage.WIDGETS) return EditorCard.HOME;
-        if (page == PaneWallPage.TERMINAL) return EditorCard.TERMINAL;
+    static EditorCard pageCard(@Nullable PageKind page) {
+        if (page == PageKind.HOME) return EditorCard.HOME;
+        if (page == PageKind.TERMINAL) return EditorCard.TERMINAL;
         return null;
     }
 
     /** {@link #cardFor}, with the door's line logged. */
     @Nullable
-    public EditorCard route(@Nullable PaneWallPage onScreen, @Nullable EditorCard named) {
+    public EditorCard route(@Nullable PageKind onScreen, @Nullable EditorCard named) {
         EditorCard card = cardFor(onScreen, named);
         log(card);
         return card;

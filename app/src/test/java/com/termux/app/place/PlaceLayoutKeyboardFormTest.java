@@ -8,8 +8,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -50,7 +50,7 @@ public class PlaceLayoutKeyboardFormTest {
     @Test
     public void everyPlaceStartsDockedInBothOrientations() {
         PlaceLayoutStore store = store();
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 assertEquals(place + " " + orientation, KeyboardForm.DOCKED,
                     store.keyboardForm(orientation));

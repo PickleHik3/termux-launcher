@@ -3,7 +3,7 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.util.List;
@@ -29,7 +29,7 @@ public final class ExtraKeysDefaultRow {
      * is the shipped row; any other value is returned untouched.
      */
     @NonNull
-    public static String forWall(@Nullable String value, @NonNull List<PaneWallPage> pages) {
+    public static String forWall(@Nullable String value, @NonNull List<PageKind> pages) {
         if (!isShippedRow(value)) return value == null ? "" : value;
         ExtraKeysLayoutModel model = ExtraKeysLayoutModel.parse(value);
         boolean changed = false;
@@ -57,8 +57,8 @@ public final class ExtraKeysDefaultRow {
      * ({@link com.termux.app.wall.WallKeys}); the key for the kind in front stays, held back.
      */
     private static boolean dropped(@NonNull ExtraKeysLayoutModel.Key key,
-                                   @NonNull List<PaneWallPage> pages) {
-        PaneWallPage target = ExtraKeyEligibility.placeSwitchTarget(key.key);
+                                   @NonNull List<PageKind> pages) {
+        PageKind target = ExtraKeyEligibility.placeSwitchTarget(key.key);
         if (target == null) return false;
         return !pages.contains(target);
     }

@@ -5,11 +5,11 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
-import com.termux.app.wall.PaneWallPage;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -83,7 +83,7 @@ public class FreshInstallLookTest {
         assertEquals(Integer.valueOf(GlassControlsMigration.FORMAT),
             store.getAll().get(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT));
         // What the editor's Look row reads on Home and on the Workspace.
-        for (PaneWallPage half : new PaneWallPage[]{PaneWallPage.WIDGETS, PaneWallPage.TERMINAL}) {
+        for (PageKind half : new PageKind[]{PageKind.HOME, PageKind.TERMINAL}) {
             assertTrue(half + " wears Clear", SurfacePresets.wornOn(preferences, clearFor(), half));
             assertTrue(half + " matches Clear", SurfacePresets.matches(preferences, clearFor(), half));
         }

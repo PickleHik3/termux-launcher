@@ -1030,7 +1030,7 @@ public class ExtraKeysEditorFragment extends Fragment
         cap.setContentDescription(title);
         // Marked, never refused: a key that does nothing where these keys go is drawn like a dead
         // key on the bar, and stays tappable and editable.
-        com.termux.app.wall.PaneWallPage place = target.markingPlace();
+        com.termux.app.page.PageKind place = target.markingPlace();
         if (place != null && !ExtraKeyEligibility.isUsable(key.key, place)) {
             cap.setTextColor(ColorUtils.setAlphaComponent(colorText, ExtraKeyCapView.DISABLED_LABEL_ALPHA));
             cap.setContentDescription(title + ", "

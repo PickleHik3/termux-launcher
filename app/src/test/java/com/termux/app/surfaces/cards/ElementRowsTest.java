@@ -1,11 +1,11 @@
 package com.termux.app.surfaces.cards;
 
-import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.surfaces.EditorCard;
 import com.termux.app.surfaces.EditorRows;
@@ -30,12 +30,12 @@ public class ElementRowsTest {
 
     @Test
     public void eachScreenListsTheSharedRowsThenItsOwnContent() {
-        List<Item> workspace = ElementRows.rows(PaneWallPage.TERMINAL);
+        List<Item> workspace = ElementRows.rows(PageKind.TERMINAL);
         assertEquals(SHARED, workspace.subList(0, SHARED.size()));
         assertEquals(Item.TERMINAL, workspace.get(workspace.size() - 1));
         assertFalse(workspace.contains(Item.WIDGETS));
 
-        List<Item> home = ElementRows.rows(PaneWallPage.WIDGETS);
+        List<Item> home = ElementRows.rows(PageKind.HOME);
         assertEquals(SHARED, home.subList(0, SHARED.size()));
         assertEquals(Item.WIDGETS, home.get(home.size() - 1));
         assertFalse(home.contains(Item.TERMINAL));
@@ -43,7 +43,7 @@ public class ElementRowsTest {
 
     @Test
     public void theSearchFieldAndTheDrawerIconAreEveryPagesSoOnlyTheWholeAppListHasThem() {
-        for (PaneWallPage screen : new PaneWallPage[] {PaneWallPage.TERMINAL, PaneWallPage.WIDGETS}) {
+        for (PageKind screen : new PageKind[] {PageKind.TERMINAL, PageKind.HOME}) {
             assertFalse(ElementRows.rows(screen).contains(Item.SEARCH_FIELD));
             assertFalse(ElementRows.rows(screen).contains(Item.DRAWER_ICON));
         }
@@ -109,8 +109,8 @@ public class ElementRowsTest {
 
     @Test
     public void onlyTheScreenCardsHoldTheList() {
-        assertEquals(PaneWallPage.WIDGETS, ElementRows.screenOf(EditorCard.HOME));
-        assertEquals(PaneWallPage.TERMINAL, ElementRows.screenOf(EditorCard.WORKSPACE));
+        assertEquals(PageKind.HOME, ElementRows.screenOf(EditorCard.HOME));
+        assertEquals(PageKind.TERMINAL, ElementRows.screenOf(EditorCard.WORKSPACE));
         EditorRows.Offers offers = new EditorRows.Offers(true, true);
         for (EditorCard card : EditorCard.values()) {
             // The Terminal card's Layout is the Workspace's list, Customization's the whole

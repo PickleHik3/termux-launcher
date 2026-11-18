@@ -2,6 +2,7 @@ package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.app.page.PageKind;
 
 /**
  * The Terminal page coming back (ADR 0015 section 1): a wall without one, once a terminal window
@@ -27,7 +28,7 @@ public final class TerminalPageReturn {
     public static int addAfter(@NonNull WallPages pages) {
         int after = FIRST;
         for (WallPages.Page page : pages.pages()) {
-            if (page.kind == WallPages.PageKind.HOME) after = page.id;
+            if (page.kind == PageKind.HOME) after = page.id;
         }
         return after;
     }
@@ -36,8 +37,8 @@ public final class TerminalPageReturn {
     @NonNull
     public static WallPages.Result restore(@NonNull WallPages pages) {
         int after = addAfter(pages);
-        if (after != FIRST) return pages.add(WallPages.PageKind.TERMINAL, after, null);
-        WallPages.Result added = pages.add(WallPages.PageKind.TERMINAL, WallPages.END, null);
+        if (after != FIRST) return pages.add(PageKind.TERMINAL, after, null);
+        WallPages.Result added = pages.add(PageKind.TERMINAL, WallPages.END, null);
         if (!added.ok() || added.page == null) return added;
         WallPages.Result moved = added.pages.move(added.page.id, 0);
         return moved.ok() ? new WallPages.Result(moved.pages, WallPages.ChangeType.ADDED,

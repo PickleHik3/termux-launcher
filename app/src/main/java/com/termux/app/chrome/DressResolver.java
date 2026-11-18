@@ -4,13 +4,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.WallShape;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WallPages.PageKind;
 
 import java.util.EnumSet;
 import java.util.Set;
@@ -52,9 +51,9 @@ public final class DressResolver {
 
         /**
          * The id of the page {@code page} stands for on screen: the Home page in front for {@link
-         * PaneWallPage#WIDGETS}, the Terminal page for a window; -1 where none is known.
+         * PageKind#HOME}, the Terminal page for a window; -1 where none is known.
          */
-        default int pageIdOf(@NonNull PaneWallPage page) { return -1; }
+        default int pageIdOf(@NonNull PageKind page) { return -1; }
 
         /** The Dock design picked on one layout, whether or not it is built yet. */
         @NonNull
@@ -101,8 +100,8 @@ public final class DressResolver {
      * Assistant page are one Workspace and wear one dress (ADR 0025).
      */
     @NonNull
-    public static PageKind kindOf(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? PageKind.HOME : PageKind.TERMINAL;
+    public static PageKind dressKindOf(@NonNull PageKind page) {
+        return page == PageKind.HOME ? PageKind.HOME : PageKind.TERMINAL;
     }
 
     @NonNull private final Source mSource;
@@ -131,7 +130,7 @@ public final class DressResolver {
                 return store != null && store.isMinimal();
             }
 
-            @Override public int pageIdOf(@NonNull PaneWallPage page) {
+            @Override public int pageIdOf(@NonNull PageKind page) {
                 PlaceLayoutStore store = places.get();
                 return store != null ? store.shownPageId(page) : -1;
             }
@@ -179,18 +178,18 @@ public final class DressResolver {
      * #dockDesignOf} are the narrow reads for that).
      */
     @NonNull
-    public Dress dressOf(@NonNull PaneWallPage page) {
-        return dressOf(layoutOf(page), kindOf(page));
+    public Dress dressOf(@NonNull PageKind page) {
+        return dressOf(layoutOf(page), dressKindOf(page));
     }
 
     /**
      * What {@code page} wears, named by its id (#173 slice E): the same as {@link
-     * #dressOf(PaneWallPage)} for a page with no id said or for the page in front, and the page's
+     * #dressOf(PageKind)} for a page with no id said or for the page in front, and the page's
      * own for another page of its kind, a Home page beside the one in front included.
      */
     @NonNull
     public Dress dressOf(@NonNull PageRef page) {
-        return dressOf(layoutOf(page), kindOf(page.kind));
+        return dressOf(layoutOf(page), dressKindOf(page.kind));
     }
 
     @NonNull
@@ -218,7 +217,7 @@ public final class DressResolver {
      * else the normal one (ADR 0015 §3).
      */
     @NonNull
-    public LayoutVariant layoutOf(@NonNull PaneWallPage page) {
+    public LayoutVariant layoutOf(@NonNull PageKind page) {
         return layoutOf(page, mSource.pageIdOf(page));
     }
 
@@ -226,7 +225,7 @@ public final class DressResolver {
      * The layout {@code page} wears, read for its own id rather than for the page of its kind in
      * front (#173 slice E): a crossing between two Home pages resolves the page it slides toward
      * while the other is still in front. A page with no id said reads as {@link
-     * #layoutOf(PaneWallPage)}.
+     * #layoutOf(PageKind)}.
      */
     @NonNull
     public LayoutVariant layoutOf(@NonNull PageRef page) {
@@ -234,9 +233,9 @@ public final class DressResolver {
     }
 
     @NonNull
-    private LayoutVariant layoutOf(@NonNull PaneWallPage page, int id) {
+    private LayoutVariant layoutOf(@NonNull PageKind page, int id) {
         // One layout per page kind (ADR 0020 §1); the page id no longer chooses anything.
-        return LayoutVariant.ofKind(kindOf(page), mSource.minimal());
+        return LayoutVariant.ofKind(dressKindOf(page), mSource.minimal());
     }
 
     /**
@@ -245,15 +244,15 @@ public final class DressResolver {
      * rebuilding it per frame included. The design the page's layout holds, as it draws.
      */
     @NonNull
-    public DockStyle dockDesignOf(@NonNull PaneWallPage page) {
-        return DockStyle.effectiveStyle(dockDesignFor(layoutOf(page), kindOf(page)));
+    public DockStyle dockDesignOf(@NonNull PageKind page) {
+        return DockStyle.effectiveStyle(dockDesignFor(layoutOf(page), dressKindOf(page)));
     }
 
     /**
      * Whether the page's dock carries the Search field ({@link Dress#searchField}), read without
      * the rest of the dress, as {@link #dockDesignOf} is: the dock's pass asks it.
      */
-    public boolean searchFieldOf(@NonNull PaneWallPage page) {
+    public boolean searchFieldOf(@NonNull PageKind page) {
         return mSource.searchField(layoutOf(page));
     }
 
@@ -261,7 +260,7 @@ public final class DressResolver {
      * Whether the page's dock carries the Drawer tile ({@link Dress#drawerTile}), read without
      * the rest of the dress, as {@link #searchFieldOf} is: the dock's row asks it.
      */
-    public boolean drawerTileOf(@NonNull PaneWallPage page) {
+    public boolean drawerTileOf(@NonNull PageKind page) {
         return mSource.drawerTile(layoutOf(page));
     }
 
@@ -269,8 +268,8 @@ public final class DressResolver {
      * Whether {@code page} wears {@code element} ({@link Dress#wears}): its page layout or its kind shows it, as the
      * store has it now, for a reader that has the page but not the dress.
      */
-    public boolean wears(@NonNull PaneWallPage page, @NonNull Element element) {
-        return mSource.layoutShows(layoutOf(page), kindOf(page), element);
+    public boolean wears(@NonNull PageKind page, @NonNull Element element) {
+        return mSource.layoutShows(layoutOf(page), dressKindOf(page), element);
     }
 
     /**

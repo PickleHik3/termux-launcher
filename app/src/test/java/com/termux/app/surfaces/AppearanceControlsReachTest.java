@@ -11,8 +11,8 @@ import android.os.Build;
 import com.termux.R;
 import com.termux.app.chrome.ElementGlass;
 import com.termux.app.chrome.FancierGlassPolicy;
+import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.LookGridKindSeed;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -236,8 +236,8 @@ public class AppearanceControlsReachTest {
     /** The card opened on {@code harness}'s editor, at {@code scope}; its model. */
     private EditorCardSheet.Model open(EditorTestHarness harness, EditorCard card,
                                        EditorChips.AppliesTo scope) {
-        PaneWallPage place = card == EditorCard.WIDGETS || card == EditorCard.HOME
-            ? PaneWallPage.WIDGETS : null;
+        PageKind place = card == EditorCard.WIDGETS || card == EditorCard.HOME
+            ? PageKind.HOME : null;
         harness.editor.present(card, place, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(card, harness.editor.shownCard());

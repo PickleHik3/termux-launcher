@@ -1,8 +1,8 @@
 package com.termux.app.place;
 
 import androidx.annotation.NonNull;
+import com.termux.app.page.PageKind;
 
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Whether the keyboard comes up on a page of the wall, which is not dress (the glossary's
@@ -23,9 +23,9 @@ public final class PlaceKeyboard {
      * mode is the Workspace's and leaves Home alone. A window comes back as it was left, unless
      * minimal mode puts it away.
      */
-    public static boolean keyboardOnEnter(@NonNull PaneWallPage page, boolean remembered,
+    public static boolean keyboardOnEnter(@NonNull PageKind page, boolean remembered,
                                           boolean minimal, boolean alwaysOn) {
-        if (page == PaneWallPage.WIDGETS) return alwaysOn || remembered;
+        if (page == PageKind.HOME) return alwaysOn || remembered;
         return MinimalMode.keyboardOnEnter(remembered, minimal);
     }
 
@@ -48,8 +48,8 @@ public final class PlaceKeyboard {
      * down at Done would leave Home without the keyboard until the next launch. Anywhere else, and
      * on Home without always on, the editor's keyboard goes as it came.
      */
-    public static boolean editorEndKeepsKeyboard(@NonNull PaneWallPage page, boolean alwaysOn) {
-        return page == PaneWallPage.WIDGETS && keyboardOnEnter(page, false, false, alwaysOn);
+    public static boolean editorEndKeepsKeyboard(@NonNull PageKind page, boolean alwaysOn) {
+        return page == PageKind.HOME && keyboardOnEnter(page, false, false, alwaysOn);
     }
 
     /**

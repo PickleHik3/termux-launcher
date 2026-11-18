@@ -2,8 +2,8 @@ package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -52,7 +52,7 @@ public class DockLiftParityTest {
 
         PlaceChromeTravel.Rest rest = new PlaceChromeTravel.Rest(keyboardUp, false);
         assertEquals(what + ": at rest nothing slides", 0f, PlaceChromeTravel.stackTranslationPx(
-            PlaceChromeTravel.rest(PaneWallPage.TERMINAL, rest), keyboardPx, dockPx), 0f);
+            PlaceChromeTravel.rest(PageKind.TERMINAL, rest), keyboardPx, dockPx), 0f);
         // The dock gone, the keyboard still up: what stands over the screen's bottom edge is the
         // keyboard and a bottom status band, nothing of the dock.
         float gone = PlaceChromeTravel.stackTranslationPx(keyboardUp ? 1f : 0f, 0f, keyboardPx,

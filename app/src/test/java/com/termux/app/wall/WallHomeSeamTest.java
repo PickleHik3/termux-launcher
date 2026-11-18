@@ -15,6 +15,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import com.termux.app.page.PageKind;
 
 /** The wall turns Home pages through its WallHome; its Host implements no Home method. */
 @RunWith(RobolectricTestRunner.class)
@@ -38,7 +39,7 @@ public class WallHomeSeamTest {
 
     /** Home, the Terminal, then a second Home page: two runs, so the second is not the default. */
     private final WallPages pages = WallPagesMigration.seed("home", 0, "home", 1)
-        .add(WallPages.PageKind.HOME, WallPages.END, null).pages;
+        .add(PageKind.HOME, WallPages.END, null).pages;
     private FakeHome home;
     private PaneWallController controller;
 
@@ -59,7 +60,7 @@ public class WallHomeSeamTest {
         controller.attachTerminalPage(terminal);
         FrameLayout widgets = new FrameLayout(activity);
         layout.addView(widgets);
-        layout.setPageView(PaneWallPage.WIDGETS, widgets);
+        layout.setPageView(PageKind.HOME, widgets);
         activity.setContentView(layout);
         layout.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(1500, View.MeasureSpec.EXACTLY));

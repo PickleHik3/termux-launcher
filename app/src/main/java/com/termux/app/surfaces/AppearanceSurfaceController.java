@@ -23,7 +23,7 @@ import androidx.core.view.WindowInsetsCompat;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.ReducedMotion;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.logger.Logger;
 
 import java.util.ArrayList;
@@ -37,7 +37,7 @@ import java.util.function.Consumer;
  * editor when the Appearance card's Wallpaper row asks for it.
  *
  * <p><b>One page.</b> There are no tabs and no mode: every door opens the editor, on the object
- * it names ({@link #open(EditorCard, PaneWallPage)}), or with no card up. The picker is not a
+ * it names ({@link #open(EditorCard, PageKind)}), or with no card up. The picker is not a
  * door of its own: the Appearance card's Wallpaper › Change raises it as a sheet over the editor: the editor's session, its frame and its Undo
  * stay where they are underneath, and Back puts the picker down. Done on the picker applies its
  * choice and goes back to the card it came from: the picker stays up, busy, until the new
@@ -195,7 +195,7 @@ public final class AppearanceSurfaceController {
          * place on screen for null); {@code onSettled} runs once the frame has settled. Already
          * presented, it raises that card (or puts the card down for null).
          */
-        void present(@Nullable EditorCard card, @Nullable PaneWallPage place,
+        void present(@Nullable EditorCard card, @Nullable PageKind place,
                      @Nullable Runnable onSettled);
 
         /**
@@ -203,7 +203,7 @@ public final class AppearanceSurfaceController {
          * from the first frame, {@code onSettled} run once the frame's first pass has placed them.
          * A relaunch reopening its carried session. Animated like {@link #present} by default.
          */
-        default void presentInPlace(@Nullable EditorCard card, @Nullable PaneWallPage place,
+        default void presentInPlace(@Nullable EditorCard card, @Nullable PageKind place,
                                     @Nullable Runnable onSettled) {
             present(card, place, onSettled);
         }
@@ -429,7 +429,7 @@ public final class AppearanceSurfaceController {
 
     // -------------------------------------------------------------------------------------- open
 
-    /** {@link #open(EditorCard, PaneWallPage)} with no card and no place. */
+    /** {@link #open(EditorCard, PageKind)} with no card and no place. */
     public void open() {
         open(null, null);
     }
@@ -439,7 +439,7 @@ public final class AppearanceSurfaceController {
      * that names no card reopens the one the person left up within Settings' window. Open
      * already, it puts the picker down and raises that card.
      */
-    public void open(@Nullable EditorCard card, @Nullable PaneWallPage place) {
+    public void open(@Nullable EditorCard card, @Nullable PageKind place) {
         if (mOpen) {
             if (mEditor.isPresented()) {
                 if (mWallpaperShown) hideWallpaper();
@@ -587,7 +587,7 @@ public final class AppearanceSurfaceController {
      * Presents the editor once its wallpaper and the launcher's container are ready, trying up to
      * {@code attempts} times before the surface closes.
      */
-    private void presentEditor(@Nullable EditorCard card, @Nullable PaneWallPage place,
+    private void presentEditor(@Nullable EditorCard card, @Nullable PageKind place,
                                boolean thenWallpaper, int attempts) {
         final int token = mToken;
         final Runnable gaveUp = () -> {
@@ -624,7 +624,7 @@ public final class AppearanceSurfaceController {
      * picker ready, the card sheet and the bar stay unseen under it until it covers them
      * ({@link WallpaperDoorMotion#veilsChrome}).
      */
-    private void presentNow(@Nullable EditorCard card, @Nullable PaneWallPage place,
+    private void presentNow(@Nullable EditorCard card, @Nullable PageKind place,
                             boolean thenWallpaper, @NonNull Runnable gaveUp) {
         boolean inPlace = mInPlace;
         boolean veil = !inPlace && WallpaperDoorMotion.veilsChrome(thenWallpaper, mOverviewReady,

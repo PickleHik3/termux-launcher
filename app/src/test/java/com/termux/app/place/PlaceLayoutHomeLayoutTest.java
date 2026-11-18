@@ -9,10 +9,10 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -141,12 +141,12 @@ public class PlaceLayoutHomeLayoutTest {
     public void aPageSaysWhichVariantItIsArrangedBy() {
         PlaceLayoutStore store = KindFixtures.onHomePage(store());
         assertEquals("a Home page without a page layout wears the shared one (version 16)",
-            LayoutVariant.HOME, store.variantFor(PaneWallPage.WIDGETS));
-        assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
-        assertEquals(LayoutVariant.NORMAL, store.variantFor(PaneWallPage.TERMINAL));
+            LayoutVariant.HOME, store.variantFor(PageKind.HOME));
+        assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PageKind.HOME));
+        assertEquals(LayoutVariant.NORMAL, store.variantFor(PageKind.TERMINAL));
         store.setMinimal(true);
-        assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PaneWallPage.WIDGETS));
-        assertEquals(LayoutVariant.MINIMAL, store.variantFor(PaneWallPage.TERMINAL));
+        assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PageKind.HOME));
+        assertEquals(LayoutVariant.MINIMAL, store.variantFor(PageKind.TERMINAL));
         assertEquals("the Workspace's variant is still what the store stands in",
             LayoutVariant.MINIMAL, store.activeVariant());
     }
