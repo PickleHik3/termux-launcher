@@ -868,6 +868,7 @@ public final class TerminalCommandPaletteController
             resolveHomeAnchor(top, bottom);
             return;
         }
+        bottom = terminalRoomBottomPx(top, bottom, bottomStackTop());
         mMaxHeightPx = Float.MAX_VALUE;
         mHomeCenterY = Float.NaN;
         mHomeHighestTop = Float.NaN;
@@ -879,6 +880,16 @@ public final class TerminalCommandPaletteController
         // Below that sits the in-app keyboard, whose keys are how the palette is typed into: if
         // the overlay ate those taps, every keystroke would register as a dismissing outside tap.
         mModalBounds.set(0f, top, mHost.getWidth(), bottom);
+    }
+
+    /**
+     * The bottom of the terminal's room for the palette: the terminal's column fills the window
+     * and the bottom stack (dock rows and the in-app keyboard) stands over its foot, so the room
+     * ends at the stack's top. A keyboard that is down stands below the screen and takes nothing.
+     */
+    static float terminalRoomBottomPx(float roomTopPx, float roomBottomPx, float stackTopPx) {
+        return roomBottomPx
+            - CommandPaletteHomeOverlay.stackHeightPx(roomTopPx, roomBottomPx, stackTopPx);
     }
 
     /**
