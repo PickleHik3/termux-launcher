@@ -113,7 +113,6 @@ public class CrossingViewsTest {
         @Override public void coverWindowInFront(int px) { coverPx = px; }
         @Override public void preRollKeyboard(@NonNull PaneWallPage target) { preRolls.add(target); }
         @Nullable @Override public SuggestionBarView dockRow() { return null; }
-        @Override public void syncDockBeadsWithMorph() {}
         @Override public void onDockRowContentChanged() {}
     }
 

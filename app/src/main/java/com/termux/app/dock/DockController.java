@@ -843,39 +843,6 @@ public final class DockController {
     }
 
     /**
-     * One frame of a crossing's morph under Lens beads: each bead worked out from its icon's
-     * drawn box (SuggestionBarView#drawnIconBoxes) by the rule the beads at rest follow theirs
-     * (LensBeadGeometry.drawnAt), on the surface the last full read found, so bead and icon
-     * never part. The host, the shelf and the dock's effect once, as a swipe's frame does; at
-     * rest and off beads nothing runs past the first check.
-     */
-    public void syncDockBeadsWithMorph() {
-        com.termux.app.dock.LensBeadGeometry.Beads rest = mDockBeads;
-        SuggestionBarView row = mHost.dockRow();
-        if (rest == null || row == null || Float.isNaN(mDockBeadsRowDy)
-            || Float.isNaN(mDockBeadsBottomPx)) return;
-        View host = mHost.hotView(R.id.accessory_surface_host);
-        if (!(host instanceof DockSurfaceHostLayout) || host.getWidth() <= 0) return;
-        int count = row.drawnIconBoxes(mDockBeadBoxes);
-        if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return;
-        for (int i = 0; i < count; i++) {
-            mDockBeadBoxes[i * 4] += mDockBeadsRowDx;
-            mDockBeadBoxes[i * 4 + 1] += mDockBeadsRowDy;
-            mDockBeadBoxes[i * 4 + 2] += mDockBeadsRowDx;
-            mDockBeadBoxes[i * 4 + 3] += mDockBeadsRowDy;
-        }
-        com.termux.app.dock.LensBeadGeometry.Beads drawn =
-            com.termux.app.dock.LensBeadGeometry.drawnAt(rest, mDockBeadBoxes, count, 0f, 0f,
-                host.getWidth(), mDockBeadsBottomPx, mHost.density());
-        if (drawn.equals(rest)) return;
-        mDockBeads = drawn;
-        ((DockSurfaceHostLayout) host).setBeads(dockBeadsDrawn());
-        DockShelfView shelf = mHost.hotView(R.id.accessory_shelf_fx);
-        if (shelf != null && mHost.dockRows().shelfShown()) shelf.setBeads(dockBeadsShadowed());
-        mHost.rebuildBackdropGlassEffectForLens();
-    }
-
-    /**
      * Works the beads out again from the row and the host as laid out and hands them to the
      * host; true when they changed. A change between beads and the slab re-cuts the host's
      * shape at once (the slab's rim and clip go, or come back).
@@ -932,8 +899,7 @@ public final class DockController {
         if (!com.termux.app.dock.LensBeadGeometry.rowWearsBeadsCuttingFrame(layout,
             mHost.stackStandsDownOnFrame(),
             mHost.keyboardSharesDockGlass())) return null;
-        // Where the row draws its icons: as laid out at rest, where a crossing's morph draws
-        // them mid-slide and through its landing (SuggestionBarView#drawnIconBoxes).
+        // Where the row draws its icons (SuggestionBarView#drawnIconBoxes).
         int count = row.drawnIconBoxes(mDockBeadBoxes);
         if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return null;
         float[] rowAt = layoutOffsetIn(row, container);

@@ -8,7 +8,6 @@ import com.termux.app.chrome.Dress;
 import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockGeometry;
 import com.termux.app.dock.DockLayout;
-import com.termux.app.dock.DockMorph;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
@@ -68,9 +67,6 @@ public class TerminalRoundTripParityTest {
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}
         @Override public void preRoll(@NonNull PaneWallPage target) {}
-        @Override public void beginMorph(@NonNull DockLayout leaving, @NonNull DockLayout arriving) {}
-        @Override public void dress(@NonNull DockMorph morph) {}
-        @Override public void endMorph(@NonNull DockLayout landed) {}
     }
 
     private static final class Stored implements DressResolver.Source {

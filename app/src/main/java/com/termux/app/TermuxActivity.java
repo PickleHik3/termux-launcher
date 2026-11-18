@@ -25001,11 +25001,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public void syncDockBeadsWithMorph() {
-            mDock.syncDockBeadsWithMorph();
-        }
-
-        @Override
         public void onDockRowContentChanged() {
             TermuxActivity.this.onDockRowContentChanged();
         }
@@ -25210,8 +25205,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // content's hold and the cover the pane controller kept on the window in front (the
             // geometry pass below lays the panes out at the size the cover stood in for, in the
             // same traversal), the keyboard's and the content's pre-rolls, the stack's
-            // translation, sink and alphas, the bar's ride, a fold's and a melt's shares, and the
-            // dock's morph, the row laying out the landed rest its last frame already drew. From
+            // translation, sink and alphas, the bar's ride, and a fold's and a melt's shares. From
             // here the chrome reads the store's arrangements again.
             Trace.beginSection("Settle.land");
             com.termux.app.place.Crossing.Landing crossingLanding =

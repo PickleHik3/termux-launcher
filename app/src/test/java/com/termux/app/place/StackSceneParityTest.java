@@ -7,8 +7,6 @@ import androidx.annotation.NonNull;
 
 import com.termux.app.chrome.StackMaterial;
 import com.termux.app.chrome.StackMaterial.RegionLook;
-import com.termux.app.dock.DockLayout;
-import com.termux.app.dock.DockMorph;
 import com.termux.app.wall.PageRef;
 import com.termux.app.wall.PaneWallPage;
 
@@ -196,9 +194,6 @@ public class StackSceneParityTest {
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}
         @Override public void preRoll(@NonNull PaneWallPage target) {}
-        @Override public void beginMorph(@NonNull DockLayout leaving, @NonNull DockLayout arriving) {}
-        @Override public void dress(@NonNull DockMorph morph) {}
-        @Override public void endMorph(@NonNull DockLayout landed) {}
     }
 
     // ---- Parity with today -----------------------------------------------------------------
