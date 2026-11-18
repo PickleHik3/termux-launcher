@@ -68,7 +68,7 @@ public class SceneSourceTest {
 
     @Test
     public void shaderWithMetaPlaysItsFiles() {
-        ShaderStore.Meta meta = new ShaderStore.Meta("Tunnel", ShaderSafety.Quality.QUARTER, 60, "tex.png");
+        ShaderStore.Meta meta = new ShaderStore.Meta("Tunnel", ShaderSafety.Quality.QUARTER, 60, "tex.png", null);
         SceneSource source = SceneSource.resolve(mContext, WallpaperMotion.shader("tunnel"), 30, meta);
         assertNotNull(source);
         assertEquals("shader:tunnel", source.key());

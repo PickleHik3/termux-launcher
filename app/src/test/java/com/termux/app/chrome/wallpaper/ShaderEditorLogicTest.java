@@ -121,7 +121,7 @@ public class ShaderEditorLogicTest {
     }
 
     private static final com.termux.app.chrome.scene.ShaderStore.Meta SAVED =
-        new com.termux.app.chrome.scene.ShaderStore.Meta("Aurora", ShaderSafety.Quality.HALF, 30, null);
+        new com.termux.app.chrome.scene.ShaderStore.Meta("Aurora", ShaderSafety.Quality.HALF, 30, null, null);
 
     @Test
     public void canApply_newAndExampleAlways() {

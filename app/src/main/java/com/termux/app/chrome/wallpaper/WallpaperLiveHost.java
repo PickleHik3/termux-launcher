@@ -830,7 +830,8 @@ public final class WallpaperLiveHost {
     private static boolean saveShader(@NonNull Context app, @NonNull ShaderEditorPage.Draft d) {
         try {
             ShaderStore.writeSource(app, d.id, d.source);
-            ShaderStore.writeMeta(app, d.id, new ShaderStore.Meta(d.name, d.quality, d.rateHz, d.texture));
+            ShaderStore.writeMeta(app, d.id, new ShaderStore.Meta(d.name, d.quality, d.rateHz, d.texture,
+                ShaderStore.readMeta(app, d.id).depth));
             if (d.savedTexture != null && !d.savedTexture.equals(d.texture)) {
                 ShaderStore.removeTexture(app, d.id, d.savedTexture);
             }
@@ -1007,7 +1008,8 @@ public final class WallpaperLiveHost {
         IO.execute(() -> {
             String stored = null;
             try {
-                stored = ShaderStore.importTexture(app, id, uri, displayName(app, uri), null);
+                stored = ShaderStore.importTexture(app, id, uri, displayName(app, uri), null,
+                    ShaderStore.readMeta(app, id).depth);
             } catch (IOException | RuntimeException e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Copying the texture failed", e);
             }
