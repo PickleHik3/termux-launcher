@@ -23,7 +23,8 @@ public class TerminalPageBackTest {
         boolean escape;
         boolean keyboardUp;
         int lowered;
-        @Nullable @Override public TerminalPaneController.Window activeWindow() { return null; }
+        @Nullable TerminalPaneController.Window active;
+        @Nullable @Override public TerminalPaneController.Window activeWindow() { return active; }
         @NonNull @Override public View paneHost() { throw new UnsupportedOperationException(); }
         @Override public boolean keysWithTerminal() { return true; }
         @Override public boolean handKeysToTerminal() { return true; }
@@ -82,6 +83,30 @@ public class TerminalPageBackTest {
         assertEquals(0, homes);
         assertTrue(pages.onBack());
         assertEquals(1, homes);
+        assertEquals(1, host.lowered);
+    }
+
+    /**
+     * The state seen on pong before this page existed (Back did nothing): the Terminal cell's
+     * window resolved through the stops, keyboard up, Back not mapped, nothing raised. Four presses
+     * through the chain: the first lowers the keyboard, the second goes to Home page 1.
+     */
+    @Test
+    public void backOnAWindowResolvedThroughTheStopsLowersThenGoesHome() {
+        Pages chain = new Pages(PageHost.NONE, () -> { });
+        int[] home = {0};
+        chain.setHomeDefault(() -> { home[0]++; return true; });
+        TerminalPages windows = new TerminalPages(host);
+        chain.putStops(7, windows);
+        host.active = new TerminalPaneController.Window(new TerminalPaneController.Leaf(null));
+        chain.landed(7, PageKind.TERMINAL);
+        chain.applyFront();
+        host.keyboardUp = true;
+        assertTrue(chain.onBack());
+        assertEquals(1, host.lowered);
+        assertEquals(0, home[0]);
+        assertTrue(chain.onBack());
+        assertEquals(1, home[0]);
         assertEquals(1, host.lowered);
     }
 }
