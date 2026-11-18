@@ -421,4 +421,97 @@ public class FramePipelineTest {
 
         assertEquals(0, chromeRuns);
     }
+
+    /** A root in a real window, so the pipeline books frames on it. */
+    private static View attachedRoot() {
+        android.app.Activity activity =
+            org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        View root = new View(activity);
+        activity.setContentView(root);
+        return root;
+    }
+
+    /**
+     * One frame, run directly: the looper's choreographer re-runs a frame that books the next at
+     * the same instant, so idling it would never end.
+     */
+    private void nextFrame() {
+        frames.runBookedFrameForTest();
+    }
+
+    @Test
+    public void aSteppedHoldTicksOncePerFrameUntilItsOwnerIsDone() {
+        View root = attachedRoot();
+        frames.attach(root);
+        Hold hold = Hold.take("x11-swap", 300L, Hold.NO_FRAME_LIMIT, () -> now);
+        int[] left = {2};
+        frames.stepHold(hold, () -> {
+            if (--left[0] > 0) return true;
+            hold.signal();
+            return false;
+        });
+        nextFrame();
+        assertEquals(1, left[0]);
+        assertTrue(hold.isOpen());
+        nextFrame();
+        assertEquals(Hold.SIGNAL, hold.releaseReason());
+        assertEquals(2, hold.heldFrames());
+        assertEquals(0, frames.steppedHolds());
+        nextFrame();
+        assertEquals("nothing ticks once it is done", 0, left[0]);
+        assertFalse(frames.isFrameBooked());
+    }
+
+    @Test
+    public void aSteppedHoldEndsByItsTimeBackstopOnAFrame() {
+        View root = attachedRoot();
+        frames.attach(root);
+        Hold hold = Hold.take("x11-cover", 160L, Hold.NO_FRAME_LIMIT, () -> now);
+        int[] steps = {0};
+        frames.stepHold(hold, () -> ++steps[0] > 0);
+        nextFrame();
+        now += 200L;
+        nextFrame();
+        assertEquals(Hold.BACKSTOP, hold.releaseReason());
+        assertEquals("the frame past the backstop asks nothing of the owner", 1, steps[0]);
+        assertEquals(0, frames.steppedHolds());
+    }
+
+    @Test
+    public void aHoldReleasedElsewhereIsDropped() {
+        View root = attachedRoot();
+        frames.attach(root);
+        Hold hold = Hold.take("x11-swap", 300L, Hold.NO_FRAME_LIMIT, () -> now);
+        int[] steps = {0};
+        frames.stepHold(hold, () -> ++steps[0] > 0);
+        nextFrame();
+        hold.landing();
+        nextFrame();
+        assertEquals(1, steps[0]);
+        assertEquals(0, frames.steppedHolds());
+    }
+
+    @Test
+    public void withoutAWindowNothingTicksAndNothingSpins() {
+        View root = newRoot();
+        frames.attach(root);
+        Hold hold = Hold.take("x11-swap", 300L, Hold.NO_FRAME_LIMIT, () -> now);
+        int[] steps = {0};
+        frames.stepHold(hold, () -> ++steps[0] > 0);
+        mainLooper().idle();
+        assertEquals(0, steps[0]);
+        assertFalse(frames.isFrameBooked());
+        assertTrue("the owner's own timer is its backstop", hold.isOpen());
+    }
+
+    @Test
+    public void destroyEndsSteppedHoldsAsLanded() {
+        View root = attachedRoot();
+        frames.attach(root);
+        Hold hold = Hold.take("x11-swap", 300L, Hold.NO_FRAME_LIMIT, () -> now);
+        frames.stepHold(hold, () -> true);
+        frames.destroy();
+        assertEquals(Hold.LANDING, hold.releaseReason());
+        assertEquals(0, frames.steppedHolds());
+    }
 }

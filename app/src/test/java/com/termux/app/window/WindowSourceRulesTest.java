@@ -229,9 +229,7 @@ public class WindowSourceRulesTest {
         // local first-layout wait: moves onto the first-layout helper
         "app/wall/PaneWallLayout.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
-        "app/x11/DisplayTouchpadView.java:2",
-        // own frame tick or fling step: moves into the pipeline table or the helper
-        "app/x11/X11PaneFrame.java:4"
+        "app/x11/DisplayTouchpadView.java:2"
     );
 
     /**

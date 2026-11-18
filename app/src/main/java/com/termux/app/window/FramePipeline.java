@@ -11,6 +11,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 
 /**
@@ -53,6 +54,9 @@ public final class FramePipeline {
     private final FrameGuards mGuards = new FrameGuards();
     /** Holds on the first frame (the relaunch reveal); open ones keep that draw back. */
     private final ArrayList<Hold> mFirstFrameHolds = new ArrayList<>(1);
+    /** Holds stepped once per frame ({@link #stepHold}), each beside what it asks of a frame. */
+    private final ArrayList<Hold> mSteppedHolds = new ArrayList<>(2);
+    private final ArrayList<BooleanSupplier> mHoldSteps = new ArrayList<>(2);
     private int mFirstFrameAttempts;
     private int mDirty;
     /** Steps run on every drawn frame without asking for one ({@link #arm}). */
@@ -241,10 +245,45 @@ public final class FramePipeline {
         return mFirstFrameBackstops;
     }
 
+    /**
+     * Steps {@code hold} once per frame while it is open, for a wait counted in frames (a surface
+     * that needs a frame or two to fill): each frame the hold counts the frame and ends by its time
+     * backstop when that has passed, then {@code onFrame} runs; it answers false once its owner is
+     * done. A hold released elsewhere is dropped. Frames are asked only while a stepped hold is
+     * open and the root has a window: without one, nothing ticks, and the owner's own timer is the
+     * backstop. Stepping the same hold again replaces what it asks.
+     */
+    public void stepHold(@NonNull Hold hold, @NonNull BooleanSupplier onFrame) {
+        if (mDestroyed || !hold.isOpen()) return;
+        int at = mSteppedHolds.indexOf(hold);
+        if (at >= 0) {
+            mHoldSteps.set(at, onFrame);
+        } else {
+            mSteppedHolds.add(hold);
+            mHoldSteps.add(onFrame);
+        }
+        bookHoldFrame();
+    }
+
+    /** One booked frame, run now, as the vsync would run it; for tests. */
+    void runBookedFrameForTest() {
+        runBookedPass();
+    }
+
+    /** How many holds are stepped per frame now; for tests. */
+    int steppedHolds() {
+        return mSteppedHolds.size();
+    }
+
     /** Unhooks the root and drops every booked pass; nothing runs afterwards. */
     public void destroy() {
         mDestroyed = true;
         mDirty = 0;
+        for (int i = mSteppedHolds.size() - 1; i >= 0; i--) {
+            mSteppedHolds.get(i).release(Hold.LANDING, "destroyed");
+        }
+        mSteppedHolds.clear();
+        mHoldSteps.clear();
         for (int i = mFirstFrameHolds.size() - 1; i >= 0; i--) {
             mFirstFrameHolds.get(i).release(Hold.LANDING, "destroyed");
         }
@@ -286,14 +325,49 @@ public final class FramePipeline {
     private void runBookedPass() {
         mAnimationBooked = false;
         mPostBooked = false;
-        if (mDestroyed || mDirty == 0) return;
+        if (mDestroyed) return;
         View root = mRoot;
         boolean framed = root != null && root.isAttachedToWindow();
-        // Without a window the post stands in for the whole frame, the draw steps too.
-        runTable(!framed, false);
-        mAfterPass = framed;
-        // A draw step waits for the pre-draw hook: make sure this frame draws.
-        if (framed && (mDirty & DRAW_STEPS) != 0 && !mDestroyed) root.invalidate();
+        // Stepped holds tick on real frames only: a post without a window would spin.
+        if (framed && !mSteppedHolds.isEmpty()) stepHolds();
+        if (mDirty != 0 && !mDestroyed) {
+            // Without a window the post stands in for the whole frame, the draw steps too.
+            runTable(!framed, false);
+            mAfterPass = framed;
+            // A draw step waits for the pre-draw hook: make sure this frame draws.
+            if (framed && (mDirty & DRAW_STEPS) != 0 && !mDestroyed) root.invalidate();
+        }
+        if (!mSteppedHolds.isEmpty()) bookHoldFrame();
+    }
+
+    /** One frame for every stepped hold; what a step does may step, release or add holds. */
+    private void stepHolds() {
+        Hold[] holds = mSteppedHolds.toArray(new Hold[0]);
+        BooleanSupplier[] steps = mHoldSteps.toArray(new BooleanSupplier[0]);
+        for (int i = 0; i < holds.length; i++) {
+            Hold hold = holds[i];
+            boolean keep = hold.onFrame() && steps[i].getAsBoolean() && hold.isOpen();
+            int at = mSteppedHolds.indexOf(hold);
+            // Re-stepped by its own step: the newer ask stays.
+            if (!keep && at >= 0 && mHoldSteps.get(at) == steps[i]) {
+                mSteppedHolds.remove(at);
+                mHoldSteps.remove(at);
+            }
+        }
+        for (int i = mSteppedHolds.size() - 1; i >= 0; i--) {
+            if (!mSteppedHolds.get(i).isOpen()) {
+                mSteppedHolds.remove(i);
+                mHoldSteps.remove(i);
+            }
+        }
+    }
+
+    /** The next frame for the stepped holds, through the same booked pass; only with a window. */
+    private void bookHoldFrame() {
+        View root = mRoot;
+        if (mDestroyed || root == null || !root.isAttachedToWindow() || mAnimationBooked) return;
+        mAnimationBooked = true;
+        root.postOnAnimation(mBookedPass);
     }
 
     /** The one pre-draw hook. Runs the table only on a frame an input marked dirty. */

@@ -2,6 +2,7 @@ package com.termux.app.wall;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -2531,6 +2532,11 @@ public class PaneWallLayoutTest {
         letTheHoldElapse();
         letTheMotionSettle();
         assertTrue("the hold asked for the stand-in", page.holds > 0);
+        com.termux.app.window.Hold still = wall.stillHold(PaneWallPage.DISPLAY);
+        assertNotNull("the wall's wait on the still is a named hold", still);
+        assertEquals(PaneWallLayout.STILL_HOLD, still.name());
+        assertEquals("a copy that lands at once ends it by its signal",
+            com.termux.app.window.Hold.SIGNAL, still.releaseReason());
         assertEquals(display, wall.sinkPage());
         assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
         assertEquals("the stand-in is a plain view: dimmed on a layer like any page",
@@ -2557,6 +2563,8 @@ public class PaneWallLayoutTest {
         letTheHoldElapse();
         letTheMotionSettle();
         // The copy is on its way: today's sink, a scale on the live surface and no layer.
+        assertTrue("the wall's still wait is open while the copy is on its way",
+            wall.stillHold(PaneWallPage.DISPLAY).isOpen());
         assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
         page.land();
@@ -2582,6 +2590,7 @@ public class PaneWallLayoutTest {
         // The left border, pulled right: the held Display page would tip if it could.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
         letTheHoldElapse();
+        com.termux.app.window.Hold still = wall.stillHold(PaneWallPage.DISPLAY);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 304f, HEIGHT / 2f,
             400L));
         assertFalse(wall.tiltPages().contains(display));
@@ -2595,6 +2604,8 @@ public class PaneWallLayoutTest {
         letTheMotionSettle();
         assertEquals("rest still tells it, so a copy landing late is only kept", 1,
             page.releases);
+        assertEquals("the rest ends the wall's wait that no copy answered",
+            com.termux.app.window.Hold.LANDING, still.releaseReason());
     }
 
     @Test

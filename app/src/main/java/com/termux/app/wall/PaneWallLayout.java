@@ -493,8 +493,10 @@ public final class PaneWallLayout extends ViewGroup
      * The places whose surface pages ({@link SurfacePage}) were asked to hold still for the motion
      * under way, from its start until the wall rests with every sink risen.
      */
-    private final java.util.EnumSet<PaneWallPage> mStillPlaces =
-        java.util.EnumSet.noneOf(PaneWallPage.class);
+    private final java.util.EnumMap<PaneWallPage, com.termux.app.window.Hold> mStillPlaces =
+        new java.util.EnumMap<>(PaneWallPage.class);
+    /** The wall's wait on a surface page's still: named, released by the still or by the rest. */
+    static final String STILL_HOLD = "wall-still";
     /** Settings' Page transition, which poses the pages as they slide ({@link WallPageTransition}). */
     @NonNull private HomePageTransition mTransition = HomePageTransition.DEFAULT;
     /** Scratch for one page's pose; main thread only. */
@@ -701,7 +703,7 @@ public final class PaneWallLayout extends ViewGroup
         if (previous != null && previous != view) unpose(previous);
         // A surface page leaving the wall lets go of its stand-in and the copy it kept.
         if (previous instanceof SurfacePage && previous != view) {
-            mStillPlaces.remove(page);
+            endStillHold(mStillPlaces.remove(page));
             ((SurfacePage) previous).dropStill();
         }
         if (view == null) mPageViews.remove(page);
@@ -3210,7 +3212,10 @@ public final class PaneWallLayout extends ViewGroup
     private void holdStill(@NonNull PaneWallPage place) {
         View page = mPageViews.get(place);
         if (!(page instanceof SurfacePage) || !isLaid(place)) return;
-        mStillPlaces.add(place);
+        if (!mStillPlaces.containsKey(place)) {
+            mStillPlaces.put(place, com.termux.app.window.Hold.take(STILL_HOLD,
+                SurfaceStandIn.COVER_BACKSTOP_MS));
+        }
         ((SurfacePage) page).holdStill(() -> onStillReady(place));
     }
 
@@ -3220,7 +3225,10 @@ public final class PaneWallLayout extends ViewGroup
      * plank's angle — so it snaps in where it would have been.
      */
     private void onStillReady(@NonNull PaneWallPage place) {
-        if (!mStillPlaces.contains(place)) return;
+        com.termux.app.window.Hold hold = mStillPlaces.get(place);
+        if (hold == null) return;
+        // The still is up: the wait ended by what it waited for (a later ask finds it ended).
+        hold.signal();
         View page = mPageViews.get(place);
         if (page == null || !canTransform(place, page)) return;
         if (page == mSinkPage && !mSinkLayered) {
@@ -3239,7 +3247,8 @@ public final class PaneWallLayout extends ViewGroup
      */
     private void releaseStills() {
         if (mStillPlaces.isEmpty()) return;
-        List<PaneWallPage> places = new ArrayList<>(mStillPlaces);
+        List<PaneWallPage> places = new ArrayList<>(mStillPlaces.keySet());
+        for (com.termux.app.window.Hold hold : mStillPlaces.values()) endStillHold(hold);
         mStillPlaces.clear();
         for (PaneWallPage place : places) {
             View page = mPageViews.get(place);
@@ -3250,7 +3259,20 @@ public final class PaneWallLayout extends ViewGroup
     /** The places asked to hold still for the motion under way, for tests. */
     @NonNull
     java.util.Set<PaneWallPage> stillPlaces() {
-        return Collections.unmodifiableSet(java.util.EnumSet.copyOf(mStillPlaces));
+        java.util.EnumSet<PaneWallPage> places = java.util.EnumSet.noneOf(PaneWallPage.class);
+        places.addAll(mStillPlaces.keySet());
+        return Collections.unmodifiableSet(places);
+    }
+
+    /** The wall's still wait for {@code place} for the motion under way; null when none; tests. */
+    @Nullable
+    com.termux.app.window.Hold stillHold(@NonNull PaneWallPage place) {
+        return mStillPlaces.get(place);
+    }
+
+    /** A still wait the rest or the page's leaving ends: the motion's work landed. */
+    private static void endStillHold(@Nullable com.termux.app.window.Hold hold) {
+        if (hold != null) hold.landing();
     }
 
     // ---- Motion ----------------------------------------------------------------------------

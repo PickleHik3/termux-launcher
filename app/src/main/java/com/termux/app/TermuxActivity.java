@@ -27046,6 +27046,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.x11.X11PaneFrame page =
             mPaneWallController.attachDisplayWindow(getLayoutInflater());
         if (page == null) return false;
+        page.setFramePipeline(mFrames);
         page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
