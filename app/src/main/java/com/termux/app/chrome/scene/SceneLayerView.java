@@ -733,7 +733,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                     loadVideo();
                 } else {
                     loadShader();
-                    if (mSpec.channel0 != null) mGl.setChannel(0, new ImageChannel(mSpec.channel0));
+                    if (mSpec.channel0 != null) mGl.setChannel(0, ImageChannel.photo(mSpec.channel0));
                 }
                 mChannelsPaused = false;
             }

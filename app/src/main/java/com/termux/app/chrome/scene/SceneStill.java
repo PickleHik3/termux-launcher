@@ -96,7 +96,7 @@ public final class SceneStill {
             } catch (GlShader.CompileException e) {
                 return null;
             }
-            if (channel0 != null) gl.setChannel(0, new ImageChannel(channel0));
+            if (channel0 != null) gl.setChannel(0, ImageChannel.photo(channel0));
             ShaderInputs in = new ShaderInputs();
             in.setDate(System.currentTimeMillis());
             in.pageOffset = 0f;
