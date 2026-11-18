@@ -112,6 +112,10 @@ Before calling a change done, say which of these applied:
   code shows a likely cause that fits it, fix it and name what to check. Build a reproduction (a
   failing test, a log line, a measured value) only when no cause in the code fits, or one fix has
   already missed. Fixes ship with a focused regression test.
+- Gradle: let it keep its daemon (a warm daemon builds an unchanged tree in about 3 s instead of
+  19 s; it exits after 15 idle minutes). Never `./gradlew --stop`: it stops every session's daemon
+  mid-build. The full unit suite runs through `scripts/full-suite.sh [log]`, which waits for any
+  other full suite on the machine to finish first and prints one result line per module.
 - Pong is the truth for layout and motion; the emulator is for throwaway shots.
 - **Pong rounds** (until the next release ships; the developer set this on 2026-11-18):
   - Every build installed on pong is a logging build. The motion log stays on, and the diagnostic

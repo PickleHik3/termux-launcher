@@ -64,7 +64,7 @@ the diff.
 
 Tests whose only job is to write pictures for a person to look at are skipped in an ordinary run
 (`ReportRenders.assumeRequested()`). Run them with `-Preports.renders`, for example
-`./gradlew --no-daemon :app:testDebugUnitTest --tests 'com.termux.app.surfaces.*' -Preports.renders`.
+`./gradlew :app:testDebugUnitTest --tests 'com.termux.app.surfaces.*' -Preports.renders`.
 They write PNGs under `app/build/reports/editor-rows` (card sheets), `editor-row-kinds` and
 `tile-grid`, and under `app/src/test/screenshots` (the Roborazzi prototype in
 `ScreenshotPrototypeTest`). A new picture-only test calls `ReportRenders.assumeRequested()` first;
