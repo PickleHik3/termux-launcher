@@ -985,6 +985,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final ResumeRest mResumeRest = new ResumeRest();
     private boolean mReturnHoldOpen;
+    /** The room the stop found, recorded with the rest ({@link ResumeRest#recordStop}). */
+    private long mStopRoomKey;
     @Nullable private com.termux.app.window.FirstLayout.Handle mReturnWait;
 
     /** The facts a page's rest is computed from, as the activity reads them now. */
@@ -11141,9 +11143,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // re-measures posted from onResume and focus — would each reach the PTY on their own.
         // The stop, not the pause: a paused window can still be on screen (a dialog over us, a
         // multi-window peer) and its grid must keep following it; a stopped one shows nothing.
+        boolean returnHoldBegun = false;
         if (mPaneController != null && mPaneController.beginReturnHold()) {
             mReturnHoldOpen = true;
-            mResumeRest.record(frontRest(), returnRoomKey());
+            // The room as the stop found it; the rest is recorded once the place's keyboard
+            // memory is written below, which it reads.
+            mStopRoomKey = returnRoomKey();
+            returnHoldBegun = true;
             android.util.Log.d(TerminalView.GEOMETRY_LOG_TAG, "return hold begin reason=stop");
         }
         if (mWidgetPaneController != null) mWidgetPaneController.onStop();
@@ -11154,7 +11160,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Leaving the app counts as leaving the place on screen: it comes back the way it was
         // left, keyboard included. The place is the one the chrome is committed to, which a slide
         // cut short by the stop has not changed yet.
-        rememberPlaceKeyboard(mLastWallPage);
+        if (returnHoldBegun) {
+            mResumeRest.recordStop(() -> rememberPlaceKeyboard(mLastWallPage), this::frontRest,
+                mStopRoomKey);
+        } else {
+            rememberPlaceKeyboard(mLastWallPage);
+        }
         if (mDock.dockPlankController() != null) {
             mDock.dockPlankController().reset();
         }

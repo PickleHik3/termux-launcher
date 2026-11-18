@@ -41,4 +41,17 @@ public class ResumeRestTest {
     @Test public void nothingRecordedResizes() {
         assertEquals(ResumeRest.Decision.RESIZE, new ResumeRest().decide(rest(true), 42L));
     }
+
+    @Test public void aKeyboardFlippedAtRestBeforeTheStopIsTheRestTheReturnKeeps() {
+        // The page's rest reads its remembered keyboard, which the stop writes: what the person
+        // left it as (up) must be what was recorded, not the memory from before the flip.
+        boolean[] remembered = {false};
+        boolean[] keyboardUpNow = {true};
+        ResumeRest resume = new ResumeRest();
+
+        resume.recordStop(() -> remembered[0] = keyboardUpNow[0],
+            () -> rest(remembered[0]), 42L);
+
+        assertEquals(ResumeRest.Decision.KEEP, resume.decide(rest(remembered[0]), 42L));
+    }
 }

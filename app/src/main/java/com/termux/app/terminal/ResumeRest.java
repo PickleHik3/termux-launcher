@@ -27,6 +27,17 @@ public final class ResumeRest {
         mRoomKey = roomKey;
     }
 
+    /**
+     * The stop: {@code rememberPlaceState} writes what the page's rest reads (its keyboard
+     * memory), so the rest is read after it: a flip made at rest is the rest the return compares.
+     * The room key is the geometry as the stop found it, read by the caller.
+     */
+    public void recordStop(@NonNull Runnable rememberPlaceState,
+                           @NonNull java.util.function.Supplier<Rest> rest, long roomKey) {
+        rememberPlaceState.run();
+        record(rest.get(), roomKey);
+    }
+
     /** Forget the record (the window goes, or the return was decided). */
     public void clear() {
         mRecorded = false;
