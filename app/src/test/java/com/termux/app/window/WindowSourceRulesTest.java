@@ -424,6 +424,16 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void theActivityHasNoDisplayLandingAndTheBindingHostNoLand() throws IOException {
+        List<String> problems = new ArrayList<>();
+        if (sources().get("app/TermuxActivity.java").contains("onDisplayPageLandedAt("))
+            problems.add("TA has onDisplayPageLandedAt");
+        if (sources().get("app/x11/DisplayPageBinding.java").contains("void land("))
+            problems.add("DisplayPageBinding.Host has land(");
+        assertNone(problems);
+    }
+
+    @Test
     public void homeDoesItsPageEventsInTheHomePageNotTheHost() throws IOException {
         List<String> problems = new ArrayList<>();
         String host = sources().get("app/launcher/home/HomePageHost.java");

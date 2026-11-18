@@ -693,8 +693,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.launcher.LauncherAppLauncher.EntryRunner mEntryRunnerHook;
     /** Hears a display that announced itself with no window open; taken out again on destroy. */
     @Nullable private com.termux.app.x11.X11DisplayReceiver.UnclaimedListener mUnclaimedDisplayListener;
-    /** The Display page the drawer routed a Linux app to, and when (A3c); -1 for none. */
-    private int mRoutedLinuxPage = -1;
     /** The Display page the latest Linux launch added itself (#192), -1 when it added none. */
     private int mAddedLinuxPage = -1;
     /** An app has had a window on the display since the temporary Display page went up. */
@@ -706,9 +704,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** How long the display stays empty of apps before its temporary page goes (a relaunch, a
      *  splash window handing over to the main one, a desktop being replaced all pass through 0). */
     private static final long TEMPORARY_DISPLAY_APP_GONE_MS = 2000L;
-    private long mRoutedLinuxAtMs;
-    /** True while a landing runs its bound app: the runner's show-display step must not slide. */
-    private boolean mLandingRunsApp;
     /** Turns a display window's {@code WM_CLASS} into the app icon its chip wears. */
     @Nullable private com.termux.app.x11.X11WindowIconResolver mDisplayWindowIcons;
     /**
@@ -1819,8 +1814,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPaneWallController == null || !isX11DisplayEnabled()) return false;
                     return mPaneWallController.displayWindow() == null && buildDisplayFrame();
                 }
-                @Override public void land(int pageId) { onDisplayPageLandedAt(pageId); }
             });
+    /** What a page's landing asks of this window: the wall, the Linux apps, the row. */
+    private final com.termux.app.x11.DisplayLanding mDisplayLanding =
+        new com.termux.app.x11.DisplayLanding(new com.termux.app.x11.DisplayLanding.Host() {
+            @Override public boolean enabled() {
+                return mPaneWallController != null && isX11DisplayEnabled();
+            }
+            @Nullable @Override public com.termux.app.wall.WallPages.Page page(int pageId) {
+                return wallPages().page(pageId);
+            }
+            @Override public void attachEmbeddedDisplay() { TermuxActivity.this.attachEmbeddedDisplay(); }
+            @Override public boolean hasDisplayWindow() {
+                return mPaneWallController.displayWindow() != null;
+            }
+            @Override public void syncDisplayOnRow() { TermuxActivity.this.syncDisplayOnRow(); }
+            @Override public boolean hasLinuxRunner() { return mLinuxApps != null; }
+            @Override public void runLinuxApp(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
+                mLinuxApps.run(app);
+            }
+            @Override public boolean raiseLinuxApp(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
+                return mLinuxAppsHost != null && mLinuxAppsHost.raiseWindowFor(app);
+            }
+            @Override public int linuxWindowIdFor(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
+                return TermuxActivity.this.linuxWindowIdFor(app);
+            }
+            @Override public boolean autostartEnabled() {
+                return mPreferences != null && mPreferences.isX11DisplayAutostartEnabled();
+            }
+        }, mDisplayServer, mDisplayPageBinding);
     /** The Display pages' one display view, and what they ask of this window. */
     private final com.termux.app.x11.DisplayPages mDisplayPages =
         new com.termux.app.x11.DisplayPages(new com.termux.app.x11.DisplayPageHost() {
@@ -25600,6 +25622,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Before anything lands the wall: Home's pages, run and press page come from the seam.
         mPaneWallController.setHome(mHomeSeam);
         // The display view stands on one Display page at a time (ADR 0015, A3b).
+        mDisplayPageBinding.setLanding(mDisplayLanding::landedAt);
         mPaneWallController.setDisplay(mDisplayPageBinding);
         mPaneWallController.attachTerminalPage(paneHost, (x, out) ->
             mPaneController != null && mPaneController.bottomPaneEdgeAt(x, out));
@@ -26372,78 +26395,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         onWallPlacesChanged();
         refreshTerminalWindowBar();
-    }
-
-    /**
-     * The wall came to rest on Display page {@code pageId}: the display starts there when it is
-     * neither running nor on its way ({@link com.termux.app.wall.DisplayPagePolicy#startsOnLanding}) and
-     * the autostart setting is on; with it off the page shows its Start button instead.
-     * A page bound to a Linux app also brings its app up ({@link
-     * com.termux.app.wall.DisplayPagePolicy#landing}): its window raised, or the app run.
-     */
-    private void onDisplayPageLandedAt(int pageId) {
-        if (mPaneWallController == null || !isX11DisplayEnabled()) return;
-        com.termux.app.wall.WallPages.Page page = wallPages().page(pageId);
-        String binding = page == null ? null : page.binding;
-        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = null;
-        if (binding != null) {
-            app = mDisplayPageBinding.cards().find(binding);
-            // Not in the cached catalog (not read yet, or installed since): one scan, on a landing
-            // only, never per frame.
-            if (app == null) {
-                app = com.termux.app.x11.LinuxAppCatalog.find(
-                    com.termux.app.x11.LinuxAppCatalog.scan(
-                        com.termux.app.x11.LinuxAppCatalog.roots()), binding);
-            }
-            if (app == null) {
-                Logger.logWarn(LOG_TAG, "Display page " + pageId + " is bound to " + binding
-                    + ", which is gone; showing nothing new");
-            }
-        }
-        boolean running = mDisplayServer.isRunning();
-        boolean routed = com.termux.app.wall.DisplayPagePolicy.isRoutedLanding(pageId,
-            mRoutedLinuxPage, mRoutedLinuxAtMs, android.os.SystemClock.uptimeMillis());
-        // The drawer's route is answered by one landing; the next landing is the user's own.
-        if (routed) mRoutedLinuxPage = -1;
-        com.termux.app.wall.DisplayPagePolicy.Landing landing =
-            com.termux.app.wall.DisplayPagePolicy.landing(binding, app != null, running,
-                mDisplayServer.isRequested(), app != null && !app.session && running
-                    && linuxWindowIdFor(app) >= 0,
-                routed,
-                com.termux.app.wall.DisplayPagePolicy.landingAutostarts(
-                    mPreferences != null && mPreferences.isX11DisplayAutostartEnabled(),
-                    mDisplayServer.ranThisLaunch()));
-        switch (landing) {
-            case NOTHING:
-                return;
-            case RAISE_APP:
-                if (mLinuxAppsHost != null) mLinuxAppsHost.raiseWindowFor(app);
-                return;
-            case RUN_APP:
-                if (mLinuxApps == null) return;
-                attachEmbeddedDisplay();
-                if (mPaneWallController.displayWindow() == null) return;
-                mDisplayServer.setRequested(true);
-                // The wall is already here: the runner's own "show the display" must not slide it.
-                mLandingRunsApp = true;
-                try {
-                    mLinuxApps.run(app);
-                } finally {
-                    mLandingRunsApp = false;
-                }
-                syncDisplayOnRow();
-                return;
-            default:
-                break;
-        }
-        attachEmbeddedDisplay();
-        if (mPaneWallController.displayWindow() == null) return;
-        mDisplayServer.setRequested(true);
-        // SHOW_START stops here: the window is up in its not-running state and its Start button
-        // starts the display (autostart is off).
-        if (landing == com.termux.app.wall.DisplayPagePolicy.Landing.START_DISPLAY
-            && com.termux.app.x11.X11CliInstaller.hasKeyboardData()) mDisplayServer.start();
-        syncDisplayOnRow();
     }
 
     /**
@@ -27975,10 +27926,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The runner starts the display itself, with the app queued behind it. The
                     // page a drawer tap was routed to is shown; a landing that runs its page's
                     // app is already there (A3c).
-                    if (mLandingRunsApp) return;
-                    boolean routed = android.os.SystemClock.uptimeMillis() - mRoutedLinuxAtMs
-                        <= com.termux.app.wall.DisplayPagePolicy.ROUTED_LANDING_MS;
-                    if (!openDisplayWindow(false, routed ? mRoutedLinuxPage : -1))
+                    if (mDisplayLanding.landingRunsApp()) return;
+                    if (!openDisplayWindow(false, mDisplayLanding.freshRoutedPage()))
                         dropAddedLinuxPage();
                 }
                 @Override public void launchGaveUp() {
@@ -28029,9 +27978,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTemporaryDisplaySawApp = false;
                 mTemporaryDisplayStartedByLaunch = !mDisplayServer.isRunning();
             }
-            mRoutedLinuxPage = routedPage;
+            mDisplayLanding.routeTo(routedPage);
             mAddedLinuxPage = route.needsNewPage() ? routedPage : -1;
-            mRoutedLinuxAtMs = android.os.SystemClock.uptimeMillis();
             mLinuxApps.run(app);
             return true;
         };

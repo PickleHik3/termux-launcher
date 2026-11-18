@@ -52,7 +52,6 @@ public class DisplayPageBindingTest {
         int pagesCalls;
         int buildCalls;
         final List<Integer> pageAsked = new ArrayList<>();
-        final List<Integer> landed = new ArrayList<>();
 
         @Nullable @Override public X11PaneFrame frame() {
             frameCalls++;
@@ -86,14 +85,11 @@ public class DisplayPageBindingTest {
             buildCalls++;
             return buildsFrame;
         }
-
-        @Override public void land(int pageId) {
-            landed.add(pageId);
-        }
     }
 
     private Activity mActivity;
     private FakeHost mHost;
+    private final List<Integer> mLanded = new ArrayList<>();
     private DisplayPageBinding mBinding;
 
     @Before
@@ -103,6 +99,7 @@ public class DisplayPageBindingTest {
         mHost.pages.add(new WallPages.Page(PAGE, PageKind.DISPLAY, null, null));
         mHost.pages.add(new WallPages.Page(OTHER_PAGE, PageKind.DISPLAY, null, null));
         mBinding = new DisplayPageBinding(mActivity, mHost);
+        mBinding.setLanding(mLanded::add);
     }
 
     private void withFrameAndWall() {
@@ -179,7 +176,7 @@ public class DisplayPageBindingTest {
         mBinding.bind(PAGE);
         mBinding.landed(PAGE);
         mBinding.landed(OTHER_PAGE);
-        assertEquals(Arrays.asList(PAGE, OTHER_PAGE), mHost.landed);
+        assertEquals(Arrays.asList(PAGE, OTHER_PAGE), mLanded);
     }
 
     @Test
