@@ -104,6 +104,24 @@ public class EditorDraftTest {
         assertTrue(places.isKeyboardShown());
     }
 
+    /**
+     * The keyboard shown by the place while the frame's view is still down (the editor raises it
+     * after it opens): the switch reads ON, and off then on again stays clean.
+     */
+    @Test
+    public void theKeyboardSwitchOpensOnWhatThePlaceAnswersNotTheFrame() {
+        com.termux.app.place.PlaceLayoutStore places = new com.termux.app.place.PlaceLayoutStore(mLive);
+        assertTrue(places.isKeyboardShown());
+        boolean on = SurfaceEditorController.keyboardSwitchOn((Boolean) places.isKeyboardShown(), false);
+        assertTrue("shown keyboard, frame still down: the switch is ON", on);
+
+        places.setKeyboardShown(false);
+        assertTrue(mDraft.isDirty());
+        assertFalse(SurfaceEditorController.keyboardSwitchOn((Boolean) places.isKeyboardShown(), true));
+        places.setKeyboardShown(true);
+        assertFalse("on again is clean", mDraft.isDirty());
+    }
+
     @Test
     public void doneStoresTheDraftOnce() {
         mEditor.lookGrid().write(OPACITY, 90);

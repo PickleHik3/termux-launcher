@@ -1676,6 +1676,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final com.termux.app.glass.GlassService mGlass =
         new com.termux.app.glass.GlassService(mFrames);
+
+    /** What a page asks of this window (ADR 0030): a field took or lost focus. */
+    private final com.termux.app.page.PageHost mPageHost = (page, focused) -> onPageFieldFocus(focused);
+
+    /**
+     * The page registry and the recorded front; its on-front and off-front work is the frame
+     * table's PAGE_FRONT step. Declared after {@link #mFrames}, which its request reads.
+     */
+    private final com.termux.app.page.Pages mPages = new com.termux.app.page.Pages(mPageHost,
+        () -> mFrames.requestFrame(com.termux.app.window.FrameStep.PAGE_FRONT));
     /** The dock's element in the glass registry. */
     private static final String DOCK_GLASS = "dock";
     /** The dock's glass kind moved: its backdrop is dressed again. */
@@ -1950,6 +1960,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         registerRotationListener();
         setContentView(R.layout.activity_termux);
         mFrames.attach(findViewById(R.id.activity_termux_root_view));
+        mFrames.bind(com.termux.app.window.FrameStep.PAGE_FRONT, mPages::applyFront);
+        mPages.setHomeDefault(() -> mPaneWallController != null
+            && mPaneWallController.goToHomePageOne(isVisible()));
         // The bottom stack's writer is a step of the frame table, on the pipeline's guards.
         mStackRenderer.attach(mFrames);
         mRowsGuard.attach(mFrames.guards());
@@ -19689,7 +19702,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public boolean handleAppDrawerCodePoint(int codePoint, boolean ctrlDown) { return mSheets.handleAppDrawerCodePoint(codePoint, ctrlDown); }
 
     /**
-     * The overlays in z order, innermost first. Each entry reads its controller when asked, never
+     * The overlays in z order, innermost first, then the page tail of the Back chain. Each entry reads its controller when asked, never
      * when registered, because most of them are built lazily on first use.
      *
      * <p>The order is the Back order: the rename chip and the find strip are modal editors over one
@@ -19838,10 +19851,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
-        // The Assistant page's Chats list closes before Back leaves the page.
-        registry.register(() -> mPaneWallController != null
-            && mPaneWallController.assistantView() instanceof com.termux.app.assistant.AssistantPageView
-            && ((com.termux.app.assistant.AssistantPageView) mPaneWallController.assistantView()).handleBack());
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 if (!mSheets.isCommandPaletteOpen()) return false;
@@ -19968,6 +19977,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new String(Character.toChars(codePoint)), floatFocused);
             }
         });
+        // The page tail of the Back chain (ADR 0030 section 3): everything above is raised over
+        // the page; then the front page's Back, then Home page 1. Reads mPages when asked, never
+        // when registered, because this runs at field initialisation.
+        registry.register(() -> mPages != null && mPages.onBack());
         return registry;
     }
 
@@ -21241,10 +21254,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer) {
         if (mInAppKeyboard == null) return;
         boolean folderRename = mSheets.isFolderRenameActive();
-        mInAppKeyboard.setTextFieldHoldsFocus(isAssistantFieldTyping());
+        mInAppKeyboard.setTextFieldHoldsFocus(isFrontPageFieldTyping());
         switch (com.termux.app.terminal.inappkeyboard.TypingClaim.owner(palette, sheet,
             folderRename || isTerminalRenameActive(), drawer, isDisplayWindowTyping(),
-            isAssistantFieldTyping())) {
+            isFrontPageFieldTyping())) {
             case COMMAND_PALETTE:
                 mInAppKeyboard.setKeyValueInterceptor(getCommandPaletteController());
                 break;
@@ -21265,7 +21278,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mInAppKeyboard.setKeyValueInterceptor(x11KeyboardBridge());
                 break;
             case ASSISTANT: {
-                com.termux.app.assistant.AssistantPageView page = assistantPageView();
+                com.termux.app.terminal.inappkeyboard.TypingPage page = typingFrontPage();
                 mInAppKeyboard.setKeyValueInterceptor(page == null ? null : page.typingKeys());
                 break;
             }
@@ -21293,25 +21306,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mPaneWallController != null && mPaneWallController.displayWindow() != null;
     }
 
+    /** The front page when it is one the launcher's keyboard types into. */
     @Nullable
-    private com.termux.app.assistant.AssistantPageView assistantPageView() {
-        return mPaneWallController != null && mPaneWallController.assistantView()
-            instanceof com.termux.app.assistant.AssistantPageView
-            ? (com.termux.app.assistant.AssistantPageView) mPaneWallController.assistantView() : null;
+    private com.termux.app.terminal.inappkeyboard.TypingPage typingFrontPage() {
+        com.termux.app.page.Page front = mPages.front();
+        return front instanceof com.termux.app.terminal.inappkeyboard.TypingPage
+            ? (com.termux.app.terminal.inappkeyboard.TypingPage) front : null;
     }
 
-    /** Whether the settled place is the Assistant page and one of its text fields holds focus. */
-    private boolean isAssistantFieldTyping() {
-        com.termux.app.assistant.AssistantPageView page = assistantPageView();
-        return page != null && settledWallPage() == com.termux.app.wall.PaneWallPage.ASSISTANT
-            && page.isTyping();
+    /** Whether the front page is one of the launcher's typing pages and one of its text fields holds focus. */
+    private boolean isFrontPageFieldTyping() {
+        com.termux.app.terminal.inappkeyboard.TypingPage page = typingFrontPage();
+        return page != null && page.isTyping();
     }
 
     /**
-     * An Assistant text field took or lost focus: it is typed into with the launcher's keyboard,
+     * A page's text field took or lost focus: it is typed into with the launcher's keyboard,
      * which comes up for it, and never the phone's.
      */
-    public void onAssistantTypingFocus(boolean focused) {
+    private void onPageFieldFocus(boolean focused) {
         // With the launcher's keyboard turned off the phone's is the only one there is: the field
         // takes it as any text field does.
         boolean inApp = isInAppKeyboardEnabled();
@@ -21325,7 +21338,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (mInAppKeyboard == null) return;
-        mInAppKeyboard.setTextFieldHoldsFocus(isAssistantFieldTyping());
+        mInAppKeyboard.setTextFieldHoldsFocus(isFrontPageFieldTyping());
         if (focused) mInAppKeyboard.show(
             com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.FOCUS);
         restoreInAppKeyboardTypingClaim();
@@ -26577,6 +26590,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 syncPlaceLayout();
             }
         });
+        mPaneWallController.setPages(mPages);
     }
 
     /**

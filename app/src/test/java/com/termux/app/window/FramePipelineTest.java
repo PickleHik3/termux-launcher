@@ -74,8 +74,9 @@ public class FramePipelineTest {
     }
 
     @Test
-    public void theChromeCommitIsTheTablesFirstStep() {
-        assertEquals(0, FrameStep.CHROME_COMMIT.ordinal());
+    public void thePageFrontIsTheTablesFirstStepAndTheChromeCommitFollowsIt() {
+        assertEquals(0, FrameStep.PAGE_FRONT.ordinal());
+        assertEquals(1, FrameStep.CHROME_COMMIT.ordinal());
     }
 
     @Test

@@ -9,6 +9,13 @@ package com.termux.app.window;
 public enum FrameStep {
 
     /**
+     * The structure point (ADR 0030 section 1): the front page's one-time on-front and off-front
+     * work, run once when the recorded front changed, before the chrome commit so what it changes
+     * is in this frame's structure.
+     */
+    PAGE_FRONT,
+
+    /**
      * The accessory chrome's commit: one whole build and apply of the chrome spec. Asked for
      * before the frame's animation phase it runs there, so the frame's layout takes what it
      * writes; asked for later it runs in the pre-draw hook and the next frame lays it out.

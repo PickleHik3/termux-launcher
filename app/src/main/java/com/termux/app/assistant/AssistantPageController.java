@@ -25,7 +25,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
 import com.termux.R;
-import com.termux.app.TermuxActivity;
+import com.termux.app.page.Page;
+import com.termux.app.page.PageHost;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.termux.TaiModelCentreFragment;
 
@@ -62,6 +63,8 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
 
     private final Context context;
     private final View page;
+    private final PageHost host;
+    private final Page self;
     private final AssistantChatView chatView;
     private final AssistantChatsView chatsView;
     private final AssistantEngine engine;
@@ -103,10 +106,13 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         render();
     };
 
-    AssistantPageController(@NonNull Context context, @NonNull View page, @NonNull AssistantChatView chatView,
+    AssistantPageController(@NonNull Context context, @NonNull View page, @NonNull PageHost host,
+                            @NonNull Page self, @NonNull AssistantChatView chatView,
                             @NonNull AssistantChatsView chatsView, @NonNull AssistantUi.Palette palette) {
         this.context = context;
         this.page = page;
+        this.host = host;
+        this.self = self;
         this.chatView = chatView;
         this.chatsView = chatsView;
         this.palette = palette;
@@ -845,8 +851,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
      * takes the keys, or the claim is recomputed without it. The phone's keyboard never opens here.
      */
     private void typingFocusChanged(boolean focused) {
-        Activity activity = activity();
-        if (activity instanceof TermuxActivity) ((TermuxActivity) activity).onAssistantTypingFocus(focused);
+        host.fieldFocusChanged(self, focused);
     }
 
     @Nullable
