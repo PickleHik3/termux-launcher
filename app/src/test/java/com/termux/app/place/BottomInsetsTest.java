@@ -70,7 +70,10 @@ public class BottomInsetsTest {
     @Test
     public void floatingCardKeepsItsGapAboveTheInset() {
         BottomInsets insets = BottomInsets.of(false, NAV, NAV, false, 21, 0);
-        assertEquals(NAV + 21, insets.stackMarginPx);
+        // The band is laid out as the foot lays it (the container reaches the edge), so the foot
+        // changing hands at a landing moves no layout number; only the surface is the foot's.
+        assertEquals(21, insets.stackMarginPx);
+        assertEquals(NAV, insets.stackExtraHeightPx);
         assertEquals(0, insets.dockFootPx);
         assertEquals(NAV + 21, insets.rowsBottomFromScreenBottomPx());
     }
@@ -122,12 +125,12 @@ public class BottomInsetsTest {
             BottomInsets.keyboardTravelHiddenPx(travel, 0f, 0, foot.stackPaddingPx));
     }
 
-    /** Without a foot the column stands on the stack's bottom: the cut is the stack's own. */
+    /** Without a foot the column stands the kept band up, as with one; the cut is the same. */
     @Test
     public void keyboardCutWithoutAFootIsTheStacksOwn() {
         int flush = 24;
         BottomInsets noFoot = BottomInsets.forKept(0, NAV, false, 0, flush);
-        assertEquals(0, noFoot.keyboardColumnMarginPx);
+        assertEquals(NAV, noFoot.keyboardColumnMarginPx);
         // The stack clips at its bottom minus the travel; the keyboard ends the padding above it.
         assertEquals(300 - flush,
             BottomInsets.keyboardTravelHiddenPx(300f, 0f, 0, noFoot.stackPaddingPx));

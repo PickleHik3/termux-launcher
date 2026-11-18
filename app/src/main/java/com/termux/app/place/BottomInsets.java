@@ -68,7 +68,12 @@ public final class BottomInsets {
                                        int stackPassMarginPx, int flushPaddingPx) {
         int flush = Math.max(0, flushPaddingPx);
         int margin = Math.max(0, stackPassMarginPx);
-        if (!dockFoot || kept <= 0) return new BottomInsets(root, kept, margin + kept, 0, flush, 0, 0);
+        if (kept <= 0) return new BottomInsets(root, kept, margin, 0, flush, 0, 0);
+        // The kept band is laid out the same with or without the foot, so the foot changing hands
+        // at a landing moves no layout number: the container is the band taller and stands on the
+        // screen's edge, the column one band up. Only the foot's surface (and where the flush
+        // remainder sits) is the foot's.
+        if (!dockFoot) return new BottomInsets(root, kept, margin, kept, flush, kept, 0);
         return new BottomInsets(root, kept, margin, kept, 0, flush + kept, flush + kept);
     }
 
