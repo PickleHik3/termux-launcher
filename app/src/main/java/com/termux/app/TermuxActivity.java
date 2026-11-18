@@ -12033,6 +12033,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return terminalDressSource();
             }
             @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+            @Override @NonNull public com.termux.app.dock.LiftSourceSlot.Shade<View> liftSourceShade() {
+                return com.termux.app.dock.LiftSourceShade.ALPHA;
+            }
         });
         mSuggestionBarView.setFolderRenameHost(new SuggestionBarView.FolderRenameHost() {
             @Override public void beginFolderRename(long revision, @NonNull String folderId,

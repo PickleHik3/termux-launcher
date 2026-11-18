@@ -8022,6 +8022,8 @@ public final class SuggestionBarView extends GridLayout
             return null;
         }
         boolean reducedMotion();
+        /** How the slot a lifted icon left is hidden while it is in the air; the lift's owner's. */
+        @NonNull com.termux.app.dock.LiftSourceSlot.Shade<View> liftSourceShade();
     }
 
     @Nullable private LiftHost liftHost;
@@ -8445,8 +8447,7 @@ public final class SuggestionBarView extends GridLayout
         final int sourceIndex;
         @NonNull final LauncherAppEntry entry;
         /** The slot it left, hidden while it is in the air, shown again however the lift ends. */
-        @NonNull final com.termux.app.dock.LiftSourceSlot<View> source =
-            new com.termux.app.dock.LiftSourceSlot<>(LIFT_SOURCE_SHADE);
+        @NonNull final com.termux.app.dock.LiftSourceSlot<View> source;
         /** The row's children have been told the stream is no longer theirs. */
         boolean childrenCancelled;
         /** The pointer that lifted the icon and carries it. */
@@ -8462,7 +8463,9 @@ public final class SuggestionBarView extends GridLayout
 
         DockLift(@NonNull com.termux.app.launcher.widget.IconCarry carry,
                  @NonNull PinnedAppItem pin, int sourceIndex, @NonNull LauncherAppEntry entry,
-                 int carryPointerId, float rawX, float rawY) {
+                 int carryPointerId, float rawX, float rawY,
+                 @NonNull com.termux.app.dock.LiftSourceSlot.Shade<View> shade) {
+            this.source = new com.termux.app.dock.LiftSourceSlot<>(shade);
             this.carryPointerId = carryPointerId;
             this.carryRawX = rawX;
             this.carryRawY = rawY;
@@ -8472,9 +8475,6 @@ public final class SuggestionBarView extends GridLayout
             this.entry = entry;
         }
     }
-
-    private static final com.termux.app.dock.LiftSourceSlot.Shade<View> LIFT_SOURCE_SHADE =
-        (slot, shown) -> slot.setAlpha(shown ? 1f : 0f);
 
     @Nullable private DockLift dockLift;
     /** The row drops every event up to the end of the stream whose carrying finger has lifted. */
@@ -8572,7 +8572,8 @@ public final class SuggestionBarView extends GridLayout
                 }
                 @Override public boolean reducedMotion() { return lifts.reducedMotion(); }
             });
-        DockLift lift = new DockLift(carry, pin, pinnedIndex, entry, pointerId, rawX, rawY);
+        DockLift lift = new DockLift(carry, pin, pinnedIndex, entry, pointerId, rawX, rawY,
+            lifts.liftSourceShade());
         made[0] = lift;
         dockLift = lift;
         lift.source.hide(slot);
