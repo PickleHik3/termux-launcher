@@ -127,9 +127,9 @@ public class ChromeRendererTest {
         assertFalse(chrome.isRenderSyncPending());
     }
 
-    /** The commit runs before layout, the render after it: two phases, so two passes. */
+    /** The commit applies the whole spec, so the render asked for in the same frame is run by it (l5-F1). */
     @Test
-    public void anApplyAndARenderInOneFrameAreStillTwoPasses() {
+    public void anApplyAndARenderInOneFrameCostOnePass() {
         chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -137,7 +137,7 @@ public class ChromeRendererTest {
         assertEquals(0, surfaces.applied.size());
         mainLooper().idle();
 
-        assertEquals(2, surfaces.applied.size());
+        assertEquals(1, surfaces.applied.size());
         assertEquals(1, surfaces.invariantsEnforced);
     }
 
@@ -429,6 +429,35 @@ public class ChromeRendererTest {
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
 
         assertEquals(1, surfaces.terminalGlassFrostUpdates);
+    }
+
+    /** The commit applies the whole spec, so a render asked for before it is not run again after. */
+    @Test
+    public void aRenderRequestedBeforeACommitIsRunByTheCommitNotAgainAfterIt() {
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        chrome = new ChromeRenderer(surfaces, null, frames);
+
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        frames.flush("test");
+        mainLooper().idle();
+
+        assertEquals("one apply, the commit's", 1, surfaces.applied.size());
+        assertFalse(chrome.isRenderSyncPending());
+    }
+
+    /** A render asked for after the commit ran still books its pass. */
+    @Test
+    public void aRenderRequestedAfterACommitStillRuns() {
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        chrome = new ChromeRenderer(surfaces, null, frames);
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        frames.flush("test");
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        mainLooper().idle();
+
+        assertEquals("the commit, then the render", 2, surfaces.applied.size());
     }
 
     /** A renderer whose commit is a step of a frame pipeline hooked on {@code root}. */

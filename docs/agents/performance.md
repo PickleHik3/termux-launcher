@@ -30,6 +30,7 @@ measuring on pong; AGENTS.md's rule on touching a real phone applies.
    | `LauncherIconStore` | heap ÷ 16, between 4 and 16 MB; artwork kept at 192 px | `LauncherIconStoreTest` |
    | `DockIconCache` | heap ÷ 8, between 8 and 32 MB | `DockIconCacheTest` |
    | `WallpaperBlurCache` (the shared frame) | 72 MB, at most 6 radii, about 1 MB per radius at quarter resolution | `WallpaperBlurCacheTest` |
+   | `GlassPagePool` (frozen pages of every glass surface, one pool) | 6 MiB at a quarter scale above 4 GiB RAM, 2 MiB at an eighth otherwise or on a low-RAM device | `GlassPagePoolTest`, `LiveBackdropBudgetTest` |
 
    Work out the cost from the pixels a drawable actually holds (AGENTS.md has the
    `AdaptiveIconDrawable` trap). A store gives memory back on `clear`, when a pane closes and under
@@ -41,7 +42,9 @@ measuring on pong; AGENTS.md's rule on touching a real phone applies.
    RenderThread is allowed, and so is re-recording a backdrop when the content beneath it changes
    (ADR 0021). A software capture in a pre-draw listener, and blurring per frame at rest, are what
    these rules exist to stop.
-   **Live budget:** at most 8 live surfaces, about 8.8 MiB, released when off screen
+   **Live budget:** at most 8 live surfaces, each a blur layer (about 1.1 MiB at most), and one
+   pages pool shared by all of them (6 MiB, or 2 MiB on 4 GiB or less; `GlassPagePool`), 15.5 MB
+   in the worst case; released when off screen and at `TRIM_MEMORY_RUNNING_LOW` and above
    (`LiveBackdropBudgetTest`).
 4. **Heavy work runs off the main thread.** That covers wallpaper decode, blur, file and network I/O
    and package queries. Native model work runs in the `:tai_runtime` process.

@@ -184,6 +184,10 @@ public class CrossingControllerTest {
 
         boolean chromeTravelMoved;
         int movedTrue;
+        // The in-app keyboard laid out but down (D1-A): its height, and the places that rest with
+        // it up.
+        int keyboardDownLaidOutPx;
+        final java.util.Set<PaneWallPage> keyboardUpPlaces = new java.util.HashSet<>();
         View stack;
         // Home's pager.
         boolean homeHome;
@@ -203,6 +207,11 @@ public class CrossingControllerTest {
 
         PlaceChromeTravel.Rest rest() {
             return new PlaceChromeTravel.Rest(false, false, true);
+        }
+
+        PlaceChromeTravel.Rest restOfPlace(PaneWallPage place) {
+            return keyboardUpPlaces.contains(place)
+                ? new PlaceChromeTravel.Rest(true, false, true) : rest();
         }
 
         ResolvedArrangement arrangementOfId(int id) {
@@ -291,8 +300,12 @@ public class CrossingControllerTest {
                         : ((PageRef) a[0]).isHome() ? HOME_ARRANGED : WORKSPACE_ARRANGED).build();
                 case "dockTravelTranslationPx":
                     return Float.isNaN(moves.dockPx) ? 0f : moves.dockPx;
-                case "chromeRestOf": return rest();
-                case "chromeRestStates": return (PlaceChromeTravel.States) place -> rest();
+                case "chromeRestOf": return restOfPlace((PaneWallPage) a[0]);
+                case "chromeRestStates":
+                    return (PlaceChromeTravel.States) place -> restOfPlace(place);
+                case "keyboardDownLaidOutPx":
+                case "travelKeyboardLaidOutPx": return keyboardDownLaidOutPx;
+                case "canPreRollTravelKeyboard": return keyboardDownLaidOutPx > 0;
                 case "frameStandsDown": return (SeamCrossing.FrameGlass) () -> false;
                 case "chromeTravelMoved": return chromeTravelMoved;
                 case "setChromeTravelMoved":
@@ -491,6 +504,32 @@ public class CrossingControllerTest {
         assertEquals("no adapter write at rest after the landing", writes, moves.writes);
         assertFalse(crossing.crossing());
         assertEquals(1, moves.morphBegins);
+    }
+
+    @Test
+    public void aKeyboardLaidOutDownIsNotPreRolledAndRisesWithTheSeam() {
+        // Home with the keyboard down but laid out, the Terminal resting with it up.
+        host.keyboardDownLaidOutPx = 340;
+        host.keyboardUpPlaces.add(PaneWallPage.TERMINAL);
+        wall.beginPlainDrag();
+        float last = Float.NaN;
+        boolean moved = false;
+        for (int i = 1; i <= 8; i++) {
+            drag(-i * 100f);
+            assertEquals("no pre-roll at " + i, 0, host.count("preRollTravelKeyboard"));
+            if (Float.isNaN(moves.keyboardPx)) continue;
+            assertTrue("between the ends at " + i, moves.keyboardPx >= 0f && moves.keyboardPx <= 340f);
+            if (!Float.isNaN(last)) {
+                assertTrue("the keyboard only rises as the seam goes: " + last + " then "
+                    + moves.keyboardPx, moves.keyboardPx <= last + 0.001f);
+                assertTrue("no step between frames: " + last + " then " + moves.keyboardPx,
+                    last - moves.keyboardPx < 120f);
+            }
+            moved |= moves.keyboardPx < 340f && moves.keyboardPx > 0f;
+            last = moves.keyboardPx;
+        }
+        assertTrue("it was seen part of the way", moved);
+        assertFalse("nothing was held for a pre-roll", crossing.keyboardPreRolled());
     }
 
     // ---- 2. Abandoned and returned ----

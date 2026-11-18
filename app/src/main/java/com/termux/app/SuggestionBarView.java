@@ -3675,6 +3675,26 @@ public final class SuggestionBarView extends GridLayout
         publishPageIndicator();
     }
 
+    /**
+     * Ends the A-Z preview only if one is showing. The chrome's apply calls this on every pass; a
+     * row with no preview has nothing to give back, and reloading it would rebuild icons that are
+     * already laid out.
+     */
+    public void clearAzPreviewIfShowing() {
+        if (activeAzLetter == null && activeAzCandidates.isEmpty()) {
+            cancelAzResetTimeout();
+            cancelAzPostLaunchClear();
+            clearAzFocusedEntry();
+            return;
+        }
+        clearAzPreview();
+    }
+
+    /** How many renders the row has been asked for; a test reads it to see a call do nothing. */
+    int renderRequestCountForTest() {
+        return searchGeneration;
+    }
+
     public void clearAzPreviewWithFade() {
         if (activeAzLetter == null) return;
         cancelAzResetTimeout();

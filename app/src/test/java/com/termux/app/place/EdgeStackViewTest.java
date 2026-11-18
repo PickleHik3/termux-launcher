@@ -387,4 +387,32 @@ public class EdgeStackViewTest {
         assertTrue(stack.setLane(keys, StackLanes.STACK));
         assertEquals(StackLanes.STACK, stack.getLane(keys));
     }
+
+    /**
+     * Pong 11-18: a landing that reorders the bottom stack (Home's apps row over the keyboard, the
+     * Terminal's under it) took the apps row out of the window and put it back, so it drew no
+     * icons until its layout settled again. A bar already in this stack changes place without
+     * leaving the window.
+     */
+    @Test public void reorderingABarItAlreadyHoldsKeepsItAttached() {
+        android.widget.FrameLayout root = new android.widget.FrameLayout(mActivity);
+        mActivity.setContentView(root);
+        EdgeStackView stack = stack(Edge.TOP);
+        root.addView(stack);
+        List<View> bars = bars(3);
+        final int[] detaches = new int[1];
+        for (View bar : bars) {
+            bar.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(View v) {}
+                @Override public void onViewDetachedFromWindow(View v) { detaches[0]++; }
+            });
+        }
+        stack.setStack(bars);
+        assertTrue(bars.get(0).isAttachedToWindow());
+        List<View> reordered = Arrays.asList(bars.get(2), bars.get(0), bars.get(1));
+        assertTrue(stack.setStack(reordered));
+        assertEquals(reordered, children(stack));
+        assertEquals("no bar left the window", 0, detaches[0]);
+        for (View bar : bars) assertSame(stack, bar.getParent());
+    }
 }

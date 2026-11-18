@@ -264,8 +264,8 @@ public final class PlaceLayoutStore {
     private static final String KEY_VOICE_PILL_Y = "voice_pill_y";
 
     /**
-     * The per-place choice of how the keyboard came back on entry. Gone with version 6: Home always
-     * comes back closed and the other two as they were left, so there is nothing left to choose.
+     * The per-place choice of how the keyboard came back on entry. Gone with version 6: every place
+     * comes back as it was left (Home also while always on), so there is nothing left to choose.
      */
     private static final String LEGACY_KEY_KEYBOARD_ON_ENTER = "keyboard_on_enter";
 
@@ -1822,17 +1822,14 @@ public final class PlaceLayoutStore {
 
     /**
      * Whether the place was left with the keyboard up, which is what it comes back with. This is
-     * the one thing the places still keep apart: the widget grid has nothing to type into, so it
-     * always answers closed, while the terminal and the display each remember their own.
+     * the one thing the places still keep apart: Home, the terminal and the display each remember
+     * their own.
      */
     public boolean wasKeyboardOpen(@NonNull PaneWallPage place) {
-        if (place == PaneWallPage.WIDGETS) return false;
         return mStore != null && mStore.getBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), false);
     }
 
     public void setKeyboardOpen(@NonNull PaneWallPage place, boolean open) {
-        // Home has no memory to keep: it comes back closed whatever it was left with.
-        if (place == PaneWallPage.WIDGETS) return;
         writeBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), open);
     }
 
@@ -2729,7 +2726,7 @@ public final class PlaceLayoutStore {
         }
         for (PaneWallPage place : PaneWallPage.values())
             editor.remove(memoryKey(place, LEGACY_KEY_KEYBOARD_ON_ENTER));
-        // Home comes back closed whatever it was left with, so its memory has nothing to answer.
+        // A Home memory from before version 6 is stale: Home starts its own memory closed.
         editor.remove(memoryKey(PaneWallPage.WIDGETS, KEY_KEYBOARD_OPEN));
 
         for (Map.Entry<String, ?> entry : all.entrySet()) {

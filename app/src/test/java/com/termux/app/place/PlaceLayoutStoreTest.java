@@ -347,11 +347,13 @@ public class PlaceLayoutStoreTest {
         assertTrue(store.wasKeyboardOpen(PaneWallPage.TERMINAL));
         assertFalse(store.wasKeyboardOpen(PaneWallPage.DISPLAY));
 
-        // Home has nothing to type into: it comes back closed whatever it was left with, and
-        // nothing is written for it.
-        store.setKeyboardOpen(PaneWallPage.WIDGETS, true);
+        // Home remembers its own, as the terminal does (developer, 2026-11-18).
         assertFalse(store.wasKeyboardOpen(PaneWallPage.WIDGETS));
-        assertFalse(prefs.contains("place.home.keyboard_open"));
+        store.setKeyboardOpen(PaneWallPage.WIDGETS, true);
+        assertTrue(store.wasKeyboardOpen(PaneWallPage.WIDGETS));
+        assertTrue("the terminal keeps its own", store.wasKeyboardOpen(PaneWallPage.TERMINAL));
+        store.setKeyboardOpen(PaneWallPage.WIDGETS, false);
+        assertFalse(store.wasKeyboardOpen(PaneWallPage.WIDGETS));
     }
 
     /** Minimal mode is read once per revision, and follows every write that moves it. */

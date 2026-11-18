@@ -1712,7 +1712,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // always-on keyboard is not the float's to close.
                 if (mPaneController == null || mPaneController.focusedHomeFloat() == null
                     || mInAppKeyboard == null || !mInAppKeyboard.isVisible()
-                    || wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) return false;
+                    || homeHoldsKeyboardUp()) return false;
                 mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                     .HideReason.USER_EVENT);
                 return true;
@@ -2012,6 +2012,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The tint sampler is the glass service's store of legibility corrections (ADR 0029 section 9).
         mChrome.ink().attachLegibility(mGlass.legibility());
         mChrome.ink().setMeasureFreeze(mCrossing::crossing);
+        mChrome.ink().setFrontHome(this::isWidgetsPageShowing);
+        mChrome.ink().setOnWidgetPolarityChanged(() -> {
+            com.termux.app.wall.WidgetPaneFrame page = mPaneWallController == null ? null
+                : mPaneWallController.widgetsPage();
+            if (page != null) page.post(page::redressWidgets);
+        });
         View panelDecor = getWindow().getDecorView();
         com.termux.app.chrome.PanelBackdrop.install(panelDecor, mPanelBackdropSource);
         com.termux.app.glass.GlassService.install(panelDecor, mGlass);
@@ -8200,7 +8206,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         }
         if (!state.keyboardShown) {
-            surfaceHost.setBackground(null);
+            setKeyboardHostBackground(surfaceHost, null);
             clearInAppKeyboardBackdrop();
             return false;
         }
@@ -8225,7 +8231,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         KeyboardMaterialPolicy.Material material =
             KeyboardMaterialPolicy.hostMaterial(form, overlays, home, display);
         if (material == KeyboardMaterialPolicy.Material.NONE) {
-            surfaceHost.setBackground(null);
+            setKeyboardHostBackground(surfaceHost, null);
             clearInAppKeyboardBackdrop();
             return false;
         }
@@ -8247,7 +8253,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // lower strip lies over the wallpaper, and the bed wears the wallpaper glass below from
         // top to bottom, one material with the dock's rows (KeyboardMaterialPolicy).
         if (inAppKeyboardSeesThroughToDisplay()) {
-            surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
+            setKeyboardHostBackground(surfaceHost, buildInAppKeyboardSurfaceBackground(
                 state, surfaceHost, capsule, cornerRadiusPx));
             clearInAppKeyboardBackdrop();
             com.termux.app.chrome.LiveChromeShape.Clip clip = mKeyboardBaseClip;
@@ -8262,7 +8268,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // a material that is no longer there. The dock underneath keeps its glass. Home is the
         // exception: its keyboard lies over the wallpaper, not over text, and wears the glass below.
         if (material == KeyboardMaterialPolicy.Material.SOLID) {
-            surfaceHost.setBackground(buildInAppKeyboardSolidSurface(
+            setKeyboardHostBackground(surfaceHost, buildInAppKeyboardSolidSurface(
                 KeyboardMaterialPolicy.solidFillIsRounded(form, overlays, home, capsule)
                     ? cornerRadiusPx : 0f));
             clearInAppKeyboardBackdrop();
@@ -8271,7 +8277,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Under a joined Docked frame the frame's glass is the sheet behind the keys; the keys keep
         // their own glass.
         if (stackStandsDownOnFrame()) {
-            surfaceHost.setBackground(null);
+            setKeyboardHostBackground(surfaceHost, null);
             clearInAppKeyboardBackdrop();
             return false;
         }
@@ -8281,7 +8287,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the deck's inks, not a tone judged on glass.
         Drawable slab = deckSlabOr(null);
         if (slab != null) {
-            surfaceHost.setBackground(slab);
+            setKeyboardHostBackground(surfaceHost, slab);
             clearInAppKeyboardBackdrop();
             return false;
         }
@@ -8299,16 +8305,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (isUnifiedAccessoryBackdropReady(state)) {
                 // No glass of its own, but the keyboard band's veil: over the unified glass,
                 // under the keys, on the host's bounds only, so the dock rows are never veiled.
-                surfaceHost.setBackground(buildInAppKeyboardVeilOnly(state, surfaceHost));
-                clearInAppKeyboardBackdrop();
+                // The veil holds no frame, so the backdrop goes without letting the veil go.
+                clearInAppKeyboardBackdropFrame();
+                setKeyboardHostBackground(surfaceHost, buildInAppKeyboardVeilOnly(state, surfaceHost));
             } else {
-                surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
-                    state, surfaceHost, false, 0f));
+                setKeyboardHostBackground(surfaceHost, buildInAppKeyboardSurfaceBackground(
+                    state, surfaceHost, false, 0f, true));
             }
             return false;
         }
-        surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
-            state, surfaceHost, capsule, cornerRadiusPx));
+        setKeyboardHostBackground(surfaceHost, buildInAppKeyboardSurfaceBackground(
+            state, surfaceHost, capsule, cornerRadiusPx, true));
         return false;
     }
 
@@ -8352,7 +8359,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : buildInAppKeyboardSurfaceBackground(state, surfaceHost, capsule, cornerRadiusPx);
         Drawable material = glass == null ? fill
             : new LayerDrawable(new Drawable[] {glass, fill});
-        surfaceHost.setBackground(new LayoutNeutralDrawable(material));
+        setKeyboardHostBackground(surfaceHost, new LayoutNeutralDrawable(material));
     }
 
     /**
@@ -8487,6 +8494,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private Drawable buildInAppKeyboardSurfaceBackground(@NonNull ChromeSpec state,
                                                          @NonNull View surfaceHost,
                                                          boolean capsule, float cornerRadiusPx) {
+        return buildInAppKeyboardSurfaceBackground(state, surfaceHost, capsule, cornerRadiusPx,
+            false);
+    }
+
+    /**
+     * {@code keep}: the host's own background, which is kept while the spec, the backdrop and the
+     * values the stack bakes at build time are the same ({@link HeldBackground}), so the host does
+     * not swap in a new drawable on every apply.
+     */
+    @NonNull
+    private Drawable buildInAppKeyboardSurfaceBackground(@NonNull ChromeSpec state,
+                                                         @NonNull View surfaceHost,
+                                                         boolean capsule, float cornerRadiusPx,
+                                                         boolean keep) {
         com.termux.app.chrome.GlassStack.Spec spec = inAppKeyboardGlassSpec(state, capsule,
             cornerRadiusPx, noteInAppKeyboardBand(surfaceHost));
         int blurRadiusDp = spec.blurRadiusDp;
@@ -8524,8 +8545,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // wrap-content host, and an intrinsic size would feed itself back into layout as a
             // blank band below a subsequently shorter keyboard. Decoration must follow content
             // geometry, never define it.
-            return new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(
-                mChrome.glass(), spec, getResources().getDisplayMetrics().density, backdrop));
+            float density = getResources().getDisplayMetrics().density;
+            java.util.List<Object> key = null;
+            if (keep) {
+                // Everything GlassStack.build reads that is not the spec: the backdrop instance,
+                // the band's baked veil and even-out, and the colours and look the factory
+                // resolves for the glass layers.
+                key = com.termux.app.chrome.HeldBackground.key("glass", spec, backdrop, density,
+                    mChrome.glass().bandVeil(spec.band), mChrome.ink().evenOutGeneration(),
+                    resolveAccessoryGlassBaseColor(), resolveDockAccentColor(),
+                    mChrome.glass().look(spec.tintStrengthPercent));
+                Drawable held = mKeyboardHostBackground.reuse(key);
+                if (held != null) return held;
+            }
+            Drawable built = new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(
+                mChrome.glass(), spec, density, backdrop));
+            if (keep) mKeyboardHostBackground.hold(key, built);
+            return built;
         } finally {
             Trace.endSection();
         }
@@ -8541,6 +8577,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Object mInAppKeyboardBackdropParallax;
 
     /**
+     * The glass or veil the keyboard host wears, kept while what it was built from is unchanged so
+     * the host keeps one background instance for its life ({@link HeldBackground}). Released
+     * whenever the host is given anything else, and with the backdrop.
+     */
+    private final com.termux.app.chrome.HeldBackground<Drawable> mKeyboardHostBackground =
+        new com.termux.app.chrome.HeldBackground<>();
+
+    /** Sets the host's background; one that is not the held glass lets the held glass go. */
+    private void setKeyboardHostBackground(@NonNull View surfaceHost, @Nullable Drawable background) {
+        if (!mKeyboardHostBackground.holds(background)) mKeyboardHostBackground.release();
+        surfaceHost.setBackground(background);
+    }
+
+    /**
      * The docked keyboard's host while the unified dock glass is its material: the keyboard band's
      * veil alone, measured on the keyboard's slice of that glass, or null when none is needed.
      */
@@ -8550,7 +8600,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (band == null) return null;
         Drawable veil = mChrome.glass().veilOnlyLayer(band, inAppKeyboardGlassAlpha(state), 0f,
             defaultDockGlassFootFraction(), false);
-        return veil == null ? null : new LayoutNeutralDrawable(veil);
+        if (veil == null) return null;
+        // The layer is one flat colour, the band's veil as the call above just resolved it.
+        java.util.List<Object> key = com.termux.app.chrome.HeldBackground.key("veil",
+            mChrome.glass().bandVeil(band));
+        Drawable held = mKeyboardHostBackground.reuse(key);
+        if (held != null) return held;
+        Drawable built = new LayoutNeutralDrawable(veil);
+        mKeyboardHostBackground.hold(key, built);
+        return built;
     }
 
     /**
@@ -8608,6 +8666,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * decides what may go.
      */
     private void clearInAppKeyboardBackdrop() {
+        mKeyboardHostBackground.release();
+        clearInAppKeyboardBackdropFrame();
+    }
+
+    /** {@link #clearInAppKeyboardBackdrop} for a host whose held background holds no frame. */
+    private void clearInAppKeyboardBackdropFrame() {
         mInAppKeyboardBackdropBitmap = null;
         mInAppKeyboardBackdropDrawable = null;
         mInAppKeyboardBackdropHost = null;
@@ -9551,7 +9615,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && isUnifiedAccessoryBackdropReady(state)) {
             View keyboardSurfaceHost = findViewById(R.id.inapp_keyboard_view_host);
             if (keyboardSurfaceHost != null) {
-                keyboardSurfaceHost.setBackground(null);
+                setKeyboardHostBackground(keyboardSurfaceHost, null);
             }
             clearInAppKeyboardBackdrop();
         }
@@ -10989,6 +11053,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (level >= TRIM_MEMORY_RUNNING_LOW && mPaneController != null) {
             mPaneController.dropNeighbourWindows();
         }
+        // The frozen pages pictures of the glass go at the same levels and when the UI hides.
+        if (mLiveBackdrop != null) mLiveBackdrop.trimPages(level);
         if (!ChromePolicy.trimReleasesBlurFrames(level)) {
             return;
         }
@@ -13574,7 +13640,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherAzGestureFxLabelOverlayView.clearDrag();
         }
         if (clearPreview && mSuggestionBarView != null) {
-            mSuggestionBarView.clearAzPreview();
+            mSuggestionBarView.clearAzPreviewIfShowing();
         }
     }
 
@@ -24838,7 +24904,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) { return TermuxActivity.this.wantsKeyboardOnEnter(place); }
         @Override public int keyboardMeasureHeightPx() { return mKeyboardGeometry.measureHeightPx(); }
         @Override public int keyboardDesiredHeightPx() { return mKeyboardGeometry.desiredHeightPx(); }
-        @Override public int travelKeyboardLaidOutPx() { return TermuxActivity.this.travelKeyboardLaidOutPx(); }
+        @Override public int travelKeyboardLaidOutPx() {
+            return com.termux.app.place.PlaceChromeTravel.keyboardLaidOutPx(isInAppKeyboardShown(),
+                TermuxActivity.this.travelKeyboardLaidOutPx(), mKeyboardDownLaidOutPx);
+        }
         @Override public int keyboardDownLaidOutPx() { return mKeyboardDownLaidOutPx; }
         @Override public boolean displayWindowInFront() { return isDisplayWindowInFront(); }
         @Override public int imeLiftPx() { return mImeLiftPx; }
@@ -25039,12 +25108,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // it: the landed frame already shows what the half's re-dress would, which follows it.
             mLandingStackDressed = seamLanding.stackDressedFor(page)
                 || seamLanding.lookBlendedOnto(page);
+            // A keyboard laid out down that the arriving place wants is shown where the travel
+            // already stood it (reveal 1, translation 0): quietly, with no reveal and no second
+            // movement. One the place does not want stays laid out down.
+            boolean quietShow = !keyboardPreRolled && !leavingKeyboardUp && page != left
+                && mKeyboardDownLaidOutPx > 0 && mInAppKeyboard != null
+                && !mInAppKeyboard.isVisible() && wantsKeyboardOnEnter(page);
             Trace.beginSection("Settle.placeState");
+            if (quietShow) {
+                mQuietKeyboardChange = true;
+                mKeyboardOpensBelowScreen = true;
+            }
             try {
                 syncPlaceState(page, leavingKeyboardUp);
             } finally {
+                mQuietKeyboardChange = false;
+                mKeyboardOpensBelowScreen = false;
                 mLandingStackDressed = false;
                 Trace.endSection();
+            }
+            // The display hears the keyboard come up as the place's own, as it heard the shown
+            // keyboard's own listener before the show went quiet.
+            if (quietShow && page == com.termux.app.wall.PaneWallPage.DISPLAY
+                && mDisplayServer.controller() != null && mInAppKeyboard.isVisible()) {
+                mDisplayServer.controller().onUserKeyboardIntent(true);
             }
             Trace.beginSection("Settle.away");
             if (beadsMelted) mDock.applyDockBeadMelt(true);
@@ -25255,6 +25342,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mOverviewHoldsPaneSizes = false;
             if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
         }
+    }
+
+    /**
+     * Whether Home keeps its keyboard up whatever a float does with it: always on, or a float
+     * restored with its keyboard. Home's memory of a visit is not this: a float's keyboard still
+     * goes with the float.
+     */
+    private boolean homeHoldsKeyboardUp() {
+        if (mOverviewPreviewing) return false;
+        if (mKeyboardForRestoredFloat) return true;
+        PlaceLayoutStore store = placeLayoutStore();
+        return store != null && store.isHomeKeyboardAlwaysOn();
     }
 
     /** Whether the place wants its keyboard up as the wall lands on it. */
@@ -33285,7 +33384,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // keyboard it raised goes with it, unless Home keeps one always on.
             if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS && mInAppKeyboard != null
                 && mInAppKeyboard.isVisible()
-                && !wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) {
+                && !homeHoldsKeyboardUp()) {
                 mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                     .HideReason.USER_EVENT);
             }

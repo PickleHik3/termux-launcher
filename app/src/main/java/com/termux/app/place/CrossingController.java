@@ -449,7 +449,8 @@ public final class CrossingController {
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
         if (!mCrossing.keyboardPreRolled()
             && com.termux.app.place.PlaceChromeTravel.needsKeyboardPreRoll(frame,
-                mHost.isInAppKeyboardShown())
+                com.termux.app.place.PlaceChromeTravel.keyboardLaidOut(
+                    mHost.isInAppKeyboardShown(), mHost.keyboardDownLaidOutPx()))
             && mHost.canPreRollTravelKeyboard()) {
             mHost.preRollTravelKeyboard(frame);
         }
@@ -1092,7 +1093,7 @@ public final class CrossingController {
         ViewGroup.LayoutParams params = stack.getLayoutParams();
         int height = params != null && params.height > 0 ? params.height : 0;
         return com.termux.app.place.PlaceChromeTravel.dockRowsLaidOutPx(height,
-            keyboardPx + Math.max(0, mHost.keyboardDownLaidOutPx()),
+            keyboardPx,
             mHost.bottomStatusBandPx());
     }
 

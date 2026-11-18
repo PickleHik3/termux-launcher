@@ -7,9 +7,9 @@ import com.termux.app.wall.PaneWallPage;
 /**
  * Whether the keyboard comes up on a page of the wall, which is not dress (the glossary's
  * <b>Dress</b>): each half keeps its own rule. A window remembers whether its keyboard was up,
- * and minimal mode puts it away ({@link MinimalMode#keyboardOnEnter}). A Home page remembers
- * nothing: the keyboard is up there only while <b>always on</b>, the Home layout's keyboard
- * element shown, which also gives it rows of the widget grid.
+ * and minimal mode puts it away ({@link MinimalMode#keyboardOnEnter}). Home remembers too, and
+ * is also up while <b>always on</b>, the Home layout's keyboard element shown, which also gives
+ * it rows of the widget grid.
  *
  * <p>Pure, so the answers are read and tested without a window.
  */
@@ -18,13 +18,14 @@ public final class PlaceKeyboard {
     private PlaceKeyboard() {}
 
     /**
-     * Whether the keyboard comes up as the wall lands on the page. A Home page remembers nothing:
-     * the keyboard is up there only while the Home layout's keyboard element is shown, which is
-     * always on. A window comes back as it was left, unless minimal mode puts it away.
+     * Whether the keyboard comes up as the wall lands on the page. Home comes back as it was
+     * left, and always up while the Home layout's keyboard element is shown (always on); minimal
+     * mode is the Workspace's and leaves Home alone. A window comes back as it was left, unless
+     * minimal mode puts it away.
      */
     public static boolean keyboardOnEnter(@NonNull PaneWallPage page, boolean remembered,
                                           boolean minimal, boolean alwaysOn) {
-        if (page == PaneWallPage.WIDGETS) return alwaysOn;
+        if (page == PaneWallPage.WIDGETS) return alwaysOn || remembered;
         return MinimalMode.keyboardOnEnter(remembered, minimal);
     }
 

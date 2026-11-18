@@ -143,7 +143,17 @@ public final class LivePicture implements GlassPicture {
     @NonNull final ArrayList<View> mRecordedPages = new ArrayList<>();
     @NonNull float[] mRecordedPoses = new float[BackdropLayers.POSE_STRIDE * 4];
     int mRecordedPoseCount = -1;
-    /** Captures this swipe has started ({@link LiveBackdrop#MAX_CAPTURES_PER_SWIPE}). */
+    /**
+     * The poses the held picture was captured at: what its reach ({@link #mPageReach}) and its
+     * pages' membership were laid out for. {@link #mRecordedPoses} is where it is drawn now, which
+     * turning pages move away from these.
+     */
+    @NonNull float[] mCapturePoses = new float[BackdropLayers.POSE_STRIDE * 4];
+    int mCapturePoseCount = -1;
+    /**
+     * Captures this swipe has started for a real change of the pages
+     * ({@link LiveBackdrop#MAX_CAPTURES_PER_SWIPE}); turning pages start none.
+     */
     int mSwipeCaptures;
     /** When the pages layer is taken again at rest ({@link PageLayerRefresh}). */
     @NonNull final PageLayerRefresh mRefresh = new PageLayerRefresh();
@@ -369,8 +379,11 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     private void applyEffect() {
         if (mBlur == null) return;
-        mBlur.setRenderEffect(layerEffect());
-        if (mSceneGround != null) mSceneGround.setRenderEffect(layerEffect());
+        RenderEffect effect = layerEffect();
+        mBlur.setRenderEffect(effect);
+        if (mSceneGround != null) mSceneGround.setRenderEffect(effect);
+        // A change of radius, tint or frost reaches the frozen pages layer at once.
+        if (mPage != null) mPage.setRenderEffect(effect);
     }
 
     /** The blur node's effect: the blur, then the stored frame's colours, then the frost. */
@@ -497,7 +510,12 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     @NonNull
     RenderNode pageNode(@NonNull Rect rect, boolean layered) {
-        if (mPage == null) mPage = new RenderNode("LiveBackdrop.page");
+        if (mPage == null) {
+            mPage = new RenderNode("LiveBackdrop.page");
+            // The glass effect runs on the frozen pictures drawn here, every frame, as it runs
+            // on the blur node: only the pages' content is a still.
+            mPage.setRenderEffect(layerEffect());
+        }
         mPage.setPosition(0, 0, quarter(rect.width()), quarter(rect.height()));
         mPage.setUseCompositingLayer(layered, null);
         mPage.setTranslationX(0f);
@@ -509,68 +527,116 @@ public final class LivePicture implements GlassPicture {
 
     /** The most pictures a frozen pages layer holds: the pages, then the wall's decor. */
     static final int MAX_SLOTS = 8;
-    /** Where each slot stands in the wall's coordinates (full scale), and what it pictures. */
-    @NonNull private final Rect[] mSlotRect = new Rect[MAX_SLOTS];
-    /** The page a slot pictures (its index among the pages), or {@link #SLOT_DECOR}. */
-    @NonNull private final int[] mSlotPage = new int[MAX_SLOTS];
-    /** Where a slot starts in the captured picture, in its quarter px. */
-    @NonNull private final int[] mSlotAtlasX = new int[MAX_SLOTS];
-    /** The alpha a slot is composited at now ({@link BackdropLayers#pageAlpha}). */
-    @NonNull private final float[] mSlotAlpha = new float[MAX_SLOTS];
+    /** {@link Slots#page} for the slot that holds the wall's decor, drawn at full opacity. */
+    static final int SLOT_DECOR = -1;
+
+    /**
+     * What a frozen pages layer's atlas holds: one slot per page (the page's own bounds and a
+     * blur gutter around them, untransformed) and the wall's decor, side by side. The slots a
+     * capture lays out ({@link #mLaid}) are kept apart from the ones the held picture draws
+     * ({@link #mHeld}) so the held layer follows the pages while a refresh is in flight; they
+     * swap when it lands.
+     */
+    private static final class Slots {
+        /** A page slot's bounds in the page's own coordinates; the decor's, in the wall's. */
+        final Rect[] rect = new Rect[MAX_SLOTS];
+        /** The page a slot pictures (its index among the pages), or {@link #SLOT_DECOR}. */
+        final int[] page = new int[MAX_SLOTS];
+        /** The blur gutter around a page's bounds in its slot, in px; 0 for the decor. */
+        final int[] gutter = new int[MAX_SLOTS];
+        /** Where a slot starts in the captured picture, in its quarter px. */
+        final int[] atlasX = new int[MAX_SLOTS];
+        /** The alpha a slot is composited at now ({@link BackdropLayers#pageAlpha}). */
+        final float[] alpha = new float[MAX_SLOTS];
+        int count;
+        int atlasWidth;
+        int atlasHeight;
+
+        void clear() {
+            count = 0;
+            atlasWidth = 0;
+            atlasHeight = 0;
+        }
+    }
+
+    @NonNull private Slots mLaid = new Slots();
+    @NonNull private Slots mHeld = new Slots();
     /** Each slot's own node, blurred on its own, so a page's edge fades as it does today. */
     @Nullable private RenderNode[] mSlotNodes;
-    private int mSlotCount;
-    private int mAtlasWidth;
-    private int mAtlasHeight;
     @NonNull private final android.graphics.Paint mSlotPaint =
         new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
     @NonNull private final Rect mSlotSrc = new Rect();
     @NonNull private final android.graphics.RectF mSlotDst = new android.graphics.RectF();
-    /** {@link #mSlotPage} for the slot that holds the wall's decor, drawn at full opacity. */
-    static final int SLOT_DECOR = -1;
+    /** A page's matrix, set from its pose each time the slots are drawn. */
+    @NonNull private final Matrix mSlotMatrix = new Matrix();
+    @NonNull private final float[] mSlotValues = new float[9];
 
-    /** Forgets the slots, before a new capture lays them out again. */
+    /** Forgets the slots being laid out, before a new capture lays them out again. */
     void clearSlots() {
-        mSlotCount = 0;
-        mAtlasWidth = 0;
-        mAtlasHeight = 0;
+        mLaid.clear();
     }
 
     /**
-     * Adds a slot over {@code rect} (wall coordinates, full scale) for page {@code page} (or
-     * {@link #SLOT_DECOR}), composited at {@code alpha}; its node to record into, positioned and
-     * blurred; null when there is no room or the rect is empty.
+     * Adds the slot of page {@code page} (its index among the pages), {@code width} x
+     * {@code height} px, composited at {@code alpha}: its node to record the page into,
+     * untransformed, from the gutter's inset ({@link BackdropLayers#slotBounds}); positioned and
+     * blurred. Null when there is no room.
      */
     @RequiresApi(Build.VERSION_CODES.S)
     @Nullable
-    RenderNode addSlot(int page, @NonNull Rect rect, float alpha) {
-        if (mSlotCount >= MAX_SLOTS || rect.isEmpty()) return null;
+    RenderNode addPageSlot(int page, int width, int height, float alpha) {
+        if (mLaid.count >= MAX_SLOTS || width <= 0 || height <= 0) return null;
+        int gutter = slotGutterPx();
+        int i = mLaid.count;
+        if (mLaid.rect[i] == null) mLaid.rect[i] = new Rect();
+        mLaid.rect[i].set(0, 0, width, height);
+        mLaid.gutter[i] = gutter;
+        int scale = GlassPagePool.current().scale;
+        return placeSlot(i, page, scaled(width + 2 * gutter, scale),
+            scaled(height + 2 * gutter, scale), alpha);
+    }
+
+    /**
+     * Adds the slot that holds the wall's decor over {@code rect} (wall coordinates, full scale),
+     * at full opacity; its node to record into. Null when there is no room or the rect is empty.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    @Nullable
+    RenderNode addDecorSlot(@NonNull Rect rect) {
+        if (mLaid.count >= MAX_SLOTS || rect.isEmpty()) return null;
+        int i = mLaid.count;
+        if (mLaid.rect[i] == null) mLaid.rect[i] = new Rect();
+        mLaid.rect[i].set(rect);
+        mLaid.gutter[i] = 0;
+        int scale = GlassPagePool.current().scale;
+        return placeSlot(i, SLOT_DECOR, scaled(rect.width(), scale), scaled(rect.height(), scale),
+            1f);
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    @NonNull
+    private RenderNode placeSlot(int i, int page, int w, int h, float alpha) {
         if (mSlotNodes == null) mSlotNodes = new RenderNode[MAX_SLOTS];
-        int i = mSlotCount++;
-        if (mSlotRect[i] == null) mSlotRect[i] = new Rect();
-        mSlotRect[i].set(rect);
-        mSlotPage[i] = page;
-        mSlotAlpha[i] = alpha;
-        mSlotAtlasX[i] = mAtlasWidth;
-        int w = quarter(rect.width());
-        int h = quarter(rect.height());
-        mAtlasWidth += w;
-        mAtlasHeight = Math.max(mAtlasHeight, h);
+        mLaid.count = i + 1;
+        mLaid.page[i] = page;
+        mLaid.alpha[i] = alpha;
+        mLaid.atlasX[i] = mLaid.atlasWidth;
+        mLaid.atlasWidth += w;
+        mLaid.atlasHeight = Math.max(mLaid.atlasHeight, h);
         RenderNode node = mSlotNodes[i];
         if (node == null) {
             node = new RenderNode("LiveBackdrop.pageSlot");
             mSlotNodes[i] = node;
         }
-        node.setPosition(mSlotAtlasX[i], 0, mSlotAtlasX[i] + w, h);
-        // Each slot is captured blurred, with the stored frame's colours and the frost, as the
-        // blur node draws: the pages layer is drawn beside the ground, not under the blur node.
-        node.setRenderEffect(layerEffect());
+        node.setPosition(mLaid.atlasX[i], 0, mLaid.atlasX[i] + w, h);
+        // A slot is captured as it is, with no effect: the blur, colours and frost run on the page
+        // node each frame ({@link #pageNode}), so a change reaches the frozen layer at once.
         return node;
     }
 
     /** How many slots the last capture laid out. */
     int slotCount() {
-        return mSlotCount;
+        return mLaid.count;
     }
 
     /**
@@ -580,14 +646,14 @@ public final class LivePicture implements GlassPicture {
      */
     @RequiresApi(Build.VERSION_CODES.S)
     boolean startCapture(@NonNull Rect rect) {
-        if (mSlotCount == 0 || mSlotNodes == null) return false;
+        if (mLaid.count == 0 || mSlotNodes == null) return false;
         if (mCaptureRoot == null) mCaptureRoot = new RenderNode("LiveBackdrop.pageCapture");
-        int w = Math.max(1, mAtlasWidth);
-        int h = Math.max(1, mAtlasHeight);
+        int w = Math.max(1, mLaid.atlasWidth);
+        int h = Math.max(1, mLaid.atlasHeight);
         mCaptureRoot.setPosition(0, 0, w, h);
         RecordingCanvas canvas = mCaptureRoot.beginRecording(w, h);
         try {
-            for (int i = 0; i < mSlotCount; i++) canvas.drawRenderNode(mSlotNodes[i]);
+            for (int i = 0; i < mLaid.count; i++) canvas.drawRenderNode(mSlotNodes[i]);
         } finally {
             mCaptureRoot.endRecording();
         }
@@ -600,7 +666,12 @@ public final class LivePicture implements GlassPicture {
 
     /** {@code px} at the page layer's quarter scale, rounded up, at least 1. */
     static int quarter(int px) {
-        return Math.max(1, (px + SCALE - 1) / SCALE);
+        return scaled(px, SCALE);
+    }
+
+    /** {@code px} at 1/{@code scale}, rounded up, at least 1. */
+    static int scaled(int px, int scale) {
+        return Math.max(1, (px + scale - 1) / scale);
     }
 
     /**
@@ -610,41 +681,88 @@ public final class LivePicture implements GlassPicture {
      */
     @RequiresApi(Build.VERSION_CODES.S)
     void alphaPages(@NonNull float[] poses, int poseCount) {
-        // A refresh under way has laid the slots out for the new picture, not the held one.
-        if (mStaged) return;
+        if (updateAlphas(poses, poseCount) && mFrozen != null && !mFrozen.isRecycled()) {
+            recordFrozen(mFrozen);
+        }
+    }
+
+    /** Sets the held slots' alphas from {@code poses}; whether any moved. */
+    private boolean updateAlphas(@NonNull float[] poses, int poseCount) {
+        Slots held = mHeld;
         boolean moved = false;
-        for (int i = 0; i < mSlotCount; i++) {
-            int page = mSlotPage[i];
+        for (int i = 0; i < held.count; i++) {
+            int page = held.page[i];
             if (page == SLOT_DECOR || page >= poseCount) continue;
             float alpha = BackdropLayers.pageAlpha(poses, page);
-            if (alpha != mSlotAlpha[i]) {
-                mSlotAlpha[i] = alpha;
+            if (alpha != held.alpha[i]) {
+                held.alpha[i] = alpha;
                 moved = true;
             }
         }
-        if (moved && mFrozen != null && !mFrozen.isRecycled()) recordFrozen(mFrozen);
+        return moved;
     }
 
-    /** The page node over the frozen picture: each slot where it stands, at its alpha. */
+    /**
+     * The pages turn: draws the held slots again at the matrices in {@code poses}, and takes
+     * these poses as the ones the layer is drawn at, so a slide after it is moved from here.
+     * Re-records the page node, a handful of bitmap draws; captures nothing and keeps the layer.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    void redrawPages(@NonNull float[] poses, int poseCount) {
+        Bitmap atlas = mFrozen;
+        if (atlas == null || atlas.isRecycled() || poseCount != mRecordedPoseCount) return;
+        System.arraycopy(poses, 0, mRecordedPoses, 0, poseCount * BackdropLayers.POSE_STRIDE);
+        mPageAimPx = 0f;
+        updateAlphas(poses, poseCount);
+        recordFrozen(atlas);
+    }
+
+    /**
+     * The page node over the frozen picture: each page's slot at its matrix (the pose it was
+     * last drawn at, {@link #mRecordedPoses}, moved by the page node's own translation for a
+     * slide), the decor where it stands, each at its alpha.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     private void recordFrozen(@NonNull Bitmap atlas) {
-        float aim = mPageAimPx;
+        Slots held = mHeld;
+        // The atlas is held at 1/scale of the pages' size, the page node at a quarter.
+        int scale = GlassPagePool.current().scale;
+        float toNode = scale / (float) SCALE;
         RenderNode page = pageNode(mPageRect, false);
-        page.setTranslationX(aim / SCALE);
+        page.setTranslationX(mPageAimPx / SCALE);
         RecordingCanvas canvas = page.beginRecording(quarter(mPageRect.width()),
             quarter(mPageRect.height()));
         try {
-            for (int i = 0; i < mSlotCount; i++) {
-                if (mSlotAlpha[i] <= 0f) continue;
-                Rect slot = mSlotRect[i];
-                int w = quarter(slot.width());
-                int h = quarter(slot.height());
-                mSlotSrc.set(mSlotAtlasX[i], 0, mSlotAtlasX[i] + w, h);
-                float left = (slot.left - mPageRect.left) / (float) SCALE;
-                float top = (slot.top - mPageRect.top) / (float) SCALE;
-                mSlotDst.set(left, top, left + w, top + h);
-                mSlotPaint.setAlpha(Math.round(mSlotAlpha[i] * 255f));
+            for (int i = 0; i < held.count; i++) {
+                if (held.alpha[i] <= 0f) continue;
+                Rect slot = held.rect[i];
+                int gutter = held.gutter[i];
+                int w = scaled(slot.width() + 2 * gutter, scale);
+                int h = scaled(slot.height() + 2 * gutter, scale);
+                mSlotSrc.set(held.atlasX[i], 0, held.atlasX[i] + w, h);
+                mSlotPaint.setAlpha(Math.round(held.alpha[i] * 255f));
+                if (held.page[i] == SLOT_DECOR) {
+                    float left = (slot.left - mPageRect.left) / (float) SCALE;
+                    float top = (slot.top - mPageRect.top) / (float) SCALE;
+                    mSlotDst.set(left, top, left + w * toNode, top + h * toNode);
+                    canvas.drawBitmap(atlas, mSlotSrc, mSlotDst, mSlotPaint);
+                    continue;
+                }
+                if (held.page[i] >= mRecordedPoseCount) continue;
+                System.arraycopy(mRecordedPoses, held.page[i] * BackdropLayers.POSE_STRIDE,
+                    mSlotValues, 0, 9);
+                mSlotMatrix.setValues(mSlotValues);
+                // Atlas px to the page node's: x scale to the page's px, off the gutter, through
+                // the page's matrix to the wall, off the layer's origin, and a quarter.
+                int save = canvas.save();
+                canvas.scale(1f / SCALE, 1f / SCALE);
+                canvas.translate(-mPageRect.left, -mPageRect.top);
+                canvas.concat(mSlotMatrix);
+                canvas.translate(-gutter, -gutter);
+                canvas.scale(scale, scale);
+                mSlotDst.set(0f, 0f, w, h);
                 canvas.drawBitmap(atlas, mSlotSrc, mSlotDst, mSlotPaint);
+                canvas.restoreToCount(save);
             }
         } finally {
             page.endRecording();
@@ -670,6 +788,11 @@ public final class LivePicture implements GlassPicture {
         mFrozen = bitmap;
         mPageAimPx = 0f;
         mPageRect.set(mPendingRect);
+        // The slots the capture laid out are the ones the held picture draws from now on.
+        Slots held = mHeld;
+        mHeld = mLaid;
+        mLaid = held;
+        mLaid.clear();
         if (mStaged) {
             // A refresh landed: what it was taken from is what the layer holds now.
             mStaged = false;
@@ -682,11 +805,12 @@ public final class LivePicture implements GlassPicture {
             mRecordedPoseCount = mStagedPoseCount;
             mPageReach.set(mStagedReach);
         }
+        keepCapturePoses();
         recordFrozen(bitmap);
         mPageMode = BackdropLayers.Mode.FROZEN;
         // The capture's recording is done with; the bitmap is all that is held.
         if (mSlotNodes != null) {
-            for (int i = 0; i < mSlotCount; i++) {
+            for (int i = 0; i < mHeld.count; i++) {
                 if (mSlotNodes[i] != null && mSlotNodes[i].hasDisplayList()) {
                     mSlotNodes[i].discardDisplayList();
                 }
@@ -973,9 +1097,23 @@ public final class LivePicture implements GlassPicture {
             if (mPage != null && mPage.hasDisplayList()) mPage.discardDisplayList();
         }
         retireFrozen();
+        mHeld.clear();
         mPageMode = BackdropLayers.Mode.LIVE;
         mRecordedPages.clear();
         mRecordedPoseCount = -1;
+        mCapturePoseCount = -1;
+    }
+
+    /** The poses the held picture was just captured at are the ones it is drawn at. */
+    private void keepCapturePoses() {
+        int floats = mRecordedPoseCount * BackdropLayers.POSE_STRIDE;
+        if (floats < 0) {
+            mCapturePoseCount = -1;
+            return;
+        }
+        if (mCapturePoses.length < floats) mCapturePoses = new float[floats];
+        System.arraycopy(mRecordedPoses, 0, mCapturePoses, 0, floats);
+        mCapturePoseCount = mRecordedPoseCount;
     }
 
     /**
@@ -1011,7 +1149,7 @@ public final class LivePicture implements GlassPicture {
 
     /** Bytes the picture the laid-out slots capture takes: the atlas, 4 bytes a pixel. */
     long atlasBytes() {
-        return (long) Math.max(1, mAtlasWidth) * Math.max(1, mAtlasHeight) * 4L;
+        return (long) Math.max(1, mLaid.atlasWidth) * Math.max(1, mLaid.atlasHeight) * 4L;
     }
 
     /**
@@ -1027,6 +1165,7 @@ public final class LivePicture implements GlassPicture {
             if (mRecordedPoses.length < floats) mRecordedPoses = new float[floats];
             System.arraycopy(poses, 0, mRecordedPoses, 0, floats);
             mRecordedPoseCount = poseCount;
+            keepCapturePoses();
             mPageReach.set(reach);
             mStaged = false;
             return;

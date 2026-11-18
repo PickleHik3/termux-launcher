@@ -228,6 +228,36 @@ public class StackRendererTest {
         assertEquals(300f, mContainer.getTranslationY(), 0f);
     }
 
+    @Test public void aCrossingCountsTheLaidOutKeyboardOnceAndItsLandingWritesNothing() {
+        FramePipeline frames = attached();
+        // Home with the keyboard down but laid out to a window with it up: the crossing's travel
+        // already carries the keyboard's laid-out height (reveal 0 at its start), so the rest's
+        // share is not added on top while the crossing runs.
+        mKeyboardDownPx = 300;
+        mRenderer.setEnds(true, false, 0f);
+        com.termux.app.place.StackScene.Motion motion = new com.termux.app.place.StackScene.Motion();
+        com.termux.app.place.StackScene.travel(false, 0f, 1f, 300, 200, 120, motion);
+        mRenderer.setTravel(motion.dockTravelPx, motion.keyboardSharePx, 0f);
+        mRenderer.setSink(0f, 0f, 0f, 0f);
+        frames.flush("test");
+        assertEquals("counted once", 300f, mContainer.getTranslationY(), 0f);
+        com.termux.app.place.StackScene.travel(false, 0.5f, 1f, 300, 200, 120, motion);
+        mRenderer.setTravel(motion.dockTravelPx, motion.keyboardSharePx, 0f);
+        frames.flush("test");
+        assertEquals("half way up", 150f, mContainer.getTranslationY(), 0f);
+        // Landed with the keyboard up: nothing laid out down, the rest stands at 0.
+        com.termux.app.place.StackScene.travel(false, 1f, 1f, 300, 200, 120, motion);
+        mRenderer.setTravel(motion.dockTravelPx, motion.keyboardSharePx, 0f);
+        frames.flush("test");
+        int before = writes();
+        mKeyboardDownPx = 0;
+        mRenderer.onLanding();
+        mRenderer.setTravel(0f, 0f, 0f);
+        frames.flush("test");
+        assertEquals(before, writes());
+        assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
+    }
+
     @Test public void aKeyboardLaidOutButDownStandsTheStackItsHeightLowerAtRest() {
         mKeyboardDownPx = 300;
         mRenderer.applyAtRest();
