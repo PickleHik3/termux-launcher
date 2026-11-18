@@ -18,7 +18,7 @@ the launcher runs it. The launcher does no AI work for the shader itself.
    stay black. The shader's settings gain an optional depth file name in the shader's own folder.
    Depth is capped at 1024 px, clamped to edge, no mipmaps. "No depth" is
    `iChannelResolution[1].x == 0.0`.
-2. **Depth is made on the phone.** *Make* in the Depth row runs one depth model once over the photo
+2. **Depth is made on the phone.** *Generate depth* under the Photo row runs one depth model once over the photo
    (`TaiDepth`, LiteRT), writes `made-depth.png` into the shader's folder and closes the model. The
    model downloads once, after a dialog that names the size, and is listed (and deletable) in the
    Model Centre as Wallpaper depth. A depth image can instead be picked by hand.
@@ -27,16 +27,20 @@ the launcher runs it. The launcher does no AI work for the shader itself.
    `WallParallax`.
 4. **The entry.** On the Shader page "New shader" and "From a photo" are two equal buttons in one
    row. No row or subtitle on the page.
-5. **The card.** "From a photo" opens a bottom sheet, "Make one from a photo": 1 Copy the
-   instructions [Copy, then Copied], 2 Paste them into an AI tool with your photo, 3 Bring the
-   result back [Paste shader]; footnote "Then choose the same photo in the editor." and the link
-   "About depth" (`docs/en/Photo_Shader_Wallpapers.md`). Paste shader closes the card and opens a
-   new shader holding the clipboard, by the editor's own Paste (same message, checks, error strip,
-   Apply rules).
-6. **The editor.** The Texture row becomes a Photo row and a Depth row after the Frame rate knob:
-   56 dp, a 36 dp thumbnail when an image is set, a one-line label, at most two text buttons. The
-   Depth row's states (none, choose a photo first, downloading, making, made here, picked by hand,
-   picked and the photo changed, failed) come from `ImageRowLogic`.
+5. **One page, no card.** "From a photo" opens the editor on a new shader in the photo flow (no bottom
+   sheet; reworked 2026-11-18). Top to bottom for every way in: title row with Apply, Name, Quality,
+   Frame rate; photo flow only: "Copy the instructions" [Copy, then Copied] with the line "Paste them
+   into an AI tool with your photo."; the Photo row; the Depth area; Also set as phone wallpaper and
+   the lock note; and last the shader (heading "Bring the result back" in the photo flow only, Code
+   box, description, Paste | Import file, error strip, too-heavy note). "New shader" and a tile's
+   pencil open the same page without the photo-flow extras.
+6. **The Depth area.** Nothing about depth shows until a photo is chosen. Then "Generate depth" with
+   "Choose depth image"; while it runs a status line with a thin bar and Cancel; when ready the
+   thumbnail, "Depth: generated from the photo" and Remove; picked by hand shows the file name (and
+   "May not match the new photo." after a photo change); failed shows one error line with Try again
+   and Choose depth image. The states come from `ImageRowLogic.depth`, which returns null while the
+   area is hidden. The picker returns without scrolling the page: the scroll content takes focus
+   when a picker opens, so no text field takes it back.
 7. **Photo changes.** Changing or removing the photo clears a depth made from it and keeps a picked
    one with "May not match the new photo." (a draft flag, not stored). A run in progress is
    cancelled when the editor closes, the draft is discarded, the photo changes or the host is
