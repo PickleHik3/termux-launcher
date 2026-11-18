@@ -8,6 +8,7 @@ import android.graphics.RectF;
 import android.graphics.RenderNode;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.SystemClock;
 import android.os.Trace;
 import android.view.View;
 import android.view.ViewGroup;
@@ -48,10 +49,10 @@ import java.util.ArrayList;
  * <p><b>Layers, always.</b> A surface other than a panel draws its backdrop layers
  * ({@link BackdropLayers}) at rest and while the wall moves alike (ADR 0029 section 3): the ground
  * (the stored pre-blurred frame, or the scene's), the local layer (everything else beneath, drawn
- * from the views' own display lists and blurred) and, while the wall moves, a frozen picture of the
- * pages ({@link PageLayerCapture}) moved by their travel. At rest the pages are in the local layer;
- * a landing re-records the local layer around them, the same composition, so a landing has nothing
- * to swap. A panel keeps its one picture until panels join the glass service.</p>
+ * from the views' own display lists and blurred) and, beneath the wall, a frozen picture of the
+ * pages ({@link PageLayerCapture}) moved by their travel, at rest and moving alike. It is taken
+ * again behind the old one when the pages change ({@link PageLayerRefresh}), so a landing has
+ * nothing to swap. A panel keeps its one picture until panels join the glass service.</p>
  *
  * <p><b>When.</b> Layers are recorded again in a pre-draw of a frame that is already being drawn
  * (the glass commit, the frame table's last step), and only when their own trigger fires: the local
@@ -106,6 +107,13 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
          * {@code canvas}, in its children's coordinates, as its own draw does now.
          */
         void drawDecorForBackdrop(@NonNull Canvas canvas);
+
+        /**
+         * Sets who is told, on the UI thread, whenever anything under the wall's pages
+         * invalidates: a content generation for the glass beneath, whose frozen pages layer is
+         * taken again behind it ({@link PageLayerRefresh}). null for none.
+         */
+        void setBackdropContentListener(@Nullable Runnable listener);
     }
 
     /**
@@ -163,6 +171,8 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     @NonNull private final RectF mUnion = new RectF();
     @NonNull private final RectF mBounds = new RectF();
     @NonNull private final Rect mPageRect = new Rect();
+    /** The blur layers a surface holds beside its pages layer, from {@link #splittable}. */
+    private long mPageBase;
     /** {@link #splittable} takes fading pages: off the wall, while it moves (a frozen layer). */
     private boolean mFadingPages;
     @NonNull private final Rect mSlot = new Rect();
@@ -190,7 +200,24 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
      * layer ({@link BackdropLayers}); null for none, and then every surface keeps one layer.
      */
     public void setWall(@Nullable Wall wall) {
+        if (mWall instanceof Wall && mWall != wall) {
+            ((Wall) mWall).setBackdropContentListener(null);
+        }
         mWall = wall instanceof ViewGroup ? (ViewGroup) wall : null;
+        if (wall != null) wall.setBackdropContentListener(mContentChanged);
+    }
+
+    @NonNull private final Runnable mContentChanged = this::wallContentChanged;
+
+    /**
+     * Something under the wall's pages invalidated: every picture's frozen pages layer is
+     * stale. Not while the wall moves: its pages move by their poses, and the layer follows them;
+     * what is stale is taken again once it has landed ({@link PageLayerRefresh}).
+     */
+    private void wallContentChanged() {
+        ViewGroup wall = mWall;
+        if (wall == null || mPictures.isEmpty() || ((Wall) wall).isMovingForBackdrop()) return;
+        for (int i = 0; i < mPictures.size(); i++) mPictures.get(i).mRefresh.request();
     }
 
     /**
@@ -448,12 +475,50 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
             mPlanMoving = moving;
             mPlanStamp++;
         }
+        mWakeMs = -1L;
         try {
             preDrawPictures(moving);
         } finally {
             mPlanning = null;
         }
+        scheduleWake();
         if (mPictures.isEmpty()) listen(false);
+    }
+
+    /** The shortest wait until a frame is wanted at rest, -1 for none; set in one pre-draw. */
+    private long mWakeMs = -1L;
+    private boolean mWakePosted;
+    private long mWakeDueMs;
+    @NonNull private final Runnable mWake = this::wake;
+
+    /** A frame is wanted in {@code ms} (0: the next): a refresh capture landing, or one due. */
+    private void wakeAfter(long ms) {
+        if (mWakeMs < 0L || ms < mWakeMs) mWakeMs = ms;
+    }
+
+    /**
+     * Posts the one wake the pre-draw asked for. At rest nothing draws, so a capture under way
+     * and a refresh that arrived inside its interval would otherwise wait for the next frame.
+     */
+    private void scheduleWake() {
+        long ms = mWakeMs;
+        mWakeMs = -1L;
+        if (ms < 0L) return;
+        long due = SystemClock.uptimeMillis() + ms;
+        if (mWakePosted && mWakeDueMs <= due) return;
+        mRoot.removeCallbacks(mWake);
+        mWakePosted = true;
+        mWakeDueMs = due;
+        if (ms == 0L) mRoot.post(mWake);
+        else mRoot.postDelayed(mWake, ms);
+    }
+
+    private void wake() {
+        mWakePosted = false;
+        for (int i = 0; i < mPictures.size(); i++) {
+            LivePicture picture = mPictures.get(i);
+            if (picture.mRefresh.requested() || picture.capturing()) picture.mSurface.invalidate();
+        }
     }
 
     private void preDrawPictures(boolean moving) {
@@ -482,6 +547,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
                 continue;
             }
             BackdropLayers.Mode mode = pageLayerMode(picture, surface, margin, reach);
+            if (!moving && picture.capturing()) wakeAfter(0L);
             int plan = layersPlan(picture, surface, margin, reach, mode);
             if (plan != 0 && drawLayers(picture, surface, margin, reach, plan)) continue;
             // A transform that cannot be undone: the one picture, recorded live, this frame.
@@ -991,9 +1057,10 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
 
     /**
      * Where {@code picture}'s pages are this frame ({@link BackdropLayers.Mode}), its frozen page
-     * layer captured, collected or re-aimed to match. Runs after {@link #collect}. LIVE at rest
-     * before anything is walked, and LIVE for a frame whose frozen layer is not ready (a capture
-     * still rendering): the pages are then in the local layer, drawn as they are.
+     * layer captured, collected or re-aimed to match. Runs after {@link #collect}. FROZEN at rest
+     * and moving alike once the first capture of the surface has landed; until then, and for a
+     * surface that cannot split its beneath, LIVE (the pages drawn as they are in the local
+     * layer): the one swap, at start-up, never at a crossing.
      */
     @NonNull
     private BackdropLayers.Mode pageLayerMode(@NonNull LivePicture picture,
@@ -1003,17 +1070,19 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
         BackdropLayers.Mode want = BackdropLayers.Mode.LIVE;
         ViewGroup wall = mWall;
         boolean moving = wall != null && ((Wall) wall).isMovingForBackdrop();
-        if (moving) {
-            want = BackdropLayers.mode(splittable(wall, surface, margin, reach, true), true);
+        // A surface on a page (a widget card) never holds a pages layer (BackdropLayers#holdsPages),
+        // so none is captured for it.
+        if (wall != null && mPath.indexOf(wall) < 0) {
+            want = BackdropLayers.mode(splittable(wall, surface, margin, reach, moving), moving);
         }
-        if (want != BackdropLayers.Mode.FROZEN) picture.mSwipeCaptures = 0;
+        if (!moving) picture.mSwipeCaptures = 0;
         if (want == BackdropLayers.Mode.LIVE) {
             if (picture.mPageMode != BackdropLayers.Mode.LIVE || picture.capturing()) {
                 picture.dropPageLayer();
             }
             return want;
         }
-        return preparePageLayer(picture, want) ? want : BackdropLayers.Mode.LIVE;
+        return preparePageLayer(picture, want, moving) ? want : BackdropLayers.Mode.LIVE;
     }
 
     /**
@@ -1026,7 +1095,9 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
      */
     private boolean splittable(@NonNull ViewGroup wall, @NonNull View surface, int margin,
                                int reach, boolean moving) {
-        mFadingPages = false;
+        // Every page goes in at any alpha, at rest too: the frozen layer pictures each whole and
+        // composites it at its alpha now, so a fade starting does not change what it holds.
+        mFadingPages = true;
         mChain.clear();
         mPages.clear();
         mPoseCount = 0;
@@ -1094,7 +1165,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
         if (mWallPathIndex < 0) {
             // A swipe carries the pages up to a width either way under a surface that stays.
             // A frozen layer holds each page, and the decor, as a picture of its own.
-            int slots = moving ? BackdropLayers.frozenSlots(mPages.size()) : 1;
+            int slots = BackdropLayers.frozenSlots(mPages.size());
             if (slots > LivePicture.MAX_SLOTS) return false;
             padX = BackdropLayers.pad(base, neededWidth, neededHeight, true, wall.getWidth(),
                 slots);
@@ -1104,6 +1175,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
         } else if (!BackdropLayers.fits(base, neededWidth, neededHeight)) {
             return false;
         }
+        mPageBase = base;
         mReach.set(mNeeded);
         mReach.inset(-padX, -padY);
         mBounds.set(mReach);
@@ -1227,61 +1299,117 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     }
 
     /**
-     * Records, captures, collects or re-aims {@code picture}'s page layer for {@code want}. Whether
-     * it can be drawn this frame.
+     * Collects, re-aims or captures {@code picture}'s pages layer. Whether it can be drawn this
+     * frame.
+     *
+     * <p>At rest the layer is kept and moved by the pages' shift; it is taken again, behind the
+     * old one, when something asked for it ({@link PageLayerRefresh}), when the pages are not the
+     * ones it holds, or when it was moved off where it was taken. The old picture is drawn until
+     * the new one lands. While the wall moves a layer that no longer holds is dropped and the
+     * pages are drawn live until a new one lands.</p>
      */
     private boolean preparePageLayer(@NonNull LivePicture picture,
-                                     @NonNull BackdropLayers.Mode want) {
+                                     @NonNull BackdropLayers.Mode want, boolean moving) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false;
-        boolean frozen = want == BackdropLayers.Mode.FROZEN;
+        if (picture.mStaged && !picture.collectCapture() && !picture.capturing()) {
+            // The refresh failed: its slots are laid out, the held picture's no longer are.
+            picture.dropPageLayer();
+        }
         float shift = BackdropLayers.shift(picture.mRecordedPoses, picture.mRecordedPoseCount,
-            mPoses, mPoseCount, frozen);
+            mPoses, mPoseCount, true);
         boolean samePages = sameViews(picture.mRecordedPages, mPages);
         float aim = BackdropLayers.aim(want, shift);
         RectF reach = picture.mPageReach;
         boolean covered = BackdropLayers.covers(reach.left, reach.top, reach.right,
             reach.bottom, mNeeded.left, mNeeded.top, mNeeded.right, mNeeded.bottom, aim);
+        boolean mismatch = BackdropLayers.needsRecord(want, picture.mPageMode, samePages, shift,
+            covered);
         if (picture.capturing()) {
-            // A capture under way pictures the pages as they stood when it started.
-            if (want == BackdropLayers.Mode.FROZEN && !BackdropLayers.needsRecord(want,
-                    want, samePages, shift, covered)) {
+            if (picture.mStaged) {
+                // A refresh behind a held layer: the held one is drawn until the new one lands.
+                if (!moving || !mismatch) {
+                    picture.aimPage(aim);
+                    return true;
+                }
+            } else if (!BackdropLayers.needsRecord(want, want, samePages, shift, covered)) {
+                // A first capture under way pictures the pages as they stood when it started.
                 if (!picture.collectCapture()) return false;
                 picture.aimPage(aim);
                 picture.alphaPages(mPoses, mPoseCount);
                 return true;
             }
             picture.dropPageLayer();
-            shift = Float.NaN;
+            mismatch = true;
         }
-        if (picture.hasPageLayer() && !BackdropLayers.needsRecord(want, picture.mPageMode,
-                samePages, shift, covered)) {
+        boolean held = picture.hasPageLayer();
+        if (!moving) return restPageLayer(picture, held, mismatch, aim);
+        if (held && !mismatch) {
             picture.aimPage(aim);
-            if (frozen) picture.alphaPages(mPoses, mPoseCount);
+            picture.alphaPages(mPoses, mPoseCount);
             return true;
         }
-        if (want == BackdropLayers.Mode.FROZEN
-                && picture.mSwipeCaptures >= MAX_CAPTURES_PER_SWIPE) {
+        if (picture.mSwipeCaptures >= MAX_CAPTURES_PER_SWIPE) {
             // The pages keep moving apart this swipe: one layer until it settles.
             if (picture.mPageMode != BackdropLayers.Mode.LIVE) picture.dropPageLayer();
             return false;
         }
         picture.dropPageLayer();
+        picture.mSwipeCaptures++;
+        startPageCapture(picture);
+        // It lands on a later frame; this one keeps the pages live.
+        return false;
+    }
+
+    /** {@link #preparePageLayer} with the wall at rest. */
+    private boolean restPageLayer(@NonNull LivePicture picture, boolean held, boolean mismatch,
+                                  float aim) {
+        PageLayerRefresh refresh = picture.mRefresh;
+        // A layer moved off where it was taken is taken again once the pages have settled.
+        if (mismatch || Math.abs(aim) > BackdropLayers.SHIFT_EPSILON_PX) refresh.request();
+        if (held && !refresh.requested()) {
+            picture.aimPage(aim);
+            picture.alphaPages(mPoses, mPoseCount);
+            return true;
+        }
+        long now = SystemClock.uptimeMillis();
+        if (!refresh.due(now)) {
+            wakeAfter(refresh.waitMs(now));
+            if (!held) return false;
+            picture.aimPage(aim);
+            picture.alphaPages(mPoses, mPoseCount);
+            return true;
+        }
+        refresh.taken(now);
+        if (held) picture.cancelCapture();
+        if (!startPageCapture(picture) || !held) return false;
+        picture.aimPage(aim);
+        return true;
+    }
+
+    /**
+     * Lays out the slots and starts the capture of the pages as they stand now. A layer held
+     * beside it is dropped first when the two would not fit the surface's share together. False
+     * when nothing could be started.
+     */
+    private boolean startPageCapture(@NonNull LivePicture picture) {
         Trace.beginSection("LiveBackdrop.pageLayer");
         try {
-            picture.mRecordedPages.addAll(mPages);
-            int floats = mPoseCount * BackdropLayers.POSE_STRIDE;
-            if (picture.mRecordedPoses.length < floats) picture.mRecordedPoses = new float[floats];
-            System.arraycopy(mPoses, 0, picture.mRecordedPoses, 0, floats);
-            picture.mRecordedPoseCount = mPoseCount;
-            picture.mPageReach.set(mReach);
             if (!recordSlots(picture)) {
+                picture.cancelCapture();
                 picture.dropPageLayer();
                 return false;
             }
-            picture.mSwipeCaptures++;
-            picture.startCapture(mPageRect);
-            // It lands on a later frame (collectCapture); this one keeps one layer.
-            return false;
+            if (picture.hasPageLayer()
+                    && mPageBase + picture.frozenBytes() + picture.atlasBytes() > MAX_LAYER_BYTES) {
+                picture.dropPageLayer();
+            }
+            picture.stageRecording(mPages, mPoses, mPoseCount, mReach);
+            if (!picture.startCapture(mPageRect)) {
+                picture.cancelCapture();
+                picture.dropPageLayer();
+                return false;
+            }
+            return true;
         } finally {
             Trace.endSection();
         }

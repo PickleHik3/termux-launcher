@@ -145,6 +145,19 @@ public final class LivePicture implements GlassPicture {
     int mRecordedPoseCount = -1;
     /** Captures this swipe has started ({@link LiveBackdrop#MAX_CAPTURES_PER_SWIPE}). */
     int mSwipeCaptures;
+    /** When the pages layer is taken again at rest ({@link PageLayerRefresh}). */
+    @NonNull final PageLayerRefresh mRefresh = new PageLayerRefresh();
+    /**
+     * A refresh capture under way behind a held layer: what it was taken from, kept apart so the
+     * held layer keeps its own poses, reach and rect until the new picture lands
+     * ({@link #collectCapture}).
+     */
+    boolean mStaged;
+    @NonNull private final ArrayList<View> mStagedPages = new ArrayList<>();
+    @NonNull private float[] mStagedPoses = new float[BackdropLayers.POSE_STRIDE * 4];
+    private int mStagedPoseCount = -1;
+    @NonNull private final android.graphics.RectF mStagedReach = new android.graphics.RectF();
+    @NonNull private final Rect mPendingRect = new Rect();
     /** Where the page layer stands in the wall's coordinates, and what it was recorded to hold. */
     @NonNull final Rect mPageRect = new Rect();
     @NonNull final android.graphics.RectF mPageReach = new android.graphics.RectF();
@@ -581,7 +594,7 @@ public final class LivePicture implements GlassPicture {
         PageLayerCapture capture = mCapture instanceof PageLayerCapture
             ? (PageLayerCapture) mCapture : new PageLayerCapture();
         mCapture = capture;
-        mPageRect.set(rect);
+        mPendingRect.set(rect);
         return capture.start(mCaptureRoot, w, h);
     }
 
@@ -597,6 +610,8 @@ public final class LivePicture implements GlassPicture {
      */
     @RequiresApi(Build.VERSION_CODES.S)
     void alphaPages(@NonNull float[] poses, int poseCount) {
+        // A refresh under way has laid the slots out for the new picture, not the held one.
+        if (mStaged) return;
         boolean moved = false;
         for (int i = 0; i < mSlotCount; i++) {
             int page = mSlotPage[i];
@@ -654,6 +669,19 @@ public final class LivePicture implements GlassPicture {
         retireFrozen();
         mFrozen = bitmap;
         mPageAimPx = 0f;
+        mPageRect.set(mPendingRect);
+        if (mStaged) {
+            // A refresh landed: what it was taken from is what the layer holds now.
+            mStaged = false;
+            mRecordedPages.clear();
+            mRecordedPages.addAll(mStagedPages);
+            if (mRecordedPoses.length < mStagedPoses.length) {
+                mRecordedPoses = new float[mStagedPoses.length];
+            }
+            System.arraycopy(mStagedPoses, 0, mRecordedPoses, 0, mStagedPoses.length);
+            mRecordedPoseCount = mStagedPoseCount;
+            mPageReach.set(mStagedReach);
+        }
         recordFrozen(bitmap);
         mPageMode = BackdropLayers.Mode.FROZEN;
         // The capture's recording is done with; the bitmap is all that is held.
@@ -939,6 +967,7 @@ public final class LivePicture implements GlassPicture {
      * on.
      */
     void dropPageLayer() {
+        mStaged = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (mCapture instanceof PageLayerCapture) ((PageLayerCapture) mCapture).cancel();
             if (mPage != null && mPage.hasDisplayList()) mPage.discardDisplayList();
@@ -973,6 +1002,53 @@ public final class LivePicture implements GlassPicture {
         return mFrozen != null;
     }
 
+    /** Bytes the held frozen picture takes, 0 with none. */
+    long frozenBytes() {
+        Bitmap frozen = mFrozen;
+        return frozen == null || frozen.isRecycled() ? 0L
+            : (long) frozen.getWidth() * frozen.getHeight() * 4L;
+    }
+
+    /** Bytes the picture the laid-out slots capture takes: the atlas, 4 bytes a pixel. */
+    long atlasBytes() {
+        return (long) Math.max(1, mAtlasWidth) * Math.max(1, mAtlasHeight) * 4L;
+    }
+
+    /**
+     * Stages what a refresh capture was taken from while the held layer keeps its own
+     * ({@link #mStaged}); false when none is held, and then it is recorded straight away.
+     */
+    void stageRecording(@NonNull ArrayList<View> pages, @NonNull float[] poses, int poseCount,
+                        @NonNull android.graphics.RectF reach) {
+        if (!hasPageLayer()) {
+            mRecordedPages.clear();
+            mRecordedPages.addAll(pages);
+            int floats = poseCount * BackdropLayers.POSE_STRIDE;
+            if (mRecordedPoses.length < floats) mRecordedPoses = new float[floats];
+            System.arraycopy(poses, 0, mRecordedPoses, 0, floats);
+            mRecordedPoseCount = poseCount;
+            mPageReach.set(reach);
+            mStaged = false;
+            return;
+        }
+        mStagedPages.clear();
+        mStagedPages.addAll(pages);
+        int floats = poseCount * BackdropLayers.POSE_STRIDE;
+        if (mStagedPoses.length < floats) mStagedPoses = new float[floats];
+        System.arraycopy(poses, 0, mStagedPoses, 0, floats);
+        mStagedPoseCount = poseCount;
+        mStagedReach.set(reach);
+        mStaged = true;
+    }
+
+    /** Cancels a capture under way and forgets what it was staged from; the held layer stays. */
+    void cancelCapture() {
+        mStaged = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && mCapture instanceof PageLayerCapture) {
+            ((PageLayerCapture) mCapture).cancel();
+        }
+    }
+
     /**
      * Drops both nodes' display lists, and with them the blur layer (a node with nothing to draw
      * gives its layer back on the next frame), but keeps the nodes: the surface's own display list
@@ -983,6 +1059,7 @@ public final class LivePicture implements GlassPicture {
         mReady = false;
         dropLayers();
         dropPageLayer();
+        mRefresh.reset();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (mBlur != null && mBlur.hasDisplayList()) mBlur.discardDisplayList();
             if (mRecord != null && mRecord.hasDisplayList()) mRecord.discardDisplayList();

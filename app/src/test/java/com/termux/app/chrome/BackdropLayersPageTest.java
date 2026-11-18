@@ -17,8 +17,8 @@ public class BackdropLayersPageTest {
     private static final int S = BackdropLayers.POSE_STRIDE;
 
     @Test
-    public void atRestThePagesStayInTheLocalLayer() {
-        assertEquals(Mode.LIVE, BackdropLayers.mode(true, false));
+    public void atRestThePagesStayFrozenToo() {
+        assertEquals(Mode.FROZEN, BackdropLayers.mode(true, false));
     }
 
     @Test

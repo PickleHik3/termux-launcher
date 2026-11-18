@@ -12,7 +12,6 @@ import com.termux.app.chrome.BackdropLayers.Move;
 import com.termux.app.chrome.BackdropLayers.Place;
 import com.termux.app.chrome.BackdropLayers.Tier;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -256,7 +255,6 @@ public class BackdropLayersTest {
      * ADR 0029 section 3: a splittable surface draws the same picture at rest and while the wall
      * moves, so the mode does not depend on motion. Red on the rest/moving switch.
      */
-    @Ignore("Red on 8c007aafd; enable with the one-picture change (flicker F3 report)")
     @Test
     public void splittableSurfaceHasTheSameModeAtRestAndMoving() {
         assertEquals(BackdropLayers.mode(true, true), BackdropLayers.mode(true, false));

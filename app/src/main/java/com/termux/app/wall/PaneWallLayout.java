@@ -2818,6 +2818,22 @@ public final class PaneWallLayout extends ViewGroup
         return isMoving();
     }
 
+    /** The glass beneath the wall, told whenever something under the wall's pages invalidates. */
+    @Nullable private Runnable mBackdropContentListener;
+
+    @Override
+    public void setBackdropContentListener(@Nullable Runnable listener) {
+        mBackdropContentListener = listener;
+    }
+
+    /** Anything under the pages redrew (a terminal printing, a clock): the glass beneath may be stale. */
+    @Override
+    public void onDescendantInvalidated(@NonNull View child, @NonNull View target) {
+        super.onDescendantInvalidated(child, target);
+        Runnable listener = mBackdropContentListener;
+        if (listener != null) listener.run();
+    }
+
     /** Everything the wall draws over its pages: the border glow, then the grabbers. */
     private void drawDecor(@NonNull android.graphics.Canvas canvas) {
         drawBorderGlow(canvas);

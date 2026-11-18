@@ -15,12 +15,13 @@ import androidx.annotation.NonNull;
  *       surface stands and at the parallax offset ({@link Motion#PARALLAX}); over a live scene the
  *       scene's frame, new at the scene's glass rate ({@link Motion#SCENE}). Never blurred again.
  *       Until the stored frame is resident the wallpaper is drawn in the local layer instead.</li>
- *   <li>{@link Layer#PAGES}: while the wall moves, the wall's pages beneath a surface that does not
- *       ride them (the dock, a float on the pinned layer), captured and blurred once as the swipe
- *       starts and moved by the pages' travel ({@link Motion#TRAVEL}). Each page is pictured on its
- *       own at full opacity and composited at its alpha now ({@link #pageAlpha}). At rest, and
- *       whenever that picture cannot be held (pages that turn, a capture still rendering), the
- *       pages are in the local layer, drawn as they are.</li>
+ *   <li>{@link Layer#PAGES}: the wall's pages beneath a surface that does not ride them (the
+ *       dock, a float on the pinned layer), captured and blurred once, held at rest and while the
+ *       wall moves, moved by the pages' travel ({@link Motion#TRAVEL}) and taken again behind the
+ *       old picture when the pages change ({@link PageLayerRefresh}). Each page is pictured on its
+ *       own at full opacity and composited at its alpha now ({@link #pageAlpha}). Until the first
+ *       capture lands, and whenever that picture cannot be held (pages that turn, until their
+ *       slots follow them), the pages are in the local layer, drawn as they are.</li>
  *   <li>{@link Layer#LOCAL}: everything else beneath the surface, drawn from the views' own
  *       display lists and blurred, so whatever redraws beneath (a terminal printing, a clock)
  *       reaches the glass without a new recording. It is recorded again only when its views
@@ -104,12 +105,13 @@ public final class BackdropLayers {
 
     /**
      * The mode for a surface whose beneath can be split ({@code splittable}: the wall's pages are
-     * beneath it, opaque or gone, and the layers fit the surface's budget): frozen while the wall
-     * moves, in the local layer at rest.
+     * beneath it, opaque or gone, and the layers fit the surface's budget): frozen, at rest and
+     * while the wall moves, so a surface keeps one picture of its pages and nothing swaps when
+     * the wall starts or stops (ADR 0029 section 3). {@code wallMoving} does not matter.
      */
     @NonNull
     public static Mode mode(boolean splittable, boolean wallMoving) {
-        return splittable && wallMoving ? Mode.FROZEN : Mode.LIVE;
+        return splittable ? Mode.FROZEN : Mode.LIVE;
     }
 
     /**
