@@ -128,7 +128,7 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     // ----- WidgetInkSource ---------------------------------------------------------------------
 
     @Override @NonNull public ChromeInk.Polarity widgetPolarity() {
-        return mChrome.ink().polarity();
+        return mChrome.ink().widgetPolarity();
     }
 
     /**

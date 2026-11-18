@@ -793,4 +793,42 @@ public class ChromeInkTest {
         assertEquals(0, store.sampledInCrossing());
         assertEquals("nothing was read in the crossing", atRest, reads[0]);
     }
+
+    /** Home's cards wear Home's remembered polarity, whatever the Workspace's chrome votes. */
+    @Test
+    public void widgetPolarityStaysHomesThroughTheWorkspaceAndACrossing() {
+        com.termux.app.glass.LegibilityStore store = new com.termux.app.glass.LegibilityStore();
+        ink.attachLegibility(store);
+        final boolean[] home = {true};
+        ink.setFrontHome(() -> home[0]);
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.widgetPolarity());
+
+        // The Workspace rests with a light wallpaper under it: the chrome turns to dark ink.
+        home[0] = false;
+        wallpaper.other = 0xFFDDDDDD;
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, new Rect(0, 600, 1080, 700), LIGHT_INK,
+            NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+        assertEquals(ChromeInk.Polarity.DARK_INK, ink.polarity());
+        assertEquals("Home's cards keep Home's ink", ChromeInk.Polarity.PALE_INK,
+            ink.widgetPolarity());
+
+        // Back to Home: through the crossing and the landing the cards never change.
+        store.beginCrossing();
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.widgetPolarity());
+        home[0] = true;
+        store.endCrossing();
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.widgetPolarity());
+    }
+
+    /** With no Home record yet, the cards answer the chrome's polarity as before. */
+    @Test
+    public void widgetPolarityIsTheChromesUntilHomeIsKnown() {
+        ink.setFrontHome(() -> false);
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        assertEquals(ink.polarity(), ink.widgetPolarity());
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.widgetPolarity());
+    }
 }
