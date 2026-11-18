@@ -1686,6 +1686,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final com.termux.app.page.Pages mPages = new com.termux.app.page.Pages(mPageHost,
         () -> mFrames.requestFrame(com.termux.app.window.FrameStep.PAGE_FRONT));
+    /** What every Home page asks of this window: its leave and shown work and its one view. */
+    private final com.termux.app.launcher.home.HomePageHost mHomePageHost =
+        new com.termux.app.launcher.home.HomePageHost() {
+            @Override public void dismissControls() {
+                if (mPaneWallController != null && mPaneWallController.widgetsPage() != null) {
+                    mPaneWallController.widgetsPage().dismissControls();
+                }
+            }
+            @Override public void leaving() {
+                batchWindowBarRefresh(() -> {
+                    if (mWidgetPaneController != null) mWidgetPaneController.onWallPageLeaving();
+                    // Leaving Home, a focused Home float gives the keyboard back to the window.
+                    if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
+                });
+            }
+            @Override public void shown() {
+                if (mWidgetPaneController != null) mWidgetPaneController.onWallPageShown(true);
+            }
+            @Nullable @Override public com.termux.app.page.PageKind committedKind() {
+                return mPages.committedKind();
+            }
+            @NonNull @Override public View view() {
+                return mPaneWallController.widgetsPage();
+            }
+        };
     /** The dock's element in the glass registry. */
     private static final String DOCK_GLASS = "dock";
     /** The dock's glass kind moved: its backdrop is dressed again. */
@@ -25930,18 +25955,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         if (mPaneWallController.displayWindow() != null) {
                             mPaneWallController.displayWindow().dismissControls();
                         }
-                        if (mPaneWallController.widgetsPage() != null) {
-                            mPaneWallController.widgetsPage().dismissControls();
-                        }
-                        if (mWidgetPaneController != null
-                            && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
-                            mWidgetPaneController.onWallPageLeaving();
-                        }
-                        // Leaving Home, a focused Home float gives the keyboard back to the window.
-                        if (mPaneController != null
-                            && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
-                            mPaneController.releaseHomeFloatFocus();
-                        }
                         // Only the bar is re-dressed at release, beside the cheap put-aways above:
                         // it is the pager, and it names the place the wall has committed to. The
                         // rest waits for the settle (syncPlaceState).
@@ -26076,10 +26089,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             flights.flyToDock(getTerminalToolbarViewPager());
         }
         noteTerminalPlaceMayBeVisible();
-        if (mWidgetPaneController != null) {
-            mWidgetPaneController.onWallPageShown(
-                page == com.termux.app.wall.PaneWallPage.WIDGETS);
-        }
         Trace.beginSection("Wall.displayAttachment");
         try {
             syncDisplayAttachment(page);
@@ -26483,6 +26492,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.WidgetPaneFrame page =
             mPaneWallController.attachWidgetsPage(getLayoutInflater());
         if (page == null) return;
+        // The Home pages register only now that their one view exists.
+        mPaneWallController.setHomePageFactory(
+            id -> new com.termux.app.launcher.home.HomePage(id, mHomePageHost));
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             // Widgets take what the dock and the floats leave of Live blur's budget.

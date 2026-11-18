@@ -223,6 +223,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Nullable private com.termux.app.page.Pages mPages;
     /** The id the Assistant page is registered under in {@link #mPages}; -1 when none. */
     private int mAssistantPageId = -1;
+    /** Makes the Home page for a Home page id; null until the host has its Home view ready. */
+    @Nullable private java.util.function.IntFunction<com.termux.app.page.Page> mHomePageFactory;
+    /** The Home pages registered in {@link #mPages}, by page id. */
+    @NonNull private final java.util.Map<Integer, com.termux.app.page.Page> mHomePages =
+        new java.util.HashMap<>();
     @Nullable private PaneSurfaceStyle mStyle;
     /** How much of the pages' outlines the last frame left showing; 1 at rest. */
     private float mOutlineAlpha = 1f;
@@ -281,11 +286,53 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     public void setPages(@Nullable com.termux.app.page.Pages pages) {
         if (mPages != null && mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
+        if (mPages != null) for (Integer id : mHomePages.keySet()) mPages.remove(id);
+        mHomePages.clear();
         mAssistantPageId = -1;
         mAssistantPage = null;
         mPages = pages;
+        syncHomePages();
         syncAssistantPage();
         recordFront();
+    }
+
+    /**
+     * The seam that makes one Home page per Home page id; the wall controller never names the
+     * launcher's classes. Registers the Home pages at once and on every later page-list change.
+     */
+    public void setHomePageFactory(
+            @Nullable java.util.function.IntFunction<com.termux.app.page.Page> factory) {
+        mHomePageFactory = factory;
+        syncHomePages();
+        recordFront();
+    }
+
+    /** Keeps one Home page registered per Home page id the wall holds; drops those that left. */
+    private void syncHomePages() {
+        java.util.function.IntFunction<com.termux.app.page.Page> factory = mHomePageFactory;
+        if (mPages == null || factory == null || mKnownPages == null) {
+            if (mPages != null) for (Integer id : mHomePages.keySet()) mPages.remove(id);
+            mHomePages.clear();
+            return;
+        }
+        java.util.List<WallPages.Page> homes = mKnownPages.homePages();
+        java.util.Iterator<java.util.Map.Entry<Integer, com.termux.app.page.Page>> it =
+            mHomePages.entrySet().iterator();
+        while (it.hasNext()) {
+            java.util.Map.Entry<Integer, com.termux.app.page.Page> entry = it.next();
+            boolean kept = false;
+            for (int i = 0; i < homes.size(); i++) kept |= homes.get(i).id == entry.getKey();
+            if (kept) continue;
+            mPages.remove(entry.getKey());
+            it.remove();
+        }
+        for (int i = 0; i < homes.size(); i++) {
+            int id = homes.get(i).id;
+            if (mHomePages.containsKey(id)) continue;
+            com.termux.app.page.Page page = factory.apply(id);
+            mHomePages.put(id, page);
+            mPages.put(id, page);
+        }
     }
 
     /** Records the cell the wall rests on as the front, when it is not moving. */
@@ -347,6 +394,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         }
         int display = mWall.boundPageId(PaneWallPage.DISPLAY);
         bindDisplay(display >= 0 ? display : -1);
+        syncHomePages();
         syncAssistantPage();
         recordFront();
         // The last window closed under the wall: the empty Terminal page keeps its cell, and the
@@ -1315,6 +1363,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallPageChanged(@NonNull PaneWallPage page) {
         mHost.onWallPageChanged(page);
+    }
+
+    @Override
+    public void onWallCellChanged(int pageId, @NonNull PaneWallPage page) {
+        mHost.onWallPageChanged(page);
+        if (mPages != null) mPages.committed(pageId, page.pageKind());
     }
 
     @Override
