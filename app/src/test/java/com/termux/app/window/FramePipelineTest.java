@@ -474,6 +474,51 @@ public class FramePipelineTest {
     }
 
     @Test
+    public void aStructureStepAskedBeforeTheAnimationPhaseRunsInThatPhase() {
+        int[] runs = {0};
+        View root = newRoot();
+        frames.bind(FrameStep.PAGE_FRONT, () -> runs[0]++);
+        frames.attach(root);
+        drawFirstFrame(root);
+        root.layout(0, 0, 10, 10);
+        runs[0] = 0;
+
+        frames.requestFrame(FrameStep.PAGE_FRONT);
+        assertEquals(0, runs[0]);
+        mainLooper().idle();
+        assertEquals(1, runs[0]);
+        draws(root);
+        assertEquals("once", 1, runs[0]);
+    }
+
+    @Test
+    public void flushRunsAStructureStepAtOnce() {
+        int[] runs = {0};
+        View root = newRoot();
+        frames.bind(FrameStep.PAGE_FRONT, () -> runs[0]++);
+        frames.attach(root);
+        drawFirstFrame(root);
+        runs[0] = 0;
+
+        frames.requestFrame(FrameStep.PAGE_FRONT);
+        frames.flush("test");
+        assertEquals(1, runs[0]);
+    }
+
+    @Test
+    public void aNonStructureStepAskedLateStillRunsInThePreDraw() {
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        root.layout(0, 0, 10, 10);
+        chromeRuns = 0;
+
+        frames.requestFrame(FrameStep.CHROME_COMMIT);
+        draws(root);
+        assertEquals(1, chromeRuns);
+    }
+
+    @Test
     public void guardsCountNothingWhileTheMotionLogIsOff() {
         View root = newRoot();
         frames.attach(root);
