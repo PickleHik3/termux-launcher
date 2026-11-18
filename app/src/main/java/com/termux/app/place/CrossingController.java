@@ -1000,10 +1000,6 @@ public final class CrossingController {
         return mCrossing.roomChangePx();
     }
 
-    // diag(268): last keyboard-height state logged per place.
-    private final java.util.HashMap<com.termux.app.wall.PaneWallPage, String> mDiag268Last =
-        new java.util.HashMap<>();
-
     /** The room a place's chrome leaves the content at rest, from the stack as it stands. */
     public int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place) {
         com.termux.app.place.PlaceChromeTravel.Rest rest = mHost.chromeRestOf(place);
@@ -1030,17 +1026,8 @@ public final class CrossingController {
         in.keyboardShown = keyboardShown;
         // The keyboard's height as the pass measures it while one shows (ChromeSpec), else the
         // last one measured.
-        boolean diagShown268 = mHost.isInAppKeyboardShown();
-        in.keyboardHeightPx = Math.max(0, diagShown268
+        in.keyboardHeightPx = Math.max(0, mHost.isInAppKeyboardShown()
             ? mHost.keyboardMeasureHeightPx() : mHost.keyboardDesiredHeightPx());
-        if (com.termux.app.chrome.MotionLog.enabled) {
-            String diagState268 = "keyboardHeightPx=" + in.keyboardHeightPx + " from="
-                + (diagShown268 ? "measure" : "desired") + " keyboardShown=" + keyboardShown;
-            if (!diagState268.equals(mDiag268Last.put(place, diagState268)))
-                com.termux.app.chrome.MotionLog.log("diag-268", "site=reservation place=" + place
-                    + " " + diagState268 + " callers="
-                    + com.termux.app.chrome.MotionLog.callers(3));
-        }
         // The place's own arrangement decides it, like its Style: the one on screen when it is the
         // committed place, else its half's stored layout.
         PlaceLayout placeLayout = place == mHost.lastWallPage()

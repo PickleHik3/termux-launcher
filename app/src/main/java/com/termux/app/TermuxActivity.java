@@ -7501,15 +7501,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The foot the keyboard's host was last dressed with; what the shape model reads. */
     private int mDressedKeyboardFootPx;
 
-    // diag(268): last state per site; a line is written only when its state changes.
-    private final java.util.HashMap<String, String> mDiag268Last = new java.util.HashMap<>();
-
-    private void diag268(@NonNull String site, @NonNull String state, @NonNull String callers) {
-        if (!MotionLog.enabled) return;
-        if (state.equals(mDiag268Last.put(site, state))) return;
-        MotionLog.log("diag-268", "site=" + site + " " + state + " callers=" + callers);
-    }
-
     /** The keyboard's foot now: the kept band while it wears it, else 0. */
     private int inAppKeyboardFootPx() {
         return BottomInsets.keyboardFootPx(mBottomKeptPx,
@@ -7565,18 +7556,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int keyboardFootPx = BottomInsets.keyboardFootPx(mBottomKeptPx,
             inAppKeyboardFootApplies(capsule));
         // The shape model (which this pass must not ask) reads the foot the host wears.
-        int diagOldFoot268 = mDressedKeyboardFootPx;
         mDressedKeyboardFootPx = floating ? 0 : keyboardFootPx;
-        if (MotionLog.enabled && diagOldFoot268 != mDressedKeyboardFootPx) {
-            MotionLog.log("diag-268", "site=dress old=" + diagOldFoot268
-                + " new=" + mDressedKeyboardFootPx + " kept=" + mBottomKeptPx
-                + " capsule=" + capsule + " floating=" + floating
-                + " ime=" + isImeVisible() + " underBands=" + underKeyboardBandsShown()
-                + " containerGone=" + (findViewById(R.id.inapp_keyboard_container) == null
-                    || findViewById(R.id.inapp_keyboard_container).getVisibility() == View.GONE)
-                + " shown=" + isInAppKeyboardShown() + " staysLaidOut=" + keyboardStaysLaidOut()
-                + " callers=" + MotionLog.callers(3));
-        }
         int innerBottomPadding = floating ? 0 : ChromePolicy.keyboardChinBottomPaddingPx(
             capsule, innerPadding, chinPaddingPx) + keyboardFootPx;
         boolean changed = false;
@@ -16871,20 +16851,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && findViewById(R.id.inapp_keyboard_container).getVisibility() != View.GONE
             ? BottomInsets.keyboardKeysPx(mKeyboardGeometry.measureHeightPx(),
                 bottomInsets.keyboardFootPx) : 0;
-        if (MotionLog.enabled) {
-            diag268("stack", "keyboardDownPx=" + keyboardDownPx
-                + " footApplies=" + inAppKeyboardFootApplies(isInAppKeyboardCapsule())
-                + " dressedFoot=" + mDressedKeyboardFootPx
-                + " measuredRaw=" + mKeyboardGeometry.desiredHeightPx()
-                + " stackExtra=" + bottomInsets.stackExtraHeightPx
-                + " stackPadding=" + bottomInsets.stackPaddingPx
-                + " kbColumnMargin=" + bottomInsets.keyboardColumnMarginPx
-                + " dockFootPx=" + bottomInsets.dockFootPx
-                + " kbFootPx=" + bottomInsets.keyboardFootPx
-                + " dockFoot=" + dockFoot + " kept=" + mBottomKeptPx
-                + " kbShown=" + state.keyboardShown + " crossing=" + mCrossing.crossing(),
-                MotionLog.callers(3));
-        }
         boolean keyboardDownChanged = keyboardDownPx != mKeyboardDownLaidOutPx;
         mKeyboardDownLaidOutPx = keyboardDownPx;
         // The band stands at the union of both sides' rests: as much taller as the other side's
@@ -17082,30 +17048,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
         boolean moved = false;
-        StringBuilder diag268 = MotionLog.enabled ? new StringBuilder() : null;
         for (com.termux.app.wall.PaneWallPage kind : ROOM_KINDS) {
             int before = wall.pageBottomInsetPx(kind);
-            int reservation = mCrossingController.travelRestReservationPx(roomPlaceOf(kind));
             wall.setPageBottomInsetPx(kind, com.termux.app.place.PageRoom.wallInsetPx(
-                reservation, mBottomKeptPx));
+                mCrossingController.travelRestReservationPx(roomPlaceOf(kind)), mBottomKeptPx));
             moved |= wall.pageBottomInsetPx(kind) != before;
-            if (diag268 != null) diag268.append(" ").append(kind).append("[reservation=")
-                .append(reservation).append(" kept=").append(mBottomKeptPx).append(" inset=")
-                .append(wall.pageBottomInsetPx(kind)).append("]");
         }
         int frontRoomPx = frontPageRoomPx();
-        if (diag268 != null && mKeyboardGeometry != null) {
-            int laidOut268 = Integer.MAX_VALUE;
-            for (com.termux.app.wall.PaneWallPage kind : ROOM_KINDS)
-                laidOut268 = Math.min(laidOut268, wall.pageBottomInsetPx(kind));
-            int raw = mKeyboardGeometry.desiredHeightPx();
-            diag268("rooms", "laidOutRoomPx=" + laidOut268 + " frontRoomPx=" + frontRoomPx
-                + diag268 + " liveFoot=" + inAppKeyboardFootPx()
-                + " dressedFoot=" + mDressedKeyboardFootPx
-                + " kbShown=" + isInAppKeyboardShown() + " staysLaidOut=" + keyboardStaysLaidOut()
-                + " measuredRaw=" + raw + " keys=" + inAppKeyboardKeysPx(raw),
-                MotionLog.callers(3));
-        }
         boolean home = mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         // The body surface is laid out once, at the smallest room any page has, and cut down to a
         // page's own by the stack's one writer; a crossing blends the two sides' rooms, so a
