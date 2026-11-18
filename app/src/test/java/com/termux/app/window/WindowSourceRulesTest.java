@@ -88,19 +88,13 @@ public class WindowSourceRulesTest {
         // page and element edge: cut as the page steps (5 to 7) land
         "launcherctl <-> terminal",
         // page and element edge: cut as the page steps (5 to 7) land
-        "look <-> wall",
-        // page and element edge: cut as the page steps (5 to 7) land
         "place <-> terminal",
-        // page and element edge: cut as the page steps (5 to 7) land
-        "place <-> wall",
         // element edge: cut when either side takes a Host
         "sound <-> x11",
         // page and element edge: cut as the page steps (5 to 7) land
         "statusbar <-> surfaces",
         // page and element edge: cut as the page steps (5 to 7) land
         "statusbar <-> terminal",
-        // page and element edge: cut as the page steps (5 to 7) land
-        "surfaces <-> wall",
         // page and element edge: cut as the page steps (5 to 7) land
         "terminal <-> theme",
         // page and element edge: cut as the page steps (5 to 7) land

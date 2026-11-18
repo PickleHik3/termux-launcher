@@ -56,7 +56,7 @@ public class PageTopInsetsTest {
         boolean reaches = PageTopInsets.canvasReachesUnderBar(committed, wallAtRest);
         int reach = PageTopInsets.canvasReachPx(reaches, true, onScreen, metrics);
         int canvasTop = EdgeStackPolicy.stackThicknessPx(onScreen, Edge.TOP, metrics) - reach;
-        return canvasTop + PageTopInsets.pageTopInsetPx(page,
+        return canvasTop + com.termux.app.wall.PageTopInset.pageTopInsetPx(page,
             PageTopInsets.workspaceTopInsetPx(reaches, true, onScreen, WORKSPACE, metrics),
             PageTopInsets.homeTopInsetPx(reaches, true, home, metrics));
     }
@@ -93,16 +93,6 @@ public class PageTopInsetsTest {
         assertFalse("off its rest", PageTopInsets.wallAtRestOn(WINDOW, false, 12f, WINDOW));
     }
 
-    @Test
-    public void aHomePageStartsAtItsOwnInsetAndAWindowAtTheWorkspaces() {
-        assertEquals(0, PageTopInsets.pageTopInsetPx(HOME, BAR, 0));
-        assertEquals(BAR, PageTopInsets.pageTopInsetPx(HOME, 0, BAR));
-        assertEquals(BAR, PageTopInsets.pageTopInsetPx(WINDOW, BAR, 0));
-        assertEquals("the display window's frame is a Workspace page", BAR,
-            PageTopInsets.pageTopInsetPx(null, BAR, 0));
-        assertEquals(0, PageTopInsets.pageTopInsetPx(WINDOW, -5, 0));
-        assertEquals(0, PageTopInsets.pageTopInsetPx(HOME, 0, -5));
-    }
 
     /**
      * One bar across the wall (#90): a Home that wears the Workspace's bar starts below it as a

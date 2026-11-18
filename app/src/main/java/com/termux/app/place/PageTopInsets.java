@@ -17,7 +17,7 @@ import com.termux.app.page.PageKind;
  * <p>Instead, while a Home page can be on screen — the wall resting on Home, or moving at all —
  * the canvas reaches up under the bar ({@link #canvasReachPx}) and each page keeps its own top:
  * a Workspace page (the terminal's or the display window's) one bar band below it, and a Home
- * page one band of its own bar below it ({@link #pageTopInsetPx}): the same band as a window's
+ * page one band of its own bar below it (the wall's {@code PageTopInset.pageTopInsetPx}): the same band as a window's
  * where Home wears the bar as the Workspace does (#90), so the two line up across the seam, and
  * the canvas's top itself where Home's layout stands no bar along the top. Resting on the Workspace, the
  * canvas stands below the bar as it always has and no page is inset, so everything that reads
@@ -101,17 +101,6 @@ public final class PageTopInsets {
                                      @NonNull EdgeStackPolicy.Metrics metrics) {
         if (!reaches || !barShown) return 0;
         return EdgeStackPolicy.topOverlapPx(home, metrics, true);
-    }
-
-    /**
-     * Where {@code page} starts below the canvas's top: a Home page at Home's inset ({@link
-     * #homeTopInsetPx}); every Workspace page —
-     * {@code null} is one the wall does not know, the display window's — at the Workspace's inset.
-     */
-    public static int pageTopInsetPx(@Nullable PageKind page, int workspaceTopInsetPx,
-                                     int homeTopInsetPx) {
-        if (page == PageKind.HOME) return Math.max(0, homeTopInsetPx);
-        return Math.max(0, workspaceTopInsetPx);
     }
 
     /**

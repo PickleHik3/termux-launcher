@@ -1,4 +1,4 @@
-package com.termux.app.wall;
+package com.termux.app.look;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -18,6 +18,10 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import android.app.Application;
 import com.termux.app.page.PageKind;
+import com.termux.app.wall.StartInPolicy;
+import com.termux.app.wall.UseAs;
+import com.termux.app.wall.WallPages;
+import com.termux.app.wall.WallPagesStore;
 
 /** The one-time seeding of the page list from Start in, the default Home page and Use as. */
 @RunWith(RobolectricTestRunner.class)

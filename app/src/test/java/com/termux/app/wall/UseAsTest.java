@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorCard;
+import com.termux.app.surfaces.UseAsCards;
 import com.termux.app.surfaces.EditorRows;
 
 import org.junit.Test;
@@ -38,8 +39,8 @@ public class UseAsTest {
         assertTrue(home.showsHomePage());
         assertTrue(home.showsHomeSettings());
         assertTrue(home.offersHomeStartIn());
-        for (EditorCard card : EditorCard.values()) assertTrue(card.name(), home.reaches(card));
-        assertSame(EditorCard.HOME, home.doorCard(EditorCard.HOME));
+        for (EditorCard card : EditorCard.values()) assertTrue(card.name(), UseAsCards.reaches(home, card));
+        assertSame(EditorCard.HOME, UseAsCards.doorCard(home, EditorCard.HOME));
         assertSame(PageKind.HOME, home.editorPlace(PageKind.HOME));
         assertSame(PageKind.HOME, home.homePage());
     }
@@ -78,18 +79,18 @@ public class UseAsTest {
 
     @Test public void terminalOnlyHasNoHomeCard() {
         UseAs terminal = UseAs.TERMINAL;
-        assertFalse(terminal.reaches(EditorCard.HOME));
-        assertTrue("the editor at rest is always reachable", terminal.reaches(null));
+        assertFalse(UseAsCards.reaches(terminal, EditorCard.HOME));
+        assertTrue("the editor at rest is always reachable", UseAsCards.reaches(terminal, null));
         for (EditorCard card : EditorCard.values()) {
-            if (card != EditorCard.HOME) assertTrue(card.name(), terminal.reaches(card));
+            if (card != EditorCard.HOME) assertTrue(card.name(), UseAsCards.reaches(terminal, card));
         }
     }
 
     @Test public void terminalOnlyHomeDoorsOpenTheEditorAtRest() {
         UseAs terminal = UseAs.TERMINAL;
-        assertNull(terminal.doorCard(EditorCard.HOME));
-        assertSame(EditorCard.WORKSPACE, terminal.doorCard(EditorCard.WORKSPACE));
-        assertSame(EditorCard.APPEARANCE, terminal.doorCard(EditorCard.APPEARANCE));
+        assertNull(UseAsCards.doorCard(terminal, EditorCard.HOME));
+        assertSame(EditorCard.WORKSPACE, UseAsCards.doorCard(terminal, EditorCard.WORKSPACE));
+        assertSame(EditorCard.APPEARANCE, UseAsCards.doorCard(terminal, EditorCard.APPEARANCE));
         assertNull("never stands the editor on a Home page", terminal.editorPlace(PageKind.HOME));
         assertSame(PageKind.TERMINAL, terminal.editorPlace(PageKind.TERMINAL));
         assertEquals("settings-home hidden by terminal -> REST", terminal.doorLine("settings-home"));

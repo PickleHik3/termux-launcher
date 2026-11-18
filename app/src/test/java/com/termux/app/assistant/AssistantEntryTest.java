@@ -10,7 +10,7 @@ import androidx.annotation.NonNull;
 
 import com.termux.app.page.PageKind;
 import com.termux.app.wall.WallPages;
-import com.termux.app.wall.WallPagesMigration;
+import com.termux.app.look.WallPagesMigration;
 
 import org.junit.Test;
 

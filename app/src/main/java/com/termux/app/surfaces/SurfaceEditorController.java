@@ -989,7 +989,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         // Terminal only has no Home: a door to Home's card opens the editor at rest, and says so.
         com.termux.app.wall.UseAs useAs = useAs();
-        if (!useAs.reaches(card)) {
+        if (!UseAsCards.reaches(useAs, card)) {
             android.util.Log.i(EditorDoor.LOG_TAG, useAs.doorLine(card.key + "-card"));
             card = null;
         }
@@ -1390,7 +1390,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return "the editor is not presented";
         if (mSheet == null)
             return "the editor has no card sheet";
-        if (!useAs().reaches(card))
+        if (!UseAsCards.reaches(useAs(), card))
             return "Use as Terminal only has no Home card";
         if (!card.standsOn(mScreen))
             return "it does not stand on the " + mScreen + " half";

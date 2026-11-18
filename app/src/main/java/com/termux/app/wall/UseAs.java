@@ -4,7 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.page.PageKind;
-import com.termux.app.surfaces.EditorCard;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -103,17 +102,6 @@ public enum UseAs {
             kept.add(i);
         }
         return Collections.unmodifiableList(kept);
-    }
-
-    /** Whether {@code card} can be opened: the Home card is gone under Terminal only. */
-    public boolean reaches(@Nullable EditorCard card) {
-        return card == null || this == HOME || card != EditorCard.HOME;
-    }
-
-    /** The card a door opens under this mode: the editor at rest (null) for a card it took away. */
-    @Nullable
-    public EditorCard doorCard(@Nullable EditorCard card) {
-        return reaches(card) ? card : null;
     }
 
     /**

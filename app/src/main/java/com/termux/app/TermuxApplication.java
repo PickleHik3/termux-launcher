@@ -115,7 +115,7 @@ public class TermuxApplication extends Application {
             WallReworkMigration.migrateIfNeeded(surfacePreferences.getSharedPreferences());
             // The wall's pages are seeded from Start in, the default Home page, Use as and the
             // widget repository's page count, once; the count is read before anything changes it.
-            com.termux.app.wall.WallPagesMigration.migrateIfNeeded(
+            com.termux.app.look.WallPagesMigration.migrateIfNeeded(
                 surfacePreferences.getSharedPreferences(),
                 () -> com.termux.app.launcher.widget.LauncherWidgetRepository.create(context)
                     .pageCount(),
@@ -136,7 +136,7 @@ public class TermuxApplication extends Application {
                 new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
                 terminalId, -1);
             // The Display page the wall upgrade created starts with the Terminal page's look.
-            com.termux.app.wall.WallPagesMigration.copyLookToUpgradedDisplay(
+            com.termux.app.look.WallPagesMigration.copyLookToUpgradedDisplay(
                 surfacePreferences.getSharedPreferences(),
                 new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
                 terminalId);
