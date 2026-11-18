@@ -15,6 +15,7 @@
 - [Notifications](Notifications.md)
 - [Layout and full screen](Layout_And_Full_Screen.md)
 - [Look and themes](Look_And_Themes.md)
+- [Photo shader wallpapers](Photo_Shader_Wallpapers.md)
 
 ## Typing
 
