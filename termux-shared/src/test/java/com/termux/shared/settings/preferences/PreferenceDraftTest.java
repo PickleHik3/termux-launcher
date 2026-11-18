@@ -19,7 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The draft over the store (window restructure step 1): a preview shown to every reader, Done
+ * The draft over the store: a preview shown to every reader, Done
  * writing it once, Discard dropping it, an outside write surviving both, and dirty meaning the
  * draft against the store.
  */

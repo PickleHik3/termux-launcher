@@ -178,7 +178,7 @@ public class PlaceChromeTravelTest {
         PlaceChromeTravel.States s = states(true, true);
         Frame first = at(PageKind.DISPLAY, 4f, s);
         assertTrue(first.keyboardInPlay);
-        // The in-app keyboard stays laid out while it is down (D1-A): its show flag is false,
+        // The in-app keyboard stays laid out while it is down: its show flag is false,
         // yet it is there for the crossing to bring up.
         assertTrue(PlaceChromeTravel.keyboardLaidOut(false, 340));
         assertFalse(PlaceChromeTravel.keyboardLaidOut(false, 0));

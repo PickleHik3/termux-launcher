@@ -24,7 +24,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The Terminal's grid on the round trip Home ⇄ Terminal with its keyboard closed, D1-A: each
+ * The Terminal's grid on the round trip Home ⇄ Terminal with its keyboard closed: each
  * page's room is its own rest's ({@link PageRoom}), so the terminal's page is laid out at the
  * Terminal's rest wherever the wall stands: not as either crossing begins, not mid-slide, not at
  * either landing, and a crossing gives nothing back and takes nothing. The crossing is driven

@@ -21,14 +21,7 @@ public final class LegibilityBlend {
      * at its end. A progress outside 0..1 is clamped and a NaN is 0.
      */
     public static int color(int from, int to, float progress) {
-        float t = clamp01(progress);
-        if (t <= 0f) return from;
-        if (t >= 1f) return to;
-        int a = lerp((from >>> 24) & 0xFF, (to >>> 24) & 0xFF, t);
-        int r = lerp((from >>> 16) & 0xFF, (to >>> 16) & 0xFF, t);
-        int g = lerp((from >>> 8) & 0xFF, (to >>> 8) & 0xFF, t);
-        int b = lerp(from & 0xFF, to & 0xFF, t);
-        return (a << 24) | (r << 16) | (g << 8) | b;
+        return Argb.lerp(from, to, progress);
     }
 
     /**
@@ -57,9 +50,5 @@ public final class LegibilityBlend {
     private static float clamp01(float value) {
         if (value != value) return 0f;
         return value < 0f ? 0f : (value > 1f ? 1f : value);
-    }
-
-    private static int lerp(int from, int to, float t) {
-        return Math.round(from + (to - from) * t);
     }
 }

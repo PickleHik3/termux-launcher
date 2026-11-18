@@ -10295,7 +10295,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the root's padding takes the band over from the content as the keyboard comes up and hands
      * it back as it goes, while the stack the content hangs above keeps standing on the old band
      * until the geometry pass, so a reach of the take alone left the grid a band short on the way
-     * up and a band tall on the way down for that one layout.
+     * up and a band tall on the way down for that one layout. The reach is signed: it may go
+     * negative for that one layout while the keyboard goes down.
      */
     @SuppressWarnings("deprecation")
     private void noteRootFitBottom(@NonNull WindowInsetsCompat insets) {
@@ -10309,11 +10310,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int delta = reach - mHomeContentImeReachPx;
         if (delta == 0) return;
         View content = findViewById(R.id.terminal_content_column);
-        if (content == null || !(content.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
-            return;
-        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) content.getLayoutParams();
-        params.bottomMargin -= delta;
-        content.setLayoutParams(params);
+        com.termux.app.place.BottomInsetFrameLayout container = findViewById(R.id.terminal_root_container);
+        if (content == null || container == null) return;
+        container.setReachingColumn(content, container.reachingColumnPx() + delta);
         mHomeContentImeReachPx = reach;
     }
 
@@ -13452,9 +13451,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The kinds of page a crossing begins or ends on, each measured at rest for the other's crossings. */
-    private static final com.termux.app.page.PageKind[] LEGIBILITY_KINDS = {
-        com.termux.app.page.PageKind.HOME, com.termux.app.page.PageKind.TERMINAL,
-        com.termux.app.page.PageKind.DISPLAY, com.termux.app.page.PageKind.ASSISTANT};
+    private static final com.termux.app.page.PageKind[] LEGIBILITY_KINDS =
+        com.termux.app.page.PageKind.values();
 
     /** The extra keys' ink at each end of a look-only crossing; set by {@link #beginLegendBlend}. */
     private boolean mLegendBlendOn;
@@ -17078,7 +17076,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockFootPx = bottomInsets.dockFootPx;
         applyDockFootLayout(accessoryStackContainer, bottomInsets);
         int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
-        // The in-app keyboard stays laid out while it is down (D1-A): the container is as tall as
+        // The in-app keyboard stays laid out while it is down: the container is as tall as
         // the keyboard-up stack, and the scene translates it down (StackScene#keyboardTranslationPx).
         // Also while nothing else keeps the stack up (the keyboard alone on it): the container
         // stays laid out for the keyboard, as it does with rows.
@@ -17242,31 +17240,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The content column fills the window to its bottom: what a page leaves of it is that page's
      * own rest, in the wall (applyPageRooms). The one reach the column keeps past its bottom is
      * the system keyboard's on Home, which keeps its grid whole while the phone's keyboard is up;
-     * it is the column's only bottom margin.
+     * the container holds it ({@code BottomInsetFrameLayout#setReachingColumn}).
      */
     private boolean applyContentImeReach(int imeReachPx) {
         View content = findViewById(R.id.terminal_content_column);
-        if (content == null) return false;
-        ViewGroup.LayoutParams layoutParams = content.getLayoutParams();
-        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
-        ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
-        int bottomMargin = -Math.max(0, imeReachPx);
-        if (marginParams.bottomMargin == bottomMargin) return false;
-        marginParams.bottomMargin = bottomMargin;
-        content.setLayoutParams(marginParams);
+        com.termux.app.place.BottomInsetFrameLayout container = findViewById(R.id.terminal_root_container);
+        if (content == null || container == null) return false;
+        int reach = Math.max(0, imeReachPx);
+        if (container.reachingColumnPx() == reach) return false;
+        container.setReachingColumn(content, reach);
         return true;
     }
 
     /** The wall's page kinds that stand a page of their own room (a display window is the Workspace's). */
-    private static final com.termux.app.page.PageKind[] ROOM_KINDS = {
-        com.termux.app.page.PageKind.HOME, com.termux.app.page.PageKind.TERMINAL,
-        com.termux.app.page.PageKind.ASSISTANT};
+    private static final com.termux.app.page.PageKind[] ROOM_KINDS =
+        com.termux.app.page.PageKind.roomKinds();
 
     /** Where the stack's top stood on the last pass at rest, from the window's bottom; -1 before. */
     private int mAppliedStackTopInsetPx = -1;
 
     /**
-     * Each page's room, from its own rest (D1-A, PageRoom): the wall's cells end that far above
+     * Each page's room, from its own rest (PageRoom): the wall's cells end that far above
      * its bottom, whichever page is in front and whatever a crossing is doing, so a crossing
      * resizes no page. What draws on every page stands on the front page's rest instead (the flat
      * body surface, a side stack's end, the find strip and the A-Z labels), as a layout value
@@ -17504,7 +17498,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The keyboard's keys' height (its foot not counted) the container is laid out taller by, with the foot, while it is down. */
     private int mKeyboardDownLaidOutPx;
-    /** Whether the docked in-app keyboard stays laid out while it is down (D1-A). */
+    /** Whether the docked in-app keyboard stays laid out while it is down. */
     private boolean keyboardStaysLaidOut() {
         return mInAppKeyboard != null && mInAppKeyboard.isEnabled() && !mInAppKeyboard.isTurnedOff()
             && !mInAppKeyboard.isExternalTextInputActive() && !isKeyboardFloating();
@@ -25433,8 +25427,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 noteTerminalPageId(back.page.id);
                 return true;
             }
-            // Home's swipe past its last page into an empty Workspace (ADR 0008, amended
-            // 2026-10-19): the same fresh shell the Terminal entry starts there.
+            // Home's swipe past its last page into an empty Workspace (ADR 0008): the same fresh shell the Terminal entry starts there.
             @Override public boolean canStartShell() {
                 return isSplitPanesEnabled() && mPaneController != null
                     && getTermuxTerminalSessionClient() != null;
@@ -26043,7 +26036,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncPlaceBarOffset(float offsetPx) {
         mWallOffsetPx = offsetPx;
         int width = mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth();
-        // The readings stand still while the wall moves under them (#90), so the row never fades
+        // The readings stand still while the wall moves under them, so the row never fades
         // or clips with the wall. The badge and the window chips are the Workspace's (ADR 0030
         // section 2): they rest a wall to the right on Home and slide in with the Workspace's
         // rows, which the top stack's renderer writes (TopStackRenderer), the bar carrying them

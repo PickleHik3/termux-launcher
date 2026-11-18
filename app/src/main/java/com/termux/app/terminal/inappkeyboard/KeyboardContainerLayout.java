@@ -10,7 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * The in-app keyboard's container. While the keyboard is laid out but down (D1-A) the stack's
+ * The in-app keyboard's container. While the keyboard is laid out but down the stack's
  * translation leaves the strip of it that stands above the screen's bottom gap on the screen,
  * clipped from view; clip bounds do not stop a touch, so it refuses touch, hover and
  * accessibility focus outright and the touch falls to what is under it. Written by the stack's

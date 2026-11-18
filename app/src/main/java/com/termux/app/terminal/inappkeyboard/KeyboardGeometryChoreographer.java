@@ -80,7 +80,7 @@ public final class KeyboardGeometryChoreographer {
         }
 
         /**
-         * Whether the docked in-app keyboard stays laid out while it is down (D1-A): the in-app
+         * Whether the docked in-app keyboard stays laid out while it is down: the in-app
          * keyboard is on, it is not switched off, not floating, and the system IME is not the
          * input. Then "down" is the stack scene's translation, never GONE.
          */
@@ -452,12 +452,12 @@ public final class KeyboardGeometryChoreographer {
             }
             mSurface.applyKeyboardSurfaceState(mSurface.buildChromeSpec());
             // The crops cut for the stack without the keyboard are rebuilt by this frame's render,
-            // as the gate's render sync used to be: nothing waits for them.
+            // so nothing waits for them.
             if (openingFromGone) mSurface.requestAccessoryRenderSync();
             mSurface.requestStackRest();
         } else if (mSurface.keyboardStaysLaidOut()) {
             // Down is the scene's translation: the container is never put away, so it is measured
-            // and laid out at its full height and a landing writes nothing for it (D1-A).
+            // and laid out at its full height and a landing writes nothing for it.
             boolean closing = !mDownLaidOut;
             if (closing)
                 mSurface.invalidateTransitionCrops();

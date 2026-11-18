@@ -23,7 +23,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * A crossing's landing frame draws what its last frame at progress 1 drew (#268): the keyboard's
+ * A crossing's landing frame draws what its last frame at progress 1 drew: the keyboard's
  * rest share is counted once however the landing's frame is asked for, the body surface's cut
  * stands on the side the wall committed to (the front's one owner), and a room set again to the
  * value it holds changes nothing. Docked (no air under the stack) and Floating (a gap), the

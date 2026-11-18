@@ -1,8 +1,7 @@
 package com.termux.app.chrome;
 
 /**
- * When a surface's frozen pages layer is taken again at rest (ADR 0029 section 3, amendment of
- * 2026-11-18): only once something asked for it (the wall's content changed, or the layer no
+ * When a surface's frozen pages layer is taken again at rest (ADR 0029 section 3): only once something asked for it (the wall's content changed, or the layer no
  * longer matches the pages), at most one capture per {@link #REFRESH_INTERVAL_MS}, and a request
  * that arrived inside the interval is taken as soon as it ends, so the last change is always
  * seen. Pure: the caller passes the clock. One per surface.

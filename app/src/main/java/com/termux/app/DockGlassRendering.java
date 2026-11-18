@@ -13,6 +13,7 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 
 import com.termux.app.chrome.OnGlass;
+import com.termux.app.glass.Argb;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -223,16 +224,7 @@ public final class DockGlassRendering {
 
     /** Straight ARGB interpolation (alpha included) between two colors. */
     public static int lerpArgb(int a, int b, float t) {
-        t = t < 0f ? 0f : (t > 1f ? 1f : t);
-        int aa = Color.alpha(a), ab = Color.alpha(b);
-        int ra = Color.red(a), rb = Color.red(b);
-        int ga = Color.green(a), gb = Color.green(b);
-        int ba = Color.blue(a), bb = Color.blue(b);
-        return Color.argb(
-            Math.round(aa + (ab - aa) * t),
-            Math.round(ra + (rb - ra) * t),
-            Math.round(ga + (gb - ga) * t),
-            Math.round(ba + (bb - ba) * t));
+        return Argb.lerp(a, b, t);
     }
 
     // ------------------------------------------------------------ the shelf under a floating slab

@@ -314,7 +314,7 @@ public class BackdropLayersTest {
         long decor = LiveBackdrop.layerBytes(1440, 400);
         assertTrue(pages + decor <= GlassPagePool.QUARTER_POOL_BYTES);
         // A fourth page is refused by the page count (LiveBackdrop.PAGE_LAYER_SLOTS), not by bytes:
-        // the pool is shared and sized by RAM, so it no longer bounds one surface's pages to three.
+        // the pool is shared and sized by RAM, so it does not bound one surface's pages to three.
         // The pad is what the decor may take beside the pages, in the pages budget.
         assertTrue(BackdropLayers.padWithin(GlassPagePool.QUARTER_POOL_BYTES, pages, 1440, 400,
             true, 1440, 1) >= 0);

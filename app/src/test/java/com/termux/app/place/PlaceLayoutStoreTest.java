@@ -347,7 +347,7 @@ public class PlaceLayoutStoreTest {
         assertTrue(store.wasKeyboardOpen(PageKind.TERMINAL));
         assertFalse(store.wasKeyboardOpen(PageKind.DISPLAY));
 
-        // Home remembers its own, as the terminal does (developer, 2026-11-18).
+        // Home remembers its own, as the terminal does.
         assertFalse(store.wasKeyboardOpen(PageKind.HOME));
         store.setKeyboardOpen(PageKind.HOME, true);
         assertTrue(store.wasKeyboardOpen(PageKind.HOME));

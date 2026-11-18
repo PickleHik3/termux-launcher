@@ -260,7 +260,7 @@ public final class DockRows {
         Shown shown = presence(chrome, mStatusBarShown && statusBarOnBottomEdge,
             mShown.underKeyboard, mViews.pageTicksAreTheDocks(), surfaceOf(mLayout));
         announce(shown);
-        // The in-app keyboard stays laid out while down (D1-A): the container it stands in stays
+        // The in-app keyboard stays laid out while down: the container it stands in stays
         // laid out with it, though no row or status bar keeps the stack "shown" for readers.
         mViews.setStackShown(shown.stack || mKeyboardLaidOut);
         mViews.setDockGlassShown(shown.dockGlass);

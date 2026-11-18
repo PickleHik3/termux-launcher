@@ -573,7 +573,7 @@ public class DockRowsSeamTest {
         assertLaneRowsKeepTheirHeightAtTheLanding(false, DockStyle.LENS_BEADS);
     }
 
-    // ---- D1-A step 2b: a lane wears its own side's layout; a keyboard alone keeps the stack ----
+    // ---- A lane wears its own side's layout; a keyboard alone keeps the stack ----
 
     @Test
     public void aLaneRowWearsItsOwnSidesLayoutWhicheverSideIsInFront() {

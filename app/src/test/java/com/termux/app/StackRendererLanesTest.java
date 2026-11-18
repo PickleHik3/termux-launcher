@@ -31,7 +31,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * The stack's writer over the side lanes (D1-A step 2): at rest the front side's lane stands at 0
+ * The stack's writer over the side lanes: at rest the front side's lane stands at 0
  * and writes nothing, the other's stands off its page's side; in a crossing each lane slides with
  * its page and the shared rows stay; the crossing's last frame is the arriving rest, so a landing
  * writes nothing and counts no landing-wrote.

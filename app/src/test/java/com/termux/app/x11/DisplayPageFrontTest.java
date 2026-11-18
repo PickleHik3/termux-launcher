@@ -24,7 +24,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * The Display pages' front and leave at the structure point (#272 slice 3): Terminal to Display
+ * The Display pages' front and leave at the structure point: Terminal to Display
  * attaches and focuses the one view once; Display to Terminal lets it go and hands the keys back
  * with no retry; Display to Display keeps the view where it is.
  */

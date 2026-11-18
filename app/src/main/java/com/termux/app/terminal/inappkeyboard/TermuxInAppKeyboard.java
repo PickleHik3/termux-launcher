@@ -351,7 +351,7 @@ public final class TermuxInAppKeyboard {
         } else {
             setContainerVisible(false);
         }
-        // Down, the keyboard is still laid out (D1-A): put the container there now, not at the first hide.
+        // Down, the keyboard is still laid out: put the container there now, not at the first hide.
         if (mEnabled && !mVisible)
             setContainerVisible(false);
     }

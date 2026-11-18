@@ -179,7 +179,7 @@ public class SeamTravelTest {
     @Test
     public void rowsThatDifferButBothHalvesStandStayPutAndSwapAtTheLanding() {
         // Nothing is laid out or slid on the way for rows that differ: the plan is none, the rows
-        // stay whole, and the stack's lanes stand both sides' rows (D1-A).
+        // stay whole, and the stack's lanes stand both sides' rows.
         PlaceLayout window = windowStacking(Element.APPS, Element.EXTRA_KEYS, Element.AZ);
         PlaceLayout[][] pairs = {
             {homeAppsOnly(), workspaceWithDock()}, {workspaceWithDock(), homeAppsOnly()},

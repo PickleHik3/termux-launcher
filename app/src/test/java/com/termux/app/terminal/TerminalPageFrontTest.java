@@ -25,7 +25,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 /**
- * The Terminal pages' front at the structure point (#273 slice 2): one page per window, a window
+ * The Terminal pages' front at the structure point: one page per window, a window
  * step is a front change, and the active pane takes the keys once on a Terminal front.
  */
 @RunWith(RobolectricTestRunner.class)

@@ -683,7 +683,7 @@ public final class SeamCrossing {
         }
         answers.moved = answers.moved || answers.relayout || mRun.plan != DockPlan.NONE;
         // The keyboard's reveal is the frame's own: a pure function of the seam's progress between
-        // the two rests, on the curve the look blends on, so it never swaps at the half (#244).
+        // the two rests, on the curve the look blends on, so it never swaps at the half.
         // With a keyboard in the stack the rows sink into its top edge, since the stack's
         // translation carries the keyboard too.
         answers.rowsSink = mRun.plan != DockPlan.NONE;

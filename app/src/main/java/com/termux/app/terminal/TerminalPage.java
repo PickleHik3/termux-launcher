@@ -35,7 +35,7 @@ public final class TerminalPage implements Page {
 
     /**
      * Nothing yet: the panes' repaint stop stays on the wall's off-screen callback until the wall
-     * host goes (#273 slice 4).
+     * host goes.
      */
     @Override
     public void offFront() { }

@@ -11,8 +11,7 @@ import com.termux.app.place.PlaceLayout.Edge;
 import org.junit.Test;
 
 /**
- * Who carries each row through a crossing (ADR 0030 section 4, with the developer's decisions on
- * #260): a row both ends show in the same place (edge, and over or under the keyboard) is the stack's and stays put; a row one end shows
+ * Who carries each row through a crossing (ADR 0030 section 4): a row both ends show in the same place (edge, and over or under the keyboard) is the stack's and stays put; a row one end shows
  * goes with that end's side; within a side nothing moves. And which landings may move rows.
  */
 public class SideRowsTest {

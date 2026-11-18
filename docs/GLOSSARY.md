@@ -36,6 +36,10 @@ Settings › Home › Gestures › Swipe on the terminal to switch windows (the 
 is always on). One rule, `TerminalBodySwipe`.
 _Avoid_: terminal swipe, text swipe, rule B
 
+**Bottom stack**:
+The bottom of the window seen as one stack: the dock's rows, the keyboard and the glass behind them, laid out once for both **sides** and moved by a crossing as a single piece. See **Top stack** for its twin and **Stack layout** for its geometry.
+_Avoid_: dock area, accessory stack
+
 **Border drag**:
 The one-finger gesture that pages the wall from a **window**, in every mode. It starts on the
 current window's border: the frame line on any of its four sides and the air between it and the next
@@ -264,7 +268,7 @@ Portrait or landscape. The shared layout has one version per orientation (and pe
 see Minimal mode); appearance is never per orientation.
 
 **Page**:
-One full-screen stop on the **wall**: a **Home page** or a **window**. Appearance is one look for
+One full-screen stop on the **wall**: a **Home page** or a **window**, each with a **page kind**, a **side**, a **rest** and its own **front** and **back** handling. Appearance is one look for
 every page. One layout dresses both halves, minimal only for windows; a Home page wears its own
 only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
@@ -306,6 +310,14 @@ size in cells during a resize drag. A new label swaps its words in place, and an
 displaces it.
 _Avoid_: size banner, resize overlay, hint
 
+**Rest**:
+What a **page** asks of the chrome while it is in front and still: whether the keyboard is up, whose extra keys show, whether its text fields type with the phone's keyboard, what the bars show and the look it wears.
+_Avoid_: resting state, chrome plan
+
+**Scene**:
+The pure answer to everything a stack shows on one frame, from a crossing's two ends and how far it has gone; a renderer is the only code that writes it to the views.
+_Avoid_: pose table, layout pass
+
 **Saved sessions**:
 A named set of sessions, windows, splits and working directories kept under `~/.termux/workspaces/`
 and loaded back as new shells. The drawer's Saved tab lists them; Save sessions… adds one.
@@ -328,6 +340,10 @@ _ADR 0030 (accepted, not yet built): the app as built still lays rows out per pa
 **Top stack**:
 The top of the window seen as one stack, like the bottom one: the status bar's glass (the strip behind the system bar and the bar's own card) is one slab both ends of a crossing share. It stays put and blends its look, frost and ink from the leaving page to the arriving one on the crossing's curve; the clock and readings stand on it; the **window chips** are the Workspace's and slide across it with the Workspace, so on Home they rest out of sight. A bar only one end shows still rides with its page. The bar edge setting puts the same stack at the top or the bottom. In code `TopStackScene` (pure) and `TopStackRenderer` (its one writer), ADR 0030 section 6.
 _Avoid_: top band (the pre-#267 name for the strip and bar's glass), wallpaper twin (the bars draw their own frost now)
+
+**Side lane**:
+The part of the **bottom stack** that only one **side** uses: a row only Home's layout has stands in Home's lane and a row only the Workspace's has in the Workspace's, while a row both show in the same place belongs to the shared stack.
+_Avoid_: half row, per-side row
 
 **Start in**:
 The one setting that says where a cold start and a home press land: Home (the default), the
@@ -440,7 +456,7 @@ These words come from ADR 0015 (the wall is a list of pages), still a draft on 2
 is accepted the entries above describe the app as built.
 
 **Page kind**:
-What a page is: a **Home page**, the **Terminal page** or a **Display page**. Each kind has its own
+What a page is: Home, Terminal, Display or Assistant; the **side** follows from it (Home for Home, the Workspace for the rest). Each kind has its own
 default **Dress**: the dock on Home pages; the status bar and extra keys, dock off, on the others.
 _Avoid_: page type, place
 
@@ -647,6 +663,14 @@ surface's own size stays an offset: pane zoom and the terminal font setting, Hom
 100% is every install's sizes as they were (`text_size_percent`, unset until moved).
 _Avoid_: font scale (Android's own, which still applies on top), zoom (the terminal's pinch)
 
+**Frame pipeline**:
+The window's one frame order: inputs only record that they have work and ask for a frame, and the pipeline then runs the **frame steps** in a fixed order, only on frames something asked for.
+_Avoid_: frame loop, draw hooks
+
+**Frame step**:
+One entry in the frame pipeline's fixed table, such as the page's front work, the chrome geometry pass or the glass commit; new code that touches a view a **scene** owns joins as a step instead of hooking a frame of its own.
+_Avoid_: callback, listener
+
 **Gate**:
 A **Hold** that keeps a window from drawing until the first frame is right: the keyboard reveal
 gate, the first-draw gate. A gate's **Backstop** is short, because a gate that stays shut is a
@@ -658,6 +682,10 @@ The window's first frame after a relaunch is a gate on the frame pipeline: the r
 The one registry every glass surface joins. An entry names its element (the look cells it reads), the view it draws in, the kind it wants and a budget priority (dock, then floats, then widgets); the service owns the granted kind, the layers, refresh, commit order and release. There are four kinds: **Wallpaper** (the stored pre-blurred frame), **Snapshot**, **Live**, and **Compositor** (the keyboard's frost over the X11 screen on the display window, falling back to Wallpaper). A surface keeps one picture for its life, and its kind changes only on a policy event (the Live blur switch, battery saver, a memory trim, a slot freeing).
 _Avoid_: backdrop service (the 0021 name), blur manager
 _ADR 0029 (accepted, partly built): the registry, its four kinds, the Live core and the commit as the frame table's last step are built (`com.termux.app.glass`), and the commit walks the entries back to front by window layer. The dock, floats, widgets, pane slabs and the tab, the panels (drawer, palette, sheet, menus) and the keyboard's Compositor frost have joined: panels pay from the same eight Live slots, a slab is aimed in the commit and nobody pushes it, and the Compositor falls back to Wallpaper on a policy event or a failure. The bars and the foot join in later steps._
+
+**Page glass declaration**:
+How a **page** hands the **glass service** its own glass surfaces (panes, widgets, floats): the page lists them and the service joins them, so the page never registers glass itself.
+_Avoid_: page glass consumer, glass hook
 
 **Legibility correction**:
 What a band's legends have to stand on at a page's rest: the opaque face under each row of the dock or the keyboard, and the legend tone chosen on the keyboard's bare face. The glass service keeps one per **page** and band (dock, keyboard, strip, panes) in its legibility store, which is what the tint sampler became: measured when the page rests and measured again only when the wallpaper, the palette, light or dark, the band's rest rectangle or its look changes. Keying on the page covers parallax. A crossing reads the two ends' stored corrections and blends the ink between pale and dark on the glass's own curve; it measures nothing, and a page never visited is measured once, at rest, before its first crossing.

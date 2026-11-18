@@ -20,7 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The Appearance editor's draft over the layouts (#254): its edits show at once and stay out of
+ * The Appearance editor's draft over the layouts: its edits show at once and stay out of
  * the file until Done; Discard drops them; a write from outside meanwhile reaches the file and
  * survives both.
  */

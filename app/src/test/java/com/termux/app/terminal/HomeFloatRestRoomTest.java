@@ -22,7 +22,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * A Home float's size comes only from Home's rest (D1-A), whichever page is in front: the
+ * A Home float's size comes only from Home's rest, whichever page is in front: the
  * Workspace's stack and keyboard, read while it stands in front, gave the float a size its shell
  * was resized to when a crossing toward Home showed it (the Workspace's keyboard up: 44x37 to
  * 44x25 during the slide, back to 44x37 after the landing). The drive here is the activity's

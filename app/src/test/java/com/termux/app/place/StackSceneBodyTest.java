@@ -13,7 +13,7 @@ import org.junit.runners.Parameterized;
 import java.util.List;
 
 /**
- * The flat body surface drawn on every page (D1-A step 3): laid out once, at the smallest of the
+ * The flat body surface drawn on every page: laid out once, at the smallest of the
  * pages' rooms, and cut down to the front page's room by the scene, so a landing lays nothing out.
  * At rest its bottom is exactly where the front page's room put its layout before; a crossing
  * blends the two ends' rooms, and its last frame is the arriving rest.

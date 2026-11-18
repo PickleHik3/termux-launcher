@@ -340,7 +340,7 @@ public final class StackLayout {
     /**
      * {@code page}'s dock rows at rest with its own extra-keys row, nothing squeezed, 0 while its
      * dock is away: the band the side stands over the keyboard. The taller of the two sides' is the
-     * band the stack lays out once (D1-A, {@link StackLanes#slackPx}).
+     * band the stack lays out once ({@link StackLanes#slackPx}).
      */
     public static int restRowsPx(@NonNull RestInput in) {
         return in.toolbarShown

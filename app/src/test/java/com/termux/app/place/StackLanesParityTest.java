@@ -15,7 +15,7 @@ import org.junit.runners.Parameterized;
 import java.util.List;
 
 /**
- * The bottom stack laid out once at the union of both sides' rests (D1-A step 2), on every layout
+ * The bottom stack laid out once at the union of both sides' rests, on every layout
  * fixture, Docked and Floating apart, the keyboard up and down: the band is the taller side's;
  * each lane's slide at rest is the crossing's end exactly, so a landing writes nothing; and the
  * room is today's, the container's extra height handed back as the content's reach past its top.

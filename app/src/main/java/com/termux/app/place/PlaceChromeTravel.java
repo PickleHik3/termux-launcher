@@ -341,7 +341,7 @@ public final class PlaceChromeTravel {
 
     /**
      * Whether the in-app keyboard is laid out for a crossing to move: shown, or down but still laid
-     * out below the screen (D1-A), which is the keyboard's rest on a place that has it down. Its
+     * out below the screen, which is the keyboard's rest on a place that has it down. Its
      * show flag alone says nothing of that, so a crossing never pre-rolls a keyboard that is there.
      */
     public static boolean keyboardLaidOut(boolean shown, int downLaidOutPx) {

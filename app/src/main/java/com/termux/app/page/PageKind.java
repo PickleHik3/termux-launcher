@@ -13,6 +13,35 @@ public enum PageKind {
     DISPLAY,
     ASSISTANT;
 
+    private static final PageKind[] ROOM_KINDS = computeRoomKinds();
+
+    /**
+     * Whether this kind stands a page of its own room; a display window is the Workspace's, so it
+     * does not.
+     */
+    public boolean hasOwnRoom() {
+        return this != DISPLAY;
+    }
+
+    /**
+     * The kinds that stand a page of their own room, in enum order. The array is shared: callers
+     * iterate it and never write to it.
+     */
+    @NonNull
+    public static PageKind[] roomKinds() {
+        return ROOM_KINDS;
+    }
+
+    private static PageKind[] computeRoomKinds() {
+        PageKind[] all = values();
+        int count = 0;
+        for (PageKind kind : all) if (kind.hasOwnRoom()) count++;
+        PageKind[] rooms = new PageKind[count];
+        int next = 0;
+        for (PageKind kind : all) if (kind.hasOwnRoom()) rooms[next++] = kind;
+        return rooms;
+    }
+
     /** Home's side for a Home page, the Workspace's for every window. */
     @NonNull
     public Side side() {

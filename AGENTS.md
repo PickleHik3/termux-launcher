@@ -81,7 +81,8 @@ Before calling a change done, say which of these applied:
 - **Editions.** Anything touching applicationId, bootstrap, manifest or signing needs a decision
   per edition.
 - **The system IME.** Every path that shows it calls `TermuxActivity.onSystemImeRequested()`
-  first, or the `mAcceptSystemImeInsets` gate drops its insets.
+  first: that takes the `system-ime` Hold (`SystemImeRide`), and only an owned keyboard's insets
+  move the layout. A request whose keyboard never shows backs off at the Hold's 1.5 s backstop.
 
 ## Where code lives
 
