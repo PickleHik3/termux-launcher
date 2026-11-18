@@ -179,6 +179,24 @@ public class PagesTest {
     }
 
     @Test
+    public void aSameKindLandingOnAnotherPageRecordsTheNewFrontAndAppliesIt() {
+        FakePage one = new FakePage(PageKind.HOME, log);
+        FakePage two = new FakePage(PageKind.HOME, log);
+        pages.put(1, one);
+        pages.put(2, two);
+        pages.landed(2, PageKind.HOME);
+        pages.applyFront();
+        pages.landed(1, PageKind.HOME);
+        assertSame(one, pages.front());
+        assertEquals(1, pages.frontId());
+        pages.applyFront();
+        assertEquals(1, one.on);
+        assertEquals(1, two.off);
+        assertTrue("an unspent Back on Home 2's page goes to the default", pages.onBack());
+        assertEquals(1, homeCalls);
+    }
+
+    @Test
     public void aNonContractFrontLeavesBackAlone() {
         pages.landed(9, PageKind.HOME);
         assertFalse(pages.onBack());
