@@ -13451,9 +13451,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The kinds of page a crossing begins or ends on, each measured at rest for the other's crossings. */
-    private static final com.termux.app.page.PageKind[] LEGIBILITY_KINDS = {
-        com.termux.app.page.PageKind.HOME, com.termux.app.page.PageKind.TERMINAL,
-        com.termux.app.page.PageKind.DISPLAY, com.termux.app.page.PageKind.ASSISTANT};
+    private static final com.termux.app.page.PageKind[] LEGIBILITY_KINDS =
+        com.termux.app.page.PageKind.values();
 
     /** The extra keys' ink at each end of a look-only crossing; set by {@link #beginLegendBlend}. */
     private boolean mLegendBlendOn;
@@ -17254,9 +17253,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The wall's page kinds that stand a page of their own room (a display window is the Workspace's). */
-    private static final com.termux.app.page.PageKind[] ROOM_KINDS = {
-        com.termux.app.page.PageKind.HOME, com.termux.app.page.PageKind.TERMINAL,
-        com.termux.app.page.PageKind.ASSISTANT};
+    private static final com.termux.app.page.PageKind[] ROOM_KINDS =
+        com.termux.app.page.PageKind.roomKinds();
 
     /** Where the stack's top stood on the last pass at rest, from the window's bottom; -1 before. */
     private int mAppliedStackTopInsetPx = -1;

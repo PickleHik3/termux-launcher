@@ -1,6 +1,9 @@
 package com.termux.app.page;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -12,5 +15,20 @@ public class PageKindTest {
         assertEquals(Side.WORKSPACE, PageKind.TERMINAL.side());
         assertEquals(Side.WORKSPACE, PageKind.DISPLAY.side());
         assertEquals(Side.WORKSPACE, PageKind.ASSISTANT.side());
+    }
+
+    @Test
+    public void everyKindButDisplayStandsItsOwnRoom() {
+        assertTrue(PageKind.HOME.hasOwnRoom());
+        assertTrue(PageKind.TERMINAL.hasOwnRoom());
+        assertFalse(PageKind.DISPLAY.hasOwnRoom());
+        assertTrue(PageKind.ASSISTANT.hasOwnRoom());
+    }
+
+    @Test
+    public void roomKindsAreThoseWithAnOwnRoomInEnumOrder() {
+        assertArrayEquals(
+            new PageKind[] {PageKind.HOME, PageKind.TERMINAL, PageKind.ASSISTANT},
+            PageKind.roomKinds());
     }
 }
