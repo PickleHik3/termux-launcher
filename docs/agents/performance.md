@@ -41,8 +41,9 @@ measuring on pong; AGENTS.md's rule on touching a real phone applies.
    RenderThread is allowed, and so is re-recording a backdrop when the content beneath it changes
    (ADR 0021). A software capture in a pre-draw listener, and blurring per frame at rest, are what
    these rules exist to stop.
-   **Live budget:** at most 8 live surfaces, about 8.8 MiB, released when off screen
-   (`LiveBackdropBudgetTest`).
+   **Live budget:** at most 8 live surfaces, each a blur layer (about 1.1 MiB at most) and, beneath
+   the wall, a pages layer of whole pages (about 4.4 MiB at most, twice that while a refresh is in
+   flight), released when off screen (`LiveBackdropBudgetTest`).
 4. **Heavy work runs off the main thread.** That covers wallpaper decode, blur, file and network I/O
    and package queries. Native model work runs in the `:tai_runtime` process.
 5. **Prefer many thin frames to a few fat ones.** On pong, capping the clock or throttling

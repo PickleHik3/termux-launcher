@@ -68,9 +68,22 @@ taken again when the content behind it changes:
   seen. Nothing changed means nothing is captured: no work at rest.
 - The new picture replaces the old one when its capture lands; the old one is drawn until then,
   so no frame has an empty layer. A surface holds one picture and has one in flight, both counted
-  against its share of the budget; when the two do not fit, the old one goes first.
+  against its pages budget (below).
 - A layer left off where it was taken (pages that moved by a shift) is retaken once the wall
   rests, so the next swipe starts from a layer that matches.
+
+Whole-page slots, same day. Each page is held whole and untransformed, in a slot of its own (its
+own bounds and the blur's reach around them, at a quarter scale), and the wall's decor in one
+more. Where a page stands is its pose's matrix, drawn over the slot whenever the layer is drawn,
+so a transition that turns pages (Carousel, Depth, Stack, a sink) redraws a handful of bitmaps
+and neither captures again nor falls back to live pages at its first frame; a slide is still the
+layer's translation alone, and a fade only changes the slots' alphas. A new capture is for a new
+content or a different set of pages, and happens at rest. The pages layer has a budget of its own,
+apart from the blur layer's `MAX_LAYER_BYTES`: `MAX_PAGES_ATLAS_BYTES`, four quarter-scale budget
+screens (three whole pages and the decor, 4 x 360 x 800 x 4 = 4,608,000 B at 1440 x 3200), and
+`MAX_PAGES_LAYER_BYTES`, twice that, so a refresh in flight never costs the held atlas its place.
+Only the held atlas stays resident. A surface with more than three pages near it, or whose pages
+do not fit, keeps the pages live.
 
 ## 4. Kinds change only on a policy event
 
@@ -145,6 +158,7 @@ sampler becomes this store. The status bar and window bar get no correction in t
 - A float's glass and the dock's draw the same layers at rest and moving, so the first frame of a
   swipe and the landed frame are the same picture.
 - Users lose the "One layer" setting; the default behaviour (All layers) stays.
-- Memory is bounded as before: at most 8 live surfaces, about 8.8 MiB, by priority.
+- Memory is bounded: at most 8 live surfaces by priority, each a blur layer and, beneath the
+  wall, a pages layer (`LiveBackdrop.BUDGET_BYTES`, the worst case; see the 2026-11-18 amendment).
 - Glass that must be on screen the frame it is asked for (the keyboard) draws what the service
   already holds; if the stored frame is not resident, it shows its frost or tint for a frame or two.
