@@ -505,8 +505,15 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                 (ViewGroup.MarginLayoutParams) body.getLayoutParams();
             g.bodyWidthPx = Math.max(0, parent.getWidth() - parent.getPaddingLeft()
                 - parent.getPaddingRight() - margins.leftMargin - margins.rightMargin);
+            // The parent's height with the top margin it was laid out with, never one written
+            // since: the canvas reaching under the status bar moves the margin at once and the
+            // parent's height on the next layout (PageTopInsets), so the two read together are off
+            // by the reach for the frame between. The bottom is the room's, written before the
+            // layout it asks for.
+            int top = parent == mBodyParent && mBodyParentTopMarginPx >= 0
+                ? mBodyParentTopMarginPx : margins.topMargin;
             g.bodyHeightPx = Math.max(0, parent.getHeight() - parent.getPaddingTop()
-                - parent.getPaddingBottom() - margins.topMargin - margins.bottomMargin);
+                - parent.getPaddingBottom() - top - margins.bottomMargin);
             g.bodyLaidOutRoomPx = margins.bottomMargin;
         }
     }
@@ -518,11 +525,30 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             if (r - l != or - ol || b - t != ob - ot) requestApply();
         };
 
+    /** The body's parent, and the body's top margin as that parent was last laid out; -1 unknown. */
+    @Nullable private View mBodyParent;
+    private int mBodyParentTopMarginPx = -1;
+    /** The parent laid the body out (even GONE): its top margin now matches its height. */
+    private final View.OnLayoutChangeListener mBodyParentLayout =
+        (v, l, t, r, b, ol, ot, or, ob) -> {
+            View body = mWatchedBody;
+            if (body == null || body.getParent() != v
+                || !(body.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return;
+            int top = ((ViewGroup.MarginLayoutParams) body.getLayoutParams()).topMargin;
+            if (top == mBodyParentTopMarginPx && b - t == ob - ot) return;
+            mBodyParentTopMarginPx = top;
+            requestApply();
+        };
+
     private void watchBody(@NonNull View body) {
         if (mWatchedBody == body) return;
         if (mWatchedBody != null) mWatchedBody.removeOnLayoutChangeListener(mBodyLayout);
+        if (mBodyParent != null) mBodyParent.removeOnLayoutChangeListener(mBodyParentLayout);
         mWatchedBody = body;
         body.addOnLayoutChangeListener(mBodyLayout);
+        mBodyParent = body.getParent() instanceof View ? (View) body.getParent() : null;
+        mBodyParentTopMarginPx = -1;
+        if (mBodyParent != null) mBodyParent.addOnLayoutChangeListener(mBodyParentLayout);
     }
 
     /**
