@@ -51,6 +51,6 @@ public final class HomePage implements Page {
 
     @Override
     public boolean onBack() {
-        return false;
+        return mHost.widgetBack() || mHost.lowerFloatKeyboard();
     }
 }

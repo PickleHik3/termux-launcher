@@ -1704,6 +1704,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void shown() {
                 if (mWidgetPaneController != null) mWidgetPaneController.onWallPageShown(true);
             }
+            @Override public boolean widgetBack() {
+                return mWidgetPaneController != null && mWidgetPaneController.onBackPressed();
+            }
+            @Override public boolean lowerFloatKeyboard() {
+                // The float keeps focus and the next press falls through as before. Home's
+                // always-on keyboard is not the float's to close.
+                if (mPaneController == null || mPaneController.focusedHomeFloat() == null
+                    || mInAppKeyboard == null || !mInAppKeyboard.isVisible()
+                    || wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) return false;
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.USER_EVENT);
+                return true;
+            }
             @Nullable @Override public com.termux.app.page.PageKind committedKind() {
                 return mPages.committedKind();
             }
@@ -19843,7 +19856,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mSheets.terminalActionsSheetIfBuilt() != null) mSheets.terminalActionsSheetIfBuilt().closeImmediately();
             }
         });
-        registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 if (!mSheets.isCommandPaletteOpen()) return false;
@@ -19914,18 +19926,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 mSheets.closeAppDrawerImmediate(reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
             }
-        });
-        registry.register(() -> {
-            // Back over a focused Home float with the keyboard up closes the keyboard first (the
-            // float grows back); the float keeps focus, and the next press falls through as before.
-            // Home's always-on keyboard is not the float's to close.
-            if (!isWidgetsPageShowing() || mPaneController == null
-                || mPaneController.focusedHomeFloat() == null || mInAppKeyboard == null
-                || !mInAppKeyboard.isVisible()
-                || wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) return false;
-            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .HideReason.USER_EVENT);
-            return true;
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {

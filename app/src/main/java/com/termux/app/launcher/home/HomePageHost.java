@@ -24,6 +24,12 @@ public interface HomePageHost {
     /** Home is the front: its widgets come alive. */
     void shown();
 
+    /** Back over a widget edit commits it, else over the picker closes it; true when it did. */
+    boolean widgetBack();
+
+    /** Back over a focused Home float with the keyboard up lowers the keyboard; true when it did. */
+    boolean lowerFloatKeyboard();
+
     /** The kind the wall last committed to, or null before any commit. */
     @Nullable PageKind committedKind();
 

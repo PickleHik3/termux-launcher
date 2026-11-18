@@ -29,6 +29,8 @@ public class HomePageFrontTest {
         @Override public void dismissControls() { dismiss++; }
         @Override public void leaving() { leaving++; }
         @Override public void shown() { shown++; }
+        @Override public boolean widgetBack() { return false; }
+        @Override public boolean lowerFloatKeyboard() { return false; }
         @Nullable @Override public PageKind committedKind() { return pages.committedKind(); }
         @NonNull @Override public View view() { throw new UnsupportedOperationException(); }
     }
