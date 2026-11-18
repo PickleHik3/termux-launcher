@@ -86,6 +86,24 @@ public class EditorDraftTest {
         assertNull(mLive.getHomePillPosition());
     }
 
+    /**
+     * The keyboard switch turned off and on again in the editor reads as it did at open, so it is
+     * no unsaved change: the store never held the key, and the draft must not either.
+     */
+    @Test
+    public void aSwitchSetBackToWhatTheStoreAnswersIsNotUnsaved() {
+        com.termux.app.place.PlaceLayoutStore places = new com.termux.app.place.PlaceLayoutStore(mLive);
+        assertFalse("the store holds no key for the switch",
+            mStore.contains("keyboard_turned_off"));
+
+        places.setKeyboardShown(false);
+        assertTrue("off is a change", mDraft.isDirty());
+        places.setKeyboardShown(true);
+
+        assertFalse("on again is the store's own answer", mDraft.isDirty());
+        assertTrue(places.isKeyboardShown());
+    }
+
     @Test
     public void doneStoresTheDraftOnce() {
         mEditor.lookGrid().write(OPACITY, 90);

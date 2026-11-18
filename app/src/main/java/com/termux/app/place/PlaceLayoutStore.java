@@ -1123,8 +1123,16 @@ public final class PlaceLayoutStore {
         com.termux.shared.settings.preferences.PreferenceDraft draft =
             com.termux.shared.settings.preferences.PreferenceDraft.current();
         if (draft != null && draft.isOpen()
-                && draft.store() == mPreferences.getSharedPreferences())
+                && draft.store() == mPreferences.getSharedPreferences()) {
+            // The draft is dirty where it holds a value the store does not: the shipped answer
+            // (shown) over a store that holds no key is the same answer, so it holds no key too.
+            if (shown && !draft.store().contains(TERMUX_APP.KEY_KEYBOARD_TURNED_OFF)) {
+                draft.edit().remove(TERMUX_APP.KEY_KEYBOARD_TURNED_OFF).apply();
+                mRevision.incrementAndGet();
+                return;
+            }
             writes = mPreferences.overDraft(draft);
+        }
         writes.setKeyboardTurnedOff(!shown);
         mRevision.incrementAndGet();
     }
