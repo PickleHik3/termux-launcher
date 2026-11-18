@@ -170,11 +170,6 @@ public final class KeyboardGeometryChoreographer {
 
     // ---- system-IME gate
 
-    /**
-     * Insets can retain the previous app's mid-transition IME snapshot across a home resume, so
-     * they count only after an input flow in this activity explicitly asked for the system IME.
-     */
-    private boolean mAcceptSystemImeInsets;
     private boolean mLastImeVisible;
 
     private final Runnable mPreviewGeometrySyncRunnable;
@@ -503,24 +498,9 @@ public final class KeyboardGeometryChoreographer {
 
     // ------------------------------------------------------------- system-IME gate
 
-    /**
-     * Marks subsequent IME insets as activity-owned rather than inherited from the previous app,
-     * and asks for them to be re-delivered. Every in-activity flow that hands input to the system
-     * keyboard goes through here — see {@code TerminalHost.onSystemImeRequested()}.
-     */
-    public void onSystemImeRequested() {
-        mAcceptSystemImeInsets = true;
+    /** Asks for the insets to be re-delivered (a system-keyboard request, see {@code TermuxActivity}). */
+    public void requestApplyInsets() {
         mSurface.requestApplyInsets();
-    }
-
-    /** Drops activity ownership of the IME insets: what arrives next is inherited, not ours. */
-    public void onSystemImeReleased() {
-        mAcceptSystemImeInsets = false;
-    }
-
-    /** True while IME insets are this activity's to act on. */
-    public boolean acceptsSystemImeInsets() {
-        return mAcceptSystemImeInsets;
     }
 
     /** The last observed system-IME visibility, without probing for it again. */

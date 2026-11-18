@@ -376,18 +376,9 @@ public class KeyboardGeometryChoreographerTest {
     // ---------------------------------------------------------------- system-IME gate
 
     @Test
-    public void imeInsetsAreIgnoredUntilAnInActivityFlowAsksForTheSystemKeyboard() {
-        // Insets can retain the previous app's mid-transition IME snapshot across a home resume.
-        assertFalse(mChoreographer.acceptsSystemImeInsets());
-
-        mChoreographer.onSystemImeRequested();
-
-        assertTrue(mChoreographer.acceptsSystemImeInsets());
-        assertTrue("the request must re-deliver insets, or the gate opens a frame late",
-            mSurface.log.contains("requestApplyInsets"));
-
-        mChoreographer.onSystemImeReleased();
-        assertFalse(mChoreographer.acceptsSystemImeInsets());
+    public void aSystemKeyboardRequestRedeliversInsets() {
+        mChoreographer.requestApplyInsets();
+        assertTrue(mSurface.log.contains("requestApplyInsets"));
     }
 
     @Test

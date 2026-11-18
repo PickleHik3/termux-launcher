@@ -769,6 +769,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mKeyboardTravelSharePx;
     /** The share that the system IME's lift owns (applyDockImeOffset); the two are summed. */
     private float mDockImeLiftPx;
+    /** Who owns the system keyboard's insets and how its animation moves the stack. */
+    private final com.termux.app.place.SystemImeRide mImeRide = new com.termux.app.place.SystemImeRide();
+    private final Handler mImeRideHandler = new Handler(Looper.getMainLooper());
     /**
      * Set around a show or hide that the slide makes on its own behalf. Nobody asked for that
      * keyboard, so it is not reported as a user's intent to the display's keyboard policy, any
@@ -2110,14 +2113,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
         mTermuxActivityRootView.setOnApplyWindowInsetsListener(new TermuxActivityRootView.WindowInsetsListener());
         View content = findViewById(android.R.id.content);
+        com.termux.app.place.SystemImeAnimation.install(content, mImeRide,
+            new com.termux.app.place.SystemImeAnimation.Host() {
+                @Override public int laidForImePx() { return mLastDispatchedImeBottomPx; }
+                @Override public void writeRide(int offsetPx) { applyDockImeOffset(offsetPx); }
+                @Override public boolean suppressed() { return isSystemImeSuppressedByInAppKeyboard(); }
+            });
         content.setOnApplyWindowInsetsListener((v, insets) -> {
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
             noteRootFitBottom(insetsCompat);
             applyBottomKept(insetsCompat);
             applyAppDrawerEdgeBleed(insetsCompat);
+            mImeRide.onInsets(insetsCompat.isVisible(Type.ime()));
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
-            applyDockImeOffset(0);
             applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
             // The root consumes the insets, so the overlays after it in this frame are handed them.
@@ -10544,7 +10553,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
 
     private void applyDockImeOffset(int imeLiftPx) {
-        mDockImeLiftPx = Math.max(0, imeLiftPx);
+        mDockImeLiftPx = imeLiftPx;
         applyAccessoryStackTranslation();
     }
 
@@ -10720,7 +10729,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int computeDockImeLiftPx(@NonNull WindowInsetsCompat insets) {
         // Insets can retain the previous app's mid-transition IME snapshot across a home resume.
         // Accept them only after an input flow in this activity explicitly requested the IME.
-        if (!mKeyboardGeometry.acceptsSystemImeInsets() || isSystemImeSuppressedByInAppKeyboard()) {
+        if (!mImeRide.owns() || isSystemImeSuppressedByInAppKeyboard()) {
             return 0;
         }
         View root = mTermuxActivityRootView;
@@ -10768,16 +10777,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public boolean shouldAcceptSystemImeLayout() {
-        return mKeyboardGeometry.acceptsSystemImeInsets();
+        return mImeRide.owns();
     }
 
     /** Marks subsequent IME insets as activity-owned rather than inherited from the previous app. */
     public void onSystemImeRequested() {
-        mKeyboardGeometry.onSystemImeRequested();
+        com.termux.app.window.Hold hold = mImeRide.request(android.os.SystemClock::uptimeMillis);
+        if (hold != null) {
+            mImeRide.onWaitEnded(() -> {
+                View root = mTermuxActivityRootView;
+                if (root != null) root.requestApplyInsets();
+            });
+            hold.armBackstop(mImeRideHandler);
+        }
+        mKeyboardGeometry.requestApplyInsets();
     }
 
     private void resetInheritedImeLayoutState() {
-        mKeyboardGeometry.onSystemImeReleased();
+        mImeRide.release();
         mImeLiftPx = 0;
         applyDockImeOffset(0);
     }
