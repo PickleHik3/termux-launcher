@@ -131,13 +131,26 @@ public final class Pages {
      * runs only the new page's on-front.
      */
     public void committed(int pageId, @NonNull PageKind kind) {
-        mCommittedId = pageId;
-        mCommittedKind = kind;
+        recordCommit(pageId, kind);
         Page applied = mApplied;
         if (applied != null && resolve(pageId) != applied) {
             mApplied = null;
             applied.offFront();
         }
+    }
+
+    /**
+     * Records the commit alone, so readers see the new kind before the landing's handler runs;
+     * {@link #committed} then runs the off-front.
+     */
+    public void recordCommit(int pageId, @NonNull PageKind kind) {
+        mCommittedId = pageId;
+        mCommittedKind = kind;
+    }
+
+    /** Whether the wall has committed to a page of {@code kind}; mid-slide it follows the commit. */
+    public boolean isCommitted(@NonNull PageKind kind) {
+        return mCommittedKind == kind;
     }
 
     public int committedId() {

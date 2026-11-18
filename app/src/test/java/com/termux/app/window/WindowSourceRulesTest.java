@@ -1,5 +1,6 @@
 package com.termux.app.window;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -406,6 +407,13 @@ public class WindowSourceRulesTest {
     public void nothingIsAddedToTheDecorOrBesideTheRoot() throws IOException {
         assertNone(SourceRules.compare("decor or content add",
             SourceRules.decorOrContentAdds(sources()), DECOR_OR_CONTENT_ADDS));
+    }
+
+    @Test
+    public void theActivityAsksTheRegistryWhetherHomeIsShowing() throws IOException {
+        String activity = sources().get("app/TermuxActivity.java");
+        assertFalse("TermuxActivity still has isWidgetsPageShowing",
+            activity.contains("isWidgetsPageShowing"));
     }
 
     @Test

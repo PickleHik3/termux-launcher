@@ -2167,7 +2167,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The tint sampler is the glass service's store of legibility corrections (ADR 0029 section 9).
         mChrome.ink().attachLegibility(mGlass.legibility());
         mChrome.ink().setMeasureFreeze(mCrossing::crossing);
-        mChrome.ink().setFrontHome(this::isWidgetsPageShowing);
+        mChrome.ink().setFrontHome(() -> mPages.isCommitted(com.termux.app.page.PageKind.HOME));
         mChrome.ink().setOnWidgetPolarityChanged(() -> {
             com.termux.app.wall.WidgetPaneFrame page = mPaneWallController == null ? null
                 : mPaneWallController.widgetsPage();
@@ -16157,7 +16157,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keeps the IME even with the launcher's keyboard up, because there that keyboard is only
         // the frame mouse mode's touchpad stands in.
         boolean display = displayTakesSystemKeyboard();
-        mInAppKeyboard.setPlaceOwnsSystemIme(isWidgetsPageShowing() || display, display);
+        mInAppKeyboard.setPlaceOwnsSystemIme(mPages.isCommitted(com.termux.app.page.PageKind.HOME) || display, display);
     }
 
     // ---------------------------------------------------------------- the edge stacks
@@ -18332,7 +18332,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             row.setTiles(java.util.Collections.emptyList());
             return;
         }
-        if (!isWidgetsPageShowing() && !wallStripOn(mLastWallPage)) return;
+        if (!mPages.isCommitted(com.termux.app.page.PageKind.HOME) && !wallStripOn(mLastWallPage)) return;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) syncWindowBarItems(bar);
     }
@@ -18364,7 +18364,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onBarNewWindow() {
         if (!isSplitPanesEnabled()) return;
-        if (isWidgetsPageShowing()) {
+        if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) {
             onWallStripNewTerminal();
             return;
         }
@@ -19646,7 +19646,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return false;
             }
             @Override public boolean onCodePoint(int codePoint, boolean ctrlDown) {
-                if (ctrlDown || !isWidgetsPageShowing() || !Character.isValidCodePoint(codePoint))
+                if (ctrlDown || !mPages.isCommitted(com.termux.app.page.PageKind.HOME) || !Character.isValidCodePoint(codePoint))
                     return false;
                 boolean floatFocused = mPaneController != null
                     && mPaneController.focusedHomeFloat() != null;
@@ -23859,7 +23859,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @NonNull com.termux.app.wall.UseAs useAs() { return TermuxActivity.this.useAs(); }
         @Override public void setHomeActionsAnchor(float rawX, float rawY) { mHomeActionsRawX = rawX; mHomeActionsRawY = rawY; }
         // -------------------------------------------------------------- the Home palette
-        @Override public boolean isOnHome() { return isWidgetsPageShowing(); }
+        @Override public boolean isOnHome() { return mPages.isCommitted(com.termux.app.page.PageKind.HOME); }
         @Override public boolean raiseInAppKeyboard() { return terminalHost().showInAppKeyboard(false); }
         @Override public boolean isHomeKeyboardAlwaysOn() { return TermuxActivity.this.isHomeKeyboardAlwaysOn(); }
         @Override public @NonNull PlaceLayout.Edge appsEdge() { return arrangement().appsEdge(); }
@@ -24956,7 +24956,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** As above, told whether the keyboard was up as the swipe began. */
     private void applyBorderKeyboardSwipe(boolean open, boolean keyboardWasUp) {
-        if (isWidgetsPageShowing() && applyHomeKeyboardSwipe(open, keyboardWasUp)) return;
+        if (mPages.isCommitted(com.termux.app.page.PageKind.HOME) && applyHomeKeyboardSwipe(open, keyboardWasUp)) return;
         com.termux.app.terminal.TerminalHost host = terminalHost();
         if (open ? host.showInAppKeyboard(false) : host.hideInAppKeyboard(false)) return;
         TermuxTerminalViewClient client = mTermuxTerminalViewClient;
@@ -25024,7 +25024,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * open the shade when let go.
      */
     private boolean beginHomeShadePull(float rawX, float rawY, long time) {
-        if (!isWidgetsPageShowing()) return false;
+        if (!mPages.isCommitted(com.termux.app.page.PageKind.HOME)) return false;
         if (Build.VERSION.SDK_INT < com.termux.app.launcher.home.ShadePullPolicy.MIN_SDK) return false;
         com.termux.app.launcher.home.HomeGestures.Action action =
             com.termux.app.launcher.home.HomeSettings.gestureAction(this,
@@ -25038,7 +25038,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mShadePull == null) {
             mShadePull = new com.termux.app.launcher.home.ShadePullInjector(() -> {
-                if (isWidgetsPageShowing()) {
+                if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) {
                     runHomeGesture(com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_DOWN);
                 }
             });
@@ -25145,7 +25145,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (opening == up) return 0;
         // On Home the finger raises the palette gesture's keyboard only; a down swipe that closes
         // the palette, or meets always on, is decided on release (applyHomeKeyboardSwipe).
-        if (isWidgetsPageShowing() && (opening ? !mSheets.isHomePaletteGestureEnabled()
+        if (mPages.isCommitted(com.termux.app.page.PageKind.HOME) && (opening ? !mSheets.isHomePaletteGestureEnabled()
             : mSheets.isCommandPaletteOpen() || isHomeKeyboardAlwaysOn())) return 0;
         mKeyboardSwipeTravel = true;
         mKeyboardSwipeFromOpen = up;
@@ -25543,7 +25543,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // On Home the swipe is the palette gesture: off in Settings, it is armed only
             // to put away a keyboard that is up.
             @Override public boolean isEnabled() {
-                return !isWidgetsPageShowing() || mSheets.isHomePaletteGestureEnabled()
+                return !mPages.isCommitted(com.termux.app.page.PageKind.HOME) || mSheets.isHomePaletteGestureEnabled()
                     || committedKeyboardVisible();
             }
             // The keyboard swipe tied to the finger: the reveal the wall's slide already
@@ -25780,12 +25780,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences == null ? null : mPreferences.getTopPaneClockAlignment());
         }
         syncPlaceBar();
-    }
-
-    /** Whether the wall rests on the Widgets place. */
-    private boolean isWidgetsPageShowing() {
-        return mPaneWallController != null
-            && mPaneWallController.currentPage() == com.termux.app.page.PageKind.HOME;
     }
 
     /** The place on screen, as {@link #currentWallPlace} answers it. */
@@ -29256,8 +29250,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // The widget grid lives on the wall's Widgets page, and nowhere else.
                 @Override public boolean isWidgetSurfaceShowing() {
-                    return mPaneWallController != null && mPaneWallController.currentPage()
-                        == com.termux.app.page.PageKind.HOME;
+                    return mPages.isCommitted(com.termux.app.page.PageKind.HOME);
                 }
                 @Override public void captureWidgetSurfaceOrigin() {
                     // The page is where it was and where it will be; there is nothing to keep.
@@ -29299,7 +29292,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     refreshGroundStrip();
                     // The badge, the chips and the summary read the page: a new page or a new
                     // widget changes all three.
-                    if (!isWidgetsPageShowing()) return;
+                    if (!mPages.isCommitted(com.termux.app.page.PageKind.HOME)) return;
                     // The Home page in front may wear a page layout of its own (ADR 0015 §3):
                     // landing on another one re-arranges the chrome. The morph is slice E.
                     // Re-arranging costs a frame of 70-160 ms, which would eat a page settle
@@ -29387,18 +29380,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 // The palette gesture starts on the page's free area: Home has no bottom border.
                 @Override public void onHomePaletteSwipe(boolean up) {
-                    if (isWidgetsPageShowing()) runHomeSwipe(up);
+                    if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) runHomeSwipe(up);
                 }
                 // Swipe up set to the drawer: the plane follows the finger like the dock's pull.
                 // The drag runs on a mirrored axis (the pull is measured downward), so up is
                 // positive travel and the release velocity flips with it.
                 @Override public void onHomeDrawerPressed() {
-                    if (isWidgetsPageShowing() && mSheets.canWarmAppDrawer()) {
+                    if (mPages.isCommitted(com.termux.app.page.PageKind.HOME) && mSheets.canWarmAppDrawer()) {
                         getAppDrawerController().warmUp();
                     }
                 }
                 @Override public boolean onHomeDrawerDragBegin(float claimRawY) {
-                    if (!isWidgetsPageShowing() || mSheets.isAppDrawerEngaged()) return false;
+                    if (!mPages.isCommitted(com.termux.app.page.PageKind.HOME) || mSheets.isAppDrawerEngaged()) return false;
                     PlaceLayout.Edge edge = arrangement().appsEdge();
                     com.termux.app.launcher.drawer.AppDrawerController drawer = getAppDrawerController();
                     drawer.beginFollowDrag(-claimRawY, AppDrawerPullGeometry.pullFor(edge),
@@ -29429,14 +29422,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mShadePull != null) mShadePull.cancel();
                 }
                 @Override public void onHomeDoubleTap() {
-                    if (isWidgetsPageShowing()) runHomeGesture(
+                    if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) runHomeGesture(
                         com.termux.app.launcher.home.HomeGestures.Gesture.DOUBLE_TAP);
                 }
                 @Override public void onHomePinchIn() {
-                    if (isWidgetsPageShowing()) openPageOverview(false);
+                    if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) openPageOverview(false);
                 }
                 @Override public void onHomeTwoFingerSwipe(boolean up) {
-                    if (isWidgetsPageShowing()) runHomeGesture(up
+                    if (mPages.isCommitted(com.termux.app.page.PageKind.HOME)) runHomeGesture(up
                         ? com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_UP
                         : com.termux.app.launcher.home.HomeGestures.Gesture.TWO_FINGER_DOWN);
                 }
@@ -29749,7 +29742,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!visible) {
             // With the bar put away the Wall strip's tiles still read
             // the same windows, on Home as on a window.
-            if (isWidgetsPageShowing() ? homeWallStrip()
+            if (mPages.isCommitted(com.termux.app.page.PageKind.HOME) ? homeWallStrip()
                 : wallStripOn(mLastWallPage))
                 syncWindowBarItems(bar);
             applyTerminalSurfaceAppearance();
@@ -29946,7 +29939,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             windowChipItems(chips, foregroundPids);
         // Home's dock may show the same chips as the Wall strip's tiles, and so may a window whose
         // dock wears the Wall strip over its apps (#93).
-        if (isWidgetsPageShowing() || wallStripFed() && wallStripOn(mLastWallPage))
+        if (mPages.isCommitted(com.termux.app.page.PageKind.HOME) || wallStripFed() && wallStripOn(mLastWallPage))
             syncWallStrip(chips, items);
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
         // On a Display page the bar shows no terminal window chips (A3c2): the status widgets
@@ -32108,7 +32101,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long now = android.os.SystemClock.uptimeMillis();
         // The bar on Home shows the same chips (#90), but nobody looks at a row window from
         // there: its attention marks stay until the window is in front in the Workspace.
-        boolean home = isWidgetsPageShowing();
+        boolean home = mPages.isCommitted(com.termux.app.page.PageKind.HOME);
         boolean looking = !home;
         boolean onDisplay = looking && isDisplayWindowInFront();
         int current = mCurrentWSession == null ? -1 : mCurrentWSession.current;
@@ -32235,7 +32228,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return window == null ? UNKNOWN_PAGE : window.homePage();
         }
 
-        @Override public boolean isOnHome() { return isWidgetsPageShowing(); }
+        @Override public boolean isOnHome() { return mPages.isCommitted(com.termux.app.page.PageKind.HOME); }
 
         @Override public boolean isKeyboardAlwaysOn() { return isHomeKeyboardAlwaysOn(); }
 
