@@ -41,14 +41,75 @@ public final class Rest {
         public final boolean homeAlwaysOn;
         public final boolean overviewPreviewing;
         public final boolean inAppKeyboard;
+        /** Read for the status bar: the layout of the page's half shows it. Defaults to true. */
+        public final boolean barShown;
+        /** Read by Home: a restored Home float asks for the keyboard as the wall lands on Home. */
+        public final boolean floatAsksKeyboard;
+        /** Read by Home: a Home float holds the focus, so its extra-keys set is the bar's. */
+        public final boolean floatFocused;
+        /** Read by Home: the focused float is a display window. */
+        public final boolean floatIsDisplay;
+        /** Read by the Display: the "Use Android keyboard" setting (the display types with the phone's keyboard). */
+        public final boolean androidKeyboard;
+        /** Read by the Display: a display server runs, so there is something to type into. */
+        public final boolean displayRunning;
+        /** Read by the Display: mouse mode's touchpad owns the keyboard frame. */
+        public final boolean mouseMode;
 
         public Inputs(boolean keyboardRemembered, boolean minimal, boolean homeAlwaysOn,
                       boolean overviewPreviewing, boolean inAppKeyboard) {
-            this.keyboardRemembered = keyboardRemembered;
-            this.minimal = minimal;
-            this.homeAlwaysOn = homeAlwaysOn;
-            this.overviewPreviewing = overviewPreviewing;
-            this.inAppKeyboard = inAppKeyboard;
+            this(new Builder().keyboardRemembered(keyboardRemembered).minimal(minimal)
+                .homeAlwaysOn(homeAlwaysOn).overviewPreviewing(overviewPreviewing)
+                .inAppKeyboard(inAppKeyboard));
+        }
+
+        private Inputs(Builder b) {
+            this.keyboardRemembered = b.keyboardRemembered;
+            this.minimal = b.minimal;
+            this.homeAlwaysOn = b.homeAlwaysOn;
+            this.overviewPreviewing = b.overviewPreviewing;
+            this.inAppKeyboard = b.inAppKeyboard;
+            this.barShown = b.barShown;
+            this.floatAsksKeyboard = b.floatAsksKeyboard;
+            this.floatFocused = b.floatFocused;
+            this.floatIsDisplay = b.floatIsDisplay;
+            this.androidKeyboard = b.androidKeyboard;
+            this.displayRunning = b.displayRunning;
+            this.mouseMode = b.mouseMode;
+        }
+
+        /** Sets the facts by name; every one it is not told is false, except {@code barShown}. */
+        public static final class Builder {
+            private boolean keyboardRemembered;
+            private boolean minimal;
+            private boolean homeAlwaysOn;
+            private boolean overviewPreviewing;
+            private boolean inAppKeyboard;
+            private boolean barShown = true;
+            private boolean floatAsksKeyboard;
+            private boolean floatFocused;
+            private boolean floatIsDisplay;
+            private boolean androidKeyboard;
+            private boolean displayRunning;
+            private boolean mouseMode;
+
+            public Builder keyboardRemembered(boolean v) { keyboardRemembered = v; return this; }
+            public Builder minimal(boolean v) { minimal = v; return this; }
+            public Builder homeAlwaysOn(boolean v) { homeAlwaysOn = v; return this; }
+            public Builder overviewPreviewing(boolean v) { overviewPreviewing = v; return this; }
+            public Builder inAppKeyboard(boolean v) { inAppKeyboard = v; return this; }
+            public Builder barShown(boolean v) { barShown = v; return this; }
+            public Builder floatAsksKeyboard(boolean v) { floatAsksKeyboard = v; return this; }
+            public Builder floatFocused(boolean v) { floatFocused = v; return this; }
+            public Builder floatIsDisplay(boolean v) { floatIsDisplay = v; return this; }
+            public Builder androidKeyboard(boolean v) { androidKeyboard = v; return this; }
+            public Builder displayRunning(boolean v) { displayRunning = v; return this; }
+            public Builder mouseMode(boolean v) { mouseMode = v; return this; }
+
+            @NonNull
+            public Inputs build() {
+                return new Inputs(this);
+            }
         }
 
         @Override
@@ -56,28 +117,53 @@ public final class Rest {
             if (this == o) return true;
             if (!(o instanceof Inputs)) return false;
             Inputs other = (Inputs) o;
-            return keyboardRemembered == other.keyboardRemembered && minimal == other.minimal
+            return keyboardRemembered == other.keyboardRemembered
+                && minimal == other.minimal
                 && homeAlwaysOn == other.homeAlwaysOn
                 && overviewPreviewing == other.overviewPreviewing
-                && inAppKeyboard == other.inAppKeyboard;
+                && inAppKeyboard == other.inAppKeyboard
+                && barShown == other.barShown
+                && floatAsksKeyboard == other.floatAsksKeyboard
+                && floatFocused == other.floatFocused
+                && floatIsDisplay == other.floatIsDisplay
+                && androidKeyboard == other.androidKeyboard
+                && displayRunning == other.displayRunning
+                && mouseMode == other.mouseMode;
         }
 
         @Override
         public int hashCode() {
-            int h = keyboardRemembered ? 1 : 0;
+            int h = 0;
+            h = h * 31 + (keyboardRemembered ? 1 : 0);
             h = h * 31 + (minimal ? 1 : 0);
             h = h * 31 + (homeAlwaysOn ? 1 : 0);
             h = h * 31 + (overviewPreviewing ? 1 : 0);
             h = h * 31 + (inAppKeyboard ? 1 : 0);
+            h = h * 31 + (barShown ? 1 : 0);
+            h = h * 31 + (floatAsksKeyboard ? 1 : 0);
+            h = h * 31 + (floatFocused ? 1 : 0);
+            h = h * 31 + (floatIsDisplay ? 1 : 0);
+            h = h * 31 + (androidKeyboard ? 1 : 0);
+            h = h * 31 + (displayRunning ? 1 : 0);
+            h = h * 31 + (mouseMode ? 1 : 0);
             return h;
         }
 
         @NonNull
         @Override
         public String toString() {
-            return "Inputs{remembered=" + keyboardRemembered + ", minimal=" + minimal
-                + ", homeAlwaysOn=" + homeAlwaysOn + ", previewing=" + overviewPreviewing
-                + ", inAppKeyboard=" + inAppKeyboard + "}";
+            return "Inputs{keyboardRemembered=" + keyboardRemembered
+                + ", minimal=" + minimal
+                + ", homeAlwaysOn=" + homeAlwaysOn
+                + ", overviewPreviewing=" + overviewPreviewing
+                + ", inAppKeyboard=" + inAppKeyboard
+                + ", barShown=" + barShown
+                + ", floatAsksKeyboard=" + floatAsksKeyboard
+                + ", floatFocused=" + floatFocused
+                + ", floatIsDisplay=" + floatIsDisplay
+                + ", androidKeyboard=" + androidKeyboard
+                + ", displayRunning=" + displayRunning
+                + ", mouseMode=" + mouseMode + "}";
         }
     }
 
