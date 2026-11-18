@@ -2,6 +2,8 @@ package com.termux.app.chrome;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.glass.Argb;
+
 /**
  * The bottom stack's material as values rather than modes: what one region of the stack (the
  * dock's rows, the keyboard, the bands under it, the foot under the system pill) wears, as a
@@ -183,11 +185,7 @@ public final class StackMaterial {
 
     /** Two ARGB colours blended per channel. */
     public static int mixArgb(int a, int b, float t) {
-        if (a == b) return a;
-        int aa = (a >>> 24) & 0xFF, ar = (a >> 16) & 0xFF, ag = (a >> 8) & 0xFF, ab = a & 0xFF;
-        int ba = (b >>> 24) & 0xFF, br = (b >> 16) & 0xFF, bg = (b >> 8) & 0xFF, bb = b & 0xFF;
-        return (Math.round(aa + (ba - aa) * t) << 24) | (Math.round(ar + (br - ar) * t) << 16)
-            | (Math.round(ag + (bg - ag) * t) << 8) | Math.round(ab + (bb - ab) * t);
+        return Argb.lerp(a, b, t);
     }
 
     private static float mix(float a, float b, float t) {
