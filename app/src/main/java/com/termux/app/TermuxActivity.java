@@ -27890,8 +27890,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The wall's pages and its home (ADR 0015): the one source of Start in and the Home page. */
     private com.termux.app.wall.WallPagesStore mWallPagesStore;
-    /** The Home run the wall bound the Home frame to (ADR 0015, A2a); -1 last for every page. */
-    /** The wall's way into Home; it also keeps the Home run the wall last bound. */
+    /** The wall's way into Home; it also keeps the Home run the wall last bound (ADR 0015, A2a). */
     private final com.termux.app.launcher.home.HomeWallSeam mHomeSeam =
         new com.termux.app.launcher.home.HomeWallSeam(() -> mWidgetPaneController,
             () -> TermuxActivity.this.wallPages());
@@ -31543,14 +31542,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return rowWindowCount();
     }
 
-    /** Which Home page or window is in front, the display window counted at its row place. */
+    /** Which window is in front, the display window counted at its row place. */
     private int wallInnerIndex(@NonNull com.termux.app.wall.PaneWallPage page) {
         return rowCurrentIndex();
     }
 
     /**
-     * Turn Home to a page, or the Workspace to a window — the display window by its row place —
-     * at once and without a slide.
+     * Turn the Workspace to a window — the display window by its row place — at once and without
+     * a slide; Home's pages turn through {@link #mHomeSeam}.
      */
     private void showWallInnerPage(@NonNull com.termux.app.wall.PaneWallPage page, int index) {
         if (mPaneController == null || index == rowCurrentIndex()) return;
