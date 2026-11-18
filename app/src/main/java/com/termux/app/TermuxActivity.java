@@ -1793,6 +1793,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void lowerKeyboard() { lowerDisplayKeyboard(); }
         });
+    /** The Terminal cell's pages, one per window. */
+    private final com.termux.app.terminal.TerminalPages mTerminalPages =
+        new com.termux.app.terminal.TerminalPages(new com.termux.app.terminal.TerminalPageHost() {
+            @Nullable @Override public com.termux.app.terminal.TerminalPaneController.Window activeWindow() {
+                return mPaneController == null ? null : mPaneController.activeWindow();
+            }
+            @NonNull @Override public View paneHost() { return findViewById(R.id.terminal_pane_host); }
+            @Override public boolean keysWithTerminal() { return getCurrentFocus() instanceof TerminalView; }
+            @Override public boolean handKeysToTerminal() { return returnKeysToTerminal(); }
+        });
     /** The dock's element in the glass registry. */
     private static final String DOCK_GLASS = "dock";
     /** The dock's glass kind moved: its backdrop is dressed again. */
@@ -14128,6 +14138,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneController.setGeometryScheduler(mGeometry);
         mPaneController.setHomePageIds(() -> wallPages().homePageIdsForRepository());
         mAppliedPaneStyleKey = null;
+        mPaneController.setOnActiveWindowChanged(mPages::innerChanged);
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
         applyTrailStyleAndRetroEffect();
         createPaneWallController(paneHost);
@@ -26563,6 +26574,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPaneWallController.setHomePageFactory(
             id -> new com.termux.app.launcher.home.HomePage(id, mHomePageHost));
         mPaneWallController.setDisplayPageFactory(mDisplayPages::page);
+        mPaneWallController.setTerminalStops(mTerminalPages);
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             // Widgets take what the dock and the floats leave of Live blur's budget.

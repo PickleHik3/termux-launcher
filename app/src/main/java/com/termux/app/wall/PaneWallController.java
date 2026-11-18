@@ -225,6 +225,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     // The wall lays out one cell per page; each kind's one view is bound to one page.
     /** The page list the cells were laid out from; null where only the kinds are known. */
     @Nullable private WallPages mKnownPages;
+    @Nullable private com.termux.app.page.Pages.Stops mTerminalStops;
+    /** No page id: kind-only cells hold negative ids, so a sentinel below them. */
+    private static final int NO_ID = Integer.MIN_VALUE;
+    private int mTerminalStopsId = NO_ID;
     /**
      * The cells hold no Display page and no Home page after the Terminal page ([Home...][Terminal]
      * or less): the wallpaper's row reads by kind, as it always did, not by the pages' order.
@@ -269,11 +273,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHomePages.clear();
         if (mPages != null) for (Integer id : mDisplayPages.keySet()) mPages.remove(id);
         mDisplayPages.clear();
+        if (mPages != null && mTerminalStopsId != NO_ID) mPages.remove(mTerminalStopsId);
+        mTerminalStopsId = NO_ID;
         mAssistantPageId = -1;
         mAssistantPage = null;
         mPages = pages;
         syncHomePages();
         syncDisplayPages();
+        syncTerminalStops();
         syncAssistantPage();
         recordFront();
     }
@@ -308,6 +315,34 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mDisplayPageFactory = factory;
         syncDisplayPages();
         recordFront();
+    }
+
+    /**
+     * The Terminal cell's windows, the pages of the one Terminal wall cell. Registered at once and
+     * on every later page-list change.
+     */
+    public void setTerminalStops(@Nullable com.termux.app.page.Pages.Stops stops) {
+        mTerminalStops = stops;
+        syncTerminalStops();
+        recordFront();
+    }
+
+    /** Registers the Terminal stops under the Terminal cell's id; drops the old id's. */
+    private void syncTerminalStops() {
+        int id = NO_ID;
+        if (mKnownPages != null) {
+            for (WallPages.Page page : mKnownPages.pages()) {
+                if (page.kind == WallPages.PageKind.TERMINAL) { id = page.id; break; }
+            }
+        } else if (mHost.useAs().rowPages().contains(PaneWallPage.TERMINAL)) {
+            id = PaneWallLayout.kindPageId(PaneWallPage.TERMINAL);
+        }
+        if (mPages == null || mTerminalStops == null) id = NO_ID;
+        if (mTerminalStopsId != NO_ID && mTerminalStopsId != id && mPages != null) {
+            mPages.remove(mTerminalStopsId);
+        }
+        mTerminalStopsId = id;
+        if (id != NO_ID) mPages.putStops(id, mTerminalStops);
     }
 
     /** Keeps one Display page registered per Display page id the wall holds. */
@@ -445,6 +480,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         bindDisplay(display >= 0 ? display : -1);
         syncHomePages();
         syncDisplayPages();
+        syncTerminalStops();
         syncAssistantPage();
         recordFront();
         // The last window closed under the wall: the empty Terminal page keeps its cell, and the

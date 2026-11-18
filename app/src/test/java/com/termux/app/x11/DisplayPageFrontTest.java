@@ -121,8 +121,8 @@ public class DisplayPageFrontTest {
         pages.committed(1, PageKind.TERMINAL);
         assertEquals(1, host.link.left);
         assertFalse("the view can no longer take the keys", host.view.isFocusable());
+        assertEquals("a Terminal takes the keys on its own front", 0, host.handBacks);
         int handBacks = host.handBacks;
-        assertTrue(handBacks >= 1);
         assertEquals("kept attached under the still while the page slides out", 0,
             host.link.detaches);
         // Later layouts ask nothing again: there is no retry.
@@ -136,6 +136,17 @@ public class DisplayPageFrontTest {
         assertEquals("the rest lets the view go, once", 1, host.link.detaches);
         display.detachIfOwed();
         assertEquals(1, host.link.detaches);
+    }
+
+    @Test
+    public void displayToHomeHandsTheKeysBack() {
+        land(5, PageKind.DISPLAY);
+        host.atRest = false;
+        int before = host.handBacks;
+        host.committed = PageKind.HOME;
+        pages.committed(2, PageKind.HOME);
+        assertTrue("Home takes no keys of its own, so the Display hands them back",
+            host.handBacks > before);
     }
 
     @Test
