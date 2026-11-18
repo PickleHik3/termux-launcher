@@ -168,6 +168,9 @@ public final class IconCarry {
         overlay.release();
         LiftDropPolicy.Release release = LiftDropPolicy.release(canceled,
             target >= 0 && target < targets.size(), overDock, drop.follower() != null);
+        if (com.termux.app.window.Counters.enabled) // diag-reorder
+            com.termux.app.window.Counters.ring("diag-reorder", "release=" + release + " target=" + target
+                + " overDock=" + overDock + " canceled=" + canceled + " raw=" + rawX + "," + rawY);
         switch (release) {
             case TARGET:
                 cancelHome();
