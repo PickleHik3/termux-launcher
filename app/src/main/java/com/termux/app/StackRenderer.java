@@ -212,7 +212,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * The crossing landed: the next apply is its landing frame. At progress 1 the scene already
      * stands the arriving rest, so that apply should change nothing; any change is counted.
      */
+    private int mDiagAfter;
+
     public void onLanding() {
+        mDiagAfter = 4 * LANE_HOST_IDS.length;
         mHasEnds = false;
         mLandingPending = true;
         requestApply();
@@ -406,6 +409,18 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                     want = mFrame.sideTx[(lane == StackLanes.HOME ? Side.HOME : Side.WORKSPACE)
                         .ordinal()];
                 }
+            }
+            if (com.termux.app.chrome.MotionLog.enabled && (mHasEnds || mDiagAfter > 0)) {
+                ViewParent parent = host.getParent();
+                com.termux.app.chrome.MotionLog.log("diag-lane", "i=" + i
+                    + " parent=" + (parent instanceof View && ((View) parent).getId() != View.NO_ID
+                        ? ((View) parent).getResources().getResourceEntryName(((View) parent).getId())
+                        : String.valueOf(parent))
+                    + " lane=" + (host.getParent() == stack ? stack.getLane(host) : -1)
+                    + " vis=" + host.getVisibility() + " h=" + host.getHeight()
+                    + " want=" + want + " tx=" + host.getTranslationX()
+                    + " ends=" + mHasEnds + " p=" + mEndsProgress);
+                if (!mHasEnds) mDiagAfter--;
             }
             if (host != mWrittenLaneView[i]) {
                 mWrittenLaneView[i] = host;

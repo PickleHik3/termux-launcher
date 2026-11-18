@@ -16653,6 +16653,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? com.termux.app.place.StackLanes.laneOf(element, home, workspace)
                 : com.termux.app.place.StackLanes.STACK;
             changed |= rows.setLane(host, lane);
+            if (com.termux.app.chrome.MotionLog.enabled) com.termux.app.chrome.MotionLog.log(
+                "diag-setlane", element + " lane=" + lane + " parentRows=" + (host.getParent() == rows)
+                + " frontSide=" + frontSide + " where=" + com.termux.app.place.StackLanes.resolve(element, front, other));
         }
         int frontLane = com.termux.app.place.StackLanes.laneOf(frontSide);
         if (rows.getFrontLane() != frontLane) {
