@@ -108,6 +108,24 @@ public final class Pages {
         return mPages.get(pageId);
     }
 
+    /**
+     * A page of {@code kind}: the committed page when it is of that kind, else any registered page
+     * or cell's current page of it; null when none is. Pages of a kind share one rest, so any will do.
+     */
+    @Nullable
+    public Page anyOf(@NonNull PageKind kind) {
+        Page committed = mCommittedId < 0 ? null : resolve(mCommittedId);
+        if (committed != null && committed.kind() == kind) return committed;
+        for (Page page : mPages.values()) {
+            if (page.kind() == kind) return page;
+        }
+        for (Stops stops : mStops.values()) {
+            Page page = stops.current();
+            if (page != null && page.kind() == kind) return page;
+        }
+        return null;
+    }
+
     /** The page put under {@code id}, else the current page of the stops under it, else null. */
     @Nullable
     private Page resolve(int id) {
