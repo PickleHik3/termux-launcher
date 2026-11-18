@@ -310,24 +310,29 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** Keeps one Home page registered per Home page id the wall holds; drops those that left. */
     private void syncHomePages() {
         java.util.function.IntFunction<com.termux.app.page.Page> factory = mHomePageFactory;
-        if (mPages == null || factory == null || mKnownPages == null) {
+        if (mPages == null || factory == null) {
             if (mPages != null) for (Integer id : mHomePages.keySet()) mPages.remove(id);
             mHomePages.clear();
             return;
         }
-        java.util.List<WallPages.Page> homes = mKnownPages.homePages();
+        // A row laid out from the kinds alone holds one Home cell under the kind's own id.
+        java.util.List<Integer> homes = new java.util.ArrayList<>();
+        if (mKnownPages != null) {
+            for (WallPages.Page home : mKnownPages.homePages()) homes.add(home.id);
+        } else if (mHost.useAs().rowPages().contains(PaneWallPage.WIDGETS)) {
+            homes.add(PaneWallLayout.kindPageId(PaneWallPage.WIDGETS));
+        }
         java.util.Iterator<java.util.Map.Entry<Integer, com.termux.app.page.Page>> it =
             mHomePages.entrySet().iterator();
         while (it.hasNext()) {
             java.util.Map.Entry<Integer, com.termux.app.page.Page> entry = it.next();
-            boolean kept = false;
-            for (int i = 0; i < homes.size(); i++) kept |= homes.get(i).id == entry.getKey();
+            boolean kept = homes.contains(entry.getKey());
             if (kept) continue;
             mPages.remove(entry.getKey());
             it.remove();
         }
         for (int i = 0; i < homes.size(); i++) {
-            int id = homes.get(i).id;
+            int id = homes.get(i);
             if (mHomePages.containsKey(id)) continue;
             com.termux.app.page.Page page = factory.apply(id);
             mHomePages.put(id, page);
