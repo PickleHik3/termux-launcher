@@ -88,6 +88,22 @@ public class ArrangementRecoveryTest {
             Saved.EMPTY, ArrangementRecovery.effectiveStartIn(HOME, false)));
     }
 
+    /** #276: Terminal only, Ctrl+D on the last shell, then the icon again in the cached process. */
+    @Test
+    public void withNoHomeAnEndedAppStartsColdEvenInACachedProcess() {
+        assertTrue(ArrangementRecovery.coldStart(false, true));
+        assertFalse(ArrangementRecovery.coldStart(true, true));
+        assertTrue(ArrangementRecovery.coldStart(true, false));
+        String startIn = ArrangementRecovery.effectiveStartIn(HOME, false);
+        assertEquals(Start.FRESH, ArrangementRecovery.decide(false, false,
+            ArrangementRecovery.coldStart(true, false), false, Saved.EMPTY, startIn));
+        assertEquals(Start.REBUILD, ArrangementRecovery.decide(false, false,
+            ArrangementRecovery.coldStart(true, false), false, Saved.ARRANGEMENT, startIn));
+        // With Home to show, the settled empty Workspace stays as the user left it.
+        assertEquals(Start.EMPTY, ArrangementRecovery.decide(false, false,
+            ArrangementRecovery.coldStart(true, true), false, Saved.EMPTY, WORKSPACE));
+    }
+
     @Test
     public void aRebuildOfFloatsOnlyOpensAWindowOnlyForStartInWorkspace() {
         assertTrue(ArrangementRecovery.rebuildWantsFreshWindow(0, WORKSPACE));

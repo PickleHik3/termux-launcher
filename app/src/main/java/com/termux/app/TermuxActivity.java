@@ -11280,7 +11280,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.terminal.ArrangementRecovery.Start decideEmptyServiceStart(
             @Nullable Intent intent) {
-        boolean cold = !sFirstShellStarted;
+        boolean cold = com.termux.app.terminal.ArrangementRecovery.coldStart(sFirstShellStarted,
+            com.termux.app.wall.WallRow.lastShellClosedShowsHome(homePagesShown(),
+                isDefaultHomeApp()));
         boolean asks = asksForSession(intent);
         com.termux.app.terminal.TerminalWorkspaceStore.Autosave autosave = cold && !asks
             ? new com.termux.app.terminal.TerminalWorkspaceStore().loadAutosave(homePagesForWorkspace())
