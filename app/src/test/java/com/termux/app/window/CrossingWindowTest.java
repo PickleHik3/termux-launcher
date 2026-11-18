@@ -124,4 +124,14 @@ public class CrossingWindowTest {
 
         assertEquals("crossing-draws draws=0 maxMs=0", sink.ringed.get(0));
     }
+
+    @Test
+    public void aPanesFirstSizingDoesNotCount() {
+        Recorder sink = new Recorder();
+        CrossingWindow window = new CrossingWindow(sink);
+        window.open(100);
+        window.resized(150, "ab12", CrossingWindow.FIRST_SIZING, "52x32", "resume");
+
+        assertTrue(sink.counted.isEmpty());
+    }
 }

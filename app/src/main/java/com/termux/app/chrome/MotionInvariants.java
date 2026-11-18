@@ -17,7 +17,8 @@ import java.util.Set;
  * <ul>
  * <li>{@code zero-resize-per-crossing}: a crossing sees no {@code pty-resize} from its begin to
  *     {@link #WINDOW_MS} after its settle: each page's room is its own rest's (PageRoom), so
- *     nothing a crossing does resizes a pane.</li>
+ *     nothing a crossing does resizes a pane. A pane's first sizing ({@code from=none}) is
+ *     exempt: it gives a new pane a size and changes none.</li>
  * <li>{@code no-still-after-live}: a page that went live during the slide (a
  *     {@code still-dropped}, no {@code still-kept} after it) logs no {@code still-kept} within
  *     {@link #QUIET_MS} after the settle.</li>
@@ -84,6 +85,9 @@ public final class MotionInvariants {
                 break;
             }
             case "pty-resize":
+                // A pane's first sizing gives it a size; it resizes nothing (D5).
+                if (com.termux.app.window.CrossingWindow.FIRST_SIZING.equals(value(kv, "from")))
+                    break;
                 if (mOpen && !mResizeReported
                         && (mSettledAt < 0 || uptimeMs - mSettledAt <= WINDOW_MS)) {
                     mResizeReported = true;

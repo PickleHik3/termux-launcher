@@ -105,4 +105,15 @@ public class MotionInvariantsTest {
         feed(1400, "still-kept", "page=2 size=1x1");
         assertTrue(mNames.isEmpty());
     }
+
+    @Test
+    public void aPanesFirstSizingInACrossingIsNoResize() {
+        feed(1000, "crossing-begin", "revision=3");
+        feed(1020, "pty-resize", "from=none to=52x32 cause=resume returnHold=false");
+        feed(1300, "wall-page-settled", "page=TERMINAL");
+        feed(1400, "pty-resize", "from=none to=52x32 cause=layout");
+        assertTrue(mNames.isEmpty());
+        feed(1436, "pty-resize", "from=52x32 to=52x30 cause=layout");
+        assertEquals(List.of("zero-resize-per-crossing"), mNames);
+    }
 }

@@ -21,6 +21,9 @@ public final class CrossingWindow {
     /** The ring line written once at each landing. */
     public static final String DRAWS = "crossing-draws";
 
+    /** The {@code from} of a pane's first sizing: its session had no size yet. */
+    public static final String FIRST_SIZING = "none";
+
     /** Half a 60 Hz frame. */
     public static final long SLOW_DRAW_NANOS = 8_000_000L;
     /** A crossing and its settle take far less; an open window older than this is stale. */
@@ -82,10 +85,13 @@ public final class CrossingWindow {
         return mOpen;
     }
 
-    /** A terminal changed size; counted when a crossing is open. */
+    /**
+     * A terminal changed size; counted when a crossing is open. A pane's first sizing
+     * ({@code from} {@link #FIRST_SIZING}) is not a resize: the pane had no size to change.
+     */
     public void resized(long nowMs, @NonNull String pane, @NonNull String from, @NonNull String to,
                         @NonNull String cause) {
-        if (!isOpen(nowMs)) return;
+        if (FIRST_SIZING.equals(from) || !isOpen(nowMs)) return;
         mSink.count(RESIZED, "pane=" + pane + " from=" + from + " to=" + to + " cause=" + cause);
     }
 
