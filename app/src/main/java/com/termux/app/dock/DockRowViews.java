@@ -119,6 +119,12 @@ public final class DockRowViews implements DockRows.Views {
 
     private void show(int viewId, boolean shown) {
         View view = mFinder.find(viewId);
+        if (view != null && com.termux.app.chrome.MotionLog.enabled
+            && view.getVisibility() != (shown ? View.VISIBLE : View.GONE)) {
+            com.termux.app.chrome.MotionLog.log("diag-rowshown", view.getResources()
+                .getResourceEntryName(viewId) + " shown=" + shown + " "
+                + com.termux.app.chrome.MotionLog.callers(8));
+        }
         if (view != null) view.setVisibility(shown ? View.VISIBLE : View.GONE);
     }
 
