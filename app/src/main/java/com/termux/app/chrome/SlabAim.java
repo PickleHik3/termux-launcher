@@ -13,7 +13,7 @@ import com.termux.app.window.WindowLayer;
 
 /**
  * Keeps a slab that draws the stored wallpaper frame aimed where its page went (ADR 0029 section
- * 10, step 2). The frame is aimed in screen space from the slab's place ({@link GlassAnchor#place}),
+ * 10). The frame is aimed in screen space from the slab's place ({@link GlassAnchor#place}),
  * and a page's slide, sink or tilt, or the wallpaper's own pan, is a transform that never redraws a
  * child; the activity used to push an invalidate to every slab on every frame the wall moved.
  *

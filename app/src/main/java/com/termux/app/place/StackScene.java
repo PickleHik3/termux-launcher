@@ -103,7 +103,7 @@ public final class StackScene {
 
     /**
      * How far down the keyboard is drawn from where it is laid out, the one number the rest and
-     * the crossing both read (D1-A): {@code (1 - reveal) * laidOutPx}. The in-app keyboard stays
+     * the crossing both read: {@code (1 - reveal) * laidOutPx}. The in-app keyboard stays
      * laid out while it is down, so a down keyboard (reveal 0) is this translation at rest, a
      * crossing's frame is it at the seam's reveal, and the crossing's end equals the rest it lands
      * on. The stack's translation carries the dock with it, which is why the bands under the

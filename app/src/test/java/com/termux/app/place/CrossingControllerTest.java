@@ -162,7 +162,7 @@ public class CrossingControllerTest {
 
         boolean chromeTravelMoved;
         int movedTrue;
-        // The in-app keyboard laid out but down (D1-A): its height, and the places that rest with
+        // The in-app keyboard laid out but down: its height, and the places that rest with
         // it up.
         int keyboardDownLaidOutPx;
         final java.util.Set<PageKind> keyboardUpPlaces = new java.util.HashSet<>();

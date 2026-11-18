@@ -19,7 +19,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * A keyboard that is laid out but down takes no touch (D1-A): the part of it a translation leaves
+ * A keyboard that is laid out but down takes no touch: the part of it a translation leaves
  * on the screen's bottom edge, under the gap the stack stands above, would type into the terminal.
  */
 @RunWith(RobolectricTestRunner.class)

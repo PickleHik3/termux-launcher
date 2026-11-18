@@ -270,7 +270,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         mController.toggle(TermuxInAppKeyboard.ToggleReason.KEYBOARD_ACTION);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        // D1-A: a docked in-app keyboard that is on stays laid out while it is down; down is the
+        // A docked in-app keyboard that is on stays laid out while it is down; down is the
         // stack scene's translation (StackScene.keyboardTranslationPx), not GONE.
         assertFalse(mController.isVisible());
         assertEquals(View.VISIBLE, keyboardContainer.getVisibility());
@@ -504,7 +504,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         assertTrue(mController.isEnabled());
         assertFalse(mController.isVisible());
-        // D1-A: hidden, the docked keyboard is still laid out (down is a translation).
+        // Hidden, the docked keyboard is still laid out (down is a translation).
         assertEquals(View.VISIBLE,
             mActivity.findViewById(R.id.inapp_keyboard_container).getVisibility());
     }

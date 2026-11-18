@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The bottom stack's side lanes (D1-A step 2, ADR 0030 section 4), as pure functions. The stack's
+ * The bottom stack's side lanes (ADR 0030 section 4), as pure functions. The stack's
  * band over the keyboard is laid out once for both sides' rests: a row both sides show in the same
  * place is the stack's ({@link #STACK}), a row only Home's layout has stands in Home's lane and a
  * row only the Workspace's has in the Workspace's ({@link SideRows#carrier}). The lanes overlap in

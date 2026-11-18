@@ -3,7 +3,7 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 
 /**
- * The room a page leaves its content at its own rest (D1-A, ADR 0030 section 3): how far the
+ * The room a page leaves its content at its own rest (ADR 0030 section 3): how far the
  * page's cells end above the window's bottom. One number per page, read from that page's own rest
  * alone, so the rest and everything that predicts it (a keyboard's reveal, a crossing's end)
  * read the same function, and a crossing between two rests changes no page's room: both ends'

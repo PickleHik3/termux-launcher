@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
 /**
- * Under the Appearance editor's draft (#254) the arrangement waits for Done, while what a place
+ * Under the Appearance editor's draft the arrangement waits for Done, while what a place
  * remembers is written at once: the wall sliding under the editor leaves the terminal's keyboard
  * memory behind, which is no unsaved edit and survives Discard.
  */

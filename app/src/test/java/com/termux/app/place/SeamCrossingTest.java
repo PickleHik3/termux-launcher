@@ -851,7 +851,7 @@ public class SeamCrossingTest {
     @Test
     public void theRowsAHalfStandsKeepTheCommittedHalfsDesignToTheLanding() {
         // The developer's phone: Home's own layout with the pinned apps and the index, the
-        // Workspace with the extra keys alone. Since round 9 a half with no apps row wears no
+        // Workspace with the extra keys alone. A half with no apps row wears no
         // design (WornDockDesign), so the halves differ by Home's Lens beads against the
         // Workspace's tray. The seam stands no other rows on the way (the rows swap at the
         // landing), so the rows keep laying out in the committed half's design.

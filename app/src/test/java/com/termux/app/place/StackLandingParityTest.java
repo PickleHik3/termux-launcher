@@ -13,7 +13,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The landing frame writes what the crossing's last frame wrote (D1-A): the container's height and
+ * The landing frame writes what the crossing's last frame wrote: the container's height and
  * its bottom margin are one function of the kept band, not of who owns the dock's foot, which flips
  * at the landing. So the stack's layout and the scene's container clip at the last crossing frame
  * (the foot still on the side left) equal the landing's (the foot on the side arrived at), for
@@ -103,7 +103,7 @@ public class StackLandingParityTest {
     }
 
     /**
-     * With no pre-roll the keyboard is laid out the whole crossing, shown or down (D1-A): the
+     * With no pre-roll the keyboard is laid out the whole crossing, shown or down: the
      * crossing's last frame stands the keyboard {@code (1 - reveal) * laidOutPx} down, which is
      * what the landing's rest stands for the same keyboard, so the landing writes the same
      * container translation and clips, down to up and up to down, the keyboard counted once.

@@ -5843,7 +5843,7 @@ public class TerminalPaneController {
                 ? (mHomeFloatGlass == null ? null
                     : mHomeFloatGlass.wear(slab, container.mGlassRedress))
                 // Window floats keep the activity's path until the Terminal page declares its
-                // glass (#273).
+                // glass.
                 : mHost.attachLiveGlass(slab, container.mGlassRedress));
         } else {
             if (slab.livePicture() != null) slab.setLivePicture(null);

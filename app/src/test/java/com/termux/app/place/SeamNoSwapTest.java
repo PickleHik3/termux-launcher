@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * No swap at the half (window restructure step 4): a crossing whose two ends dress the bottom
+ * No swap at the half: a crossing whose two ends dress the bottom
  * stack apart in structure (Style, Corners, Margin, the layout's dock and keyboard sizes, the
  * chin) and in look, on every layout pair, with the keyboard up on both, up to down and down to
  * up, in both directions. The stack is never laid out or dressed again after the crossing

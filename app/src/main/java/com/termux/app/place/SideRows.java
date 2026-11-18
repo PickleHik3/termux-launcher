@@ -6,12 +6,12 @@ import com.termux.app.page.Side;
 
 /**
  * Who carries each row through a crossing, read from both ends' layouts as the crossing begins
- * (ADR 0030 section 4 and its 2026-11-18 amendment). A row both ends show in the same place (the
+ * (ADR 0030 section 4 and its amendment). A row both ends show in the same place (the
  * same edge and, along the bottom, the same side of the keyboard) belongs to the stack, like the
  * slab and the keyboard, and stays put; a row only one end shows goes with that end's side; a row
  * the two ends show in different places goes with the side that owns it ({@link Side#owns}). Within a side nothing moves: a layout that differs changes in
  * place at the landing. Each side's extra-keys bar always goes with its own side. The status bar
- * is shared chrome, never a side's row (along the bottom it keeps today's behaviour until #267).
+ * is shared chrome, never a side's row (along the bottom it keeps the landing of the shared stack).
  */
 public final class SideRows {
 

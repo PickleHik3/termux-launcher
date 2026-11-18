@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.util.ReflectionHelpers;
 
 /**
- * The in-app keyboard stands laid out while it is down (D1-A): visible, with a height, below the
+ * The in-app keyboard stands laid out while it is down: visible, with a height, below the
  * screen and cut by the stack's one writer ({@code StackRenderer}). A drag that begins over it
  * found a keyboard band to choreograph and wrote its translation, alpha and clip, and the clip it
  * cleared (the writer's, which hides the laid-out keyboard) was a foreign write on the stack.

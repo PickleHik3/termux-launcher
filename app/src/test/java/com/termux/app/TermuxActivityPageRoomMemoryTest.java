@@ -32,7 +32,7 @@ import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
 
 /**
- * The room written for a page that is not in front is the rest it will arrive with (#262): the
+ * The room written for a page that is not in front is the rest it will arrive with: the
  * Terminal left with its keyboard toggled since its room was last written holds, once the wall
  * rests on Home, the room of its arriving rest, so the next crossing resizes nothing.
  */

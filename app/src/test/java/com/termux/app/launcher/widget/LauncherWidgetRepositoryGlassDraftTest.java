@@ -16,7 +16,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 /**
- * The Appearance editor's "Glass widgets" switch drafts the widgets' own glass choices (#254):
+ * The Appearance editor's "Glass widgets" switch drafts the widgets' own glass choices:
  * shown at once, written once on Done, dropped on Discard with nothing to put back.
  */
 @RunWith(RobolectricTestRunner.class)

@@ -235,7 +235,7 @@ public class WindowSourceRulesTest {
 
     /** Files that write elevation or translationZ (shadow or order), with the count of writes. */
     static final List<String> Z_WRITES = Arrays.asList(
-        // Z doubles as draw order: the A-Z row is rebuilt in #260
+        // Z doubles as draw order: the A-Z row is being rebuilt
         "app/AzScrubRowView.java:2",
         // elevation for a shadow or lift: classify when its layer moves
         "app/SuggestionBarView.java:2",
@@ -263,7 +263,7 @@ public class WindowSourceRulesTest {
         "app/material/M3.java:2",
         // elevation for a shadow or lift: classify when its layer moves
         "app/notice/AppNoticeHostView.java:1",
-        // Z doubles as draw order: the row stacks are rebuilt in #260
+        // Z doubles as draw order: the row stacks are being rebuilt
         "app/place/EdgeStackView.java:1",
         // elevation for a shadow or lift: classify when its layer moves
         "app/setup/AppearanceResetCard.java:1",

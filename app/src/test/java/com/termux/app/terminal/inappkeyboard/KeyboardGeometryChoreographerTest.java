@@ -462,7 +462,7 @@ public class KeyboardGeometryChoreographerTest {
         boolean blurEnabled = true;
         boolean keyboardShown = true;
         boolean activityAlive = true;
-        /** The docked in-app keyboard stays laid out while down (D1-A); false is today's GONE. */
+        /** The docked in-app keyboard stays laid out while down; false is GONE. */
         boolean staysLaidOut = true;
         int stackRests;
         /** The next dress changes the host's margins or padding. */

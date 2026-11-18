@@ -18,7 +18,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 /**
- * Back on a Display page through the chain's tail (#272 slice 4): a layer open over it is the
+ * Back on a Display page through the chain's tail: a layer open over it is the
  * layer's; a keyboard the page raised goes down; a running display gets Back for its app; a
  * stopped one with nothing raised leaves Back to the chain's default, Home page 1.
  */

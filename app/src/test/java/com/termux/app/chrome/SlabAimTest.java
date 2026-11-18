@@ -26,7 +26,7 @@ import org.robolectric.annotation.Config;
 
 /**
  * Pane slabs read their place from the glass service's commit instead of the activity's push
- * (ADR 0029 section 10, step 2): a slab whose page moved draws again in the frame the page moved
+ * (ADR 0029 section 10): a slab whose page moved draws again in the frame the page moved
  * in, a slab that did not move is never asked to, and a frame with no slab moving draws nothing.
  */
 @RunWith(RobolectricTestRunner.class)

@@ -13,7 +13,7 @@ import org.junit.runners.Parameterized;
 import java.util.List;
 
 /**
- * A page's room from its own rest (D1-A step 3), on every layout fixture, Docked and Floating
+ * A page's room from its own rest, on every layout fixture, Docked and Floating
  * apart, the keyboard up and down: it is today's room at that rest (the pass's content
  * reservation), whichever page is in front, so a crossing between two rests, which reads only
  * the two rests, changes no page's room.

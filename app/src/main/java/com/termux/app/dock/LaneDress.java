@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.page.Side;
 
 /**
- * Which side's layout dresses a row of the bottom stack (D1-A, ADR 0030). A row that stands for
+ * Which side's layout dresses a row of the bottom stack (ADR 0030). A row that stands for
  * both sides, or for the side in front, wears the front layout. A lane row of the side that is
  * not in front wears that side's own layout at rest, so a crossing's landing changes nothing in
  * the arriving lane's look: the answer for a row of one side is the same whichever side is in

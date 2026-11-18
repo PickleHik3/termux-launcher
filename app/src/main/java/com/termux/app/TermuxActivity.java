@@ -17076,7 +17076,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockFootPx = bottomInsets.dockFootPx;
         applyDockFootLayout(accessoryStackContainer, bottomInsets);
         int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
-        // The in-app keyboard stays laid out while it is down (D1-A): the container is as tall as
+        // The in-app keyboard stays laid out while it is down: the container is as tall as
         // the keyboard-up stack, and the scene translates it down (StackScene#keyboardTranslationPx).
         // Also while nothing else keeps the stack up (the keyboard alone on it): the container
         // stays laid out for the keyboard, as it does with rows.
@@ -17260,7 +17260,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mAppliedStackTopInsetPx = -1;
 
     /**
-     * Each page's room, from its own rest (D1-A, PageRoom): the wall's cells end that far above
+     * Each page's room, from its own rest (PageRoom): the wall's cells end that far above
      * its bottom, whichever page is in front and whatever a crossing is doing, so a crossing
      * resizes no page. What draws on every page stands on the front page's rest instead (the flat
      * body surface, a side stack's end, the find strip and the A-Z labels), as a layout value
@@ -17498,7 +17498,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The keyboard's keys' height (its foot not counted) the container is laid out taller by, with the foot, while it is down. */
     private int mKeyboardDownLaidOutPx;
-    /** Whether the docked in-app keyboard stays laid out while it is down (D1-A). */
+    /** Whether the docked in-app keyboard stays laid out while it is down. */
     private boolean keyboardStaysLaidOut() {
         return mInAppKeyboard != null && mInAppKeyboard.isEnabled() && !mInAppKeyboard.isTurnedOff()
             && !mInAppKeyboard.isExternalTextInputActive() && !isKeyboardFloating();
@@ -25427,8 +25427,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 noteTerminalPageId(back.page.id);
                 return true;
             }
-            // Home's swipe past its last page into an empty Workspace (ADR 0008, amended
-            // 2026-10-19): the same fresh shell the Terminal entry starts there.
+            // Home's swipe past its last page into an empty Workspace (ADR 0008): the same fresh shell the Terminal entry starts there.
             @Override public boolean canStartShell() {
                 return isSplitPanesEnabled() && mPaneController != null
                     && getTermuxTerminalSessionClient() != null;
@@ -26037,7 +26036,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncPlaceBarOffset(float offsetPx) {
         mWallOffsetPx = offsetPx;
         int width = mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth();
-        // The readings stand still while the wall moves under them (#90), so the row never fades
+        // The readings stand still while the wall moves under them, so the row never fades
         // or clips with the wall. The badge and the window chips are the Workspace's (ADR 0030
         // section 2): they rest a wall to the right on Home and slide in with the Workspace's
         // rows, which the top stack's renderer writes (TopStackRenderer), the bar carrying them

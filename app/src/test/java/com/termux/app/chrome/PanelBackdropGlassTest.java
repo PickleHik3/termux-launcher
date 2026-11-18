@@ -33,7 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Panels take their Live slot from the glass registry (ADR 0029 section 10, step 3): the registry
+ * Panels take their Live slot from the glass registry (ADR 0029 section 10): the registry
  * is the only budget, so a panel opening never pushes a widget off Live behind its back, and the
  * recorder never has to choose a victim of its own.
  */

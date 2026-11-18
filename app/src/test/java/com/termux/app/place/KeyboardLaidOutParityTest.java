@@ -15,7 +15,7 @@ import org.junit.runners.Parameterized;
 import java.util.List;
 
 /**
- * D1-A step 1: the in-app keyboard stays laid out while it is down, and "down" is one number the
+ * The in-app keyboard stays laid out while it is down, and "down" is one number the
  * rest and the crossing both read ({@link StackScene#keyboardTranslationPx}). On every layout
  * fixture, Docked and Floating, the keyboard up and down, one pane and many: the crossing's value
  * at progress 0 and 1 is each end's rest value, and the terminal's room with the keyboard laid out

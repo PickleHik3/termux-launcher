@@ -204,7 +204,7 @@ public final class CrossingController {
 
         /**
          * The keyboard's height the stack's container is laid out taller by while the keyboard is
-         * down (D1-A); 0 otherwise. The dock's rows are the container less this.
+         * down; 0 otherwise. The dock's rows are the container less this.
          */
         default int keyboardDownLaidOutPx() {
             return 0;
