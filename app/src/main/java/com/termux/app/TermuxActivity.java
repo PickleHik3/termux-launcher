@@ -1758,6 +1758,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.launcher.home.HomeGlass mHomeGlass =
         new com.termux.app.launcher.home.HomeGlass(mGlass, mPages::declareGlass,
             () -> mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0);
+    /** The floats inside terminal windows wear their glass through the Terminal page. */
+    private final com.termux.app.terminal.TerminalGlass mTerminalGlass =
+        new com.termux.app.terminal.TerminalGlass(mGlass, mPages::declareGlass,
+            () -> mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0);
     /** What every Home page asks of this window: facts and narrow requests; the page does the work. */
     private final com.termux.app.launcher.home.HomePageHost mHomePageHost =
         new com.termux.app.launcher.home.HomePageHost() {
@@ -2004,7 +2008,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.USER_EVENT);
                 return true;
             }
-        });
+        }, mTerminalGlass);
     /** The dock's element in the glass registry. */
     private static final String DOCK_GLASS = "dock";
     /** The dock's glass kind moved: its backdrop is dressed again. */
@@ -4750,19 +4754,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, blurRadiusDp,
             com.termux.app.chrome.LiveBackdrop.RANK_CHROME, DOCK_GLASS, mDockGlassRedress);
         return picture == null ? null : picture.drawable();
-    }
-
-    /** A float's or a widget's element in the glass registry: its slab's own name. */
-    @NonNull
-    private static String glassElement(@NonNull String kind, @NonNull View slab) {
-        return kind + "@" + Integer.toHexString(System.identityHashCode(slab));
-    }
-
-    /** {@code redress} as the glass service tells it; null for none. */
-    @Nullable
-    private static com.termux.app.glass.GlassService.Redress glassRedress(
-            @Nullable Runnable redress) {
-        return redress == null ? null : kind -> redress.run();
     }
 
     /**
@@ -13880,6 +13871,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void drop(@NonNull View slab) { mHomeGlass.drop(slab); }
         });
+        mPaneController.setWindowFloatGlass(mTerminalGlass);
         mAppliedPaneStyleKey = null;
         mPaneController.setOnActiveWindowChanged(mPages::innerChanged);
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
@@ -31959,22 +31951,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Bridges {@link com.termux.app.terminal.TerminalPaneController} back into the activity. */
     private final class PaneHost implements com.termux.app.terminal.TerminalPaneController.Host {
-        // A float's glass blurs what is beneath it at the terminal glass's own radius.
-        @Nullable @Override
-        public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
-                                                                 @Nullable Runnable redress) {
-            String element = glassElement("float", slab);
-            return attachLivePicture(slab,
-                mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0,
-                com.termux.app.chrome.LiveBackdrop.RANK_FLOAT, element,
-                mGlass.grantedTo(element, slab) == null ? glassRedress(redress) : null);
-        }
-
-        @Override public void detachLiveGlass(@NonNull View slab) {
-            if (mLiveBackdrop != null) mLiveBackdrop.detach(slab);
-            mGlass.unregister(glassElement("float", slab));
-        }
-
         // Live windows while swiping: the row's windows beside the one in front. None under
         // reduced motion, where the wall never shows them, or with the display in front.
         @Nullable @Override

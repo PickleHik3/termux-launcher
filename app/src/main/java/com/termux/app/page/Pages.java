@@ -26,6 +26,13 @@ public final class Pages {
     public interface Stops {
         /** The page in front inside the cell, or null when it holds none. */
         @Nullable Page current();
+
+        /**
+         * The page that declares the cell's glass: the one in front, or any the cell holds while
+         * none is in front for a moment, so a window closing never lets go of the others' glass.
+         */
+        @Nullable
+        default Page glassPage() { return current(); }
     }
 
     @NonNull private final PageHost mHost;
@@ -92,7 +99,7 @@ public final class Pages {
         List<GlassEntry> all = new ArrayList<>();
         for (Page page : mPages.values()) page.declareGlass(all);
         for (Stops stops : mStops.values()) {
-            Page page = stops.current();
+            Page page = stops.glassPage();
             if (page != null) page.declareGlass(all);
         }
         HashSet<String> seen = new HashSet<>();

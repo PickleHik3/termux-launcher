@@ -494,10 +494,14 @@ public class WindowSourceRulesTest {
             }
         }
         String activity = sources().get("app/TermuxActivity.java");
-        for (String banned : new String[]{"glassElement(\"widget\"", "attachWidgetLiveGlass", "RANK_WIDGET"}) {
+        for (String banned : new String[]{"glassElement(\"widget\"", "attachWidgetLiveGlass", "RANK_WIDGET",
+                "glassElement(\"float\"", "attachLiveGlass(", "detachLiveGlass("}) {
             if (activity.contains(banned)) problems.add("TermuxActivity mentions " + banned);
         }
         String pane = sources().get("app/terminal/TerminalPaneController.java");
+        for (String banned : new String[]{"attachLiveGlass(", "detachLiveGlass("}) {
+            if (pane.contains(banned)) problems.add("TerminalPaneController mentions " + banned);
+        }
         int at = pane.indexOf("private void syncFloatLiveGlass(");
         int open = at < 0 ? -1 : pane.indexOf('{', at);
         int depth = 0;
@@ -507,8 +511,8 @@ public class WindowSourceRulesTest {
             if (c == '{') depth++;
             else if (c == '}' && --depth == 0) { end = i; break; }
         }
-        if (at < 0 || !pane.substring(open, end).contains("mHomeFloatGlass")) {
-            problems.add("syncFloatLiveGlass does not route Home floats through mHomeFloatGlass");
+        if (at < 0 || !pane.substring(open, end).contains("floatGlassOf(")) {
+            problems.add("syncFloatLiveGlass does not route floats through their page's FloatGlass");
         }
         assertNone(problems);
     }
