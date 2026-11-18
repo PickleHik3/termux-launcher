@@ -1802,6 +1802,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull @Override public View paneHost() { return findViewById(R.id.terminal_pane_host); }
             @Override public boolean keysWithTerminal() { return getCurrentFocus() instanceof TerminalView; }
             @Override public boolean handKeysToTerminal() { return returnKeysToTerminal(); }
+            @Override public boolean backIsEscape() {
+                return mProperties != null && mProperties.isBackKeyTheEscapeKey();
+            }
+            @Override public boolean lowerKeyboard() {
+                if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return false;
+                mInAppKeyboard.hide(
+                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.USER_EVENT);
+                return true;
+            }
         });
     /** The dock's element in the glass registry. */
     private static final String DOCK_GLASS = "dock";

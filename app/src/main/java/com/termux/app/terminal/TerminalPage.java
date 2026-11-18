@@ -40,8 +40,15 @@ public final class TerminalPage implements Page {
     @Override
     public void offFront() { }
 
+    /**
+     * Back with nothing raised over the terminal: the keyboard goes down if it is up, else the
+     * chain's default takes the wall to Home page 1. Back mapped to Escape is the user's Escape;
+     * a Back that reached the chain while no pane held the keys is spent here, as today, never a
+     * slide Home.
+     */
     @Override
     public boolean onBack() {
-        return false;
+        if (mHost.backIsEscape()) return true;
+        return mHost.lowerKeyboard();
     }
 }

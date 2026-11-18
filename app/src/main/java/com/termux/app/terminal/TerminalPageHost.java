@@ -19,4 +19,10 @@ public interface TerminalPageHost {
 
     /** Hands the keys to the active pane, once; false when nothing took them. */
     boolean handKeysToTerminal();
+
+    /** Whether Back is mapped to Escape: the user's Escape, spent by the terminal. */
+    boolean backIsEscape();
+
+    /** Lowers the in-app keyboard when it is up; false when it was not. */
+    boolean lowerKeyboard();
 }

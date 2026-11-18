@@ -44,6 +44,8 @@ public class TerminalPageFrontTest {
         @NonNull @Override public View paneHost() { return paneHost; }
         @Override public boolean keysWithTerminal() { return keysWithTerminal; }
         @Override public boolean handKeysToTerminal() { handBacks++; return true; }
+        @Override public boolean backIsEscape() { return false; }
+        @Override public boolean lowerKeyboard() { return false; }
     }
 
     /** Home's page: counts its fronts. */
