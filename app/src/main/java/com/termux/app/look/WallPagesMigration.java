@@ -1,4 +1,4 @@
-package com.termux.app.wall;
+package com.termux.app.look;
 
 import android.content.SharedPreferences;
 
@@ -9,7 +9,12 @@ import androidx.annotation.VisibleForTesting;
 import com.termux.app.look.LookStore;
 import com.termux.app.look.PageLook;
 import com.termux.app.page.PageKind;
+import com.termux.app.wall.StartInPolicy;
+import com.termux.app.wall.UseAs;
+import com.termux.app.wall.WallPages;
 import com.termux.app.wall.WallPages.Page;
+import com.termux.app.wall.WallPagesStore;
+import com.termux.app.wall.WallRow;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.ArrayList;

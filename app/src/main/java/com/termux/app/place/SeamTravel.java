@@ -250,7 +250,7 @@ public final class SeamTravel {
      * Workspace without moving anything on that page: Home stands nothing on its top or side edges,
      * whose stacks the bar's band would push in. The bar overlays Home's canvas (a Home page
      * whose layout stands no bar along the top starts at the canvas's top,
-     * {@link PageTopInsets#pageTopInsetPx}), so with those edges empty nothing on Home moves.
+     * {@code PageTopInset#pageTopInsetPx}), so with those edges empty nothing on Home moves.
      */
     public static boolean statusCanArriveOver(@NonNull PlaceLayout home) {
         return EdgeStackPolicy.stack(home, Edge.TOP).isEmpty()

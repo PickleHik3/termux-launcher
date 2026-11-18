@@ -29,7 +29,6 @@ import com.termux.app.chrome.CornerZones;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.launcher.home.HomePageTransition;
 import com.termux.app.page.PageKind;
-import com.termux.app.place.PageTopInsets;
 import com.termux.view.HoldTiming;
 
 import java.util.ArrayList;
@@ -3814,7 +3813,7 @@ public final class PaneWallLayout extends ViewGroup
 
     /** Where {@code child} starts below the wall's top, beyond its frame (PageTopInsets). */
     private int pageTopInsetPx(@NonNull View child) {
-        return PageTopInsets.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx,
+        return PageTopInset.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx,
             mHomeTopInsetPx);
     }
 
