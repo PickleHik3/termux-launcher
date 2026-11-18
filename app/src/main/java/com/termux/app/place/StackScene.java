@@ -169,7 +169,7 @@ public final class StackScene {
          */
         public final float[] share = new float[StackEnd.REGION_COUNT];
         /** Each region's even-out matrix, the identity where neither end evens it out. */
-        public final float[][] evenOut = new float[StackEnd.REGION_COUNT][20];
+        public final float[][] evenOut = new float[StackEnd.REGION_COUNT][COLOR_MATRIX_LENGTH];
 
         /** The decor strip under the pill: its alpha (visible above 0) and the foot's look. */
         public float stripAlpha;
@@ -243,7 +243,7 @@ public final class StackScene {
                 if (regionTop[r] != o.regionTop[r] || regionBottom[r] != o.regionBottom[r]
                     || !look[r].sameAs(o.look[r])) return false;
                 if (share[r] != o.share[r] && !look[r].sameAs(o.look[r])) return false;
-                for (int i = 0; i < 20; i++) if (evenOut[r][i] != o.evenOut[r][i]) return false;
+                for (int i = 0; i < COLOR_MATRIX_LENGTH; i++) if (evenOut[r][i] != o.evenOut[r][i]) return false;
             }
             return true;
         }
@@ -527,7 +527,7 @@ public final class StackScene {
 
     private static void evenOut(@Nullable float[] a, @Nullable float[] b, float w,
                                 @NonNull float[] out) {
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < COLOR_MATRIX_LENGTH; i++) {
             float x = a != null ? a[i] : IDENTITY[i];
             float y = b != null ? b[i] : IDENTITY[i];
             out[i] = w <= 0f ? x : w >= 1f ? y : x + (y - x) * w;
@@ -535,8 +535,11 @@ public final class StackScene {
     }
 
     private static void identity(@NonNull float[] out) {
-        System.arraycopy(IDENTITY, 0, out, 0, 20);
+        System.arraycopy(IDENTITY, 0, out, 0, COLOR_MATRIX_LENGTH);
     }
+
+    /** Length of a 4x5 colour matrix, the way android.graphics.ColorMatrix stores it. */
+    public static final int COLOR_MATRIX_LENGTH = 20;
 
     private static final float[] IDENTITY = {
         1, 0, 0, 0, 0,

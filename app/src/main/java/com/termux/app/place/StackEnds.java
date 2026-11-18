@@ -41,7 +41,7 @@ public final class StackEnds {
         for (int region = 0; region < StackEnd.REGION_COUNT; region++) {
             RegionLook look = new RegionLook();
             if (host.regionLook(page, region, look)) end.looks[region] = look;
-            float[] matrix = new float[20];
+            float[] matrix = new float[StackScene.COLOR_MATRIX_LENGTH];
             if (host.evenOut(page, region, matrix)) end.evenOut[region] = matrix;
         }
         end.strip = host.stripRule(page);
