@@ -110,6 +110,53 @@ public class SurfaceEditorRelaunchTest {
         assertFalse(isDirty(after));
     }
 
+    /**
+     * The widgets' glass preview lives in the activity's repository, which a theme relaunch
+     * builds again: the new editor shows the same preview and still counts it as unsaved.
+     */
+    @Test
+    public void theRelaunchedEditorKeepsTheWidgetGlassPreview() {
+        FakeGlass oldGlass = new FakeGlass();
+        SurfaceEditorController before = editorOnNewActivity(oldGlass);
+        present(before);
+        oldGlass.followPage();
+        assertTrue(oldGlass.dirty);
+
+        AppearanceSurfaceController.EditorSession carried = before.carrySession();
+        FakeGlass newGlass = new FakeGlass();
+        SurfaceEditorController after = editorOnNewActivity(newGlass);
+        after.adoptSessionNext(carried);
+        present(after);
+
+        assertTrue("the preview is shown again on the new activity", newGlass.dirty);
+        assertTrue("and is still unsaved", isDirty(after));
+    }
+
+    @Test
+    public void aRelaunchWithoutAWidgetGlassPreviewDraftsNone() {
+        FakeGlass oldGlass = new FakeGlass();
+        SurfaceEditorController before = editorOnNewActivity(oldGlass);
+        present(before);
+        AppearanceSurfaceController.EditorSession carried = before.carrySession();
+
+        FakeGlass newGlass = new FakeGlass();
+        SurfaceEditorController after = editorOnNewActivity(newGlass);
+        after.adoptSessionNext(carried);
+        present(after);
+
+        assertEquals(0, newGlass.followed);
+    }
+
+    /** One activity's repository draft, as the host adapts it. */
+    private static final class FakeGlass implements SurfaceEditorController.WidgetGlassDraft {
+        boolean dirty;
+        int followed;
+        @Override public void followPage() { dirty = true; followed++; }
+        @Override public boolean isDirty() { return dirty; }
+        @Override public void commit() { dirty = false; }
+        @Override public void discard() { dirty = false; }
+    }
+
     @Test
     public void undoPutsTheCardLooksBackEvenAfterARelaunch() {
         SharedPreferences store = preferences.getSharedPreferences();
@@ -186,6 +233,11 @@ public class SurfaceEditorRelaunchTest {
 
     /** An activity with the views the editor looks for, and an editor over it. */
     private SurfaceEditorController editorOnNewActivity() {
+        return editorOnNewActivity(null);
+    }
+
+    private SurfaceEditorController editorOnNewActivity(
+            SurfaceEditorController.WidgetGlassDraft glass) {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         Context themed = new ContextThemeWrapper(activity,
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
@@ -204,10 +256,11 @@ public class SurfaceEditorRelaunchTest {
         root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         activity.setContentView(root, new ViewGroup.LayoutParams(1080, 2000));
-        return new SurfaceEditorController(host(activity, themed));
+        return new SurfaceEditorController(host(activity, themed, glass));
     }
 
-    private SurfaceEditorController.Host host(Activity activity, Context themed) {
+    private SurfaceEditorController.Host host(Activity activity, Context themed,
+            SurfaceEditorController.WidgetGlassDraft glass) {
         PlaceLayout place = place();
         return (SurfaceEditorController.Host) Proxy.newProxyInstance(
             SurfaceEditorController.Host.class.getClassLoader(),
@@ -218,6 +271,7 @@ public class SurfaceEditorRelaunchTest {
                     case "findView": return activity.findViewById((Integer) args[0]);
                     case "preferences": return preferences;
                     case "placeLayout": return place;
+                    case "widgetGlassDraft": return glass;
                     case "isInAppKeyboardShown": return true;
                     case "editorPaintsWallpaper": return false;
                     case "hashCode": return System.identityHashCode(proxy);

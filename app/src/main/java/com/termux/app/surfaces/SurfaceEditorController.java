@@ -988,6 +988,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mEntrySettings = carried.settings;
             mSessionCustom.copyFrom(carried.custom);
             refreshSettingsSignature();
+            WidgetGlassDraft widgetGlass = mHost.widgetGlassDraft();
+            if (carried.glassDrafted && widgetGlass != null)
+                widgetGlass.followPage();
         }
         // A look that is Custom at open is the user's own: kept as the saved Custom, so a Look
         // tried and kept comes back to it. It goes into the draft: Done stores it, Discard drops it.
@@ -2898,8 +2901,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         EditorSettingsSnapshot settings = mEntrySettings;
         if (!mOpen || settings == null)
             return mCarriedNext;
-        LayoutEditorController layout = mHost.layoutEditor();
-        return new CarriedSession(settings, mSessionCustom.copy());
+        // The widgets' glass preview lives in this activity's repository, which the next one
+        // builds again: only the fact that it was showing is carried.
+        WidgetGlassDraft widgetGlass = mHost.widgetGlassDraft();
+        return new CarriedSession(settings, mSessionCustom.copy(),
+            widgetGlass != null && widgetGlass.isDirty());
     }
 
     @Override
@@ -2911,11 +2917,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     static final class CarriedSession implements AppearanceSurfaceController.EditorSession {
         @NonNull final EditorSettingsSnapshot settings;
         @NonNull final SessionCustom custom;
+        /** Whether the widgets' glass preview was showing, to be shown again by the next editor. */
+        final boolean glassDrafted;
 
         CarriedSession(@NonNull EditorSettingsSnapshot settings,
-                       @NonNull SessionCustom custom) {
+                       @NonNull SessionCustom custom, boolean glassDrafted) {
             this.settings = settings;
             this.custom = custom;
+            this.glassDrafted = glassDrafted;
         }
     }
 
