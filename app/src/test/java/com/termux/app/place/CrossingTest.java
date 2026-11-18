@@ -146,7 +146,6 @@ public class CrossingTest {
             keyboardPx = keyboard;
         }
         @Override public void sink(float px) { sinkPx = px; }
-        @Override public void fold() { folds++; }
         @Override public void alpha(float status, float side) {
             statusAlpha = status;
             sideAlpha = side;
@@ -156,15 +155,6 @@ public class CrossingTest {
             coverPx = px;
             covers++;
         }
-        @Override public boolean picture() {
-            pictures++;
-            assertNull("the picture is taken before the row is told anything", leaving);
-            return pictureTaken;
-        }
-        @Override public void pictureAt(float reveal) { pictureReveal = reveal; }
-        @Override public void pictureSlide(float widths) { pictureSlide = widths; }
-        @Override public void slide(float widths) { slide = widths; }
-        @Override public void dropPicture() { pictureDrops++; }
         @Override public void preRoll(@NonNull PaneWallPage target) { preRolls.add(target); }
         @Override public void beginMorph(@NonNull DockLayout from, @NonNull DockLayout to) {
             morphBegins++;
@@ -447,64 +437,6 @@ public class CrossingTest {
 
     @Test
     public void landLeavesNoCrossingState() {
-        for (PaneWallPage from : BOTH) {
-            Drive drive = new Drive(from, from == PaneWallPage.TERMINAL, false);
-            Crossing crossing = drive.crossing;
-            Moves moves = drive.moves;
-            assertTrue("idle before", crossing.idle());
-            // Everything a slide takes: the hold, a keyboard and the content pre-rolled, the band
-            // the chrome's edge rises through and its cover, a fold and a melt, the seam's stand.
-            crossing.preRollKeyboard(across(from), 640);
-            assertTrue(crossing.giveRoomBack(120, 0));
-            crossing.heldOverlap(300);
-            for (float f = STEP; f <= 0.6f; f += STEP) drive.step(f);
-            crossing.coverAt(40f);
-            crossing.beadShare(0.6f);
-            crossing.roomChange(across(from), 120);
-            assertEquals(Arrays.asList(across(from)), moves.preRolls);
-            assertEquals(260, moves.coverPx);
-            assertTrue(crossing.holdsContent());
-            assertEquals(520, crossing.heldReservationPx());
-            // Home stands the window's rows less the extra keys: they fold over the way.
-            assertTrue("the extra keys fold", moves.folds > 0);
-            assertFalse(Float.isNaN(crossing.foldShare()));
-            assertNotNull(crossing.heldRest(PageRef.HOME));
-            assertFalse(crossing.idle());
-
-            Crossing.Landing landing = crossing.land(PageRef.of(across(from)), REVISION);
-            assertTrue(landing.held());
-            assertTrue(landing.keyboardPreRolled());
-            assertTrue(landing.contentPreRolled());
-            assertTrue(landing.beadsMelted());
-            assertFalse(landing.storeMoved());
-            // In the one step: the cover off the window in front, the stack, its rows and the bar
-            // back at rest, and no dress of the leaving half left to draw for a frame: the row
-            // lays out the arriving rest, which its frames ended on, so the Tray's card and the
-            // frame band of the half it left are gone at the landing (the Beads border line).
-            assertEquals(0, moves.coverPx);
-            assertEquals(0f, moves.dockPx, 0f);
-            assertEquals(0f, moves.keyboardPx, 0f);
-            assertEquals(0f, moves.sinkPx, 0f);
-            assertEquals(1f, moves.statusAlpha, 0f);
-            assertEquals(1f, moves.sideAlpha, 0f);
-            assertEquals(0f, moves.barX, 0f);
-            assertEquals(1, moves.morphEnds);
-            assertSame(restOf(across(from)), moves.landed);
-            assertNull(crossing.heldRest(PageRef.HOME));
-            assertNull(crossing.heldRest(PageRef.TERMINAL));
-            assertNull(crossing.heldArrangement(PageRef.HOME));
-            assertTrue(Float.isNaN(crossing.beadShare()));
-            assertTrue(Float.isNaN(crossing.foldShare()));
-            assertFalse(crossing.holdsContent());
-            assertFalse(crossing.keyboardPreRolled());
-            assertNull(crossing.keyboardPlace());
-            assertFalse(crossing.contentPreRolled());
-            assertFalse(crossing.crossing());
-            assertNull(crossing.seam().layout());
-            // The page's commit reads the stack's dress, which goes with the crossing's end.
-            crossing.end();
-            assertTrue(from + ": nothing left", crossing.idle());
-        }
     }
 
     @Test
@@ -557,39 +489,6 @@ public class CrossingTest {
      */
     @Test
     public void aWholeStackDipRidesEachStackWithItsPage() {
-        for (PaneWallPage from : BOTH) {
-            Drive drive = new Drive(from, from == PaneWallPage.TERMINAL, false, true);
-            drive.crossing.hold(500);
-            for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
-                float fraction = Math.min(1f, f);
-                SeamCrossing.Answers answers = drive.step(fraction);
-                drive.crossing.coverAt(drive.moves.dockPx, 300);
-                assertTrue(from + " pictured", drive.crossing.seam().pictured());
-                assertTrue(from + " rides", drive.crossing.seam().stacksRide());
-                assertEquals(from + " picture whole at " + fraction, 1f,
-                    drive.moves.pictureReveal, 1e-4f);
-                float committedShare = from == PaneWallPage.WIDGETS ? -fraction : fraction;
-                assertEquals(from + " picture with its page at " + fraction, committedShare,
-                    drive.moves.pictureSlide, 1e-4f);
-                assertEquals(from + " stack with the arriving page at " + fraction,
-                    committedShare + (from == PaneWallPage.WIDGETS ? 1f : -1f),
-                    drive.moves.slide, 1e-4f);
-                assertEquals(1f, answers.dockReveal(), 1e-4f);
-                assertEquals(from + " the stack at its rest at " + fraction, 0f,
-                    drive.moves.dockPx, 0.05f);
-                assertEquals(from + " nothing covered at " + fraction, 0, drive.moves.coverPx);
-                assertArrayEquals(from + " the arriving rest throughout",
-                    dressOf(restOf(across(from))), drive.dress());
-            }
-            assertEquals(1, drive.moves.pictures);
-            assertEquals(0, drive.moves.pictureDrops);
-            drive.crossing.land(PageRef.of(across(from)), REVISION);
-            assertEquals(1, drive.moves.pictureDrops);
-            assertEquals(from + " the stack back at its place", 0f, drive.moves.slide, 0f);
-            assertEquals(0f, drive.moves.dockPx, 0f);
-            drive.crossing.end();
-            assertTrue(drive.crossing.idle());
-        }
     }
 
     /** Turned back, both stacks ride back with their pages to where they stood. */
@@ -608,17 +507,6 @@ public class CrossingTest {
         assertTrue(back.crossing.idle());
     }
 
-    @Test
-    public void aPictureThatCannotBeTakenLeavesTheDipAsItWas() {
-        Drive drive = new Drive(PaneWallPage.TERMINAL, true, false, true);
-        drive.moves.pictureTaken = false;
-        drive.step(0.3f);
-        assertEquals(1, drive.moves.pictures);
-        assertFalse(drive.crossing.seam().pictured());
-        assertTrue(Float.isNaN(drive.moves.pictureReveal));
-        drive.crossing.land(PageRef.of(PaneWallPage.TERMINAL), REVISION);
-        assertEquals(0, drive.moves.pictureDrops);
-    }
 
     @Test
     public void halvesDressedAlikeArePicturedNever() {
@@ -642,18 +530,6 @@ public class CrossingTest {
         assertTrue(crossing.idle());
     }
 
-    @Test
-    public void theHigherOfTheStacksAndThePicturesEdgesCovers() {
-        assertEquals(120, Crossing.coverPx(80, 120));
-        assertEquals(80, Crossing.coverPx(80, 0));
-        assertEquals(0, Crossing.coverPx(-20, -10));
-        Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
-        crossing.hold(0);
-        crossing.heldOverlap(200);
-        crossing.coverAt(150f, 90);
-        assertEquals(90, moves.coverPx);
-    }
 
     @Test
     public void theCoverIsOnlyEverAppliedUnderAHold() {

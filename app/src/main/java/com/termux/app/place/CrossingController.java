@@ -237,20 +237,11 @@ public final class CrossingController {
         /** The keyboard brought up below the screen for the frame's arriving place. */
         void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame);
 
-        /** The keyboard put away with the picture of the stack. */
-        void putKeyboardAwayWithPicture();
-
-        /** Whether a pictured dip put the keyboard away. */
-        boolean keyboardPicturedAway();
-
         /** Whether a keyboard swipe drives the travel. */
         boolean keyboardSwipeTravel();
 
         /** A keyboard up on both places crosses from one material to the other. */
         void syncKeyboardMaterialTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame);
-
-        /** The cover under the stack's picture, px. */
-        int stackPictureCoverPx();
 
         // ---- dock ------------------------------------------------------------------
 
@@ -435,8 +426,7 @@ public final class CrossingController {
         readSeamTravel(frame);
         Trace.endSection();
         // Every answer the seam has for this frame, from what the crossing read as it began, and
-        // the dock's dress at the chrome's progress into the other half. A pictured dip moves on
-        // the wall's own way (SeamCrossing#pictured).
+        // the dock's dress at the chrome's progress into the other half.
         Trace.beginSection("Travel.answers");
         com.termux.app.place.SeamCrossing.Answers seam = mCrossing.frame(frame,
             mHost.preferences() != null && mHost.chrome() != null, mHost.dockBandEaseRunning(),
@@ -445,7 +435,7 @@ public final class CrossingController {
         Trace.beginSection("Travel.blends");
         // The strip under the pill crosses from the one dress to the other with the finger.
         mHost.syncNavStripFade(frame);
-        // A stack whose halves differ only in look blends its glass with the wall.
+        // A stack whose halves differ in look blends its glass with the wall.
         syncStackLookBlend(seam);
         // And the band behind the system bar with the bar's glass, by the same share.
         mHost.syncTopBandFade(frame);
@@ -457,8 +447,7 @@ public final class CrossingController {
         Trace.beginSection("Travel.preRolls");
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
-        // A keyboard a pictured dip put away travels in the picture, never in the stack again.
-        if (!mCrossing.keyboardPreRolled() && !mHost.keyboardPicturedAway()
+        if (!mCrossing.keyboardPreRolled()
             && com.termux.app.place.PlaceChromeTravel.needsKeyboardPreRoll(frame,
                 mHost.isInAppKeyboardShown())
             && mHost.canPreRollTravelKeyboard()) {
@@ -479,9 +468,7 @@ public final class CrossingController {
         int dockPx = travelDockLaidOutPx(keyboardPx);
         // The stack as the crossing answers it (Crossing#stack): with a keyboard in the stack the
         // rows sink into its top edge, since the stack's own translation carries the keyboard
-        // too; or only the extra keys fold, the rows on the canvas's side of them sinking by its
-        // hidden part (#94); and between halves that dress the stack differently the keyboard
-        // dips with the rows (SeamDress.wholeStack), both moved by the translation.
+        // too, both moved by the translation.
         boolean wasMoved = mHost.dockTravelTranslationPx() != 0f;
         float translation = mCrossing.stack(seam, dockReveal, keyboardPx, dockPx,
             travelDockRowsPx(keyboardPx));
@@ -729,7 +716,7 @@ public final class CrossingController {
             float translation = mCrossing.stack(seam, dockReveal, keyboardPx, dockPx,
                 travelDockRowsPx(keyboardPx));
             if (translation != 0f || wasMoved) mHost.setChromeTravelMoved(true);
-            if (mCrossing.holdsContent()) mCrossing.coverAt(translation, mHost.stackPictureCoverPx());
+            if (mCrossing.holdsContent()) mCrossing.coverAt(translation);
             boolean barRides = mHost.syncStatusTravel(frame, seam);
             float fade = seam.statusFade();
             float statusAlpha = barRides ? 1f : !Float.isNaN(fade) ? fade : frame.statusReveal;
@@ -842,7 +829,7 @@ public final class CrossingController {
                 mHost.isSplitPanesEnabled(), pagesSlide),
             hereRest, thereRest, mHost.arrangementRevision());
         if (!begins) return;
-        // A look apart alone blends the dock's glass from here to there (syncStackLookBlend).
+        // A look apart blends the dock's glass from here to there (syncStackLookBlend).
         mLookBlendShare = Float.NaN;
         mLookBlendHereOpacity = mHost.preferences() == null ? 100
             : mHost.preferences().getAppBarOpacity(mHost.lookIdOf(herePage));
@@ -929,11 +916,6 @@ public final class CrossingController {
                 // here, or a bar that comes, moves nothing it holds.
                 mHost.beginTravelHold();
                 mCrossing.seam().standLayout();
-                // A pictured dip toward a half without a keyboard: the keyboard leaves with the
-                // picture, so the stack is laid out in this pass as the other half rests — its
-                // rows, its glass and its foot measured without a keyboard under them, as the
-                // settle would lay them out — instead of over a keyboard pushed below the screen.
-                mHost.putKeyboardAwayWithPicture();
                 mHost.setChromeTravelMoved(true);
                 // The stack changes halves with its rows, so it is dressed for the half it now
                 // stands in this same pass, while none of it shows (SeamDress). The sizes follow
@@ -944,8 +926,8 @@ public final class CrossingController {
                 // of them shows.
                 mHost.syncDrawerTile();
                 // The slab's Dock design goes with the stack's dress, on the frame it changes
-                // halves while none of it shows — a pictured dip's first, a dip's swap, either way
-                // round — so the dock rises as it rests and the settle has nothing to re-dress
+                // halves while none of it shows — a slide in's first — so the dock rises as it
+                // rests and the settle has nothing to re-dress
                 // (SeamCrossing#stackDesign), whether a finger, a home press or a tap started it.
                 if (seam.restyle()) {
                     com.termux.app.wall.PaneWallPage wears =

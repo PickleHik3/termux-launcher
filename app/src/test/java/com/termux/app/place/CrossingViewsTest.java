@@ -112,13 +112,9 @@ public class CrossingViewsTest {
         @Override public void rideStatusX(float px) { barX = px; }
         @Override public void coverWindowInFront(int px) { coverPx = px; }
         @Override public void preRollKeyboard(@NonNull PaneWallPage target) { preRolls.add(target); }
-        @Override public boolean extraKeysRowOnScreen() { return true; }
-        @Override public int terminalFlushPaddingPx() { return 12; }
         @Nullable @Override public SuggestionBarView dockRow() { return null; }
         @Override public void syncDockBeadsWithMorph() {}
         @Override public void onDockRowContentChanged() {}
-        @Nullable @Override public StackPicture stackPicture(@Nullable View stack) { return null; }
-        @Override public int wallWidthPx() { return WIDTH; }
     }
 
     /** The layers a sink or a fold moves, and the views the alphas fade. */
@@ -168,7 +164,6 @@ public class CrossingViewsTest {
         final PlaceChromeTravel.States states;
 
         Drive(@NonNull PaneWallPage from) {
-            views.attach(crossing);
             committed = from;
             here = half(from, false);
             there = half(across(from), false);

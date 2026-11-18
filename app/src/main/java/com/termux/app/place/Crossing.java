@@ -34,7 +34,7 @@ import com.termux.app.wall.PaneWallPage;
  *
  * <p>A frame is three calls, in the order the activity applies them: {@link #frame} for the seam's
  * answers and the dock's dress, {@link #stack} once the frame's pre-rolls and the seam's layout
- * pass have run (the stack's sink or fold and its translation), and {@link #rideBar} and
+ * pass have run (the stack's sink and its translation), and {@link #rideBar} and
  * {@link #fade} once the bar's host is laid out. A reversal, or a window chip tapped mid-slide,
  * needs nothing of its own: the rests stay and the morph reads the wall's position, so no
  * measurement jumps. {@link #land} clears everything the crossing held in one step; the stack's
@@ -46,40 +46,14 @@ import com.termux.app.wall.PaneWallPage;
  */
 public final class Crossing {
 
-    /** The accessory stack: drawn at a translation, its rows sunk or the extra keys folded. */
+    /** The accessory stack: drawn at a translation, its rows sunk. */
     public interface Stack {
         /** The stack drawn {@code dockPx} lower, of which {@code keyboardPx} is the keyboard's. */
         void translate(float dockPx, float keyboardPx);
         /** The rows' sink into the keyboard's top edge (0 puts every layer back). */
         void sink(float px);
-        /** The extra keys folded by {@link #foldShare()}, the rows around them as it holds them. */
-        void fold();
         /** The status content's and the side bars' travel alpha (1 puts them back). */
         void alpha(float status, float side);
-
-        /**
-         * Pictures the stack as it is drawn now, the committed half's at rest, for a crossing that
-         * stands it in for the stack ({@link SeamCrossing#wantsPicture}). Whether it was taken;
-         * nothing is shown yet.
-         */
-        default boolean picture() {
-            return false;
-        }
-
-        /** The picture drawn with {@code reveal} of it showing, sunk below the screen by the rest. */
-        default void pictureAt(float reveal) {}
-
-        /** The picture drawn {@code widths} of the wall's width across from its rest (0 puts it back). */
-        default void pictureSlide(float widths) {}
-
-        /** The picture goes, and what it held with it. */
-        default void dropPicture() {}
-
-        /**
-         * The stack drawn {@code widths} of the wall's width across from its rest, riding with
-         * the arriving page ({@link SeamCrossing.Answers#stackSlide}); 0 puts it back.
-         */
-        default void slide(float widths) {}
 
         /**
          * The crossing's two ends by side and the wall's progress between them (0 the side it
@@ -187,7 +161,6 @@ public final class Crossing {
     private int mCoverPx;
 
     // ---- What the frames ease ----
-    private float mFoldShare = Float.NaN;
     private float mBeadShare = Float.NaN;
 
     private final Landing mLanding = new Landing(new SeamCrossing.Landing());
@@ -229,10 +202,6 @@ public final class Crossing {
             MotionLog.log("crossing-begin", "revision=" + revision);
             com.termux.app.window.CrossingWindow.shared().open(android.os.SystemClock.uptimeMillis());
         }
-        // A whole-stack dip pictures the committed half's stack now, before anything of the
-        // crossing has touched it (the row's morph below included); a picture that cannot be
-        // taken leaves the dip as it was.
-        if (mSeam.wantsPicture()) mSeam.pictured(mStack.picture());
         mCommitted = here.page.kind;
         mHere = here;
         mThere = there;
@@ -255,10 +224,8 @@ public final class Crossing {
     }
 
     /**
-     * The same, with the wall's own frame beside the chrome's, which a pictured dip moves on
-     * ({@link SeamCrossing#frame(Frame, Frame, boolean, boolean, boolean)}). The row a pictured
-     * dip stands is the other half's from the first frame, so its dress is the arriving rest
-     * throughout.
+     * The same, with the wall's own frame beside the chrome's, which the look blend moves on
+     * ({@link SeamCrossing#frame(Frame, Frame, boolean, boolean, boolean)}).
      */
     @NonNull
     public SeamCrossing.Answers frame(@NonNull Frame frame, @NonNull Frame wallFrame,
@@ -274,7 +241,7 @@ public final class Crossing {
         }
         if (mCommitted != null && here != null && mMorph.active()) {
             // Read by end, so a frame of Home's pager morphs between two Home pages' rests.
-            mMorph.at(mSeam.pictured() ? 1f : SeamTravel.otherEndProgress(frame, here.page));
+            mMorph.at(SeamTravel.otherEndProgress(frame, here.page));
             mDock.dress(mMorph);
         }
         return answers;
@@ -282,8 +249,8 @@ public final class Crossing {
 
     /**
      * The stack for this frame, once its pre-rolls and the seam's layout pass have run: the rows
-     * sink into the keyboard or the extra keys fold, as the seam answered, and the stack is drawn
-     * at its translation, which is returned (the cover reads it, {@link #coverAt}).
+     * sink into the keyboard as the seam answered, and the stack is drawn at its translation,
+     * which is returned (the cover reads it, {@link #coverAt}).
      *
      * @param dockReveal how much of the dock rows the stack stands shows (the seam's)
      * @param keyboardPx the keyboard's height as the stack lays it out, 0 while it is down
@@ -294,28 +261,11 @@ public final class Crossing {
                        int dockPx, int rowsPx) {
         // The travel and the rows' sink are the stack scene's (StackScene#travel).
         StackScene.Motion motion = mMotion;
-        StackScene.travel(seam.folds(), seam.rowsSink(keyboardPx), seam.keyboardReveal(),
+        StackScene.travel(seam.rowsSink(keyboardPx), seam.keyboardReveal(),
             dockReveal, keyboardPx, dockPx, rowsPx, motion);
-        if (seam.folds()) {
-            // Only the extra keys fold: the rows on the canvas's side of them sink by their hidden
-            // part, the rows between them and the screen's edge stand still (#94).
-            mFoldShare = seam.extraKeysShare();
-            mStack.fold();
-        } else {
-            mFoldShare = Float.NaN;
-            mStack.sink(motion.rowsSinkPx);
-        }
+        mStack.sink(motion.rowsSinkPx);
         float translation = motion.dockTravelPx;
         mStack.translate(translation, motion.keyboardSharePx);
-        // The committed half's stack, pictured, goes as the other half's comes: sinking, or
-        // riding out with its page while the other half's waits for the landing.
-        float picture = seam.pictureReveal();
-        if (!Float.isNaN(picture)) mStack.pictureAt(clamp01(picture));
-        float slide = seam.pictureSlide();
-        if (!Float.isNaN(slide)) mStack.pictureSlide(slide);
-        // And the stack dressed for the other half rides in with its page, or stands at its own.
-        float stackSlide = seam.stackSlide();
-        mStack.slide(Float.isNaN(stackSlide) ? 0f : stackSlide);
         return translation;
     }
 
@@ -525,35 +475,13 @@ public final class Crossing {
      * PlaceChromeTravel#coveredRoomPx}). Only while the content is held.
      */
     public void coverAt(float stackTranslationPx) {
-        coverAt(stackTranslationPx, 0);
-    }
-
-    /**
-     * The same, where a picture of the committed half's stack stands {@code pictureCoverPx} up
-     * into that room too: the higher of the two edges covers.
-     */
-    public void coverAt(float stackTranslationPx, int pictureCoverPx) {
         if (!mHoldsContent) return;
-        // Stacks that ride stand on their own pages, never over the window in front: the
-        // terminal's page is laid out at the Terminal's rest, its own stack under it.
-        int px = mSeam.stacksRide() ? 0
-            : coverPx(PlaceChromeTravel.coveredRoomPx(mHeldOverlapPx, stackTranslationPx),
-                pictureCoverPx);
+        int px = Math.max(0, PlaceChromeTravel.coveredRoomPx(mHeldOverlapPx, stackTranslationPx));
         mCoverPx = px;
         mCover.cover(px);
     }
 
-    /** The cover for a stack's and a picture's edges in the room: the higher of the two. */
-    static int coverPx(int stackCoverPx, int pictureCoverPx) {
-        return Math.max(0, Math.max(stackCoverPx, pictureCoverPx));
-    }
-
     // ---- What the frames ease ----
-
-    /** How much of the extra keys a fold shows ({@link #stack}); NaN while none runs. */
-    public float foldShare() {
-        return mFoldShare;
-    }
 
     /** The beaded half's share while beads melt; NaN while nothing melts. */
     public void beadShare(float share) {
@@ -577,14 +505,11 @@ public final class Crossing {
     @NonNull
     public Landing land(@NonNull PageRef landed, int revision) {
         if (MotionLog.enabled) MotionLog.log("land", "landed=" + landed + " revision=" + revision);
-        // The picture goes in the frame the stack is put back at its rest, whichever half that is.
-        if (mSeam.pictured()) mStack.dropPicture();
         Landing landing = releaseInto(mLanding);
         landing.beadsMelted = !Float.isNaN(mBeadShare);
         landing.storeMoved = mCommitted != null && revision != mRevision;
         landing.seam = mSeam.land(landed.kind);
         mBeadShare = Float.NaN;
-        mFoldShare = Float.NaN;
         mBar.rideX(0f);
         mStack.sink(0f);
         mStack.alpha(1f, 1f);
@@ -638,7 +563,6 @@ public final class Crossing {
         // The grid's hold is handed to the settle, which ends it after its layout.
         mGridHold = null;
         mStack.translate(0f, 0f);
-        mStack.slide(0f);
         mStack.endSides();
         mCoverPx = 0;
         if (covered) mCover.cover(0);
@@ -658,7 +582,7 @@ public final class Crossing {
         return !mHoldsContent && mHeldReservationPx == 0 && mHeldOverlapPx == 0
             && !mKeyboardPreRolled && mKeyboardPlace == null && !mContentPreRolled
             && mGridHold == null && mRoomArriving == null && mRoomChangePx == 0 && mCoverPx == 0
-            && Float.isNaN(mFoldShare) && Float.isNaN(mBeadShare) && !mMorph.active()
+            && Float.isNaN(mBeadShare) && !mMorph.active()
             && mCommitted == null && mHere == null && mThere == null
             && mHereRest == null && mThereRest == null && mRevision == 0
             && mSeam.layout() == null && mSeam.other() == null && mSeam.stackDressPage() == null;

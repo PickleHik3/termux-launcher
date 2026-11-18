@@ -64,7 +64,6 @@ public class TerminalRoundTripParityTest {
             Crossing.Keyboard, Crossing.Dock {
         @Override public void translate(float dockPx, float keyboardPx) {}
         @Override public void sink(float px) {}
-        @Override public void fold() {}
         @Override public void alpha(float status, float side) {}
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}

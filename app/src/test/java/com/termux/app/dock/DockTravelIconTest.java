@@ -64,16 +64,6 @@ public class DockTravelIconTest {
             .build());
     }
 
-    @Test
-    public void theTravelLayoutSharesItsRowAsHomeDoes() {
-        assertEquals(SeamTravel.DockPlan.DIP, SeamTravel.dockPlan(WINDOW, HOME));
-        PlaceLayout travel = SeamTravel.withDockOf(WINDOW, HOME);
-        assertEquals(EdgeStackPolicy.stack(HOME, Edge.BOTTOM),
-            EdgeStackPolicy.stack(travel, Edge.BOTTOM));
-        // The letters share the row's sheet on both: neither hands out the lone baseline.
-        assertFalse(alone(HOME));
-        assertFalse(alone(travel));
-    }
 
     @Test
     public void theTravelLayoutHandsHomesIconAtEverySize() {

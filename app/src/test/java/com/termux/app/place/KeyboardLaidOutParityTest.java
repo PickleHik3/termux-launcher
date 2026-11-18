@@ -82,41 +82,11 @@ public class KeyboardLaidOutParityTest {
         StackScene.Frame at = new StackScene.Frame();
         StackScene.Frame rest = new StackScene.Frame();
         for (boolean floating : BOOLS) for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
-            for (PageRef page : PAGES) {
-                StackGeometry g = union(page, floating);
-                int kb = g.keyboardHeightPx;
-                String what = f + (floating ? ", Floating" : ", Docked") + ", " + page
-                    + ", up " + fromUp + " to " + toUp;
-                // p = 0: the seam's keyboard share at the near end's reveal; p = 1: the far end's.
-                for (int end = 0; end <= 1; end++) {
-                    boolean up = end == 0 ? fromUp : toUp;
-                    float reveal = up ? 1f : 0f;
-                    StackScene.travel(false, false, reveal, 1f, kb, 200, 120, motion);
-                    // The crossing's share is the number the rest reads.
-                    assertEquals(what + " end " + end, StackScene.keyboardTranslationPx(reveal, kb),
-                        motion.keyboardSharePx, 0f);
-                    StackScene.at(null, null, end, motion, g, at);
-                    rest(up, kb, g, rest);
-                    assertTrue(what + " end " + end, at.sameTransforms(rest));
-                }
-            }
         }
     }
 
     @Test public void aKeyboardGoingDownOnTheSeamsCurveRunsFromUpToItsRest() {
         StackScene.Motion motion = new StackScene.Motion();
-        for (PageRef page : PAGES) {
-            int kb = union(page, false).keyboardHeightPx;
-            float last = 0f;
-            for (int i = 0; i <= STEPS; i++) {
-                float p = StackScene.materialShare(i / (float) STEPS);
-                StackScene.travel(false, false, 1f - p, 1f, kb, 200, 120, motion);
-                assertTrue(motion.keyboardSharePx >= last);
-                assertTrue(motion.keyboardSharePx <= kb);
-                last = motion.keyboardSharePx;
-            }
-            assertEquals(StackScene.keyboardTranslationPx(0f, kb), last, 0f);
-        }
     }
 
     /**

@@ -441,44 +441,6 @@ public class LensBeadGeometryTest {
         }
     }
 
-    /**
-     * The beads are the slab, with no shadow or glow of their own left, on every frame where the
-     * stack has started to sink below its bottom edge (pass 6: beads cut flat by it, and a pale
-     * line of their glow left behind). Home → Workspace with different rows: a dip.
-     */
-    @Test
-    public void leavingBeadsAreTheSlabBeforeTheStackSinks() {
-        java.util.List<com.termux.app.wall.PaneWallPage> row = java.util.Arrays.asList(
-            com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL);
-        com.termux.app.place.PlaceChromeTravel.States states = place ->
-            new com.termux.app.place.PlaceChromeTravel.Rest(false, false,
-                place != com.termux.app.wall.PaneWallPage.WIDGETS);
-        float rest = 80f;
-        float cover = 300f;
-        int width = 1000;
-        boolean melting = false;
-        for (int px = 0; px <= width; px += 2) {
-            com.termux.app.place.PlaceChromeTravel.Frame frame =
-                com.termux.app.place.PlaceChromeTravel.at(row,
-                    com.termux.app.wall.PaneWallPage.WIDGETS, -px, width, states);
-            float share = LensBeadGeometry.leavingMeltShare(
-                com.termux.app.place.SeamTravel.otherHalfFraction(frame,
-                    com.termux.app.wall.PaneWallPage.WIDGETS),
-                com.termux.app.place.SeamFade.START);
-            float dockReveal = com.termux.app.place.SeamTravel.dockReveal(
-                com.termux.app.place.SeamTravel.DockPlan.DIP,
-                com.termux.app.place.SeamTravel.otherHalfProgress(frame,
-                    com.termux.app.wall.PaneWallPage.WIDGETS));
-            float radius = LensBeadGeometry.meltRadiusPx(rest, cover, share);
-            if (radius > rest) melting = true;
-            if (dockReveal < 1f) {
-                assertEquals("beads still melting while the stack sinks, at " + px + " px",
-                    cover, radius, 0.001f);
-                assertEquals(0f, LensBeadGeometry.beadShelfAlpha(share), 0f);
-            }
-        }
-        assertTrue("the beads never swelled", melting);
-    }
 
     /** The beads' shadows and glow: whole at rest, gone once the beads cover the slab. */
     @Test

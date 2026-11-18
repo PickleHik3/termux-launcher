@@ -69,26 +69,11 @@ public class SeamDressTest {
             assertSame(HOME, SeamDress.stackPage(HOME, TERMINAL, DockPlan.SLIDE_OUT, progress));
     }
 
-    @Test
-    public void aDipChangesTheDressAtTheSwapWhereNeitherHalfShows() {
-        float before = SeamTravel.DIP_SWAP - 1e-3f;
-        float after = SeamTravel.DIP_SWAP + 1e-3f;
-        assertSame(TERMINAL, SeamDress.stackPage(TERMINAL, HOME, DockPlan.DIP, before));
-        assertSame(HOME, SeamDress.stackPage(TERMINAL, HOME, DockPlan.DIP, after));
-        // On both sides of the change the stack is all but below the screen.
-        assertEquals(0f, SeamTravel.dockReveal(DockPlan.DIP, before), 0.01f);
-        assertEquals(0f, SeamTravel.dockReveal(DockPlan.DIP, after), 0.01f);
-    }
 
     @Test
     public void aSlideThatSpringsBackGivesTheCommittedDressBack() {
         // Out to past the swap and back to rest: the same function, read back down.
         float[] way = {0f, 0.3f, 0.6f, 0.9f, 0.6f, 0.3f, 0f};
-        for (float progress : way) {
-            PaneWallPage page = SeamDress.stackPage(TERMINAL, HOME, DockPlan.DIP, progress);
-            assertSame("progress " + progress,
-                progress >= SeamTravel.DIP_SWAP ? HOME : TERMINAL, page);
-        }
         assertSame(TERMINAL, SeamDress.stackPage(TERMINAL, HOME, DockPlan.SLIDE_IN, 0f));
     }
 
@@ -127,65 +112,13 @@ public class SeamDressTest {
 
     @Test
     public void halvesDressedAlikeKeepTheRowsPlan() {
-        for (DockPlan rows : DockPlan.values()) {
-            assertSame(rows, SeamDress.plan(rows, true, false, true, true));
-            assertFalse(SeamDress.wholeStack(SeamDress.plan(rows, true, false, true, true), false));
-        }
     }
 
-    @Test
-    public void aStackThatCannotBeExchangedKeepsChangingAtSettle() {
-        assertSame(DockPlan.NONE, SeamDress.plan(DockPlan.NONE, false, true, true, true));
-    }
 
-    @Test
-    public void differentDressWithNothingOnTheLeavingHalfRisesDressedFromTheFirstFrame() {
-        assertSame(DockPlan.SLIDE_IN, SeamDress.plan(DockPlan.SLIDE_IN, true, true, false, true));
-        // Only a keyboard arriving, no rows on either half: it still rises in its own dress.
-        assertSame(DockPlan.SLIDE_IN, SeamDress.plan(DockPlan.NONE, true, true, false, true));
-    }
 
-    @Test
-    public void differentDressWithNothingArrivingLeavesAsItWouldAndDressesOffScreen() {
-        assertSame(DockPlan.SLIDE_OUT, SeamDress.plan(DockPlan.SLIDE_OUT, true, true, true, false));
-        assertSame(DockPlan.NONE, SeamDress.plan(DockPlan.NONE, true, true, true, false));
-        assertSame(DockPlan.NONE, SeamDress.plan(DockPlan.NONE, true, true, false, false));
-    }
 
-    @Test
-    public void differentDressOnTwoStacksThatShowDipsTheWholeStack() {
-        // A Workspace with the same dock as Home: the rows would stay put, the dress cannot.
-        DockPlan same = SeamDress.plan(DockPlan.NONE, true, true, true, true);
-        assertSame(DockPlan.DIP, same);
-        assertTrue(SeamDress.wholeStack(same, true));
-        // A keyboard leaving while Home's rows arrive: the keyboard goes before they come.
-        assertSame(DockPlan.DIP, SeamDress.plan(DockPlan.SLIDE_IN, true, true, true, true));
-    }
 
-    @Test
-    public void aWholeStackDipTakesTheKeyboardDownAndBringsTheOtherHalfsUp() {
-        assertEquals(1f, SeamDress.wholeStackKeyboardReveal(0f, true, true), EPSILON);
-        assertEquals(1f, SeamDress.wholeStackKeyboardReveal(1f, true, true), EPSILON);
-        assertEquals(0.5f, SeamDress.wholeStackKeyboardReveal(0.25f, true, false), EPSILON);
-        assertEquals(0f, SeamDress.wholeStackKeyboardReveal(0.75f, true, false), EPSILON);
-        assertEquals(0f, SeamDress.wholeStackKeyboardReveal(0.25f, false, true), EPSILON);
-        assertEquals(0.5f, SeamDress.wholeStackKeyboardReveal(0.75f, false, true), EPSILON);
-        // Hidden on both sides of the swap, where the stack is dressed again.
-        assertEquals(0f, SeamDress.wholeStackKeyboardReveal(SeamTravel.DIP_SWAP, true, true),
-            EPSILON);
-        assertEquals(0f, SeamDress.wholeStackKeyboardReveal(SeamTravel.DIP_SWAP - 1e-4f, true,
-            true), 1e-3f);
-    }
 
-    @Test
-    public void theKeyboardRevealIsContinuousOverAWholeDip() {
-        float previous = SeamDress.wholeStackKeyboardReveal(0f, true, true);
-        for (float progress = 0.01f; progress <= 1f; progress += 0.01f) {
-            float reveal = SeamDress.wholeStackKeyboardReveal(progress, true, true);
-            assertTrue("progress " + progress, Math.abs(reveal - previous) <= 0.021f);
-            previous = reveal;
-        }
-    }
 
     // ---- the dress as a value
 

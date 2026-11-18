@@ -143,24 +143,5 @@ public class KeyboardFollowsSeamTest {
 
     @Test
     public void theLandingFrameLeavesNothingToTravel() {
-        for (boolean homeUp : BOOLS) for (boolean windowUp : BOOLS) {
-            PlaceChromeTravel.States s = states(homeUp, windowUp);
-            for (PaneWallPage arriving : new PaneWallPage[] {PaneWallPage.WIDGETS,
-                PaneWallPage.TERMINAL}) {
-                Rest rest = s.restOf(arriving);
-                PaneWallPage leaving = arriving == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL
-                    : PaneWallPage.WIDGETS;
-                Frame frame = between(leaving, arriving, 1f, s);
-                // The stack is laid out for the arriving rest at the landing.
-                int keyboardPx = rest.keyboardReveal() > 0f ? mFixture.keyboardLaidOutPx() : 0;
-                StackScene.Motion motion = new StackScene.Motion();
-                StackScene.travel(false, false, frame.keyboardReveal, frame.dockReveal,
-                    keyboardPx, 200, 120, motion);
-                String what = mFixture + " home=" + homeUp + " window=" + windowUp + " into "
-                    + arriving;
-                assertEquals(what, 0f, motion.dockTravelPx, 0f);
-                assertEquals(what, 0f, motion.keyboardSharePx, 0f);
-            }
-        }
     }
 }

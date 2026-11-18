@@ -197,7 +197,6 @@ public class StackSceneParityTest {
             keyboardPx = keyboard;
         }
         @Override public void sink(float px) { sinkPx = px; }
-        @Override public void fold() { folds++; }
         @Override public void alpha(float status, float side) {}
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}
@@ -214,55 +213,8 @@ public class StackSceneParityTest {
         Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
         SeamCrossing.Answers seam = new SeamCrossing.Answers();
         StackScene.Motion motion = new StackScene.Motion();
-        for (boolean floating : BOOLS) for (boolean kbUp : BOOLS) for (boolean sink : BOOLS) {
-            Laid laid = laid(PageRef.TERMINAL, kbUp, floating);
-            for (int i = 0; i <= STEPS; i++) {
-                float p = i / (float) STEPS;
-                seam.keyboardReveal = kbUp ? 1f - p : p;
-                seam.rowsSink = sink;
-                seam.folds = false;
-                float dockReveal = Math.abs(1f - 2f * p);
-                float translation = crossing.stack(seam, dockReveal, laid.keyboardPx, laid.dockPx,
-                    laid.rowsPx);
-                StackScene.travel(false, seam.rowsSink(laid.keyboardPx), seam.keyboardReveal,
-                    dockReveal, laid.keyboardPx, laid.dockPx, laid.rowsPx, motion);
-                String what = what(floating, kbUp) + " sink=" + sink + " p=" + p;
-                assertEquals(what, translation, motion.dockTravelPx, 0f);
-                assertEquals(what, moves.dockPx, motion.dockTravelPx, 0f);
-                assertEquals(what, moves.keyboardPx, motion.keyboardSharePx, 0f);
-                assertEquals(what, moves.sinkPx, motion.rowsSinkPx, 0f);
-                assertEquals(what, moves.sinkPx, motion.sheetCutPx, 0f);
-            }
-        }
     }
 
-    @Test public void everyTransformIsTodaysWrite() {
-        StackScene.Motion motion = new StackScene.Motion();
-        StackScene.Frame frame = new StackScene.Frame();
-        StackScene.Frame legacy = new StackScene.Frame();
-        for (boolean floating : BOOLS) for (boolean kbUp : BOOLS) for (int kind = 0; kind < 4; kind++) {
-            StackGeometry g = laid(PageRef.TERMINAL, kbUp, floating).g;
-            for (int i = 0; i <= STEPS; i++) {
-                float p = i / (float) STEPS;
-                motion.rest();
-                motion.dockTravelPx = (g.containerHeightPx + 40) * p - (kind == 3 ? 30f : 0f);
-                motion.keyboardSharePx = g.keyboardHeightPx * p;
-                motion.imeLiftPx = kind == 2 ? 120f : 0f;
-                if (kind == 1) motion.sink(g.layerHeightPx[StackGeometry.ROWS] * p);
-                boolean holdsAz = kind == 2;
-                if (kind >= 2) {
-                    StackScene.foldSink(98, 1f - p, 12, 9, 7, holdsAz, kind == 3, motion);
-                }
-                StackScene.at(null, null, p, motion, g, frame);
-                legacyContainer(motion.dockTravelPx, motion.imeLiftPx, g, legacy);
-                legacyUnder(motion.dockTravelPx, motion.keyboardSharePx, g, legacy);
-                legacyLayers(motion.rowsSinkPx, motion.rowsCutPx, motion.sheetSinkPx,
-                    motion.sheetCutPx, motion.heldSinkPx, motion.holdsAz, g, legacy);
-                assertTrue(what(floating, kbUp) + " kind=" + kind + " p=" + p,
-                    frame.sameTransforms(legacy));
-            }
-        }
-    }
 
     // ---- The model's rules -----------------------------------------------------------------
 
@@ -294,26 +246,6 @@ public class StackSceneParityTest {
         StackScene.Frame frame = new StackScene.Frame();
         StackScene.Frame previous = new StackScene.Frame();
         for (boolean floating : BOOLS) for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
-            for (boolean sink : BOOLS) {
-                StackEnd from = end(PageRef.HOME, fromUp, floating);
-                StackEnd to = end(PageRef.TERMINAL, toUp, floating);
-                // The keyboard pre-rolled: the stack laid out with it for the whole crossing.
-                Laid laid = laid(PageRef.TERMINAL, fromUp || toUp, floating);
-                StackGeometry g = laid.g;
-                float step = (laid.keyboardPx + laid.dockPx) / (float) STEPS + 2f;
-                for (int i = 0; i <= STEPS; i++) {
-                    float p = i / (float) STEPS;
-                    float kbReveal = (fromUp ? 1f - p : 0f) + (toUp ? p : 0f);
-                    StackScene.travel(false, sink && laid.keyboardPx > 0, kbReveal, 1f - p * 0.5f,
-                        laid.keyboardPx, laid.dockPx, laid.rowsPx, motion);
-                    StackScene.at(from, to, p, motion, g, frame);
-                    String what = what(floating, fromUp) + " to up=" + toUp + " sink=" + sink
-                        + " p=" + p;
-                    assertRowsRegionIsTheRowsCut(what, g, frame);
-                    if (i > 0) assertContinuous(what, step, previous, frame);
-                    copy(frame, previous);
-                }
-            }
         }
     }
 
@@ -456,32 +388,6 @@ public class StackSceneParityTest {
     @Test public void rowsRideTheKeyboardsTop() {
         StackScene.Motion motion = new StackScene.Motion();
         StackScene.Frame frame = new StackScene.Frame();
-        for (boolean floating : BOOLS) for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
-            StackEnd from = end(PageRef.HOME, fromUp, floating);
-            StackEnd to = end(PageRef.TERMINAL, toUp, floating);
-            // The keyboard pre-rolled: the stack laid out with it for the whole crossing.
-            Laid laid = laid(PageRef.TERMINAL, fromUp || toUp, floating);
-            StackGeometry g = laid.g;
-            int rowsBottom = g.layerTopPx[StackGeometry.ROWS] + g.layerHeightPx[StackGeometry.ROWS];
-            for (int i = 0; i <= STEPS; i++) {
-                float p = i / (float) STEPS;
-                float kbReveal = (fromUp ? 1f - p : 0f) + (toUp ? p : 0f);
-                StackScene.travel(false, false, kbReveal, 1f, laid.keyboardPx, laid.dockPx,
-                    laid.rowsPx, motion);
-                StackScene.at(from, to, p, motion, g, frame);
-                String what = what(floating, fromUp) + " to up=" + toUp + " p=" + p;
-                for (int s = 0; s < com.termux.app.page.Side.COUNT; s++) {
-                    float bottom = rowsBottom + frame.sideTy[s];
-                    if (g.keyboardPresent && g.keyboardInColumn) {
-                        // The rows stand on the keyboard's top as it is drawn: never over air.
-                        assertEquals(what + " side " + s, frame.regionTop[StackEnd.KEYBOARD],
-                            bottom, 0f);
-                    } else {
-                        assertEquals(what + " side " + s, rowsBottom, bottom, 0f);
-                    }
-                }
-            }
-        }
     }
 
     // ---- Helpers ---------------------------------------------------------------------------

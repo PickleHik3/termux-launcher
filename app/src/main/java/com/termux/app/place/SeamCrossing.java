@@ -18,9 +18,9 @@ import com.termux.app.wall.PaneWallPage;
  * One crossing of the seam between the wall's halves, Home and the Workspace's window beside it,
  * from the first frame of a slide that reaches the other half to the settle (#94). It is fed the
  * two halves' {@link Dress}es and layouts once, as it begins, and answers every frame from what
- * it read then: how much of the dock shows, whether the rows sink into a keyboard or the extra
- * keys fold, how much of the keyboard shows, which half's dress the stack wears and whether it is
- * dressed again on this frame, whether the seam stands another arrangement, how the halves' own
+ * it read then: how much of the dock shows, whether the rows sink into a keyboard, how much of the
+ * keyboard shows, how far the stack's look has blended, which half's dress the stack wears and
+ * whether it is dressed again on this frame (a slide in only, where none of the stack shows), whether the seam stands another arrangement, how the halves' own
  * bands and beads ease, and whether the status bar rides with the Workspace's page and for which
  * page it is dressed. The activity only begins a crossing, applies the answers to its views, and
  * lands and ends it at settle; how each answer is worked out is {@link SeamTravel}'s and
@@ -198,8 +198,6 @@ public final class SeamCrossing {
     public static final class Answers {
         float dockReveal;
         float keyboardReveal;
-        boolean folds;
-        float extraKeysShare;
         boolean rowsSink;
         boolean relayout;
         boolean restyle;
@@ -208,9 +206,6 @@ public final class SeamCrossing {
         float beadShare;
         boolean moved;
         boolean barRedressed;
-        float pictureReveal;
-        float pictureSlide;
-        float stackSlide;
         float statusFade;
         float barMarginShare;
         float lookShare;
@@ -222,8 +217,6 @@ public final class SeamCrossing {
         void clear(float dock, float keyboard) {
             dockReveal = dock;
             keyboardReveal = keyboard;
-            folds = false;
-            extraKeysShare = Float.NaN;
             rowsSink = false;
             relayout = false;
             restyle = false;
@@ -232,9 +225,6 @@ public final class SeamCrossing {
             beadShare = Float.NaN;
             moved = false;
             barRedressed = false;
-            pictureReveal = Float.NaN;
-            pictureSlide = Float.NaN;
-            stackSlide = Float.NaN;
             statusFade = Float.NaN;
             barMarginShare = Float.NaN;
             lookShare = Float.NaN;
@@ -243,7 +233,7 @@ public final class SeamCrossing {
         /**
          * How far the stack's glass has blended from the committed page's look toward the other
          * page's, 0 to 1 with the wall's offset, on a crossing whose halves dress the stack apart
-         * only in look; NaN otherwise. The blend is quantised ({@link #LOOK_STEPS}), so the glass
+         * in look, whatever their structure; NaN otherwise. The blend is quantised ({@link #LOOK_STEPS}), so the glass
          * is set again only when the step changes.
          */
         public float lookShare() {
@@ -276,19 +266,9 @@ public final class SeamCrossing {
             return dockReveal;
         }
 
-        /** How much of the keyboard shows: a whole-stack dip's, else the frame's. */
+        /** How much of the keyboard shows: the frame's, between the two rests on the seam's curve. */
         public float keyboardReveal() {
             return keyboardReveal;
-        }
-
-        /** Whether only the extra keys fold on this crossing, the rows above them standing still. */
-        public boolean folds() {
-            return folds;
-        }
-
-        /** How much of the extra keys row a fold shows, 0 to 1; NaN while nothing folds. */
-        public float extraKeysShare() {
-            return extraKeysShare;
         }
 
         /**
@@ -338,33 +318,6 @@ public final class SeamCrossing {
         public boolean barRedressed() {
             return barRedressed;
         }
-
-        /**
-         * How much of the committed half's stack, pictured as it stood when the crossing began
-         * ({@link #pictured}), shows: 1 at rest, 0 once it has sunk below the screen, in step with
-         * the wall. NaN while the stack is not pictured.
-         */
-        public float pictureReveal() {
-            return pictureReveal;
-        }
-
-        /**
-         * Where the picture of the committed half's stack is drawn across, as an x offset from its
-         * rest in widths of the wall: with its page, on a crossing whose arriving stack waits for
-         * ({@link SeamDress#stacksRide}). NaN while it does not ride.
-         */
-        public float pictureSlide() {
-            return pictureSlide;
-        }
-
-        /**
-         * Where the stack, dressed for the other half, is drawn across, as an x offset from its
-         * rest in widths of the wall: with the arriving page ({@link SeamDress#stacksRide}). NaN
-         * while it does not ride.
-         */
-        public float stackSlide() {
-            return stackSlide;
-        }
     }
 
     /** What a settle has left to do for the crossing ({@link #land}). The same object each time. */
@@ -375,7 +328,7 @@ public final class SeamCrossing {
         @Nullable PaneWallPage dressedFor;
         boolean dressDiffered;
         boolean shapeDiffered;
-        /** Whether the halves were apart only in look, which the crossing blended with the wall. */
+        /** Whether the halves were apart in look, which the crossing blended with the wall. */
         boolean lookBlended;
         @Nullable PaneWallPage committedKind;
         /** Whether a half's own band was eased: a slide that came back lays the dock out whole. */
@@ -453,33 +406,15 @@ public final class SeamCrossing {
         @Nullable PaneWallPage other;
         @Nullable PlaceLayout otherLayout;
         @NonNull DockPlan plan = DockPlan.NONE;
-        /** The dock rows a fold leaves standing, outside the extra keys; empty unless it folds. */
-        @NonNull java.util.List<Element> foldHeld = java.util.Collections.emptyList();
         /**
-         * How much taller the keyless half's rows rest than the other half's less the extra keys,
-         * which a fold travels too ({@link SeamTravel#foldRowsSinkPx}); 0 unless it folds.
+         * Whether the stack is dressed again when its rows change halves (a slide in, where none of
+         * the stack shows) and whether the halves' shapes differ; which half keeps a keyboard in
+         * the stack.
          */
-        int foldRestGrowthPx;
-        /**
-         * Whether the halves dress the stack differently, and so whether it is dressed again when it
-         * changes halves; whether it then dips whole, keyboard included; which half keeps a keyboard
-         * in the stack.
-         */
-        boolean dressDiffers, shapeDiffers, wholeStack;
+        boolean dressDiffers, shapeDiffers;
         boolean committedKeyboard, otherKeyboard;
         /** Whether each half keeps the in-app keyboard up at rest, in the stack or not. */
         boolean committedKeyboardUp, otherKeyboardUp;
-        /**
-         * Whether the committed half's stack is drawn from a picture taken as the crossing began,
-         * so the stack itself stands and wears the other half's rows from the first frame and the
-         * two cross over the whole way ({@link #pictured}).
-         */
-        boolean pictured;
-        /**
-         * Whether each half's stack rides with its page, the committed half's in its picture
-         * ({@link SeamDress#stacksRide}).
-         */
-        boolean rides;
         /**
          * Whether both halves stand the bar alike, in one shape, so it stands still (#90); otherwise
          * whether the Workspace's bar rides with its page; and whether a slide from Home may lay the
@@ -491,7 +426,7 @@ public final class SeamCrossing {
          * Margins in dp as stored.
          */
         boolean barMarginEases;
-        /** Whether the halves dress the stack apart only in look, which blends instead of dipping. */
+        /** Whether the halves dress the stack apart in look, which blends with the wall. */
         boolean lookBlends;
         int committedMarginDp, otherMarginDp;
         /** Whether beads melt on this crossing, and whether the committed half is the beaded one. */
@@ -575,14 +510,13 @@ public final class SeamCrossing {
         mRun.otherDesign = WornDockDesign.of(other.dress.dockDesign(), there);
         mRun.committedSearchField = committed.dress.searchField();
         mRun.otherSearchField = other.dress.searchField();
-        mRun.dressDiffers = !committed.stack.equals(other.stack);
         mRun.shapeDiffers = !committed.stack.shape.equals(other.stack.shape);
-        // A look apart alone keeps one stack: its glass blends with the wall (amendment
-        // 2026-11-04), so the stack neither dips nor is dressed again mid-slide. The dip stays
-        // for a structure apart: a shape (Style, Corners, Margin) or the layout's sizes.
-        mRun.lookBlends = mRun.dressDiffers
-            && committed.stack.structureEquals(other.stack) && !mRun.oneKind;
-        if (mRun.lookBlends) mRun.dressDiffers = false;
+        // A look apart blends with the wall, whatever the structure: the stack's glass crosses
+        // from one end's look to the other's, and nothing is laid out or dressed again on the way
+        // (the slab's and the keyboard's numbers blend the same way, StackScene). Where the
+        // structure is apart too, the landing's re-dress finds a look already drawn.
+        boolean structureApart = !committed.stack.structureEquals(other.stack);
+        boolean lookApart = !committed.stack.look.stackEquals(other.stack.look);
         // One bar across the wall (#90): where both halves stand it alike, in one outline, it
         // stands still on the crossing instead of riding with the Workspace's page. A Margin
         // apart only insets it, and the bar eases from one inset to the other with the wall
@@ -624,21 +558,14 @@ public final class SeamCrossing {
                 mRun.otherKeyboard);
         mRun.beadMelt = stage.beadsDrawn != otherBeads;
         mRun.beadsCommitted = stage.beadsDrawn;
-        boolean exchangeable = SeamTravel.dockExchangeable(here)
-            && SeamTravel.dockExchangeable(there);
-        mRun.plan = SeamDress.plan(SeamTravel.dockPlan(here, there), exchangeable, mRun.dressDiffers,
-            mRun.committedKeyboard || !EdgeStackPolicy.stack(here, Edge.BOTTOM).isEmpty(),
-            mRun.otherKeyboard || !EdgeStackPolicy.stack(there, Edge.BOTTOM).isEmpty());
-        mRun.wholeStack = SeamDress.wholeStack(mRun.plan, mRun.dressDiffers);
-        // The layout a fold runs in stands the extra keys: the committed one folding out, the
-        // other half's folding in.
-        mRun.foldHeld = mRun.plan == DockPlan.FOLD_OUT ? SeamTravel.rowsOutsideExtraKeys(here)
-            : mRun.plan == DockPlan.FOLD_IN ? SeamTravel.rowsOutsideExtraKeys(there)
-            : java.util.Collections.emptyList();
-        // Its rows travel from one half's rest to the other's: the keyless half's may stand
-        // taller than the keyed half's less the extra keys (the A-Z row's chin on the rim).
-        mRun.foldRestGrowthPx = foldRestGrowthPx(mRun.plan, committed.restRowsPx,
-            other.restRowsPx);
+        mRun.plan = SeamTravel.dockPlan(here, there);
+        // The one place the stack is dressed again on the way: a slide in toward rows the
+        // committed half has none of, with no keyboard of its own in the stack, where none of the
+        // stack shows (the rows are laid out and dressed in the first frame, below the screen).
+        // Two halves that both stand rows never are; both sides' rows stand in their lanes.
+        mRun.dressDiffers = structureApart && mRun.plan == DockPlan.SLIDE_IN
+            && !mRun.committedKeyboard;
+        mRun.lookBlends = !mRun.oneKind && lookApart && !mRun.dressDiffers;
         // Only from Home: the Workspace's bar is the one that travels with its page, unless the
         // bar is one across the wall and stands still.
         mRun.statusMayShow = !mRun.barStill && committed.page.isHome()
@@ -655,55 +582,11 @@ public final class SeamCrossing {
             mRun.barFades = mRun.barEnd != null && !stage.pagesSlide;
             mRun.statusMayShow = mRun.barEnd != null && mRun.barEnd.equals(other.page);
         }
-        boolean dockMayShow = mRun.plan == DockPlan.SLIDE_IN || mRun.plan == DockPlan.FOLD_IN
-            || mRun.plan == DockPlan.DIP;
+        boolean dockMayShow = mRun.plan == DockPlan.SLIDE_IN;
         mRun.dockLayout = dockMayShow ? SeamTravel.withDockOf(here, there) : null;
         mRun.statusLayout = mRun.statusMayShow ? SeamTravel.withStatusOf(here, there) : null;
         mRun.dockStatusLayout = dockMayShow && mRun.statusMayShow
             ? SeamTravel.withStatusOf(mRun.dockLayout, there) : null;
-    }
-
-    /**
-     * Whether the crossing that has just begun would picture the committed half's stack: a
-     * whole-stack dip ({@link SeamDress#wholeStack}), where one stack cannot wear both halves at
-     * once. Pictured, the stack wears the other half's rows from the first frame and rises over
-     * the whole way while the picture of the committed half's sinks over the whole way, in step
-     * with the wall, instead of both dipping through a swap at half way. Asked once, right after
-     * the {@link #begin} that started the crossing, before anything of it is drawn.
-     */
-    public boolean wantsPicture() {
-        return mRun.wholeStack && !mRun.pictured;
-    }
-
-    /** Whether the picture was taken; one that was not leaves the dip as it was. */
-    public void pictured(boolean taken) {
-        mRun.pictured = taken && mRun.wholeStack;
-        mRun.rides = SeamDress.stacksRide(mRun.committed, mRun.other,
-            mRun.pictured && !mRun.oneKind);
-    }
-
-    /**
-     * Whether the arriving stack waits below the screen for the landing on this crossing
-     * ({@link SeamDress#stacksRide}).
-     */
-    public boolean stacksRide() {
-        return pictured() && mRun.rides;
-    }
-
-    /**
-     * Whether a pictured dip puts the committed half's keyboard away with its picture: the
-     * keyboard is in the committed stack, and the other half keeps none, so the stack it stands
-     * from the first frame is that half's rest — no keyboard laid out under its rows, its glass
-     * and its foot measured as they rest — rather than its rows over a keyboard pushed below the
-     * screen.
-     */
-    public boolean picturesKeyboardAway() {
-        return pictured() && mRun.committedKeyboard && !mRun.otherKeyboard;
-    }
-
-    /** Whether the committed half's stack is drawn from its picture on this crossing. */
-    public boolean pictured() {
-        return mRun.pictured && mRun.wholeStack;
     }
 
     /**
@@ -735,8 +618,8 @@ public final class SeamCrossing {
 
     /**
      * The same, with the wall's own frame beside the chrome's ({@code wallFrame}, the frame of the
-     * wall's offset where a settle keeps the chrome on a clock of its own): a pictured dip
-     * ({@link #pictured}) moves both stacks on the wall's way, in step with the page.
+     * wall's offset where a settle keeps the chrome on a clock of its own): the look and a still
+     * bar's Margin blend on the wall's own way.
      */
     @NonNull
     public Answers frame(@NonNull Frame frame, @NonNull Frame wallFrame, boolean dressable,
@@ -750,12 +633,7 @@ public final class SeamCrossing {
         // Read by end: a frame of the wall names its sides by kind and reads as by half; a frame
         // of Home's pager names its pages, and reads the way between two Home pages.
         float progress = SeamTravel.otherEndProgress(frame, committedEnd);
-        // A pictured dip: the stack wears and stands the other half's rows from the crossing's
-        // first frame to its landing, whichever way the wall goes, and the picture of the committed
-        // half's stack stands in for it; the two cross on the wall's own way.
-        boolean pictured = pictured();
-        float dressProgress = pictured ? 1f : progress;
-        float travel = pictured ? SeamTravel.otherEndFraction(wallFrame, committedEnd) : progress;
+        float dressProgress = progress;
         // Which half's dress the stack wears, noting a change for this frame's pass.
         PaneWallPage stackPage = SeamDress.stackPage(committed, other, mRun.plan, dressProgress);
         PaneWallPage dressPage = stackPage == committed ? null : stackPage;
@@ -778,7 +656,7 @@ public final class SeamCrossing {
         }
         // Lens beads only one half draws melt into the slab, or come out of it, the same way.
         if (dressable && crosses && mRun.beadMelt) {
-            if (!pictured && mRun.beadsCommitted && SeamTravel.committedRowsLeave(mRun.plan)) {
+            if (mRun.beadsCommitted && SeamTravel.committedRowsLeave(mRun.plan)) {
                 // The beaded half's rows sink below the stack's bottom edge, which cuts them flat:
                 // the beads melt while the chrome still rests and sink as the slab.
                 answers.beadShare = LensBeadGeometry.leavingMeltShare(
@@ -788,7 +666,7 @@ public final class SeamCrossing {
                 answers.beadShare = mRun.beadsCommitted ? 1f - share : share;
             }
         }
-        // A look apart alone blends the stack's glass with the wall, in steps.
+        // A look apart blends the stack's glass with the wall, in steps.
         if (mRun.lookBlends) {
             float share = clamp01(SeamTravel.otherEndProgress(wallFrame, committedEnd));
             answers.lookShare = Math.round(share * LOOK_STEPS) / (float) LOOK_STEPS;
@@ -817,34 +695,15 @@ public final class SeamCrossing {
             answers.restyleShape = mRun.shapeDiffers;
             mRun.restylePending = false;
         }
-        // Stacks that ride stand whole the whole way, each on its own page: the picture of the
-        // committed half's riding out, the stack dressed for the other half riding in.
-        boolean rides = pictured && mRun.rides;
         if (mRun.plan != DockPlan.NONE) {
-            answers.dockReveal = rides ? 1f : pictured ? travel
-                : SeamTravel.dockReveal(mRun.plan, progress);
+            answers.dockReveal = SeamTravel.dockReveal(mRun.plan, progress);
         }
         answers.moved = answers.moved || answers.relayout || mRun.plan != DockPlan.NONE;
-        // Between halves that dress the stack differently the keyboard dips with the rows, so it
-        // is below the screen where the stack changes its dress.
-        if (mRun.wholeStack) {
-            answers.keyboardReveal = rides ? (mRun.otherKeyboard ? 1f : 0f)
-                : pictured ? (mRun.otherKeyboard ? travel : 0f)
-                : SeamDress.wholeStackKeyboardReveal(progress, mRun.committedKeyboard,
-                    mRun.otherKeyboard);
-            if (rides && mRun.otherEnd != null) {
-                answers.pictureReveal = 1f;
-                answers.pictureSlide = SeamTravel.committedScreenShare(wallFrame, committedEnd);
-                answers.stackSlide = SeamTravel.committedScreenShare(wallFrame, mRun.otherEnd);
-            } else if (pictured) {
-                answers.pictureReveal = 1f - travel;
-            }
-        }
-        answers.folds = SeamTravel.folds(mRun.plan);
-        if (answers.folds) answers.extraKeysShare = SeamTravel.extraKeysShare(mRun.plan, progress);
-        // With a keyboard in the stack the rows sink into its top edge; a whole-stack dip moves
-        // both by the translation.
-        answers.rowsSink = !answers.folds && mRun.plan != DockPlan.NONE && !mRun.wholeStack;
+        // The keyboard's reveal is the frame's own: a pure function of the seam's progress between
+        // the two rests, on the curve the look blends on, so it never swaps at the half (#244).
+        // With a keyboard in the stack the rows sink into its top edge, since the stack's
+        // translation carries the keyboard too.
+        answers.rowsSink = mRun.plan != DockPlan.NONE;
         return answers;
     }
 
@@ -934,7 +793,11 @@ public final class SeamCrossing {
         if (here.dress.dockDesign() != there.dress.dockDesign()
             || here.dress.searchField() != there.dress.searchField()
             || !here.stack.equals(there.stack)) return false;
+        // Two Home pages standing other rows still cross: the morph of the dock's row and the bar
+        // run, and the rows themselves change at the landing (no dip: nothing is laid out on the way).
         return SeamTravel.dockPlan(here.layout, there.layout) != DockPlan.NONE
+            || !EdgeStackPolicy.stack(here.layout, Edge.BOTTOM)
+                .equals(EdgeStackPolicy.stack(there.layout, Edge.BOTTOM))
             || SeamTravel.homeBarWearer(here.layout, there.layout) != null;
     }
 
@@ -1027,14 +890,10 @@ public final class SeamCrossing {
      * The in-app keyboard the dock's foot under the gesture pill answers to on this frame
      * ({@code DockSpec#footExists}), given the keyboard as it is now ({@code liveKeyboardUp}):
      * the keyboard of the half whose rows the stack stands, as that half rests, from the frame
-     * the stack stands them; the live one otherwise. So a crossing from the Workspace's keyboard
-     * to Home's keyboard-down dock gives Home's rows their foot on the frame they stand, out of
-     * sight at the dip's swap, and the settle on Home, whose live keyboard is down, finds it
-     * there. Only where the leaving keyboard is below the screen by then (a dip, whose swap is
-     * no earlier than the keyboard's retreat ends, or a pictured dip, which puts it away with its
-     * picture): elsewhere a foot would run on behind a keyboard still in sight. Before the rows
-     * change halves the live keyboard answers, so a keyboard brought up for the arriving half
-     * takes the foot from the frame it is pre-rolled, as it rises in the stack under the rows.
+     * the stack stands them; the live one otherwise. Only a slide in stands the other half's
+     * rows on the way, so only there does the foot follow the arriving half's keyboard before the
+     * landing; elsewhere the live keyboard answers, and the keyboard rises or sinks on the seam's
+     * curve ({@link Answers#keyboardReveal}).
      */
     public boolean footKeyboardUp(boolean liveKeyboardUp) {
         Run run = mRun;
@@ -1064,20 +923,10 @@ public final class SeamCrossing {
 
     /**
      * Whether the foot answers to the other half's keyboard on this run's frame: the stack stands
-     * that half's rows, and the leaving keyboard has gone or the swap has come.
+     * that half's rows (a slide in), and the committed half keeps no keyboard of its own up.
      */
     private static boolean rowsHoldFoot(@NonNull Run run) {
-        if (!run.dockShown) return false;
-        return !run.committedKeyboardUp || leavingKeyboardAwayAtSwap(run);
-    }
-
-    /**
-     * Whether the foot goes with the other half's rows once the stack changes them: with a
-     * picture of the whole stack, and at a dip's swap, which the foot follows whatever the leaving
-     * keyboard has travelled by then (it follows the seam, so it is part way down, not gone).
-     */
-    private static boolean leavingKeyboardAwayAtSwap(@NonNull Run run) {
-        return (run.pictured && run.wholeStack) || run.plan == DockPlan.DIP;
+        return run.dockShown && !run.committedKeyboardUp;
     }
 
     /** The other half's page the crossing was begun for; null while none runs. */
@@ -1112,36 +961,6 @@ public final class SeamCrossing {
     @Nullable
     public PlaceLayout layout() {
         return mRun.layout;
-    }
-
-    /**
-     * Whether a fold leaves {@code row} where it stands: a dock row between the extra keys and the
-     * screen's bottom edge ({@link SeamTravel#rowsOutsideExtraKeys}). False for every row while
-     * nothing folds.
-     */
-    public boolean foldHolds(@NonNull Element row) {
-        return mRun.foldHeld.contains(row);
-    }
-
-    /**
-     * How much taller the keyless half's dock rows rest than the keyed half's less the extra keys
-     * row, which a fold's rows travel on top of the extra keys' height so its end at Home's side
-     * is Home's rest ({@link SeamTravel#foldRowsSinkPx}). 0 while nothing folds, and wherever
-     * either half's rows were not known at begin.
-     */
-    public int foldRestGrowthPx() {
-        return mRun.foldRestGrowthPx;
-    }
-
-    /** The keyless half's rest rows less the keyed half's, for a fold; 0 otherwise or unknown. */
-    private static int foldRestGrowthPx(@NonNull DockPlan plan, int committedRowsPx,
-                                        int otherRowsPx) {
-        if (committedRowsPx < 0 || otherRowsPx < 0) return 0;
-        switch (plan) {
-            case FOLD_OUT: return otherRowsPx - committedRowsPx;
-            case FOLD_IN: return committedRowsPx - otherRowsPx;
-            default: return 0;
-        }
     }
 
     /**
@@ -1188,11 +1007,10 @@ public final class SeamCrossing {
 
     /**
      * The Dock design the stack's slab wears on this frame: the half's whose dress the stack
-     * wears ({@link #stackDressPage}). Where the halves dress the stack differently it changes
-     * halves only on a frame where none of it shows — a pictured dip's first frame, a dip's swap,
-     * a slide in's first frame — and its design (Tray, Beads, Strip or Peek) goes with its dress
-     * there, so the dock a crossing brings in rises looking as it rests and nothing changes at
-     * the settle, however the slide was started. Null while no crossing holds the designs.
+     * wears ({@link #stackDressPage}). It changes halves only on a slide in's first frame,
+     * where none of the stack shows, and its design (Tray, Beads, Strip or Peek) goes with its
+     * dress there, so the dock a slide brings in rises looking as it rests. Null while no
+     * crossing holds the designs.
      */
     @Nullable
     public DockStyle stackDesign() {

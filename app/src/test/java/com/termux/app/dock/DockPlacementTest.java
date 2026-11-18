@@ -166,40 +166,7 @@ public class DockPlacementTest {
             false, false);
     }
 
-    @Test
-    public void workspaceToHomeTheRowsADipBringsInWearHomesPeekBeforeTheLanding() {
-        assertEquals(DockPlan.DIP, SeamTravel.dockPlan(WITH_EXTRA_KEYS, APPS_OVER_AZ));
-        // The Workspace's tray up to the swap, where none of the dock shows.
-        assertFalse(travelAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS, PaneWallPage.WIDGETS,
-            APPS_OVER_AZ, 0.25f));
-        // From the swap Home's rows rise already wearing Peek, though the Workspace's keyboard is
-        // still up: Home's card stands on it (D11), and the landing on Home commits the same.
-        boolean travel = travelAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS,
-            PaneWallPage.WIDGETS, APPS_OVER_AZ, SeamTravel.DIP_SWAP);
-        assertTrue(travel);
-        assertEquals("one answer, travelled and settled", travel,
-            settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false));
-        assertEquals(travel, settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, true));
-        assertEquals(travel, travelAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS,
-            PaneWallPage.WIDGETS, APPS_OVER_AZ, 1f));
-        // Read off the committed page, as it was, the keyboard refused the card all the way.
-        assertFalse(DockPlacement.peekCardStands(true, true,
-            SeamTravel.withDockOf(WITH_EXTRA_KEYS, APPS_OVER_AZ), false, WORKSPACE_KEYBOARD_UP,
-            false, false, false));
-    }
 
-    @Test
-    public void homeToWorkspaceTheRowsADipBringsInWearTheWorkspacesTray() {
-        assertEquals(DockPlan.DIP, SeamTravel.dockPlan(APPS_OVER_AZ, WITH_EXTRA_KEYS));
-        // Home's Peek up to the swap, with the Workspace's keyboard pre-rolled under it or not.
-        assertTrue(travelAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, PaneWallPage.TERMINAL,
-            WITH_EXTRA_KEYS, 0.25f));
-        boolean travel = travelAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, PaneWallPage.TERMINAL,
-            WITH_EXTRA_KEYS, SeamTravel.DIP_SWAP);
-        assertFalse(travel);
-        assertEquals(travel, settleAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS,
-            WORKSPACE_KEYBOARD_UP));
-    }
 
     @Test
     public void aSlideThatFallsBackWearsTheLookItStartedWith() {
@@ -228,13 +195,4 @@ public class DockPlacementTest {
         assertTrue(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false));
     }
 
-    @Test
-    public void aFoldOutNeverStandsHomesRowsSoItsLookChangesAtTheLanding() {
-        // Home's rows plus the extra keys on the Workspace: the extra keys fold away in sight and
-        // the stack stands the Workspace's rows to the landing, which alone brings Peek.
-        assertEquals(DockPlan.FOLD_OUT, SeamTravel.dockPlan(APPS_AZ_AND_KEYS, APPS_OVER_AZ));
-        assertFalse(travelAnswer(PaneWallPage.TERMINAL, APPS_AZ_AND_KEYS, PaneWallPage.WIDGETS,
-            APPS_OVER_AZ, 0.99f));
-        assertTrue(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false));
-    }
 }

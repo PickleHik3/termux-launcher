@@ -178,7 +178,7 @@ public class SeamNoSwapTest {
 
     private static final class Sample {
         float fraction, keyboardReveal, lookShare, dockReveal;
-        boolean relayout, restyle, folds, hasLayout;
+        boolean relayout, restyle, hasLayout;
     }
 
     private static Sample[] run(Dressing d, Pair pair, PaneWallPage from, boolean fromKeyboard,
@@ -213,7 +213,6 @@ public class SeamNoSwapTest {
             // it, and that one, must stand the stack as it is.
             s.relayout = begun && answers.relayout();
             s.restyle = begun && answers.restyle();
-            s.folds = answers.folds();
             if (answers.relayout()) crossing.standLayout();
             s.hasLayout = crossing.layout() != null;
             samples[i] = s;
@@ -249,7 +248,6 @@ public class SeamNoSwapTest {
                 assertFalse(what + " relayout at " + s.fraction, s.relayout);
                 assertFalse(what + " restyle at " + s.fraction, s.restyle);
                 assertFalse(what + " layout stood at " + s.fraction, s.hasLayout);
-                assertFalse(what + " fold at " + s.fraction, s.folds);
             }
         });
     }

@@ -18,12 +18,12 @@ import java.util.Objects;
  * surface wears the half it belongs to on every frame it can be seen:
  *
  * <ul>
- *   <li><b>The stack</b> (the dock's rows, the A-Z index, the extra keys and the keyboard) wears
- *       the half whose rows it stands ({@link #stackPage}). It changes its dress only together
- *       with its rows, on the frame the seam lays them out, which is one where none of the stack
- *       shows. When the halves dress it differently and both show some of it, the whole stack,
- *       keyboard included, dips: down over the first half of the way, dressed and laid out for the
- *       other half while it is below the screen, and up over the second ({@link #plan}).</li>
+ *   <li><b>The stack</b> (the dock's rows, the A-Z index, the extra keys and the keyboard) is
+ *       dressed for the committed half all the way across and for the arriving half from the
+ *       landing; it is never laid out or dressed again on the way. Where the halves dress it apart
+ *       in look its glass blends with the wall ({@link StackDress#structureEquals}), and where
+ *       they dress it apart in structure the slab and the keyboard blend their numbers
+ *       ({@link StackScene}).</li>
  *   <li><b>The status bar</b> is the Workspace's alone (Home wears none), so it wears the
  *       Workspace's dress through any slide across the seam, laid out over Home or not.</li>
  *   <li><b>The frame</b> (the window's border, its panes and Home's floats, which share their
@@ -200,77 +200,5 @@ public final class SeamDress {
         if (page == PaneWallPage.WIDGETS)
             return homePageId >= 0 ? homePageId : TermuxAppSharedPreferences.PAGE_WALL;
         return displayPageId >= 0 ? displayPageId : terminalPageId;
-    }
-
-    /**
-     * How the stack crosses the seam, given how its rows would ({@code rowsPlan},
-     * {@link SeamTravel#dockPlan}). While the halves dress it alike that is the answer. While they
-     * differ, the stack's dress may only change on a frame where none of the stack shows:
-     *
-     * <ul>
-     *   <li>neither half shows any of it: nothing to dress ({@link DockPlan#NONE});</li>
-     *   <li>only the other half does: it is laid out and dressed in the first frame, while all of
-     *       it is below the screen, and rises ({@link DockPlan#SLIDE_IN});</li>
-     *   <li>only the committed half does: it leaves as it would, and is dressed at settle, off
-     *       screen ({@code rowsPlan});</li>
-     *   <li>both do, the same rows or not, a keyboard or not: the whole stack dips
-     *       ({@link DockPlan#DIP}, {@link #wholeStack}).</li>
-     * </ul>
-     *
-     * A stack that cannot be exchanged mid-slide ({@code exchangeable} false: a row on a side or
-     * the top edge, under the keyboard, or beside a bottom status bar) keeps its settle-time
-     * change.
-     *
-     * @param committedShows whether the committed half's stack shows anything at rest: a dock row
-     *                       on the bottom edge, or a keyboard in the stack
-     * @param otherShows     the same, for the other half
-     */
-    @NonNull
-    public static DockPlan plan(@NonNull DockPlan rowsPlan, boolean exchangeable,
-                                boolean dressDiffers, boolean committedShows,
-                                boolean otherShows) {
-        if (!dressDiffers || !exchangeable) return rowsPlan;
-        if (!otherShows) return committedShows ? rowsPlan : DockPlan.NONE;
-        if (!committedShows) return DockPlan.SLIDE_IN;
-        return DockPlan.DIP;
-    }
-
-    /**
-     * Whether the whole stack, keyboard included, travels by the plan's reveal: a dip between two
-     * halves that dress it differently. Otherwise the rows sink into a keyboard in the stack and
-     * the keyboard keeps its own travel, as between halves dressed alike.
-     */
-    public static boolean wholeStack(@NonNull DockPlan plan, boolean dressDiffers) {
-        return dressDiffers && plan == DockPlan.DIP;
-    }
-
-    /**
-     * Whether a pictured whole-stack crossing between Home and the Workspace has each half's
-     * stack ride with its own page (D11, 2026-11-01): the committed half's, pictured as it stood,
-     * rides out with the page it stood on, and the other half's, dressed for it from the first
-     * frame, rides in with the arriving page at its rest. Nothing of either stack rises, sinks or
-     * waits, so the arriving page brings its chrome where it rests, and the terminal's page, laid
-     * out at the Terminal's rest both ways (Crossing#restTerminalAway), never shows a band of
-     * wallpaper under it. It replaced the stack that waited below the screen for the landing
-     * (2026-10-31), which showed that band through the whole slide. Between two Home pages the
-     * stacks keep crossing in step with the wall.
-     */
-    public static boolean stacksRide(@Nullable PaneWallPage committed,
-                                     @Nullable PaneWallPage other, boolean pictured) {
-        return pictured && committed != null && other != null
-            && SeamTravel.crosses(committed, other);
-    }
-
-    /**
-     * How much of the keyboard shows in a whole-stack dip at {@code progress} into the other
-     * half: the committed half's keyboard goes down with the rows before the swap, the other
-     * half's comes up with them after it, and a half without one shows none. Both read 0 at the
-     * swap, where the stack is dressed again.
-     */
-    public static float wholeStackKeyboardReveal(float progress, boolean committedKeyboard,
-                                                 boolean otherKeyboard) {
-        float reveal = SeamTravel.dockReveal(DockPlan.DIP, progress);
-        boolean keyboard = progress < SeamTravel.DIP_SWAP ? committedKeyboard : otherKeyboard;
-        return keyboard ? reveal : 0f;
     }
 }

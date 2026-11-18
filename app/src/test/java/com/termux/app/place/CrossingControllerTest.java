@@ -135,7 +135,6 @@ public class CrossingControllerTest {
             writes++;
         }
         @Override public void sink(float px) { sinkPx = px; writes++; }
-        @Override public void fold() { folds++; writes++; }
         @Override public void alpha(float status, float side) {
             statusAlpha = status;
             sideAlpha = side;
@@ -143,7 +142,6 @@ public class CrossingControllerTest {
         }
         @Override public void rideX(float px) { barX = px; writes++; }
         @Override public void cover(int px) { coverPx = px; covers++; writes++; }
-        @Override public void slide(float widths) { slide = widths; writes++; }
         @Override public void preRoll(@NonNull PaneWallPage target) {
             preRolls.add(target);
             writes++;

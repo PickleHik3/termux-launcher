@@ -754,9 +754,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.place.CrossingViews(this, new CrossingViewsHost());
     private final com.termux.app.place.Crossing mCrossing = new com.termux.app.place.Crossing(
         mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews);
-    {
-        mCrossingViews.attach(mCrossing);
-    }
     /** The crossing's per-frame driver (ADR 0018 D17); it reaches this activity through {@link CrossingControllerHost}. */
     private final com.termux.app.place.CrossingController mCrossingController =
         new com.termux.app.place.CrossingController(mCrossing, new CrossingControllerHost());
@@ -24704,16 +24701,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
 
-        @Override
-        public boolean extraKeysRowOnScreen() {
-            return mDockRows.isRowOnScreen(Element.EXTRA_KEYS);
-        }
-
-        @Override
-        public int terminalFlushPaddingPx() {
-            return mAppliedTerminalFlushPaddingPx;
-        }
-
         @Nullable
         @Override
         public SuggestionBarView dockRow() {
@@ -24730,16 +24717,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.onDockRowContentChanged();
         }
 
-        @Nullable
-        @Override
-        public com.termux.app.place.StackPicture stackPicture(@Nullable View stack) {
-            return TermuxActivity.this.stackPicture(stack);
-        }
-
-        @Override
-        public int wallWidthPx() {
-            return mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth();
-        }
     }
 
     /** What only the activity gives the crossing's driver (place.CrossingController). */
@@ -24815,11 +24792,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean canPreRollTravelKeyboard() { return TermuxActivity.this.canPreRollTravelKeyboard(); }
         @Override public void beginTravelHold() { TermuxActivity.this.beginTravelHold(); }
         @Override public void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.preRollTravelKeyboard(frame); }
-        @Override public void putKeyboardAwayWithPicture() { TermuxActivity.this.putKeyboardAwayWithPicture(); }
-        @Override public boolean keyboardPicturedAway() { return mKeyboardPicturedAway; }
         @Override public boolean keyboardSwipeTravel() { return mKeyboardSwipeTravel; }
         @Override public void syncKeyboardMaterialTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.syncKeyboardMaterialTravel(frame); }
-        @Override public int stackPictureCoverPx() { return TermuxActivity.this.stackPictureCoverPx(); }
         // ---- dock ------------------------------------------------------------------
         @Override public @NonNull com.termux.app.dock.DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout arrangement, @NonNull com.termux.app.wall.PaneWallPage rowsPage) { return mDock.dockSnapshot(arrangement, rowsPage); }
         @Override public @NonNull com.termux.app.dock.DockGeometry.Half dockHalf(@NonNull com.termux.app.wall.PageRef page, @NonNull PlaceOrientation orientation, @NonNull PlaceLayout fallbackLayout) { return mDock.dockHalf(page, orientation, fallbackLayout); }
@@ -24856,40 +24830,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void settlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page, @Nullable com.termux.app.wall.PageRef landed) { TermuxActivity.this.settlePlaceChrome(page, landed); }
         @Override public void syncPlaceLayout() { TermuxActivity.this.syncPlaceLayout(); }
         @Override public void geometryRequestNow(@NonNull GeometryScheduler.Reason reason, @NonNull GeometryScheduler.ResizePolicy policy) { mGeometry.requestNow(reason, policy); }
-    }
-
-    /**
-     * The view the committed half's stack is pictured in for a whole-stack dip, made the first
-     * time one is asked for: a sibling of the stack standing just under it, so the stack the
-     * crossing brings in is drawn over the picture of the one it takes away.
-     */
-    @Nullable private com.termux.app.place.StackPicture mStackPicture;
-
-    @Nullable
-    private com.termux.app.place.StackPicture stackPicture(@Nullable View stack) {
-        if (mStackPicture != null) return mStackPicture;
-        if (stack == null || !(stack.getParent() instanceof ViewGroup)) return null;
-        ViewGroup parent = (ViewGroup) stack.getParent();
-        com.termux.app.place.StackPicture picture = new com.termux.app.place.StackPicture(this);
-        ViewGroup.LayoutParams params = parent instanceof RelativeLayout
-            ? new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT)
-            : new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT);
-        parent.addView(picture, parent.indexOfChild(stack), params);
-        mStackPicture = picture;
-        return picture;
-    }
-
-    /**
-     * How far the picture of the committed half's stack stands up into the room the content
-     * holds, where the wall's bottom is: what a pane on that edge is covered by. 0 while none
-     * shows.
-     */
-    private int stackPictureCoverPx() {
-        com.termux.app.place.StackPicture picture = mStackPicture;
-        if (picture == null || !picture.holds() || mPaneWallController == null) return 0;
-        return picture.coverOver(picture.bottomOf(mPaneWallController.wall()));
     }
 
     /**
@@ -24992,8 +24932,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.page.Side.of(left == com.termux.app.wall.PaneWallPage.WIDGETS),
                 com.termux.app.page.Side.of(page == com.termux.app.wall.PaneWallPage.WIDGETS),
                 true);
-            // A keyboard a pictured dip put away comes back where the wall came back.
-            landKeyboardPicturedAway(page, left);
             Trace.endSection();
             boolean keyboardPreRolled = crossingLanding.keyboardPreRolled();
             contentPreRolled = crossingLanding.contentPreRolled();
@@ -25079,7 +25017,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // And its rows carry their own half's Drawer tile again.
                 syncDrawerTile();
             }
-            // A pictured dip that came back takes its slab's design back too, in the frame the
+            // A slide in that came back takes its slab's design back too, in the frame the
             // stack is put back on screen; one that landed had it worn by the commit.
             if (mDockDesignTravelledTo != null && mDockDesignTravelledTo != mLastWallPage)
                 mDock.restyleDockSurface();
@@ -25228,55 +25166,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * pre-rolled below the screen is the arriving place's, not this one's.
      */
     private boolean committedKeyboardVisible() {
-        // A keyboard a pictured dip put away is still the committed place's: it is up there.
-        if (mKeyboardPicturedAway) return true;
         return mInAppKeyboard != null && mInAppKeyboard.isVisible() && !mCrossing.keyboardPreRolled();
-    }
-
-    /**
-     * Whether a pictured dip put the committed place's keyboard away with its picture
-     * (putKeyboardAwayWithPicture): still up as far as that place is concerned, until the settle.
-     */
-    private boolean mKeyboardPicturedAway;
-
-    /**
-     * Puts the committed place's keyboard away, quietly, once per crossing, where a pictured dip
-     * carries it in its picture to a half that keeps none (SeamCrossing#picturesKeyboardAway).
-     */
-    private void putKeyboardAwayWithPicture() {
-        if (mKeyboardPicturedAway || !mCrossing.seam().picturesKeyboardAway()
-            || mInAppKeyboard == null || !mInAppKeyboard.isVisible()
-            || mCrossing.keyboardPreRolled())
-            return;
-        mKeyboardPicturedAway = true;
-        mQuietKeyboardChange = true;
-        try {
-            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .HideReason.WALL_PAGE);
-        } finally {
-            mQuietKeyboardChange = false;
-        }
-    }
-
-    /**
-     * The settle's half of {@link #putKeyboardAwayWithPicture}: landed on the other half there is
-     * nothing to do; back on the committed place the keyboard comes back up, quietly, under the
-     * picture, which stays a moment so the keyboard's own first frames are covered.
-     */
-    private void landKeyboardPicturedAway(@NonNull com.termux.app.wall.PaneWallPage page,
-                                          @NonNull com.termux.app.wall.PaneWallPage left) {
-        if (!mKeyboardPicturedAway) return;
-        mKeyboardPicturedAway = false;
-        if (page != left || mInAppKeyboard == null || mInAppKeyboard.isVisible()) return;
-        mQuietKeyboardChange = true;
-        try {
-            mInAppKeyboard.showForTravel(page == com.termux.app.wall.PaneWallPage.TERMINAL
-                ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TERMINAL_TAP
-                : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason
-                    .KEYBOARD_ACTION);
-        } finally {
-            mQuietKeyboardChange = false;
-        }
     }
 
     /**

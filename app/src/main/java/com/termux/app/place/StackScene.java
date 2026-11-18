@@ -15,7 +15,7 @@ import com.termux.app.page.Side;
  * topology. {@code StackRenderer} is the only code that writes it to the views.
  *
  * <p>The transform maths is today's, moved here: the travel from {@code Crossing#stack}, a
- * fold's sink from {@code CrossingViews#applyFoldSink}, each layer's sink and cut from
+ * each layer's sink and cut from
  * {@code CrossingViews#applyLayerSink}, the container's translation and clip from
  * {@code TermuxActivity#applyAccessoryStackTranslation} (with the system IME's lift), and the
  * keyboard's clip and the bands' hold from {@code TermuxActivity#applyUnderKeyboardTravel}.
@@ -94,16 +94,15 @@ public final class StackScene {
     /**
      * The travel of one crossing frame ({@code Crossing#stack}): the keyboard's and the dock's
      * hidden parts ({@link PlaceChromeTravel#stackTranslationPx}), the dock counted as shown
-     * while the rows sink into the keyboard's top edge instead. Writes the travel and the
-     * keyboard's share into {@code out}, and the rows' sink unless {@code folds} (a fold's sink
-     * is {@link #foldSink}'s, read off the laid-out extra keys).
+     * while the rows sink into the keyboard's top edge instead. Writes the travel, the keyboard's
+     * share and the rows' sink into {@code out}.
      *
      * @param rowsSink whether the rows sink (the seam's, for this keyboard's laid-out height)
      */
-    public static void travel(boolean folds, boolean rowsSink, float keyboardReveal,
+    public static void travel(boolean rowsSink, float keyboardReveal,
                               float dockReveal, int keyboardPx, int dockPx, int rowsPx,
                               @NonNull Motion out) {
-        if (!folds) out.sink(rowsSink ? rowsPx * (1f - clamp01(dockReveal)) : 0f);
+        out.sink(rowsSink ? rowsPx * (1f - clamp01(dockReveal)) : 0f);
         out.dockTravelPx = PlaceChromeTravel.stackTranslationPx(keyboardReveal,
             rowsSink ? 1f : dockReveal, keyboardPx, dockPx);
         out.keyboardSharePx = keyboardTranslationPx(keyboardReveal, keyboardPx);
@@ -151,22 +150,6 @@ public final class StackScene {
                                         int slackPx) {
         return Math.max(0, stackHeightPx) + Math.max(0, keyboardDownLaidOutPx)
             + Math.max(0, slackPx);
-    }
-
-    /**
-     * A fold's sink ({@code CrossingViews#applyFoldSink}): the rows go down by the part of the
-     * extra keys row the fold hides, the sheet by its own share, and rows held outside the extra
-     * keys stand where they are laid out. Returns the cut the extra keys row cuts itself at.
-     */
-    public static float foldSink(int keysPx, float share, int padUnderRowsPx, int flushPx,
-                                 int growthPx, boolean holdsAz, boolean holdsRows,
-                                 @NonNull Motion out) {
-        float cut = SeamTravel.foldSinkPx(keysPx, share);
-        float rows = SeamTravel.foldRowsSinkPx(keysPx, share, padUnderRowsPx, growthPx);
-        float sheet = SeamTravel.foldSheetSinkPx(keysPx, share, flushPx, growthPx);
-        float held = SeamTravel.foldHeldSinkPx(padUnderRowsPx, share);
-        out.layerSink(rows, holdsRows ? rows - held : cut, sheet, sheet - held, held, holdsAz);
-        return cut;
     }
 
     /** One frame of the stack. Mutable and reused; {@link #sameAs} compares two. */
