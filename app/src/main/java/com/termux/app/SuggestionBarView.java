@@ -3,8 +3,6 @@ package com.termux.app;
 import android.annotation.SuppressLint;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.animation.AnimatorSet;
-import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.ActivityOptions;
@@ -667,12 +665,24 @@ public final class SuggestionBarView extends GridLayout
     private boolean rowInteractionActive = false;
     @Nullable private String azFocusedEntryKey;
     @Nullable private View azFocusedView;
-    @Nullable private Animator azFocusAnimator;
+    @Nullable private AzFocusSink azFocusSink;
     private long lastAzFocusBounceUptimeMs = 0L;
     private long azFocusLastSeenUptimeMs = 0L;
     private static final long AZ_FOCUS_BOUNCE_COOLDOWN_MS = 320L;
     private static final long AZ_FOCUS_LOSS_GRACE_MS = 180L;
-    private static final float AZ_FOCUS_REST_ALPHA = 0.26f;
+
+    /** Who writes the A-Z focus onto the focused launch view; the row decides which one. */
+    public interface AzFocusSink {
+        /** {@code target} is focused now; {@code bounce} asks for the dip on arrival. */
+        void focus(@NonNull View target, boolean bounce);
+        /** The focus is gone; the view it was on is put back. */
+        void clear();
+    }
+
+    /** The A-Z gesture's owner; with none the row writes nothing onto a launch view. */
+    public void setAzFocusSink(@Nullable AzFocusSink sink) {
+        azFocusSink = sink;
+    }
 
     public static final int AZ_EDGE_NONE = 0;
     public static final int AZ_EDGE_LEFT = -1;
@@ -3257,70 +3267,16 @@ public final class SuggestionBarView extends GridLayout
         if (rowHapticsEnabled && movedBetweenApps) {
             Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
         }
-        if ((now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS) {
-            lastAzFocusBounceUptimeMs = now;
-            animateAzFocusAlpha(target);
-        } else {
-            applyAzFocusRestState(target);
-        }
+        boolean bounce = (now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS;
+        if (bounce) lastAzFocusBounceUptimeMs = now;
+        if (azFocusSink != null) azFocusSink.focus(target, bounce);
     }
 
     public void clearAzFocusedEntry() {
-        if (azFocusAnimator != null) {
-            azFocusAnimator.cancel();
-            azFocusAnimator = null;
-        }
-        if (azFocusedView != null) {
-            azFocusedView.animate().cancel();
-            azFocusedView.setScaleX(1f);
-            azFocusedView.setScaleY(1f);
-            azFocusedView.setTranslationY(0f);
-            azFocusedView.animate()
-                .alpha(1f)
-                .setDuration(96L)
-                .setInterpolator(new DecelerateInterpolator(1.45f))
-                .setListener(null)
-                .start();
-        }
+        if (azFocusedView != null && azFocusSink != null) azFocusSink.clear();
         azFocusedView = null;
         azFocusedEntryKey = null;
         azFocusLastSeenUptimeMs = 0L;
-    }
-
-    private void animateAzFocusAlpha(@NonNull View target) {
-        target.animate().cancel();
-        target.setScaleX(1f);
-        target.setScaleY(1f);
-        target.setTranslationY(0f);
-        AnimatorSet bounce = new AnimatorSet();
-        ObjectAnimator alpha = ObjectAnimator.ofFloat(target, View.ALPHA, target.getAlpha(), AZ_FOCUS_REST_ALPHA);
-        bounce.playTogether(alpha);
-        bounce.setDuration(86L);
-        bounce.setInterpolator(new DecelerateInterpolator(1.55f));
-        bounce.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                if (target == azFocusedView) {
-                    applyAzFocusRestState(target);
-                }
-            }
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
-                if (target == azFocusedView) {
-                    applyAzFocusRestState(target);
-                }
-            }
-        });
-        azFocusAnimator = bounce;
-        bounce.start();
-    }
-
-    private void applyAzFocusRestState(@NonNull View target) {
-        target.setScaleX(1f);
-        target.setScaleY(1f);
-        target.setTranslationY(0f);
-        target.setAlpha(AZ_FOCUS_REST_ALPHA);
     }
 
     public void clearAzPreview() {

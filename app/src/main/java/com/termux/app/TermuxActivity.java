@@ -116,6 +116,7 @@ import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzBarHostGeometry;
+import com.termux.app.launcher.az.AzFocusWriter;
 import com.termux.app.launcher.az.AzFloatingStripPolicy;
 import com.termux.app.launcher.az.AzPreviewTargetPolicy;
 import com.termux.app.launcher.az.AzScrubGesture;
@@ -12013,6 +12014,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // An icon lifted out of the dock goes to Home the way one from the drawer does, and the
         // drop targets come up where Home's own drag puts them.
         wirePageTicks();
+        mSuggestionBarView.setAzFocusSink(new SuggestionBarView.AzFocusSink() {
+            private final AzFocusWriter writer = new AzFocusWriter();
+            @Override public void focus(@NonNull View target, boolean bounce) {
+                writer.focus(target, bounce);
+            }
+            @Override public void clear() { writer.clear(); }
+        });
         mSuggestionBarView.setLiftHost(new SuggestionBarView.LiftHost() {
             @Override @Nullable
             public com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {

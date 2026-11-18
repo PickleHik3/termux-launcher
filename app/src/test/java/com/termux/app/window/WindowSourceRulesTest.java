@@ -422,6 +422,35 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void theAppsRowWritesNoParentClipFocusOrLiftTarget() throws IOException {
+        List<String> problems = new ArrayList<>();
+        String row = new String(Files.readAllBytes(root().resolve("app/SuggestionBarView.java")),
+            java.nio.charset.StandardCharsets.UTF_8);
+        for (String write : new String[]{"parentGroup.setClip", "grandParentGroup.setClip",
+            "azFocusedView.set", "azFocusedView.animate", "target.setScaleX", "target.setAlpha",
+            "ObjectAnimator.ofFloat(target", "LIFT_SOURCE_SHADE", "slot.setAlpha"}) {
+            if (row.contains(write)) problems.add("SuggestionBarView still writes: " + write);
+        }
+        Path layout = root().resolve("../../../../main/res/layout/activity_termux.xml").normalize();
+        String xml = new String(Files.readAllBytes(layout), java.nio.charset.StandardCharsets.UTF_8);
+        for (String id : new String[]{"apps_bar_viewpager", "place_apps_bar_host"}) {
+            java.util.regex.Matcher tag = java.util.regex.Pattern
+                .compile("<([\\w.]+)[^>]*?@\\+id/" + id + "\"([^>]*)>", java.util.regex.Pattern.DOTALL)
+                .matcher(xml);
+            if (!tag.find()) {
+                problems.add(id + " is not declared");
+                continue;
+            }
+            String attrs = tag.group(0);
+            if (!attrs.contains("android:clipChildren=\"false\""))
+                problems.add(id + " does not declare clipChildren false");
+            if (!attrs.contains("android:clipToPadding=\"false\""))
+                problems.add(id + " does not declare clipToPadding false");
+        }
+        assertNone(problems);
+    }
+
+    @Test
     public void theAppsRowHasNoCrossingMorph() throws IOException {
         List<String> problems = new ArrayList<>();
         for (String file : new String[]{"app/SuggestionBarView.java", "app/place/Crossing.java",
