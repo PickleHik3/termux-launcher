@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The shader editor (ShaderEditorPage), under the sheet's bar: name, a monospace code box that
      scrolls sideways instead of wrapping, Paste and Import file, the error strip, the knobs
-     (Quality, Frame rate, Texture), "Also set as phone wallpaper" in terminal-app mode only,
+     (Quality, Frame rate), the Photo and Depth rows, "Also set as phone wallpaper" in terminal-app mode only,
      Apply (in the title row), Back to photo while a motion is in use, and Delete. The knobs reuse the settings rows
      (preference_segmented_pill). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -175,48 +175,13 @@
                 android:id="@+id/shader_knob_rate"
                 layout="@layout/preference_segmented_pill" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:minHeight="48dp"
-                android:orientation="horizontal"
-                android:paddingStart="@dimen/settings_gutter"
-                android:paddingEnd="@dimen/settings_gutter">
+            <include
+                android:id="@+id/shader_photo_row"
+                layout="@layout/shader_image_row" />
 
-                <TextView
-                    android:id="@+id/shader_texture_label"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:ellipsize="middle"
-                    android:maxLines="1"
-                    android:textAppearance="?attr/textAppearanceBodyMedium"
-                    android:textColor="?attr/colorOnSurface" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/shader_texture_choose"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:minWidth="0dp"
-                    android:minHeight="48dp"
-                    android:text="@string/shader_texture_choose" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/shader_texture_remove"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:minWidth="0dp"
-                    android:minHeight="48dp"
-                    android:text="@string/shader_texture_remove"
-                    android:visibility="gone" />
-            </LinearLayout>
+            <include
+                android:id="@+id/shader_depth_row"
+                layout="@layout/shader_image_row" />
 
             <!-- Terminal-app mode only: the same remembered setting as the Photo page's. -->
             <LinearLayout

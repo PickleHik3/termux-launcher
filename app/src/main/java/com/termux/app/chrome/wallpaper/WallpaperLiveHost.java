@@ -189,7 +189,9 @@ public final class WallpaperLiveHost {
     @Nullable private ActivityResultLauncher<String[]> mImportLauncher;
     @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mTextureLauncher;
     @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mVideoLauncher;
+    @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mDepthLauncher;
     @Nullable private String mTextureTarget;
+    @Nullable private String mDepthTarget;
 
     public WallpaperLiveHost(@NonNull Context context, @NonNull WallpaperPickerPage picker,
                              @NonNull Listener listener) {
@@ -264,6 +266,22 @@ public final class WallpaperLiveHost {
                     mTextureTarget = id;
                     launcher.launch(new PickVisualMediaRequest.Builder()
                         .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE).build());
+                }
+
+                @Override public void onPickDepth(@NonNull String id) {
+                    ActivityResultLauncher<PickVisualMediaRequest> launcher = mDepthLauncher;
+                    if (launcher == null) {
+                        toast(R.string.shader_import_unavailable);
+                        return;
+                    }
+                    mDepthTarget = id;
+                    launcher.launch(new PickVisualMediaRequest.Builder()
+                        .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE).build());
+                }
+
+                @Override public void onDropFile(@NonNull String id, @NonNull String name) {
+                    final Context app = mContext.getApplicationContext();
+                    IO.execute(() -> ShaderStore.removeTexture(app, id, name));
                 }
 
                 @Override public void onDelete(@NonNull String id) {
@@ -418,12 +436,15 @@ public final class WallpaperLiveHost {
         mReleased = true;
         mSwap.cancel();
         if (mPage == Page.EDITOR) discardEditor();
+        if (mEditor != null) mEditor.release();
         if (mList != null) mList.release();
         if (mImportLauncher != null) mImportLauncher.unregister();
         if (mTextureLauncher != null) mTextureLauncher.unregister();
+        if (mDepthLauncher != null) mDepthLauncher.unregister();
         if (mVideoLauncher != null) mVideoLauncher.unregister();
         mImportLauncher = null;
         mTextureLauncher = null;
+        mDepthLauncher = null;
         mVideoLauncher = null;
         if (mList != null) mLive.setVisibility(View.GONE);
     }
@@ -696,7 +717,10 @@ public final class WallpaperLiveHost {
     private void showList() {
         if (mList == null || mEditor == null) return;
         boolean fromEditor = mPage == Page.EDITOR;
-        if (fromEditor) discardEditor();
+        if (fromEditor) {
+            discardEditor();
+            mEditor.onClosed();
+        }
         mList.bind(readStored());
         if (fromEditor) mList.restoreScrollY(mListScrollY);
         goTo(Page.LIST, fromEditor);
@@ -729,14 +753,20 @@ public final class WallpaperLiveHost {
         goTo(Page.EDITOR, true);
     }
 
-    /** The editor goes without applying: a new shader's folder, or a texture picked and not saved, is dropped. */
+    /** The editor goes without applying: a new shader's folder, or a photo or depth picked and not saved, is dropped. */
     private void discardEditor() {
         if (mEditor == null || mEditorSaved) return;
         final String id = mEditor.id();
         final String unsaved = mEditor.unsavedTexture();
+        final String unsavedDepth = mEditor.unsavedDepth();
         final Context app = mContext.getApplicationContext();
         if (mEditor.isNew()) IO.execute(() -> ShaderStore.delete(app, id));
-        else if (unsaved != null) IO.execute(() -> ShaderStore.removeTexture(app, id, unsaved));
+        else if (unsaved != null || unsavedDepth != null) {
+            IO.execute(() -> {
+                ShaderStore.removeTexture(app, id, unsaved);
+                ShaderStore.removeTexture(app, id, unsavedDepth);
+            });
+        }
     }
 
     @Nullable
@@ -958,6 +988,8 @@ public final class WallpaperLiveHost {
             new ActivityResultContracts.OpenDocument(), this::onShaderFilePicked);
         mTextureLauncher = activity.getActivityResultRegistry().register(prefix + "texture",
             new ActivityResultContracts.PickVisualMedia(), this::onTexturePicked);
+        mDepthLauncher = activity.getActivityResultRegistry().register(prefix + "depth",
+            new ActivityResultContracts.PickVisualMedia(), this::onDepthPicked);
         mVideoLauncher = activity.getActivityResultRegistry().register(prefix + "video",
             new ActivityResultContracts.PickVisualMedia(), this::onVideoPicked);
     }
@@ -1008,11 +1040,11 @@ public final class WallpaperLiveHost {
         mTextureTarget = null;
         if (uri == null || id == null || mReleased || mEditor == null) return;
         final Context app = mContext.getApplicationContext();
+        final String depthName = mEditor.draft().depth;
         IO.execute(() -> {
             String stored = null;
             try {
-                stored = ShaderStore.importTexture(app, id, uri, displayName(app, uri), null,
-                    ShaderStore.readMeta(app, id).depth);
+                stored = ShaderStore.importTexture(app, id, uri, displayName(app, uri), null, depthName);
             } catch (IOException | RuntimeException e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Copying the texture failed", e);
             }
@@ -1021,6 +1053,30 @@ public final class WallpaperLiveHost {
                 if (mReleased || mEditor == null || !id.equals(mEditor.id())) return;
                 if (name == null) toast(R.string.shader_texture_failed);
                 else mEditor.setTexture(name);
+            });
+        });
+    }
+
+    private void onDepthPicked(@Nullable Uri uri) {
+        final String id = mDepthTarget;
+        mDepthTarget = null;
+        if (uri == null || id == null || mReleased || mEditor == null) return;
+        final Context app = mContext.getApplicationContext();
+        final ShaderEditorPage.Draft d = mEditor.draft();
+        // A depth picked here and not saved is replaced; a saved one goes on Apply.
+        final String previous = ShaderEditorLogic.unsavedFileToDrop(d.depth, d.savedDepth);
+        IO.execute(() -> {
+            String stored = null;
+            try {
+                stored = ShaderStore.importDepth(app, id, uri, displayName(app, uri), previous, d.texture);
+            } catch (IOException | RuntimeException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Copying the depth image failed", e);
+            }
+            final String name = stored;
+            mRoot.post(() -> {
+                if (mReleased || mEditor == null || !id.equals(mEditor.id())) return;
+                if (name == null) toast(R.string.shader_texture_failed);
+                else mEditor.setDepth(name);
             });
         });
     }
