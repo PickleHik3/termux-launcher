@@ -10295,7 +10295,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the root's padding takes the band over from the content as the keyboard comes up and hands
      * it back as it goes, while the stack the content hangs above keeps standing on the old band
      * until the geometry pass, so a reach of the take alone left the grid a band short on the way
-     * up and a band tall on the way down for that one layout.
+     * up and a band tall on the way down for that one layout. The reach is signed: it may go
+     * negative for that one layout while the keyboard goes down.
      */
     @SuppressWarnings("deprecation")
     private void noteRootFitBottom(@NonNull WindowInsetsCompat insets) {
@@ -10309,11 +10310,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int delta = reach - mHomeContentImeReachPx;
         if (delta == 0) return;
         View content = findViewById(R.id.terminal_content_column);
-        if (content == null || !(content.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
-            return;
-        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) content.getLayoutParams();
-        params.bottomMargin -= delta;
-        content.setLayoutParams(params);
+        com.termux.app.place.BottomInsetFrameLayout container = findViewById(R.id.terminal_root_container);
+        if (content == null || container == null) return;
+        container.setReachingColumn(content, container.reachingColumnPx() + delta);
         mHomeContentImeReachPx = reach;
     }
 
@@ -17242,18 +17241,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The content column fills the window to its bottom: what a page leaves of it is that page's
      * own rest, in the wall (applyPageRooms). The one reach the column keeps past its bottom is
      * the system keyboard's on Home, which keeps its grid whole while the phone's keyboard is up;
-     * it is the column's only bottom margin.
+     * the container holds it ({@code BottomInsetFrameLayout#setReachingColumn}).
      */
     private boolean applyContentImeReach(int imeReachPx) {
         View content = findViewById(R.id.terminal_content_column);
-        if (content == null) return false;
-        ViewGroup.LayoutParams layoutParams = content.getLayoutParams();
-        if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
-        ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
-        int bottomMargin = -Math.max(0, imeReachPx);
-        if (marginParams.bottomMargin == bottomMargin) return false;
-        marginParams.bottomMargin = bottomMargin;
-        content.setLayoutParams(marginParams);
+        com.termux.app.place.BottomInsetFrameLayout container = findViewById(R.id.terminal_root_container);
+        if (content == null || container == null) return false;
+        int reach = Math.max(0, imeReachPx);
+        if (container.reachingColumnPx() == reach) return false;
+        container.setReachingColumn(content, reach);
         return true;
     }
 

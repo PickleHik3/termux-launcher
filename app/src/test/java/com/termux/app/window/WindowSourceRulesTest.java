@@ -373,6 +373,26 @@ public class WindowSourceRulesTest {
             SourceRules.activityUsers(sources()), ACTIVITY_USERS));
     }
 
+    /** Files that write a negative bottom margin, with the count of writes. */
+    static final List<String> NEGATIVE_BOTTOM_MARGINS = Arrays.asList(
+        // the frame glass grows under the system bars: moves to a reaching container like the content column's
+        "app/TermuxActivity.java:1"
+    );
+
+    @Test
+    public void noViewReachesThroughANegativeBottomMargin() throws IOException {
+        java.util.regex.Pattern negative = java.util.regex.Pattern.compile(
+            "bottomMargin\\s*(=\\s*-|-=)");
+        Map<String, Integer> actual = new java.util.TreeMap<>();
+        for (Map.Entry<String, String> source : sources().entrySet()) {
+            java.util.regex.Matcher m = negative.matcher(source.getValue());
+            int count = 0;
+            while (m.find()) count++;
+            if (count > 0) actual.put(source.getKey(), count);
+        }
+        assertNone(SourceRules.compare("negative bottom margin", actual, NEGATIVE_BOTTOM_MARGINS));
+    }
+
     @Test
     public void onlyThePipelineRegistersFrameHooks() throws IOException {
         assertNone(SourceRules.compare("frame hook", SourceRules.frameHooks(sources()), FRAME_HOOKS));

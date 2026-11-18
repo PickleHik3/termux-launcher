@@ -70,6 +70,58 @@ public class BottomInsetFrameLayoutTest {
         assertEquals(0, layer.getBottom());
     }
 
+    @Test
+    public void theColumnReachesTaller_withAndWithoutBottomPadding() {
+        for (int padding : new int[]{KEPT, 0}) {
+            Context context = RuntimeEnvironment.getApplication();
+            BottomInsetFrameLayout container = container(context);
+            container.setPadding(0, 0, 0, padding);
+            View column = columnUnderReachingChild(container, context);
+            ViewGroup parent = (ViewGroup) column.getParent();
+            container.setReachingColumn(column, 120);
+            layout(container);
+            assertEquals(parent.getHeight() + 120, column.getHeight());
+            assertEquals(0, column.getTop());
+            assertEquals(0, ((ViewGroup.MarginLayoutParams) column.getLayoutParams()).bottomMargin);
+        }
+    }
+
+    @Test
+    public void aNegativeReachShortensTheColumn() {
+        Context context = RuntimeEnvironment.getApplication();
+        BottomInsetFrameLayout container = container(context);
+        View column = columnUnderReachingChild(container, context);
+        container.setReachingColumn(column, -50);
+        layout(container);
+        assertEquals(((ViewGroup) column.getParent()).getHeight() - 50, column.getHeight());
+        assertEquals(-50, container.reachingColumnPx());
+    }
+
+    @Test
+    public void theSameReachTwiceDoesNotDouble() {
+        Context context = RuntimeEnvironment.getApplication();
+        BottomInsetFrameLayout container = container(context);
+        View column = columnUnderReachingChild(container, context);
+        container.setReachingColumn(column, 120);
+        layout(container);
+        int first = column.getHeight();
+        container.setReachingColumn(column, 120);
+        layout(container);
+        layout(container);
+        assertEquals(first, column.getHeight());
+    }
+
+    private static View columnUnderReachingChild(BottomInsetFrameLayout container, Context context) {
+        android.widget.RelativeLayout reaching = new android.widget.RelativeLayout(context);
+        container.addView(reaching, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        container.setReachingChild(reaching);
+        android.widget.LinearLayout column = new android.widget.LinearLayout(context);
+        reaching.addView(column, new android.widget.RelativeLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        return column;
+    }
+
     private static BottomInsetFrameLayout container(Context context) {
         BottomInsetFrameLayout container = new BottomInsetFrameLayout(context);
         container.setPadding(0, 0, 0, KEPT);
