@@ -607,7 +607,8 @@ public final class PaneWallLayout extends ViewGroup
      * The live neighbour windows' views, previous then next ({@link LiveNeighbourPolicy}):
      * containers the pane controller fills with the adjacent windows' pane trees. The wall adds
      * them as its children, lays them out as the Workspace page and stands them one width either
-     * side of it while it moves; at rest they are {@code GONE}. An empty container is never shown.
+     * side of it while it moves; at rest they are {@code GONE} but still laid out at the Workspace
+     * page's size, so a resize reaches their shells at rest. An empty container is never shown.
      *
      * @param prepare run as a drag takes the wall from the Workspace, before anything moves, so
      *                the containers hold the windows beside the one in front now
@@ -644,12 +645,18 @@ public final class PaneWallLayout extends ViewGroup
 
     /**
      * Whether this pass measures and lays out {@code child}: a page on screen, and a live
-     * neighbour out beside the Workspace page even while it is off screen (INVISIBLE), so both
-     * neighbours take the host's size as a drag begins rather than one of them mid-way.
+     * neighbour beside the Workspace page even while it is off screen (INVISIBLE) or put away
+     * (GONE, once filled and while the Workspace page is there). A neighbour is so sized for the
+     * Workspace page's rest: a keyboard or chrome change resizes its shells then, and a crossing
+     * lays it out at the size it already has.
      */
     private boolean isLaidOutNow(@NonNull View child) {
         int visibility = child.getVisibility();
-        return visibility == VISIBLE || (visibility == INVISIBLE && isInnerNeighbour(child));
+        if (visibility == VISIBLE) return true;
+        if (!isInnerNeighbour(child)) return false;
+        if (visibility == INVISIBLE) return true;
+        return mTerminalHost != null && mTerminalHost.getVisibility() != GONE
+            && child instanceof ViewGroup && ((ViewGroup) child).getChildCount() > 0;
     }
 
     private boolean isInnerNeighbour(@NonNull View child) {
@@ -682,7 +689,8 @@ public final class PaneWallLayout extends ViewGroup
             poseOnWall(view, x, width);
             view.setAlpha(mPose.alpha);
             // No layout is asked for coming on screen: an INVISIBLE neighbour is laid out with
-            // the pages (isLaidOutNow), and one leaving GONE asks for its own pass. A released
+            // the pages (isLaidOutNow), and a filled one put away (GONE) was laid out at rest
+            // already, so it comes on screen at the size it has. A released
             // step brings the leaving window on screen this way, and a pass there cost the frame.
             view.setVisibility(LiveNeighbourPolicy.onScreen(x, width) ? VISIBLE : INVISIBLE);
         }
