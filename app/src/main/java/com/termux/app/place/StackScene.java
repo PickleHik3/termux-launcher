@@ -394,8 +394,12 @@ public final class StackScene {
         out.ty[V_UNDER] = -share;
         out.clipped[V_UNDER] = false;
         out.ty[V_KEYBOARD] = 0f;
-        int hidden = inColumn ? BottomInsets.keyboardTravelHiddenPx(m.dockTravelPx, share,
-                g.belowKeyboardInColumnPx, g.stackPaddingBottomPx)
+        // A keyboard that wears its foot is cut with its own share, which no band holds (none
+        // stands under it): the foot goes under the pill with the keys.
+        int hidden = inColumn ? BottomInsets.keyboardTravelHiddenPx(m.dockTravelPx,
+                g.keyboardFootPx > 0 ? m.keyboardSharePx : share, g.belowKeyboardInColumnPx,
+                g.stackPaddingBottomPx, g.keyboardFootPx,
+                BottomInsets.keyboardKeysPx(g.keyboardHeightPx, g.keyboardFootPx))
             : Math.round(share);
         if (hidden <= 0) {
             out.clipped[V_KEYBOARD] = false;

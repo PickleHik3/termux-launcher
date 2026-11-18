@@ -102,6 +102,7 @@ import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.place.CanvasBudgetPolicy;
+import com.termux.app.place.BottomInsets;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.ExtraKeysColumnGeometry;
@@ -6745,8 +6746,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Before its first layout the host has no height yet: the last measure stands in, so the
         // piece is not a zero-height one whose radius clamps to nothing.
         float keyboard = keyboardUp && keyboardHost != null
-            ? (keyboardHost.getHeight() > 0 ? keyboardHost.getHeight()
-                : mKeyboardGeometry.desiredHeightPx()) : 0f;
+            ? BottomInsets.keyboardKeysPx(keyboardHost.getHeight() > 0 ? keyboardHost.getHeight()
+                : mKeyboardGeometry.desiredHeightPx(), mDressedKeyboardFootPx) : 0f;
         return com.termux.app.chrome.LiveChromeShape.of(layout,
             arrangementOf(chromeWearsHomeShape(surface) ? com.termux.app.wall.PageRef.HOME
                 : com.termux.app.wall.PageRef.TERMINAL).layoutStyle(), width, height,
@@ -7136,6 +7137,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The editor's sheet already runs under the gesture pill; this strip is the decor's
         // topmost child and painted the dock's glass foot over it, so the inset read untinted.
         if (mSurfaceEditor.isActive()) return false;
+        // A keyboard that wears the band as its own foot reaches the edge itself.
+        if (inAppKeyboardFootPx() > 0) return false;
         return shouldShowDecorNavBarSurface(state.toolbarShown, state.keyboardShown,
             mNavBarHeight, mKeyboardGeometry.lastImeVisible() || isImeVisible(),
             mDock.dockFloats(),
@@ -7946,6 +7949,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mDock.dockFloats()) {
             return 1f;
         }
+        // The band is the stack's own (the keyboard's foot, or the dock's): the glass draws its
+        // whole span, nothing is left for a strip below.
+        if (mDockFootPx > 0 || inAppKeyboardFootPx() > 0) {
+            return 1f;
+        }
         int navHeight = mNavBarHeight;
         if (navHeight <= 0) {
             return 1f;
@@ -7978,6 +7986,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** True while the keyboard is hosted in its floating frame rather than in the dock. */
     private boolean isKeyboardFloating() {
         return mFloatingKeyboard != null && mFloatingKeyboard.isFloating();
+    }
+
+    /**
+     * Whether the keyboard wears the kept navigation band as its own foot: it is laid out in the
+     * stack's column as a Docked slice (shown, or down and still laid out), no bands stand under
+     * it and the system keyboard is away. It does not flip when the keyboard toggles up or down at
+     * rest, so the toggle resizes nothing new. The one question the dress phase and the stack
+     * pass both ask ({@link BottomInsets#keyboardFootPx(int, boolean)}).
+     */
+    private boolean inAppKeyboardFootApplies(boolean capsule) {
+        if (capsule || isKeyboardFloating() || isImeVisible() || underKeyboardBandsShown())
+            return false;
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        if (keyboardContainer == null || keyboardContainer.getVisibility() == View.GONE)
+            return false;
+        return isInAppKeyboardShown() || keyboardStaysLaidOut();
+    }
+
+    /** The foot the keyboard's host was last dressed with; what the shape model reads. */
+    private int mDressedKeyboardFootPx;
+
+    /** The keyboard's foot now: the kept band while it wears it, else 0. */
+    private int inAppKeyboardFootPx() {
+        return BottomInsets.keyboardFootPx(mBottomKeptPx,
+            inAppKeyboardFootApplies(isInAppKeyboardCapsule()));
+    }
+
+    /** The keys of a laid-out keyboard height: the foot is the keyboard's own, not the stack's. */
+    private int inAppKeyboardKeysPx(int laidOutPx) {
+        return BottomInsets.keyboardKeysPx(laidOutPx, inAppKeyboardFootPx());
     }
 
     /**
@@ -8018,8 +8056,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int chinPaddingPx = resolveInAppKeyboardBottomPaddingPx();
         int bottomMargin = ChromePolicy.keyboardChinBottomMarginPx(
             capsule, 0, chinPaddingPx);
+        // The kept navigation band under a Docked keyboard is its own: its material reaches the
+        // screen's bottom, and the keys stand where they did (BottomInsets#keyboardFootPx, the
+        // same band the stack pass counts).
+        int keyboardFootPx = BottomInsets.keyboardFootPx(mBottomKeptPx,
+            inAppKeyboardFootApplies(capsule));
+        // The shape model (which this pass must not ask) reads the foot the host wears.
+        mDressedKeyboardFootPx = floating ? 0 : keyboardFootPx;
         int innerBottomPadding = floating ? 0 : ChromePolicy.keyboardChinBottomPaddingPx(
-            capsule, innerPadding, chinPaddingPx);
+            capsule, innerPadding, chinPaddingPx) + keyboardFootPx;
         boolean changed = false;
         ViewGroup.LayoutParams layoutParams = surfaceHost.getLayoutParams();
         if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
@@ -9700,7 +9745,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewGroup.LayoutParams params = accessoryContainer.getLayoutParams();
         int totalHeight = params != null && params.height > 0
             ? params.height : accessoryContainer.getHeight();
-        int toolbarHeight = Math.max(0, totalHeight - state.keyboardHeight);
+        int toolbarHeight = Math.max(0, totalHeight - inAppKeyboardKeysPx(state.keyboardHeight));
         if (toolbarHeight <= 0)
             return null;
         int width = accessoryContainer.getWidth();
@@ -10688,6 +10733,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         @Override public int keyboardDesiredHeightPx() {
             return mKeyboardGeometry == null ? 0 : mKeyboardGeometry.desiredHeightPx();
+        }
+        @Override public int keyboardFootPx() {
+            return mKeyboardGeometry == null ? 0 : inAppKeyboardFootPx();
         }
         @Override public boolean underKeyboardBandsShown() {
             return mDockRows != null && mDockRows.underKeyboardBandsShown();
@@ -17217,7 +17265,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWidgetHostController.repository();
         if (on) {
             int rows = com.termux.app.place.PlaceKeyboard.keyboardRows(
-                Math.max(0, mKeyboardGeometry.desiredHeightPx()),
+                inAppKeyboardKeysPx(Math.max(0, mKeyboardGeometry.desiredHeightPx())),
                 mWidgetPaneController == null ? 0 : mWidgetPaneController.gridHeightPx(),
                 widgets.gridDefinition().rows);
             com.termux.app.launcher.widget.WidgetReflowReport report =
@@ -17406,7 +17454,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         stackIn.keyboardShown = state.keyboardShown;
         stackIn.extraKeysRowEnabled = state.extraKeysRowEnabled;
         stackIn.toolbarHeightPx = toolbarHeightPx;
-        stackIn.keyboardHeightPx = state.keyboardHeight;
+        // The keys' height: the keyboard's foot is its own, and every room reads the keys.
+        stackIn.keyboardHeightPx = inAppKeyboardKeysPx(state.keyboardHeight);
         stackIn.statusBandPx = mStatusBar.bottomStatusBandPx();
         stackIn.imeLiftPx = mImeLiftPx;
         stackIn.ceilingBeforeMarginPx = accessoryStackCeilingBeforeMarginPx();
@@ -17455,7 +17504,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDock.dockFloats(), mCrossing.seam().footKeyboardUp(state.keyboardShown), isImeVisible(),
             mBottomKeptPx);
         com.termux.app.place.BottomInsets bottomInsets = com.termux.app.place.BottomInsets.forKept(
-            0, mBottomKeptPx, dockFoot, stack.bottomMarginPx, stack.flushBottomInsetPx);
+            0, mBottomKeptPx, dockFoot, stack.bottomMarginPx, stack.flushBottomInsetPx,
+            inAppKeyboardFootApplies(isInAppKeyboardCapsule()));
         mDockFootPx = bottomInsets.dockFootPx;
         applyDockFootLayout(accessoryStackContainer, bottomInsets);
         int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
@@ -17466,7 +17516,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int keyboardDownPx = !state.keyboardShown && keyboardStaysLaidOut()
             && findViewById(R.id.inapp_keyboard_container) != null
             && findViewById(R.id.inapp_keyboard_container).getVisibility() != View.GONE
-            ? mKeyboardGeometry.measureHeightPx() : 0;
+            ? BottomInsets.keyboardKeysPx(mKeyboardGeometry.measureHeightPx(),
+                bottomInsets.keyboardFootPx) : 0;
         boolean keyboardDownChanged = keyboardDownPx != mKeyboardDownLaidOutPx;
         mKeyboardDownLaidOutPx = keyboardDownPx;
         // The band stands at the union of both sides' rests: as much taller as the other side's
@@ -17482,7 +17533,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLaneSlackPx = laneSlackPx;
         if (laneSlackChanged) applyAccessorySurfaceBounds(state);
         int combinedHeight = com.termux.app.place.StackScene.containerHeightPx(
-            stack.stackHeightPx + bottomInsets.stackExtraHeightPx, keyboardDownPx, laneSlackPx);
+            stack.stackHeightPx + bottomInsets.containerExtraPx(), keyboardDownPx, laneSlackPx);
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
         // taller glass instead of hugging its bottom edge.
         int flushBottomInsetPx = bottomInsets.stackPaddingPx;
@@ -17545,7 +17596,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Each page's room, from its own rest; after the keyboard's state is applied, which the
         // front page's rest reads.
         overlapChanged |= applyPageRooms(stack.stackShown
-            ? stack.stackHeightPx + bottomInsets.stackExtraHeightPx + accessoryBottomMarginPx : 0,
+            ? stack.stackHeightPx + bottomInsets.containerExtraPx() + accessoryBottomMarginPx : 0,
             stack.sideStackOverlapPx);
         // While the slide holds the content, the room it gives back is laid out under a grid the
         // travel has paused (preRollTravelContent); the settle sends the PTY its one size.
@@ -17882,7 +17933,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : com.termux.app.place.StackLanes.slackPx(frontRows, otherRows);
     }
 
-    /** The keyboard's height the stack's container is laid out taller by while it is down. */
+    /** The keyboard's keys' height (its foot not counted) the container is laid out taller by, with the foot, while it is down. */
     private int mKeyboardDownLaidOutPx;
     /** Whether the docked in-app keyboard stays laid out while it is down (D1-A). */
     private boolean keyboardStaysLaidOut() {
@@ -24221,10 +24272,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return travelKeyboardLaidOutPx() * (1f - shown);
     }
 
-    /** The keyboard's height as the stack lays it out; 0 while it is down or floating. */
+    /**
+     * The keyboard's keys' height as the stack lays it out; 0 while it is down or floating. What
+     * the travel slides: the foot below the keys is the keyboard's own and goes with the cut.
+     */
     private int travelKeyboardLaidOutPx() {
         if (!isInAppKeyboardShown() || isKeyboardFloating()) return 0;
-        return Math.max(0, mKeyboardGeometry.desiredHeightPx());
+        return inAppKeyboardKeysPx(Math.max(0, mKeyboardGeometry.desiredHeightPx()));
     }
 
     /** What only the activity gives the sheets' controller (chrome.sheets.SheetsController). */
@@ -24892,8 +24946,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isKeyboardFloating() { return TermuxActivity.this.isKeyboardFloating(); }
         @Override public boolean committedKeyboardVisible() { return TermuxActivity.this.committedKeyboardVisible(); }
         @Override public boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) { return TermuxActivity.this.wantsKeyboardOnEnter(place); }
-        @Override public int keyboardMeasureHeightPx() { return mKeyboardGeometry.measureHeightPx(); }
-        @Override public int keyboardDesiredHeightPx() { return mKeyboardGeometry.desiredHeightPx(); }
+        @Override public int keyboardMeasureHeightPx() {
+            return inAppKeyboardKeysPx(mKeyboardGeometry.measureHeightPx());
+        }
+        @Override public int keyboardDesiredHeightPx() {
+            return inAppKeyboardKeysPx(mKeyboardGeometry.desiredHeightPx());
+        }
         @Override public int travelKeyboardLaidOutPx() {
             return com.termux.app.place.PlaceChromeTravel.keyboardLaidOutPx(isInAppKeyboardShown(),
                 TermuxActivity.this.travelKeyboardLaidOutPx(), mKeyboardDownLaidOutPx);
