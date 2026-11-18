@@ -448,6 +448,22 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void theActivityDeclaresNoDisplayTouchpadMethods() throws IOException {
+        List<String> problems = new ArrayList<>();
+        String activity = sources().get("app/TermuxActivity.java");
+        for (String name : new String[]{"isDisplayTouchpadFrame", "applyDisplayFrameKeyboard",
+                "applyDisplayFrameTextFocus", "applyDisplayFrameDecision", "syncDisplayTouchpad",
+                "raiseDisplayFrameKeyboard", "lowerDisplayFrameKeyboard",
+                "applyDisplayTouchpadFrame", "releaseDisplayTouchpadWait",
+                "splitKeyboardTouchpadGap", "seatDisplayTouchpad", "syncDisplayTouchpadModeSwitch",
+                "switchDisplayKeyboardMode"}) {
+            if (java.util.regex.Pattern.compile("(?m)^    (private |public )?[\\w.<>]+ " + name + "\\(")
+                    .matcher(activity).find()) problems.add("TA declares " + name);
+        }
+        assertNone(problems);
+    }
+
+    @Test
     public void homeDoesItsPageEventsInTheHomePageNotTheHost() throws IOException {
         List<String> problems = new ArrayList<>();
         String host = sources().get("app/launcher/home/HomePageHost.java");
