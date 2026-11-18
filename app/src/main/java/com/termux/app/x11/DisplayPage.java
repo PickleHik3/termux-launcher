@@ -38,11 +38,11 @@ public final class DisplayPage implements Page {
         return view;
     }
 
-    /** Nothing calls this yet. */
+    /** What the Display asks of the chrome while it is in front and still: {@link DisplayRest}. */
     @NonNull
     @Override
     public Rest rest(@NonNull Rest.Inputs in) {
-        throw new UnsupportedOperationException("The Display's rest arrives with #272 slice 1");
+        return DisplayRest.of(in);
     }
 
     @Override
