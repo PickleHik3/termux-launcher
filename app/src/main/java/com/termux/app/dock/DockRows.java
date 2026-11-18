@@ -295,7 +295,8 @@ public final class DockRows {
             ? LaneDress.layoutFor(mLaneSides[1], mFrontSide, layout, other)
             : (mShown.az || other == null ? layout : other);
         boolean moved = mViews.setRowHeight(Element.APPS, appsFrom.appsBarHeightPx);
-        moved |= mViews.setPageBandHeight(layout.indicatorBandHeightPx);
+        // The page band is the apps row's own: it stands and is sized with that row.
+        moved |= mViews.setPageBandHeight(appsFrom.indicatorBandHeightPx);
         moved |= mViews.setRowHeight(Element.AZ, azFrom.azRowHeightPx);
         return moved;
     }

@@ -551,6 +551,7 @@ public class DockRowsSeamTest {
         rows.applyLayout(leavingLayout);
         int apps = views.heights.get(Element.APPS);
         int az = views.heights.get(Element.AZ);
+        int band = views.pageBandHeight;
         assertTrue("the fixture's rows have a height", apps > 0);
 
         // The landing: the front and the other layout already describe the arriving side while
@@ -560,12 +561,14 @@ public class DockRowsSeamTest {
         rows.applyLayout(arrivingLayout);
         assertEquals("apps in the commit pass", apps, (int) views.heights.get(Element.APPS));
         assertEquals("az in the commit pass", az, (int) views.heights.get(Element.AZ));
+        assertEquals("the apps row's page band in the commit pass", band, views.pageBandHeight);
         // The settle: the rows are renewed for the arriving side, then laid out again.
         rows.apply(chrome(arrivingPlace, false), false, false,
             new DockRows.Union(true, true, false));
         rows.applyLayout(arrivingLayout);
         assertEquals("apps after the settle", apps, (int) views.heights.get(Element.APPS));
         assertEquals("az after the settle", az, (int) views.heights.get(Element.AZ));
+        assertEquals("the apps row's page band after the settle", band, views.pageBandHeight);
     }
 
     @Test
