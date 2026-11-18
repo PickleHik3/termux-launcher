@@ -183,7 +183,7 @@ public class StackSceneParityTest {
 
     /** Crossing#stack's stack, recorded. */
     private static final class Moves implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
-            Crossing.Keyboard, Crossing.Dock {
+            Crossing.Keyboard {
         float dockPx, keyboardPx, sinkPx;
         @Override public void translate(float dock, float keyboard) {
             dockPx = dock;
@@ -200,7 +200,7 @@ public class StackSceneParityTest {
 
     @Test public void theTravelIsCrossingStacks() {
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
         SeamCrossing.Answers seam = new SeamCrossing.Answers();
         StackScene.Motion motion = new StackScene.Motion();
         for (boolean floating : BOOLS) for (boolean kbUp : BOOLS) for (boolean sink : BOOLS) {

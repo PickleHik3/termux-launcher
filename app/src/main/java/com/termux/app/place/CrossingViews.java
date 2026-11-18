@@ -7,7 +7,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.SuggestionBarView;
 import com.termux.app.page.PageKind;
 
 /**
@@ -19,10 +18,10 @@ import com.termux.app.page.PageKind;
  *
  * <p>The activity gives it what only the activity has through its {@link Host}: the window's
  * views, the travel's shares it keeps for its own layout passes, the pane and wall controllers,
- * the keyboard and the dock's row.
+ * and the keyboard.
  */
 public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
-        Crossing.Keyboard, Crossing.Dock {
+        Crossing.Keyboard {
 
     /** What only the activity can give the adapter. */
     public interface Host {
@@ -39,10 +38,6 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         void coverWindowInFront(int px);
         /** The in-app keyboard brought up below the screen for {@code target}'s half, quietly. */
         void preRollKeyboard(@NonNull PageKind target);
-        /** The dock's pinned row; null before it is inflated. */
-        @Nullable SuggestionBarView dockRow();
-        /** One of the row's icons was drawn again: the reflection shows it as the icon does. */
-        void onDockRowContentChanged();
         /** The stack's one writer of transforms: the sink, the cut and the slide go through it. */
         @NonNull com.termux.app.StackRenderer stackRenderer();
     }

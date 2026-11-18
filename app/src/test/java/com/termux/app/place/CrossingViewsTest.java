@@ -26,7 +26,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.SuggestionBarView;
 import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
@@ -112,8 +111,6 @@ public class CrossingViewsTest {
         @Override public void rideStatusX(float px) { barX = px; }
         @Override public void coverWindowInFront(int px) { coverPx = px; }
         @Override public void preRollKeyboard(@NonNull PageKind target) { preRolls.add(target); }
-        @Nullable @Override public SuggestionBarView dockRow() { return null; }
-        @Override public void onDockRowContentChanged() {}
     }
 
     /** The layers a sink or a fold moves, and the views the alphas fade. */
@@ -157,7 +154,7 @@ public class CrossingViewsTest {
     /** The crossing over the adapter, driven as the activity's travel pass applies a frame. */
     private final class Drive {
         final CrossingViews views = new CrossingViews(mActivity, mHost);
-        final Crossing crossing = new Crossing(views, views, views, views, views);
+        final Crossing crossing = new Crossing(views, views, views, views);
         final PageKind committed;
         final SeamCrossing.Endpoint here, there;
         final PlaceChromeTravel.States states;

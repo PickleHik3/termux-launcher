@@ -743,7 +743,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.place.CrossingViews mCrossingViews =
         new com.termux.app.place.CrossingViews(this, new CrossingViewsHost());
     private final com.termux.app.place.Crossing mCrossing = new com.termux.app.place.Crossing(
-        mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews);
+        mCrossingViews, mCrossingViews, mCrossingViews, mCrossingViews);
     /** The crossing's per-frame driver (ADR 0018 D17); it reaches this activity through {@link CrossingControllerHost}. */
     private final com.termux.app.place.CrossingController mCrossingController =
         new com.termux.app.place.CrossingController(mCrossing, new CrossingControllerHost());
@@ -24396,17 +24396,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mQuietKeyboardChange = false;
                 mKeyboardOpensBelowScreen = false;
             }
-        }
-
-        @Nullable
-        @Override
-        public SuggestionBarView dockRow() {
-            return mSuggestionBarView;
-        }
-
-        @Override
-        public void onDockRowContentChanged() {
-            TermuxActivity.this.onDockRowContentChanged();
         }
 
     }

@@ -123,7 +123,7 @@ public class CrossingTest {
     // ---- The adapter, recorded ----
 
     private static final class Moves implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
-            Crossing.Keyboard, Crossing.Dock {
+            Crossing.Keyboard {
         float dockPx = Float.NaN, keyboardPx = Float.NaN, sinkPx = Float.NaN;
         float statusAlpha = Float.NaN, sideAlpha = Float.NaN, barX = Float.NaN;
         int coverPx = -1;
@@ -153,7 +153,7 @@ public class CrossingTest {
 
     private static final class Drive {
         final Moves moves = new Moves();
-        final Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        final Crossing crossing = new Crossing(moves, moves, moves, moves);
         final PageKind committed;
         final SeamCrossing.Endpoint here, there;
         final PlaceChromeTravel.States states;
@@ -341,7 +341,7 @@ public class CrossingTest {
     @Test
     public void aKeyboardSwipeLetsTheHoldGoInOneStep() {
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
         crossing.preRollKeyboard(PageKind.TERMINAL, 500);
         crossing.heldOverlap(200);
         // The swipe's frame goes through the crossing: the stack, all of it the keyboard's, and
@@ -383,7 +383,7 @@ public class CrossingTest {
     @Test
     public void aCrossingLeavesNothingOfTheRoomToPutBackAtTheLanding() {
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
         assertFalse(crossing.holdsContent());
         crossing.land(PageRef.of(PageKind.TERMINAL), REVISION);
         crossing.end();
@@ -394,7 +394,7 @@ public class CrossingTest {
     @Test
     public void theCoverIsOnlyEverAppliedUnderAHold() {
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
         crossing.heldOverlap(200);
         crossing.coverAt(0f);
         assertEquals(-1, moves.coverPx);
@@ -469,7 +469,7 @@ public class CrossingTest {
         assertSame(SeamTravel.DockPlan.NONE, SeamTravel.dockPlan(HOME, HOME_WITH_INDEX));
         assertTrue(SeamCrossing.crosses(here, there));
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
         Rest home = new Rest(false, false, true);
         crossing.begin(here, there, SeamCrossing.Stage.of(false, () -> false, true), rest2,
             rest3, REVISION);

@@ -60,7 +60,7 @@ public class TerminalRoundTripParityTest {
     // ---- The adapter: only the page's inset is read ----
 
     private static final class Views implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
-            Crossing.Keyboard, Crossing.Dock {
+            Crossing.Keyboard {
         @Override public void translate(float dockPx, float keyboardPx) {}
         @Override public void sink(float px) {}
         @Override public void alpha(float status, float side) {}
@@ -92,7 +92,7 @@ public class TerminalRoundTripParityTest {
     }
 
     private final Views views = new Views();
-    private final Crossing crossing = new Crossing(views, views, views, views, views);
+    private final Crossing crossing = new Crossing(views, views, views, views);
 
     private SeamCrossing.Endpoint end(@NonNull PageKind page) {
         Dress dress = new DressResolver(new Stored()).dressOf(page);

@@ -36,8 +36,8 @@ import com.termux.app.wall.PageRef;
  * needs nothing of its own: the rests stay, so no measurement jumps. {@link #land} clears everything the crossing held in one step; the stack's
  * dress, which the page's commit still reads, goes at {@link #end}.
  *
- * <p>Its adapter is only what moves: the {@link Stack}, the {@link Bar}, the {@link Cover}, the
- * {@link Keyboard} and the {@link Dock}'s row. Frames read and write fields only; nothing here
+ * <p>Its adapter is only what moves: the {@link Stack}, the {@link Bar}, the {@link Cover} and the
+ * {@link Keyboard}; the dock's rows travel with their side, so a crossing asks nothing of them. Frames read and write fields only; nothing here
  * allocates after {@link #begin}.
  */
 public final class Crossing {
@@ -76,10 +76,6 @@ public final class Crossing {
     public interface Keyboard {
         /** Bring the keyboard up below the screen for {@code target}'s half, quietly. */
         void preRoll(@NonNull PageKind target);
-    }
-
-    /** The dock's pinned row. Rows travel with their side, so a crossing asks nothing of it. */
-    public interface Dock {
     }
 
     /** What a landing has left to do, read before the next crossing. The same object each time. */
@@ -121,7 +117,6 @@ public final class Crossing {
     @NonNull private final Bar mBar;
     @NonNull private final Cover mCover;
     @NonNull private final Keyboard mKeyboard;
-    @NonNull private final Dock mDock;
 
     private final SeamCrossing mSeam = new SeamCrossing();
 
@@ -157,12 +152,11 @@ public final class Crossing {
     private final SeamCrossing.Landing mNoSeam = new SeamCrossing.Landing();
 
     public Crossing(@NonNull Stack stack, @NonNull Bar bar, @NonNull Cover cover,
-                    @NonNull Keyboard keyboard, @NonNull Dock dock) {
+                    @NonNull Keyboard keyboard) {
         mStack = stack;
         mBar = bar;
         mCover = cover;
         mKeyboard = keyboard;
-        mDock = dock;
     }
 
     // ---- Begin and frame ----

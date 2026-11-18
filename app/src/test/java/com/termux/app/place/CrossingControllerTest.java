@@ -117,7 +117,7 @@ public class CrossingControllerTest {
     // ---- The adapter, recorded ----
 
     private static final class Moves implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
-            Crossing.Keyboard, Crossing.Dock {
+            Crossing.Keyboard {
         float dockPx = Float.NaN, keyboardPx = Float.NaN, sinkPx = Float.NaN;
         float statusAlpha = Float.NaN, sideAlpha = Float.NaN, barX = Float.NaN, slide = Float.NaN;
         int coverPx = -1;
@@ -350,7 +350,7 @@ public class CrossingControllerTest {
         wall = wallCtl.wall();
 
         moves = new Moves();
-        crossing = new Crossing(moves, moves, moves, moves, moves);
+        crossing = new Crossing(moves, moves, moves, moves);
         host = new FakeHost();
         // The stack the travel reads its height from: 200 px of rows over a 20 px margin.
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
