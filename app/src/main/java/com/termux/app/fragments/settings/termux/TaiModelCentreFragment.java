@@ -147,6 +147,7 @@ public class TaiModelCentreFragment extends Fragment
     @NonNull private List<TaiModelSpec> installedSpeech = Collections.emptyList();
     /** Installed text-to-image models; their own "Image generation" group under Installed, never in a chat list. */
     @NonNull private List<TaiModelSpec> installedImage = Collections.emptyList();
+    @NonNull private List<TaiModelSpec> installedDepth = Collections.emptyList();
     /** Installed speech-output (voice) models; shown under Installed and never as chat or speech-to-text. */
     @NonNull private List<TaiModelSpec> installedVoice = Collections.emptyList();
     /** The resolver for this phone's picks, rebuilt with the installed models; the Functions rows read it. */
@@ -375,6 +376,7 @@ public class TaiModelCentreFragment extends Fragment
         }
         installedChat = chat;
         installedImage = TaiModelCentreRows.imageModels(installedAll.values());
+        installedDepth = TaiModelCentreRows.depthModels(installedAll.values());
         installedSpeech = TaiSpeechModels.installed(store);
         installedVoice = TaiTtsModels.installed(store);
         // Read aloud is offered only with a voice installed; an install or delete here changes that.
@@ -854,7 +856,23 @@ public class TaiModelCentreFragment extends Fragment
                 addModelRow(items, row);
             }
         }
-        if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty() && installedImage.isEmpty()) {
+        if (!installedDepth.isEmpty()) {
+            String header = getString(R.string.tai_centre_depth_header);
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "depth-models", "depth-models|" + header,
+                new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_depth_sub)), false));
+            for (TaiModelSpec spec : installedDepth) {
+                // Nothing to load, make default or tune: only Delete, like an image model.
+                TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(spec.id, false, spec, null);
+                row.image = true;
+                row.title = spec.displayName;
+                StringBuilder subtitle = new StringBuilder(getString(R.string.tai_centre_kind_depth));
+                if (spec.sizeBytes > 0L) subtitle.append(" · ").append(TaiModelCentreRows.formatBytes(spec.sizeBytes));
+                row.subtitle = subtitle.toString();
+                addModelRow(items, row);
+            }
+        }
+        if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty() && installedImage.isEmpty()
+                && installedDepth.isEmpty()) {
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-installed", "empty-installed",
                 new TaiModelCentreAdapter.Empty(getString(R.string.tai_centre_empty_installed_title),
                     getString(R.string.tai_fn_empty_installed_summary)), false));
