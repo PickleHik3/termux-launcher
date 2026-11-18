@@ -36,6 +36,7 @@ public final class SceneThumbView extends View {
 
     @Nullable private String mSource;
     @Nullable private File mChannel0;
+    @Nullable private File mChannel1;
     @Nullable private Bitmap mBitmap;
     /** Moves with every new source or size, so a late render for an old one is dropped. */
     private int mGeneration;
@@ -52,11 +53,15 @@ public final class SceneThumbView extends View {
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 
-    /** The shader text to show the still of (null for blank) and its iChannel0 image. */
-    public void setShader(@Nullable String source, @Nullable File channel0) {
-        if (java.util.Objects.equals(source, mSource) && java.util.Objects.equals(channel0, mChannel0)) return;
+    /** The shader text to show the still of (null for blank), its iChannel0 image and its depth image. */
+    public void setShader(@Nullable String source, @Nullable File channel0, @Nullable File channel1) {
+        if (java.util.Objects.equals(source, mSource) && java.util.Objects.equals(channel0, mChannel0)
+            && java.util.Objects.equals(channel1, mChannel1)) {
+            return;
+        }
         mSource = source;
         mChannel0 = channel0;
+        mChannel1 = channel1;
         dropBitmap();
         requestRender();
     }
@@ -66,12 +71,12 @@ public final class SceneThumbView extends View {
      * scene kinds any more, so it shows nothing.
      */
     public void setScene(@Nullable String kind, float speed, float density, int palette) {
-        setShader(null, null);
+        setShader(null, null, null);
     }
 
     /** As {@link #setScene}: shows nothing. */
     public void setChoice(@NonNull LiveWallpaperChoice choice) {
-        setShader(null, null);
+        setShader(null, null, null);
     }
 
     /** The still's render scale for a view of {@code w} x {@code h}: the longer side at most {@link #MAX_RENDER_SIDE_PX}. */
@@ -96,13 +101,14 @@ public final class SceneThumbView extends View {
         float scale = renderScale(w, h);
         final int rw = Math.max(1, Math.round(w * scale)), rh = Math.max(1, Math.round(h * scale));
         final File channel0 = mChannel0;
+        final File channel1 = mChannel1;
         final int generation = mGeneration;
         final ShaderLook look = ShaderLook.resolve(getContext());
         mRendering = true;
         WORKER.execute(() -> {
             Bitmap still = null;
             try {
-                still = SceneStill.render(source, channel0, rw, rh, look);
+                still = SceneStill.render(source, channel0, channel1, rw, rh, look);
             } catch (RuntimeException e) {
                 Log.w(TAG, "thumbnail still failed", e);
             }

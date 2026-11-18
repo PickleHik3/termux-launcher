@@ -75,7 +75,7 @@ public final class ShaderPrelude {
         I_FRAME_RATE = 4, I_MOUSE = 5, I_DATE = 6, I_CHANNEL0 = 7, I_CHANNEL_RESOLUTION = 11,
         A_RESOLUTION = 12, A_TIME = 13, A_TOUCH = 14, A_POINTER_COUNT = 15, A_POINTERS = 16,
         A_BATTERY = 17, A_OFFSET = 18, A_DATE = 19, TL_PAGE_OFFSET = 20, TL_BATTERY = 21,
-        TL_KEYBOARD = 22, TL_DARK = 23, TL_COLOR0 = 24;
+        TL_KEYBOARD = 22, TL_DARK = 23, TL_COLOR0 = 24, TL_TOUCH_AGE = 27;
 
     /**
      * Every uniform of the contract, in prelude order. Shadertoy: iResolution .. iChannelResolution.
@@ -85,7 +85,8 @@ public final class ShaderPrelude {
      * (x, y px, touch size), battery float 0..1, offset vec2 (wallpaper offset), date vec4 (year,
      * month from 0, day, seconds since midnight). Launcher extras: tlPageOffset 0..1, tlBattery
      * 0..1, tlKeyboard (fraction of the height), tlDark 0/1, tlColor0..2 (accent, surface,
-     * on-surface; sRGB 0..1).
+     * on-surface; sRGB 0..1), tlTouchAge (seconds since the finger lifted, 0 while it is down, a
+     * large constant before the first touch).
      */
     public static final Uniform[] UNIFORMS = {
         new Uniform("vec3", "iResolution", 0),
@@ -115,6 +116,7 @@ public final class ShaderPrelude {
         new Uniform("vec3", "tlColor0", 0),
         new Uniform("vec3", "tlColor1", 0),
         new Uniform("vec3", "tlColor2", 0),
+        new Uniform("float", "tlTouchAge", 0),
     };
 
     /** The output the generated ES 3 {@code main} writes. */

@@ -90,6 +90,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         @NonNull public final String key;
         @NonNull public final File source;
         @Nullable public final File channel0;
+        /** The depth image of the photo in channel 0, or null. */
+        @Nullable public final File channel1;
         @NonNull public final ShaderSafety.Quality quality;
         /** Debug route: reload the source when its time stamp moves, and never revert on errors. */
         public final boolean debugFile;
@@ -101,16 +103,18 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             this.key = key;
             this.source = videoFile;
             this.channel0 = null;
+            this.channel1 = null;
             this.quality = ShaderSafety.Quality.FULL;
             this.debugFile = debugFile;
             this.video = videoFile;
         }
 
-        public Spec(@NonNull String key, @NonNull File source, @Nullable File channel0,
+        public Spec(@NonNull String key, @NonNull File source, @Nullable File channel0, @Nullable File channel1,
                     @NonNull ShaderSafety.Quality quality, boolean debugFile) {
             this.key = key;
             this.source = source;
             this.channel0 = channel0;
+            this.channel1 = channel1;
             this.quality = quality;
             this.debugFile = debugFile;
             this.video = null;
@@ -243,8 +247,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     }
 
     /**
-     * {@code tlPageOffset}, 0..1. Nothing feeds the scene a page position yet (the photo's parallax
-     * lives in the backdrop), so it stays 0 until a caller sets it.
+     * {@code tlPageOffset}, 0..1: how far the home screen's pages have slid, from
+     * {@code SceneController.setPageOffset}. It stays 0 until a caller sets it.
      */
     public void setPageOffset(float offset) {
         mPageOffset = Math.max(0f, Math.min(1f, offset));
@@ -494,7 +498,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             long nowMs = SystemClock.uptimeMillis();
             boolean touched = false;
             if (!mRing.isEmpty()) {
-                mRing.drainInto(mTouch);
+                mRing.drainInto(mTouch, mIn.timeSec);
                 touched = true;
             }
             boolean motion = mMotion;
@@ -636,6 +640,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 if (pct >= 0 && pct <= 100) mIn.battery = pct / 100f;
             }
             mIn.pageOffset = mPageOffset;
+            mIn.touchAge = mTouch.age(mIn.timeSec);
             mIn.offset[0] = mPageOffset;
             mIn.offset[1] = 0f;
             mIn.keyboard = mKeyboard;
@@ -734,6 +739,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
                 } else {
                     loadShader();
                     if (mSpec.channel0 != null) mGl.setChannel(0, ImageChannel.photo(mSpec.channel0));
+                    if (mSpec.channel1 != null) mGl.setChannel(1, ImageChannel.depth(mSpec.channel1));
                 }
                 mChannelsPaused = false;
             }

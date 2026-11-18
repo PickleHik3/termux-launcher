@@ -97,7 +97,7 @@ public class ShaderSafetyTest {
         assertEquals(200f, m[1], 0f);
         assertEquals(50f, m[2], 0f);
         assertEquals(-400f, m[3], 0f);
-        t.up(300f, 600f);
+        t.up(300f, 600f, 0.0);
         t.move(900f, 900f);
         t.fill(m, 1000f, 0.5f);
         assertEquals(150f, m[0], 0f);
@@ -123,21 +123,47 @@ public class ShaderSafetyTest {
 
     @Test
     public void anEditOfTheShaderInUseRebuildsOnlyForSourceOrTexture() {
-        ShaderStamp running = new ShaderStamp(1000L, null, 0L, ShaderSafety.Quality.HALF, 30);
+        ShaderStamp running = new ShaderStamp(1000L, null, 0L, null, 0L, ShaderSafety.Quality.HALF, 30);
         assertEquals(ShaderStamp.Change.REBUILD, ShaderStamp.decide(null, running));
         assertEquals(ShaderStamp.Change.NONE,
-            ShaderStamp.decide(running, new ShaderStamp(1000L, null, 99L, ShaderSafety.Quality.HALF, 30)));
+            ShaderStamp.decide(running, new ShaderStamp(1000L, null, 99L, null, 0L, ShaderSafety.Quality.HALF, 30)));
         assertEquals(ShaderStamp.Change.REBUILD,
-            ShaderStamp.decide(running, new ShaderStamp(2000L, null, 0L, ShaderSafety.Quality.HALF, 30)));
+            ShaderStamp.decide(running, new ShaderStamp(2000L, null, 0L, null, 0L, ShaderSafety.Quality.HALF, 30)));
         assertEquals(ShaderStamp.Change.REBUILD,
-            ShaderStamp.decide(running, new ShaderStamp(1000L, "a.png", 5L, ShaderSafety.Quality.HALF, 30)));
-        ShaderStamp textured = new ShaderStamp(1000L, "a.png", 5L, ShaderSafety.Quality.HALF, 30);
+            ShaderStamp.decide(running, new ShaderStamp(1000L, "a.png", 5L, null, 0L, ShaderSafety.Quality.HALF, 30)));
+        ShaderStamp textured = new ShaderStamp(1000L, "a.png", 5L, null, 0L, ShaderSafety.Quality.HALF, 30);
         assertEquals(ShaderStamp.Change.REBUILD,
-            ShaderStamp.decide(textured, new ShaderStamp(1000L, "a.png", 6L, ShaderSafety.Quality.HALF, 30)));
+            ShaderStamp.decide(textured, new ShaderStamp(1000L, "a.png", 6L, null, 0L, ShaderSafety.Quality.HALF, 30)));
         assertEquals(ShaderStamp.Change.IN_PLACE,
-            ShaderStamp.decide(running, new ShaderStamp(1000L, null, 0L, ShaderSafety.Quality.FULL, 30)));
+            ShaderStamp.decide(running, new ShaderStamp(1000L, null, 0L, null, 0L, ShaderSafety.Quality.FULL, 30)));
         assertEquals(ShaderStamp.Change.IN_PLACE,
-            ShaderStamp.decide(running, new ShaderStamp(1000L, null, 0L, ShaderSafety.Quality.HALF, 60)));
+            ShaderStamp.decide(running, new ShaderStamp(1000L, null, 0L, null, 0L, ShaderSafety.Quality.HALF, 60)));
+    }
+
+    @Test
+    public void aChangedDepthImageRebuilds() {
+        ShaderStamp running = new ShaderStamp(1000L, "a.png", 5L, null, 0L, ShaderSafety.Quality.HALF, 30);
+        assertEquals(ShaderStamp.Change.REBUILD,
+            ShaderStamp.decide(running, new ShaderStamp(1000L, "a.png", 5L, "d.png", 7L, ShaderSafety.Quality.HALF, 30)));
+        ShaderStamp deep = new ShaderStamp(1000L, "a.png", 5L, "d.png", 7L, ShaderSafety.Quality.HALF, 30);
+        assertEquals(ShaderStamp.Change.NONE, ShaderStamp.decide(deep, deep));
+        assertEquals(ShaderStamp.Change.REBUILD,
+            ShaderStamp.decide(deep, new ShaderStamp(1000L, "a.png", 5L, "d.png", 8L, ShaderSafety.Quality.HALF, 30)));
+        assertEquals(ShaderStamp.Change.REBUILD,
+            ShaderStamp.decide(deep, new ShaderStamp(1000L, "a.png", 5L, null, 0L, ShaderSafety.Quality.HALF, 30)));
+    }
+
+    @Test
+    public void touchAgeIsLargeBeforeATouchZeroWhileDownThenCountsFromTheLift() {
+        SceneTouch t = new SceneTouch();
+        assertEquals(SceneTouch.AGE_BEFORE_TOUCH, t.age(5.0), 0f);
+        t.down(10f, 10f);
+        assertEquals(0f, t.age(6.0), 0f);
+        t.up(10f, 10f, 7.0);
+        assertEquals(0f, t.age(7.0), 0f);
+        assertEquals(1.5f, t.age(8.5), 1e-6f);
+        t.down(10f, 10f);
+        assertEquals(0f, t.age(9.0), 0f);
     }
 
     @Test
