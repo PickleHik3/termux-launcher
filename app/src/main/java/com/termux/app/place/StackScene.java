@@ -176,6 +176,16 @@ public final class StackScene {
         public int topology;
 
         /**
+         * What the slab and the keyboard show on this frame ({@link #shape}): the slab's height,
+         * corner radius and inset, and the keyboard's shown height, each from the leaving rest
+         * to the arriving one on the material curve. All 0 for a frame without ends.
+         */
+        public float slabHeightPx;
+        public float slabCornerPx;
+        public float slabInsetPx;
+        public float keyboardShownPx;
+
+        /**
          * Each side's rows ({@link Side}, by ordinal): drawn this far across from where they are
          * laid out, riding with their side ({@link #sideSlide}), and this far down, so they stand
          * on the keyboard's top as it is drawn. Across is 0 for a frame without ends.
@@ -219,7 +229,9 @@ public final class StackScene {
         /** Whether {@code o} draws the same: transforms, what shows of each region, strip, inks. */
         public boolean sameAs(@NonNull Frame o) {
             if (!sameTransforms(o) || topology != o.topology || inkArgb != o.inkArgb
-                || stripAlpha != o.stripAlpha) return false;
+                || stripAlpha != o.stripAlpha || slabHeightPx != o.slabHeightPx
+                || slabCornerPx != o.slabCornerPx || slabInsetPx != o.slabInsetPx
+                || keyboardShownPx != o.keyboardShownPx) return false;
             for (int s = 0; s < Side.COUNT; s++) {
                 if (sideTx[s] != o.sideTx[s] || sideTy[s] != o.sideTy[s]) return false;
             }
@@ -255,6 +267,30 @@ public final class StackScene {
         body(from, to, p, live, out);
         regions(from, to, materialShare(p), live, out);
         sides(from, to, p, live, out);
+        shape(from, to, materialShare(p), out);
+    }
+
+    /**
+     * The slab's and the keyboard's shown numbers at blend {@code w} ({@link #materialShare}) from
+     * {@code from}'s rest to {@code to}'s, into {@code out}: exactly the leaving rest's at 0 and
+     * the arriving rest's at 1, a straight blend between, so a structure apart (Corners, Margin,
+     * the dock's or the keyboard's size) moves with the wall and the landing finds it drawn.
+     * Drawn, never laid out: the numbers are cuts, outlines and insets of the one layout.
+     */
+    public static void shape(@Nullable StackEnd from, @Nullable StackEnd to, float w,
+                             @NonNull Frame out) {
+        if (from == null || to == null) {
+            out.slabHeightPx = out.slabCornerPx = out.slabInsetPx = out.keyboardShownPx = 0f;
+            return;
+        }
+        out.slabHeightPx = blend(from.slabHeightPx(), to.slabHeightPx(), w);
+        out.slabCornerPx = blend(from.cornerPx, to.cornerPx, w);
+        out.slabInsetPx = blend(from.insetPx, to.insetPx, w);
+        out.keyboardShownPx = blend(from.keyboardShownPx(), to.keyboardShownPx(), w);
+    }
+
+    private static float blend(float a, float b, float w) {
+        return w <= 0f ? a : w >= 1f ? b : a + (b - a) * w;
     }
 
     /**

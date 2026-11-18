@@ -46,6 +46,14 @@ public final class StackEnd {
      */
     public int roomPx;
     public boolean floating;
+    /**
+     * The slab's corner radius and its inset from the window's edge at this end's rest, in px: its
+     * Corners and Margin as drawn. A crossing blends them on the material curve
+     * ({@link StackScene#shape}); the slab's height is the host layer's rest height and the
+     * keyboard's shown height the rest's keyboard height while the end has one.
+     */
+    public int cornerPx;
+    public int insetPx;
     /** Each region's look; null where this end has no such region. */
     @NonNull public final RegionLook[] looks = new RegionLook[REGION_COUNT];
     @NonNull public StripRule strip = StripRule.BARE;
@@ -60,6 +68,16 @@ public final class StackEnd {
     /** Whether this end has {@code region}. */
     public boolean has(int region) {
         return looks[region] != null;
+    }
+
+    /** The slab's laid-out height at this end's rest ({@link StackGeometry#HOST}). */
+    public int slabHeightPx() {
+        return rest.layerPresent[StackGeometry.HOST] ? rest.layerHeightPx[StackGeometry.HOST] : 0;
+    }
+
+    /** The keyboard's height as this end shows it at rest: 0 where it has none up. */
+    public int keyboardShownPx() {
+        return has(KEYBOARD) && rest.keyboardPresent ? rest.keyboardHeightPx : 0;
     }
 
     public int topology() {
