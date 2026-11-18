@@ -1074,8 +1074,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             finishReturnHold(false);
             return;
         }
-        mReturnWait = com.termux.app.window.FirstLayout.afterSettledFrame(paneHost,
-            RETURN_WAIT_BACKSTOP_MS, this::finishReturnHold);
+        // The window's root, not the pane host: off the Workspace the host is off screen or gone,
+        // where a layout asked of it stays pending and no frame of the window reads as settled.
+        mReturnWait = com.termux.app.window.FirstLayout.afterSettledFrame(
+            getWindow().getDecorView(), RETURN_WAIT_BACKSTOP_MS, this::finishReturnHold);
     }
 
     private void cancelReturnWait() {
