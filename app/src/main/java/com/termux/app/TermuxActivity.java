@@ -1728,6 +1728,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final com.termux.app.page.Pages mPages = new com.termux.app.page.Pages(mPageHost,
         () -> mFrames.requestFrame(com.termux.app.window.FrameStep.PAGE_FRONT));
+    /** Home's widgets and floats wear their glass through the Home page. */
+    private final com.termux.app.launcher.home.HomeGlass mHomeGlass =
+        new com.termux.app.launcher.home.HomeGlass(mGlass, mPages::declareGlass,
+            () -> mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0);
     /** What every Home page asks of this window: its leave and shown work and its one view. */
     private final com.termux.app.launcher.home.HomePageHost mHomePageHost =
         new com.termux.app.launcher.home.HomePageHost() {
@@ -2130,6 +2134,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mFrames.bind(com.termux.app.window.FrameStep.GEOMETRY, mGeometryHost::runBookedFrame);
         mPages.setHomeDefault(() -> mPaneWallController != null
             && mPaneWallController.goToHomePageOne(isVisible()));
+        // The pages' glass lives in the glass service as long as the pages are registered, and
+        // its Live pictures come from the recorder, made on the first ask.
+        mPages.setGlass(mGlass);
+        mGlass.setLiveSource(new com.termux.app.glass.GlassService.LiveSource() {
+            @Nullable @Override
+            public Object attach(@NonNull View surface, float radiusPx, int priority) {
+                com.termux.app.chrome.LiveBackdrop recorder = liveBackdrop();
+                if (recorder == null) return null;
+                com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
+                recorder.setStoredBake(cache.bakedVibrancy(), cache.bakedFrameTint());
+                int rank = com.termux.app.chrome.LiveBackdrop.rankOf(priority);
+                return recorder.attach(surface, radiusPx, rank);
+            }
+
+            @Override
+            public void detach(@NonNull View surface) {
+                if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);
+            }
+        });
         // The bottom stack's writer is a step of the frame table, on the pipeline's guards.
         mStackRenderer.attach(mFrames);
         // The top stack's writer joins it: the bar's ride, the strip and the chips' slide.
@@ -4604,9 +4627,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Nullable com.termux.app.glass.GlassService.Redress redress) {
         com.termux.app.glass.GlassKind kind = mGlass.grantedTo(element, surface);
         if (kind == null) {
-            int priority = rank == com.termux.app.chrome.LiveBackdrop.RANK_WIDGET
-                ? com.termux.app.glass.GlassEntry.PRIORITY_WIDGET
-                : rank == com.termux.app.chrome.LiveBackdrop.RANK_FLOAT
+            int priority = rank == com.termux.app.chrome.LiveBackdrop.RANK_FLOAT
                 ? com.termux.app.glass.GlassEntry.PRIORITY_FLOAT
                 : com.termux.app.glass.GlassEntry.PRIORITY_DOCK;
             // The dock stands in the chrome layer; floats and widgets on the pages.
@@ -13703,6 +13724,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new PaneHost(), paneHost, getLayoutInflater());
         mPaneController.setGeometryScheduler(mGeometry);
         mPaneController.setHomePageIds(() -> wallPages().homePageIdsForRepository());
+        mPaneController.setHomeFloatGlass(new com.termux.app.terminal.TerminalPaneController.FloatGlass() {
+            @Nullable @Override
+            public com.termux.app.chrome.LivePicture wear(@NonNull View slab,
+                    @Nullable Runnable redress) {
+                return mHomeGlass.wearFloat(slab, redress);
+            }
+            @Override public void drop(@NonNull View slab) { mHomeGlass.drop(slab); }
+        });
         mAppliedPaneStyleKey = null;
         mPaneController.setOnActiveWindowChanged(mPages::innerChanged);
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
@@ -26091,25 +26120,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (page == null) return;
         // The Home pages register only now that their one view exists.
         mPaneWallController.setHomePageFactory(
-            id -> new com.termux.app.launcher.home.HomePage(id, mHomePageHost));
+            id -> new com.termux.app.launcher.home.HomePage(id, mHomePageHost, mHomeGlass));
+        page.setGlass(new com.termux.app.wall.WidgetPaneFrame.Glass() {
+            @Nullable @Override
+            public com.termux.app.chrome.LivePicture wear(@NonNull View slab, int blurDp,
+                    @Nullable Runnable redress) {
+                return mHomeGlass.wearWidget(slab, blurDp, redress);
+            }
+            @Override public void drop(@NonNull View slab) { mHomeGlass.drop(slab); }
+        });
         mPaneWallController.setDisplayPageFactory(mDisplayPages::page);
         mPaneWallController.setTerminalStops(mTerminalPages);
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             // Widgets take what the dock and the floats leave of Live blur's budget.
             @Override public boolean liveBlur() { return mLiveBlur; }
-            @Nullable @Override
-            public com.termux.app.chrome.LivePicture attachWidgetLiveGlass(@NonNull View slab,
-                    int blurDp, @Nullable Runnable redress) {
-                String element = glassElement("widget", slab);
-                return attachLivePicture(slab, blurDp,
-                    com.termux.app.chrome.LiveBackdrop.RANK_WIDGET, element,
-                    mGlass.grantedTo(element, slab) == null ? glassRedress(redress) : null);
-            }
-            @Override public void detachWidgetLiveGlass(@NonNull View slab) {
-                if (mLiveBackdrop != null) mLiveBackdrop.detach(slab);
-                mGlass.unregister(glassElement("widget", slab));
-            }
             @Override public void openSurfaceEditor() {
                 TermuxActivity.this.openSurfaceEditor(com.termux.app.surfaces.EditorDoor.PANE_CONTROLS);
             }

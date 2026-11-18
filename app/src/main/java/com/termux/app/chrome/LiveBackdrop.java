@@ -423,6 +423,13 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     public static final int RANK_FLOAT = 1;
     public static final int RANK_WIDGET = 2;
 
+    /** The rank of a glass entry's {@code GlassEntry.PRIORITY_*}: the dock's is the chrome's. */
+    public static int rankOf(int glassPriority) {
+        return glassPriority == com.termux.app.glass.GlassEntry.PRIORITY_WIDGET ? RANK_WIDGET
+            : glassPriority == com.termux.app.glass.GlassEntry.PRIORITY_FLOAT ? RANK_FLOAT
+            : RANK_CHROME;
+    }
+
     /**
      * Which of {@code count} live pictures, at {@code ranks}, gives its place to a surface of
      * {@code rank}: the newest of the worst rank, when that rank is worse than {@code rank};

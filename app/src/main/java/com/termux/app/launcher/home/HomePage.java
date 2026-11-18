@@ -3,10 +3,15 @@ package com.termux.app.launcher.home;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.app.glass.GlassEntry;
 
 import com.termux.app.page.Page;
 import com.termux.app.page.PageKind;
 import com.termux.app.page.Rest;
+
+import java.util.List;
 
 /**
  * One Home page behind the page contract. Every Home page shares the host's one view; the page
@@ -18,9 +23,22 @@ public final class HomePage implements Page {
     private final int mPageId;
     @NonNull private final HomePageHost mHost;
 
+    @Nullable private final HomeGlass mGlass;
+
     public HomePage(int pageId, @NonNull HomePageHost host) {
+        this(pageId, host, null);
+    }
+
+    public HomePage(int pageId, @NonNull HomePageHost host, @Nullable HomeGlass glass) {
         mPageId = pageId;
         mHost = host;
+        mGlass = glass;
+    }
+
+    /** Home's widgets and floats declare their glass here; every Home page adds the same ones. */
+    @Override
+    public void declareGlass(@NonNull List<GlassEntry> out) {
+        if (mGlass != null) mGlass.declare(out);
     }
 
     public int pageId() {

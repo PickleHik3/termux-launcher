@@ -140,12 +140,27 @@ public final class WidgetPaneFrame extends PaneContentFrame
     public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
                                                              @Nullable Runnable redress) {
         com.termux.app.chrome.LookGlassStyle look = mStyle == null ? null : mStyle.lookGlass();
-        if (mHost == null || look == null) return null;
-        return mHost.attachWidgetLiveGlass(slab, look.spec().blurDp, redress);
+        if (mLiveGlass == null || look == null) return null;
+        return mLiveGlass.wear(slab, look.spec().blurDp, redress);
     }
 
     @Override public void detachLiveGlass(@NonNull View slab) {
-        if (mHost != null) mHost.detachWidgetLiveGlass(slab);
+        if (mLiveGlass != null) mLiveGlass.drop(slab);
+    }
+
+    /** Where a widget's glass is worn and given back; the Home page's glass. */
+    public interface Glass {
+        /** The slab's live picture at {@code blurDp}; null while another kind is granted. */
+        @Nullable
+        com.termux.app.chrome.LivePicture wear(@NonNull View slab, int blurDp,
+                                               @Nullable Runnable redress);
+
+        /** The slab gave its glass back. */
+        void drop(@NonNull View slab);
+    }
+
+    public void setGlass(@Nullable Glass glass) {
+        mLiveGlass = glass;
     }
 
     /**
@@ -221,18 +236,6 @@ public final class WidgetPaneFrame extends PaneContentFrame
         void setWidgetGrid(int columns, int rows);
         /** Whether Live blur is in effect now. */
         default boolean liveBlur() { return false; }
-        /**
-         * A widget slab's live picture at {@code blurDp}, in the budget's widget place; null while
-         * the glass service grants it another kind. {@code redress} runs when that kind moves.
-         */
-        @Nullable
-        default com.termux.app.chrome.LivePicture attachWidgetLiveGlass(@NonNull View slab,
-                                                                        int blurDp,
-                                                                        @Nullable Runnable redress) {
-            return null;
-        }
-        /** The slab gave its glass entry back. */
-        default void detachWidgetLiveGlass(@NonNull View slab) {}
     }
 
     /** The buttons the page's border tab carries. */
@@ -256,6 +259,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
     @Nullable private PaneSurfaceStyle mStyle;
     @Nullable private PaneControlsView mControls;
     @Nullable private Host mHost;
+    @Nullable private Glass mLiveGlass;
     @Nullable private com.termux.app.launcher.widget.WidgetGridSizePopup mGridSizePopup;
     private boolean mEditing;
     private int mPressedAction = PaneControlsView.ACTION_NONE;

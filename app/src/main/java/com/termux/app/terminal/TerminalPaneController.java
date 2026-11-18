@@ -494,6 +494,7 @@ public class TerminalPaneController {
     private final Map<Window, HostedFloatContainer> mHostedContainers = new HashMap<>();
     /** Where Home floats are drawn, over the Home pages; null until the host gives one. */
     @Nullable private HomeFloatLayer mHomeFloatLayer;
+    @Nullable private FloatGlass mHomeFloatGlass;
     /** The Home float holding focus, whose pane takes the keyboard; null while Home or a window has it. */
     @Nullable private Window mFocusedHomeFloat;
     /** What covers the float layer, on screen: the status bar's bottom, the dock's top, the keyboard's top. */
@@ -3652,6 +3653,20 @@ public class TerminalPaneController {
      * with its page and slides with Home across the seam. Floats opened before it existed are put
      * in it now.
      */
+    /** Where a Home float's glass is worn and given back; the Home page's glass. */
+    public interface FloatGlass {
+        /** The slab's live picture; null while another kind is granted. */
+        @Nullable
+        com.termux.app.chrome.LivePicture wear(@NonNull View slab, @Nullable Runnable redress);
+
+        /** The slab gave its glass back. */
+        void drop(@NonNull View slab);
+    }
+
+    public void setHomeFloatGlass(@Nullable FloatGlass glass) {
+        mHomeFloatGlass = glass;
+    }
+
     public void setHomeFloatLayer(@Nullable HomeFloatLayer layer) {
         if (mHomeFloatLayer == layer) return;
         if (mHomeFloatLayer != null) {
@@ -5824,10 +5839,16 @@ public class TerminalPaneController {
         if (slab == null) return;
         if (FloatLiveGlass.wants(FloatLiveGlass.inside(slab, container),
                 slab.getVisibility() == View.VISIBLE)) {
-            slab.setLivePicture(mHost.attachLiveGlass(slab, container.mGlassRedress));
+            slab.setLivePicture(container.mIsHomeFloat
+                ? (mHomeFloatGlass == null ? null
+                    : mHomeFloatGlass.wear(slab, container.mGlassRedress))
+                // Window floats keep the activity's path until the Terminal page declares its
+                // glass (#273).
+                : mHost.attachLiveGlass(slab, container.mGlassRedress));
         } else {
             if (slab.livePicture() != null) slab.setLivePicture(null);
-            mHost.detachLiveGlass(slab);
+            if (!container.mIsHomeFloat) mHost.detachLiveGlass(slab);
+            else if (mHomeFloatGlass != null) mHomeFloatGlass.drop(slab);
         }
         // The titlebar shows the same picture, so glass on glass reaches it too, at no slot of
         // its own: the recording reaches up over the strip.
@@ -7707,6 +7728,8 @@ public class TerminalPaneController {
         private final Leaf mLeaf;
         /** The Home float this container draws, or null for a window's floating pane. */
         @Nullable private final Window mHomeFloat;
+        /** Whether this is a Home float: its glass goes through the Home page's. */
+        final boolean mIsHomeFloat;
         private final FloatTitlebarView mTitlebar;
         private final Paint mChromePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private int mDragMode = DRAG_NONE;
@@ -7725,6 +7748,7 @@ public class TerminalPaneController {
             super(mHostView.getContext());
             mLeaf = leaf;
             mHomeFloat = homeFloat;
+            mIsHomeFloat = homeFloat != null;
             setElevation(dp(FLOAT_ELEVATION_DP));
             // The container itself stays transparent so the gap between the titlebar and the
             // pane shows what is behind; the surface color lives on a wrapper rather than the
@@ -7822,7 +7846,8 @@ public class TerminalPaneController {
             PaneGlassBackdropView slab = mPaneGlassViews.get(mLeaf.session);
             if (slab == null) return;
             if (slab.livePicture() != null) slab.setLivePicture(null);
-            mHost.detachLiveGlass(slab);
+            if (!mIsHomeFloat) mHost.detachLiveGlass(slab);
+            else if (mHomeFloatGlass != null) mHomeFloatGlass.drop(slab);
             titlebar().setLiveGlass(null);
         }
 
