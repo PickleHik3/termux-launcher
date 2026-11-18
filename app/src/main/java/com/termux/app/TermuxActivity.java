@@ -25829,6 +25829,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             wall != null && wall.settleEndsSlide(), windowDraws, page)) {
                         Trace.beginSection("Wall.landed");
                         Trace.endSection();
+                        // The wall already answers the arriving page as current: the glyphs
+                        // change in the frame the motion lands, not in the settle after it.
+                        refreshPageGlyphs();
                         com.termux.app.wall.PaneWallPage earlier = mLandedFrameSettle.hold(page);
                         if (earlier != null) runWallPageSettle(earlier);
                         mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
