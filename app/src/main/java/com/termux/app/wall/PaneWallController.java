@@ -65,17 +65,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         @Nullable default WallPages wallPages() { return null; }
         /**
-         * Bind the one display view to Display page {@code pageId} (ADR 0015, A3b): the Display
-         * page the wall is on or heading for, which shows the display live while the others show
-         * their picture or card. -1 while the wall has no Display page.
-         */
-        default void bindDisplayPage(int pageId) { }
-        /**
-         * The wall came to rest on Display page {@code pageId}, the bound one: the display starts
-         * here when it is down ({@link DisplayPagePolicy#startsOnLanding}).
-         */
-        default void onDisplayPageLanded(int pageId) { }
-        /**
          * What builds the Assistant page's view (ADR 0022), asked when the wall first holds an
          * Assistant page. The wall owns the view; the host only says how it is made.
          */
@@ -210,6 +199,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** The Home pages registered in {@link #mPages}, by page id. */
     @NonNull private final java.util.Map<Integer, com.termux.app.page.Page> mHomePages =
         new java.util.HashMap<>();
+    /** Makes the Display page for a Display page id; null until the host has set it. */
+    @Nullable private java.util.function.IntFunction<com.termux.app.page.Page> mDisplayPageFactory;
+    /** The Display pages registered in {@link #mPages}, by page id. */
+    @NonNull private final java.util.Map<Integer, com.termux.app.page.Page> mDisplayPages =
+        new java.util.HashMap<>();
     @Nullable private PaneSurfaceStyle mStyle;
     /** How much of the pages' outlines the last frame left showing; 1 at rest. */
     private float mOutlineAlpha = 1f;
@@ -238,13 +232,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private boolean mDefaultOrder = true;
     /** The row had a window at the last {@link #refreshPages}. */
     private boolean mHadWindow;
+    /** Where the display view is bound and lands; NONE until the host sets it. */
+    @NonNull private WallDisplay mDisplay = WallDisplay.NONE;
     /** The run last handed to the host ({@link WallHome#bindRun}). */
     @NonNull private WallHome mHome = WallHome.NONE;
     private int mBoundFirst = 0;
     private int mBoundLast = -1;
     /** The Display page the display view was last bound to; -1 for none yet. */
     private int mDisplayPageId = -1;
-    /** The Display page last handed to the host ({@link Host#bindDisplayPage}). */
+    /** The Display page last handed to the Display seam ({@link WallDisplay#bind}). */
     private int mBoundDisplayPageId = -1;
     /**
      * The last used Display page: the one the wall last came to rest on, or was sent to by its
@@ -271,10 +267,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (mPages != null && mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
         if (mPages != null) for (Integer id : mHomePages.keySet()) mPages.remove(id);
         mHomePages.clear();
+        if (mPages != null) for (Integer id : mDisplayPages.keySet()) mPages.remove(id);
+        mDisplayPages.clear();
         mAssistantPageId = -1;
         mAssistantPage = null;
         mPages = pages;
         syncHomePages();
+        syncDisplayPages();
         syncAssistantPage();
         recordFront();
     }
@@ -288,6 +287,68 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHomePageFactory = factory;
         syncHomePages();
         recordFront();
+    }
+
+    /**
+     * The Display's seam: told where the one display view is bound and where the wall lands on
+     * it. The binding made before this call is handed over at once.
+     */
+    public void setDisplay(@NonNull WallDisplay display) {
+        mDisplay = display;
+        if (mBoundDisplayPageId >= 0) display.bind(mBoundDisplayPageId);
+    }
+
+    /**
+     * The seam that makes one Display page per Display page id, all sharing the one display view;
+     * the wall controller never names the display's classes. Registers them at once and on every
+     * later page-list change.
+     */
+    public void setDisplayPageFactory(
+            @Nullable java.util.function.IntFunction<com.termux.app.page.Page> factory) {
+        mDisplayPageFactory = factory;
+        syncDisplayPages();
+        recordFront();
+    }
+
+    /** Keeps one Display page registered per Display page id the wall holds. */
+    private void syncDisplayPages() {
+        java.util.List<Integer> ids = new java.util.ArrayList<>();
+        if (mKnownPages != null) {
+            for (WallPages.Page page : mKnownPages.pages()) {
+                if (page.kind == WallPages.PageKind.DISPLAY) ids.add(page.id);
+            }
+        } else if (mHost.useAs().rowPages().contains(PaneWallPage.DISPLAY)) {
+            // A row laid out from the kinds alone holds one Display cell under the kind's own id.
+            ids.add(PaneWallLayout.kindPageId(PaneWallPage.DISPLAY));
+        }
+        syncRegistered(mDisplayPageFactory, mDisplayPages, ids);
+    }
+
+    /** Registers one page per id from {@code factory} in {@link #mPages}; drops ids that left. */
+    private void syncRegistered(
+            @Nullable java.util.function.IntFunction<com.termux.app.page.Page> factory,
+            @NonNull java.util.Map<Integer, com.termux.app.page.Page> registered,
+            @NonNull java.util.List<Integer> ids) {
+        if (mPages == null || factory == null) {
+            if (mPages != null) for (Integer id : registered.keySet()) mPages.remove(id);
+            registered.clear();
+            return;
+        }
+        java.util.Iterator<java.util.Map.Entry<Integer, com.termux.app.page.Page>> it =
+            registered.entrySet().iterator();
+        while (it.hasNext()) {
+            java.util.Map.Entry<Integer, com.termux.app.page.Page> entry = it.next();
+            if (ids.contains(entry.getKey())) continue;
+            mPages.remove(entry.getKey());
+            it.remove();
+        }
+        for (int i = 0; i < ids.size(); i++) {
+            int id = ids.get(i);
+            if (registered.containsKey(id)) continue;
+            com.termux.app.page.Page page = factory.apply(id);
+            registered.put(id, page);
+            mPages.put(id, page);
+        }
     }
 
     /** Keeps one Home page registered per Home page id the wall holds; drops those that left. */
@@ -383,6 +444,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int display = mWall.boundPageId(PaneWallPage.DISPLAY);
         bindDisplay(display >= 0 ? display : -1);
         syncHomePages();
+        syncDisplayPages();
         syncAssistantPage();
         recordFront();
         // The last window closed under the wall: the empty Terminal page keeps its cell, and the
@@ -514,7 +576,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         }
         if (pageId == mBoundDisplayPageId) return;
         mBoundDisplayPageId = pageId;
-        mHost.bindDisplayPage(pageId);
+        mDisplay.bind(pageId);
     }
 
     /** The Display page the display view is bound to; -1 while the wall has none. */
@@ -883,7 +945,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * Build the display's frame on the wall as the Display pages' one view (A3b): it stands on
-     * the bound Display page ({@link Host#bindDisplayPage}). Inflated here rather than in the
+     * the bound Display page ({@link WallDisplay#bind}). Inflated here rather than in the
      * layout file so an install that never runs a display never builds its surface.
      */
     @Nullable
@@ -1400,7 +1462,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHost.onWallPageSettled(page);
         if (page == PaneWallPage.TERMINAL) startShellOnLanding();
         if (page == PaneWallPage.DISPLAY && mBoundDisplayPageId >= 0) {
-            mHost.onDisplayPageLanded(mBoundDisplayPageId);
+            mDisplay.landed(mBoundDisplayPageId);
         }
     }
 

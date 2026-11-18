@@ -217,26 +217,23 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     /** Bumped by every cover and every cancel: a commit callback of an older one does nothing. */
     private int mCoverToken;
     private int mCoverFramesLeft;
-    private final android.view.Choreographer.FrameCallback mCoverFrame =
-        new android.view.Choreographer.FrameCallback() {
-            @Override public void doFrame(long frameTimeNanos) {
-                if (--mCoverFramesLeft > 0) {
-                    android.view.Choreographer.getInstance().postFrameCallback(this);
-                } else {
-                    finishCover(false);
-                }
-            }
-        };
-    private final android.view.Choreographer.FrameCallback mSwapFrame =
-        new android.view.Choreographer.FrameCallback() {
-            @Override public void doFrame(long frameTimeNanos) {
-                if (--mSwapFramesLeft > 0) {
-                    android.view.Choreographer.getInstance().postFrameCallback(this);
-                } else {
-                    finishSwap(false);
-                }
-            }
-        };
+    /**
+     * The window's frame pipeline, which steps the swap and cover holds once per frame; without
+     * one they end by their timers ({@link #mSwapBackstop}, {@link #mCoverBackstop}).
+     */
+    @Nullable private com.termux.app.window.FramePipeline mFrames;
+    /** One frame of the cover's wait: false once it is over. */
+    private final java.util.function.BooleanSupplier mCoverFrame = () -> {
+        if (--mCoverFramesLeft > 0) return true;
+        finishCover(false);
+        return false;
+    };
+    /** One frame of the swap's wait: false once it is over. */
+    private final java.util.function.BooleanSupplier mSwapFrame = () -> {
+        if (--mSwapFramesLeft > 0) return true;
+        finishSwap(false);
+        return false;
+    };
     /** Told the surface is back, so the stand-in can wait out the frames X takes to fill it. */
     private final android.view.SurfaceHolder.Callback mStillSurfaceCallback =
         new android.view.SurfaceHolder.Callback() {
@@ -656,6 +653,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     public void dismissControls() {
         if (mControls != null) mControls.dismiss();
         if (mRail != null) mRail.dismiss();
+    }
+
+    /** The window's frame pipeline, which steps the still's waits; set once the frame is built. */
+    public void setFramePipeline(@Nullable com.termux.app.window.FramePipeline frames) {
+        mFrames = frames;
     }
 
     public void setHost(@Nullable Host host) {
@@ -1418,10 +1420,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     }
 
     private void startSwapFrames() {
-        android.view.Choreographer choreographer = android.view.Choreographer.getInstance();
-        choreographer.removeFrameCallback(mSwapFrame);
         mSwapFramesLeft = SurfaceStandIn.SWAP_FRAMES;
-        choreographer.postFrameCallback(mSwapFrame);
+        if (mFrames != null && mSwapHold != null) mFrames.stepHold(mSwapHold, mSwapFrame);
     }
 
     /** The surface drew, or the backstop ran out: the stand-in comes down. */
@@ -1456,9 +1456,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     private void postCoverFrames(int frames) {
         mCoverFramesLeft = frames;
-        android.view.Choreographer choreographer = android.view.Choreographer.getInstance();
-        choreographer.removeFrameCallback(mCoverFrame);
-        choreographer.postFrameCallback(mCoverFrame);
+        if (mFrames != null && mCoverHold != null) mFrames.stepHold(mCoverHold, mCoverFrame);
     }
 
     /** A frame with the stand-in has reached the screen, or the backstop ran out. */
@@ -1483,7 +1481,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         mCoverHold = null;
         mCoverToken++;
         mStillHandler.removeCallbacks(mCoverBackstop);
-        android.view.Choreographer.getInstance().removeFrameCallback(mCoverFrame);
         mCoverFramesLeft = 0;
     }
 
@@ -1492,7 +1489,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         mSwapHold = null;
         cancelCover();
         mStillHandler.removeCallbacks(mSwapBackstop);
-        android.view.Choreographer.getInstance().removeFrameCallback(mSwapFrame);
         mSwapFramesLeft = 0;
     }
 

@@ -1724,6 +1724,72 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mPaneWallController.widgetsPage();
             }
         };
+    /** Which Display page the display view stands on, and what its frame shows there. */
+    private final com.termux.app.x11.DisplayPageBinding mDisplayPageBinding =
+        new com.termux.app.x11.DisplayPageBinding(this,
+            new com.termux.app.x11.DisplayPageBinding.Host() {
+                @Nullable @Override public com.termux.app.x11.X11PaneFrame frame() {
+                    return mPaneWallController == null ? null : mPaneWallController.displayWindow();
+                }
+                @Nullable @Override public com.termux.app.wall.WallPages.Page page(int pageId) {
+                    return wallPages().page(pageId);
+                }
+                @NonNull @Override public java.util.List<com.termux.app.wall.WallPages.Page> pages() {
+                    return wallPages().pages();
+                }
+                @Nullable @Override public com.termux.app.wall.PaneWallLayout wall() {
+                    return mPaneWallController == null ? null : mPaneWallController.wall();
+                }
+                @Override public boolean isRunning() { return mDisplayServer.isRunning(); }
+                @Override public boolean isGone() { return isFinishing(); }
+                @Override public boolean buildFrameIfMissing() {
+                    if (mPaneWallController == null || !isX11DisplayEnabled()) return false;
+                    return mPaneWallController.displayWindow() == null && buildDisplayFrame();
+                }
+                @Override public void land(int pageId) { onDisplayPageLandedAt(pageId); }
+            });
+    /** The Display pages' one display view, and what they ask of this window. */
+    private final com.termux.app.x11.DisplayPages mDisplayPages =
+        new com.termux.app.x11.DisplayPages(new com.termux.app.x11.DisplayPageHost() {
+            @Nullable @Override public View displayView() {
+                com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+                    ? null : mPaneWallController.displayWindow();
+                if (frame == null) return null;
+                try {
+                    return frame.display();
+                } catch (IllegalStateException notInflated) {
+                    return null;
+                }
+            }
+            @Nullable @Override public com.termux.app.x11.DisplayPages.Link link() {
+                com.termux.app.x11.X11DisplayHostController controller = mDisplayServer.controller();
+                return controller == null ? null
+                    : com.termux.app.x11.DisplayPages.linkOf(controller);
+            }
+            @Override public boolean isRunning() { return mDisplayServer.isRunning(); }
+            @Nullable @Override public com.termux.app.page.PageKind committedKind() {
+                return mPages.committedKind();
+            }
+            @Override public boolean wallAtRest() {
+                return mPaneWallController == null || (!mPaneWallController.wall().isMoving()
+                    && mPaneWallController.wall().offsetPx() == 0f);
+            }
+            @Override public boolean isDisplayShowing() { return isDisplayWindowShowing(); }
+            @Override public boolean isLayerOpen() { return TermuxActivity.this.isLayerOpen(); }
+            @Override public boolean wantsKeyboardOnEnter() {
+                return TermuxActivity.this.wantsKeyboardOnEnter(
+                    com.termux.app.wall.PaneWallPage.DISPLAY);
+            }
+            @Override public void refreshEmptyState() { refreshDisplayEmptyStateReadiness(); }
+            @Override public void restoreTypingClaim() { restoreInAppKeyboardTypingClaim(); }
+            @Override public void syncKeyboardRoute() { syncDisplayKeyboardRoute(); }
+            @Override public void hideSystemKeyboard() { hideDisplaySystemKeyboard(); }
+            @Override public boolean handKeysToTerminal() { return returnKeysToTerminal(); }
+            @NonNull @Override public com.termux.app.x11.DisplayFrameContentPolicy.Content frameContent() {
+                return mFrameContent.content();
+            }
+            @Override public void lowerKeyboard() { lowerDisplayKeyboard(); }
+        });
     /** The dock's element in the glass registry. */
     private static final String DOCK_GLASS = "dock";
     /** The dock's glass kind moved: its backdrop is dressed again. */
@@ -2450,7 +2516,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // already rests on the Display place, and a display whose surface is not attached takes
         // no touch and misses every setting changed while we were away.
         if (mDisplayServer.controller() != null && isDisplayWindowShowing() && !mPaneWallController.wall().isMoving()) {
-            syncDisplayAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
+            mDisplayPages.attach();
         }
         // The default home can have been changed while we were stopped.
         mDefaultHomeApp = null;
@@ -4907,9 +4973,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (wallPage == com.termux.app.wall.PaneWallPage.ASSISTANT) {
             // Its dim is the Workspace's look, read through its own page.
             page = pages.assistant();
-        } else if (wallPage == com.termux.app.wall.PaneWallPage.DISPLAY && mBoundDisplayPage >= 0) {
+        } else if (wallPage == com.termux.app.wall.PaneWallPage.DISPLAY && mDisplayPageBinding.boundPage() >= 0) {
             // A Display page wears its own dim (W6).
-            page = pages.page(mBoundDisplayPage);
+            page = pages.page(mDisplayPageBinding.boundPage());
             if (page == null) page = pages.terminal();
         } else if (terminal) {
             page = pages.terminal();
@@ -6238,7 +6304,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.PaneWallPage window =
             surface == com.termux.app.place.SeamDress.Surface.STACK ? stackPage : mLastWallPage;
         // The Assistant page reads its own page's look cells (@kind:assistant, ADR 0022).
-        int displayId = window == com.termux.app.wall.PaneWallPage.DISPLAY ? mBoundDisplayPage
+        int displayId = window == com.termux.app.wall.PaneWallPage.DISPLAY ? mDisplayPageBinding.boundPage()
             : window == com.termux.app.wall.PaneWallPage.ASSISTANT ? assistantPageId() : -1;
         return com.termux.app.place.SeamDress.lookPageId(kind,
             kind == com.termux.app.wall.PaneWallPage.WIDGETS ? homePageInFront() : -1, displayId,
@@ -6252,7 +6318,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.wall.PaneWallPage.WIDGETS, page.id >= 0 ? page.id : homePageInFront(),
                 -1, terminalLookPageId());
         return com.termux.app.place.SeamDress.lookPageId(page.kind, -1,
-            page.kind == com.termux.app.wall.PaneWallPage.DISPLAY ? mBoundDisplayPage
+            page.kind == com.termux.app.wall.PaneWallPage.DISPLAY ? mDisplayPageBinding.boundPage()
                 : page.kind == com.termux.app.wall.PaneWallPage.ASSISTANT ? assistantPageId() : -1,
             terminalLookPageId());
     }
@@ -14464,8 +14530,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.wall.PaneWallPage place = currentWallPlace();
             if (place == com.termux.app.wall.PaneWallPage.WIDGETS)
                 return homePageInFront();
-            if (place == com.termux.app.wall.PaneWallPage.DISPLAY && mBoundDisplayPage >= 0)
-                return mBoundDisplayPage;
+            if (place == com.termux.app.wall.PaneWallPage.DISPLAY && mDisplayPageBinding.boundPage() >= 0)
+                return mDisplayPageBinding.boundPage();
             com.termux.app.wall.WallPages.Page terminal = TermuxActivity.this.wallPages().terminal();
             return terminal == null ? -1 : terminal.id;
         }
@@ -15198,7 +15264,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mDisplayTouchpad != null) {
                 mDisplayTouchpad = null;
                 releaseDisplayTouchpadWait();
-                mDisplayTouchpadWaitRound = 0;
                 host.post(TermuxActivity.this::syncDisplayTouchpad);
             }
         }
@@ -15212,7 +15277,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAttachedInAppKeyboardView = null;
             mDisplayTouchpad = null;
             releaseDisplayTouchpadWait();
-            mDisplayTouchpadWaitRound = 0;
             mKeyboardGeometry.discardMeasuredHeight();
         }
 
@@ -25807,13 +25871,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                     int index) {
                     showWallInnerPage(page, index);
                 }
-                // The display view stands on one Display page at a time (ADR 0015, A3b).
-                @Override public void bindDisplayPage(int pageId) {
-                    onDisplayPageBound(pageId);
-                }
-                @Override public void onDisplayPageLanded(int pageId) {
-                    onDisplayPageLandedAt(pageId);
-                }
                 @Override public void onInnerStepBegin(
                         @NonNull com.termux.app.wall.PaneWallPage page, int steps) {
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
@@ -26064,6 +26121,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         // Before anything lands the wall: Home's pages, run and press page come from the seam.
         mPaneWallController.setHome(mHomeSeam);
+        // The display view stands on one Display page at a time (ADR 0015, A3b).
+        mPaneWallController.setDisplay(mDisplayPageBinding);
         mPaneWallController.attachTerminalPage(paneHost, (x, out) ->
             mPaneController != null && mPaneController.bottomPaneEdgeAt(x, out));
         // The Widgets page is built before the widget controller looks its grid up, so the
@@ -26581,6 +26640,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Home pages register only now that their one view exists.
         mPaneWallController.setHomePageFactory(
             id -> new com.termux.app.launcher.home.HomePage(id, mHomePageHost));
+        mPaneWallController.setDisplayPageFactory(mDisplayPages::page);
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             // Widgets take what the dock and the floats leave of Live blur's budget.
@@ -26721,18 +26781,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, animate);
     }
 
-    /** {@link #syncDisplayAttachment} is to leave the X view attached until the travel ends. */
-    private boolean mDeferDisplayDetach;
-    /** It did: the X view is still attached to a display window that is no longer in front. */
-    private boolean mDisplayDetachOwed;
-
-    /** The display's slide out is over: its X view lets go now, unless it came back in front. */
-    private void detachOwedDisplayView() {
-        if (!mDisplayDetachOwed) return;
-        mDisplayDetachOwed = false;
-        if (mDisplayServer.controller() != null && !isDisplayWindowShowing()) mDisplayServer.controller().detachView();
-    }
-
     /**
      * The window in front of the Workspace changed kind without the wall moving — the display
      * window came in front, or a terminal window took its place — so the place changed: what a
@@ -26751,6 +26799,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.PaneWallPage place = currentWallPlace();
         settlePlaceChrome(place);
         syncDisplayAttachment(place);
+        // No landing follows a change of window under a wall at rest: the view goes with it now.
+        if (place == com.termux.app.wall.PaneWallPage.DISPLAY) mDisplayPages.attach();
+        else mDisplayPages.leave();
         if (place == com.termux.app.wall.PaneWallPage.TERMINAL) noteTerminalPlaceMayBeVisible();
         // A display window left before its display came up goes, once the window that took its
         // place has arrived.
@@ -26832,7 +26883,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * is taken back from pending removal, so no page is left deleted while its display runs.
      */
     private void removeDisplayPageAndStop(int id) {
-        final boolean holds = isDisplayUp() && mBoundDisplayPage == id;
+        final boolean holds = isDisplayUp() && mDisplayPageBinding.boundPage() == id;
         editWallPages(pages -> pages.remove(id));
         final com.termux.app.wall.WallPagesStore store = wallPagesStore();
         if (!holds) {
@@ -26885,171 +26936,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshTerminalWindowBar();
     }
 
-    /** The Display page the display view stands on (A3b); -1 while the wall has none. */
-    private int mBoundDisplayPage = -1;
-
-    /**
-     * The wall bound the display view to Display page {@code pageId}: the page gets the frame,
-     * built as soon as the wall has a Display page so the slide onto it shows the page's card,
-     * not an empty page. Building the frame alone starts nothing.
-     */
-    private void onDisplayPageBound(int pageId) {
-        int left = mBoundDisplayPage;
-        mBoundDisplayPage = pageId;
-        if (left != pageId) {
-            // The frame leaves page `left`: what it shows now is that page's last picture. The
-            // page it comes to shows its own picture, or its card, until the landing makes it live.
-            keepDisplayPagePicture(left);
-            mDisplayPageStillPending = pageId >= 0;
-            applyDisplayPageStill();
-        }
-        if (pageId >= 0 && mPaneWallController != null) {
-            mPaneWallController.wall().post(this::ensureDisplayPageFrame);
-        }
-    }
-
-    /** The frame came to its bound page and has not landed there yet: the page's still shows. */
-    private boolean mDisplayPageStillPending;
-    /** Hides the bound page's still once its app was raised or run there. */
-    private final Runnable mDisplayPageLive = () -> {
-        mDisplayPageStillPending = false;
-        applyDisplayPageStill();
-    };
-    /** How long a landed page keeps its still while its app comes forward, in ms. */
-    private static final long DISPLAY_PAGE_LIVE_DELAY_MS = 300L;
-
-    /** Keep what the running display shows as Display page {@code pageId}'s picture. */
-    private void keepDisplayPagePicture(int pageId) {
-        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
-            ? null : mPaneWallController.displayWindow();
-        if (pageId < 0 || frame == null || !mDisplayServer.isRunning()) return;
-        frame.copyPagePicture(full -> {
-            if (full == null) return;
-            com.termux.app.wall.WallPages.Page page = wallPages().page(pageId);
-            if (isFinishing() || page == null || mPaneWallController == null
-                    || page.kind != com.termux.app.wall.WallPages.PageKind.DISPLAY) {
-                full.recycle();
-                return;
-            }
-            // Pictures are kept at half size (ADR 0016 section 2): a still is seen in motion.
-            android.graphics.Bitmap picture = com.termux.app.wall.PaneWallLayout.halfPicture(
-                full, frame.getWidth(), frame.getHeight());
-            if (picture == null) return;
-            // The wall keeps the one copy: the page's cell shows it while the display is bound
-            // elsewhere, and the frame's still while the page's app comes forward.
-            mPaneWallController.wall().keepPicture(pageId, picture);
-            // A picture that lands after the frame came back to its page is that page's newest.
-            if (pageId == mBoundDisplayPage) applyDisplayPageStill();
-        });
-    }
-
-    /**
-     * What the display frame shows on its bound page ({@link
-     * com.termux.app.wall.PageStillPolicy#shows}): live, the page's picture, or its card. A
-     * page the frame just came to counts as not live until its landing. With the display down
-     * and its keyboard data missing, the empty state's install prompt shows instead of a card.
-     */
-    private void applyDisplayPageStill() {
-        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
-            ? null : mPaneWallController.displayWindow();
-        if (frame == null) return;
-        int pageId = mBoundDisplayPage;
-        boolean running = mDisplayServer.isRunning();
-        com.termux.app.wall.WallPages.Page page = pageId < 0 ? null : wallPages().page(pageId);
-        if (page == null || (!running && !com.termux.app.x11.X11CliInstaller.hasKeyboardData())) {
-            frame.hidePageStill();
-            return;
-        }
-        // Landed with the display down: the empty state is all there is. A picture kept from
-        // the last live visit is of a display that is gone, worth nothing in front of it.
-        if (!running && !mDisplayPageStillPending) {
-            frame.hidePageStill();
-            return;
-        }
-        android.graphics.Bitmap picture = mPaneWallController.wall().pictureOf(pageId);
-        switch (com.termux.app.wall.PageStillPolicy.shows(pageId,
-                mDisplayPageStillPending ? -1 : pageId, running, picture != null)) {
-            case LIVE:
-            case NONE:
-                frame.hidePageStill();
-                return;
-            case PICTURE:
-                frame.showPageStill(picture, null, "");
-                return;
-            case CARD:
-            default:
-                break;
-        }
-        // The card's name and icon come from the cache (W2): read off the main thread once per
-        // binding, never on a drag's re-bind.
-        com.termux.app.x11.DisplayCardCache.Card<android.graphics.drawable.Drawable> card =
-            page.binding == null ? null : displayCards().card(page.binding);
-        if (page.binding != null && card == null && mDisplayCardsAsked.add(page.binding)) {
-            refreshDisplayCards();
-        }
-        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = card == null ? null : card.app;
-        android.graphics.drawable.Drawable icon = card == null ? null : card.icon;
-        if (icon == null) {
-            icon = androidx.core.content.ContextCompat.getDrawable(this,
-                R.drawable.ic_symbol_desktop_windows);
-            if (icon != null) {
-                icon = icon.mutate();
-                icon.setTint(0xFFE8EAED);
-            }
-        }
-        frame.showPageStill(null, icon, com.termux.app.wall.DisplayPagePolicy.cardName(page,
-            app == null ? null : app.name));
-    }
-
-    @Nullable private com.termux.app.x11.DisplayCardCache<android.graphics.drawable.Drawable>
-        mDisplayCards;
-    /** Bindings whose card a refresh was asked for since the catalog last changed. */
-    private final java.util.Set<String> mDisplayCardsAsked = new java.util.HashSet<>();
-    private static final java.util.concurrent.ExecutorService DISPLAY_CARD_READER =
-        java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "display-cards");
-            thread.setDaemon(true);
-            return thread;
-        });
-
-    /** The Linux app catalog and the bound Display pages' cards, read off the main thread. */
-    @NonNull
-    private com.termux.app.x11.DisplayCardCache<android.graphics.drawable.Drawable> displayCards() {
-        if (mDisplayCards == null) {
-            final android.content.res.Resources resources = getResources();
-            mDisplayCards = new com.termux.app.x11.DisplayCardCache<>(
-                () -> com.termux.app.x11.LinuxAppCatalog.scan(
-                    com.termux.app.x11.LinuxAppCatalog.roots()),
-                app -> {
-                    java.io.File file = com.termux.app.x11.LinuxAppIcons.find(app);
-                    return file == null ? null
-                        : com.termux.app.x11.LinuxAppIcons.load(resources, file);
-                },
-                DISPLAY_CARD_READER, this::runOnUiThread);
-        }
-        return mDisplayCards;
-    }
-
-    /** Reads the catalog and every bound Display page's card again; the still follows. */
-    private void refreshDisplayCards() {
-        java.util.List<String> bindings = new java.util.ArrayList<>();
-        for (com.termux.app.wall.WallPages.Page p : wallPages().pages()) {
-            if (p.kind == com.termux.app.wall.WallPages.PageKind.DISPLAY && p.binding != null)
-                bindings.add(p.binding);
-        }
-        displayCards().refresh(bindings, () -> {
-            if (!isFinishing()) applyDisplayPageStill();
-        });
-    }
-
-    /** The display's frame on the wall while the wall has a Display page, the display up or not. */
-    private void ensureDisplayPageFrame() {
-        if (mPaneWallController == null || !isX11DisplayEnabled() || mBoundDisplayPage < 0) return;
-        if (mPaneWallController.displayWindow() == null && buildDisplayFrame()) {
-            applyDisplayPageStill();
-        }
-    }
-
     /**
      * The wall came to rest on Display page {@code pageId}: the display starts there when it is
      * neither running nor on its way ({@link com.termux.app.wall.DisplayPagePolicy#startsOnLanding}) and
@@ -27059,16 +26945,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onDisplayPageLandedAt(int pageId) {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
-        // The page goes live once its app had a moment to come forward (A3c2).
-        if (pageId == mBoundDisplayPage) {
-            mPaneWallController.wall().removeCallbacks(mDisplayPageLive);
-            mPaneWallController.wall().postDelayed(mDisplayPageLive, DISPLAY_PAGE_LIVE_DELAY_MS);
-        }
         com.termux.app.wall.WallPages.Page page = wallPages().page(pageId);
         String binding = page == null ? null : page.binding;
         com.termux.app.x11.LinuxAppCatalog.LinuxApp app = null;
         if (binding != null) {
-            app = displayCards().find(binding);
+            app = mDisplayPageBinding.cards().find(binding);
             // Not in the cached catalog (not read yet, or installed since): one scan, on a landing
             // only, never per frame.
             if (app == null) {
@@ -27147,6 +27028,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.x11.X11PaneFrame page =
             mPaneWallController.attachDisplayWindow(getLayoutInflater());
         if (page == null) return false;
+        page.setFramePipeline(mFrames);
         page.setHost(new com.termux.app.x11.X11PaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             @Override public void openSurfaceEditor() {
@@ -27267,7 +27149,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void dropAddedLinuxPage() {
         int id = mAddedLinuxPage;
         mAddedLinuxPage = -1;
-        if (id < 0 || (isDisplayUp() && mBoundDisplayPage == id)) return;
+        if (id < 0 || (isDisplayUp() && mDisplayPageBinding.boundPage() == id)) return;
         // A page made lasting since ("Add display") is the user's now.
         com.termux.app.wall.WallPages.Page page = wallPages().page(id);
         if (page == null || !page.temporary) return;
@@ -27381,7 +27263,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Whoever owns typing now — an open palette or sheet keeps its claim — not nobody.
         restoreInAppKeyboardTypingClaim();
         hideDisplaySystemKeyboard();
-        releaseDisplayFocus(mPaneWallController.displayWindow());
+        mDisplayPages.releaseFocus();
         mPaneWallController.detachDisplayWindow();
         syncDisplayEnvironment();
         syncDisplayKeyboardRoute();
@@ -27399,7 +27281,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Display pages stay on the wall: a fresh frame stands on the bound one, its card. It
         // goes up in this same pass, not a posted one: with the old frame off and nothing on the
         // page, a frame between would draw the bare wallpaper.
-        ensureDisplayPageFrame();
+        mDisplayPageBinding.ensureFrame();
     }
 
     /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
@@ -27473,24 +27355,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Android's Back on the Display place: a keyboard the place raised goes down first, and with
-     * nothing of its own to put down the app on the display is told to go back. What it means is
-     * {@link com.termux.app.x11.DisplayBackPolicy}; this is where the answer is applied.
+     * Android's Back on the Display place, on the key path because X wants every key: the Display
+     * page's own Back ({@link com.termux.app.x11.DisplayPages#onBack}), answered once on the way
+     * up with the press swallowed, so nothing below the page sees half a Back. What the page
+     * leaves (PASS) goes the ordinary way, whose chain ends at Home page 1.
      */
     private boolean consumeDisplayBack(@NonNull KeyEvent event) {
-        com.termux.app.x11.DisplayBackPolicy.Action action =
-            com.termux.app.x11.DisplayBackPolicy.decide(isDisplayWindowShowing(), isLayerOpen(),
-                mDisplayServer.isRunning(),
-                mDisplayServer.controller() == null ? null : mDisplayServer.controller().textFocusPolicy().state(),
-                mFrameContent.content());
-        if (action == com.termux.app.x11.DisplayBackPolicy.Action.PASS) return false;
-        // Answered once, on the way up; the press is swallowed with it so nothing below the page
-        // sees half a Back.
-        if (event.getAction() != KeyEvent.ACTION_UP) return true;
-        if (action == com.termux.app.x11.DisplayBackPolicy.Action.LOWER_KEYBOARD)
-            lowerDisplayKeyboard();
-        else if (mDisplayServer.controller() != null)
-            mDisplayServer.controller().sendBackKey();
+        if (mDisplayPages.back() == com.termux.app.x11.DisplayBackPolicy.Action.PASS) return false;
+        if (event.getAction() == KeyEvent.ACTION_UP) mDisplayPages.onBack();
         return true;
     }
 
@@ -27569,92 +27441,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The display's surface follows the page: attached while the display window is the one at
-     * rest, detached otherwise — a hidden page holds no screen-sized buffer, and the server keeps
-     * its clients either way. Called when the wall settles, and when a controller is built while
-     * the wall already rests on the page (the page's own "Turn on"), which no settle follows.
+     * The settle's part of the Display: the keys' row follows the place, and a display view kept
+     * attached through a slide off the Display pages lets go now. Attaching and letting go
+     * otherwise belong to the Display pages' front and leave ({@link com.termux.app.x11.DisplayPages}).
      */
     private void syncDisplayAttachment(@NonNull com.termux.app.wall.PaneWallPage page) {
         mSettledWallPage = page;
         refreshExtraKeySet(true);
-        com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
-            ? null : mPaneWallController.displayWindow();
-        // Off its window the display's view must neither keep the keys nor take them back.
-        if (page != com.termux.app.wall.PaneWallPage.DISPLAY) releaseDisplayFocus(display);
-        if (mDisplayServer.controller() == null || display == null) return;
-        if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
-            // The arrival itself: nothing about starting or stopping a display happened, but the
-            // message may be stale if a package landed in the prefix while the wall rested
-            // elsewhere.
-            refreshDisplayEmptyStateReadiness();
-            mDisplayDetachOwed = false;
-            com.termux.app.x11.DisplayViewFocus.admit(display.display());
-            mDisplayServer.controller().attachView(display.display());
-            display.display().requestFocus();
-            // A place that asked for the keyboard as it arrived asked for it itself, so the
-            // text-focus policy leaves that keyboard alone until it is put down again.
-            mDisplayServer.controller().onDisplayPlaceEntered(
-                wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.DISPLAY));
-            // The in-app keyboard and the extra-keys row type into X while the page is showing;
-            // the terminal never sees those values, unless a layer open over it holds them.
-            restoreInAppKeyboardTypingClaim();
-            syncDisplayKeyboardRoute();
-        } else {
-            if (mDeferDisplayDetach) mDisplayDetachOwed = true;
-            else mDisplayServer.controller().detachView();
-            mDisplayServer.controller().onDisplayPlaceLeft();
-            restoreInAppKeyboardTypingClaim();
-            // The phone's keyboard belongs to the place it was raised on; it goes down with it,
-            // and the launcher's keyboard takes its suppression back for the terminal.
-            hideDisplaySystemKeyboard();
-            syncDisplayKeyboardRoute();
-        }
+        if (page != com.termux.app.wall.PaneWallPage.DISPLAY) mDisplayPages.detachIfOwed();
     }
 
     /**
-     * The display window left the screen or is going: the keys go back to the active terminal
-     * pane — quietly, so no system keyboard comes up for it — and the display's view stops being
-     * able to take them (DisplayViewFocus). Without it the palette and the terminal stay deaf
-     * after a display session until the app restarts.
+     * The keys go back to the active terminal pane, quietly, once: no retry. A key that then
+     * finds nothing holding the keys is delivered by the per-key safety net, which asks again.
+     * Nothing to do while an external text field takes input. True when the pane holds them.
      */
-    private void releaseDisplayFocus(@Nullable com.termux.app.x11.X11PaneFrame frame) {
-        if (frame == null) return;
-        com.termux.x11.LorieView view;
-        try {
-            view = frame.display();
-        } catch (IllegalStateException notInflated) {
-            return;
-        }
-        com.termux.app.x11.DisplayViewFocus.release(view,
-            focused -> focused instanceof TerminalView, this::returnKeysToTerminal);
+    private boolean returnKeysToTerminal() {
+        if (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive()) return false;
+        return handKeysToActivePane();
     }
-
-    /**
-     * The keys go back to the active terminal pane, quietly, and are checked to have landed: a
-     * focus request made while the display goes can come to nothing (the pane out of the window,
-     * or its page changing under it), and then nothing in the window holds the keys at all. Tried
-     * again after each of the next layouts until it lands, or until something that types — a
-     * terminal, a text field taking input — holds them.
-     */
-    private void returnKeysToTerminal() {
-        if (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive()) return;
-        if (handKeysToActivePane() || getWindow() == null || mKeysReturnPending) return;
-        mKeysReturnPending = true;
-        com.termux.app.x11.DisplayViewFocus.retryAfterLayout(getWindow().getDecorView(), 3,
-            () -> {
-                boolean done = (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive())
-                    || getCurrentFocus() instanceof TerminalView
-                    || isDisplayKeyHolderShowing()
-                    || handKeysToActivePane();
-                if (done) mKeysReturnPending = false;
-                return done;
-            },
-            // Out of tries: the safety net delivers each key and asks again with the next one.
-            () -> mKeysReturnPending = false);
-    }
-
-    /** A {@link #returnKeysToTerminal} retry waits for a layout; one at a time. */
-    private boolean mKeysReturnPending;
 
     /** One quiet focus request on the active pane; true when the pane really holds the keys. */
     private boolean handKeysToActivePane() {
@@ -27754,8 +27559,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Apps came or went, so a class that resolved to nothing may resolve now.
         if (mDisplayWindowIcons != null) mDisplayWindowIcons.clear();
         // The Display pages' cards are read again with the catalog (W2).
-        mDisplayCardsAsked.clear();
-        if (mDisplayCards != null) refreshDisplayCards();
+        mDisplayPageBinding.onCatalogChanged();
         // The same two steps, in the same order, as a package change takes through
         // refreshSuggestionBarFromPackageState: kick the provider's background rebuild first, then
         // tell the drawer. The provider parks warm-up callbacks while a rebuild is in flight, so
@@ -28124,7 +27928,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     onWallPlacesChanged();
                 }
                 // A removed Display page's picture went with refreshPages (A3c2).
-                applyDisplayPageStill();
+                mDisplayPageBinding.applyStill();
             }
             @Override public void onRemoved(@NonNull com.termux.app.wall.WallPages.Page page) {
                 // The removal is final: the page's own look goes with it, and what stood on it.
@@ -28311,14 +28115,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     @Override @Nullable public String displayAppName(@NonNull String binding) {
                         com.termux.app.x11.LinuxAppCatalog.LinuxApp app =
-                            displayCards().find(binding);
+                            mDisplayPageBinding.cards().find(binding);
                         return app == null ? null : app.name;
                     }
                     @Override public int pageAfterCurrent() {
                         return linuxRouteFromPageId();
                     }
                     @Override public void refreshDisplayCards() {
-                        TermuxActivity.this.refreshDisplayCards();
+                        mDisplayPageBinding.refreshCards();
                     }
                     @Override public void refreshPages() {
                         if (mPaneWallController != null) mPaneWallController.refreshPages();
@@ -28359,7 +28163,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     removeAssistantPageFromWall(id);
                 }
                 @Override public boolean displayPageHolds(int id) {
-                    return isDisplayUp() && mBoundDisplayPage == id;
+                    return isDisplayUp() && mDisplayPageBinding.boundPage() == id;
                 }
                 @Override public void removeDisplayPage(int id) {
                     removeDisplayPageAndStop(id);
@@ -28402,9 +28206,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override @NonNull public java.util.List<com.termux.app.wall.PageOverviewView.DisplayApp>
                         displayApps() {
                     java.util.List<com.termux.app.x11.LinuxAppCatalog.LinuxApp> apps =
-                        displayCards().apps();
+                        mDisplayPageBinding.cards().apps();
                     // Not read yet: read it now, for the next time the picker opens.
-                    if (apps.isEmpty()) refreshDisplayCards();
+                    if (apps.isEmpty()) mDisplayPageBinding.refreshCards();
                     java.util.List<com.termux.app.wall.PageOverviewView.DisplayApp> out =
                         new java.util.ArrayList<>(apps.size());
                     for (com.termux.app.x11.LinuxAppCatalog.LinuxApp app : apps) {
@@ -28992,7 +28796,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Built while the display window is already in front at rest (its own "Turn on") — there
         // is no settle coming to attach the surface, so do it now.
         if (isDisplayWindowShowing() && !mPaneWallController.wall().isMoving()) {
-            syncDisplayAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
+            mDisplayPages.attach();
         }
     }
 
@@ -29105,7 +28909,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? null : mPaneWallController.displayWindow();
             if (frame != null) frame.applyRunning(running);
             if (mPaneWallController != null) mPaneWallController.onDisplayRunningChanged();
-            applyDisplayPageStill();
+            mDisplayPageBinding.applyStill();
             TermuxActivity.this.syncPlaceBar();
             syncDisplayTouchpad();
             syncDisplayEnvironment();
@@ -29466,9 +29270,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The keyboard layout the pad follows, held so a second attach does not stack another. */
     @Nullable private View.OnLayoutChangeListener mDisplayTouchpadFollower;
     /** Set while the pad is waiting out a keyboard layout before it is attached. */
-    @Nullable private DisplayTouchpadWait mDisplayTouchpadWait;
-    /** Layouts waited out in a row; the pad is attached anyway once it reaches the cap. */
-    private int mDisplayTouchpadWaitRound;
+    @Nullable private com.termux.app.window.FirstLayout.Handle mDisplayTouchpadWait;
+    /** The pad waited out one layout already: it is attached at the next ask, whatever it finds. */
+    private boolean mDisplayTouchpadWaited;
 
     /** Flip mouse mode; returns the new state. The mark at the end of the stats is the announcement. */
     boolean toggleMouseMode() {
@@ -29739,7 +29543,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!wanted) {
             releaseDisplayTouchpadWait();
-            mDisplayTouchpadWaitRound = 0;
             if (pad == null) return;
             final com.termux.app.x11.DisplayTouchpadView leaving = pad;
             mDisplayTouchpad = null;
@@ -29798,16 +29601,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // been asked to part wider has not reported the new one yet. Wait that layout out rather
         // than standing the pad over the whole frame, and putting the keys out, for a frame.
         if (keyboardView != null && (parting || !keyboardView.isLaidOut())
-            && mDisplayTouchpadWaitRound < MAX_DISPLAY_TOUCHPAD_WAITS) {
-            if (mDisplayTouchpadWait == null || !mDisplayTouchpadWait.follows(keyboardView)) {
-                releaseDisplayTouchpadWait();
-                mDisplayTouchpadWaitRound++;
-                mDisplayTouchpadWait = new DisplayTouchpadWait(keyboardView);
+            && !mDisplayTouchpadWaited) {
+            // One layout, once: the 160 ms backstop is the keyboard reveal gate's, for the same
+            // reason — a layout that never comes must not swallow the pad.
+            if (mDisplayTouchpadWait == null) {
+                mDisplayTouchpadWait = com.termux.app.window.FirstLayout.afterNextLayout(
+                    keyboardView, 160L, () -> {
+                        mDisplayTouchpadWait = null;
+                        mDisplayTouchpadWaited = true;
+                        syncDisplayTouchpad();
+                    });
             }
             return;
         }
         releaseDisplayTouchpadWait();
-        mDisplayTouchpadWaitRound = 0;
         if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
         Rect gap = splitKeyboardTouchpadGap(keyboardView);
         host.addView(pad, seatDisplayTouchpad(pad, keyboardView, gap));
@@ -29888,46 +29695,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /**
-     * How many keyboard layouts the pad waits out before it is attached anyway. The wait exists
-     * so the pad is never sized to a frame the keyboard is about to leave; a wait that never
-     * ends would be mouse mode with nothing to point on, which is worse than one wrong frame.
-     */
-    private static final int MAX_DISPLAY_TOUCHPAD_WAITS = 3;
-
-    /**
-     * One keyboard layout waited out before the touchpad is attached: the keyboard's first, or
-     * the one a widened parting has just asked for. The 160 ms backstop is the keyboard reveal
-     * gate's, for the same reason — a layout that never comes must not swallow the pad.
-     */
-    private final class DisplayTouchpadWait {
-
-        @NonNull private final View mKeyboardView;
-        @NonNull private final com.termux.app.window.FirstLayout.Handle mLayoutWait;
-
-        DisplayTouchpadWait(@NonNull View keyboardView) {
-            mKeyboardView = keyboardView;
-            mLayoutWait = com.termux.app.window.FirstLayout.afterNextLayout(keyboardView, 160L, this::onLaidOut);
-        }
-
-        boolean follows(@NonNull View keyboardView) {
-            return mKeyboardView == keyboardView;
-        }
-
-        private void onLaidOut() {
-            if (mDisplayTouchpadWait != this) return;
-            release();
-            syncDisplayTouchpad();
-        }
-
-        void release() {
-            if (mDisplayTouchpadWait == this) mDisplayTouchpadWait = null;
-            mLayoutWait.cancel();
-        }
-    }
-
+    /** Ends the pad's layout wait, if one is on, and lets the next attach wait once again. */
     private void releaseDisplayTouchpadWait() {
-        if (mDisplayTouchpadWait != null) mDisplayTouchpadWait.release();
+        if (mDisplayTouchpadWait != null) mDisplayTouchpadWait.cancel();
+        mDisplayTouchpadWait = null;
+        mDisplayTouchpadWaited = false;
     }
 
     /** The parting of a split keyboard in the keyboard view's pixels; null when it has none. */

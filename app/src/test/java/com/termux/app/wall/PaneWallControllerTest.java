@@ -36,7 +36,7 @@ import android.app.Application;
 public class PaneWallControllerTest {
 
     /** A host with a number of Home pages and windows, each with one in front. */
-    private static final class Host implements PaneWallController.Host, WallHome {
+    private static final class Host implements PaneWallController.Host, WallHome, WallDisplay {
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -67,8 +67,8 @@ public class PaneWallControllerTest {
         @Override public boolean reducedMotion() { return reduced; }
         int homePress;
         @Override public WallPages wallPages() { return pages; }
-        @Override public void bindDisplayPage(int pageId) { boundDisplay = pageId; }
-        @Override public void onDisplayPageLanded(int pageId) { landedDisplay = pageId; }
+        @Override public void bind(int pageId) { boundDisplay = pageId; }
+        @Override public void landed(int pageId) { landedDisplay = pageId; }
         @Override public void onWallPageChanged(PaneWallPage page) { changes.add(page); }
         @Override public UseAs useAs() { return useAs; }
         @Override public boolean canStartWorkspace() { return canStart; }
@@ -128,6 +128,7 @@ public class PaneWallControllerTest {
         layout.addView(terminal);
         PaneWallController made = new PaneWallController(layout, withHost);
         made.setHome(withHost);
+        made.setDisplay(withHost);
         made.attachTerminalPage(terminal);
         layout.setPageView(PaneWallPage.WIDGETS, widgets);
         layout.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
@@ -584,6 +585,7 @@ public class PaneWallControllerTest {
         layout.addView(terminal);
         PaneWallController made = new PaneWallController(layout, withHost);
         made.setHome(withHost);
+        made.setDisplay(withHost);
         made.attachTerminalPage(terminal);
         made.attachWidgetsPage(LayoutInflater.from(activity));
         android.view.ViewGroup.MarginLayoutParams margins =

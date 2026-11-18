@@ -229,9 +229,7 @@ public class WindowSourceRulesTest {
         // local first-layout wait: moves onto the first-layout helper
         "app/wall/PaneWallLayout.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
-        "app/x11/DisplayTouchpadView.java:2",
-        // own frame tick or fling step: moves into the pipeline table or the helper
-        "app/x11/X11PaneFrame.java:4"
+        "app/x11/DisplayTouchpadView.java:2"
     );
 
     /**
@@ -314,7 +312,7 @@ public class WindowSourceRulesTest {
     /** Files that reach the decor or the content view while adding views, with the count of sites. */
     static final List<String> DECOR_OR_CONTENT_ADDS = Arrays.asList(
         // decor and content view: moves into the layer hosts
-        "app/TermuxActivity.java:80",
+        "app/TermuxActivity.java:79",
         // reads the decor to find the keys under a gesture; its debug recorder now wraps the window root
         "app/chrome/scene/SceneController.java:1",
         // decor and content view: moves into the layer hosts

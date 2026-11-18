@@ -128,39 +128,6 @@ public class DisplayViewFocusTest {
     }
 
     @Test
-    public void aHandBackThatDidNotLandIsRetriedAfterTheNextLayouts() {
-        int[] tries = {0};
-        boolean[] gaveUp = {false};
-        DisplayViewFocus.retryAfterLayout(mTerminal, 3, () -> ++tries[0] == 2,
-            () -> gaveUp[0] = true);
-        assertEquals(0, tries[0]);
-        layout();
-        layout();
-        layout();
-        assertEquals(2, tries[0]);
-        assertFalse(gaveUp[0]);
-    }
-
-    @Test
-    public void retriesStopAfterTheirLast() {
-        int[] tries = {0};
-        boolean[] gaveUp = {false};
-        DisplayViewFocus.retryAfterLayout(mTerminal, 2, () -> {
-            tries[0]++;
-            return false;
-        }, () -> gaveUp[0] = true);
-        layout();
-        layout();
-        layout();
-        assertEquals(2, tries[0]);
-        assertTrue(gaveUp[0]);
-    }
-
-    private void layout() {
-        mTerminal.getViewTreeObserver().dispatchOnGlobalLayout();
-    }
-
-    @Test
     public void aKeyNobodyHoldsGoesToTheTerminal() {
         assertSame(DisplayViewFocus.Route.TERMINAL,
             DisplayViewFocus.routeFor(DisplayViewFocus.Holder.NONE, KeyEvent.KEYCODE_G, true));

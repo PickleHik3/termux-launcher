@@ -43,7 +43,7 @@ public class PageStillsTest {
     private static final int WIDTH = 1080;
     private static final int HEIGHT = 1800;
 
-    private static final class Host implements PaneWallController.Host, WallHome {
+    private static final class Host implements PaneWallController.Host, WallHome, WallDisplay {
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -57,7 +57,8 @@ public class PageStillsTest {
         @Override public boolean reducedMotion() { return true; }
         @Override public boolean hasWindow() { return true; }
         @Override public WallPages wallPages() { return pages; }
-        @Override public void bindDisplayPage(int pageId) { boundDisplay = pageId; }
+        @Override public void bind(int pageId) { boundDisplay = pageId; }
+        @Override public void landed(int pageId) { }
         @Override public int innerCount(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? Math.max(1, pages.homePages().size()) : 1;
         }
@@ -110,6 +111,7 @@ public class PageStillsTest {
         layout.addView(display);
         controller = new PaneWallController(layout, host);
         controller.setHome(host);
+        controller.setDisplay(host);
         controller.attachTerminalPage(terminal);
         layout.setPageView(PaneWallPage.WIDGETS, widgets);
         layout.setPageView(PaneWallPage.DISPLAY, display);
