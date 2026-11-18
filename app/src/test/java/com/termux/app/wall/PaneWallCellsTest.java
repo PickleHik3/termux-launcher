@@ -35,7 +35,7 @@ public class PaneWallCellsTest {
 
     private static final int WIDTH = 1080;
 
-    private static final class Host implements PaneWallController.Host, WallHome {
+    private static final class Host implements PaneWallController.Host, WallHome, WallDisplay {
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -69,8 +69,8 @@ public class PaneWallCellsTest {
         }
         @Override public boolean hasWindow() { return hasWindow; }
         @Override public WallPages wallPages() { return pages; }
-        @Override public void bindDisplayPage(int pageId) { boundDisplay = pageId; }
-        @Override public void onDisplayPageLanded(int pageId) { landedDisplay = pageId; }
+        @Override public void bind(int pageId) { boundDisplay = pageId; }
+        @Override public void landed(int pageId) { landedDisplay = pageId; }
         @Override public void onWallPageChanged(PaneWallPage page) {
             if (!constructed) callsWhileConstructing++;
             changes.add(page);
@@ -126,6 +126,7 @@ public class PaneWallCellsTest {
         host.constructed = false;
         controller = new PaneWallController(layout, host);
         controller.setHome(host);
+        controller.setDisplay(host);
         host.constructed = true;
         controller.attachTerminalPage(terminal);
         layout.setPageView(PaneWallPage.WIDGETS, widgets);

@@ -65,17 +65,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         @Nullable default WallPages wallPages() { return null; }
         /**
-         * Bind the one display view to Display page {@code pageId} (ADR 0015, A3b): the Display
-         * page the wall is on or heading for, which shows the display live while the others show
-         * their picture or card. -1 while the wall has no Display page.
-         */
-        default void bindDisplayPage(int pageId) { }
-        /**
-         * The wall came to rest on Display page {@code pageId}, the bound one: the display starts
-         * here when it is down ({@link DisplayPagePolicy#startsOnLanding}).
-         */
-        default void onDisplayPageLanded(int pageId) { }
-        /**
          * What builds the Assistant page's view (ADR 0022), asked when the wall first holds an
          * Assistant page. The wall owns the view; the host only says how it is made.
          */
@@ -243,13 +232,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private boolean mDefaultOrder = true;
     /** The row had a window at the last {@link #refreshPages}. */
     private boolean mHadWindow;
+    /** Where the display view is bound and lands; NONE until the host sets it. */
+    @NonNull private WallDisplay mDisplay = WallDisplay.NONE;
     /** The run last handed to the host ({@link WallHome#bindRun}). */
     @NonNull private WallHome mHome = WallHome.NONE;
     private int mBoundFirst = 0;
     private int mBoundLast = -1;
     /** The Display page the display view was last bound to; -1 for none yet. */
     private int mDisplayPageId = -1;
-    /** The Display page last handed to the host ({@link Host#bindDisplayPage}). */
+    /** The Display page last handed to the Display seam ({@link WallDisplay#bind}). */
     private int mBoundDisplayPageId = -1;
     /**
      * The last used Display page: the one the wall last came to rest on, or was sent to by its
@@ -296,6 +287,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHomePageFactory = factory;
         syncHomePages();
         recordFront();
+    }
+
+    /**
+     * The Display's seam: told where the one display view is bound and where the wall lands on
+     * it. The binding made before this call is handed over at once.
+     */
+    public void setDisplay(@NonNull WallDisplay display) {
+        mDisplay = display;
+        if (mBoundDisplayPageId >= 0) display.bind(mBoundDisplayPageId);
     }
 
     /**
@@ -576,7 +576,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         }
         if (pageId == mBoundDisplayPageId) return;
         mBoundDisplayPageId = pageId;
-        mHost.bindDisplayPage(pageId);
+        mDisplay.bind(pageId);
     }
 
     /** The Display page the display view is bound to; -1 while the wall has none. */
@@ -945,7 +945,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /**
      * Build the display's frame on the wall as the Display pages' one view (A3b): it stands on
-     * the bound Display page ({@link Host#bindDisplayPage}). Inflated here rather than in the
+     * the bound Display page ({@link WallDisplay#bind}). Inflated here rather than in the
      * layout file so an install that never runs a display never builds its surface.
      */
     @Nullable
@@ -1462,7 +1462,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHost.onWallPageSettled(page);
         if (page == PaneWallPage.TERMINAL) startShellOnLanding();
         if (page == PaneWallPage.DISPLAY && mBoundDisplayPageId >= 0) {
-            mHost.onDisplayPageLanded(mBoundDisplayPageId);
+            mDisplay.landed(mBoundDisplayPageId);
         }
     }
 
