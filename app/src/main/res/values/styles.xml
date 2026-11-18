@@ -103,14 +103,4 @@
         <item name="android:minWidth">0dp</item>
     </style>
 
-    <!-- The numbered circle of a step on the "Make one from a photo" card. -->
-    <style name="PhotoShaderStepBadge">
-        <item name="android:layout_width">28dp</item>
-        <item name="android:layout_height">28dp</item>
-        <item name="android:background">@drawable/photo_shader_step_badge</item>
-        <item name="android:gravity">center</item>
-        <item name="android:importantForAccessibility">no</item>
-        <item name="android:textAppearance">?attr/textAppearanceLabelLarge</item>
-        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
-    </style>
 </resources>

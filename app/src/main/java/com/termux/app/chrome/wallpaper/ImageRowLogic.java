@@ -17,13 +17,13 @@ public final class ImageRowLogic {
     private ImageRowLogic() {}
 
     /** The first line. */
-    public enum Label { PHOTO_NONE, PHOTO_NAMED, DEPTH_NONE, DEPTH_DOWNLOADING, DEPTH_MAKING, DEPTH_MADE, DEPTH_NAMED }
+    public enum Label { PHOTO_NONE, PHOTO_NAMED, NONE, DEPTH_DOWNLOADING, DEPTH_MAKING, DEPTH_MADE, DEPTH_NAMED }
 
     /** The optional second line. */
-    public enum Note { NONE, CHOOSE_PHOTO_FIRST, MAY_NOT_MATCH, FAILED }
+    public enum Note { NONE, MAY_NOT_MATCH, FAILED }
 
     /** A text button. */
-    public enum Action { CHOOSE, CHANGE, REMOVE, MAKE, CANCEL, TRY_AGAIN }
+    public enum Action { CHOOSE, CHANGE, REMOVE, MAKE, GENERATE_DEPTH, CHOOSE_DEPTH, CANCEL, TRY_AGAIN }
 
     /** Where a depth run is. */
     public enum Run { IDLE, DOWNLOADING, MAKING }
@@ -67,7 +67,8 @@ public final class ImageRowLogic {
     }
 
     /**
-     * The Depth row.
+     * The Depth area, or null while nothing about depth shows: no photo and no depth image. With a
+     * photo and no depth it is the Generate depth button beside Choose depth image, with no label.
      *
      * @param photoSet     a photo is chosen
      * @param depthName    the draft's depth file, or null
@@ -76,9 +77,10 @@ public final class ImageRowLogic {
      * @param percent      the run's 0-100
      * @param failed       the last run failed (ignored while one runs or a depth is set)
      */
-    @NonNull
+    @Nullable
     public static Row depth(boolean photoSet, @Nullable String depthName, boolean photoChanged,
                             @NonNull Run run, int percent, boolean failed) {
+        if (!photoSet && depthName == null && run == Run.IDLE) return null;
         int pct = Math.max(0, Math.min(100, percent));
         if (run == Run.DOWNLOADING) {
             return new Row(Label.DEPTH_DOWNLOADING, Note.NONE, true, pct, false, Action.CANCEL, true, null);
@@ -87,13 +89,10 @@ public final class ImageRowLogic {
             return new Row(Label.DEPTH_MAKING, Note.NONE, true, pct, false, Action.CANCEL, true, null);
         }
         if (depthName == null) {
-            if (!photoSet) {
-                return new Row(Label.DEPTH_NONE, Note.CHOOSE_PHOTO_FIRST, false, 0, false, Action.MAKE, false, null);
-            }
             if (failed) {
-                return new Row(Label.DEPTH_NONE, Note.FAILED, false, 0, false, Action.TRY_AGAIN, true, Action.CHOOSE);
+                return new Row(Label.NONE, Note.FAILED, false, 0, false, Action.TRY_AGAIN, true, Action.CHOOSE_DEPTH);
             }
-            return new Row(Label.DEPTH_NONE, Note.NONE, false, 0, false, Action.MAKE, true, Action.CHOOSE);
+            return new Row(Label.NONE, Note.NONE, false, 0, false, Action.GENERATE_DEPTH, true, Action.CHOOSE_DEPTH);
         }
         if (ShaderStore.isMadeDepth(depthName)) {
             return new Row(Label.DEPTH_MADE, Note.NONE, false, 0, true, Action.REMOVE, true, null);

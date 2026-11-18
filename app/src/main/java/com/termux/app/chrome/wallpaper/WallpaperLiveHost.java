@@ -191,7 +191,6 @@ public final class WallpaperLiveHost {
     @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mVideoLauncher;
     @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mDepthLauncher;
     @Nullable private String mTextureTarget;
-    @Nullable private PhotoShaderCard mCard;
     @Nullable private String mDepthTarget;
 
     public WallpaperLiveHost(@NonNull Context context, @NonNull WallpaperPickerPage picker,
@@ -223,7 +222,7 @@ public final class WallpaperLiveHost {
                 }
 
                 @Override public void onOpen(@NonNull String id) {
-                    openShader(id);
+                    openShader(id, false);
                 }
 
                 @Override public void onOpenExample(@NonNull String slug) {
@@ -231,11 +230,11 @@ public final class WallpaperLiveHost {
                 }
 
                 @Override public void onNew() {
-                    openShader(null);
+                    openShader(null, false);
                 }
 
                 @Override public void onFromPhoto() {
-                    showPhotoCard();
+                    openShader(null, true);
                 }
 
                 @Override public void onBackToPhoto() {
@@ -441,8 +440,6 @@ public final class WallpaperLiveHost {
         mReleased = true;
         mSwap.cancel();
         if (mPage == Page.EDITOR) discardEditor();
-        if (mCard != null) mCard.dismiss();
-        mCard = null;
         if (mEditor != null) mEditor.release();
         if (mList != null) mList.release();
         if (mImportLauncher != null) mImportLauncher.unregister();
@@ -733,7 +730,7 @@ public final class WallpaperLiveHost {
         goTo(Page.LIST, fromEditor);
     }
 
-    private void openShader(@Nullable String id) {
+    private void openShader(@Nullable String id, boolean photoFlow) {
         if (mList == null || mEditor == null || mReleased) return;
         ShaderStore.Meta meta = null;
         String source = null;
@@ -743,21 +740,10 @@ public final class WallpaperLiveHost {
         }
         mEditor.show(id, meta, source, LiveSceneLogic.showsBackToPhoto(readStored()),
             mPicker.alsoPhone().isChecked(), heldReason(), LiveSceneLogic.inUse(readStored(), id));
+        if (photoFlow) mEditor.setPhotoFlow(true);
         mEditorSaved = id != null;
         mListScrollY = mList.scrollY();
         goTo(Page.EDITOR, true);
-    }
-
-    /** From a photo: the steps card; its Paste shader opens a new shader holding the clipboard. */
-    private void showPhotoCard() {
-        if (mList == null || mEditor == null || mReleased) return;
-        if (mCard != null) mCard.dismiss();
-        mCard = PhotoShaderCard.show(mContext, () -> {
-            mCard = null;
-            if (mReleased || mEditor == null) return;
-            openShader(null);
-            mEditor.pasteClipboard();
-        });
     }
 
     /** A bundled example in the editor; nothing is saved until Apply, which saves a copy. */
@@ -808,7 +794,7 @@ public final class WallpaperLiveHost {
         ShaderStore.Meta meta = ShaderStore.readMeta(mContext, id);
         String source = ShaderStore.readText(ShaderStore.sourceFile(mContext, id));
         if (source == null || source.trim().isEmpty()) {
-            openShader(id);
+            openShader(id, false);
             return;
         }
         applyShader(new ShaderEditorPage.Draft(id, meta.name, source, meta.quality, meta.rateHz, meta.texture,
@@ -841,7 +827,7 @@ public final class WallpaperLiveHost {
                     setBusy(false);
                     if (listKey != null) {
                         if (draft.isExample) openExample(listKey);
-                        else openShader(listKey);
+                        else openShader(listKey, false);
                     }
                     mEditor.showErrors(errors);
                 });

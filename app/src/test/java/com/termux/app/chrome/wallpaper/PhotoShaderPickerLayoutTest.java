@@ -1,6 +1,7 @@
 package com.termux.app.chrome.wallpaper;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -8,6 +9,7 @@ import android.app.Application;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -34,14 +36,15 @@ import org.robolectric.annotation.GraphicsMode;
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class PhotoShaderPickerLayoutTest {
 
+    private Activity mActivity;
     private ContextThemeWrapper mThemed;
     private float mDensity;
 
     @Before
     public void setUp() {
         RuntimeEnvironment.setFontScale(1.3f);
-        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        mThemed = new ContextThemeWrapper(activity, R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        mActivity = Robolectric.buildActivity(Activity.class).setup().get();
+        mThemed = new ContextThemeWrapper(mActivity, R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         mDensity = mThemed.getResources().getDisplayMetrics().density;
     }
 
@@ -100,6 +103,7 @@ public class PhotoShaderPickerLayoutTest {
                     ImageRowView view = new ImageRowView(mThemed, row, action -> {});
                     view.bind(ImageRowLogic.depth(true, name, true, run, 42, failed), name, null);
                     layOut(row);
+                    assertEquals(View.VISIBLE, row.getVisibility());
                     View labelColumn = (View) view.labelView().getParent();
                     View first = view.firstButton();
                     assertTrue(labelColumn.getRight() <= first.getLeft());
@@ -109,5 +113,124 @@ public class PhotoShaderPickerLayoutTest {
                 }
             }
         }
+    }
+
+    // --- the editor page ---
+
+    private int pickTexture;
+    private int pickDepth;
+
+    private ShaderEditorPage editor() {
+        return new ShaderEditorPage(mThemed, false, new ShaderEditorPage.Actions() {
+            @Override public void onApply(@NonNull ShaderEditorPage.Draft draft) {}
+            @Override public void onBackToPhoto() {}
+            @Override public void onAlsoPhone(boolean on) {}
+            @Override public void onImport() {}
+            @Override public void onPickTexture(@NonNull String id) { pickTexture++; }
+            @Override public void onPickDepth(@NonNull String id) { pickDepth++; }
+            @Override public void onDropFile(@NonNull String id, @NonNull String name) {}
+            @Override public void onDelete(@NonNull String id) {}
+        });
+    }
+
+    private static int indexOf(@NonNull ViewGroup content, @NonNull View v) {
+        View child = v;
+        while (child.getParent() != content) child = (View) child.getParent();
+        return content.indexOfChild(child);
+    }
+
+    @Test
+    public void editorOrderIsKnobsThenPhotoAndDepthThenTheShaderLast() {
+        ShaderEditorPage page = editor();
+        page.show(null, null, null, false, false, null, false);
+        View root = page.root();
+        ViewGroup content = root.findViewById(R.id.shader_editor_content);
+        int name = indexOf(content, root.findViewById(R.id.shader_name));
+        int quality = indexOf(content, root.findViewById(R.id.shader_knob_quality));
+        int rate = indexOf(content, root.findViewById(R.id.shader_knob_rate));
+        int copy = indexOf(content, root.findViewById(R.id.shader_photo_flow_copy));
+        int photo = indexOf(content, root.findViewById(R.id.shader_photo_row));
+        int depth = indexOf(content, root.findViewById(R.id.shader_depth_row));
+        int also = indexOf(content, root.findViewById(R.id.live_also_row));
+        int heading = indexOf(content, root.findViewById(R.id.shader_code_heading));
+        int code = indexOf(content, root.findViewById(R.id.shader_code));
+        int paste = indexOf(content, root.findViewById(R.id.shader_paste));
+        int errors = indexOf(content, root.findViewById(R.id.shader_errors));
+        int heavy = indexOf(content, root.findViewById(R.id.shader_too_heavy));
+        assertTrue(name < quality && quality < rate && rate < copy && copy < photo && photo < depth);
+        assertTrue(depth < also && also < heading && heading < code && code < paste);
+        assertTrue(paste < errors && errors < heavy);
+        assertEquals(content.getChildCount() - 1, heavy);
+    }
+
+    @Test
+    public void copyStepAndHeadingShowOnlyInThePhotoFlow() {
+        ShaderEditorPage page = editor();
+        View copy = page.root().findViewById(R.id.shader_photo_flow_copy);
+        View heading = page.root().findViewById(R.id.shader_code_heading);
+        page.show(null, null, null, false, false, null, false);
+        assertEquals(View.GONE, copy.getVisibility());
+        assertEquals(View.GONE, heading.getVisibility());
+        page.setPhotoFlow(true);
+        assertEquals(View.VISIBLE, copy.getVisibility());
+        assertEquals(View.VISIBLE, heading.getVisibility());
+        assertEquals(mThemed.getString(R.string.photo_shader_copy), ((TextView) page.root()
+            .findViewById(R.id.shader_photo_flow_copy_button)).getText().toString());
+        page.show(null, null, null, false, false, null, false);
+        assertEquals(View.GONE, copy.getVisibility());
+        assertEquals(View.GONE, heading.getVisibility());
+    }
+
+    @Test
+    public void copyReadsCopiedAfterATapAndCopyTextIsTheRawResource() {
+        ShaderEditorPage page = editor();
+        page.show(null, null, null, false, false, null, false);
+        page.setPhotoFlow(true);
+        TextView button = page.root().findViewById(R.id.shader_photo_flow_copy_button);
+        button.performClick();
+        assertEquals(mThemed.getString(R.string.photo_shader_copied), button.getText().toString());
+        assertTrue(ShaderEditorPage.readInstructions(mThemed).length() > 0);
+        page.setPhotoFlow(true);
+        assertEquals(mThemed.getString(R.string.photo_shader_copy), button.getText().toString());
+    }
+
+    @Test
+    public void depthShowsNothingUntilAPhotoIsChosenAndGoesWithIt() {
+        ShaderEditorPage page = editor();
+        page.show(null, null, null, false, false, null, false);
+        View depthRoot = page.root().findViewById(R.id.shader_depth_row);
+        assertEquals(View.GONE, depthRoot.getVisibility());
+        page.setTexture("photo.jpg");
+        assertEquals(View.VISIBLE, depthRoot.getVisibility());
+        assertEquals(mThemed.getString(R.string.shader_depth_generate),
+            ((TextView) page.depthRow().firstButton()).getText().toString());
+        assertEquals(mThemed.getString(R.string.shader_depth_choose),
+            ((TextView) page.depthRow().secondButton()).getText().toString());
+        page.setTexture(null);
+        assertEquals(View.GONE, depthRoot.getVisibility());
+    }
+
+    @Test
+    public void choosingAPhotoLeavesFocusOnThePageNotOnATextField() {
+        ShaderEditorPage page = editor();
+        page.show(null, null, null, false, false, null, false);
+        mActivity.setContentView(page.root());
+        View name = page.root().findViewById(R.id.shader_name);
+        View content = page.root().findViewById(R.id.shader_editor_content);
+        name.requestFocus();
+        assertTrue(name.hasFocus());
+        page.photoRow().firstButton().performClick();
+        assertEquals(1, pickTexture);
+        assertFalse("the name field must not take focus back", name.hasFocus());
+        assertFalse(page.codeBox().hasFocus());
+        assertTrue("the page's content holds focus", content.hasFocus());
+        page.setTexture("photo.jpg");
+        assertFalse(name.hasFocus());
+        assertFalse(page.codeBox().hasFocus());
+        page.codeBox().requestFocus();
+        page.depthRow().secondButton().performClick();
+        assertEquals(1, pickDepth);
+        assertFalse(page.codeBox().hasFocus());
+        assertTrue(content.hasFocus());
     }
 }
