@@ -325,6 +325,10 @@ Home or the Workspace: the two halves of the **wall** seen from the seam. A side
 _Avoid_: half (the pre-0030 word), place, "its page" for a shared row
 _ADR 0030 (accepted, not yet built): the app as built still lays rows out per page and swaps them at the landing._
 
+**Top stack**:
+The top of the window seen as one stack, like the bottom one: the status bar's glass (the strip behind the system bar and the bar's own card) is one slab both ends of a crossing share. It stays put and blends its look, frost and ink from the leaving page to the arriving one on the crossing's curve; the clock and readings stand on it; the **window chips** are the Workspace's and slide across it with the Workspace, so on Home they rest out of sight. A bar only one end shows still rides with its page. The bar edge setting puts the same stack at the top or the bottom. In code `TopStackScene` (pure) and `TopStackRenderer` (its one writer), ADR 0030 section 6.
+_Avoid_: top band (the pre-#267 name for the strip and bar's glass), wallpaper twin (the bars draw their own frost now)
+
 **Start in**:
 The one setting that says where a cold start and a home press land: Home (the default), the
 Workspace, which opens one fresh shell window (a home press goes to its first window), or Display, the **display window**, which holds only while the
