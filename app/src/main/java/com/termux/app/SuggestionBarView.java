@@ -777,18 +777,6 @@ public final class SuggestionBarView extends GridLayout
         setClipChildren(false);
         setClipToPadding(false);
         resetTransientVisualState();
-        ViewParent parent = getParent();
-        if (parent instanceof ViewGroup) {
-            ViewGroup parentGroup = (ViewGroup) parent;
-            parentGroup.setClipChildren(false);
-            parentGroup.setClipToPadding(false);
-            ViewParent grandParent = parentGroup.getParent();
-            if (grandParent instanceof ViewGroup) {
-                ViewGroup grandParentGroup = (ViewGroup) grandParent;
-                grandParentGroup.setClipChildren(false);
-                grandParentGroup.setClipToPadding(false);
-            }
-        }
         attachNotificationBadgeListener();
         // Renders parked while the window was away, for cells still waiting on them.
         iconBinder.resumeAll();
