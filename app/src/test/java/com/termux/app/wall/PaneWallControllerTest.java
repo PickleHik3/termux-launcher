@@ -63,6 +63,7 @@ public class PaneWallControllerTest {
         int boundDisplay = -2;
         int landedDisplay = -1;
         final java.util.List<PaneWallPage> changes = new java.util.ArrayList<>();
+        final java.util.List<PaneWallPage> settled = new java.util.ArrayList<>();
 
         @Override public boolean reducedMotion() { return reduced; }
         int homePress;
@@ -70,6 +71,7 @@ public class PaneWallControllerTest {
         @Override public void bind(int pageId) { boundDisplay = pageId; }
         @Override public void landed(int pageId) { landedDisplay = pageId; }
         @Override public void onWallPageChanged(PaneWallPage page) { changes.add(page); }
+        @Override public void onWallPageSettled(PaneWallPage page) { settled.add(page); }
         @Override public UseAs useAs() { return useAs; }
         @Override public boolean canStartWorkspace() { return canStart; }
         @Override public boolean startWorkspaceShell() {
@@ -778,6 +780,20 @@ public class PaneWallControllerTest {
         assertEquals(PaneWallPage.DISPLAY, controller.currentPage());
         assertEquals("landing tells the host which page", 4, host.landedDisplay);
         assertFalse("the Terminal page is not showing", controller.isTerminalShowing());
+    }
+
+    @Test public void aHomePageChangeInsideTheRunAnnouncesItselfAsASettle() {
+        displayPages();
+        controller.goHome(false);
+        assertTrue(controller.goToHomePageAt(1, false));
+        assertEquals(2, controller.wall().currentPageId());
+        host.settled.clear();
+
+        assertTrue("Back on Home 2 goes to Home 1", controller.goToHomePageOne(false));
+
+        assertEquals(1, controller.wall().currentPageId());
+        assertEquals("the change is told once, as a settle", Arrays.asList(PaneWallPage.WIDGETS),
+            host.settled);
     }
 
     /** [Home 1][Assistant 4][Home 2][Terminal 3], the Assistant page as home. */

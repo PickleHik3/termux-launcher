@@ -530,10 +530,19 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         typingFocusChanged(focused);
     }
 
-    /** Whether back should close the Chats list; the page's host asks first. */
+    /**
+     * Back's work on the page, one step per press: the Chats list closes first, then the
+     * composer's focus drops and the keyboard goes down. False with neither to do, so the chain
+     * takes the wall to Home page 1.
+     */
     boolean handleBack() {
-        if (!chatsOpen) return false;
-        closeChats();
+        if (chatsOpen) {
+            closeChats();
+            return true;
+        }
+        if (!chatView.composer().field().hasFocus()) return false;
+        hideKeyboard();
+        host.lowerKeyboard();
         return true;
     }
 
