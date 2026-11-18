@@ -4831,7 +4831,7 @@ public final class SuggestionBarView extends GridLayout
 
     /**
      * One rail icon, across the rail, as the dock handed it. Zero while it has handed none, and a
-     * rail with no size draws no icons,.
+     * rail with no size draws no icons.
      */
     private int railIconSizePx() {
         return dockRailIconPx;
