@@ -672,7 +672,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Bundle mPendingWallState;
     /** Whether a home press came while the launcher was in front, or brings it back from away. */
     private final com.termux.app.wall.HomePress mHomePress = new com.termux.app.wall.HomePress();
-    @Nullable private com.termux.app.x11.X11DisplayHostController mX11Display;
+    private final com.termux.app.x11.DisplayServer mDisplayServer =
+        new com.termux.app.x11.DisplayServer(this, new DisplayServerHost());
     @Nullable private com.termux.app.x11.X11KeyboardBridge mX11KeyboardBridge;
     /**
      * Runs a Linux app from the drawer on the display, starting the display when needed. The
@@ -690,12 +691,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.launcher.LauncherAppLauncher.EntryRunner mEntryRunnerHook;
     /** Hears a display that announced itself with no window open; taken out again on destroy. */
     @Nullable private com.termux.app.x11.X11DisplayReceiver.UnclaimedListener mUnclaimedDisplayListener;
-    /**
-     * A display was asked for (the Display entry, a Linux app, {@code wall.display}) and has not
-     * come up yet: its window is on the row while it starts. Cleared when it runs — the running
-     * display holds the window from then on — and when the row leaves the window before it does.
-     */
-    private boolean mDisplayRequested;
     /** The Display page the drawer routed a Linux app to, and when (A3c); -1 for none. */
     private int mRoutedLinuxPage = -1;
     /** The Display page the latest Linux launch added itself (#192), -1 when it added none. */
@@ -712,15 +707,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private long mRoutedLinuxAtMs;
     /** True while a landing runs its bound app: the runner's show-display step must not slide. */
     private boolean mLandingRunsApp;
-    /** The apps open on the display: the drawer's Displays group, and its chip's front icon. */
-    @Nullable private com.termux.app.x11.X11WindowList mX11Windows;
-    @NonNull private java.util.List<com.termux.app.x11.X11WindowList.Window> mDisplayWindows =
-        java.util.Collections.emptyList();
-    private int mDisplayActiveWindow = -1;
     /** Turns a display window's {@code WM_CLASS} into the app icon its chip wears. */
     @Nullable private com.termux.app.x11.X11WindowIconResolver mDisplayWindowIcons;
-    /** Closes the display's apps before the server is killed; built the first time Stop is used. */
-    @Nullable private com.termux.app.x11.DisplayStopSequence mDisplayStop;
     /**
      * The place whose keyboard state is on screen: the one the wall last settled on, so arriving
      * somewhere new can record what the place being left leaves behind. Before the first settle
@@ -2407,7 +2395,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // onStop let go of the display's surface; nothing else re-attaches it when the wall
         // already rests on the Display place, and a display whose surface is not attached takes
         // no touch and misses every setting changed while we were away.
-        if (mX11Display != null && isDisplayWindowShowing() && !mPaneWallController.wall().isMoving()) {
+        if (mDisplayServer.controller() != null && isDisplayWindowShowing() && !mPaneWallController.wall().isMoving()) {
             syncDisplayAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
         }
         // The default home can have been changed while we were stopped.
@@ -10840,7 +10828,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetHostController != null) mWidgetHostController.onStop();
         mIsVisible = false;
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
-        if (mX11Display != null) mX11Display.detachView();
+        if (mDisplayServer.controller() != null) mDisplayServer.controller().detachView();
         // Leaving the app counts as leaving the place on screen: it comes back the way it was
         // left, keyboard included. The place is the one the chrome is committed to, which a slide
         // cut short by the stop has not changed yet.
@@ -11011,29 +10999,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The display controller is this activity's; the server it talks to is not. Letting go
         // here hands the server's announcement on to the next activity's controller, and stops
         // this activity's view chain being pinned by the Binder for as long as the server runs.
-        if (mX11Display != null) {
-            // Letting go of the server reads as "not running" to the listener, whose answer is
-            // for a display that stopped: DISPLAY cleared for new sessions, the window list
-            // emptied, the page shown empty, a pending stop's teardown run. None of that is true
-            // when only this activity is going (a configuration relaunch, or any destroy): the
-            // server and its clients keep running, and the next activity's controller takes the
-            // kept announcement and attaches its page to them.
-            mX11Display.setListener(null);
-            mX11Display.destroy();
-            mX11Display = null;
-        }
-        if (mX11Windows != null) {
-            mX11Windows.stop();
-            mX11Windows = null;
-        }
+        // Letting go of the server reads as "not running" to the listener, whose answer is for a
+        // display that stopped; the server and its clients keep running when only this activity
+        // goes, and the next activity's controller takes the kept announcement (release()).
+        mDisplayServer.release();
         if (mDisplayWindowIcons != null) {
             mDisplayWindowIcons.shutdown();
             mDisplayWindowIcons = null;
         }
-        if (mDisplayStop != null) {
-            mDisplayStop.abandon();
-            mDisplayStop = null;
-        }
+        mDisplayServer.abandonStop();
         if (mLinuxApps != null) {
             // Only this activity's loan ends. The runner keeps the desktop on the display, the
             // launches still settling and the window manager it owes, for the next activity: a
@@ -14050,7 +14024,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A keyboard the wall's slide raised or put away on its own is nobody's intent either.
             if (mQuietKeyboardChange) return;
             mSheets.claimDrawerRaisedKeyboard();
-            if (mX11Display != null) mX11Display.onUserKeyboardIntent(shown);
+            if (mDisplayServer.controller() != null) mDisplayServer.controller().onUserKeyboardIntent(shown);
         });
         mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
         mInAppKeyboard.onCreate(savedInstanceState);
@@ -18663,7 +18637,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             menu.setOnMenuItemClickListener(item -> {
                 int other = item.getItemId() - 100;
                 if (other >= 0 && other < others.size()) {
-                    if (mX11Windows != null) mX11Windows.activate(others.get(other).id);
+                    mDisplayServer.activateWindow(others.get(other).id);
                     return true;
                 }
                 switch (item.getItemId()) {
@@ -21241,7 +21215,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Whether the settled place is the display window, with a display attached to type into. */
     private boolean isDisplayWindowTyping() {
-        return settledWallPage() == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
+        return settledWallPage() == com.termux.app.wall.PaneWallPage.DISPLAY && mDisplayServer.controller() != null
             && mPaneWallController != null && mPaneWallController.displayWindow() != null;
     }
 
@@ -25027,11 +25001,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mQuietKeyboardChange = false;
                 }
             } else if (keyboardPreRolled && page != left
-                && page == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
+                && page == com.termux.app.wall.PaneWallPage.DISPLAY && mDisplayServer.controller() != null
                 && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
                 // The display hears the keyboard come up as the place's own, which is what the
                 // settle-time show the pre-roll stood in for would have told it.
-                mX11Display.onUserKeyboardIntent(true);
+                mDisplayServer.controller().onUserKeyboardIntent(true);
             }
             // The strip's crossing has landed on one end's dress: the commit below dresses it
             // plainly, as that end wears it.
@@ -25669,8 +25643,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // display's policy hears it here, since the keyboard itself saw no change to
                 // report.
                 applyBorderKeyboardSwipe(open, mKeyboardSwipeFromOpen);
-                if (open && mX11Display != null && !mRaisingDisplayFrameKeyboard)
-                    mX11Display.onUserKeyboardIntent(true);
+                if (open && mDisplayServer.controller() != null && !mRaisingDisplayFrameKeyboard)
+                    mDisplayServer.controller().onUserKeyboardIntent(true);
             } else if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
                 mQuietKeyboardChange = true;
                 try {
@@ -26532,107 +26506,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
                     ? null : mPaneWallController.displayWindow();
                 return frame == null ? null : frame.display();
-            }, () -> mX11Display != null && mX11Display.pasteWithShift());
+            }, () -> mDisplayServer.controller() != null && mDisplayServer.controller().pasteWithShift());
         }
         return mX11KeyboardBridge;
     }
 
-    /** Whether a display server is up and connected to the display window. */
-    private boolean isEmbeddedDisplayRunning() {
-        return mX11Display != null && mX11Display.isRunning();
-    }
-
     /** Stopping a display closes everything on it, so it is asked once. */
     private void confirmStopEmbeddedDisplay() {
-        if (!isEmbeddedDisplayRunning()) return;
+        if (!mDisplayServer.isRunning()) return;
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
             .setTitle(R.string.termux_wall_display_stop_title)
             .setMessage(R.string.termux_wall_display_stop_message)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.termux_wall_display_stop_confirm,
-                (dialog, which) -> stopEmbeddedDisplay())
+                (dialog, which) -> mDisplayServer.stop())
             .show();
-    }
-
-    /**
-     * Stop the display: every app on it is asked to close itself first, and the server goes once
-     * they have — or after {@link com.termux.app.x11.DisplayStopSequence#DRAIN_TIMEOUT_MS} ms,
-     * whichever comes first. Killing the server with apps still on it is what leaves Firefox and
-     * friends believing they crashed.
-     */
-    private void stopEmbeddedDisplay() {
-        displayStopSequence().start(mDisplayWindows.size());
-    }
-
-    @NonNull
-    private com.termux.app.x11.DisplayStopSequence displayStopSequence() {
-        if (mDisplayStop == null) {
-            final Handler handler = new Handler(Looper.getMainLooper());
-            mDisplayStop = new com.termux.app.x11.DisplayStopSequence(
-                new com.termux.app.x11.DisplayStopSequence.Actions() {
-                    @Override public void closeAllWindows() { closeAllDisplayWindows(); }
-                    @Override public void killDisplayServer() { killEmbeddedDisplayServer(); }
-                },
-                new com.termux.app.x11.DisplayStopSequence.Scheduler() {
-                    @Nullable private Runnable pending;
-
-                    @Override public void schedule(long delayMs, @NonNull Runnable action) {
-                        pending = action;
-                        handler.postDelayed(action, delayMs);
-                    }
-
-                    @Override public void cancel() {
-                        if (pending != null) handler.removeCallbacks(pending);
-                        pending = null;
-                    }
-                });
-        }
-        return mDisplayStop;
-    }
-
-    /** Ask every app listed on the display to close itself, as its own close button would. */
-    private void closeAllDisplayWindows() {
-        if (mX11Windows == null) return;
-        for (com.termux.app.x11.X11WindowList.Window window :
-                new java.util.ArrayList<>(mDisplayWindows)) {
-            mX11Windows.close(window.id);
-        }
-    }
-
-    /**
-     * Seam for a Display window's close: ask the app at {@code index} of the chip row to close.
-     * False when there is no such window.
-     */
-    boolean closeDisplayWindow(int index) {
-        if (mX11Windows == null || index < 0 || index >= mDisplayWindows.size()) return false;
-        mX11Windows.close(mDisplayWindows.get(index).id);
-        return true;
-    }
-
-    /**
-     * Stop the server the way {@code pkill termux-x11} does, whoever started it. It is a separate
-     * process on purpose — that is what keeps an X server crash off the home screen — so its own
-     * name is the only handle the launcher has on it. Signalled from here, not through the
-     * prefix's {@code pkill}, which a prefix without procps lacks; that is only the fallback when
-     * no server could be found here. The window leaves when the server's Binder dies.
-     */
-    private void killEmbeddedDisplayServer() {
-        final String packageName = getPackageName();
-        new Thread(() -> {
-            int stopped = com.termux.app.x11.X11ServerProcesses.stopAll(packageName);
-            // A SIGTERMed server leaves its socket; looking at the sockets drops the dead ones.
-            com.termux.app.x11.X11Sockets.liveDisplays(com.termux.app.x11.X11Sockets.socketDir(),
-                com.termux.app.x11.X11Sockets.LOCAL_SOCKET);
-            if (stopped > 0) return;
-            runOnUiThread(() -> {
-                if (mTermuxService == null) return;
-                mTermuxService.createTermuxTask(
-                    TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkill",
-                    new String[]{"-f", "termux-x11 " + packageName}, null,
-                    TermuxConstants.TERMUX_HOME_DIR_PATH);
-            });
-        }, "x11-stop").start();
-        syncPlaceBar();
     }
 
     /**
@@ -26707,12 +26595,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * A display is up, so its window is in a row: one runs, or one was asked for and is starting
-     * ({@link #mDisplayRequested}).
+     * ({@link com.termux.app.x11.DisplayServer#isRequested()}).
      */
     private boolean isDisplayUp() {
         return isX11DisplayEnabled() && mPaneWallController != null
             && mPaneWallController.displayWindow() != null
-            && (mDisplayRequested || isEmbeddedDisplayRunning());
+            && (mDisplayServer.isRequested() || mDisplayServer.isRunning());
     }
 
     // ---- The display window in the Workspace's row (ADR 0008, amended 2026-10-19) -----------
@@ -26792,7 +26680,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void detachOwedDisplayView() {
         if (!mDisplayDetachOwed) return;
         mDisplayDetachOwed = false;
-        if (mX11Display != null && !isDisplayWindowShowing()) mX11Display.detachView();
+        if (mDisplayServer.controller() != null && !isDisplayWindowShowing()) mDisplayServer.controller().detachView();
     }
 
     /**
@@ -26874,15 +26762,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The display window's close: it is the display, so closing it stops it — every app on it is
      * asked to close first (Stop's sequence), asked first when an app is open, since closing them
      * may lose their work. A display still starting, or waiting for its keyboard layouts, simply
-     * goes. The window leaves the row when the display does ({@link #tearDownEmbeddedDisplay}).
+     * goes. The window leaves the row when the display does ({@link com.termux.app.x11.DisplayServer#tearDown}).
      */
     private void closeDisplayWindowFromRow() {
         if (!isDisplayUp()) return;
-        if (!isEmbeddedDisplayRunning()) {
-            tearDownEmbeddedDisplay();
+        if (!mDisplayServer.isRunning()) {
+            mDisplayServer.tearDown();
             return;
         }
-        if (mDisplayWindows.isEmpty()) stopEmbeddedDisplay();
+        if (mDisplayServer.windows().isEmpty()) mDisplayServer.stop();
         else confirmStopEmbeddedDisplay();
     }
 
@@ -26901,13 +26789,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             store.commitRemoval(id);
             return;
         }
-        if (!isEmbeddedDisplayRunning()) {
-            tearDownEmbeddedDisplay();
+        if (!mDisplayServer.isRunning()) {
+            mDisplayServer.tearDown();
             store.commitRemoval(id);
             return;
         }
-        if (mDisplayWindows.isEmpty()) {
-            stopEmbeddedDisplay();
+        if (mDisplayServer.windows().isEmpty()) {
+            mDisplayServer.stop();
             store.commitRemoval(id);
             return;
         }
@@ -26918,7 +26806,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.termux_wall_display_stop_confirm, (dialog, which) -> {
                 decided[0] = true;
-                stopEmbeddedDisplay();
+                mDisplayServer.stop();
                 store.commitRemoval(id);
             })
             .setOnDismissListener(dialog -> {
@@ -26984,7 +26872,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void keepDisplayPagePicture(int pageId) {
         com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
             ? null : mPaneWallController.displayWindow();
-        if (pageId < 0 || frame == null || !isEmbeddedDisplayRunning()) return;
+        if (pageId < 0 || frame == null || !mDisplayServer.isRunning()) return;
         frame.copyPagePicture(full -> {
             if (full == null) return;
             com.termux.app.wall.WallPages.Page page = wallPages().page(pageId);
@@ -27016,7 +26904,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? null : mPaneWallController.displayWindow();
         if (frame == null) return;
         int pageId = mBoundDisplayPage;
-        boolean running = isEmbeddedDisplayRunning();
+        boolean running = mDisplayServer.isRunning();
         com.termux.app.wall.WallPages.Page page = pageId < 0 ? null : wallPages().page(pageId);
         if (page == null || (!running && !com.termux.app.x11.X11CliInstaller.hasKeyboardData())) {
             frame.hidePageStill();
@@ -27143,19 +27031,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     + ", which is gone; showing nothing new");
             }
         }
-        boolean running = isEmbeddedDisplayRunning();
+        boolean running = mDisplayServer.isRunning();
         boolean routed = com.termux.app.wall.DisplayPagePolicy.isRoutedLanding(pageId,
             mRoutedLinuxPage, mRoutedLinuxAtMs, android.os.SystemClock.uptimeMillis());
         // The drawer's route is answered by one landing; the next landing is the user's own.
         if (routed) mRoutedLinuxPage = -1;
         com.termux.app.wall.DisplayPagePolicy.Landing landing =
             com.termux.app.wall.DisplayPagePolicy.landing(binding, app != null, running,
-                mDisplayRequested, app != null && !app.session && running
+                mDisplayServer.isRequested(), app != null && !app.session && running
                     && linuxWindowIdFor(app) >= 0,
                 routed,
                 com.termux.app.wall.DisplayPagePolicy.landingAutostarts(
                     mPreferences != null && mPreferences.isX11DisplayAutostartEnabled(),
-                    mDisplayRanThisLaunch));
+                    mDisplayServer.ranThisLaunch()));
         switch (landing) {
             case NOTHING:
                 return;
@@ -27166,7 +27054,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mLinuxApps == null) return;
                 attachEmbeddedDisplay();
                 if (mPaneWallController.displayWindow() == null) return;
-                mDisplayRequested = true;
+                mDisplayServer.setRequested(true);
                 // The wall is already here: the runner's own "show the display" must not slide it.
                 mLandingRunsApp = true;
                 try {
@@ -27181,11 +27069,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         attachEmbeddedDisplay();
         if (mPaneWallController.displayWindow() == null) return;
-        mDisplayRequested = true;
+        mDisplayServer.setRequested(true);
         // SHOW_START stops here: the window is up in its not-running state and its Start button
         // starts the display (autostart is off).
         if (landing == com.termux.app.wall.DisplayPagePolicy.Landing.START_DISPLAY
-            && com.termux.app.x11.X11CliInstaller.hasKeyboardData()) startEmbeddedDisplay();
+            && com.termux.app.x11.X11CliInstaller.hasKeyboardData()) mDisplayServer.start();
         syncDisplayOnRow();
     }
 
@@ -27193,7 +27081,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Build the display window: the page that inflates the X view, whose native side loads the
      * server library and allocates a context, and the server connection behind it. Built only when
      * a display is wanted or one announced itself, so an install that never runs one never builds
-     * any of it; the page goes again when the display does ({@link #tearDownEmbeddedDisplay}).
+     * any of it; the page goes again when the display does ({@link com.termux.app.x11.DisplayServer#tearDown}).
      * Whether it is on the row is {@link #isDisplayUp}'s to say.
      */
     private void buildDisplayWindow() {
@@ -27220,14 +27108,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void toggleMinimalMode() {
                 setMinimalMode(!TermuxActivity.this.isMinimalMode());
             }
-            @Override public void startDisplay() { startEmbeddedDisplay(); }
-            @Override public void turnOnDisplay() { startEmbeddedDisplay(); }
+            @Override public void startDisplay() { mDisplayServer.start(); }
+            @Override public void turnOnDisplay() { mDisplayServer.start(); }
             @Override public void installKeyboardData(@NonNull java.util.List<String> command) {
                 runKeyboardDataInstall(command);
             }
             @Override public void toggleDisplayPower() {
-                if (isEmbeddedDisplayRunning()) confirmStopEmbeddedDisplay();
-                else startEmbeddedDisplay();
+                if (mDisplayServer.isRunning()) confirmStopEmbeddedDisplay();
+                else mDisplayServer.start();
             }
             @Override public void openDisplaySettings() {
                 ActivityUtils.startActivity(TermuxActivity.this,
@@ -27302,10 +27190,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController == null || !isX11DisplayEnabled()) return false;
         attachEmbeddedDisplay();
         if (mPaneWallController.displayWindow() == null) return false;
-        if (!isEmbeddedDisplayRunning()) {
-            mDisplayRequested = true;
+        if (!mDisplayServer.isRunning()) {
+            mDisplayServer.setRequested(true);
             if (start && com.termux.app.x11.X11CliInstaller.hasKeyboardData()) {
-                startEmbeddedDisplay();
+                mDisplayServer.start();
             }
         }
         closeAppDrawerForLinuxLaunch();
@@ -27375,14 +27263,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void closeTemporaryDisplayIfAppGone() {
         if (isFinishing() || isDestroyed()) return;
-        if (!mTemporaryDisplaySawApp || !mDisplayWindows.isEmpty()
+        if (!mTemporaryDisplaySawApp || !mDisplayServer.windows().isEmpty()
             || wallPages().temporaryDisplay() == null) return;
         // Emptied again since this check was posted: that later one decides.
         if (android.os.SystemClock.uptimeMillis() - mTemporaryDisplayEmptyAtMs
             < TEMPORARY_DISPLAY_APP_GONE_MS) return;
         // The display stopping takes the page with it (tearDownEmbeddedDisplay).
-        if (mTemporaryDisplayStartedByLaunch && isEmbeddedDisplayRunning()) {
-            stopEmbeddedDisplay();
+        if (mTemporaryDisplayStartedByLaunch && mDisplayServer.isRunning()) {
+            mDisplayServer.stop();
             return;
         }
         removeTemporaryDisplayPage();
@@ -27394,7 +27282,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void sweepTemporaryDisplayPages() {
         if (wallPages().temporaryDisplay() == null) return;
-        if (isEmbeddedDisplayRunning()
+        if (mDisplayServer.isRunning()
             || com.termux.app.x11.X11DisplayReceiver.hasKeptAnnouncement()) return;
         wallPagesStore().transform(com.termux.app.wall.WallPages::withoutTemporaryPages);
     }
@@ -27407,7 +27295,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void claimKeptDisplay() {
         if (mPaneWallController == null || !isX11DisplayEnabled()) return;
         // A Display page's frame alone has no server connection yet: the announcement is its.
-        if (mPaneWallController.displayWindow() != null && mX11Display != null) return;
+        if (mPaneWallController.displayWindow() != null && mDisplayServer.controller() != null) return;
         if (!com.termux.app.x11.X11DisplayReceiver.hasKeptAnnouncement()) return;
         attachEmbeddedDisplay();
     }
@@ -27418,15 +27306,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * window with nothing on it does not stay in the row. {@code place} is where it rests.
      */
     private void dropUnstartedDisplay(@NonNull com.termux.app.wall.PaneWallPage place) {
-        if (place == com.termux.app.wall.PaneWallPage.DISPLAY || !mDisplayRequested
-            || isEmbeddedDisplayRunning()) return;
-        mDisplayRequested = false;
-        tearDownEmbeddedDisplay();
+        if (place == com.termux.app.wall.PaneWallPage.DISPLAY || !mDisplayServer.isRequested()
+            || mDisplayServer.isRunning()) return;
+        mDisplayServer.setRequested(false);
+        mDisplayServer.tearDown();
     }
 
     /** {@link #dropUnstartedDisplay} once the wall and the window it brought in are at rest. */
     private void dropUnstartedDisplayWhenSettled(long delayMs) {
-        if (mPaneWallController == null || !mDisplayRequested) return;
+        if (mPaneWallController == null || !mDisplayServer.isRequested()) return;
         mPaneWallController.wall().postDelayed(() -> {
             if (mPaneWallController == null || mPaneWallController.wall().isMoving()) return;
             dropUnstartedDisplay(currentWallPlace());
@@ -27434,30 +27322,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Takes the display window off the wall: the server connection is let go of, the window's
-     * frame and the X view behind it are removed — which frees the view's native context — and
-     * the chrome that read the row is brought up to date. A display window in front hands the row
-     * to the window on its left. The server itself, if one runs, is left alone. Runs when the
-     * display stops, and when a display that never came up is left or closed.
+     * The activity's half of the display window's teardown (the server's half is
+     * {@link com.termux.app.x11.DisplayServer#tearDown}): the window's frame and the X view behind
+     * it are removed — which frees the view's native context — and the chrome that read the row is
+     * brought up to date. A display window in front hands the row to the window on its left.
      */
-    private void tearDownEmbeddedDisplay() {
-        if (mPaneWallController == null || mPaneWallController.displayWindow() == null) return;
-        boolean wasInFront = isDisplayWindowInFront();
-        mDisplayRequested = false;
-        if (mDisplayStop != null) {
-            mDisplayStop.abandon();
-            mDisplayStop = null;
-        }
-        syncDisplayWindowList(false);
-        if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(false);
-        if (mX11Display != null) {
-            // Destroying the controller reports it stopped; nothing is to hear that now.
-            mX11Display.setListener(null);
-            mX11Display.detachView();
-            mX11Display.onDisplayPlaceLeft();
-            mX11Display.destroy();
-            mX11Display = null;
-        }
+    private void tearDownEmbeddedDisplayWindow(boolean wasInFront) {
         // Whoever owns typing now — an open palette or sheet keeps its claim — not nobody.
         restoreInAppKeyboardTypingClaim();
         hideDisplaySystemKeyboard();
@@ -27560,8 +27430,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean consumeDisplayBack(@NonNull KeyEvent event) {
         com.termux.app.x11.DisplayBackPolicy.Action action =
             com.termux.app.x11.DisplayBackPolicy.decide(isDisplayWindowShowing(), isLayerOpen(),
-                isEmbeddedDisplayRunning(),
-                mX11Display == null ? null : mX11Display.textFocusPolicy().state(),
+                mDisplayServer.isRunning(),
+                mDisplayServer.controller() == null ? null : mDisplayServer.controller().textFocusPolicy().state(),
                 mFrameContent.content());
         if (action == com.termux.app.x11.DisplayBackPolicy.Action.PASS) return false;
         // Answered once, on the way up; the press is swallowed with it so nothing below the page
@@ -27569,8 +27439,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (event.getAction() != KeyEvent.ACTION_UP) return true;
         if (action == com.termux.app.x11.DisplayBackPolicy.Action.LOWER_KEYBOARD)
             lowerDisplayKeyboard();
-        else if (mX11Display != null)
-            mX11Display.sendBackKey();
+        else if (mDisplayServer.controller() != null)
+            mDisplayServer.controller().sendBackKey();
         return true;
     }
 
@@ -27661,7 +27531,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? null : mPaneWallController.displayWindow();
         // Off its window the display's view must neither keep the keys nor take them back.
         if (page != com.termux.app.wall.PaneWallPage.DISPLAY) releaseDisplayFocus(display);
-        if (mX11Display == null || display == null) return;
+        if (mDisplayServer.controller() == null || display == null) return;
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
             // The arrival itself: nothing about starting or stopping a display happened, but the
             // message may be stale if a package landed in the prefix while the wall rested
@@ -27669,11 +27539,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             refreshDisplayEmptyStateReadiness();
             mDisplayDetachOwed = false;
             com.termux.app.x11.DisplayViewFocus.admit(display.display());
-            mX11Display.attachView(display.display());
+            mDisplayServer.controller().attachView(display.display());
             display.display().requestFocus();
             // A place that asked for the keyboard as it arrived asked for it itself, so the
             // text-focus policy leaves that keyboard alone until it is put down again.
-            mX11Display.onDisplayPlaceEntered(
+            mDisplayServer.controller().onDisplayPlaceEntered(
                 wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.DISPLAY));
             // The in-app keyboard and the extra-keys row type into X while the page is showing;
             // the terminal never sees those values, unless a layer open over it holds them.
@@ -27681,8 +27551,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncDisplayKeyboardRoute();
         } else {
             if (mDeferDisplayDetach) mDisplayDetachOwed = true;
-            else mX11Display.detachView();
-            mX11Display.onDisplayPlaceLeft();
+            else mDisplayServer.controller().detachView();
+            mDisplayServer.controller().onDisplayPlaceLeft();
             restoreInAppKeyboardTypingClaim();
             // The phone's keyboard belongs to the place it was raised on; it goes down with it,
             // and the launcher's keyboard takes its suppression back for the terminal.
@@ -28788,8 +28658,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
         mLinuxAppsHost = new com.termux.app.x11.X11LinuxAppRunner.Host() {
-                @Override public boolean isDisplayRunning() { return isEmbeddedDisplayRunning(); }
-                @Override public void startDisplay() { startEmbeddedDisplay(); }
+                @Override public boolean isDisplayRunning() { return mDisplayServer.isRunning(); }
+                @Override public void startDisplay() { mDisplayServer.start(); }
                 @Override public boolean runScript(@NonNull String script,
                         @NonNull com.termux.app.x11.X11LinuxAppRunner.ScriptExitListener onExit) {
                     if (mTermuxService == null) return false;
@@ -28821,10 +28691,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     dropAddedLinuxPage();
                 }
                 @Override public boolean raiseWindowFor(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
-                    if (mX11Windows == null) return false;
+                    if (!mDisplayServer.hasWindowList()) return false;
                     int id = linuxWindowIdFor(app);
                     if (id < 0) return false;
-                    mX11Windows.activate(id);
+                    mDisplayServer.activateWindow(id);
                     return true;
                 }
                 @Override public void showNotice(@NonNull String message) { showToast(message, true); }
@@ -28863,7 +28733,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     wallPagesStore().edit(route::addTo);
                 routedPage = added.ok() && added.page != null ? added.page.id : -1;
                 mTemporaryDisplaySawApp = false;
-                mTemporaryDisplayStartedByLaunch = !isEmbeddedDisplayRunning();
+                mTemporaryDisplayStartedByLaunch = !mDisplayServer.isRunning();
             }
             mRoutedLinuxPage = routedPage;
             mAddedLinuxPage = route.needsNewPage() ? routedPage : -1;
@@ -28968,7 +28838,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The display window of {@code app} on the running display, or -1. */
     private int linuxWindowIdFor(@NonNull com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
         return com.termux.app.x11.DisplayWindowMatch.windowFor(
-            mDisplayWindows, app.startupWmClass, app.exec, app.id);
+            mDisplayServer.windows(), app.startupWmClass, app.exec, app.id);
     }
 
     @Nullable
@@ -28984,10 +28854,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * something asked for it ({@link #openDisplayWindow}) or someone typed {@code termux-x11 :0}.
      */
     private void createX11DisplayController() {
-        if (mPaneWallController == null || mX11Display != null) return;
+        if (mPaneWallController == null || mDisplayServer.controller() != null) return;
         com.termux.app.x11.X11PaneFrame page = mPaneWallController.displayWindow();
         if (page == null) return;
-        mX11Display = new com.termux.app.x11.X11DisplayHostController(this,
+        mDisplayServer.setController(new com.termux.app.x11.X11DisplayHostController(this,
             new com.termux.x11.LorieHost.Callbacks() {
                 @Override public void toggleKeyboardVisibility() {
                     if (toggleDisplayFrameKeyboard()) return;
@@ -29025,8 +28895,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // A temporary page goes with its display.
                     removeTemporaryDisplayPage();
                 }
-            });
-        mX11Display.setTextFocusKeyboard(new com.termux.app.x11.DisplayTextFocusPolicy.Keyboard() {
+            }));
+        mDisplayServer.controller().setTextFocusKeyboard(new com.termux.app.x11.DisplayTextFocusPolicy.Keyboard() {
             @Override public void showKeyboardForTextFocus() {
                 // While mouse mode owns the keyboard frame the keyboard is already up in it: the
                 // text field brings it in front of the touchpad instead of raising anything.
@@ -29050,25 +28920,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         page.setTapListener(new com.termux.app.x11.X11PaneFrame.TapListener() {
             @Override public void onDisplayTap() {
-                if (mX11Display != null) mX11Display.onDisplayTap();
+                if (mDisplayServer.controller() != null) mDisplayServer.controller().onDisplayTap();
             }
 
             @Override public void onDisplayDrag() {
-                if (mX11Display != null) mX11Display.onDisplayDrag();
+                if (mDisplayServer.controller() != null) mDisplayServer.controller().onDisplayDrag();
             }
         });
-        mX11Display.host().setLorieView(page.display());
-        com.termux.app.x11.X11DisplayHostController controller = mX11Display;
-        controller.setListener(this::onEmbeddedDisplayRunningChanged);
-        // A kept announcement can have reported the display running while the controller was
-        // built, before anything listened: told once the build has finished.
-        if (controller.isRunning()) {
-            mPaneWallController.wall().post(() -> {
-                if (mX11Display == controller && controller.isRunning()) {
-                    onEmbeddedDisplayRunningChanged(true);
-                }
-            });
-        }
+        mDisplayServer.controller().host().setLorieView(page.display());
+        mDisplayServer.listen(mPaneWallController.wall());
         syncDisplayEnvironment();
         // The tool store CLI goes in the same way the display's commands do, on every start.
         com.termux.app.store.TlstoreInstaller.installAsync(this, result -> {
@@ -29082,61 +28942,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // is no settle coming to attach the surface, so do it now.
         if (isDisplayWindowShowing() && !mPaneWallController.wall().isMoving()) {
             syncDisplayAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
-        }
-    }
-
-    /**
-     * A display came up or went down. Up, it holds its window in the row from now on; down, and
-     * not asked for again, its window goes (ADR 0008) — the row, if it was in front, lands on the
-     * window on its left, or the last Home page when there is none.
-     */
-    private void onEmbeddedDisplayRunningChanged(boolean running) {
-        refreshPageGlyphs();
-        if (running) {
-            mDisplayRequested = false;
-            mDisplayConnectedSinceStart = true;
-            mDisplayRanThisLaunch = true;
-            setDisplayStartFailure(null);
-        }
-        if (!running && !mDisplayRequested) {
-            tearDownEmbeddedDisplay();
-            if (mPaneWallController != null) mPaneWallController.onDisplayRunningChanged();
-            syncPlaceBar();
-            return;
-        }
-        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
-            ? null : mPaneWallController.displayWindow();
-        if (frame != null) frame.applyRunning(running);
-        if (mPaneWallController != null) mPaneWallController.onDisplayRunningChanged();
-        applyDisplayPageStill();
-        syncPlaceBar();
-        syncDisplayTouchpad();
-        syncDisplayEnvironment();
-        if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(running);
-        syncDisplayWindowList(running);
-        // A display that stopped has nothing left to type into.
-        if (!running) hideDisplaySystemKeyboard();
-        syncDisplayKeyboardRoute();
-        syncDisplayOnRow();
-        // Start in = Display: the cold start's landing finishes on the display window.
-        if (running && mStartOnDisplayPending) {
-            mStartOnDisplayPending = false;
-            bringDisplayWindowInFront(false);
-        }
-    }
-
-    /** Follow the display's apps while a display runs; forget them when it stops. */
-    private void syncDisplayWindowList(boolean running) {
-        if (mX11Windows != null) {
-            mX11Windows.stop();
-            mX11Windows = null;
-        }
-        if (running) {
-            mX11Windows = new com.termux.app.x11.X11WindowList(
-                com.termux.app.x11.X11DisplayHostController.displayName(), this::onDisplayWindowsChanged);
-            mX11Windows.start();
-        } else {
-            onDisplayWindowsChanged(java.util.Collections.emptyList(), -1);
         }
     }
 
@@ -29168,10 +28973,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.chrome.DisplayAppChips displayAppChips() {
         java.util.List<Integer> ids = new java.util.ArrayList<>();
-        for (com.termux.app.x11.X11WindowList.Window w : mDisplayWindows) ids.add(w.id);
+        for (com.termux.app.x11.X11WindowList.Window w : mDisplayServer.windows()) ids.add(w.id);
         return new com.termux.app.chrome.DisplayAppChips(ids,
-            com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayWindows.size(),
-                mDisplayActiveWindow));
+            com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayServer.windows().size(),
+                mDisplayServer.activeWindow()));
     }
 
     /** One chip per app open on the display, named and iconed like the old single chip. */
@@ -29182,7 +28987,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
             new java.util.ArrayList<>();
-        for (com.termux.app.x11.X11WindowList.Window window : mDisplayWindows) {
+        for (com.termux.app.x11.X11WindowList.Window window : mDisplayServer.windows()) {
             String name = com.termux.app.x11.DisplayWindowName.of(
                 apps == null ? null : apps.nameFor(window.wmClass), window.label, display);
             String spoken = name.equals(display) ? display
@@ -29196,12 +29001,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.terminal.TerminalWindowBar.WindowItem displayWindowItem() {
         String display = getString(R.string.launcher_entry_display);
-        int front = com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayWindows.size(),
-            mDisplayActiveWindow);
+        int front = com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayServer.windows().size(),
+            mDisplayServer.activeWindow());
         if (front < 0) {
             return new com.termux.app.terminal.TerminalWindowBar.WindowItem(display, display);
         }
-        com.termux.app.x11.X11WindowList.Window window = mDisplayWindows.get(front);
+        com.termux.app.x11.X11WindowList.Window window = mDisplayServer.windows().get(front);
         com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
         String name = com.termux.app.x11.DisplayWindowName.of(
             apps == null ? null : apps.nameFor(window.wmClass), window.label, display);
@@ -29213,14 +29018,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void onDisplayWindowsChanged(
             @NonNull java.util.List<com.termux.app.x11.X11WindowList.Window> windows, int active) {
-        mDisplayWindows = windows;
-        mDisplayActiveWindow = active;
-        if (mX11Display != null) {
-            int front = com.termux.app.x11.DisplayWindowName.frontIndex(windows.size(), active);
-            mX11Display.setFrontWindowClass(front < 0 ? null : windows.get(front).wmClass);
-        }
-        // A stop in progress is waiting for exactly this: the last app closing itself.
-        if (mDisplayStop != null) mDisplayStop.onWindowsChanged(windows.size());
         noteTemporaryDisplayWindows(windows.size());
         // The display's chip wears its front app's name and icon, so a new front app re-dresses it.
         if (!isDisplayUp() || !isSplitPanesEnabled()) return;
@@ -29228,61 +29025,78 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (bar != null) syncWindowBarItems(bar);
     }
 
-    /** Run the configured start command as a background task, as if it had been typed. */
-    private void startEmbeddedDisplay() {
-        if (mTermuxService == null || mPreferences == null || !isX11DisplayEnabled()) return;
-        // The prefix commands are written at start-up, which on a first launch is before the
-        // bootstrap exists. Put them in now if they are missing, then start.
-        if (!com.termux.app.x11.X11CliInstaller.isInstalled(this)) {
-            com.termux.app.x11.X11CliInstaller.installAsync(this, result -> {
-                if (isFinishing() || isDestroyed()) return;
-                if (com.termux.app.x11.X11CliInstaller.isInstalled(this)) startEmbeddedDisplayNow();
-                else Logger.logWarn(LOG_TAG, "Display commands not installed: " + result);
-            });
-            return;
+    /** What the display server's lifecycle needs from the activity. */
+    private final class DisplayServerHost implements com.termux.app.x11.DisplayServer.Host {
+        @Override public void refreshPageGlyphs() { TermuxActivity.this.refreshPageGlyphs(); }
+
+        @Override public void setStartFailure(@Nullable String reason) {
+            setDisplayStartFailure(reason);
         }
-        startEmbeddedDisplayNow();
-    }
 
-    private void startEmbeddedDisplayNow() {
-        if (mTermuxService == null || mPreferences == null || !isX11DisplayEnabled()) return;
-        String[] argv = com.termux.app.x11.X11StartCommand.argv(mPreferences.getX11DisplayCommand(),
-            mPreferences.getX11DisplayDpi(), mPreferences.isX11LegacyDrawingEnabled(),
-            mPreferences.isX11ForceBgraEnabled(),
-            com.termux.app.x11.X11WindowManager.xstartup(mPreferences.getX11WindowManager()));
-        if (argv.length == 0) return;
-        // A new Start clears what the last one said, and counts from here whether a display
-        // connects.
-        final int startId = ++mDisplayStartId;
-        mDisplayConnectedSinceStart = false;
-        setDisplayStartFailure(null);
-        final com.termux.shared.shell.command.runner.app.AppShell task =
-            mTermuxService.createTermuxTask(argv[0],
-                java.util.Arrays.copyOfRange(argv, 1, argv.length), null,
-                TermuxConstants.TERMUX_HOME_DIR_PATH);
-        if (task == null) return;
-        // The exit callback runs on the main thread after the task's output is complete, so
-        // stderr is safe to read here.
-        mTermuxService.notifyOnAppShellExit(task, exitCode -> {
-            if (isFinishing() || isDestroyed()) return;
-            // Superseded by a later Start, or a display did connect: the server ended normally.
-            if (startId != mDisplayStartId || mDisplayConnectedSinceStart) return;
-            setDisplayStartFailure(com.termux.app.x11.X11StartFailure.reason(
-                task.getExecutionCommand().resultData.stderr,
-                getString(R.string.termux_x11_start_failed_generic)));
-        });
-    }
+        @Override public boolean hasDisplayWindow() {
+            return mPaneWallController != null && mPaneWallController.displayWindow() != null;
+        }
 
-    /** Which Start the exit callback belongs to; bumped by every Start. */
-    private int mDisplayStartId;
-    /** Whether a display came up since the last Start. */
-    private boolean mDisplayConnectedSinceStart;
-    /**
-     * Whether a display has run since the launcher started. Once it has, landing on a stopped
-     * Display page shows Start instead of starting it again: the autostart setting starts the
-     * display with the launcher, and a stop the user made stays stopped.
-     */
-    private boolean mDisplayRanThisLaunch;
+        @Override public boolean isDisplayWindowInFront() {
+            return TermuxActivity.this.isDisplayWindowInFront();
+        }
+
+        @Override public void onDisplayTornDown(boolean wasInFront) {
+            tearDownEmbeddedDisplayWindow(wasInFront);
+        }
+
+        @Override public void onLinuxAppsRunningChanged(boolean running) {
+            if (mLinuxApps != null) mLinuxApps.onDisplayRunningChanged(running);
+        }
+
+        @Override public void syncRunningChrome(boolean running) {
+            com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+                ? null : mPaneWallController.displayWindow();
+            if (frame != null) frame.applyRunning(running);
+            if (mPaneWallController != null) mPaneWallController.onDisplayRunningChanged();
+            applyDisplayPageStill();
+            TermuxActivity.this.syncPlaceBar();
+            syncDisplayTouchpad();
+            syncDisplayEnvironment();
+        }
+
+        @Override public void afterRunningChanged(boolean running) {
+            // A display that stopped has nothing left to type into.
+            if (!running) hideDisplaySystemKeyboard();
+            syncDisplayKeyboardRoute();
+            syncDisplayOnRow();
+        }
+
+        @Override public void bringInFrontIfStartOnDisplayPending() {
+            // Start in = Display: the cold start's landing finishes on the display window.
+            if (mStartOnDisplayPending) {
+                mStartOnDisplayPending = false;
+                bringDisplayWindowInFront(false);
+            }
+        }
+
+        @Override public void onDisplayGone() {
+            if (mPaneWallController != null) mPaneWallController.onDisplayRunningChanged();
+            TermuxActivity.this.syncPlaceBar();
+        }
+
+        @Override public void onWindowsChanged(
+                @NonNull java.util.List<com.termux.app.x11.X11WindowList.Window> windows,
+                int active) {
+            onDisplayWindowsChanged(windows, active);
+        }
+
+        @Override public void syncPlaceBar() { TermuxActivity.this.syncPlaceBar(); }
+
+        @Nullable @Override public TermuxService service() { return mTermuxService; }
+
+        @Nullable @Override public com.termux.shared.termux.settings.preferences
+                .TermuxAppSharedPreferences preferences() {
+            return mPreferences;
+        }
+
+        @Override public boolean isActivityGone() { return isFinishing() || isDestroyed(); }
+    }
 
     /** Hand the Display window the reason the last Start died, or clear it with null. */
     private void setDisplayStartFailure(@Nullable String reason) {
@@ -29530,12 +29344,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         in.terminalWindowLabels = windowLabels;
         in.currentTerminalWindow = windowLabels.isEmpty() ? -1 : rowCurrentIndex();
         // The display's title is the app in front, named as the window bar's chip names it.
-        in.displayRunning = isEmbeddedDisplayRunning();
+        in.displayRunning = mDisplayServer.isRunning();
         if (in.displayRunning) {
             java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
                 displayAppItems();
-            int front = com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayWindows.size(),
-                mDisplayActiveWindow);
+            int front = com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayServer.windows().size(),
+                mDisplayServer.activeWindow());
             if (front >= 0 && front < items.size()) {
                 String title = com.termux.app.wall.pageswitch.PageSwitchModel.plainLabel(
                     items.get(front).label);
@@ -29637,7 +29451,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.x11.DisplayKeyboardRoute.Target keyboardRoute() {
         return com.termux.app.x11.DisplayKeyboardRoute.decide(
             mPreferences != null && mPreferences.isX11AndroidKeyboardEnabled(),
-            isDisplayWindowShowing(), isEmbeddedDisplayRunning(),
+            isDisplayWindowShowing(), mDisplayServer.isRunning(),
             mInAppKeyboard != null && mInAppKeyboard.isEnabled());
     }
 
@@ -29742,7 +29556,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the terminal's alone and the keyboard is nobody's but the user's.
      */
     private boolean isDisplayTouchpadFrame() {
-        return mFrameContent.isMouseMode() && isDisplayWindowShowing() && isEmbeddedDisplayRunning()
+        return mFrameContent.isMouseMode() && isDisplayWindowShowing() && mDisplayServer.isRunning()
             && mInAppKeyboard != null && findViewById(R.id.inapp_keyboard_view_host) != null;
     }
 
@@ -29790,7 +29604,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // exactly what it opened and the user is not left with a keyboard to dismiss.
         if (decision.releaseFrame) lowerDisplayFrameKeyboard();
         syncMouseModeMark();
-        if (mX11Display == null) return;
+        if (mDisplayServer.controller() == null) return;
         if (decision.intent != com.termux.app.x11.DisplayFrameContentPolicy.Intent.NONE)
             mSheets.claimDrawerRaisedKeyboard();
         switch (decision.intent) {
@@ -29798,10 +29612,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // A keyboard the user asked for is theirs — but only if one is actually up: the
                 // pad's frame going away with it is nobody's keyboard.
                 if (mInAppKeyboard != null && mInAppKeyboard.isVisible())
-                    mX11Display.onUserKeyboardIntent(true);
+                    mDisplayServer.controller().onUserKeyboardIntent(true);
                 break;
             case UNPIN:
-                mX11Display.onUserKeyboardIntent(false);
+                mDisplayServer.controller().onUserKeyboardIntent(false);
                 break;
             default:
                 break;
@@ -29905,7 +29719,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 () -> {
                     com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
                         ? null : mPaneWallController.displayWindow();
-                    return frame == null || !isEmbeddedDisplayRunning() ? null : frame.display();
+                    return frame == null || !mDisplayServer.isRunning() ? null : frame.display();
                 },
                 isInAppKeyboardCapsule(),
                 // The pad lies over the place, so it is an overlay: one opaque panel in the same
@@ -29920,7 +29734,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A tap on the pad is the display's tap: it opens the window a cursor name answers
             // in, exactly as a tap on the picture does.
             pad.setTapListener(() -> {
-                if (mX11Display != null) mX11Display.onDisplayTap();
+                if (mDisplayServer.controller() != null) mDisplayServer.controller().onDisplayTap();
             });
             pad.setModeSwitchListener(this::switchDisplayKeyboardMode);
             mDisplayTouchpad = pad;
@@ -30454,11 +30268,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && isDisplayWindowInFront()) {
             // #192: on a Display page the bar's chips are the display's apps.
-            if (mX11Windows == null) return;
+            if (!mDisplayServer.hasWindowList()) return;
             com.termux.app.chrome.DisplayAppChips apps = displayAppChips();
             int id = close ? apps.closeWindowId(index) : apps.tapWindowId(index);
             if (id < 0) return;
-            if (close) mX11Windows.close(id); else mX11Windows.activate(id);
+            if (close) mDisplayServer.closeWindowById(id); else mDisplayServer.activateWindow(id);
             return;
         }
         if (mPaneController == null) return;
@@ -33728,7 +33542,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             // A focus source is a signal, not an order: on the Display place the policy decides
             // whether it means a keyboard, and it is the one that will close it again.
-            if (fromFocus && mX11Display != null && mX11Display.onTextFocusSignal(true)) return true;
+            if (fromFocus && mDisplayServer.controller() != null && mDisplayServer.controller().onTextFocusSignal(true)) return true;
             if (system) return applyDisplaySystemKeyboard(true);
             // Asking for it by hand while mouse mode holds the frame brings the keyboard to the
             // front of it instead of raising a second one.
@@ -33742,7 +33556,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean hideInAppKeyboard(boolean fromFocus) {
             boolean system = displayTakesSystemKeyboard();
             if (!system && (mInAppKeyboard == null || !mInAppKeyboard.isEnabled())) return false;
-            if (fromFocus && mX11Display != null && mX11Display.onTextFocusSignal(false)) return true;
+            if (fromFocus && mDisplayServer.controller() != null && mDisplayServer.controller().onTextFocusSignal(false)) return true;
             if (system) return applyDisplaySystemKeyboard(false);
             if (!fromFocus && applyDisplayFrameKeyboard(false)) return true;
             mInAppKeyboard.hide(fromFocus
