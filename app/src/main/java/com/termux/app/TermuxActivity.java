@@ -17392,7 +17392,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // rows reach over the front's, the slab starting that far below the container's top.
         int passRowsPx = state.toolbarShown
             ? stack.dock.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0;
-        int laneSlackPx = laneSlackPx(stackIn.dock, measuredToolbarHeightPx, passRowsPx);
+        // And at the Terminal's rest flush padding, which its gate stands only while it is on
+        // screen: the container is as tall either side of the landing.
+        int laneSlackPx = laneSlackPx(stackIn.dock, measuredToolbarHeightPx, passRowsPx)
+            + com.termux.app.place.StackLanes.flushSlackPx(mTerminalRestFlushPaddingPx,
+                stack.flushPaddingPx);
         boolean laneSlackChanged = laneSlackPx != mLaneSlackPx;
         mLaneSlackPx = laneSlackPx;
         if (laneSlackChanged) applyAccessorySurfaceBounds(state);
