@@ -6,7 +6,7 @@ import com.termux.app.page.PageKind;
 import com.termux.app.page.Rest;
 
 /** The Assistant page's rest (ADR 0030 section 1), computed from plain booleans. */
-final class AssistantRest {
+public final class AssistantRest {
 
     private AssistantRest() {}
 
@@ -16,7 +16,7 @@ final class AssistantRest {
      * one. The bar shows its own set and the chips show; the page wears the Workspace's look.
      */
     @NonNull
-    static Rest of(@NonNull Rest.Inputs in) {
+    public static Rest of(@NonNull Rest.Inputs in) {
         boolean keyboardUp = !in.overviewPreviewing && in.keyboardRemembered && !in.minimal;
         return new Rest(keyboardUp, PageKind.ASSISTANT, !in.inAppKeyboard, true, true,
             PageKind.TERMINAL);

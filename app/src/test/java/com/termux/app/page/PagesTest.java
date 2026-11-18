@@ -63,6 +63,32 @@ public class PagesTest {
     }
 
     @Test
+    public void recordCommitRecordsTheKindAndRunsNoOffFront() {
+        FakePage a = new FakePage(PageKind.ASSISTANT, log);
+        FakePage b = new FakePage(PageKind.TERMINAL, log);
+        pages.put(1, a);
+        pages.put(2, b);
+        pages.landed(1, PageKind.ASSISTANT);
+        pages.applyFront();
+        assertFalse(pages.isCommitted(PageKind.TERMINAL));
+
+        pages.recordCommit(2, PageKind.TERMINAL);
+
+        assertTrue(pages.isCommitted(PageKind.TERMINAL));
+        assertFalse(pages.isCommitted(PageKind.ASSISTANT));
+        assertEquals(2, pages.committedId());
+        assertEquals(0, a.off);
+        pages.committed(2, PageKind.TERMINAL);
+        assertEquals(1, a.off);
+    }
+
+    @Test
+    public void nothingIsCommittedBeforeTheFirstCommit() {
+        assertFalse(pages.isCommitted(PageKind.HOME));
+        assertFalse(pages.isCommitted(PageKind.TERMINAL));
+    }
+
+    @Test
     public void theSameLandingTwiceAsksOnce() {
         pages.landed(7, PageKind.ASSISTANT);
         pages.landed(7, PageKind.ASSISTANT);

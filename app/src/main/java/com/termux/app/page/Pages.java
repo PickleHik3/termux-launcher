@@ -26,6 +26,13 @@ public final class Pages {
     public interface Stops {
         /** The page in front inside the cell, or null when it holds none. */
         @Nullable Page current();
+
+        /**
+         * The page that declares the cell's glass: the one in front, or any the cell holds while
+         * none is in front for a moment, so a window closing never lets go of the others' glass.
+         */
+        @Nullable
+        default Page glassPage() { return current(); }
     }
 
     @NonNull private final PageHost mHost;
@@ -92,7 +99,7 @@ public final class Pages {
         List<GlassEntry> all = new ArrayList<>();
         for (Page page : mPages.values()) page.declareGlass(all);
         for (Stops stops : mStops.values()) {
-            Page page = stops.current();
+            Page page = stops.glassPage();
             if (page != null) page.declareGlass(all);
         }
         HashSet<String> seen = new HashSet<>();
@@ -106,6 +113,24 @@ public final class Pages {
     @Nullable
     public Page page(int pageId) {
         return mPages.get(pageId);
+    }
+
+    /**
+     * A page of {@code kind}: the committed page when it is of that kind, else any registered page
+     * or cell's current page of it; null when none is. Pages of a kind share one rest, so any will do.
+     */
+    @Nullable
+    public Page anyOf(@NonNull PageKind kind) {
+        Page committed = mCommittedId < 0 ? null : resolve(mCommittedId);
+        if (committed != null && committed.kind() == kind) return committed;
+        for (Page page : mPages.values()) {
+            if (page.kind() == kind) return page;
+        }
+        for (Stops stops : mStops.values()) {
+            Page page = stops.current();
+            if (page != null && page.kind() == kind) return page;
+        }
+        return null;
     }
 
     /** The page put under {@code id}, else the current page of the stops under it, else null. */
@@ -131,13 +156,26 @@ public final class Pages {
      * runs only the new page's on-front.
      */
     public void committed(int pageId, @NonNull PageKind kind) {
-        mCommittedId = pageId;
-        mCommittedKind = kind;
+        recordCommit(pageId, kind);
         Page applied = mApplied;
         if (applied != null && resolve(pageId) != applied) {
             mApplied = null;
             applied.offFront();
         }
+    }
+
+    /**
+     * Records the commit alone, so readers see the new kind before the landing's handler runs;
+     * {@link #committed} then runs the off-front.
+     */
+    public void recordCommit(int pageId, @NonNull PageKind kind) {
+        mCommittedId = pageId;
+        mCommittedKind = kind;
+    }
+
+    /** Whether the wall has committed to a page of {@code kind}; mid-slide it follows the commit. */
+    public boolean isCommitted(@NonNull PageKind kind) {
+        return mCommittedKind == kind;
     }
 
     public int committedId() {

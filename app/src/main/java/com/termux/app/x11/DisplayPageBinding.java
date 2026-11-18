@@ -25,12 +25,13 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.IntConsumer;
 
 /**
  * Which Display page the one display view stands on, and what the frame shows there: live, the
  * page's kept picture, or its card (a Linux app's name and icon, read off the main thread). The
  * wall tells it where the view is bound and where it lands ({@link WallDisplay}); the landing's
- * own work (starting the display, raising or running the page's app) is the host's. Main thread
+ * own work (starting the display, raising or running the page's app) is the landing's ({@link DisplayLanding}). Main thread
  * only.
  */
 public final class DisplayPageBinding implements WallDisplay {
@@ -50,8 +51,6 @@ public final class DisplayPageBinding implements WallDisplay {
         boolean isGone();
         /** Builds the display's frame when the Display is enabled and none is built; true when it built one. */
         boolean buildFrameIfMissing();
-        /** The wall came to rest on the bound Display page: start, raise or run there. */
-        void land(int pageId);
     }
 
     /** How long a landed page keeps its still while its app comes forward, in ms. */
@@ -65,6 +64,8 @@ public final class DisplayPageBinding implements WallDisplay {
 
     @NonNull private final Context mContext;
     @NonNull private final Host mHost;
+    /** The landing's work (start, raise or run) once the wall rests on a page; set once. */
+    @Nullable private IntConsumer mLanding;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     /** The Display page the display view stands on (A3b); -1 while the wall has none. */
     private int mBound = -1;
@@ -82,6 +83,11 @@ public final class DisplayPageBinding implements WallDisplay {
     public DisplayPageBinding(@NonNull Context context, @NonNull Host host) {
         mContext = context;
         mHost = host;
+    }
+
+    /** Who does the landing's work: start the display, raise or run the page's app. */
+    public void setLanding(@NonNull IntConsumer landing) {
+        mLanding = landing;
     }
 
     /** The Display page the display view stands on; -1 while the wall has none. */
@@ -110,7 +116,7 @@ public final class DisplayPageBinding implements WallDisplay {
 
     /**
      * The wall came to rest on Display page {@code pageId}: the page goes live once its app had
-     * a moment to come forward (A3c2), and the host does the landing's work.
+     * a moment to come forward (A3c2), and the landing does its work.
      */
     @Override
     public void landed(int pageId) {
@@ -118,7 +124,7 @@ public final class DisplayPageBinding implements WallDisplay {
             mHandler.removeCallbacks(mLive);
             mHandler.postDelayed(mLive, LIVE_DELAY_MS);
         }
-        mHost.land(pageId);
+        if (mLanding != null) mLanding.accept(pageId);
     }
 
     /** Keep what the running display shows as Display page {@code pageId}'s picture. */
@@ -215,6 +221,11 @@ public final class DisplayPageBinding implements WallDisplay {
                 CARD_READER, mHandler::post);
         }
         return mCards;
+    }
+
+    /** Swaps the catalog and card reader, so a test needs no real catalog. */
+    void setCardsForTest(@NonNull DisplayCardCache<Drawable> cards) {
+        mCards = cards;
     }
 
     /** Reads the catalog and every bound Display page's card again; the still follows. */

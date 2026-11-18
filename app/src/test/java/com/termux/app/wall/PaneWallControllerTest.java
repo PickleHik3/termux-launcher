@@ -1270,6 +1270,41 @@ public class PaneWallControllerTest {
         assertEquals(Arrays.asList("stepBegin 1", "step 1"), terminal.calls);
     }
 
+    @Test public void theRegistryHoldsTheCommittedKindWhenTheLandingHearsItAndBeforeTheOffFront() {
+        com.termux.app.page.Pages registry =
+            new com.termux.app.page.Pages(com.termux.app.page.PageHost.NONE, () -> { });
+        controller.setPages(registry);
+        int[] off = new int[1];
+        com.termux.app.page.Page applied = new com.termux.app.page.Page() {
+            @Override public PageKind kind() { return PageKind.HOME; }
+            @Override public View view() { return new View(activity); }
+            @Override public com.termux.app.page.Rest rest(com.termux.app.page.Rest.Inputs in) { return null; }
+            @Override public void onFront() { }
+            @Override public void offFront() { off[0]++; }
+            @Override public boolean onBack() { return false; }
+        };
+        final int appliedId = 9999;
+        registry.put(appliedId, applied);
+        registry.landed(appliedId, PageKind.HOME);
+        registry.applyFront();
+        java.util.List<String> seen = new java.util.ArrayList<>();
+        controller.setLanding(new WallLanding() {
+            @Override public void committed(PageKind page) {
+                seen.add(page + " home=" + registry.isCommitted(PageKind.HOME)
+                    + " terminal=" + registry.isCommitted(PageKind.TERMINAL) + " off=" + off[0]);
+            }
+        });
+
+        controller.onWallCellChanged(wall.currentPageId() + 1, PageKind.TERMINAL);
+        assertEquals("TERMINAL home=false terminal=true off=0", seen.get(0));
+        assertEquals("the off-front runs after the landing heard the commit", 1, off[0]);
+
+        registry.landed(appliedId, PageKind.HOME);
+        registry.applyFront();
+        controller.onWallCellChanged(appliedId, PageKind.HOME);
+        assertEquals("HOME home=true terminal=false off=1", seen.get(1));
+    }
+
     private static void idle() {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
             .idleFor(java.time.Duration.ofMillis(3000L));

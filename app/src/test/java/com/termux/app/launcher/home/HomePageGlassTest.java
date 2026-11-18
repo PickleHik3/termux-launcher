@@ -12,10 +12,13 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.glass.GlassKind;
 import com.termux.app.glass.GlassService;
+import com.termux.app.launcher.widget.WidgetPaneController;
 import com.termux.app.page.PageHost;
 import com.termux.app.page.PageKind;
 import com.termux.app.page.Pages;
 import com.termux.app.window.FramePipeline;
+
+import com.termux.app.wall.WidgetPaneFrame;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -34,11 +37,13 @@ import java.util.List;
 public class HomePageGlassTest {
 
     private static final class Host implements HomePageHost {
-        @Override public void dismissControls() { }
-        @Override public void leaving() { }
-        @Override public void shown() { }
-        @Override public boolean widgetBack() { return false; }
-        @Override public boolean lowerFloatKeyboard() { return false; }
+        @Nullable @Override public WidgetPaneController widgets() { return null; }
+        @Nullable @Override public WidgetPaneFrame frame() { return null; }
+        @Override public void batchBarRefresh(@NonNull Runnable work) { work.run(); }
+        @Override public void releaseHomeFloatFocus() { }
+        @Override public boolean homeFloatFocused() { return false; }
+        @Override public boolean homeHoldsKeyboardUp() { return false; }
+        @Override public boolean lowerKeyboard() { return false; }
         @Nullable @Override public PageKind committedKind() { return null; }
         @NonNull @Override public View view() { throw new UnsupportedOperationException(); }
     }

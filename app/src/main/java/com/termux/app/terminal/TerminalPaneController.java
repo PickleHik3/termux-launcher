@@ -292,18 +292,6 @@ public class TerminalPaneController {
          */
         default boolean onFloatWindowOntoHome(@NonNull Window window) { return false; }
         /**
-         * Live blur's picture of what is drawn beneath {@code slab}, a floating window's glass,
-         * made if it has none; null while the glass service grants it another kind, and the slab
-         * keeps the stored frame. {@code redress} runs when a policy event moves that kind.
-         */
-        @Nullable
-        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
-                                                                  @Nullable Runnable redress) {
-            return null;
-        }
-        /** {@code slab} left its float for good: its glass entry and layer go. */
-        default void detachLiveGlass(@NonNull View slab) {}
-        /**
          * The shell of the float terminal widget {@code widgetId} hosts ended on its own: the
          * float is gone, and the widget shows the way to start a new shell.
          */
@@ -495,6 +483,7 @@ public class TerminalPaneController {
     /** Where Home floats are drawn, over the Home pages; null until the host gives one. */
     @Nullable private HomeFloatLayer mHomeFloatLayer;
     @Nullable private FloatGlass mHomeFloatGlass;
+    @Nullable private FloatGlass mWindowFloatGlass;
     /** The Home float holding focus, whose pane takes the keyboard; null while Home or a window has it. */
     @Nullable private Window mFocusedHomeFloat;
     /** What covers the float layer, on screen: the status bar's bottom, the dock's top, the keyboard's top. */
@@ -3653,7 +3642,7 @@ public class TerminalPaneController {
      * with its page and slides with Home across the seam. Floats opened before it existed are put
      * in it now.
      */
-    /** Where a Home float's glass is worn and given back; the Home page's glass. */
+    /** Where a float's glass is worn and given back; the glass of the page the float is on. */
     public interface FloatGlass {
         /** The slab's live picture; null while another kind is granted. */
         @Nullable
@@ -3665,6 +3654,16 @@ public class TerminalPaneController {
 
     public void setHomeFloatGlass(@Nullable FloatGlass glass) {
         mHomeFloatGlass = glass;
+    }
+
+    /** Where a window float's glass is worn and given back; the Terminal page's glass. */
+    public void setWindowFloatGlass(@Nullable FloatGlass glass) {
+        mWindowFloatGlass = glass;
+    }
+
+    @Nullable
+    private FloatGlass floatGlassOf(@NonNull FloatingPaneContainer container) {
+        return container.mIsHomeFloat ? mHomeFloatGlass : mWindowFloatGlass;
     }
 
     public void setHomeFloatLayer(@Nullable HomeFloatLayer layer) {
@@ -5839,16 +5838,12 @@ public class TerminalPaneController {
         if (slab == null) return;
         if (FloatLiveGlass.wants(FloatLiveGlass.inside(slab, container),
                 slab.getVisibility() == View.VISIBLE)) {
-            slab.setLivePicture(container.mIsHomeFloat
-                ? (mHomeFloatGlass == null ? null
-                    : mHomeFloatGlass.wear(slab, container.mGlassRedress))
-                // Window floats keep the activity's path until the Terminal page declares its
-                // glass.
-                : mHost.attachLiveGlass(slab, container.mGlassRedress));
+            FloatGlass glass = floatGlassOf(container);
+            slab.setLivePicture(glass == null ? null : glass.wear(slab, container.mGlassRedress));
         } else {
             if (slab.livePicture() != null) slab.setLivePicture(null);
-            if (!container.mIsHomeFloat) mHost.detachLiveGlass(slab);
-            else if (mHomeFloatGlass != null) mHomeFloatGlass.drop(slab);
+            FloatGlass glass = floatGlassOf(container);
+            if (glass != null) glass.drop(slab);
         }
         // The titlebar shows the same picture, so glass on glass reaches it too, at no slot of
         // its own: the recording reaches up over the strip.
@@ -7846,8 +7841,8 @@ public class TerminalPaneController {
             PaneGlassBackdropView slab = mPaneGlassViews.get(mLeaf.session);
             if (slab == null) return;
             if (slab.livePicture() != null) slab.setLivePicture(null);
-            if (!mIsHomeFloat) mHost.detachLiveGlass(slab);
-            else if (mHomeFloatGlass != null) mHomeFloatGlass.drop(slab);
+            FloatGlass glass = floatGlassOf(this);
+            if (glass != null) glass.drop(slab);
             titlebar().setLiveGlass(null);
         }
 

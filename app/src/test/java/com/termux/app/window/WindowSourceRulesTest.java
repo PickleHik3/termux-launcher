@@ -1,5 +1,6 @@
 package com.termux.app.window;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -409,10 +410,73 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void theActivityAsksTheRegistryWhetherHomeIsShowing() throws IOException {
+        String activity = sources().get("app/TermuxActivity.java");
+        assertFalse("TermuxActivity still has isWidgetsPageShowing",
+            activity.contains("isWidgetsPageShowing"));
+    }
+
+    @Test
     public void noHostOverTheMethodCap() throws IOException {
         Map<String, Integer> hosts = new TreeMap<>();
         for (String key : SourceRules.bigHosts(sources(), HOST_METHOD_CAP).keySet()) hosts.put(key, 1);
         assertNone(SourceRules.compare("Host over " + HOST_METHOD_CAP + " methods", hosts, BIG_HOSTS));
+    }
+
+    @Test
+    public void theActivityHasNoDisplayLandingAndTheBindingHostNoLand() throws IOException {
+        List<String> problems = new ArrayList<>();
+        if (sources().get("app/TermuxActivity.java").contains("onDisplayPageLandedAt("))
+            problems.add("TA has onDisplayPageLandedAt");
+        if (sources().get("app/x11/DisplayPageBinding.java").contains("void land("))
+            problems.add("DisplayPageBinding.Host has land(");
+        assertNone(problems);
+    }
+
+    @Test
+    public void theActivityDeclaresNoDisplaySystemKeyboardMethods() throws IOException {
+        List<String> problems = new ArrayList<>();
+        String activity = sources().get("app/TermuxActivity.java");
+        for (String name : new String[]{"displayView", "keyboardRoute", "displayTakesSystemKeyboard",
+                "applyDisplaySystemKeyboard", "toggleDisplaySystemKeyboard",
+                "hideDisplaySystemKeyboard", "syncDisplayKeyboardRoute", "holdDisplayKeyboardFocus",
+                "displayImeRoomPx", "applyDisplayImeRoom"}) {
+            if (java.util.regex.Pattern.compile("(?m)^    (private |public )?[\\w.<>]+ " + name + "\\(")
+                    .matcher(activity).find()) problems.add("TA declares " + name);
+        }
+        assertNone(problems);
+    }
+
+    @Test
+    public void theActivityDeclaresNoDisplayTouchpadMethods() throws IOException {
+        List<String> problems = new ArrayList<>();
+        String activity = sources().get("app/TermuxActivity.java");
+        for (String name : new String[]{"isDisplayTouchpadFrame", "applyDisplayFrameKeyboard",
+                "applyDisplayFrameTextFocus", "applyDisplayFrameDecision", "syncDisplayTouchpad",
+                "raiseDisplayFrameKeyboard", "lowerDisplayFrameKeyboard",
+                "applyDisplayTouchpadFrame", "releaseDisplayTouchpadWait",
+                "splitKeyboardTouchpadGap", "seatDisplayTouchpad", "syncDisplayTouchpadModeSwitch",
+                "switchDisplayKeyboardMode"}) {
+            if (java.util.regex.Pattern.compile("(?m)^    (private |public )?[\\w.<>]+ " + name + "\\(")
+                    .matcher(activity).find()) problems.add("TA declares " + name);
+        }
+        assertNone(problems);
+    }
+
+    @Test
+    public void homeDoesItsPageEventsInTheHomePageNotTheHost() throws IOException {
+        List<String> problems = new ArrayList<>();
+        String host = sources().get("app/launcher/home/HomePageHost.java");
+        for (String banned : new String[]{"leaving(", "shown(", "dismissControls(", "widgetBack(",
+                "lowerFloatKeyboard("}) {
+            if (host.contains(banned)) problems.add("HomePageHost declares " + banned);
+        }
+        String activity = sources().get("app/TermuxActivity.java");
+        for (String banned : new String[]{"private int homePageInFront(",
+                "private boolean wantsKeyboardOnEnter(", "new com.termux.app.wall.WidgetPaneFrame.Glass()"}) {
+            if (activity.contains(banned)) problems.add("TermuxActivity has " + banned);
+        }
+        assertNone(problems);
     }
 
     @Test
@@ -430,10 +494,14 @@ public class WindowSourceRulesTest {
             }
         }
         String activity = sources().get("app/TermuxActivity.java");
-        for (String banned : new String[]{"glassElement(\"widget\"", "attachWidgetLiveGlass", "RANK_WIDGET"}) {
+        for (String banned : new String[]{"glassElement(\"widget\"", "attachWidgetLiveGlass", "RANK_WIDGET",
+                "glassElement(\"float\"", "attachLiveGlass(", "detachLiveGlass("}) {
             if (activity.contains(banned)) problems.add("TermuxActivity mentions " + banned);
         }
         String pane = sources().get("app/terminal/TerminalPaneController.java");
+        for (String banned : new String[]{"attachLiveGlass(", "detachLiveGlass("}) {
+            if (pane.contains(banned)) problems.add("TerminalPaneController mentions " + banned);
+        }
         int at = pane.indexOf("private void syncFloatLiveGlass(");
         int open = at < 0 ? -1 : pane.indexOf('{', at);
         int depth = 0;
@@ -443,10 +511,28 @@ public class WindowSourceRulesTest {
             if (c == '{') depth++;
             else if (c == '}' && --depth == 0) { end = i; break; }
         }
-        if (at < 0 || !pane.substring(open, end).contains("mHomeFloatGlass")) {
-            problems.add("syncFloatLiveGlass does not route Home floats through mHomeFloatGlass");
+        if (at < 0 || !pane.substring(open, end).contains("floatGlassOf(")) {
+            problems.add("syncFloatLiveGlass does not route floats through their page's FloatGlass");
         }
         assertNone(problems);
+    }
+
+    /** The pages are re-read once after the wall's seams are set, not at every commit the landing hears. */
+    @Test
+    public void theLandingDoesNotReReadThePagesAtEveryCommit() throws IOException {
+        String activity = sources().get("app/TermuxActivity.java");
+        int at = activity.indexOf("setLanding(new com.termux.app.wall.WallLanding() {");
+        assertTrue("WallLanding seam not found", at >= 0);
+        int open = activity.indexOf('{', at);
+        int depth = 0;
+        int end = open;
+        for (int i = open; i < activity.length(); i++) {
+            char c = activity.charAt(i);
+            if (c == '{') depth++;
+            else if (c == '}' && --depth == 0) { end = i; break; }
+        }
+        assertTrue("the landing re-reads the pages at every commit",
+            !activity.substring(open, end).contains("refreshPages()"));
     }
 
     @Test

@@ -1372,6 +1372,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     @Override
     public void onWallCellChanged(int pageId, @NonNull PageKind page) {
+        if (mPages != null) mPages.recordCommit(pageId, page);
         mLanding.committed(page);
         if (mPages != null) mPages.committed(pageId, page);
     }
