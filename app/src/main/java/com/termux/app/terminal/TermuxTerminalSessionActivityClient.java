@@ -343,7 +343,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // until a resize or a stop jogs it. A plain post always runs.
         boolean pumpFrames = isLazyModeEnabled() && changedView.isAttachedToWindow();
         if (pumpFrames) {
-            changedView.postOnAnimation(redraw);
+            com.termux.app.window.FirstLayout.nextFrame(changedView, redraw);
         } else {
             mUiHandler.post(redraw);
         }

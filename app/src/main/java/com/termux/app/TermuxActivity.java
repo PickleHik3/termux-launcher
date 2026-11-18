@@ -5497,17 +5497,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mPeekRefreshPending;
     private final View.OnLayoutChangeListener mPeekLayoutListener =
         (v, l, t, r, b, ol, ot, or, ob) -> schedulePeekRefresh();
-    private final ViewTreeObserver.OnPreDrawListener mPeekPreDraw =
-        new ViewTreeObserver.OnPreDrawListener() {
-            @Override
-            public boolean onPreDraw() {
-                View host = mPeekWatchedHost;
-                if (host != null) host.getViewTreeObserver().removeOnPreDrawListener(this);
-                mPeekRefreshPending = false;
-                onPeekLayoutSettled();
-                return true;
-            }
-        };
+    /** The one wait for the host's next draw that a layout asked for ({@link #schedulePeekRefresh}). */
+    @Nullable private com.termux.app.window.FirstLayout.Handle mPeekWait;
     /** The Reflection knob moved: the reflection is drawn at its new strength. */
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener mPeekReflectionKnob =
         (preferences, key) -> {
@@ -5690,8 +5681,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPeekWatchedHost != host) {
             if (mPeekWatchedHost != null) {
                 mPeekWatchedHost.removeOnLayoutChangeListener(mPeekLayoutListener);
-                if (mPeekRefreshPending)
-                    mPeekWatchedHost.getViewTreeObserver().removeOnPreDrawListener(mPeekPreDraw);
+                if (mPeekWait != null) mPeekWait.cancel();
+                mPeekWait = null;
                 mPeekRefreshPending = false;
             }
             mPeekWatchedHost = host;
@@ -5714,7 +5705,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = mPeekWatchedHost;
         if (mPeekRefreshPending || host == null) return;
         mPeekRefreshPending = true;
-        host.getViewTreeObserver().addOnPreDrawListener(mPeekPreDraw);
+        mPeekWait = com.termux.app.window.FirstLayout.beforeNextDraw(host, () -> {
+            mPeekWait = null;
+            mPeekRefreshPending = false;
+            onPeekLayoutSettled();
+        });
     }
 
     /**

@@ -43,6 +43,14 @@ public final class FirstLayout {
     }
 
     /**
+     * Posts {@code action} on the view's own frame clock, ahead of its next traversal: for a view's
+     * own redraw pacing. Off a window it waits in the view's queue until an attach.
+     */
+    public static void nextFrame(@NonNull View view, @NonNull Runnable action) {
+        view.postOnAnimation(action);
+    }
+
+    /**
      * Runs {@code action} once, when the view's window has drawn (inside the draw callback, so it
      * may only post work). The listener is let go on the next main-loop turn.
      */

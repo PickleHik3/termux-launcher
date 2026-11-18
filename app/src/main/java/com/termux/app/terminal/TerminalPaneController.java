@@ -26,7 +26,6 @@ import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
 import android.view.ViewConfiguration;
-import android.view.ViewTreeObserver;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.PathInterpolator;
@@ -2040,12 +2039,8 @@ public class TerminalPaneController {
         private int mSecondColumns;
         private int mSecondRows;
         @Nullable private View mReadoutHost;
-        @Nullable private ViewTreeObserver mReadoutObserver;
+        @Nullable private com.termux.app.window.FirstLayout.Handle mReadoutWait;
         private final Runnable mReadoutDown = this::takeReadoutDown;
-        private final ViewTreeObserver.OnPreDrawListener mReadoutUpdate = () -> {
-            updateReadout();
-            return true;
-        };
 
         /**
          * The drag began at ({@code x}, {@code y}) on {@code host}, which posts its timer. The
@@ -2107,11 +2102,11 @@ public class TerminalPaneController {
             if (mReadFirst == null) return;
             mReadoutLive = true;
             mReadoutHost = host;
-            ViewTreeObserver observer = host.getViewTreeObserver();
-            if (observer.isAlive()) {
-                observer.addOnPreDrawListener(mReadoutUpdate);
-                mReadoutObserver = observer;
-            }
+            // Refreshed before each frame until the drag's read-out ends.
+            mReadoutWait = com.termux.app.window.FirstLayout.beforeEachDrawUntil(host, () -> {
+                updateReadout();
+                return !mReadoutLive;
+            });
             updateReadout();
         }
 
@@ -2144,10 +2139,8 @@ public class TerminalPaneController {
 
         /** The drag ended: the read-out stays {@link DragResizePause#READOUT_LINGER_MS} more. */
         private void endReadout() {
-            if (mReadoutObserver != null && mReadoutObserver.isAlive()) {
-                mReadoutObserver.removeOnPreDrawListener(mReadoutUpdate);
-            }
-            mReadoutObserver = null;
+            if (mReadoutWait != null) mReadoutWait.cancel();
+            mReadoutWait = null;
             if (mReadoutLive) updateReadout();
             mReadoutLive = false;
             mReadFirst = null;
