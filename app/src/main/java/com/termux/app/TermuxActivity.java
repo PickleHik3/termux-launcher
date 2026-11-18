@@ -26685,7 +26685,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (strip != null) {
             if (strip.getTranslationY() != 0f) strip.setTranslationY(0f);
             if (strip.getAlpha() != 1f) strip.setAlpha(1f);
-            if (strip.getClipBounds() != null) strip.setClipBounds(null);
         }
         // At rest the top stack stands the front page's side; the wall moving or laid out again
         // (its width) and the place bar's sync are the one place every rest change passes.

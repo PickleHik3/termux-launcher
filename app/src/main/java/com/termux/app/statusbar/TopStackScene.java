@@ -137,15 +137,17 @@ public final class TopStackScene {
     }
 
     /**
-     * The frame at progress {@code p} from {@code from} toward {@code to}.
+     * The frame at progress {@code p} from {@code from} toward {@code to}, the chips sliding at
+     * the page's own fraction {@code slide}; {@code p} drives the look and the inks only.
      *
+     * @param slide       the page's fraction, 0 to 1, which only the chips' slide follows
      * @param rideXPx     the ride's x, or NaN when the bar does not ride a page
      * @param rideWearsTo whether the riding bar wears {@code to}'s look
      */
-    public static void at(@NonNull End from, @NonNull End to, float p, int widthPx,
+    public static void at(@NonNull End from, @NonNull End to, float p, float slide, int widthPx,
                           float rideXPx, boolean rideWearsTo, @NonNull Frame out) {
         boolean one = shared(from, to);
-        float chipsTx = StackScene.sideSlide(Side.WORKSPACE, from.side, to.side, p, widthPx);
+        float chipsTx = StackScene.sideSlide(Side.WORKSPACE, from.side, to.side, slide, widthPx);
         if (!one && !Float.isNaN(rideXPx)) {
             End wearer = rideWearsTo ? to : from;
             out.shared = false;
@@ -173,5 +175,11 @@ public final class TopStackScene {
         for (int i = 0; i < INK_COUNT; i++) {
             out.inks[i] = StackMaterial.mixArgb(from.inks[i], to.inks[i], share);
         }
+    }
+
+    /** {@link #at(End, End, float, float, int, float, boolean, Frame)} with the chips on {@code p} too. */
+    public static void at(@NonNull End from, @NonNull End to, float p, int widthPx,
+                          float rideXPx, boolean rideWearsTo, @NonNull Frame out) {
+        at(from, to, p, p, widthPx, rideXPx, rideWearsTo, out);
     }
 }

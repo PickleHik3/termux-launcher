@@ -189,6 +189,53 @@ public class TopStackRendererTest {
         assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
     }
 
+    @Test public void theChipsFollowThePagesFractionWhileTheGlassFollowsTheChrome() {
+        mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
+            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+        mRenderer.setProgress(0.2f, 0.6f);
+        settle();
+        assertEquals(WIDTH * 0.4f, mChips.getTranslationX(), 0.001f);
+        assertEquals(SeamFade.share(0.2f), mBarBlend.share(), 0f);
+    }
+
+    @Test public void theChipsStayInsideTheirSlotWhileTheySlideAndTheClipIsGoneAtRest() {
+        mChips.layout(0, 0, 400, 60);
+        mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
+            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+        frameAt(0.5f);
+        assertEquals(new android.graphics.Rect(-500, 0, -100, 60), mChips.getClipBounds());
+        frameAt(0.9f);
+        assertEquals(new android.graphics.Rect(-100, 0, 300, 60), mChips.getClipBounds());
+        int writes = mRenderer.mWriteCount;
+        mRenderer.requestApply();
+        settle();
+        assertEquals(writes, mRenderer.mWriteCount);
+        frameAt(1f);
+        assertEquals(null, mChips.getClipBounds());
+        assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
+        // The guard owns the clip: another writer is heard.
+        mRenderer.setProgress(0.5f);
+        settle();
+        mChips.setClipBounds(new android.graphics.Rect(1, 0, 2, 3));
+        mRenderer.apply();
+        assertTrue(Counters.lines().toString(), Counters.lines().toString()
+            .contains("top terminal_status_place_content.clipLeft"));
+    }
+
+    @Test public void aLandingWritesNoClipEither() {
+        mChips.layout(0, 0, 400, 60);
+        mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
+            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+        frameAt(0.6f);
+        frameAt(1f);
+        int writes = mRenderer.mWriteCount;
+        mRenderer.onLanding();
+        settle();
+        assertEquals(writes, mRenderer.mWriteCount);
+        assertEquals(null, mChips.getClipBounds());
+        assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
+    }
+
     @Test public void aCrossingBackToItsStartLandsOnItsStartAsWell() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
             end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);

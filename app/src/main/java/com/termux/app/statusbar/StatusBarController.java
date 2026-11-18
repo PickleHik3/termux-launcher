@@ -1213,7 +1213,6 @@ public final class StatusBarController {
             if (strip != null) {
                 if (strip.getTranslationY() != 0f) strip.setTranslationY(0f);
                 if (strip.getAlpha() != 1f) strip.setAlpha(1f);
-                if (strip.getClipBounds() != null) strip.setClipBounds(null);
             }
         }
         if (seam.barRedressed()) mHost.syncPlaceBar();
@@ -1226,7 +1225,8 @@ public final class StatusBarController {
         TopStackRenderer top = mHost.topStack();
         top.setWidth(widthPx);
         if (committed != null) {
-            top.setProgress(com.termux.app.place.SeamTravel.otherEndProgress(frame, committed));
+            top.setProgress(com.termux.app.place.SeamTravel.otherEndProgress(frame, committed),
+                com.termux.app.place.SeamTravel.otherEndFraction(frame, committed));
         }
         top.setRide(rides ? crossing.barScreenXPx(frame, widthPx) : Float.NaN,
             crossing.barRideWearsOther());

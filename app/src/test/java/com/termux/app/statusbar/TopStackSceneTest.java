@@ -58,6 +58,30 @@ public class TopStackSceneTest {
     }
 
     @Test
+    public void chipsFollowTheSlideFractionAndTheLookFollowsP() {
+        TopStackScene.Frame f = new TopStackScene.Frame();
+        TopStackScene.Frame r = new TopStackScene.Frame();
+        TopStackScene.End from = end(Side.HOME, PlaceLayout.Edge.TOP, 7, true, PALE, 1);
+        TopStackScene.End to = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 7, true, DARK, 2);
+        TopStackScene.at(from, to, 0.2f, 0.6f, W, Float.NaN, false, f);
+        assertEquals(StackScene.sideSlide(Side.WORKSPACE, Side.HOME, Side.WORKSPACE, 0.6f, W),
+            f.chipsTx, 0f);
+        assertEquals(com.termux.app.place.SeamFade.share(0.2f), f.lookShare, 0f);
+        TopStackScene.at(from, to, 0f, 0f, W, Float.NaN, false, f);
+        TopStackScene.rest(from, W, r);
+        assertSame(r, f);
+        TopStackScene.at(from, to, 1f, 1f, W, Float.NaN, false, f);
+        TopStackScene.rest(to, W, r);
+        assertSame(r, f);
+        // a riding bar's chips slide at the fraction too
+        TopStackScene.End a = end(Side.HOME, PlaceLayout.Edge.TOP, 1, true, PALE, 1);
+        TopStackScene.End b = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 2, true, DARK, 2);
+        TopStackScene.at(a, b, 0.2f, 0.6f, W, 100f, true, f);
+        assertEquals(StackScene.sideSlide(Side.WORKSPACE, Side.HOME, Side.WORKSPACE, 0.6f, W) - 100f,
+            f.chipsTx, 0f);
+    }
+
+    @Test
     public void sharedMatrixKeepsSlabAndParity() {
         TopStackScene.Frame f = new TopStackScene.Frame();
         TopStackScene.Frame g = new TopStackScene.Frame();

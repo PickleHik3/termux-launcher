@@ -1,5 +1,6 @@
 package com.termux.app.statusbar;
 
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 
@@ -45,7 +46,8 @@ public final class TopStackRenderer {
     }
 
     private static final String[] OWNED = {"terminal_window_bar_host.translationX",
-        "terminal_status_bar_background.translationX", "terminal_status_place_content.translationX"};
+        "terminal_status_bar_background.translationX", "terminal_status_place_content.translationX",
+        "terminal_status_place_content.clipLeft"};
 
     @NonNull private final Views mViews;
     @Nullable private FramePipeline mFrames;
@@ -60,6 +62,15 @@ public final class TopStackRenderer {
     private boolean mCrossing;
     private boolean mStripHereShown;
     private float mProgress;
+    /** The page's fraction, which the chips' slide follows (the look follows {@link #mProgress}). */
+    private float mSlide;
+    /** The chips' clip as last written (never read back from the view: reading allocates). */
+    private boolean mClipOn;
+    private int mClipLeft;
+    private int mClipRight;
+    private int mClipBottom;
+    private final Rect mClipRead = new Rect();
+    private final Rect mClipWrite = new Rect();
     /** The ride's x, NaN when the bar does not ride a page; and whether it wears the other end. */
     private float mRideX = Float.NaN;
     private boolean mRideWearsTo;
@@ -94,6 +105,10 @@ public final class TopStackRenderer {
                 return view == null ? 0f : view.getTranslationX();
             });
         }
+        guard.own(OWNED[3], () -> {
+            View view = mViews.view(R.id.terminal_status_place_content);
+            return view == null || !view.getClipBounds(mClipRead) ? 0f : mClipRead.left;
+        });
         mGuard = guard;
     }
 
@@ -141,15 +156,25 @@ public final class TopStackRenderer {
         mCrossing = true;
         mLandingPending = false;
         mProgress = 0f;
+        mSlide = 0f;
         mRideX = Float.NaN;
         mRideWearsTo = false;
         requestApply();
     }
 
-    /** The wall's progress from the committed end toward the other, 0 to 1. */
+    /** The wall's progress from the committed end toward the other, 0 to 1; the chips follow it too. */
     public void setProgress(float p) {
-        if (mProgress == p) return;
+        setProgress(p, p);
+    }
+
+    /**
+     * The chrome's progress {@code p} (the look and the inks) and the page's fraction {@code slide}
+     * (the chips' slide), each 0 to 1 from the committed end toward the other.
+     */
+    public void setProgress(float p, float slide) {
+        if (mProgress == p && mSlide == slide) return;
         mProgress = p;
+        mSlide = slide;
         requestApply();
     }
 
@@ -217,13 +242,15 @@ public final class TopStackRenderer {
         if (guard != null) guard.check();
         boolean riding = mCrossing && !Float.isNaN(mRideX) && !TopStackScene.shared(mFrom, mTo);
         if (mCrossing) {
-            TopStackScene.at(mFrom, mTo, mProgress, mWidth, mRideX, mRideWearsTo, mFrame);
+            TopStackScene.at(mFrom, mTo, mProgress, mSlide, mWidth, mRideX, mRideWearsTo, mFrame);
         } else {
             TopStackScene.rest(mRest, mWidth, mFrame);
         }
         writeTx(mViews.view(R.id.terminal_window_bar_host), mFrame.slabTx);
         writeTx(mViews.view(R.id.terminal_status_bar_background), mFrame.stripTx);
-        writeTx(mViews.view(R.id.terminal_status_place_content), mFrame.chipsTx);
+        View chips = mViews.view(R.id.terminal_status_place_content);
+        writeTx(chips, mFrame.chipsTx);
+        writeClip(chips, mFrame.chipsTx);
         writeInks(riding);
         if (mCrossing) {
             mGlassShare = riding ? (mRideWearsTo ? 1f : 0f) : mFrame.lookShare;
@@ -252,6 +279,32 @@ public final class TopStackRenderer {
         System.arraycopy(mFrame.inks, 0, mAppliedInks, 0, TopStackScene.INK_COUNT);
         mInksKnown = true;
         sink.apply(mAppliedInks);
+        mWriteCount++;
+    }
+
+    /**
+     * Keeps the sliding chips inside the strip's laid-out slot: the clip, in the strip's own
+     * coordinates, is the slot's span shifted back by the slide; none while the strip stands.
+     */
+    private void writeClip(@Nullable View view, float tx) {
+        if (view == null) return;
+        if (tx == 0f) {
+            if (!mClipOn) return;
+            mClipOn = false;
+            view.setClipBounds(null);
+            mWriteCount++;
+            return;
+        }
+        int left = Math.round(-tx);
+        int right = left + view.getWidth();
+        int bottom = view.getHeight();
+        if (mClipOn && mClipLeft == left && mClipRight == right && mClipBottom == bottom) return;
+        mClipOn = true;
+        mClipLeft = left;
+        mClipRight = right;
+        mClipBottom = bottom;
+        mClipWrite.set(left, 0, right, bottom);
+        view.setClipBounds(mClipWrite);
         mWriteCount++;
     }
 
