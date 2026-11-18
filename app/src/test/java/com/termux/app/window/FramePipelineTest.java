@@ -74,10 +74,11 @@ public class FramePipelineTest {
     }
 
     @Test
-    public void thePageSettleIsTheTablesFirstStepAndThePageFrontAndChromeCommitFollowIt() {
+    public void thePageSettleIsTheTablesFirstStepThenPageFrontGeometryAndTheChromeCommit() {
         assertEquals(0, FrameStep.PAGE_SETTLE.ordinal());
         assertEquals(1, FrameStep.PAGE_FRONT.ordinal());
-        assertEquals(2, FrameStep.CHROME_COMMIT.ordinal());
+        assertEquals(2, FrameStep.GEOMETRY.ordinal());
+        assertEquals(3, FrameStep.CHROME_COMMIT.ordinal());
     }
 
     @Test

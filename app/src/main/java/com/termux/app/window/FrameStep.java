@@ -23,6 +23,12 @@ public enum FrameStep {
     PAGE_FRONT,
 
     /**
+     * The chrome geometry pass {@code GeometryScheduler} booked: structure written before the
+     * frame's layout, so the layout takes what it writes.
+     */
+    GEOMETRY,
+
+    /**
      * The accessory chrome's commit: one whole build and apply of the chrome spec. Asked for
      * before the frame's animation phase it runs there, so the frame's layout takes what it
      * writes; asked for later it runs in the pre-draw hook and the next frame lays it out.

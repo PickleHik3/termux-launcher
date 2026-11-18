@@ -178,7 +178,7 @@ public class WindowSourceRulesTest {
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/SuggestionBarView.java:1",
         // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
-        "app/TermuxActivity.java:5",
+        "app/TermuxActivity.java:4",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/assistant/AssistantPageController.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
@@ -214,12 +214,8 @@ public class WindowSourceRulesTest {
         "app/terminal/PreDrawHook.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/terminal/TerminalCommandPaletteController.java:1",
-        // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
-        "app/terminal/TerminalPaneController.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/terminal/TerminalWindowBar.java:2",
-        // own frame tick or fling step: moves into the pipeline table or the helper
-        "app/terminal/TermuxTerminalSessionActivityClient.java:1",
         // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
         "app/terminal/extrakeys/HomePillFlightPlayer.java:1",
         // own frame tick or fling step: moves into the pipeline table or the helper

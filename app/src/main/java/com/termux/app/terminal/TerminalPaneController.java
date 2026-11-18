@@ -521,6 +521,8 @@ public class TerminalPaneController {
      * lease is last to go) is logged as {@link TerminalView#CAUSE_RETURN_HOLD}.
      */
     private boolean mReturnHoldInSpan;
+    /** The return hold is being given back with the rest unchanged: the panes' pending sizes go. */
+    private boolean mReturnHoldDropsPending;
     /**
      * Owns the grid's pause through the transitions this controller drives (focus growth, a
      * resize-key burst, a divider or float drag), so they share one resize with whatever else is
@@ -2204,19 +2206,33 @@ public class TerminalPaneController {
     /** True while any host surface owns transient terminal geometry. */
     public boolean isHostSurfaceResizeInProgress() { return mHostSurfaceResizeDepth > 0; }
 
-    /** The launcher left the screen: hold the grid until {@link #finishReturnHold}. */
-    public void beginReturnHold() {
-        if (mReturnHoldActive) return;
+    /**
+     * The launcher left the screen: hold the grid until {@link #finishReturnHold}. False when a
+     * return hold was already open.
+     */
+    public boolean beginReturnHold() {
+        if (mReturnHoldActive) return false;
         mReturnHoldActive = true;
         mReturnHoldInSpan = true;
         beginHostSurfaceResize();
+        return true;
     }
 
-    /** The layout it came back to has settled: give back the return hold's lease. */
-    public void finishReturnHold() {
+    /**
+     * The layout it came back to has come: give back the return hold's lease. {@code resize}
+     * false when the rest and the room are the ones it left with: the panes on screen drop what
+     * the burst of the return made pending, so no PTY hears a size. A parked neighbour, a Home
+     * float and a hosted float keep their rest layout behaviour either way.
+     */
+    public void finishReturnHold(boolean resize) {
         if (!mReturnHoldActive) return;
         mReturnHoldActive = false;
-        finishHostSurfaceResizeKeepingBottom();
+        mReturnHoldDropsPending = !resize;
+        try {
+            finishHostSurfaceResizeKeepingBottom();
+        } finally {
+            mReturnHoldDropsPending = false;
+        }
     }
 
     /** The cover last applied, so a frame that repeats it touches no pane. */
@@ -6482,7 +6498,8 @@ public class TerminalPaneController {
         }
         String cause = mReturnHoldInSpan ? TerminalView.CAUSE_RETURN_HOLD : "resume";
         mReturnHoldInSpan = false;
-        java.util.HashSet<TerminalView> visible = new java.util.HashSet<>(getVisiblePaneViews());
+        java.util.HashSet<TerminalView> tiled = new java.util.HashSet<>(getVisiblePaneViews());
+        java.util.HashSet<TerminalView> visible = new java.util.HashSet<>(tiled);
         // A Home float laid out during the hold is owed that size: discarded, its shell never gets
         // an emulator and the pane draws nothing but black.
         visible.addAll(shownHomeFloatPaneViews());
@@ -6502,8 +6519,13 @@ public class TerminalPaneController {
                 }
                 continue;
             }
-            if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
-            else view.resumeTerminalSizeUpdatesDiscardingPending();
+            if (visible.contains(view)) {
+                if (mReturnHoldDropsPending && tiled.contains(view)) {
+                    view.resumeTerminalSizeUpdatesDiscardingPending();
+                } else {
+                    view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
+                }
+            } else view.resumeTerminalSizeUpdatesDiscardingPending();
         }
     }
 
