@@ -360,11 +360,26 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         wake();
     }
 
+    private long mDiagGateAtMs;
+    private volatile long mDiagFrameAtMs;
+
+    /** TEMPORARY diag (tag TLSceneDiag, revert before merge): the gates, once a second. */
+    private void diagGates() {
+        long now = SystemClock.uptimeMillis();
+        if (now - mDiagGateAtMs < 1000L) return;
+        mDiagGateAtMs = now;
+        Log.i("TLSceneDiag", "gates run=" + mRun + " destroyed=" + mDestroyed + " screenOn=" + mScreenOn
+            + " shown=" + isShown() + " winVis=" + getWindowVisibility() + " mainSurface=" + mMainSurfaceReady
+            + " lazy=" + mLazy + " motion=" + mMotion + " supported=" + SceneController.isSupported()
+            + " awake=" + mAwake + " alpha=" + getAlpha() + " size=" + getWidth() + "x" + getHeight());
+    }
+
     /** The keyboard height can only be read here: poll it a few times a second while the layer runs. */
     private void poll() {
         // mPolling stays set while this runs, so updateRun() does not post a second poll loop.
         refreshGates(SystemClock.uptimeMillis());
         updateRun();
+        diagGates();
         if (!mRun) {
             mPolling = false;
             return;
@@ -485,6 +500,8 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
         private void onFrame(long frameTimeNanos) {
             mPosted = false;
             if (!mRun || !mSurfaceReady || mGaveUp) {
+                // TEMPORARY diag (tag TLSceneDiag, revert before merge)
+                Log.i("TLSceneDiag", "idle run=" + mRun + " surfaceReady=" + mSurfaceReady + " gaveUp=" + mGaveUp);
                 goIdle();
                 return;
             }
@@ -520,6 +537,14 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
             }
             boolean moving = motion && !held && !powerHold && !heavyHold;
             long period = moving ? mPeriodNs : Long.MAX_VALUE;
+            if (nowMs - mDiagFrameAtMs >= 1000L) {
+                // TEMPORARY diag (tag TLSceneDiag, revert before merge): why a frame moves or holds.
+                mDiagFrameAtMs = nowMs;
+                Log.i("TLSceneDiag", "frame moving=" + moving + " motion=" + motion + " held=" + held
+                    + " powerHold=" + powerHold + " heavy=" + mHeldReason + " periodNs=" + period
+                    + " rateNs=" + mPeriodNs + " draws=" + mDrawCount + " iTime=" + mIn.timeSec
+                    + " blank=" + mSurfaceBlank + " quality=" + mDrawQuality);
+            }
             if (period == Long.MAX_VALUE) mIn.pause();
             // With no ambient motion (rate 0) a touch still shows: one frame for it.
             boolean touchFrame = touched && moving && mPeriodNs == Long.MAX_VALUE;
