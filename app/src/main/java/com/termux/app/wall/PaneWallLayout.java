@@ -3776,6 +3776,9 @@ public final class PaneWallLayout extends ViewGroup
     public void setPageBottomInsetPx(@NonNull PaneWallPage kind, int px) {
         int inset = Math.max(0, px);
         if (inset == mPageBottomInsetPx[kind.ordinal()]) return;
+        com.termux.app.chrome.MotionLog.log("diag-room", "wall-inset kind=" + kind + " was="
+            + mPageBottomInsetPx[kind.ordinal()] + " now=" + inset + " callers="
+            + com.termux.view.TerminalView.diagCallers(10));
         mPageBottomInsetPx[kind.ordinal()] = inset;
         requestLayout();
     }
@@ -3863,10 +3866,23 @@ public final class PaneWallLayout extends ViewGroup
                 child.measure(MeasureSpec.makeMeasureSpec(right - left, MeasureSpec.EXACTLY),
                     MeasureSpec.makeMeasureSpec(bottom - top, MeasureSpec.EXACTLY));
             }
+            PaneWallPage diagKind = pageKindOf(child);
+            if (diagKind != null) {
+                String bounds = left + "," + top + "," + right + "," + bottom + " vis=" + child.getVisibility();
+                if (!bounds.equals(mDiagBounds.get(diagKind))) {
+                    com.termux.app.chrome.MotionLog.log("diag-room", "wall-page-layout kind=" + diagKind
+                        + " was=" + mDiagBounds.get(diagKind) + " now=" + bounds
+                        + " inset=" + pageBottomInsetPx(child));
+                    mDiagBounds.put(diagKind, bounds);
+                }
+            }
             child.layout(left, top, right, bottom);
         }
         publishBackExclusion();
     }
+
+    private final java.util.EnumMap<PaneWallPage, String> mDiagBounds =
+        new java.util.EnumMap<>(PaneWallPage.class);
 
     /**
      * A display started or stopped: the Display page's borders change their reach
