@@ -762,6 +762,14 @@ public final class ChromeRenderer {
         }
         LandingDiag.write("Chrome.commit");
         Trace.beginSection("Chrome.commit");
+        // The commit applies the whole spec, which is the very pass an accessory render asked for
+        // before it would run a moment later: that render is withdrawn (a request made during or
+        // after the apply books its own).
+        boolean withdrewRender = mRenderSyncPending;
+        if (withdrewRender) {
+            mHandler.removeCallbacks(mRenderSyncRunnable);
+            mRenderSyncPending = false;
+        }
         mCommitRunning = true;
         try {
             mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
@@ -777,6 +785,7 @@ public final class ChromeRenderer {
             mCommitRunning = false;
             Trace.endSection();
         }
+        if (withdrewRender) mSurfaces.enforceAccessoryFxInvariants();
         // A frost asked for while this commit was booked, which its apply did not run itself.
         if (mFrostOwedToCommit) {
             mFrostOwedToCommit = false;
