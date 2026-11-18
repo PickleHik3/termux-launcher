@@ -62,6 +62,30 @@ public class PagesTest {
         assertEquals(1, asks);
     }
 
+    /** A row laid out from the kinds alone registers its pages under negative kind ids. */
+    @Test
+    public void aWallOfKindsAloneHasAFrontThatTakesBackAndItsOnFront() {
+        int homeId = -100;
+        int displayId = -102;
+        FakePage home = new FakePage(PageKind.HOME, log);
+        FakePage display = new FakePage(PageKind.DISPLAY, log);
+        pages.put(homeId, home);
+        pages.put(displayId, display);
+        pages.landed(displayId, PageKind.DISPLAY);
+        pages.applyFront();
+        assertSame(display, pages.front());
+        assertEquals(1, display.on);
+        display.spendsBack = true;
+        assertTrue(pages.onBack());
+        assertEquals(1, display.back);
+        pages.committed(homeId, PageKind.HOME);
+        assertEquals(1, display.off);
+        assertSame(home, pages.anyOf(PageKind.HOME));
+        pages.landed(homeId, PageKind.HOME);
+        pages.applyFront();
+        assertEquals(1, home.on);
+    }
+
     @Test
     public void recordCommitRecordsTheKindAndRunsNoOffFront() {
         FakePage a = new FakePage(PageKind.ASSISTANT, log);
