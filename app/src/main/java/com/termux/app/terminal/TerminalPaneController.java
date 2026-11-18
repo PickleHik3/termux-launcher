@@ -1614,10 +1614,9 @@ public class TerminalPaneController {
         // hit tests read that map.
         forgetSplitLayouts(node);
         // A neighbour's panes follow the size its container is laid out at, as the window in
-        // front does: the container is GONE at rest, so nothing is laid out or sent then, and the
-        // wall lays it out at the host's size as a drag begins. A window that missed a keyboard
-        // or chrome change while away is resized then, before it slides on screen, so its grid
-        // already fits when it is promoted. Under a host resize every pane is held; its end
+        // front does: the container is GONE at rest but the wall lays it out at the
+        // Workspace page's size then too, so a keyboard or chrome change resizes its shells at
+        // rest and a crossing finds them fitting. Under a host resize every pane is held; its end
         // resumes these with the panes on screen (setAllPaneSizeUpdatesPaused).
         for (Leaf leaf : leavesOf(node)) {
             TerminalView view = mPaneViews.get(leaf.session);
@@ -6455,11 +6454,12 @@ public class TerminalPaneController {
         // old rows in a shorter cell and the rows past the cell, the prompt among them, were cut.
         visible.addAll(shownHostedFloatPaneViews());
         for (TerminalView view : mPaneViews.values()) {
-            // A live neighbour laid out beside the host is owed its size like a pane on screen; a
-            // put-away one (GONE, not laid out) holds the size it had, as a hidden window does.
+            // A live neighbour is owed its size like a pane on screen when its container is laid
+            // out (the wall lays a filled one out at the Workspace page's size at rest too); one
+            // that never was holds the size it had, as a hidden window does.
             FrameLayout neighbour = neighbourContainerOf(view);
             if (neighbour != null) {
-                if (neighbour.getVisibility() != View.GONE) {
+                if (neighbour.getVisibility() != View.GONE || neighbour.isLaidOut()) {
                     view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
                 } else {
                     view.resumeTerminalSizeUpdatesDiscardingPending();
