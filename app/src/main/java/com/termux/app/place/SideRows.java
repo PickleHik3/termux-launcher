@@ -6,10 +6,10 @@ import com.termux.app.page.Side;
 
 /**
  * Who carries each row through a crossing, read from both ends' layouts as the crossing begins
- * (ADR 0030 section 4 and its 2026-11-17 amendment). A row both ends show on the same edge
- * belongs to the stack, like the slab and the keyboard, and stays put; a row only one end shows
- * goes with that end's side; a row on different edges at the two ends goes with the side that
- * owns it ({@link Side#owns}). Within a side nothing moves: a layout that differs changes in
+ * (ADR 0030 section 4 and its 2026-11-18 amendment). A row both ends show in the same place (the
+ * same edge and, along the bottom, the same side of the keyboard) belongs to the stack, like the
+ * slab and the keyboard, and stays put; a row only one end shows goes with that end's side; a row
+ * the two ends show in different places goes with the side that owns it ({@link Side#owns}). Within a side nothing moves: a layout that differs changes in
  * place at the landing. Each side's extra-keys bar always goes with its own side. The status bar
  * is shared chrome, never a side's row (along the bottom it keeps today's behaviour until #267).
  */
@@ -43,12 +43,28 @@ public final class SideRows {
         boolean fromShows = !a.hidden;
         boolean toShows = !b.hidden;
         if (fromShows && toShows) {
-            if (a.edge == b.edge) return Carrier.STACK;
+            if (samePlace(a, b, element, fromLayout, toLayout)) return Carrier.STACK;
             return of(Side.HOME.owns(rowOf(element)) ? Side.HOME : Side.WORKSPACE);
         }
         if (fromShows) return of(from);
         if (toShows) return of(to);
         return Carrier.NONE;
+    }
+
+    /**
+     * Whether both layouts stand a shown row in the same place: the same edge and, along the
+     * bottom, the same side of the keyboard. Read through {@link StackLanes#where}; if that
+     * answers NONE for a row the slot shows, the slot's own edge and side decide.
+     */
+    private static boolean samePlace(@NonNull Slot a, @NonNull Slot b, @NonNull Element element,
+                                     @NonNull PlaceLayout fromLayout, @NonNull PlaceLayout toLayout) {
+        StackLanes.Where wa = StackLanes.where(fromLayout, element);
+        StackLanes.Where wb = StackLanes.where(toLayout, element);
+        if (wa != StackLanes.Where.NONE && wb != StackLanes.Where.NONE) return wa == wb;
+        if (a.edge != b.edge) return false;
+        return a.edge != PlaceLayout.Edge.BOTTOM
+            || EdgeStackPolicy.standsUnderKeyboard(fromLayout, element)
+                == EdgeStackPolicy.standsUnderKeyboard(toLayout, element);
     }
 
     /**

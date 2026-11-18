@@ -79,7 +79,9 @@ public class StackLanesParityTest {
         for (Element element : StackLanes.ROWS) {
             Side lane = StackLanes.laneSide(element, f.home, f.window);
             // From either front the lane is the same (a crossing's end is the rest from its side).
-            int expected = StackLanes.laneOf(element, f.home, f.window);
+            // A row the layouts stand in two places has no lane here (laneSide's guard).
+            int expected = StackLanes.conflicts(element, f.home, f.window) ? StackLanes.STACK
+                : StackLanes.laneOf(element, f.home, f.window);
             assertEquals(f.name + " " + element, expected,
                 lane == null ? StackLanes.STACK : StackLanes.laneOf(lane));
         }

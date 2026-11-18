@@ -12,7 +12,7 @@ import org.junit.Test;
 
 /**
  * Who carries each row through a crossing (ADR 0030 section 4, with the developer's decisions on
- * #260): a row both ends show on the same edge is the stack's and stays put; a row one end shows
+ * #260): a row both ends show in the same place (edge, and over or under the keyboard) is the stack's and stays put; a row one end shows
  * goes with that end's side; within a side nothing moves. And which landings may move rows.
  */
 public class SideRowsTest {
@@ -20,11 +20,15 @@ public class SideRowsTest {
     private static final Side H = Side.HOME;
     private static final Side WS = Side.WORKSPACE;
 
-    @Test public void pongsAppsRowStaysPutBetweenHomeAndTheTerminal() {
+    @Test public void anAppsRowInOnePlaceAtBothEndsStaysPutOtherwiseItGoesWithHome() {
         for (LayoutFixtures.Fixture f : LayoutFixtures.ALL) {
-            assertSame(f.name, SideRows.Carrier.STACK,
+            // Pong's window stands its apps under the keyboard, Home over it: Home's, not the stack's.
+            SideRows.Carrier expected = StackLanes.where(f.window, Element.APPS)
+                == StackLanes.where(f.home, Element.APPS)
+                ? SideRows.Carrier.STACK : SideRows.Carrier.HOME;
+            assertSame(f.name, expected,
                 SideRows.carrier(Element.APPS, H, f.home, WS, f.window));
-            assertSame(f.name, SideRows.Carrier.STACK,
+            assertSame(f.name, expected,
                 SideRows.carrier(Element.APPS, WS, f.window, H, f.home));
         }
     }
@@ -37,6 +41,20 @@ public class SideRowsTest {
         assertSame(SideRows.Carrier.HOME, SideRows.carrier(Element.APPS, WS, bare, H, home));
         assertSame(SideRows.Carrier.WORKSPACE, SideRows.carrier(Element.APPS, WS, home, H, bare));
         assertSame(SideRows.Carrier.NONE, SideRows.carrier(Element.APPS, H, bare, WS, bare));
+    }
+
+    @Test public void aRowOverTheKeyboardOnOneEndAndUnderItOnTheOtherGoesWithItsOwner() {
+        for (Element e : new Element[] {Element.APPS, Element.AZ}) {
+            PlaceLayout over = LayoutFixtures.HOME.withSlot(e, new Slot(false, Edge.BOTTOM, 0, false));
+            PlaceLayout under = LayoutFixtures.HOME.withSlot(e, new Slot(false, Edge.BOTTOM, 0, true));
+            assertSame(e.name(), StackLanes.Where.BOTTOM_UNDER, StackLanes.where(under, e));
+            assertSame(e.name(), SideRows.Carrier.HOME, SideRows.carrier(e, H, over, WS, under));
+            assertSame(e.name(), SideRows.Carrier.HOME, SideRows.carrier(e, H, under, WS, over));
+            assertSame(e.name(), SideRows.Carrier.HOME, SideRows.carrier(e, WS, over, H, under));
+            assertSame(e.name(), SideRows.Carrier.HOME, SideRows.carrier(e, WS, under, H, over));
+            assertSame(e.name(), SideRows.Carrier.STACK, SideRows.carrier(e, H, under, WS, under));
+            assertSame(e.name(), SideRows.Carrier.STACK, SideRows.carrier(e, H, over, WS, over));
+        }
     }
 
     @Test public void aRowOnTwoEdgesGoesWithItsOwner() {
