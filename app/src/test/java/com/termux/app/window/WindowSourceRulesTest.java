@@ -116,8 +116,6 @@ public class WindowSourceRulesTest {
     /** Files outside the activity's package that name TermuxActivity. */
     static final List<String> ACTIVITY_USERS = Arrays.asList(
         // names the activity: takes a Host or PageHost instead
-        "app/assistant/AssistantPageController.java:1",
-        // names the activity: takes a Host or PageHost instead
         "app/dock/PromptLineFieldView.java:1",
         // names the activity: takes a Host or PageHost instead
         "app/fonts/FontInstallCoordinator.java:1",

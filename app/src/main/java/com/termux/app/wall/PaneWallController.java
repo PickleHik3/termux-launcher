@@ -218,6 +218,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Nullable private com.termux.app.x11.X11PaneFrame mDisplayWindow;
     /** The Assistant page's one view while the wall holds the page. */
     @Nullable private View mAssistantView;
+    @Nullable private com.termux.app.page.Page mAssistantPage;
+    /** The page registry the host owns (ADR 0030); null until the host sets it. */
+    @Nullable private com.termux.app.page.Pages mPages;
+    /** The id the Assistant page is registered under in {@link #mPages}; -1 when none. */
+    private int mAssistantPageId = -1;
     @Nullable private PaneSurfaceStyle mStyle;
     /** How much of the pages' outlines the last frame left showing; 1 at rest. */
     private float mOutlineAlpha = 1f;
@@ -267,6 +272,26 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWall.setListener(this);
         mWall.setReducedMotion(host.reducedMotion());
         refreshPages();
+    }
+
+    /**
+     * The host's page registry: the Assistant page registers there while the wall holds it, and
+     * every landing records the front there. Re-reads the pages so a page built before this call
+     * is registered and the current cell is the recorded front.
+     */
+    public void setPages(@Nullable com.termux.app.page.Pages pages) {
+        if (mPages != null && mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
+        mAssistantPageId = -1;
+        mAssistantPage = null;
+        mPages = pages;
+        syncAssistantPage();
+        recordFront();
+    }
+
+    /** Records the cell the wall rests on as the front, when it is not moving. */
+    private void recordFront() {
+        if (mPages == null || mWall.isMoving()) return;
+        mPages.landed(mWall.currentPageId(), mWall.currentPage().pageKind());
     }
 
     @NonNull
@@ -323,6 +348,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int display = mWall.boundPageId(PaneWallPage.DISPLAY);
         bindDisplay(display >= 0 ? display : -1);
         syncAssistantPage();
+        recordFront();
         // The last window closed under the wall: the empty Terminal page keeps its cell, and the
         // wall hands to the Home page beside it (ADR 0015). Closing a window is not a landing,
         // so no shell starts.
@@ -398,12 +424,18 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             View view = mAssistantView;
             if (view == null) return;
             mAssistantView = null;
+            mAssistantPage = null;
+            if (mPages != null && mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
+            mAssistantPageId = -1;
             mWall.setPageView(PaneWallPage.ASSISTANT, null);
             mWall.removeView(view);
             return;
         }
         if (mAssistantView == null) {
-            View view = mHost.assistantPageHost().createPageView(mWall.getContext());
+            com.termux.app.page.Page assistant = mHost.assistantPageHost().createPage(mWall.getContext(),
+                mPages == null ? com.termux.app.page.PageHost.NONE : mPages.host());
+            View view = assistant.view();
+            mAssistantPage = assistant;
             mWall.addView(view);
             mAssistantView = view;
             mWall.setPageView(PaneWallPage.ASSISTANT, view);
@@ -412,6 +444,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             }
         }
         if (id >= 0) mWall.bind(PaneWallPage.ASSISTANT, id);
+        if (mPages != null && mAssistantPage != null && mAssistantPageId != id) {
+            if (mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
+            mPages.put(id, mAssistantPage);
+            mAssistantPageId = id;
+        }
     }
 
     /** The Assistant page's view while the wall holds the page; null otherwise. */
@@ -707,6 +744,21 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public boolean goToHomePageAt(int index, boolean animate) {
         int count = Math.max(1, mHost.innerCount(PaneWallPage.WIDGETS));
         return goToHomePage(Math.max(0, Math.min(count - 1, index)), animate, true);
+    }
+
+    /**
+     * Go to the first Home page; false when the wall already rests on it or holds no Home page.
+     * The Back chain's tail (ADR 0030 section 3).
+     */
+    public boolean goToHomePageOne(boolean animate) {
+        if (!mHost.useAs().showsHomePage()) return false;
+        int index = homeIndexOf(mWall.currentPageId());
+        if (index < 0 && mWall.currentPage() == PaneWallPage.WIDGETS) {
+            index = mHost.innerIndex(PaneWallPage.WIDGETS);
+        }
+        if (PaneWallPolicy.restsOnHomePageOne(mWall.currentPage(), mWall.isMoving(), index)) return false;
+        if (mKnownPages != null && homeCount() == 0) return false;
+        return goToHomePage(0, animate, true);
     }
 
     /**
@@ -1282,6 +1334,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (page != PaneWallPage.TERMINAL) mLandingShellStarted = false;
         if (page == PaneWallPage.DISPLAY && pageId >= 0) mLastDisplayPageId = pageId;
         bindCell(pageId);
+        // Recorded before the host's settle, which applies the typing claim and reads the front.
+        if (mPages != null) mPages.landed(pageId, page.pageKind());
         mHost.onWallPageSettled(page);
         if (page == PaneWallPage.TERMINAL) startShellOnLanding();
         if (page == PaneWallPage.DISPLAY && mBoundDisplayPageId >= 0) {
@@ -1391,6 +1445,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     @Override
     public void onWallOffsetChanged(float offsetPx) {
+        if (mPages != null) {
+            int width = mWall.getWidth();
+            mPages.travelled(width > 0 ? Math.abs(offsetPx) / width : 0f);
+        }
         reaimPages();
         syncOutlineAlpha(offsetPx);
         mHost.onWallOffsetChanged(offsetPx);

@@ -392,4 +392,13 @@ public class PaneWallPolicyTest {
         assertEquals(homeMarginDp,
             PaneWallPolicy.pageInsetPx(PaneWallPage.WIDGETS, homeMarginDp, 0) + homeMarginDp);
     }
+
+    @Test
+    public void theWallRestsOnHomePageOneOnlyOnHomeStillAtIndexZero() {
+        assertTrue(PaneWallPolicy.restsOnHomePageOne(PaneWallPage.WIDGETS, false, 0));
+        assertFalse("Home 2", PaneWallPolicy.restsOnHomePageOne(PaneWallPage.WIDGETS, false, 1));
+        assertFalse("moving", PaneWallPolicy.restsOnHomePageOne(PaneWallPage.WIDGETS, true, 0));
+        assertFalse("a window", PaneWallPolicy.restsOnHomePageOne(PaneWallPage.ASSISTANT, false, 0));
+        assertFalse("no index", PaneWallPolicy.restsOnHomePageOne(PaneWallPage.WIDGETS, false, -1));
+    }
 }
