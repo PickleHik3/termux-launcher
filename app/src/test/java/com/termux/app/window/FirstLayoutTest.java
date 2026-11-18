@@ -192,6 +192,8 @@ public class FirstLayoutTest {
     /** An attached view whose window has focus and has drawn its first frame. */
     private static View newFocusedSettledView() {
         View view = newAttachedView();
+        // A view that draws something, as a real content view does.
+        view.setBackgroundColor(0xff000000);
         Shadows.shadowOf(RuntimeEnvironment.getApplication().getMainLooper())
             .idleFor(java.time.Duration.ofMillis(60));
         setWindowFocus(view, true);
@@ -217,11 +219,107 @@ public class FirstLayoutTest {
     public void aReturnWaitIsReleasedBySignalOnAFrameWithNoLayout() {
         View view = newFocusedSettledView();
         java.util.List<Boolean> ways = new java.util.ArrayList<>();
-        FirstLayout.afterNextLayout(view, 160L, ways::add);
+        FirstLayout.afterSettledFrame(view, 160L, ways::add);
 
-        view.invalidate();
+        scheduleFrame(view);
         framesUntil("the wait was released", () -> !ways.isEmpty());
 
         assertEquals(java.util.Collections.singletonList(Boolean.FALSE), ways);
+    }
+
+    /**
+     * Asks the window for a frame with no layout request. A Robolectric window has no size, so
+     * {@code invalidate()} schedules nothing; this is the call it would end in.
+     */
+    private static void scheduleFrame(View view) {
+        try {
+            Object root = View.class.getMethod("getViewRootImpl").invoke(view);
+            java.lang.reflect.Method m = root.getClass().getDeclaredMethod("scheduleTraversals");
+            m.setAccessible(true);
+            m.invoke(root);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("cannot schedule a frame", e);
+        }
+    }
+
+    private static void idle(long ms) {
+        Shadows.shadowOf(RuntimeEnvironment.getApplication().getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(ms));
+    }
+
+    @Test
+    public void aSettledFrameWaitDoesNotReleaseWithoutWindowFocusUntilItComes() {
+        View view = newFocusedSettledView();
+        setWindowFocus(view, false);
+        java.util.List<Boolean> ways = new java.util.ArrayList<>();
+        FirstLayout.afterSettledFrame(view, 160L, ways::add);
+
+        scheduleFrame(view);
+        idle(60);
+        assertTrue("a frame without focus waits", ways.isEmpty());
+
+        setWindowFocus(view, true);
+        // On a device the wait's own invalidate() asks for this frame; see scheduleFrame.
+        scheduleFrame(view);
+        framesUntil("focus gain then a frame released it", () -> !ways.isEmpty());
+        assertEquals(java.util.Collections.singletonList(Boolean.FALSE), ways);
+    }
+
+    @Test
+    public void aSettledFrameWaitSkipsAFrameWithALayoutPending() {
+        View view = newFocusedSettledView();
+        java.util.List<Boolean> ways = new java.util.ArrayList<>();
+        FirstLayout.Handle handle = FirstLayout.afterSettledFrame(view, 160L, ways::add);
+
+        // A pre-draw pass while a layout is requested does not release it.
+        view.requestLayout();
+        assertTrue(view.isLayoutRequested());
+        assertTrue(draws(view));
+        assertTrue("a pending layout waits", handle.isActive());
+
+        framesUntil("the settled frame after the layout", () -> !ways.isEmpty());
+        assertEquals(java.util.Collections.singletonList(Boolean.FALSE), ways);
+    }
+
+    @Test
+    public void aSettledFrameWaitRunsOnItsBackstopWhenNoFrameComes() {
+        View view = newFocusedSettledView();
+        setWindowFocus(view, false);
+        java.util.List<Boolean> ways = new java.util.ArrayList<>();
+        FirstLayout.Handle handle = FirstLayout.afterSettledFrame(view, 160L, ways::add);
+
+        idle(161);
+
+        assertEquals(java.util.Collections.singletonList(Boolean.TRUE), ways);
+        assertFalse(handle.isActive());
+        setWindowFocus(view, true);
+        idle(100);
+        assertEquals("once only", 1, ways.size());
+    }
+
+    @Test
+    public void aCancelledSettledFrameWaitDropsEverything() {
+        View view = newFocusedSettledView();
+        java.util.List<Boolean> ways = new java.util.ArrayList<>();
+        FirstLayout.afterSettledFrame(view, 160L, ways::add).cancel();
+
+        scheduleFrame(view);
+        idle(500);
+
+        assertTrue(ways.isEmpty());
+    }
+
+    @Test
+    public void aSettledFrameWaitCancelledAfterItsReleaseWasPostedNeverRuns() {
+        View view = newFocusedSettledView();
+        java.util.List<Boolean> ways = new java.util.ArrayList<>();
+        FirstLayout.Handle handle = FirstLayout.afterSettledFrame(view, 160L, ways::add);
+
+        assertTrue(draws(view));
+        assertFalse("released by the pre-draw", handle.isActive());
+        handle.cancel();
+        idle(500);
+
+        assertTrue(ways.isEmpty());
     }
 }
