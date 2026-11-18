@@ -55,9 +55,16 @@ release() {
     lease "$TARGET" release >/dev/null 2>&1
     [ -n "$SERIAL" ] && [ "$SERIAL" != "$TARGET" ] && lease "$SERIAL" release >/dev/null 2>&1
 }
-lease "$TARGET" acquire --for 20 "$PURPOSE" || exit 1
-if [ -n "$SERIAL" ] && [ "$SERIAL" != "$TARGET" ]; then
-    lease "$SERIAL" acquire --for 20 "$PURPOSE" || { release; exit 1; }
+# A lease the caller already holds (a round inside a longer device session) stays held afterwards.
+HELD=0
+lease "$TARGET" status 2>/dev/null | grep -q "^$TARGET is leased by .*(you)" && HELD=1
+if [ "$HELD" = 1 ]; then
+    release() { :; }
+else
+    lease "$TARGET" acquire --for 20 "$PURPOSE" || exit 1
+    if [ -n "$SERIAL" ] && [ "$SERIAL" != "$TARGET" ]; then
+        lease "$SERIAL" acquire --for 20 "$PURPOSE" || { release; exit 1; }
+    fi
 fi
 trap release EXIT
 
