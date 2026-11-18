@@ -344,23 +344,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             StackScene.at(front, front, 0f, mEffective, mGeometry, mFrame);
         }
         mPlankTarget = plankTarget();
-        if (com.termux.app.chrome.MotionLog.enabled && ((mHasEnds && mEndsProgress >= 0.9f)
-                || landing || mDiagAfter > 0)) {
-            StackScene.Motion m = mEffective;
-            StackGeometry g = mGeometry;
-            com.termux.app.chrome.MotionLog.log("diag-stack", "landing=" + landing + " ends=" + mHasEnds
-                + " p=" + mEndsProgress + " travel=" + m.dockTravelPx + " kbShare=" + m.keyboardSharePx
-                + " ime=" + m.imeLiftPx + " sink=" + m.rowsSinkPx + "/" + m.rowsCutPx + "/" + m.sheetSinkPx
-                + "/" + m.sheetCutPx + " contH=" + g.containerHeightPx + " pad=" + g.stackPaddingBottomPx
-                + " kbTop=" + g.keyboardTopPx + " kbH=" + g.keyboardHeightPx + " kbDown="
-                + mViews.keyboardDownLaidOutPx() + " under=" + g.underShown + ":" + g.underTopPx + "-" + g.underBottomPx
-                + " foot=" + g.footTopPx + "-" + g.footBottomPx + " body=" + g.bodyHeightPx + "/" + g.bodyLaidOutRoomPx
-                + " rooms=" + mEndHome.roomPx + "/" + mEndWorkspace.roomPx
-                + " clipC=" + mFrame.clipped[StackScene.V_CONTAINER] + ":" + mFrame.clipBottom[StackScene.V_CONTAINER]
-                + " clipK=" + mFrame.clipped[StackScene.V_KEYBOARD] + ":" + mFrame.clipBottom[StackScene.V_KEYBOARD]
-                + " clipB=" + mFrame.clipped[StackScene.V_BODY] + ":" + mFrame.clipBottom[StackScene.V_BODY]
-                + " tyC=" + mFrame.ty[StackScene.V_CONTAINER]);
-        }
 
         boolean containerMoved = writeTy(StackScene.V_CONTAINER, container,
             mFrame.ty[StackScene.V_CONTAINER] + plankTy(PLANK_CONTAINER));
