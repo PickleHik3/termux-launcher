@@ -22,7 +22,8 @@ public class WallDisplaySeamSourceTest {
     private static String hostBody() throws Exception {
         String src = read("wall/PaneWallController.java");
         int start = src.indexOf("public interface Host {");
-        assertTrue(start >= 0);
+        // The Host is gone (slice 4b): the whole controller must name none of them.
+        if (start < 0) return src;
         int depth = 0;
         for (int i = src.indexOf('{', start); i < src.length(); i++) {
             char c = src.charAt(i);

@@ -43,7 +43,13 @@ public class PageStillsTest {
     private static final int WIDTH = 1080;
     private static final int HEIGHT = 1800;
 
-    private static final class Host implements PaneWallController.Host, WallFacts, WallHome, WallDisplay {
+    private static final class Host implements WallFacts, WallHome, WallDisplay {
+        final WallTerminal terminal = new WallTerminal() {
+            @Override public int count() { return innerCount(PaneWallPage.TERMINAL); }
+            @Override public int index() { return innerIndex(PaneWallPage.TERMINAL); }
+            @Override public void show(int index) { showInnerPage(PaneWallPage.TERMINAL, index); }
+
+        };
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -59,13 +65,13 @@ public class PageStillsTest {
         @Override public WallPages wallPages() { return pages; }
         @Override public void bind(int pageId) { boundDisplay = pageId; }
         @Override public void landed(int pageId) { }
-        @Override public int innerCount(PaneWallPage page) {
+        public int innerCount(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? Math.max(1, pages.homePages().size()) : 1;
         }
-        @Override public int innerIndex(PaneWallPage page) {
+        public int innerIndex(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? homePage : 0;
         }
-        @Override public void showInnerPage(PaneWallPage page, int index) {
+        public void showInnerPage(PaneWallPage page, int index) {
             if (page == PaneWallPage.WIDGETS) homePage = index;
         }
     }
@@ -109,7 +115,8 @@ public class PageStillsTest {
         layout.addView(widgets);
         layout.addView(terminal);
         layout.addView(display);
-        controller = new PaneWallController(layout, host, host);
+        controller = new PaneWallController(layout, host);
+        controller.setTerminal(host.terminal);
         controller.setHome(host);
         controller.setDisplay(host);
         controller.attachTerminalPage(terminal);

@@ -18,58 +18,14 @@ import com.termux.app.terminal.PaneSurfaceStyle;
  */
 public final class PaneWallController implements PaneWallLayout.Listener {
 
-    /** What the wall asks the activity: the page callbacks. Its inputs are the seams ({@link WallFacts},
-     *  {@link WallKeyboardSwipe}, {@link WallStatusFold}) and its pose is {@link WallPose}. */
-    public interface Host {
-        /**
-         * The Terminal page goes back on the wall ({@link TerminalPageReturn#restore}); false when
-         * it could not.
-         */
-        default boolean restoreTerminalPage() { return false; }
-        /**
-         * Whether the empty Terminal page's first shell can be made now. Asked only while the
-         * Terminal page has no window; without one the page still stands as a stop, showing its
-         * card.
-         */
-        default boolean canStartWorkspace() { return false; }
-        /**
-         * The wall has landed on the empty Terminal page (ADR 0016 section 6), by any route:
-         * start its first shell, as the Terminal entry does into an empty row. The window takes
-         * the page when it arrives. False when no shell could be made; the page keeps its card.
-         */
-        default boolean startWorkspaceShell() { return false; }
-        /**
-         * How many pages of its own kind {@code page} holds: the Home pages, or the terminal
-         * windows of the current session's row.
-         */
-        default int innerCount(@NonNull PaneWallPage page) { return 1; }
-        /** Which of them is in front, counting from 0. */
-        default int innerIndex(@NonNull PaneWallPage page) { return 0; }
-        /** Turn {@code page} to its {@code index}-th page at once (Home page n). */
-        default void showInnerPage(@NonNull PaneWallPage page, int index) { }
-        /**
-         * A border drag committed to the window {@code steps} away and the wall still stands where
-         * the finger let go: picture what is leaving. {@link #onInnerStep} follows.
-         */
-        default void onInnerStepBegin(@NonNull PaneWallPage page, int steps) { }
-        /**
-         * Show the window {@code steps} away, the wall at rest again: it comes in from
-         * {@code fromPx}, where the drag had already brought it.
-         */
-        default void onInnerStep(@NonNull PaneWallPage page, int steps, float fromPx) { }
-        /** A page came to rest on screen. */
-        default void onWallPageSettled(@NonNull PaneWallPage page) { }
-        /** The wall committed to a different page, before the slide finishes. */
-        default void onWallPageChanged(@NonNull PaneWallPage page) { }
-    }
-
     /** Saved-instance-state key for the half the wall rested in ({@link WallRow#HALF_HOME}…). */
     public static final String ARG_HALF = "wall_half";
     /** Saved-instance-state key for the page's index within its half ({@link WallRow#savedIndex}). */
     public static final String ARG_INDEX = "wall_index";
 
     @NonNull private final PaneWallLayout mWall;
-    @NonNull private final Host mHost;
+    @NonNull private WallTerminal mTerminal = WallTerminal.NONE;
+    @NonNull private WallLanding mLanding = WallLanding.NONE;
     /** The wall's needs-only reads; {@link WallFacts#NONE} until the constructor or {@link #setFacts}. */
     @NonNull private WallFacts mFacts = WallFacts.NONE;
     @NonNull private WallKeyboardSwipe mKeyboardSwipe = WallKeyboardSwipe.NONE;
@@ -147,22 +103,26 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** The cells hold a Display page: the wallpaper's pan reads the pages' order. */
     private boolean mHasDisplayPage;
 
-    public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
-        this(wall, host, WallFacts.NONE);
-    }
-
     /**
      * The facts come with the constructor: it reads them on the way up, before a setter could
      * hand them over.
      */
-    public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host,
-                              @NonNull WallFacts facts) {
+    public PaneWallController(@NonNull PaneWallLayout wall, @NonNull WallFacts facts) {
         mWall = wall;
-        mHost = host;
         mFacts = facts;
         mWall.setListener(this);
         mWall.setReducedMotion(facts.reducedMotion());
         refreshPages();
+    }
+
+    /** The Terminal page's seam. */
+    public void setTerminal(@Nullable WallTerminal terminal) {
+        mTerminal = terminal == null ? WallTerminal.NONE : terminal;
+    }
+
+    /** The seam told where the wall commits and where it rests. */
+    public void setLanding(@Nullable WallLanding landing) {
+        mLanding = landing == null ? WallLanding.NONE : landing;
     }
 
     /** Replace the needs-only reads the constructor was given. */
@@ -390,7 +350,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // changes; the store's change reads the pages again.
         if (TerminalPageReturn.needed(mFacts.wallPages(), mFacts.terminalWindowOpen())) {
             mWorkspacePending = true;
-            if (!mHost.restoreTerminalPage()) mWorkspacePending = false;
+            if (!mTerminal.restore()) mWorkspacePending = false;
         }
         boolean lostWindow = mHadWindow && !hasWindow;
         mHadWindow = hasWindow;
@@ -430,7 +390,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
-     * The cells the wall lays out: one per page of {@link Host#wallPages}, in order, by page id;
+     * The cells the wall lays out: one per page of {@link WallFacts#wallPages}, in order, by page id;
      * under Terminal only without the Home pages. The Terminal page is a cell with or without a
      * window: empty, it is a stop whose landing starts the first shell (ADR 0016 section 6). A
      * kind-only list ({@link UseAs#rowPages}) where the pages are not known.
@@ -872,16 +832,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** The Home pages or windows the wall's view of {@code kind} holds; Home's come from its seam. */
     private int innerCount(@NonNull PaneWallPage kind) {
-        return kind == PaneWallPage.WIDGETS ? mHome.count() : mHost.innerCount(kind);
+        return kind == PaneWallPage.WIDGETS ? mHome.count() : mTerminal.count();
     }
 
     private int innerIndex(@NonNull PaneWallPage kind) {
-        return kind == PaneWallPage.WIDGETS ? mHome.index() : mHost.innerIndex(kind);
+        return kind == PaneWallPage.WIDGETS ? mHome.index() : mTerminal.index();
     }
 
     private void showInner(@NonNull PaneWallPage kind, int index) {
         if (kind == PaneWallPage.WIDGETS) mHome.show(index);
-        else mHost.showInnerPage(kind, index);
+        else mTerminal.show(index);
     }
 
     /** The seam out to Home; null for none. */
@@ -1236,11 +1196,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     private void startShellOnLanding() {
         if (mLandingShellStarted || mWorkspacePending || mFacts.hasWindow()
-            || !mHost.canStartWorkspace()) {
+            || !mTerminal.canStartShell()) {
             return;
         }
         mLandingShellStarted = true;
-        if (!mHost.startWorkspaceShell()) {
+        if (!mTerminal.startShell()) {
             // No shell could be made: the page keeps its card, and the next landing asks again.
             mLandingShellStarted = false;
             return;
@@ -1400,12 +1360,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     @Override
     public void onWallPageChanged(@NonNull PaneWallPage page) {
-        mHost.onWallPageChanged(page);
+        mLanding.committed(page);
     }
 
     @Override
     public void onWallCellChanged(int pageId, @NonNull PaneWallPage page) {
-        mHost.onWallPageChanged(page);
+        mLanding.committed(page);
         if (mPages != null) mPages.committed(pageId, page.pageKind());
     }
 
@@ -1428,7 +1388,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         bindCell(pageId);
         // Recorded before the host's settle, which applies the typing claim and reads the front.
         if (mPages != null) mPages.landed(pageId, page.pageKind());
-        mHost.onWallPageSettled(page);
+        mLanding.landed(page);
         if (page == PaneWallPage.TERMINAL) startShellOnLanding();
         if (page == PaneWallPage.DISPLAY && mBoundDisplayPageId >= 0) {
             mDisplay.landed(mBoundDisplayPageId);
@@ -1445,12 +1405,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     @Override
     public void onInnerStepBegin(@NonNull PaneWallPage page, int steps) {
-        mHost.onInnerStepBegin(page, steps);
+        if (page == PaneWallPage.TERMINAL) mTerminal.stepBegin(steps);
     }
 
     @Override
     public void onInnerStep(@NonNull PaneWallPage page, int steps, float fromPx) {
-        mHost.onInnerStep(page, steps, fromPx);
+        if (page == PaneWallPage.TERMINAL) mTerminal.step(steps, fromPx);
+        else mTerminal.dropDeparture();
     }
 
     /**

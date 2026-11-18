@@ -35,7 +35,17 @@ public class PaneWallCellsTest {
 
     private static final int WIDTH = 1080;
 
-    private static final class Host implements PaneWallController.Host, WallFacts, WallHome, WallDisplay {
+    private static final class Host implements WallFacts, WallHome, WallDisplay {
+        final WallTerminal terminal = new WallTerminal() {
+            @Override public int count() { return innerCount(PaneWallPage.TERMINAL); }
+            @Override public int index() { return innerIndex(PaneWallPage.TERMINAL); }
+            @Override public void show(int index) { showInnerPage(PaneWallPage.TERMINAL, index); }
+            @Override public boolean canStartShell() { return canStartWorkspace(); }
+            @Override public boolean startShell() { return startWorkspaceShell(); }
+        };
+        final WallLanding landing = new WallLanding() {
+            @Override public void committed(PaneWallPage page) { onWallPageChanged(page); }
+        };
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -59,8 +69,8 @@ public class PaneWallCellsTest {
         int callsWhileConstructing;
 
         @Override public boolean reducedMotion() { return reduced; }
-        @Override public boolean canStartWorkspace() { return canStart; }
-        @Override public boolean startWorkspaceShell() {
+        public boolean canStartWorkspace() { return canStart; }
+        public boolean startWorkspaceShell() {
             shellsStarted++;
             hasWindow = true;
             windows = 1;
@@ -71,19 +81,19 @@ public class PaneWallCellsTest {
         @Override public WallPages wallPages() { return pages; }
         @Override public void bind(int pageId) { boundDisplay = pageId; }
         @Override public void landed(int pageId) { landedDisplay = pageId; }
-        @Override public void onWallPageChanged(PaneWallPage page) {
+        public void onWallPageChanged(PaneWallPage page) {
             if (!constructed) callsWhileConstructing++;
             changes.add(page);
         }
-        @Override public int innerCount(PaneWallPage page) {
+        public int innerCount(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? Math.max(1, pages.homePages().size())
                 : page == PaneWallPage.TERMINAL ? (hasWindow ? windows : 0) : 1;
         }
-        @Override public int innerIndex(PaneWallPage page) {
+        public int innerIndex(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? homePage
                 : page == PaneWallPage.TERMINAL ? current : 0;
         }
-        @Override public void showInnerPage(PaneWallPage page, int index) {
+        public void showInnerPage(PaneWallPage page, int index) {
             if (!constructed) callsWhileConstructing++;
             if (page == PaneWallPage.WIDGETS) homePage = index;
             if (page == PaneWallPage.TERMINAL) current = index;
@@ -124,9 +134,12 @@ public class PaneWallCellsTest {
         layout.addView(terminal);
         layout.addView(display);
         host.constructed = false;
-        controller = new PaneWallController(layout, host, host);
+        controller = new PaneWallController(layout, host);
         controller.setHome(host);
         controller.setDisplay(host);
+        controller.setTerminal(host.terminal);
+        controller.setLanding(host.landing);
+        controller.refreshPages();
         host.constructed = true;
         controller.attachTerminalPage(terminal);
         layout.setPageView(PaneWallPage.WIDGETS, widgets);

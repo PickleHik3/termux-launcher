@@ -2086,6 +2086,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         registerRotationListener();
         setContentView(R.layout.activity_termux);
         mFrames.attach(findViewById(R.id.activity_termux_root_view));
+        mFrames.bind(com.termux.app.window.FrameStep.PAGE_SETTLE, this::flushLandedFrameSettle);
         mFrames.bind(com.termux.app.window.FrameStep.PAGE_FRONT, mPages::applyFront);
         mPages.setHomeDefault(() -> mPaneWallController != null
             && mPaneWallController.goToHomePageOne(isVisible()));
@@ -11194,8 +11195,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.layout.LayoutStore.shared(this).removeListener(mLayoutsListener);
         com.termux.app.wall.pageswitch.PageGlyphSource.uninstall(mPageGlyphProvider);
         mLayoutsRelayoutHandler.removeCallbacks(mLayoutsRelayout);
-        // A landing's settle still posted has no window left to lay out.
-        mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
         mLandedFrameSettle.drop();
         unregisterRotationListener();
         if (mPageSwitch != null) mPageSwitch.close();
@@ -25969,127 +25968,125 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         };
         mPaneWallController = new com.termux.app.wall.PaneWallController(
-            (com.termux.app.wall.PaneWallLayout) wall,
-            new com.termux.app.wall.PaneWallController.Host() {
-                @Override public boolean restoreTerminalPage() {
-                    com.termux.app.wall.WallPages.Result back = wallPagesStore().edit(
-                        com.termux.app.wall.TerminalPageReturn::restore);
-                    if (!back.ok() || back.page == null) return false;
-                    noteTerminalPageId(back.page.id);
-                    return true;
+            (com.termux.app.wall.PaneWallLayout) wall, wallFacts);
+        mPaneWallController.setTerminal(new com.termux.app.wall.WallTerminal() {
+            @Override public boolean restore() {
+                com.termux.app.wall.WallPages.Result back = wallPagesStore().edit(
+                    com.termux.app.wall.TerminalPageReturn::restore);
+                if (!back.ok() || back.page == null) return false;
+                noteTerminalPageId(back.page.id);
+                return true;
+            }
+            // Home's swipe past its last page into an empty Workspace (ADR 0008, amended
+            // 2026-10-19): the same fresh shell the Terminal entry starts there.
+            @Override public boolean canStartShell() {
+                return isSplitPanesEnabled() && mPaneController != null
+                    && getTermuxTerminalSessionClient() != null;
+            }
+            @Override public boolean startShell() {
+                if (!canStartShell()) return false;
+                getTermuxTerminalSessionClient().addNewSession(false, null);
+                return true;
+            }
+            @Override public int count() {
+                return wallInnerCount(com.termux.app.wall.PaneWallPage.TERMINAL);
+            }
+            @Override public int index() {
+                return wallInnerIndex(com.termux.app.wall.PaneWallPage.TERMINAL);
+            }
+            @Override public void show(int index) {
+                showWallInnerPage(com.termux.app.wall.PaneWallPage.TERMINAL, index);
+            }
+            @Override public void stepBegin(int steps) {
+                if (MotionLog.enabled) MotionLog.log("inner-step-begin", "page=TERMINAL steps=" + steps);
+                mStatusCardHost.dismiss();
+                // A terminal window leaving for another is pictured, unless the one arriving
+                // stands live beside it: then the leaving one stays live too and carries on.
+                if (isLiveWindowStep(steps)) dropTerminalDepartureSnapshot();
+                else captureTerminalDeparture();
+            }
+            @Override public void step(int steps, float fromPx) {
+                if (MotionLog.enabled) {
+                    MotionLog.log("inner-step", "page=TERMINAL steps=" + steps + " fromPx=" + fromPx);
                 }
-                // Home's swipe past its last page into an empty Workspace (ADR 0008, amended
-                // 2026-10-19): the same fresh shell the Terminal entry starts there.
-                @Override public boolean canStartWorkspace() {
-                    return isSplitPanesEnabled() && mPaneController != null
-                        && getTermuxTerminalSessionClient() != null;
+                Trace.beginSection("Term.stepWindow");
+                try {
+                    stepWindowFromWall(steps, fromPx);
+                } finally {
+                    Trace.endSection();
                 }
-                @Override public boolean startWorkspaceShell() {
-                    if (!canStartWorkspace()) return false;
-                    getTermuxTerminalSessionClient().addNewSession(false, null);
-                    return true;
+            }
+            @Override public void dropDeparture() {
+                dropTerminalDepartureSnapshot();
+            }
+        });
+        mPaneWallController.setLanding(new com.termux.app.wall.WallLanding() {
+            @Override public void landed(
+                    @NonNull com.termux.app.wall.PaneWallPage page) {
+                if (MotionLog.enabled) {
+                    MotionLog.log("wall-page-settled", "page=" + page);
+                    mMotionInvariantHandler.removeCallbacks(mMotionInvariantTick);
+                    mMotionInvariantHandler.postDelayed(mMotionInvariantTick,
+                        com.termux.app.chrome.MotionInvariants.WINDOW_MS + 50);
                 }
-                @Override public int innerCount(@NonNull com.termux.app.wall.PaneWallPage page) {
-                    return wallInnerCount(page);
+                // The landed frame draws the page at rest with the chrome at the end of its
+                // travel; making that the layout waits for just after it (LandedFrameSettle).
+                com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+                View decor = getWindow() != null ? getWindow().getDecorView() : null;
+                boolean windowDraws = !isDestroyed() && decor != null
+                    && decor.isAttachedToWindow();
+                if (com.termux.app.wall.LandedFrameSettle.defers(
+                        wall != null && wall.settleEndsSlide(), windowDraws, page)) {
+                    Trace.beginSection("Wall.landed");
+                    Trace.endSection();
+                    // The wall already answers the arriving page as current: the glyphs
+                    // change in the frame the motion lands, not in the settle after it.
+                    refreshPageGlyphs();
+                    com.termux.app.wall.PaneWallPage earlier = mLandedFrameSettle.hold(page);
+                    if (earlier != null) runWallPageSettle(earlier);
+                    mFrames.requestNextFrame(com.termux.app.window.FrameStep.PAGE_SETTLE);
+                    return;
                 }
-                @Override public int innerIndex(@NonNull com.termux.app.wall.PaneWallPage page) {
-                    return wallInnerIndex(page);
-                }
-                @Override public void showInnerPage(@NonNull com.termux.app.wall.PaneWallPage page,
-                                                    int index) {
-                    showWallInnerPage(page, index);
-                }
-                @Override public void onInnerStepBegin(
-                        @NonNull com.termux.app.wall.PaneWallPage page, int steps) {
-                    if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
-                    if (MotionLog.enabled) MotionLog.log("inner-step-begin", "page=TERMINAL steps=" + steps);
-                    mStatusCardHost.dismiss();
-                    // A terminal window leaving for another is pictured, unless the one arriving
-                    // stands live beside it: then the leaving one stays live too and carries on.
-                    if (isLiveWindowStep(steps)) dropTerminalDepartureSnapshot();
-                    else captureTerminalDeparture();
-                }
-                @Override public void onInnerStep(@NonNull com.termux.app.wall.PaneWallPage page,
-                                                  int steps, float fromPx) {
-                    if (page == com.termux.app.wall.PaneWallPage.TERMINAL) {
-                        if (MotionLog.enabled) {
-                            MotionLog.log("inner-step", "page=TERMINAL steps=" + steps + " fromPx=" + fromPx);
-                        }
-                        Trace.beginSection("Term.stepWindow");
-                        try {
-                            stepWindowFromWall(steps, fromPx);
-                        } finally {
-                            Trace.endSection();
-                        }
-                    } else {
-                        dropTerminalDepartureSnapshot();
+                flushLandedFrameSettle();
+                runWallPageSettle(page);
+            }
+            @Override public void committed(
+                    @NonNull com.termux.app.wall.PaneWallPage page) {
+                // A page change by any other means puts the switch panel away.
+                if (mPageSwitch != null) mPageSwitch.close();
+                // A landing still waiting for its post lands before the page changes again.
+                flushLandedFrameSettle();
+                // One window-bar refresh for the whole change, however many syncs ask.
+                batchWindowBarRefresh(() -> {
+                    noteTerminalPlaceMayBeVisible();
+                    if (mPaneWallController.displayWindow() != null) {
+                        mPaneWallController.displayWindow().dismissControls();
                     }
-                }
-                @Override public void onWallPageSettled(
-                        @NonNull com.termux.app.wall.PaneWallPage page) {
-                    if (MotionLog.enabled) {
-                        MotionLog.log("wall-page-settled", "page=" + page);
-                        mMotionInvariantHandler.removeCallbacks(mMotionInvariantTick);
-                        mMotionInvariantHandler.postDelayed(mMotionInvariantTick,
-                            com.termux.app.chrome.MotionInvariants.WINDOW_MS + 50);
-                    }
-                    // The landed frame draws the page at rest with the chrome at the end of its
-                    // travel; making that the layout waits for just after it (LandedFrameSettle).
+                    // Only the bar is re-dressed at release, beside the cheap put-aways above:
+                    // it is the pager, and it names the place the wall has committed to. The
+                    // rest waits for the settle (syncPlaceState).
+                    syncPlaceBar();
+                    // The window chips belong to the Workspace: its row's windows, the
+                    // display window's among them, and none on Home.
+                    com.termux.app.terminal.TerminalWindowBar chips =
+                        findViewById(R.id.terminal_window_bar);
+                    if (chips != null && isSplitPanesEnabled()) syncWindowBarItems(chips);
+                    // A change the wall makes at rest — a page taken away while it was
+                    // showing hands the wall to Home without a slide — is followed by no
+                    // settle, so the place's state is applied here instead.
                     com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
-                    View decor = getWindow() != null ? getWindow().getDecorView() : null;
-                    boolean windowDraws = !isDestroyed() && decor != null
-                        && decor.isAttachedToWindow();
-                    if (com.termux.app.wall.LandedFrameSettle.defers(
-                            wall != null && wall.settleEndsSlide(), windowDraws, page)) {
-                        Trace.beginSection("Wall.landed");
-                        Trace.endSection();
-                        // The wall already answers the arriving page as current: the glyphs
-                        // change in the frame the motion lands, not in the settle after it.
-                        refreshPageGlyphs();
-                        com.termux.app.wall.PaneWallPage earlier = mLandedFrameSettle.hold(page);
-                        if (earlier != null) runWallPageSettle(earlier);
-                        mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
-                        mLandingHandler.post(mLandedFrameSettleRunnable);
-                        return;
-                    }
-                    flushLandedFrameSettle();
-                    runWallPageSettle(page);
-                }
-                @Override public void onWallPageChanged(
-                        @NonNull com.termux.app.wall.PaneWallPage page) {
-                    // A page change by any other means puts the switch panel away.
-                    if (mPageSwitch != null) mPageSwitch.close();
-                    // A landing still waiting for its post lands before the page changes again.
-                    flushLandedFrameSettle();
-                    // One window-bar refresh for the whole change, however many syncs ask.
-                    batchWindowBarRefresh(() -> {
-                        noteTerminalPlaceMayBeVisible();
-                        if (mPaneWallController.displayWindow() != null) {
-                            mPaneWallController.displayWindow().dismissControls();
-                        }
-                        // Only the bar is re-dressed at release, beside the cheap put-aways above:
-                        // it is the pager, and it names the place the wall has committed to. The
-                        // rest waits for the settle (syncPlaceState).
-                        syncPlaceBar();
-                        // The window chips belong to the Workspace: its row's windows, the
-                        // display window's among them, and none on Home.
-                        com.termux.app.terminal.TerminalWindowBar chips =
-                            findViewById(R.id.terminal_window_bar);
-                        if (chips != null && isSplitPanesEnabled()) syncWindowBarItems(chips);
-                        // A change the wall makes at rest — a page taken away while it was
-                        // showing hands the wall to Home without a slide — is followed by no
-                        // settle, so the place's state is applied here instead.
-                        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
-                        if (wall != null && !wall.isMoving() && wall.offsetPx() == 0f)
-                            settlePlaceChrome(placeOf(page));
-                        // At rest with no settle to follow: clipboard reads waiting for the
-                        // terminal may be due.
-                        if (wall != null && !wall.isMoving()
-                            && mTermuxTerminalSessionActivityClient != null)
-                            mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
-                    });
-                }
-            }, wallFacts);
+                    if (wall != null && !wall.isMoving() && wall.offsetPx() == 0f)
+                        settlePlaceChrome(placeOf(page));
+                    // At rest with no settle to follow: clipboard reads waiting for the
+                    // terminal may be due.
+                    if (wall != null && !wall.isMoving()
+                        && mTermuxTerminalSessionActivityClient != null)
+                        mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
+                });
+        // The constructor's own pass ran before the Terminal seam was there: its restore is asked now.
+        mPaneWallController.refreshPages();
+            }
+        });
         mPaneWallController.setKeyboardSwipe(new com.termux.app.wall.WallKeyboardSwipe() {
             @Override public void onSwipe(boolean open) {
                 applyBorderKeyboardSwipe(open);
@@ -26171,18 +26168,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The place settle a slide's landed frame left for just after it (LandedFrameSettle). */
     private final com.termux.app.wall.LandedFrameSettle mLandedFrameSettle =
         new com.termux.app.wall.LandedFrameSettle();
-    /** Where that settle is posted: the main looper, whether or not the decor is attached. */
-    private final Handler mLandingHandler = new Handler(Looper.getMainLooper());
-    private final Runnable mLandedFrameSettleRunnable = this::flushLandedFrameSettle;
 
     /**
-     * Runs the settle a landed frame left waiting, now; nothing when none waits. The post runs it
+     * Runs the settle a landed frame left waiting, now; nothing when none waits. The next frame's step runs it
      * just after that frame, and anything that reads the settled state first runs it here.
      */
     private void flushLandedFrameSettle() {
         com.termux.app.wall.PaneWallPage page = mLandedFrameSettle.take();
         if (page == null) return;
-        mLandingHandler.removeCallbacks(mLandedFrameSettleRunnable);
         if (isDestroyed() || mPaneWallController == null) return;
         runWallPageSettle(page);
     }

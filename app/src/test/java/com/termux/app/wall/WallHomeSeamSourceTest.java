@@ -18,7 +18,8 @@ public class WallHomeSeamSourceTest {
         if (!Files.exists(file)) file = Paths.get("app").resolve(file);
         String src = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
         int start = src.indexOf("public interface Host {");
-        assertTrue(start >= 0);
+        // The Host is gone (slice 4b): the whole controller must name none of them.
+        if (start < 0) return src;
         int depth = 0;
         for (int i = src.indexOf('{', start); i < src.length(); i++) {
             char c = src.charAt(i);
