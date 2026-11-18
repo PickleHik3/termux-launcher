@@ -222,8 +222,6 @@ public class WindowSourceRulesTest {
         "app/terminal/TermuxTerminalSessionActivityClient.java:1",
         // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
         "app/terminal/extrakeys/HomePillFlightPlayer.java:1",
-        // shared chrome or gate: becomes a pipeline step or Hold (ADR 0028 s3)
-        "app/terminal/inappkeyboard/KeyboardGeometryChoreographer.java:2",
         // own frame tick or fling step: moves into the pipeline table or the helper
         "app/wall/PageOverviewView.java:4",
         // local first-layout wait: moves onto the first-layout helper
