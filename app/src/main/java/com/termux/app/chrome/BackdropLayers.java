@@ -238,21 +238,28 @@ public final class BackdropLayers {
 
     /**
      * {@link #pad} against {@code budgetBytes} instead of a blur layer's share: the frozen pages
-     * layer's own atlas ({@link LiveBackdrop#MAX_PAGES_ATLAS_BYTES}), with {@code baseBytes} the
+     * layer's own atlas (at most the {@link GlassPagePool} pool), with {@code baseBytes} the
      * whole pages already in it ({@link #slotBytes}) and {@code slots} the pictures the padded
      * rect is cut into (the wall's decor: one).
      */
     public static int padWithin(long budgetBytes, long baseBytes, int width, int height,
                                 boolean horizontal, int maxPadPx, int slots) {
+        return padWithin(budgetBytes, baseBytes, width, height, horizontal, maxPadPx, slots,
+            LivePicture.SCALE);
+    }
+
+    /** {@link #padWithin} for an atlas held at 1/{@code scale} ({@link GlassPagePool.Tier}). */
+    public static int padWithin(long budgetBytes, long baseBytes, int width, int height,
+                                boolean horizontal, int maxPadPx, int slots, int scale) {
         int n = Math.max(1, slots);
-        if (!fitsWithin(budgetBytes, baseBytes, n * width, height)) return -1;
+        if (!fitsWithin(budgetBytes, baseBytes, n * width, height, scale)) return -1;
         int low = 0;
         int high = Math.max(0, maxPadPx);
         while (low < high) {
             int mid = (low + high + 1) >>> 1;
             boolean ok = horizontal
-                ? fitsWithin(budgetBytes, baseBytes, n * (width + 2 * mid), height)
-                : fitsWithin(budgetBytes, baseBytes, n * width, height + 2 * mid);
+                ? fitsWithin(budgetBytes, baseBytes, n * (width + 2 * mid), height, scale)
+                : fitsWithin(budgetBytes, baseBytes, n * width, height + 2 * mid, scale);
             if (ok) low = mid;
             else high = mid - 1;
         }
@@ -281,7 +288,13 @@ public final class BackdropLayers {
 
     /** Whether a layer of {@code width} x {@code height} fits beside {@code baseBytes} in {@code budgetBytes}. */
     public static boolean fitsWithin(long budgetBytes, long baseBytes, int width, int height) {
-        return baseBytes + LiveBackdrop.layerBytes(width, height) <= budgetBytes;
+        return fitsWithin(budgetBytes, baseBytes, width, height, LivePicture.SCALE);
+    }
+
+    /** {@link #fitsWithin} for a layer held at 1/{@code scale}. */
+    public static boolean fitsWithin(long budgetBytes, long baseBytes, int width, int height,
+                                     int scale) {
+        return baseBytes + LiveBackdrop.layerBytes(width, height, scale) <= budgetBytes;
     }
 
     /**
@@ -300,6 +313,11 @@ public final class BackdropLayers {
     /** Bytes of a page's slot ({@link #slotBounds}) at the layer's quarter scale. */
     public static long slotBytes(int pageWidth, int pageHeight, int gutterPx) {
         return LiveBackdrop.layerBytes(pageWidth + 2 * gutterPx, pageHeight + 2 * gutterPx);
+    }
+
+    /** {@link #slotBytes} at 1/{@code scale} of the page's size ({@link GlassPagePool.Tier}). */
+    public static long slotBytes(int pageWidth, int pageHeight, int gutterPx, int scale) {
+        return LiveBackdrop.layerBytes(pageWidth + 2 * gutterPx, pageHeight + 2 * gutterPx, scale);
     }
 
     // ---- Backdrop layers -------------------------------------------------------------------

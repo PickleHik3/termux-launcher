@@ -11041,6 +11041,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (level >= TRIM_MEMORY_RUNNING_LOW && mPaneController != null) {
             mPaneController.dropNeighbourWindows();
         }
+        // The frozen pages pictures of the glass go at the same levels and when the UI hides.
+        if (mLiveBackdrop != null) mLiveBackdrop.trimPages(level);
         if (!ChromePolicy.trimReleasesBlurFrames(level)) {
             return;
         }

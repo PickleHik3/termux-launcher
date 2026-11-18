@@ -33,18 +33,12 @@ public class LiveBackdropBudgetTest {
     public void theBudgetIsEightQuarterScaleScreens() {
         assertEquals(8, LiveBackdrop.MAX_LIVE_SURFACES);
         assertEquals(360L * 800L * 4L, LiveBackdrop.MAX_LAYER_BYTES);
-        // The pages layer's own share, outside the blur layer's: four quarter-scale budget
-        // screens an atlas (three whole pages and the decor), twice that with the refresh in flight.
+        // The pages layers of every surface share one pool (GlassPagePool), sized by RAM.
         assertEquals(4, LiveBackdrop.PAGE_LAYER_SLOTS);
-        assertEquals(4L * 360L * 800L * 4L, LiveBackdrop.MAX_PAGES_ATLAS_BYTES);
-        assertEquals(2L * 4L * 360L * 800L * 4L, LiveBackdrop.MAX_PAGES_LAYER_BYTES);
-        assertEquals(8L * (360L * 800L * 4L + 2L * 4L * 360L * 800L * 4L),
-            LiveBackdrop.BUDGET_BYTES);
-        // The worst case in all, eight pictures that each hold a blur layer and a full pages layer
-        // with its refresh in flight. Raised from ten MiB when the pages layer began to hold whole
-        // pages (ADR 0029 section 3); a real phone holds a few surfaces beneath the wall, and at
-        // rest only the atlas, not the refresh.
-        assertTrue("under 80 MiB", LiveBackdrop.BUDGET_BYTES < 80L * 1024L * 1024L);
+        // The worst case in all: eight blur layers and the quarter-scale pool, 8 x 1,152,000 +
+        // 6,291,456 = 15,507,456 B (14.8 MiB). It replaced 82,944,000 B (eight full pages layers).
+        assertEquals(8L * 1_152_000L + 6L * 1024L * 1024L, LiveBackdrop.BUDGET_BYTES);
+        assertTrue("under 18 MiB", LiveBackdrop.BUDGET_BYTES < 18L * 1024L * 1024L);
     }
 
     @Test

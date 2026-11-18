@@ -379,8 +379,11 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     private void applyEffect() {
         if (mBlur == null) return;
-        mBlur.setRenderEffect(layerEffect());
-        if (mSceneGround != null) mSceneGround.setRenderEffect(layerEffect());
+        RenderEffect effect = layerEffect();
+        mBlur.setRenderEffect(effect);
+        if (mSceneGround != null) mSceneGround.setRenderEffect(effect);
+        // A change of radius, tint or frost reaches the frozen pages layer at once.
+        if (mPage != null) mPage.setRenderEffect(effect);
     }
 
     /** The blur node's effect: the blur, then the stored frame's colours, then the frost. */
@@ -507,7 +510,12 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     @NonNull
     RenderNode pageNode(@NonNull Rect rect, boolean layered) {
-        if (mPage == null) mPage = new RenderNode("LiveBackdrop.page");
+        if (mPage == null) {
+            mPage = new RenderNode("LiveBackdrop.page");
+            // The glass effect runs on the frozen pictures drawn here, every frame, as it runs
+            // on the blur node: only the pages' content is a still.
+            mPage.setRenderEffect(layerEffect());
+        }
         mPage.setPosition(0, 0, quarter(rect.width()), quarter(rect.height()));
         mPage.setUseCompositingLayer(layered, null);
         mPage.setTranslationX(0f);
@@ -583,7 +591,9 @@ public final class LivePicture implements GlassPicture {
         if (mLaid.rect[i] == null) mLaid.rect[i] = new Rect();
         mLaid.rect[i].set(0, 0, width, height);
         mLaid.gutter[i] = gutter;
-        return placeSlot(i, page, quarter(width + 2 * gutter), quarter(height + 2 * gutter), alpha);
+        int scale = GlassPagePool.current().scale;
+        return placeSlot(i, page, scaled(width + 2 * gutter, scale),
+            scaled(height + 2 * gutter, scale), alpha);
     }
 
     /**
@@ -598,7 +608,9 @@ public final class LivePicture implements GlassPicture {
         if (mLaid.rect[i] == null) mLaid.rect[i] = new Rect();
         mLaid.rect[i].set(rect);
         mLaid.gutter[i] = 0;
-        return placeSlot(i, SLOT_DECOR, quarter(rect.width()), quarter(rect.height()), 1f);
+        int scale = GlassPagePool.current().scale;
+        return placeSlot(i, SLOT_DECOR, scaled(rect.width(), scale), scaled(rect.height(), scale),
+            1f);
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -617,9 +629,8 @@ public final class LivePicture implements GlassPicture {
             mSlotNodes[i] = node;
         }
         node.setPosition(mLaid.atlasX[i], 0, mLaid.atlasX[i] + w, h);
-        // Each slot is captured blurred, with the stored frame's colours and the frost, as the
-        // blur node draws: the pages layer is drawn beside the ground, not under the blur node.
-        node.setRenderEffect(layerEffect());
+        // A slot is captured as it is, with no effect: the blur, colours and frost run on the page
+        // node each frame ({@link #pageNode}), so a change reaches the frozen layer at once.
         return node;
     }
 
@@ -655,7 +666,12 @@ public final class LivePicture implements GlassPicture {
 
     /** {@code px} at the page layer's quarter scale, rounded up, at least 1. */
     static int quarter(int px) {
-        return Math.max(1, (px + SCALE - 1) / SCALE);
+        return scaled(px, SCALE);
+    }
+
+    /** {@code px} at 1/{@code scale}, rounded up, at least 1. */
+    static int scaled(int px, int scale) {
+        return Math.max(1, (px + scale - 1) / scale);
     }
 
     /**
@@ -709,6 +725,9 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     private void recordFrozen(@NonNull Bitmap atlas) {
         Slots held = mHeld;
+        // The atlas is held at 1/scale of the pages' size, the page node at a quarter.
+        int scale = GlassPagePool.current().scale;
+        float toNode = scale / (float) SCALE;
         RenderNode page = pageNode(mPageRect, false);
         page.setTranslationX(mPageAimPx / SCALE);
         RecordingCanvas canvas = page.beginRecording(quarter(mPageRect.width()),
@@ -718,14 +737,14 @@ public final class LivePicture implements GlassPicture {
                 if (held.alpha[i] <= 0f) continue;
                 Rect slot = held.rect[i];
                 int gutter = held.gutter[i];
-                int w = quarter(slot.width() + 2 * gutter);
-                int h = quarter(slot.height() + 2 * gutter);
+                int w = scaled(slot.width() + 2 * gutter, scale);
+                int h = scaled(slot.height() + 2 * gutter, scale);
                 mSlotSrc.set(held.atlasX[i], 0, held.atlasX[i] + w, h);
                 mSlotPaint.setAlpha(Math.round(held.alpha[i] * 255f));
                 if (held.page[i] == SLOT_DECOR) {
                     float left = (slot.left - mPageRect.left) / (float) SCALE;
                     float top = (slot.top - mPageRect.top) / (float) SCALE;
-                    mSlotDst.set(left, top, left + w, top + h);
+                    mSlotDst.set(left, top, left + w * toNode, top + h * toNode);
                     canvas.drawBitmap(atlas, mSlotSrc, mSlotDst, mSlotPaint);
                     continue;
                 }
@@ -733,14 +752,14 @@ public final class LivePicture implements GlassPicture {
                 System.arraycopy(mRecordedPoses, held.page[i] * BackdropLayers.POSE_STRIDE,
                     mSlotValues, 0, 9);
                 mSlotMatrix.setValues(mSlotValues);
-                // Atlas px to the page node's: x4 to the page's px, off the gutter, through the
-                // page's matrix to the wall, off the layer's origin, and a quarter.
+                // Atlas px to the page node's: x scale to the page's px, off the gutter, through
+                // the page's matrix to the wall, off the layer's origin, and a quarter.
                 int save = canvas.save();
                 canvas.scale(1f / SCALE, 1f / SCALE);
                 canvas.translate(-mPageRect.left, -mPageRect.top);
                 canvas.concat(mSlotMatrix);
                 canvas.translate(-gutter, -gutter);
-                canvas.scale(SCALE, SCALE);
+                canvas.scale(scale, scale);
                 mSlotDst.set(0f, 0f, w, h);
                 canvas.drawBitmap(atlas, mSlotSrc, mSlotDst, mSlotPaint);
                 canvas.restoreToCount(save);

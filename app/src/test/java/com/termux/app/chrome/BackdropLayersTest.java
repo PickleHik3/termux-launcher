@@ -298,7 +298,7 @@ public class BackdropLayersTest {
     /**
      * Each page is one slot over its own untransformed bounds and a blur gutter, at a quarter
      * scale: where the page stands is a matrix drawn later, not part of the slot. Three pages
-     * and the decor at the 1440 x 3200 budget screen fit {@link LiveBackdrop#MAX_PAGES_ATLAS_BYTES}.
+     * and the decor at the 1440 x 3200 budget screen fit {@link GlassPagePool#QUARTER_POOL_BYTES}.
      */
     @Test
     public void aSlotIsAPagesOwnBoundsAndThreePagesWithDecorFitTheBudget() {
@@ -312,14 +312,13 @@ public class BackdropLayersTest {
         assertEquals(410L * 850L * 4L, BackdropLayers.slotBytes(1440, 3200, 100));
         long pages = 3 * BackdropLayers.slotBytes(1440, 3200, 100);
         long decor = LiveBackdrop.layerBytes(1440, 400);
-        assertTrue(pages + decor <= LiveBackdrop.MAX_PAGES_ATLAS_BYTES);
-        // A fourth whole page does not fit beside three.
-        assertFalse(pages + BackdropLayers.slotBytes(1440, 3200, 100) + decor
-            <= LiveBackdrop.MAX_PAGES_ATLAS_BYTES);
+        assertTrue(pages + decor <= GlassPagePool.QUARTER_POOL_BYTES);
+        // A fourth page is refused by the page count (LiveBackdrop.PAGE_LAYER_SLOTS), not by bytes:
+        // the pool is shared and sized by RAM, so it no longer bounds one surface's pages to three.
         // The pad is what the decor may take beside the pages, in the pages budget.
-        assertTrue(BackdropLayers.padWithin(LiveBackdrop.MAX_PAGES_ATLAS_BYTES, pages, 1440, 400,
+        assertTrue(BackdropLayers.padWithin(GlassPagePool.QUARTER_POOL_BYTES, pages, 1440, 400,
             true, 1440, 1) >= 0);
-        assertEquals(-1, BackdropLayers.padWithin(LiveBackdrop.MAX_PAGES_ATLAS_BYTES,
-            LiveBackdrop.MAX_PAGES_ATLAS_BYTES, 1440, 400, true, 1440, 1));
+        assertEquals(-1, BackdropLayers.padWithin(GlassPagePool.QUARTER_POOL_BYTES,
+            GlassPagePool.QUARTER_POOL_BYTES, 1440, 400, true, 1440, 1));
     }
 }
