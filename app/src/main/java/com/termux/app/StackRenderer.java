@@ -509,8 +509,14 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                 (ViewGroup.MarginLayoutParams) body.getLayoutParams();
             g.bodyWidthPx = Math.max(0, parent.getWidth() - parent.getPaddingLeft()
                 - parent.getPaddingRight() - margins.leftMargin - margins.rightMargin);
-            g.bodyHeightPx = Math.max(0, parent.getHeight() - parent.getPaddingTop()
-                - parent.getPaddingBottom() - margins.topMargin - margins.bottomMargin);
+            // Its top as laid out, never its margin: the canvas reaching under the status bar
+            // moves the margin at once and the parent's height on the next layout, together
+            // (PageTopInsets), so the margin read against the laid-out parent is off by the reach
+            // for the frame between. The bottom is the room's, written before the layout it asks.
+            int top = body.isLaidOut() ? body.getTop()
+                : parent.getPaddingTop() + margins.topMargin;
+            g.bodyHeightPx = Math.max(0, parent.getHeight() - parent.getPaddingBottom()
+                - margins.bottomMargin - top);
             g.bodyLaidOutRoomPx = margins.bottomMargin;
             // diag-clip84
             if (com.termux.app.window.Counters.enabled && g.bodyHeightPx != mDiagBodyH) {
