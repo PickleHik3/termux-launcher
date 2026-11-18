@@ -184,4 +184,52 @@ public class PagesTest {
         assertFalse(pages.onBack());
         assertEquals(0, homeCalls);
     }
+
+    @Test
+    public void aCommitAwayRunsOffFrontAtOnceAndTheLandingRunsOnlyTheNewOnFront() {
+        FakePage a = new FakePage(PageKind.ASSISTANT, log);
+        FakePage b = new FakePage(PageKind.TERMINAL, log);
+        pages.put(1, a);
+        pages.put(2, b);
+        pages.landed(1, PageKind.ASSISTANT);
+        pages.applyFront();
+        log.clear();
+        pages.committed(2, PageKind.TERMINAL);
+        assertEquals(List.of("ASSISTANT:off"), log);
+        assertEquals(2, pages.committedId());
+        assertEquals(PageKind.TERMINAL, pages.committedKind());
+        pages.landed(2, PageKind.TERMINAL);
+        pages.applyFront();
+        assertEquals(List.of("ASSISTANT:off", "TERMINAL:on"), log);
+        assertEquals(1, a.off);
+    }
+
+    @Test
+    public void aCommitToTheAppliedPageRunsNothing() {
+        FakePage a = new FakePage(PageKind.ASSISTANT, log);
+        pages.put(1, a);
+        pages.landed(1, PageKind.ASSISTANT);
+        pages.applyFront();
+        log.clear();
+        pages.committed(1, PageKind.ASSISTANT);
+        assertTrue(log.isEmpty());
+    }
+
+    @Test
+    public void aCommitAwayAndBackBeforeTheLandingRerunsOnFront() {
+        FakePage a = new FakePage(PageKind.ASSISTANT, log);
+        FakePage b = new FakePage(PageKind.TERMINAL, log);
+        pages.put(1, a);
+        pages.put(2, b);
+        pages.landed(1, PageKind.ASSISTANT);
+        pages.applyFront();
+        asks = 0;
+        log.clear();
+        pages.committed(2, PageKind.TERMINAL);
+        pages.committed(1, PageKind.ASSISTANT);
+        pages.landed(1, PageKind.ASSISTANT);
+        assertEquals(1, asks);
+        pages.applyFront();
+        assertEquals(List.of("ASSISTANT:off", "ASSISTANT:on"), log);
+    }
 }
