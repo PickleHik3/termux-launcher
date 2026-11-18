@@ -1,6 +1,9 @@
 package com.termux.app.statusbar;
 
 import android.app.Application;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.os.Build;
 import android.view.View;
 
@@ -24,16 +27,12 @@ public class PlaceContentStripFadeTest {
         assertEquals(0f, strip.getRightFadingEdgeStrength(), 0f);
     }
 
-    @Test public void slidingThePlaceAwayDissolvesBothEnds() {
+    @Test public void slidingThePlaceLeavesTheRightEndToTheSlotMask() {
         PlaceContentStrip strip = strip();
         int length = strip.getHorizontalFadingEdgeLength();
         strip.setTranslationX(length / 2f);
-        assertEquals(0.5f, strip.getRightFadingEdgeStrength(), 0.01f);
-        strip.setTranslationX(-3f * length);
-        assertEquals(1f, strip.getRightFadingEdgeStrength(), 0f);
-        assertEquals(1f, strip.getLeftFadingEdgeStrength(), 0f);
-        strip.setTranslationX(0f);
         assertEquals(0f, strip.getRightFadingEdgeStrength(), 0f);
+        assertEquals(1f, strip.getLeftFadingEdgeStrength(), 0f);
     }
 
     @Test public void rightToLeftTheReadingsAreOnTheLeft() {
@@ -41,6 +40,42 @@ public class PlaceContentStripFadeTest {
         strip.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         assertEquals(0f, strip.getLeftFadingEdgeStrength(), 0f);
         assertEquals(1f, strip.getRightFadingEdgeStrength(), 0f);
+    }
+
+    @Test public void aTranslatedStripDrawsIntoALayerAndMasksTheEdge() {
+        PlaceContentStrip strip = strip();
+        strip.layout(0, 0, 200, 40);
+        strip.setTranslationX(30f);
+        CountingCanvas canvas = new CountingCanvas();
+        strip.dispatchDraw(canvas);
+        assertEquals(1, canvas.layers);
+        assertEquals(1, canvas.masks);
+    }
+
+    @Test public void aStripAtRestDrawsWithoutALayer() {
+        PlaceContentStrip strip = strip();
+        strip.layout(0, 0, 200, 40);
+        CountingCanvas canvas = new CountingCanvas();
+        strip.dispatchDraw(canvas);
+        assertEquals(0, canvas.layers);
+        assertEquals(0, canvas.masks);
+    }
+
+    private static final class CountingCanvas extends Canvas {
+        int layers;
+        int masks;
+
+        CountingCanvas() { super(Bitmap.createBitmap(200, 40, Bitmap.Config.ARGB_8888)); }
+
+        @Override public int saveLayer(float l, float t, float r, float b, Paint paint) {
+            layers++;
+            return super.saveLayer(l, t, r, b, paint);
+        }
+
+        @Override public void drawRect(float l, float t, float r, float b, Paint paint) {
+            if (paint.getXfermode() != null) masks++;
+            super.drawRect(l, t, r, b, paint);
+        }
     }
 
     private static PlaceContentStrip strip() {

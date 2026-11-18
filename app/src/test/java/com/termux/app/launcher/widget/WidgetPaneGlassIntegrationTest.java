@@ -28,7 +28,8 @@ public class WidgetPaneGlassIntegrationTest {
         // The widget pane is not in this layout (it was only ever counted as absent): the whole
         // layout holds no capturing blur view, the pane included wherever it is added.
         assertEquals(0, countBlurViews(root));
-        assertNotNull(root.findViewById(R.id.terminal_window_bar_wallpaper_backdrop));
+        assertTrue(root.findViewById(R.id.terminal_window_bar_background)
+            instanceof com.termux.app.chrome.BarGlassView);
     }
     /** Views that blur by capturing the window, by name: none is left in the app. */
     private static int countBlurViews(android.view.View view) {

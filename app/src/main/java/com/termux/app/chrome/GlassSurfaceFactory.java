@@ -203,6 +203,25 @@ public final class GlassSurfaceFactory {
             preferences.getDockTintStrength(lookPage));
     }
 
+    /**
+     * The status band's ink question asked of the glass the bar's look gives it now, whatever face
+     * its pane was last told ({@link ChromeInk#onGlassWearing}): the bar's opacity and tinted base
+     * under the look the status reads answer. For the end of a crossing that has not been dressed;
+     * a bar already dressed asks {@link ChromeInk#onGlass}, which reads what is drawn.
+     */
+    @Nullable
+    public OnGlass.Resolution statusBandOnGlassWearingLook(@NonNull android.graphics.Rect rect,
+                                                           int darkInk, int paleInk,
+                                                           double target) {
+        if (mInk == null) return null;
+        TermuxAppSharedPreferences preferences = mSurfaces.preferences();
+        float opacity = preferences != null
+            ? preferences.getStatusBarOpacity(mSurfaces.statusLookPage()) / 100f : 1f;
+        int base = look(statusTintStrength()).tintBase(mSurfaces.glassBaseColor());
+        return mInk.onGlassWearing(GlassBackdropCache.Band.STATUS_BAR, rect, darkInk, paleInk,
+            target, opacity, base);
+    }
+
     /** The status bar's tint strength, percent. */
     public int statusTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
@@ -540,6 +559,15 @@ public final class GlassSurfaceFactory {
     public static boolean frostDrawsEdge(@Nullable android.widget.ImageView frost) {
         if (frost == null || frost.getVisibility() != android.view.View.VISIBLE) return false;
         SharedFrameDrawable shared = SharedFrameDrawable.of(frost.getDrawable());
+        return shared != null && shared.refracts();
+    }
+
+    /** As {@link #frostDrawsEdge(android.widget.ImageView)}, for the frost a bar's glass view holds. */
+    public static boolean frostDrawsEdge(@Nullable BarGlassView bar) {
+        if (bar == null || bar.getVisibility() != android.view.View.VISIBLE || !bar.frostShown()) {
+            return false;
+        }
+        SharedFrameDrawable shared = SharedFrameDrawable.of(bar.getFrost());
         return shared != null && shared.refracts();
     }
 

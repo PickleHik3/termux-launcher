@@ -408,7 +408,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
 
         // The trailing stats read as one status cluster. Color and dot separators provide the
         // grouping, so individual pill backgrounds only add visual noise.
-        setBackground(null);
+        if (getBackground() != null) setBackground(null);
 
         // The deck's display window: every reading lit in the display colour, a muted one dimmed.
         if (mDeckDisplay != null) {

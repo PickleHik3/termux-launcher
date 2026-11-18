@@ -295,14 +295,18 @@ public final class CrossingController {
         /** The strip under the pill fading with the finger. */
         void syncNavStripFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame);
 
-        /** The band behind the system bar fading with the bar's glass. */
-        void syncTopBandFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame);
-
         /** The strip under the pill begun fading between the ends. */
         void beginNavStripFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there);
 
         /** The top band begun fading between the ends. */
         void beginTopBandFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there);
+
+        /**
+         * The top stack's crossing begins between the two ends, or reads its ends again for a
+         * frame that reaches another page of the other half; each with the layout it arranges.
+         */
+        void beginTopStack(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there,
+                           @NonNull PlaceLayout hereLayout, @NonNull PlaceLayout thereLayout);
 
         /** A band only one half's dock carries following its page across the seam. */
         void syncSeamBandShare(@NonNull com.termux.app.place.SeamCrossing.Answers seam);
@@ -431,8 +435,8 @@ public final class CrossingController {
         mHost.syncNavStripFade(frame);
         // A stack whose halves differ in look blends its glass with the wall.
         syncStackLookBlend(seam);
-        // And the band behind the system bar with the bar's glass, by the same share.
-        mHost.syncTopBandFade(frame);
+        // The band behind the system bar crosses with the bar's glass by the same share, written
+        // by the top stack's renderer from the status travel below.
         // A band only one half's dock carries follows its page across the seam.
         mHost.syncSeamBandShare(seam);
         // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
@@ -679,6 +683,7 @@ public final class CrossingController {
             com.termux.app.place.SeamCrossing.Stage.of(mHost.dockBeads() != null, mHost.frameStandsDown(),
                 mHost.isSplitPanesEnabled(), pagesSlide),
             hereRest, thereRest, mHost.arrangementRevision());
+        mHost.beginTopStack(herePage, therePage, hereLayout, thereLayout);
         return true;
     }
 
@@ -806,6 +811,7 @@ public final class CrossingController {
             com.termux.app.place.SeamCrossing.Stage.of(mHost.dockBeads() != null, mHost.frameStandsDown(),
                 mHost.isSplitPanesEnabled(), pagesSlide),
             hereRest, thereRest, mHost.arrangementRevision());
+        mHost.beginTopStack(herePage, therePage, committed, otherLayout);
         if (!begins) return;
         // A look apart blends the dock's glass from here to there (syncStackLookBlend).
         mLookBlendShare = Float.NaN;

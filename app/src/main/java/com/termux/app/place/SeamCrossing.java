@@ -797,6 +797,12 @@ public final class SeamCrossing {
         return mRun.other != null && mRun.oneKind;
     }
 
+    /** The committed end the crossing was begun from, as a page; null while none runs. */
+    @Nullable
+    public PageRef committedEnd() {
+        return mRun.other == null ? null : mRun.committedEnd;
+    }
+
     /** The other end the crossing was begun for, as a page; null while none runs. */
     @Nullable
     public PageRef otherEnd() {
@@ -804,13 +810,36 @@ public final class SeamCrossing {
     }
 
     /**
+     * Whether both ends stand the bar alike, in one outline, so it stays put across the crossing
+     * and nothing but its glass and ink changes. The top stack's scene
+     * ({@code TopStackScene#shared}) is told the same through its ends' outline keys, so the two
+     * agree on which bar is one slab.
+     */
+    public boolean barStill() {
+        return mRun.other != null && mRun.barStill;
+    }
+
+    /**
+     * Whether the riding bar wears the other end's look ({@link #rideBar}): across the seam the
+     * Workspace's, which is the other end when the crossing began on Home; between two Home pages
+     * the page that wears the bar, when that is the other one.
+     */
+    public boolean barRideWearsOther() {
+        if (mRun.other == null) return false;
+        if (mRun.oneKind) return mRun.barEnd != null && mRun.barEnd.equals(mRun.otherEnd);
+        return mRun.committed == PaneWallPage.WIDGETS;
+    }
+
+    /**
      * Whether the status bar wears the other half's dress on this frame, the {@code seamTravel}
-     * the bar's dress reads ({@link SeamDress#wearsHome}): the Workspace's while the wall slides
-     * across the seam ({@link #sliding}), never on a slide between two Home pages, where the bar
-     * is Home's on both ends.
+     * the bar's dress reads ({@link SeamDress#wearsHome}): the Workspace's while a bar that rides
+     * with its page slides across the seam ({@link #sliding}). Never on a slide between two Home
+     * pages, where the bar is Home's on both ends, and never for a bar both ends stand alike
+     * ({@link #barStill}): that one stays put in the committed page's look and its glass blends
+     * with the wall.
      */
     public boolean barDressedAcross() {
-        return sliding() && !mRun.oneKind;
+        return sliding() && !mRun.oneKind && !mRun.barStill;
     }
 
     /**
