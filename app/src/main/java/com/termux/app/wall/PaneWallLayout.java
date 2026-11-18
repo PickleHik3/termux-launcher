@@ -3871,16 +3871,6 @@ public final class PaneWallLayout extends ViewGroup
                 child.measure(MeasureSpec.makeMeasureSpec(right - left, MeasureSpec.EXACTLY),
                     MeasureSpec.makeMeasureSpec(bottom - top, MeasureSpec.EXACTLY));
             }
-            if (com.termux.app.window.Counters.enabled && child == mTerminalHost // diag-clip84
-                && (child.getTop() != top || child.getBottom() != bottom)) {
-                com.termux.app.window.Counters.ring("diag-clip84", "wall-page-layout kind=TERMINAL was="
-                    + child.getLeft() + "," + child.getTop() + "," + child.getRight() + ","
-                    + child.getBottom() + " now=" + left + "," + top + "," + right + "," + bottom
-                    + " wallH=" + (b - t) + " padT=" + getPaddingTop() + " wsTop=" + mWorkspaceTopInsetPx
-                    + " homeTop=" + mHomeTopInsetPx + " bottomInset=" + pageBottomInsetPx(child)
-                    + " frameTop=" + frameMarginPx(child, margins.topMargin, false)
-                    + " moving=" + isMoving() + " offset=" + offsetPx());
-            }
             child.layout(left, top, right, bottom);
         }
         publishBackExclusion();

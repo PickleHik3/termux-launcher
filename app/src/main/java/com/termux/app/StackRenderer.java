@@ -396,10 +396,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         if (body != null) {
             watchBody(body);
             writeClip(StackScene.V_BODY, body);
-            if (landing && com.termux.app.window.Counters.enabled) // diag-clip84
-                com.termux.app.window.Counters.ring("diag-clip84", "landing-apply bodyClipBottom="
-                    + mFrame.clipBottom[StackScene.V_BODY] + " clipped=" + mFrame.clipped[StackScene.V_BODY]
-                    + " bodyHeightPx=" + mGeometry.bodyHeightPx + " callers=" + diagCallers());
         }
         writeLanes();
         writeContent();
@@ -519,20 +515,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             g.bodyHeightPx = Math.max(0, parent.getHeight() - parent.getPaddingTop()
                 - parent.getPaddingBottom() - top - margins.bottomMargin);
             g.bodyLaidOutRoomPx = margins.bottomMargin;
-            // diag-clip84
-            if (com.termux.app.window.Counters.enabled && g.bodyHeightPx != mDiagBodyH) {
-                com.termux.app.window.Counters.ring("diag-clip84", "body-geom was=" + mDiagBodyH
-                    + " now=" + g.bodyHeightPx + " parentH=" + parent.getHeight()
-                    + " parentLR=" + parent.isLayoutRequested() + " padT=" + parent.getPaddingTop()
-                    + " padB=" + parent.getPaddingBottom() + " mTop=" + margins.topMargin
-                    + " mBot=" + margins.bottomMargin + " bodyTop=" + body.getTop()
-                    + " bodyH=" + body.getHeight() + " bodyLR=" + body.isLayoutRequested()
-                    + " hasEnds=" + mHasEnds + " landing=" + mLandingPending);
-            }
-            mDiagBodyH = g.bodyHeightPx;
         }
     }
-    private int mDiagBodyH = -1; // diag-clip84
 
     /** The body surface whose layout changes ask for a frame: its cut is read off its size. */
     @Nullable private View mWatchedBody;
@@ -719,17 +703,5 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private void invalidateIfDressed(int id) {
         View view = mViews.view(id);
         if (view != null && view.getBackground() != null) view.invalidate();
-    }
-
-    /** diag-clip84 */
-    static String diagCallers() {
-        StackTraceElement[] st = new Throwable().getStackTrace();
-        StringBuilder b = new StringBuilder();
-        for (int i = 2; i < Math.min(st.length, 9); i++) {
-            String c = st[i].getClassName();
-            b.append(c.substring(c.lastIndexOf('.') + 1)).append('.').append(st[i].getMethodName())
-                .append(':').append(st[i].getLineNumber()).append('>');
-        }
-        return b.toString();
     }
 }

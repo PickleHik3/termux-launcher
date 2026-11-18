@@ -16513,20 +16513,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         if (bodyTopPx != mBodySurfaceTopPx) {
-            if (com.termux.app.window.Counters.enabled) { // diag-clip84
-                View diagBody = findViewById(R.id.terminal_background);
-                View diagParent = diagBody == null ? null : (View) diagBody.getParent();
-                com.termux.app.wall.PaneWallLayout diagWall = mPaneWallController == null ? null
-                    : mPaneWallController.wall();
-                com.termux.app.window.Counters.ring("diag-clip84", "body-top was="
-                    + mBodySurfaceTopPx + " now=" + bodyTopPx + " wsInset=" + insetPx
-                    + " committed=" + mLastWallPage + " reaches=" + mCanvasReachesUnderBar
-                    + " moving=" + (diagWall != null && diagWall.isMoving())
-                    + " offset=" + (diagWall == null ? 0f : diagWall.offsetPx())
-                    + " wallPage=" + (diagWall == null ? null : diagWall.currentPage())
-                    + " parentH=" + (diagParent == null ? -1 : diagParent.getHeight())
-                    + " callers=" + StackRenderer.diagCallers());
-            }
             mBodySurfaceTopPx = bodyTopPx;
             View body = findViewById(R.id.terminal_background);
             if (body != null && body.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
