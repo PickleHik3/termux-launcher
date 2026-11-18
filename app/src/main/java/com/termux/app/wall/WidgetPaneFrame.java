@@ -168,9 +168,9 @@ public final class WidgetPaneFrame extends PaneContentFrame
 
     /**
      * A system ask for the solid card or the "Widgets on glass" switch changed: the frame is held
-     * or let go, the widgets re-dress.
+     * or let go, the widgets re-dress. Also run by the activity when Home's own polarity moves.
      */
-    private void redressWidgets() {
+    public void redressWidgets() {
         syncLookWorn();
         PaneSurfaceStyle look = widgetGlassStyle();
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget

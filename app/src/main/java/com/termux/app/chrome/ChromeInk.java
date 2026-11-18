@@ -461,6 +461,12 @@ public final class ChromeInk {
         new java.util.LinkedHashMap<>(MAX_PANE_ANSWERS, 0.75f, true);
 
     @Nullable private Polarity mPolarity;
+    /** Home's own votes, written only while Home is in front at rest. Kept by {@link #invalidate}. */
+    @NonNull private final Map<GlassBackdropCache.Band, Integer> mHomeVotes =
+        new EnumMap<>(GlassBackdropCache.Band.class);
+    @Nullable private Polarity mHomePolarity;
+    @Nullable private java.util.function.BooleanSupplier mFrontHome;
+    @Nullable private Runnable mOnWidgetPolarityChanged;
     /**
      * The pane band's mean flat glass as last measured; survives {@link #invalidate} so a
      * re-sample replaces it instead of leaving a gap. Transparent until a pane is measured.
@@ -2128,17 +2134,41 @@ public final class ChromeInk {
         if (mVotes.isEmpty()) {
             return mPolarity != null ? mPolarity : Polarity.DARK_INK;
         }
-        int mean = meanVote();
+        mPolarity = decide(mPolarity, meanVote(mVotes));
+        return mPolarity;
+    }
+
+    /** The hysteresis both polarities share: {@code current} holds until the other wins by the margin. */
+    @NonNull
+    private static Polarity decide(@Nullable Polarity current, @ColorInt int mean) {
         double dark = OnGlass.ratio(Color.BLACK, mean);
         double pale = OnGlass.ratio(Color.WHITE, mean);
-        if (mPolarity == null) {
-            mPolarity = dark >= pale ? Polarity.DARK_INK : Polarity.PALE_INK;
-        } else if (mPolarity == Polarity.DARK_INK && pale > dark * POLARITY_FLIP_MARGIN) {
-            mPolarity = Polarity.PALE_INK;
-        } else if (mPolarity == Polarity.PALE_INK && dark > pale * POLARITY_FLIP_MARGIN) {
-            mPolarity = Polarity.DARK_INK;
-        }
-        return mPolarity;
+        if (current == null) return dark >= pale ? Polarity.DARK_INK : Polarity.PALE_INK;
+        if (current == Polarity.DARK_INK && pale > dark * POLARITY_FLIP_MARGIN) return Polarity.PALE_INK;
+        if (current == Polarity.PALE_INK && dark > pale * POLARITY_FLIP_MARGIN) return Polarity.DARK_INK;
+        return current;
+    }
+
+    /** Says whether Home is the page in front, so its votes are kept apart; set once by the activity. */
+    public void setFrontHome(@Nullable java.util.function.BooleanSupplier frontHome) {
+        mFrontHome = frontHome;
+    }
+
+    /** Run once each time Home's own polarity moves, so the widget cards are dressed again. */
+    public void setOnWidgetPolarityChanged(@Nullable Runnable listener) {
+        mOnWidgetPolarityChanged = listener;
+    }
+
+    /**
+     * The polarity Home's widget cards wear: Home's own, from the votes cast while Home was in
+     * front at rest, so the Terminal's look in a crossing cannot flip them. Before Home has voted
+     * it is {@link #polarity()}.
+     */
+    @NonNull
+    public Polarity widgetPolarity() {
+        readMode();
+        if (mHomeVotes.isEmpty() || mHomePolarity == null) return polarity();
+        return mHomePolarity;
     }
 
     // ------------------------------------------------------------------ for the surface builder
@@ -2648,6 +2678,8 @@ public final class ChromeInk {
         invalidate();
         for (Contract contract : mContracts.values()) contract.tone = 0;
         mPolarity = null;
+        mHomeVotes.clear();
+        mHomePolarity = null;
         mInkAnswers.clear();
     }
 
@@ -2717,6 +2749,14 @@ public final class ChromeInk {
     private void vote(@NonNull GlassBackdropCache.Band band, @ColorInt int flatGlass) {
         // A crossing casts no vote: the polarity it began with is the one the page lands with.
         if (mLegibility != null && mLegibility.crossing()) return;
+        if (mFrontHome != null && mFrontHome.getAsBoolean()) {
+            mHomeVotes.put(band, flatGlass);
+            Polarity home = decide(mHomePolarity, meanVote(mHomeVotes));
+            if (home != mHomePolarity) {
+                mHomePolarity = home;
+                if (mOnWidgetPolarityChanged != null) mOnWidgetPolarityChanged.run();
+            }
+        }
         Integer previous = mVotes.put(band, flatGlass);
         if (previous != null && previous == flatGlass) return;
         // A new or moved vote can move the mean past the hysteresis band. Nothing is recomputed
@@ -2726,14 +2766,14 @@ public final class ChromeInk {
     }
 
     @ColorInt
-    private int meanVote() {
+    private static int meanVote(@NonNull Map<GlassBackdropCache.Band, Integer> votes) {
         long red = 0, green = 0, blue = 0;
-        for (Integer vote : mVotes.values()) {
+        for (Integer vote : votes.values()) {
             red += Color.red(vote);
             green += Color.green(vote);
             blue += Color.blue(vote);
         }
-        int count = Math.max(1, mVotes.size());
+        int count = Math.max(1, votes.size());
         return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
     }
 

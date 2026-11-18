@@ -793,4 +793,71 @@ public class ChromeInkTest {
         assertEquals(0, store.sampledInCrossing());
         assertEquals("nothing was read in the crossing", atRest, reads[0]);
     }
+
+    // ------------------------------------------------------------------ Home's own polarity
+
+    private int homeRects;
+    private int widgetNotices;
+
+    /** One band's vote, read off a rect nobody asked about before so the sample is fresh. */
+    private void voteStatus(boolean onHome, int glass) {
+        ink.setFrontHome(() -> onHome);
+        wallpaper.other = glass;
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, new Rect(0, 1000 + homeRects++, 1080, 1100),
+            LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+    }
+
+    /** The Terminal in front votes dark glass; Home's cards keep what Home voted. */
+    @Test
+    public void homesWidgetPolarityIgnoresTheTerminalsVotes() {
+        voteStatus(true, 0xFFDDDDDD);
+        voteStatus(false, 0xFF202020);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.polarity());
+        assertEquals(ChromeInk.Polarity.DARK_INK, ink.widgetPolarity());
+    }
+
+    /** Landing on Home with the same values changes nothing, whatever the chrome-wide votes hold. */
+    @Test
+    public void landingOnHomeWithTheSameVotesKeepsTheAnswer() {
+        ink.setOnWidgetPolarityChanged(() -> widgetNotices++);
+        voteStatus(true, 0xFFDDDDDD);
+        ink.onGlass(GlassBackdropCache.Band.AZ_STRIP, AZ_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_LARGE_TEXT);
+        voteStatus(false, 0xFF202020);
+        widgetNotices = 0;
+        voteStatus(true, 0xFFDDDDDD);
+        assertEquals(ChromeInk.Polarity.DARK_INK, ink.widgetPolarity());
+        assertEquals(0, widgetNotices);
+    }
+
+    /** A Home vote that moves the mean flips the answer and says so once. */
+    @Test
+    public void aHomeVoteThatFlipsHomesAnswerRunsTheListenerOnce() {
+        voteStatus(true, 0xFFDDDDDD);
+        ink.setOnWidgetPolarityChanged(() -> widgetNotices++);
+        voteStatus(true, 0xFF202020);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.widgetPolarity());
+        assertEquals(1, widgetNotices);
+        voteStatus(true, 0xFF202020);
+        assertEquals(1, widgetNotices);
+    }
+
+    /** A mode re-read keeps Home's answer; a redress drops it. */
+    @Test
+    public void invalidateKeepsHomesAnswerAndRedressDropsIt() {
+        voteStatus(true, 0xFF202020);
+        ink.invalidate();
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.widgetPolarity());
+        ink.resetForRedress();
+        assertEquals(ink.polarity(), ink.widgetPolarity());
+        assertEquals(ChromeInk.Polarity.DARK_INK, ink.widgetPolarity());
+    }
+
+    /** With no Home vote yet the chrome-wide answer stands. */
+    @Test
+    public void withoutAHomeVoteTheWidgetsFollowTheChrome() {
+        voteStatus(false, 0xFF202020);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.polarity());
+        assertEquals(ink.polarity(), ink.widgetPolarity());
+    }
 }
