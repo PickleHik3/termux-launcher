@@ -78,12 +78,41 @@ more. Where a page stands is its pose's matrix, drawn over the slot whenever the
 so a transition that turns pages (Carousel, Depth, Stack, a sink) redraws a handful of bitmaps
 and neither captures again nor falls back to live pages at its first frame; a slide is still the
 layer's translation alone, and a fade only changes the slots' alphas. A new capture is for a new
-content or a different set of pages, and happens at rest. The pages layer has a budget of its own,
-apart from the blur layer's `MAX_LAYER_BYTES`: `MAX_PAGES_ATLAS_BYTES`, four quarter-scale budget
-screens (three whole pages and the decor, 4 x 360 x 800 x 4 = 4,608,000 B at 1440 x 3200), and
-`MAX_PAGES_LAYER_BYTES`, twice that, so a refresh in flight never costs the held atlas its place.
-Only the held atlas stays resident. A surface with more than three pages near it, or whose pages
-do not fit, keeps the pages live.
+content or a different set of pages, and happens at rest.
+
+One pool, 2026-11-18 (replaces a budget of 4.4 MiB an atlas and twice that a surface, 79 MiB in the
+worst case). The pages layers of every surface in the window share one pool, `GlassPagePool`, sized
+by the phone's RAM and read once per process (`ActivityManager.getMemoryInfo` and
+`isLowRamDevice`). Pages are always frozen on the wall in a crossing, on every phone; the tier sets
+only how sharply:
+
+| RAM | Pages captured at | Pool | Arithmetic (nine slots: three surfaces, three 1080 x 2400 pages, 16 px gutter) |
+|---|---|---|---|
+| more than 4 GiB and not a low-RAM device | a quarter | 6 MiB = 6,291,456 B | 278 x 608 x 4 = 676,096 B a slot, 9 slots 6,084,864 B |
+| 4 GiB or less, or a low-RAM device | an eighth | 2 MiB = 2,097,152 B | 139 x 304 x 4 = 169,024 B a slot, 9 slots 1,521,216 B |
+
+The live blur node keeps its own quarter scale; only the pages layer follows the tier. The worst
+case in all is eight blur layers and the pool, 8 x 1,152,000 + 6,291,456 = 15,507,456 B
+(`LiveBackdropBudgetTest`).
+
+- **Priority.** While the wall moves, surfaces whose rect overlaps the wall are served the pool
+  first (`GlassPagePool.order`). A capture counts its atlas against the pool from its start; the
+  held picture of the same surface stays beside it while both fit, else it goes first. A surface
+  the pool has no room for that frame keeps the picture it last held, without recording again; one
+  holding none draws live.
+- **Trim.** At `TRIM_MEMORY_RUNNING_LOW` and above, which includes the UI hiding and the process
+  moving to the background, every surface lets go of its pages pictures and the pool is empty. The
+  next crossing takes one capture per surface at its start and rides it through.
+- **The effect runs live.** A slot is captured without the blur, colours or frost. Those are the
+  page node's render effect, set where the frozen atlas is drawn, so the blur runs every frame on
+  the moving picture and a change of radius, tint or frost reaches the frozen layer at once. Only
+  the pages' content is a still, at most one refresh old. The refraction shader is drawn over the
+  picture at draw time and is never recorded into a capture.
+- **Live blur off** holds no pages layer at all (the surfaces draw their stored frame); the
+  setting stays the low-memory path.
+
+A surface with more than three pages near it, or whose pages do not fit the pool, keeps the pages
+live.
 
 ## 4. Kinds change only on a policy event
 
