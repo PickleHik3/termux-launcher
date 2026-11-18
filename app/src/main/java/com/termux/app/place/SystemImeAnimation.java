@@ -37,6 +37,14 @@ public final class SystemImeAnimation {
         ViewCompat.setWindowInsetsAnimationCallback(content,
             new WindowInsetsAnimationCompat.Callback(
                 WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                /** The IME inset the layout answered before this animation: where it starts. */
+                private int mStartImePx;
+
+                @Override
+                public void onPrepare(@NonNull WindowInsetsAnimationCompat animation) {
+                    if (isIme(animation)) mStartImePx = host.laidForImePx();
+                }
+
                 @NonNull
                 @Override
                 public WindowInsetsAnimationCompat.BoundsCompat onStart(
@@ -47,6 +55,10 @@ public final class SystemImeAnimation {
                         // answered for it already.
                         ride.onAnimationStart();
                         ride.onAnimationStart(host.laidForImePx());
+                        // The first frame laid out for the end state draws before any progress:
+                        // hold the stack where the IME starts, not where it ends.
+                        ride.onAnimationProgress(mStartImePx);
+                        host.writeRide(ride.owns() && !host.suppressed() ? ride.offsetPx() : 0);
                     }
                     return bounds;
                 }
