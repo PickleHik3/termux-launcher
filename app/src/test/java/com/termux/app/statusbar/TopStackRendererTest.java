@@ -276,4 +276,100 @@ public class TopStackRendererTest {
         mFrames.flush("test");
         assertEquals(500f, mChips.getTranslationX(), 0.001f);
     }
+
+    // ---- The bar's ink ----------------------------------------------------------------------
+
+    private static final int DARK_INK = 0xFF202020;
+    private static final int PALE_INK = 0xFFE0E0E0;
+
+    /** Every array the sink was handed, copied: one entry per apply. */
+    private final java.util.ArrayList<int[]> mApplied = new java.util.ArrayList<>();
+
+    private TopStackScene.End inked(TopStackScene.End e, int ink) {
+        java.util.Arrays.fill(e.inks, ink);
+        e.inksResolved = true;
+        return e;
+    }
+
+    private void sink() {
+        mRenderer.setInks(inks -> mApplied.add(inks.clone()));
+    }
+
+    private void beginInked() {
+        mRenderer.begin(
+            inked(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true), PALE_INK),
+            inked(end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), DARK_INK), true);
+    }
+
+    @Test public void theInksCrossBlendedAndStandExactlyOnEachEndsAtItsEnds() {
+        sink();
+        beginInked();
+        frameAt(0f);
+        assertEquals(PALE_INK, mApplied.get(mApplied.size() - 1)[0]);
+        frameAt(0.5f);
+        int mid = mApplied.get(mApplied.size() - 1)[StatusInkSlots.COUNT - 1];
+        assertTrue("strictly between: " + Integer.toHexString(mid),
+            Color.red(mid) > Color.red(DARK_INK) && Color.red(mid) < Color.red(PALE_INK));
+        frameAt(1f);
+        for (int ink : mApplied.get(mApplied.size() - 1)) assertEquals(DARK_INK, ink);
+    }
+
+    @Test public void inksThatDidNotChangeAreNotAppliedAgain() {
+        sink();
+        beginInked();
+        frameAt(0.5f);
+        int applied = mApplied.size();
+        mRenderer.requestApply();
+        settle();
+        mRenderer.setWidth(WIDTH);
+        mRenderer.setProgress(0.5f);
+        settle();
+        assertEquals(applied, mApplied.size());
+    }
+
+    @Test public void theLandingAppliesNothingNewAndTheRestKeepsTheLandedInks() {
+        sink();
+        beginInked();
+        frameAt(0.5f);
+        frameAt(1f);
+        int applied = mApplied.size();
+        mRenderer.onLanding();
+        settle();
+        assertEquals(applied, mApplied.size());
+        // A rest asked for the page it settled on does not wipe the inks it landed with.
+        mRenderer.rest(end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true));
+        settle();
+        assertEquals(applied, mApplied.size());
+    }
+
+    @Test public void aRestAppliesItsInksOnlyWhenTheyChanged() {
+        sink();
+        int[] pale = new int[StatusInkSlots.COUNT];
+        java.util.Arrays.fill(pale, PALE_INK);
+        // The caller wrote these to the views itself: the renderer takes them as the standing ink.
+        mRenderer.restInks(pale);
+        mRenderer.rest(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true));
+        settle();
+        assertEquals(0, mApplied.size());
+        mRenderer.requestApply();
+        settle();
+        assertEquals(0, mApplied.size());
+    }
+
+    @Test public void aCrossingWithUnresolvedEndsWritesNoInks() {
+        sink();
+        mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
+            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+        frameAt(0.5f);
+        assertEquals(0, mApplied.size());
+    }
+
+    @Test public void theRendererSaysWhileItCrosses() {
+        assertEquals(false, mRenderer.crossing());
+        beginInked();
+        assertEquals(true, mRenderer.crossing());
+        frameAt(1f);
+        mRenderer.onLanding();
+        assertEquals(false, mRenderer.crossing());
+    }
 }

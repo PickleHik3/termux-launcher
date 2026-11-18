@@ -1295,6 +1295,27 @@ public final class StatusBarController {
         mWidgets.syncStatusBarInk();
     }
 
+    /** Once the host's top-stack renderer exists: its blended inks are written through the bar's views. */
+    public void bindTopStackInks() {
+        mWidgets.bindTopStackInks();
+    }
+
+    /** {@link StatusBarWidgets#resolveStatusInks}: a crossing's ends, measured once at begin. */
+    public boolean resolveStatusInks(@NonNull int[] out, boolean wearingLook) {
+        return mWidgets.resolveStatusInks(out, wearingLook);
+    }
+
+    /** The band the last {@link #resolveStatusInks} measured; null before the first. */
+    @Nullable
+    public com.termux.app.chrome.OnGlass.Resolution resolvedStatusBand() {
+        return mWidgets.resolvedBand();
+    }
+
+    /** {@link StatusBarWidgets#applySessionsBand}: the Workspace end's band, for a crossing. */
+    public void applySessionsBand(@Nullable com.termux.app.chrome.OnGlass.Resolution band) {
+        mWidgets.applySessionsBand(band);
+    }
+
     /** {@link StatusBarWidgets#updateStatusWidgets}. */
     public void updateStatusWidgets() {
         mWidgets.updateStatusWidgets();

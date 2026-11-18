@@ -563,6 +563,35 @@ public final class ChromeInk {
     }
 
     /**
+     * {@link #onGlass} as if {@code band}'s pane wore the glass {@code opacity} and {@code baseColor}
+     * describe, and nothing of the face it was told: what the bar would read once a page it has not
+     * landed on is dressed. A crossing asks it once, at begin, for the end the surface builders have
+     * not dressed yet; the pane's own face (what its surface told, {@link #noteBandGlass}) is put
+     * back before this returns, so every other reader still answers the glass that is drawn.
+     */
+    @NonNull
+    public OnGlass.Resolution onGlassWearing(@NonNull GlassBackdropCache.Band band,
+                                             @NonNull Rect screenRect,
+                                             @ColorInt int darkInk, @ColorInt int paleInk,
+                                             double target, float opacity,
+                                             @ColorInt int baseColor) {
+        BandGlass glass = glassFor(band);
+        float keptOpacity = glass.opacity;
+        boolean keptTinted = glass.tinted;
+        int keptBase = glass.baseColor;
+        glass.opacity = opacity < 0f ? 0f : (opacity > 1f ? 1f : opacity);
+        glass.tinted = true;
+        glass.baseColor = baseColor;
+        try {
+            return onGlass(band, screenRect, darkInk, paleInk, target);
+        } finally {
+            glass.opacity = keptOpacity;
+            glass.tinted = keptTinted;
+            glass.baseColor = keptBase;
+        }
+    }
+
+    /**
      * {@link #onGlass} for a band whose ink is not the chrome's to choose: the in-app keyboard,
      * whose key labels are its theme's and stand on its theme's key caps. The answer is a veil for
      * the band's glass and nothing else — {@link OnGlass.Resolution#ink} is whichever given ink

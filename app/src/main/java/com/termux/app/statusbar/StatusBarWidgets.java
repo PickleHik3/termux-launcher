@@ -23,6 +23,11 @@ final class StatusBarWidgets {
         mHost = host;
     }
 
+    /** The top stack's renderer writes a crossing's blended inks through this bar's views. */
+    void bindTopStackInks() {
+        mHost.topStack().setInks(this::applyStatusInks);
+    }
+
     /**
      * Hears the notifications the dock badges its icons with, while the status bar's
      * notifications indicator is on; null while it is off.
@@ -126,9 +131,45 @@ final class StatusBarWidgets {
      * band's veil moves.</p>
      */
     void syncStatusBarInk() {
+        // A crossing's renderer owns the content's inks: it wrote both ends' blend (resolved once
+        // at begin) and lands on the end's; the settle's sync then measures at rest.
+        TopStackRenderer top = mHost.topStack();
+        if (top.crossing()) {
+            top.requestApply();
+            return;
+        }
+        if (!resolveStatusInks(mRestInks, false)) return;
+        applyStatusInks(mRestInks);
+        top.restInks(mRestInks);
+        applySessionsBand(mResolvedBand);
+        com.termux.app.statusbar.MediaWidgetView media = mHost.findViewById(R.id.terminal_media_widget);
+        if (media != null) media.onThemeChanged();
+        com.termux.app.terminal.TerminalClockWidget clock = mHost.findViewById(R.id.terminal_clock_widget);
+        if (clock != null) clock.onThemeChanged();
+    }
+
+    /** What the bar's content wears at rest, in {@link StatusInkSlots} order; reused. */
+    private final int[] mRestInks = new int[StatusInkSlots.COUNT];
+    /** The band the last {@link #resolveStatusInks} measured: what the sessions chip is inked on. */
+    @Nullable private com.termux.app.chrome.OnGlass.Resolution mResolvedBand;
+
+    /** The band the last {@link #resolveStatusInks} measured; null before the first. */
+    @Nullable com.termux.app.chrome.OnGlass.Resolution resolvedBand() {
+        return mResolvedBand;
+    }
+
+    /**
+     * Measures every ink the bar's content is drawn in into {@code out} ({@link StatusInkSlots}),
+     * writing nothing to a view. False, with {@code out} untouched, until the bar has been laid
+     * out and a wallpaper sample exists.
+     *
+     * @param wearingLook the band is asked of the glass the status look now answers (the look a
+     *     crossing's arriving end would be dressed in) and not of the glass the pane was told
+     */
+    boolean resolveStatusInks(@NonNull int[] out, boolean wearingLook) {
         com.termux.app.chrome.ChromeInk ink = mHost.chrome().ink();
         if (!ink.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect))
-            return;
+            return false;
         int primary = statusInkSeed(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
         // A real ink pair: the primary role toned dark (about 30) for pale glass and pale (about
         // 85) for dark glass, so the band can flip with the chrome's polarity rather than buying
@@ -136,9 +177,16 @@ final class StatusBarWidgets {
         double primaryTone = com.termux.app.theme.SchemeTone.tone(primary);
         int darkPrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 30d - primaryTone);
         int palePrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 85d - primaryTone);
-        com.termux.app.chrome.OnGlass.Resolution band = ink.onGlass(
-            com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect,
-            darkPrimary, palePrimary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        com.termux.app.chrome.OnGlass.Resolution band = wearingLook
+            ? mHost.chrome().glass().statusBandOnGlassWearingLook(mStatusInkRect, darkPrimary,
+                palePrimary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT)
+            : null;
+        if (band == null) {
+            band = ink.onGlass(
+                com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect,
+                darkPrimary, palePrimary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        }
+        mResolvedBand = band;
 
         // A muted widget is the AI glyph's few seconds of afterlife: the state is said by the
         // neutral role, and the fade is allowed only as far as the backdrop can carry it.
@@ -148,38 +196,82 @@ final class StatusBarWidgets {
             com.termux.app.statusbar.StatusBarInk.MUTED_ALPHA,
             com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
 
-        for (int widgetId : STATUS_INK_WIDGET_IDS) {
-            com.termux.app.statusbar.StatusBarWidgetView widget = mHost.findViewById(widgetId);
-            if (widget == null) continue;
+        for (int i = 0; i < STATUS_INK_WIDGET_IDS.length; i++) {
+            int at = StatusInkSlots.widget(i);
+            com.termux.app.statusbar.StatusBarWidgetView widget =
+                mHost.findViewById(STATUS_INK_WIDGET_IDS[i]);
+            if (widget == null) {
+                out[at + StatusInkSlots.WIDGET_BODY] = 0;
+                out[at + StatusInkSlots.WIDGET_LARGE] = 0;
+                out[at + StatusInkSlots.WIDGET_MUTED] = 0;
+                continue;
+            }
             int seed = statusInkSeed(widget.colorRole());
-            widget.setInk(
-                ink.inkOn(band, seed, seed, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT),
-                ink.inkOn(band, seed, seed, com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT),
-                muted);
+            out[at + StatusInkSlots.WIDGET_BODY] =
+                ink.inkOn(band, seed, seed, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+            out[at + StatusInkSlots.WIDGET_LARGE] =
+                ink.inkOn(band, seed, seed, com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
+            out[at + StatusInkSlots.WIDGET_MUTED] = muted;
         }
-        for (int dotId : STATUS_INK_DOT_IDS) {
-            com.termux.app.statusbar.MaterialDotSeparatorView dot = mHost.findViewById(dotId);
-            if (dot == null) continue;
+        for (int i = 0; i < STATUS_INK_DOT_IDS.length; i++) {
+            com.termux.app.statusbar.MaterialDotSeparatorView dot =
+                mHost.findViewById(STATUS_INK_DOT_IDS[i]);
+            if (dot == null) {
+                out[StatusInkSlots.dot(i)] = 0;
+                continue;
+            }
             int seed = statusInkSeed(dot.colorRole());
-            dot.setInk(ink.inkOn(band, seed, seed,
-                com.termux.app.chrome.OnGlass.TARGET_DECORATION));
+            out[StatusInkSlots.dot(i)] = ink.inkOn(band, seed, seed,
+                com.termux.app.chrome.OnGlass.TARGET_DECORATION);
+        }
+        out[StatusInkSlots.LENS_SURFACE] = band.surface;
+        out[StatusInkSlots.PINNED_SURFACE] = band.surface;
+        out[StatusInkSlots.CLOCK_SURFACE] = band.surface;
+        out[StatusInkSlots.CLOCK_INK] = band.ink;
+        return true;
+    }
+
+    /**
+     * Writes {@code inks} ({@link StatusInkSlots}) to the bar's content: each view takes its
+     * colour only when it differs from the one it wears (the views compare), so an unchanged
+     * array writes nothing. The sessions chip and the window chips are Workspace content that
+     * slides with the chips and does not blend ({@link #applySessionsBand}); the media widget and
+     * the clock's theme are the scheme's, not the band's.
+     */
+    void applyStatusInks(@NonNull int[] inks) {
+        for (int i = 0; i < STATUS_INK_WIDGET_IDS.length; i++) {
+            com.termux.app.statusbar.StatusBarWidgetView widget =
+                mHost.findViewById(STATUS_INK_WIDGET_IDS[i]);
+            if (widget == null) continue;
+            int at = StatusInkSlots.widget(i);
+            widget.setInk(inks[at + StatusInkSlots.WIDGET_BODY],
+                inks[at + StatusInkSlots.WIDGET_LARGE], inks[at + StatusInkSlots.WIDGET_MUTED]);
+        }
+        for (int i = 0; i < STATUS_INK_DOT_IDS.length; i++) {
+            com.termux.app.statusbar.MaterialDotSeparatorView dot =
+                mHost.findViewById(STATUS_INK_DOT_IDS[i]);
+            if (dot != null) dot.setInk(inks[StatusInkSlots.dot(i)]);
         }
         com.termux.app.statusbar.StatusBarLensView lens = mHost.findViewById(R.id.terminal_status_lens);
-        if (lens != null) lens.setBandSurface(band.surface);
-        com.termux.app.statusbar.SessionsIndicatorView sessions =
-            mHost.findViewById(R.id.terminal_sessions_indicator);
-        if (sessions != null) sessions.setBandInk(ink, band);
-        // What stands on the same band takes its ink from the same resolution.
+        if (lens != null) lens.setBandSurface(inks[StatusInkSlots.LENS_SURFACE]);
         com.termux.app.statusbar.PinnedNotificationsView pinned =
             mHost.findViewById(R.id.terminal_pinned_notifications);
-        if (pinned != null) pinned.setBandSurface(band.surface);
-        com.termux.app.statusbar.MediaWidgetView media = mHost.findViewById(R.id.terminal_media_widget);
-        if (media != null) media.onThemeChanged();
+        if (pinned != null) pinned.setBandSurface(inks[StatusInkSlots.PINNED_SURFACE]);
         com.termux.app.terminal.TerminalClockWidget clock = mHost.findViewById(R.id.terminal_clock_widget);
         if (clock != null) {
-            clock.setBandInk(band.surface, band.ink);
-            clock.onThemeChanged();
+            clock.setBandInk(inks[StatusInkSlots.CLOCK_SURFACE], inks[StatusInkSlots.CLOCK_INK]);
         }
+    }
+
+    /**
+     * The sessions chip is inked on {@code band}, the Workspace end's: it slides with the window
+     * chips and does not blend across a crossing. Nothing for a null band.
+     */
+    void applySessionsBand(@Nullable com.termux.app.chrome.OnGlass.Resolution band) {
+        if (band == null) return;
+        com.termux.app.statusbar.SessionsIndicatorView sessions =
+            mHost.findViewById(R.id.terminal_sessions_indicator);
+        if (sessions != null) sessions.setBandInk(mHost.chrome().ink(), band);
     }
 
     /** The role colour a status tier is written in; its hue is the tier, and the toning keeps it. */

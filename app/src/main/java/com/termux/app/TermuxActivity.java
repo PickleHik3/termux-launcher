@@ -2071,6 +2071,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mStackRenderer.attach(mFrames);
         // The top stack's writer joins it: the bar's ride, the strip and the chips' slide.
         mTopStackRenderer.attach(mFrames);
+        mStatusBar.bindTopStackInks();
         mRowsGuard.attach(mFrames.guards());
         mFrames.setLog((event, detail) -> {
             if (com.termux.app.chrome.MotionLog.enabled) com.termux.app.chrome.MotionLog.log(event, detail);
@@ -7468,7 +7469,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * stack's two ends, each with what its layout says of the bar, its look, and the chips and
      * strip as they stand. The two ends draw the bar in one outline exactly when the seam says
      * the bar stands still ({@link com.termux.app.place.SeamCrossing#barStill}), which the scene's
-     * {@code shared} must agree with. Inks are not read yet.
+     * {@code shared} must agree with. Each end's inks are measured here, once (a crossing
+     * measures nothing, ADR 0029 section 9): the committed end as the bar stands, the other under
+     * its page's look; an end that cannot be measured wears the other's, so nothing flips.
      */
     private void beginTopStack(@NonNull com.termux.app.wall.PageRef here,
                                @NonNull com.termux.app.wall.PageRef there,
@@ -7479,7 +7482,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View strip = findViewById(R.id.terminal_status_bar_glass_surface);
         boolean stripHereShown = mTopFadeActive ? mTopFadeStripHere != null
             : strip != null && strip.isShown();
+        fillTopInks(here, there);
         mTopStackRenderer.begin(mTopEndHere, mTopEndThere, stripHereShown);
+    }
+
+    /**
+     * Both top ends' inks. The arriving end is asked of the glass its page's look gives the bar,
+     * with the status reads answering that page; the sessions chip, which slides with the chips
+     * and does not blend, is inked on the Workspace end's band. The committed end is measured
+     * last so the band's memory finishes on what is drawn.
+     */
+    private void fillTopInks(@NonNull com.termux.app.wall.PageRef here,
+                             @NonNull com.termux.app.wall.PageRef there) {
+        boolean sameLook = mTopEndHere.lookId == mTopEndThere.lookId;
+        com.termux.app.chrome.OnGlass.Resolution thereBand = null;
+        boolean thereOk;
+        if (sameLook) {
+            thereOk = false;
+        } else {
+            mLookIdOverride = mTopEndThere.lookId;
+            try {
+                thereOk = mStatusBar.resolveStatusInks(mTopEndThere.inks, true);
+            } finally {
+                mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+            }
+            if (thereOk) thereBand = mStatusBar.resolvedStatusBand();
+        }
+        boolean hereOk = mStatusBar.resolveStatusInks(mTopEndHere.inks, false);
+        com.termux.app.chrome.OnGlass.Resolution hereBand = hereOk
+            ? mStatusBar.resolvedStatusBand() : null;
+        if (sameLook || !thereOk) {
+            if (hereOk) System.arraycopy(mTopEndHere.inks, 0, mTopEndThere.inks, 0,
+                mTopEndHere.inks.length);
+            thereOk = hereOk;
+            thereBand = hereBand;
+        } else if (!hereOk) {
+            System.arraycopy(mTopEndThere.inks, 0, mTopEndHere.inks, 0, mTopEndThere.inks.length);
+            hereOk = true;
+            hereBand = thereBand;
+        }
+        mTopEndHere.inksResolved = hereOk;
+        mTopEndThere.inksResolved = thereOk;
+        mStatusBar.applySessionsBand(!here.isHome() ? hereBand : !there.isHome() ? thereBand
+            : hereBand);
     }
 
     private void fillTopEnd(@NonNull com.termux.app.statusbar.TopStackScene.End end,

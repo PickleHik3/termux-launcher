@@ -24,8 +24,10 @@ import com.termux.app.window.FrameStep;
  * crossfades themselves are built and settled by the activity (TopBandFade); this writes their
  * share. Without a pipeline (a test, before the window) a share is written at once.
  *
- * <p>Ink is not written yet: {@link TopStackScene.Frame#inks} is computed and left unapplied for
- * the step that gives the bar's content its blended colours. Nothing allocates per frame.
+ * <p>The ink is written too: {@link TopStackScene.Frame#inks} goes to the {@link Inks} sink
+ * whenever it differs from what the sink was last given, so a crossing writes the bar's content
+ * its blended colours and a rest writes nothing. A crossing measures nothing (ADR 0029 section
+ * 9): both ends' inks are resolved once, at begin, by the activity. Nothing allocates per frame.
  */
 public final class TopStackRenderer {
 
@@ -33,6 +35,12 @@ public final class TopStackRenderer {
     public interface Views {
         /** The window's view of {@code id}; null while it has none. */
         @Nullable View view(int id);
+    }
+
+    /** Where the frame's blended inks go: the bar's content, owned by {@link StatusBarWidgets}. */
+    public interface Inks {
+        /** Writes {@code inks} (a {@link StatusInkSlots} layout) to the content; reads it only for the call. */
+        void apply(@NonNull int[] inks);
     }
 
     private static final String[] OWNED = {"terminal_window_bar_host.translationX",
@@ -56,6 +64,10 @@ public final class TopStackRenderer {
     private boolean mRideWearsTo;
     private int mWidth;
     private float mGlassShare;
+    @Nullable private Inks mInks;
+    /** What the sink holds now; {@link #mInksKnown} once it holds anything this writer knows. */
+    private final int[] mAppliedInks = new int[TopStackScene.INK_COUNT];
+    private boolean mInksKnown;
     /** The number of view writes made so far: a test's and a trace's count. */
     int mWriteCount;
 
@@ -82,6 +94,28 @@ public final class TopStackRenderer {
             });
         }
         mGuard = guard;
+    }
+
+    /** The bar's content, which the frame's inks are written to. */
+    public void setInks(@Nullable Inks inks) {
+        mInks = inks;
+    }
+
+    /**
+     * The rest's inks, measured and already written to the content by their owner (the bar's own
+     * sync at rest): the renderer takes them as what the content wears, and as the rest's, so a
+     * landing or a later frame writes only a difference.
+     */
+    public void restInks(@NonNull int[] inks) {
+        System.arraycopy(inks, 0, mRest.inks, 0, TopStackScene.INK_COUNT);
+        mRest.inksResolved = true;
+        System.arraycopy(inks, 0, mAppliedInks, 0, TopStackScene.INK_COUNT);
+        mInksKnown = true;
+    }
+
+    /** A crossing is under way: the renderer, not the bar's sync, owns the content's inks. */
+    public boolean crossing() {
+        return mCrossing;
     }
 
     /** A share the renderer does not own moved (a crossfade was built): the step writes it on this frame. */
@@ -161,7 +195,9 @@ public final class TopStackRenderer {
      * does not end a crossing.
      */
     public void rest(@NonNull TopStackScene.End front) {
-        mRest.set(front);
+        // The front's inks come with it only when it was measured; else the rest keeps its own.
+        if (front.inksResolved) mRest.set(front);
+        else mRest.setShape(front);
         requestApply();
     }
 
@@ -187,7 +223,7 @@ public final class TopStackRenderer {
         writeTx(mViews.view(R.id.terminal_window_bar_host), mFrame.slabTx);
         writeTx(mViews.view(R.id.terminal_status_bar_background), mFrame.stripTx);
         writeTx(mViews.view(R.id.terminal_status_place_content), mFrame.chipsTx);
-        // The inks (mFrame.inks) are the bar content's, written by the step that owns them.
+        writeInks(riding);
         if (mCrossing) {
             mGlassShare = riding ? (mRideWearsTo ? 1f : 0f) : mFrame.lookShare;
             writeGlass();
@@ -198,6 +234,24 @@ public final class TopStackRenderer {
             for (int slot = 0; slot < OWNED.length; slot++) guard.wrote(slot);
             if (landing) guards.setLanding(false);
         }
+    }
+
+    /**
+     * Hands the frame's inks to the sink when they differ from what it holds. A frame whose ends
+     * were never measured has none to give; a riding bar wears one end's.
+     */
+    private void writeInks(boolean riding) {
+        Inks sink = mInks;
+        if (sink == null) return;
+        boolean known = !mCrossing ? mRest.inksResolved
+            : riding ? (mRideWearsTo ? mTo.inksResolved : mFrom.inksResolved)
+            : mFrom.inksResolved && mTo.inksResolved;
+        if (!known) return;
+        if (mInksKnown && java.util.Arrays.equals(mFrame.inks, mAppliedInks)) return;
+        System.arraycopy(mFrame.inks, 0, mAppliedInks, 0, TopStackScene.INK_COUNT);
+        mInksKnown = true;
+        sink.apply(mAppliedInks);
+        mWriteCount++;
     }
 
     private void writeTx(@Nullable View view, float x) {

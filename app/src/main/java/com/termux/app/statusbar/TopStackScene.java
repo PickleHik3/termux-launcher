@@ -25,10 +25,11 @@ public final class TopStackScene {
     private TopStackScene() {}
 
     /**
-     * Ink slots in an {@link End} and a {@link Frame}: the renderer maps each to the widgets of
-     * the bar's content (clock, readings, chips, icons) and writes the blended colour back.
+     * Ink slots in an {@link End} and a {@link Frame}: one per colour the bar's content is drawn
+     * in, laid out by {@link StatusInkSlots}; the renderer hands the blended array to its
+     * {@link TopStackRenderer.Inks} sink.
      */
-    public static final int INK_COUNT = 8;
+    public static final int INK_COUNT = StatusInkSlots.COUNT;
 
     /** {@link Frame#wornLookId()} while the look is part way from one end's to the other's. */
     public static final int MIXED = Integer.MIN_VALUE;
@@ -52,8 +53,17 @@ public final class TopStackScene {
         public boolean stripDressedForBar;
         /** Ink colours for the bar's content; light and dark looks give different values. */
         public final int[] inks = new int[INK_COUNT];
+        /** {@link #inks} hold a measurement; false until the owner resolved them. */
+        public boolean inksResolved;
 
         public void set(@NonNull End o) {
+            setShape(o);
+            inksResolved = o.inksResolved;
+            System.arraycopy(o.inks, 0, inks, 0, INK_COUNT);
+        }
+
+        /** Everything but the inks: a rest keeps the inks the last measurement gave it. */
+        public void setShape(@NonNull End o) {
             barShown = o.barShown;
             edge = o.edge;
             side = o.side;
@@ -62,7 +72,6 @@ public final class TopStackScene {
             chipsShown = o.chipsShown;
             stripShown = o.stripShown;
             stripDressedForBar = o.stripDressedForBar;
-            System.arraycopy(o.inks, 0, inks, 0, INK_COUNT);
         }
     }
 

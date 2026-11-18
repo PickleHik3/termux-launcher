@@ -43,6 +43,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -192,6 +193,100 @@ public class StatusBarControllerTest {
         assertFalse(mBar.isStatusBarVertical());
         standOn(PlaceLayout.Edge.LEFT);
         assertTrue(mBar.isStatusBarVertical());
+    }
+
+    // ---- The bar's inks: resolved into slots, applied from slots --------------------------------
+
+    private StatusBarWidgetView widgetAt(int id) {
+        StatusBarWidgetView widget = new StatusBarWidgetView(RuntimeEnvironment.getApplication(), null);
+        mHost.views.put(id, widget);
+        return widget;
+    }
+
+    private MaterialDotSeparatorView dotAt(int id) {
+        MaterialDotSeparatorView dot =
+            new MaterialDotSeparatorView(RuntimeEnvironment.getApplication(), null);
+        mHost.views.put(id, dot);
+        return dot;
+    }
+
+    private StatusBarWidgets widgets() {
+        return ReflectionHelpers.getField(mBar, "mWidgets");
+    }
+
+    private static int[] distinctInks() {
+        int[] inks = new int[StatusInkSlots.COUNT];
+        for (int i = 0; i < inks.length; i++) inks[i] = 0xFF000000 | (0x010203 * (i + 1) + 1000);
+        return inks;
+    }
+
+    @Test
+    public void everyWidgetAndDotTakesItsOwnSlotsOfTheArray() {
+        StatusBarWidgetView cpu = widgetAt(R.id.terminal_status_widget_cpu);
+        StatusBarWidgetView ai = widgetAt(R.id.terminal_status_widget_ai);
+        MaterialDotSeparatorView dot = dotAt(R.id.terminal_status_dot_ai);
+        int[] inks = distinctInks();
+        widgets().applyStatusInks(inks);
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(0) + StatusInkSlots.WIDGET_BODY]),
+            ReflectionHelpers.<Integer>getField(cpu, "mLabelInk"));
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(0) + StatusInkSlots.WIDGET_LARGE]),
+            ReflectionHelpers.<Integer>getField(cpu, "mIconInk"));
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(5) + StatusInkSlots.WIDGET_MUTED]),
+            ReflectionHelpers.<Integer>getField(ai, "mMutedInk"));
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.dot(4)]),
+            ReflectionHelpers.<Integer>getField(dot, "mInk"));
+    }
+
+    @Test
+    public void applyingTheSameInksTwiceWritesNothingTheSecondTime() {
+        StatusBarWidgetView cpu = widgetAt(R.id.terminal_status_widget_cpu);
+        MaterialDotSeparatorView dot = dotAt(R.id.terminal_status_dot_cpu_ram);
+        int[] inks = distinctInks();
+        widgets().applyStatusInks(inks);
+        // A write boxes a fresh Integer (these are past the small-int cache): the same object
+        // after the second apply means the setters stood on their compare.
+        Integer label = ReflectionHelpers.getField(cpu, "mLabelInk");
+        Integer dotInk = ReflectionHelpers.getField(dot, "mInk");
+        widgets().applyStatusInks(inks.clone());
+        assertSame(label, ReflectionHelpers.<Integer>getField(cpu, "mLabelInk"));
+        assertSame(dotInk, ReflectionHelpers.<Integer>getField(dot, "mInk"));
+        int[] moved = inks.clone();
+        moved[StatusInkSlots.dot(0)] ^= 0x00FF00;
+        widgets().applyStatusInks(moved);
+        assertEquals(Integer.valueOf(moved[StatusInkSlots.dot(0)]),
+            ReflectionHelpers.<Integer>getField(dot, "mInk"));
+    }
+
+    @Test
+    public void aCrossingsFramesReachTheViewsAndTheBarsOwnSyncStandsDown() {
+        mBar.bindTopStackInks();
+        StatusBarWidgetView cpu = widgetAt(R.id.terminal_status_widget_cpu);
+        TopStackScene.End from = new TopStackScene.End();
+        TopStackScene.End to = new TopStackScene.End();
+        for (TopStackScene.End e : new TopStackScene.End[] {from, to}) {
+            e.barShown = true;
+            e.edge = PlaceLayout.Edge.TOP;
+            e.inksResolved = true;
+        }
+        e0(from, 0xFFE0E0E0);
+        e0(to, 0xFF202020);
+        to.side = com.termux.app.page.Side.WORKSPACE;
+        mHost.topStack.begin(from, to, true);
+        mHost.topStack.setProgress(0.5f);
+        int mid = ReflectionHelpers.<Integer>getField(cpu, "mLabelInk");
+        assertTrue(Integer.toHexString(mid), android.graphics.Color.red(mid) > 0x20
+            && android.graphics.Color.red(mid) < 0xE0);
+        // The renderer owns the inks while it crosses: the sync reaches no chrome (the fake
+        // throws on it) and writes nothing.
+        mBar.syncStatusBarInk();
+        assertEquals(Integer.valueOf(mid), ReflectionHelpers.<Integer>getField(cpu, "mLabelInk"));
+        mHost.topStack.setProgress(1f);
+        assertEquals(Integer.valueOf(0xFF202020),
+            ReflectionHelpers.<Integer>getField(cpu, "mLabelInk"));
+    }
+
+    private static void e0(TopStackScene.End end, int ink) {
+        java.util.Arrays.fill(end.inks, ink);
     }
 
     /** Counts the grid holds the scheduler takes; posts nothing. */
