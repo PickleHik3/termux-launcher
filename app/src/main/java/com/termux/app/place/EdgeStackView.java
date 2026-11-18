@@ -115,15 +115,29 @@ public class EdgeStackView extends LinearLayout {
         boolean reversed = mEdge == Edge.BOTTOM || mEdge == Edge.RIGHT;
         int count = outermostFirst.size();
         boolean moved = false;
+        boolean reordered = false;
         for (int position = 0; position < count; position++) {
             View bar = outermostFirst.get(reversed ? count - 1 - position : position);
             if (bar == null) continue;
             ViewGroup parent = bar.getParent() instanceof ViewGroup
                 ? (ViewGroup) bar.getParent() : null;
             if (parent == this && indexOfChild(bar) == position) continue;
-            if (parent != null) parent.removeView(bar);
-            addView(bar, Math.min(position, getChildCount()));
+            if (parent == this) {
+                // A bar this stack already holds changes place without leaving the window: a
+                // removeView/addView pair detaches it, and a bar re-attached mid-landing (the apps
+                // row) draws nothing until its layout settles again.
+                detachViewFromParent(bar);
+                attachViewToParent(bar, Math.min(position, getChildCount()), bar.getLayoutParams());
+                reordered = true;
+            } else {
+                if (parent != null) parent.removeView(bar);
+                addView(bar, Math.min(position, getChildCount()));
+            }
             moved = true;
+        }
+        if (reordered) {
+            requestLayout();
+            invalidate();
         }
         return moved;
     }
