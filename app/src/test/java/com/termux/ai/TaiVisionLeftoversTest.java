@@ -26,20 +26,22 @@ public class TaiVisionLeftoversTest {
     }
 
     @Test
-    public void visionToolsAndLegacyIdsAreDeletedAndNothingElse() {
+    public void sceneAndCutOutModelsAreDeletedAndDepthAndChatAreKept() {
         TaiModelSpec depth = spec("depth-anything-3-small", TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
-        TaiModelSpec other = spec("some-depth-import", TaiModelSpec.CAPABILITY_SCENE_SEGMENTATION);
+        TaiModelSpec depthImport = spec("some-depth-import", TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
+        TaiModelSpec scene = spec("some-scene-import", TaiModelSpec.CAPABILITY_SCENE_SEGMENTATION);
         TaiModelSpec chat = spec("gemma-4-e2b-it", TaiModelSpec.CAPABILITY_TEXT_CHAT);
-        Set<String> ids = TaiVisionLeftovers.idsToDelete(Arrays.asList(depth, other, chat),
-            Arrays.asList("u2net", "gemma-4-e2b-it", ""));
-        assertEquals(new LinkedHashSet<>(Arrays.asList("depth-anything-3-small", "some-depth-import", "u2net")), ids);
+        Set<String> ids = TaiVisionLeftovers.idsToDelete(Arrays.asList(depth, depthImport, scene, chat),
+            Arrays.asList("u2net", "depth-anything-v2-small", "gemma-4-e2b-it", ""));
+        assertEquals(new LinkedHashSet<>(Arrays.asList("some-scene-import", "u2net")), ids);
     }
 
     @Test
-    public void aLegacySpecWithoutCapabilitiesIsStillDeleted() {
-        TaiModelSpec bare = spec("segformer-b0-ade20k", TaiModelSpec.CAPABILITY_TEXT_CHAT);
+    public void aDepthSpecKnownOnlyByIdIsKeptAndALegacySceneSpecIsDeleted() {
+        TaiModelSpec bareDepth = spec("depth-anything-v2-small", TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        TaiModelSpec bareScene = spec("segformer-b0-ade20k", TaiModelSpec.CAPABILITY_TEXT_CHAT);
         assertEquals(Collections.singleton("segformer-b0-ade20k"),
-            TaiVisionLeftovers.idsToDelete(Collections.singletonList(bare), Collections.<String>emptyList()));
+            TaiVisionLeftovers.idsToDelete(Arrays.asList(bareDepth, bareScene), Collections.<String>emptyList()));
     }
 
     @Test
