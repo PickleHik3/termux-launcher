@@ -3,6 +3,7 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
@@ -34,6 +35,18 @@ public enum ExtraKeysTarget {
         mPage2Key = page2Key;
         mHeightKey = heightKey;
         mMarkingPlace = markingPlace;
+    }
+
+    /** The target a page's own extra keys go to. */
+    @NonNull
+    public static ExtraKeysTarget forPage(@NonNull PageKind kind) {
+        switch (kind) {
+            case HOME: return HOME;
+            case DISPLAY: return DISPLAY;
+            case ASSISTANT: return ASSISTANT;
+            case TERMINAL:
+            default: return TERMINAL;
+        }
     }
 
     /** The two page lines, in order. */

@@ -1,5 +1,9 @@
 package com.termux.app.wall;
 
+import androidx.annotation.NonNull;
+
+import com.termux.app.page.PageKind;
+
 /**
  * The kinds of page on the wall's row, in the order they stand (ADR 0008), and the places the
  * chrome is dressed for. The row has two: {@link #WIDGETS} carries every Home page and
@@ -28,5 +32,17 @@ public enum PaneWallPage {
     /** The name {@code wall.go} and {@code launcherctl} use. */
     public String toolName() {
         return name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** The page kind of ADR 0030 this place stands for. */
+    @NonNull
+    public PageKind pageKind() {
+        switch (this) {
+            case WIDGETS: return PageKind.HOME;
+            case DISPLAY: return PageKind.DISPLAY;
+            case ASSISTANT: return PageKind.ASSISTANT;
+            case TERMINAL:
+            default: return PageKind.TERMINAL;
+        }
     }
 }
