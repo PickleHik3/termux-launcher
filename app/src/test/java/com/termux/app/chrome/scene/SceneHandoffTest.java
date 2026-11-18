@@ -22,9 +22,9 @@ public class SceneHandoffTest {
         assertTrue(ring.push(SceneEventRing.MOVE, 30f, 40f));
         assertTrue(ring.push(SceneEventRing.UP, 50f, 60f));
         assertFalse(ring.isEmpty());
-        assertEquals(3, ring.drainInto(touch));
+        assertEquals(3, ring.drainInto(touch, 0.0));
         assertTrue(ring.isEmpty());
-        assertEquals(0, ring.drainInto(touch));
+        assertEquals(0, ring.drainInto(touch, 0.0));
         // View 100 tall at scale 1: y flips; up keeps the last position, z goes negative.
         touch.fill(mouse, 100f, 1f);
         assertEquals(50f, mouse[0], 0f);
@@ -39,11 +39,11 @@ public class SceneHandoffTest {
             assertTrue(ring.push(SceneEventRing.MOVE, i, 0f));
         }
         assertFalse(ring.push(SceneEventRing.MOVE, 99f, 0f));
-        assertEquals(SceneEventRing.CAPACITY, ring.drainInto(new SceneTouch()));
+        assertEquals(SceneEventRing.CAPACITY, ring.drainInto(new SceneTouch(), 0.0));
         assertTrue(ring.push(SceneEventRing.DOWN, 1f, 1f));
         // The indices wrapped past the capacity once; the record still arrives.
         SceneTouch touch = new SceneTouch();
-        assertEquals(1, ring.drainInto(touch));
+        assertEquals(1, ring.drainInto(touch, 0.0));
         assertTrue(touch.isDown());
     }
 
@@ -60,7 +60,7 @@ public class SceneHandoffTest {
         SceneTouch touch = new SceneTouch();
         producer.start();
         int taken = 0;
-        while (producer.isAlive() || !ring.isEmpty()) taken += ring.drainInto(touch);
+        while (producer.isAlive() || !ring.isEmpty()) taken += ring.drainInto(touch, 0.0);
         producer.join();
         assertEquals(accepted[0], taken);
     }

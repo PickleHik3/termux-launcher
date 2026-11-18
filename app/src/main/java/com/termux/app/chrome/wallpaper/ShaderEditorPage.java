@@ -18,15 +18,20 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.textfield.TextInputEditText;
 import com.termux.R;
+import com.termux.ai.TaiDepth;
 import com.termux.app.chrome.scene.ShaderErrors;
 import com.termux.app.chrome.scene.ShaderSafety;
 import com.termux.app.chrome.scene.ShaderStore;
 
+import java.io.File;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * The shader editor: name, a monospace code box that scrolls sideways, Paste and Import file, the
- * error strip, the knobs (Quality, Frame rate, Texture), Apply, Back to photo while a motion is in
+ * error strip, the knobs (Quality, Frame rate), the Photo and Depth rows, Apply, Back to photo while a motion is in
  * use, and Delete. The page edits a draft; the host checks, saves and applies it
  * ({@link Actions#onApply}). Nothing is written until Apply.
  */
@@ -44,13 +49,18 @@ public final class ShaderEditorPage {
         @Nullable public final String texture;
         /** The texture the shader was saved with, to remove when it changed. */
         @Nullable public final String savedTexture;
+        /** The iChannel1 (depth) file name inside the shader's folder, or null. */
+        @Nullable public final String depth;
+        /** The depth the shader was saved with, to remove when it changed. */
+        @Nullable public final String savedDepth;
         public final boolean isNew;
         /** Opened from a bundled example: Apply saves a copy under {@link #id}, a fresh one. */
         public final boolean isExample;
 
         Draft(@NonNull String id, @NonNull String name, @NonNull String source,
               @NonNull ShaderSafety.Quality quality, int rateHz, @Nullable String texture,
-              @Nullable String savedTexture, boolean isNew, boolean isExample) {
+              @Nullable String savedTexture, @Nullable String depth, @Nullable String savedDepth,
+              boolean isNew, boolean isExample) {
             this.isExample = isExample;
             this.id = id;
             this.name = name;
@@ -59,13 +69,16 @@ public final class ShaderEditorPage {
             this.rateHz = rateHz;
             this.texture = texture;
             this.savedTexture = savedTexture;
+            this.depth = depth;
+            this.savedDepth = savedDepth;
             this.isNew = isNew;
         }
 
         /** The same draft under another name. */
         @NonNull
         Draft withName(@NonNull String other) {
-            return new Draft(id, other, source, quality, rateHz, texture, savedTexture, isNew, isExample);
+            return new Draft(id, other, source, quality, rateHz, texture, savedTexture, depth, savedDepth, isNew,
+                isExample);
         }
     }
 
@@ -82,8 +95,14 @@ public final class ShaderEditorPage {
         /** Import file. */
         void onImport();
 
-        /** Choose image (the texture). */
+        /** Choose image for the Photo (the texture). */
         void onPickTexture(@NonNull String id);
+
+        /** Choose image for the Depth. */
+        void onPickDepth(@NonNull String id);
+
+        /** An image the draft no longer uses and never saved: delete the file. */
+        void onDropFile(@NonNull String id, @NonNull String name);
 
         /** Delete, confirmed. */
         void onDelete(@NonNull String id);
@@ -100,8 +119,8 @@ public final class ShaderEditorPage {
     private final TextView mDescription;
     private final MaterialButtonToggleGroup mQuality;
     private final MaterialButtonToggleGroup mRate;
-    private final TextView mTextureLabel;
-    private final MaterialButton mTextureRemove;
+    private final ImageRowView mPhotoRow;
+    private final ImageRowView mDepthRow;
     private final View mAlsoRow;
     private final MaterialSwitch mAlso;
     private final View mProgress;
@@ -110,7 +129,6 @@ public final class ShaderEditorPage {
     private final MaterialButton mDelete;
     private final MaterialButton mPaste;
     private final MaterialButton mImport;
-    private final MaterialButton mTextureChoose;
 
     @NonNull private String mId = "";
     private boolean mIsNew = true;
@@ -120,6 +138,18 @@ public final class ShaderEditorPage {
     private int mRateValue = 30;
     @Nullable private String mTexture;
     @Nullable private String mSavedTexture;
+    @Nullable private String mDepth;
+    @Nullable private String mSavedDepth;
+    /** A depth picked by hand is kept across a photo change and then may not match it (not stored). */
+    private boolean mDepthMayNotMatch;
+    private ImageRowLogic.Run mRun = ImageRowLogic.Run.IDLE;
+    private int mRunPercent;
+    private boolean mDepthFailed;
+    @Nullable private TaiDepth.Handle mHandle;
+    /** Moves when a run or a model check is cancelled, so their late callbacks are dropped. */
+    private int mRunToken;
+    @Nullable private android.app.Dialog mDialog;
+    private boolean mReleased;
     /** What is saved for the open shader, and whether it is the one in use, for {@link #updateApply}. */
     @Nullable private String mSavedSource;
     @Nullable private ShaderStore.Meta mSavedMeta;
@@ -138,9 +168,8 @@ public final class ShaderEditorPage {
         mCode = mRoot.findViewById(R.id.shader_code);
         mErrors = mRoot.findViewById(R.id.shader_errors);
         mTooHeavy = mRoot.findViewById(R.id.shader_too_heavy);
-        mTextureLabel = mRoot.findViewById(R.id.shader_texture_label);
-        mTextureRemove = mRoot.findViewById(R.id.shader_texture_remove);
-        mTextureChoose = mRoot.findViewById(R.id.shader_texture_choose);
+        mPhotoRow = new ImageRowView(context, mRoot.findViewById(R.id.shader_photo_row), this::onPhotoAction);
+        mDepthRow = new ImageRowView(context, mRoot.findViewById(R.id.shader_depth_row), this::onDepthAction);
         mAlsoRow = mRoot.findViewById(R.id.live_also_row);
         mAlso = mRoot.findViewById(R.id.live_also_switch);
         mDescription = mRoot.findViewById(R.id.shader_description);
@@ -212,13 +241,6 @@ public final class ShaderEditorPage {
 
         mPaste.setOnClickListener(v -> paste());
         mImport.setOnClickListener(v -> mActions.onImport());
-        mTextureChoose.setOnClickListener(v -> mActions.onPickTexture(mId));
-        mTextureRemove.setOnClickListener(v -> {
-            // The file goes on Apply (or with the folder, for a shader never saved).
-            mTexture = null;
-            bindTexture();
-            updateApply();
-        });
         mApply.setOnClickListener(v -> apply());
         mBack.setOnClickListener(v -> mActions.onBackToPhoto());
         mDelete.setOnClickListener(v -> confirmDelete());
@@ -273,14 +295,19 @@ public final class ShaderEditorPage {
             mDescription.setText(example ? R.string.shader_example_note : R.string.shader_description);
             mQualityValue = m.quality;
             mRateValue = m.rateHz;
+            cancelRun();
             mTexture = example ? null : m.texture;
             mSavedTexture = mIsNew ? null : m.texture;
+            mDepth = example ? null : m.depth;
+            mSavedDepth = mIsNew ? null : m.depth;
+            mDepthMayNotMatch = false;
+            mDepthFailed = false;
             mSavedMeta = mIsNew ? null : meta;
             mSavedSource = mIsNew ? null : source;
             mInUse = inUse;
             checkByTag(mQuality, mQualityValue);
             checkByTag(mRate, Integer.valueOf(mRateValue));
-            bindTexture();
+            bindImages();
             showErrors(null);
             mAlso.setChecked(alsoPhone);
             mBack.setVisibility(motionInUse ? View.VISIBLE : View.GONE);
@@ -307,8 +334,8 @@ public final class ShaderEditorPage {
     @NonNull
     public Draft draft() {
         String name = ShaderEditorLogic.nameOrDefault(textOf(mName), mContext.getString(R.string.shader_default_name));
-        return new Draft(mId, name, textOf(mCode), mQualityValue, mRateValue, mTexture, mSavedTexture, mIsNew,
-            mIsExample);
+        return new Draft(mId, name, textOf(mCode), mQualityValue, mRateValue, mTexture, mSavedTexture, mDepth,
+            mSavedDepth, mIsNew, mIsExample);
     }
 
     @NonNull
@@ -326,6 +353,12 @@ public final class ShaderEditorPage {
         return mTexture != null && !mTexture.equals(mSavedTexture) ? mTexture : null;
     }
 
+    /** The depth picked on this page and not saved yet. */
+    @Nullable
+    public String unsavedDepth() {
+        return mDepth != null && !mDepth.equals(mSavedDepth) ? mDepth : null;
+    }
+
     /** The code box takes {@code text} whole (an imported file). */
     public void setSource(@NonNull String text) {
         mCode.setText(text);
@@ -333,11 +366,174 @@ public final class ShaderEditorPage {
         updateApply();
     }
 
-    /** The texture the draft uses; null for none. */
+    /** The photo the draft uses; null for none. A depth made from the old photo goes, a picked one stays. */
     public void setTexture(@Nullable String name) {
+        cancelRun();
         mTexture = name;
-        bindTexture();
+        mPhotoRow.clearThumb();
+        String kept = ShaderEditorLogic.depthAfterPhotoChange(mDepth);
+        if (!Objects.equals(kept, mDepth)) {
+            dropIfUnsaved(mDepth, mSavedDepth);
+            mDepth = kept;
+            mDepthRow.clearThumb();
+        }
+        mDepthMayNotMatch = mDepth != null;
+        mDepthFailed = false;
+        bindImages();
         updateApply();
+    }
+
+    /** The depth image the draft uses; null for none. */
+    public void setDepth(@Nullable String name) {
+        cancelRun();
+        if (!Objects.equals(name, mDepth)) dropIfUnsaved(mDepth, mSavedDepth);
+        mDepth = name;
+        mDepthMayNotMatch = false;
+        mDepthFailed = false;
+        mDepthRow.clearThumb();
+        bindImages();
+        updateApply();
+    }
+
+    private void dropIfUnsaved(@Nullable String name, @Nullable String savedName) {
+        String drop = ShaderEditorLogic.unsavedFileToDrop(name, savedName);
+        if (drop != null) mActions.onDropFile(mId, drop);
+    }
+
+    private void onPhotoAction(@NonNull ImageRowLogic.Action action) {
+        if (action == ImageRowLogic.Action.REMOVE) setTexture(null);
+        else if (action == ImageRowLogic.Action.CHOOSE || action == ImageRowLogic.Action.CHANGE) {
+            mActions.onPickTexture(mId);
+        }
+    }
+
+    private void onDepthAction(@NonNull ImageRowLogic.Action action) {
+        switch (action) {
+            case REMOVE: setDepth(null); break;
+            case CHOOSE:
+            case CHANGE: mActions.onPickDepth(mId); break;
+            case MAKE:
+            case TRY_AGAIN: startMake(); break;
+            case CANCEL:
+                cancelRun();
+                bindImages();
+                updateApply();
+                break;
+            default: break;
+        }
+    }
+
+    // --- Make depth ---
+
+    private static final ExecutorService CHECK = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "ShaderDepthCheck");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Make: starts at once when the model is on the phone, else asks about the download first. */
+    private void startMake() {
+        if (mTexture == null || mRun != ImageRowLogic.Run.IDLE || mReleased) return;
+        mDepthFailed = false;
+        final int token = ++mRunToken;
+        final Context app = mContext.getApplicationContext();
+        CHECK.execute(() -> {
+            final boolean ready = TaiDepth.modelReady(app);
+            final long bytes = ready ? 0L : TaiDepth.downloadBytes(app);
+            mRoot.post(() -> {
+                if (token != mRunToken || mReleased) return;
+                if (ready) beginRun();
+                else confirmDownload(bytes);
+            });
+        });
+    }
+
+    private void confirmDownload(long bytes) {
+        final int token = mRunToken;
+        mDialog = new MaterialAlertDialogBuilder(mContext)
+            .setTitle(R.string.shader_depth_confirm_title)
+            .setMessage(mContext.getString(R.string.shader_depth_confirm_body, ImageRowLogic.formatSize(bytes)))
+            .setNegativeButton(R.string.shader_depth_cancel, null)
+            .setPositiveButton(R.string.shader_depth_confirm_download, (d, w) -> {
+                if (token == mRunToken && !mReleased) beginRun();
+            })
+            .setOnDismissListener(d -> mDialog = null)
+            .show();
+    }
+
+    private void beginRun() {
+        if (mTexture == null) return;
+        final Context app = mContext.getApplicationContext();
+        final File dir = ShaderStore.shaderDir(app, mId);
+        final int token = ++mRunToken;
+        mRun = ImageRowLogic.Run.MAKING;
+        mRunPercent = 0;
+        mHandle = TaiDepth.start(app, new File(dir, mTexture), new File(dir, ShaderStore.MADE_DEPTH_FILE),
+            new TaiDepth.Listener() {
+                @Override public void onDownloading(int percent) {
+                    if (token != mRunToken) return;
+                    mRun = ImageRowLogic.Run.DOWNLOADING;
+                    mRunPercent = percent;
+                    bindImages();
+                }
+
+                @Override public void onMaking(int percent) {
+                    if (token != mRunToken) return;
+                    mRun = ImageRowLogic.Run.MAKING;
+                    mRunPercent = percent;
+                    bindImages();
+                }
+
+                @Override public void onDone(@NonNull File out) {
+                    if (token != mRunToken) return;
+                    endRun();
+                    dropIfUnsaved(mDepth, mSavedDepth);
+                    mDepth = ShaderStore.MADE_DEPTH_FILE;
+                    mDepthMayNotMatch = false;
+                    mDepthRow.clearThumb();
+                    bindImages();
+                    updateApply();
+                }
+
+                @Override public void onFailed(@NonNull String code) {
+                    if (token != mRunToken) return;
+                    endRun();
+                    mDepthFailed = true;
+                    bindImages();
+                    updateApply();
+                }
+            });
+        bindImages();
+        updateApply();
+    }
+
+    private void endRun() {
+        mRun = ImageRowLogic.Run.IDLE;
+        mHandle = null;
+    }
+
+    /** Stops a running or pending depth run, and a download question, without a failure. */
+    private void cancelRun() {
+        mRunToken++;
+        TaiDepth.Handle h = mHandle;
+        if (h != null) h.cancel();
+        endRun();
+        android.app.Dialog dialog = mDialog;
+        mDialog = null;
+        if (dialog != null) dialog.dismiss();
+    }
+
+    /** The editor went away (Back, Apply, discard): the run stops and the thumbnails are let go. */
+    void onClosed() {
+        cancelRun();
+        mPhotoRow.clearThumb();
+        mDepthRow.clearThumb();
+    }
+
+    /** The host is released: as {@link #onClosed}, for good. */
+    void release() {
+        mReleased = true;
+        onClosed();
     }
 
     /** Shows up to three errors on the strip; none hides it. */
@@ -376,7 +572,7 @@ public final class ShaderEditorPage {
 
     /** Apply is on when there is something to apply and the page is not working. */
     private void updateApply() {
-        mApply.setEnabled(!mBusy && ShaderEditorLogic.canApply(draft(), mSavedSource, mSavedMeta, mInUse));
+        mApply.setEnabled(!mBusy && mRun == ImageRowLogic.Run.IDLE && ShaderEditorLogic.canApply(draft(), mSavedSource, mSavedMeta, mInUse));
     }
 
     private void apply() {
@@ -386,6 +582,11 @@ public final class ShaderEditorPage {
             return;
         }
         mActions.onApply(d);
+    }
+
+    /** Paste: the clipboard's text into the code box, or the error strip's message when it has none. */
+    void pasteClipboard() {
+        paste();
     }
 
     private void paste() {
@@ -407,10 +608,11 @@ public final class ShaderEditorPage {
             .show();
     }
 
-    private void bindTexture() {
-        mTextureLabel.setText(mTexture == null ? mContext.getString(R.string.shader_texture_none)
-            : mContext.getString(R.string.shader_texture_named, mTexture));
-        mTextureRemove.setVisibility(mTexture == null ? View.GONE : View.VISIBLE);
+    private void bindImages() {
+        final File dir = ShaderStore.shaderDir(mContext.getApplicationContext(), mId);
+        mPhotoRow.bind(ImageRowLogic.photo(mTexture), mTexture, mTexture == null ? null : new File(dir, mTexture));
+        mDepthRow.bind(ImageRowLogic.depth(mTexture != null, mDepth, mDepthMayNotMatch, mRun, mRunPercent,
+            mDepthFailed), mDepth, mDepth == null ? null : new File(dir, mDepth));
     }
 
     @NonNull
@@ -420,6 +622,16 @@ public final class ShaderEditorPage {
     }
 
     // --- tests ---
+
+    @NonNull
+    ImageRowView photoRow() {
+        return mPhotoRow;
+    }
+
+    @NonNull
+    ImageRowView depthRow() {
+        return mDepthRow;
+    }
 
     @NonNull
     View applyButton() {

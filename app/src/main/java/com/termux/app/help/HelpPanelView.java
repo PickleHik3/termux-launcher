@@ -57,8 +57,7 @@ public final class HelpPanelView extends FrameLayout {
     }
 
     /** Where the deeper pages live — the base the display guide's own link already uses. */
-    @VisibleForTesting
-    static final String DOCS_BASE = "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/";
+    public static final String DOCS_BASE = "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/";
     @VisibleForTesting
     static final String DOCS_INDEX = TermuxConstants.TERMUX_LAUNCHER_DOCS_URL;
     /** Questions go to the Discord server, where the help bot answers first. */

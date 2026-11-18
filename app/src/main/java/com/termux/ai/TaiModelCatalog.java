@@ -25,17 +25,31 @@ public final class TaiModelCatalog {
     public static final String EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID = "embeddinggemma-2-text-vision-440m";
     /** EmbeddingGemma 2 Text 270M: the smaller text-only EmbeddingGemma 2. */
     public static final String EMBEDDING_GEMMA_2_TEXT_270M_ID = "embeddinggemma-2-text-270m";
+    /** Depth graphs for photo wallpapers: tool models run once by {@link DepthMaker}, never listed. */
+    public static final String DEPTH_ANYTHING_3_SMALL_ID = "depth-anything-3-small";
+    public static final String DEPTH_ANYTHING_V2_SMALL_ID = "depth-anything-v2-small";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
+    private static volatile Map<String, CatalogEntry> listed = withoutTools(BUILT_IN_ENTRIES);
     private TaiModelCatalog() {}
 
     /** Drops a remote overlay a test applied, so the next test sees the built-in catalogue. */
     @androidx.annotation.VisibleForTesting
     public static synchronized void resetForTesting() {
         entries = BUILT_IN_ENTRIES;
+        listed = withoutTools(BUILT_IN_ENTRIES);
     }
 
-    @NonNull public static Map<String, CatalogEntry> entries() { return entries; }
+    /** The catalogue every list reads: model entries only. The depth tool models are found by {@link #get}. */
+    @NonNull public static Map<String, CatalogEntry> entries() { return listed; }
+
+    private static Map<String, CatalogEntry> withoutTools(@NonNull Map<String, CatalogEntry> all) {
+        LinkedHashMap<String, CatalogEntry> out = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : all.entrySet()) {
+            if (!TaiModelSpec.isVisionTool(entry.getValue().endpointCapabilities)) out.put(entry.getKey(), entry.getValue());
+        }
+        return Collections.unmodifiableMap(out);
+    }
     @Nullable public static CatalogEntry get(@Nullable String modelId) { return modelId == null ? null : entries.get(modelId); }
 
     /** {@link #entries()} minus speech models (speech-to-text and speech output) and embedding-only
@@ -49,6 +63,7 @@ public final class TaiModelCatalog {
         for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
+            if (TaiModelSpec.isVisionTool(entry.getValue().endpointCapabilities)) continue;
             if (isImageGeneration(entry.getValue())) continue;
             if (isEmbeddingOnly(entry.getValue())) continue;
             chat.put(entry.getKey(), entry.getValue());
@@ -120,7 +135,7 @@ public final class TaiModelCatalog {
     @Nullable
     public static CatalogEntry downloadEntry(@NonNull JSONObject download) {
         String modelId = download.optString("modelId", "").trim();
-        if (modelId.isEmpty() || entries().containsKey(modelId)) return null;
+        if (modelId.isEmpty() || entries.containsKey(modelId)) return null;
         String path = download.optString("path", download.optString("url", ""));
         String backend = download.optString("backend", TaiModelSpec.inferBackend(path));
         String format = download.optString("format", TaiModelSpec.inferFormat(path));
@@ -201,6 +216,7 @@ public final class TaiModelCatalog {
             } catch (Exception ignored) {}
         }
         entries = Collections.unmodifiableMap(merged);
+        listed = withoutTools(merged);
     }
 
     @NonNull
@@ -379,7 +395,33 @@ public final class TaiModelCatalog {
                 hfSidecar(embeddingGemmaRepo, embeddingGemmaRevision, "sentencepiece.model",
                     "d6daa52d93d7aad10e8388bd526c4e501d914b47177398d1d9621f1fe48438c7"))));
 
+        // Depth graphs for photo wallpapers, LiteRT .tflite run once on the CPU by DepthMaker. Not
+        // gated; sizes and hashes from the Hugging Face API (LFS sha256), revisions pinned.
+        entries.put(DEPTH_ANYTHING_3_SMALL_ID, visionAvailable(
+            DEPTH_ANYTHING_3_SMALL_ID, "Depth Anything 3 Small", "Depth for photo wallpapers",
+            "litert-community/Depth-Anything-3-Small", "5cd25d936e3fde2edef68f53b4123401454ac9c8",
+            "da3_small_gpu_fp16.tflite", "Apache-2.0", 55_035_456L,
+            "e170369a72ba1bba7486a4d2de555639fccd0595a9bb5b5349f7733ed4aebd1f",
+            "depth-anything-3", "fp16", TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION, "Depth", "55 MB", "4GB+"));
+        entries.put(DEPTH_ANYTHING_V2_SMALL_ID, visionAvailable(
+            DEPTH_ANYTHING_V2_SMALL_ID, "Depth Anything V2 Small", "Depth for photo wallpapers",
+            "litert-community/depth-anything-v2-small", "178427e448dbf4da93b1e7b1b2abc103ad329bd6",
+            "tflite/depth_anything_v2_small_wi8_afp32.tflite", "Apache-2.0", 27_733_680L,
+            "f74509422e4a9270a354b249a9193abdd4903354be63701262238a7f4b869611",
+            "depth-anything-v2", "int8", TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION, "Depth", "28 MB", "4GB+"));
+
         return Collections.unmodifiableMap(entries);
+    }
+
+    /** A depth entry: one hash-pinned .tflite, no sidecars, one vision capability. */
+    private static CatalogEntry visionAvailable(String id, String name, String role, String repo, String revision,
+                                                String artifactPath, String license, long size, String sha256,
+                                                String architecture, String quantization, String capability,
+                                                String tag, String sizeEstimate, String ramTier) {
+        return new CatalogEntry(id, name, role, repo, revision, artifactPath, license, size,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, architecture, quantization,
+            128, 128, 128, ramGb(ramTier), sha256, setOf(capability), null, null,
+            "wallpaper_vision", "wallpaper_vision", tags(tag), sizeEstimate, ramTier, false, true, "");
     }
 
     private static CatalogEntry liteRtAvailable(String id, String name, String jobGroup, String priority, boolean recommended,

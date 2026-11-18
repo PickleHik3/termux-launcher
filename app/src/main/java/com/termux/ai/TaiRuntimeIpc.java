@@ -106,6 +106,14 @@ final class TaiRuntimeIpc {
      */
     static final String OP_GPU_PROBE = "gpuProbe";
 
+    /**
+     * The photo wallpaper's depth image. Make is a stream (one {@code stage} event with a percent
+     * per step, then the result) on the service's own depth lane; cancel runs on the control lane
+     * so it reaches a run in progress instead of queuing behind it.
+     */
+    static final String OP_DEPTH_MAKE = "depthMake";
+    static final String OP_DEPTH_CANCEL = "depthCancel";
+
     private TaiRuntimeIpc() {
     }
 }

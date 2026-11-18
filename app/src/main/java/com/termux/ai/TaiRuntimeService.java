@@ -114,6 +114,14 @@ public final class TaiRuntimeService extends Service {
     });
     /** Image generations running now; the service stays in the foreground while one runs. */
     private final AtomicInteger imageInFlight = new AtomicInteger();
+    /** The depth maker has a lane of its own: one thread, so photos are made one at a time and nothing else waits. */
+    private final ExecutorService depthExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-runtime-depth");
+        thread.setDaemon(true);
+        return thread;
+    });
+    /** Depth runs going now; the service stays in the foreground while one runs. */
+    private final AtomicInteger depthInFlight = new AtomicInteger();
     /**
      * Carries out what the watch decides. Evictions take the router's load lock, so a load in
      * progress holds them up; that must stall neither the watch tick (which also publishes
@@ -234,6 +242,7 @@ public final class TaiRuntimeService extends Service {
         sttExecutor.shutdownNow();
         ttsExecutor.shutdownNow();
         imageExecutor.shutdownNow();
+        depthExecutor.shutdownNow();
         pressureExecutor.shutdownNow();
         super.onDestroy();
         if (idleExitAnnounced) {
@@ -314,6 +323,10 @@ public final class TaiRuntimeService extends Service {
             }
             if (isImageOperation(operation)) {
                 imageExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+                return;
+            }
+            if (isDepthOperation(operation)) {
+                depthExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
                 return;
             }
             // Raised as the bench is queued, so everything already ahead of it on the serial lane
@@ -411,6 +424,7 @@ public final class TaiRuntimeService extends Service {
         return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation)
             || TaiRuntimeIpc.OP_UNLOAD_CHAT_MODEL.equals(operation)
             || TaiRuntimeIpc.OP_TTS_STOP.equals(operation) || TaiRuntimeIpc.OP_IMAGE_CANCEL.equals(operation)
+            || TaiRuntimeIpc.OP_DEPTH_CANCEL.equals(operation)
             || TaiRuntimeIpc.OP_TTS_PAUSE.equals(operation) || TaiRuntimeIpc.OP_TTS_RESUME.equals(operation)
             || TaiRuntimeIpc.OP_TTS_STATE.equals(operation)
             || TaiRuntimeIpc.OP_BENCH_SKIP_WAIT.equals(operation)
@@ -437,6 +451,11 @@ public final class TaiRuntimeService extends Service {
             || TaiRuntimeIpc.OP_BENCHMARK.equals(operation)
             || TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)
             || TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation);
+    }
+
+    /** The depth maker runs on {@link #depthExecutor}; its cancel is a control operation, not one of these. */
+    static boolean isDepthOperation(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_DEPTH_MAKE.equals(operation);
     }
 
     /** Image generation runs on {@link #imageExecutor}; its cancel is a control operation, not one of these. */
@@ -469,9 +488,11 @@ public final class TaiRuntimeService extends Service {
     ) {
         boolean speech = isTtsOperation(operation);
         boolean image = isImageOperation(operation);
+        boolean depth = isDepthOperation(operation);
         boolean bench = TaiRuntimeIpc.OP_BENCH_RUN.equals(operation);
         if (speech) ttsInFlight.incrementAndGet();
         if (image) imageInFlight.incrementAndGet();
+        if (depth) depthInFlight.incrementAndGet();
         try {
             String payload = body != null ? body : readBodyFile(bodyFile);
             // The deadline runs from here, the start of the load, not from the caller's request.
@@ -482,12 +503,13 @@ public final class TaiRuntimeService extends Service {
                 // Before the work, so a first load is watched too: nothing else starts the watch until it ends.
                 startRuntimeWatch();
                 ensureForeground("On-device AI runtime", speech ? "Speaking" : image ? "Generating an image"
-                    : bench ? "Benchmarking" : "Preparing " + operation);
+                    : depth ? "Making a depth image" : bench ? "Benchmarking" : "Preparing " + operation);
             }
             if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
                 || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
                 || TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)
                 || TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation)
+                || TaiRuntimeIpc.OP_DEPTH_MAKE.equals(operation)
                 || bench) {
                 runStreamRequest(replyTo, requestId, operation, payload);
                 return;
@@ -503,6 +525,7 @@ public final class TaiRuntimeService extends Service {
             }
             if (speech) ttsInFlight.decrementAndGet();
             if (image) imageInFlight.decrementAndGet();
+            if (depth) depthInFlight.decrementAndGet();
             deleteBodyFile(bodyFile);
             if (!isStatusOperation(operation) && !TaiRuntimeIpc.OP_GPU_PROBE.equals(operation)) lastActivityMs = System.currentTimeMillis();
             inFlight.decrementAndGet();
@@ -585,6 +608,8 @@ public final class TaiRuntimeService extends Service {
                 return manager.speech().speechState();
             case TaiRuntimeIpc.OP_IMAGE_CANCEL:
                 return manager.images().cancelImage();
+            case TaiRuntimeIpc.OP_DEPTH_CANCEL:
+                return manager.depth().cancel();
             case TaiRuntimeIpc.OP_GPU_PROBE:
                 return TaiPlatformCaps.probeReply(TaiPlatformCaps.probe(this));
             default:
@@ -614,6 +639,8 @@ public final class TaiRuntimeService extends Service {
             manager.speech().synthesizeSpeechToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation)) {
             manager.images().generateImageToEvents(body, sink);
+        } else if (TaiRuntimeIpc.OP_DEPTH_MAKE.equals(operation)) {
+            manager.depth().makeToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) {
             manager.benchHost().benchRun(body, sink);
         } else if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
@@ -641,7 +668,10 @@ public final class TaiRuntimeService extends Service {
             || isTtsOperation(operation)
             // Image generation holds the GPU for seconds to minutes; it must not be cut off when
             // the launcher goes to the background, nor run in the little-core cpuset.
-            || isImageOperation(operation);
+            || isImageOperation(operation)
+            // A few seconds of CPU; the little-core cpuset would triple them, and leaving the
+            // launcher must not cut the run off.
+            || isDepthOperation(operation);
     }
 
     /** A chat model is held, coming up, warm or generating: the foreground and presence cases. */
@@ -666,6 +696,8 @@ public final class TaiRuntimeService extends Service {
                 ensureForeground("On-device AI runtime", chat ? state.status : "Speaking");
             } else if (imageInFlight.get() > 0) {
                 ensureForeground("On-device AI runtime", chat ? state.status : "Generating an image");
+            } else if (depthInFlight.get() > 0) {
+                ensureForeground("On-device AI runtime", chat ? state.status : "Making a depth image");
             } else if (chat) {
                 ensureForeground("On-device AI runtime", state.status);
             } else if (foreground) {

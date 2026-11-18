@@ -48,7 +48,7 @@ public final class ShaderExamples {
         /** The knobs as a saved shader's settings (no texture). */
         @NonNull
         public ShaderStore.Meta meta() {
-            return new ShaderStore.Meta(name, quality, rateHz, null);
+            return new ShaderStore.Meta(name, quality, rateHz, null, null);
         }
     }
 

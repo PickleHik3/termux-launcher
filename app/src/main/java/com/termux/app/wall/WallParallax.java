@@ -153,6 +153,16 @@ public final class WallParallax {
     }
 
     /**
+     * How far the row has slid, 0 at Home page 1 and 1 at the last page, the same stretch
+     * {@link #offsetPx} pans the wallpaper over; what a shader reads as {@code tlPageOffset}.
+     * 0 for a row of one page; held to 0..1 past either end.
+     */
+    public static float pageFraction(float rowPosition, int rowCount) {
+        if (rowCount <= 1) return 0f;
+        return Math.max(0f, Math.min(1f, rowPosition / (rowCount - 1)));
+    }
+
+    /**
      * How far the wall would have slid to move the wallpaper {@code gapPx}, in px of the wall's
      * own travel: the gap in pages ({@link #offsetPx} spreads {@code sparePx} over
      * {@code rowCount - 1} steps) times a page's width. Edit pages holds the wallpaper still while

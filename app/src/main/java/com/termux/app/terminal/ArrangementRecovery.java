@@ -78,6 +78,16 @@ public final class ArrangementRecovery {
     }
 
     /**
+     * Whether a start with no live shell counts as cold: the process has not started its first
+     * shell, or there is no Home to show ({@code hasHome} false, {@link
+     * WallRow#lastShellClosedShowsHome}). Without Home, closing the last shell ended the app, so
+     * its next start begins again from the autosave even while Android kept the process cached.
+     */
+    public static boolean coldStart(boolean firstShellStarted, boolean hasHome) {
+        return !firstShellStarted || !hasHome;
+    }
+
+    /**
      * The Start in a start goes by: the preference, unless there is no Home to show ({@code
      * hasHome} false: no Home pages and not the phone's home app, where closing the last shell
      * ends the app, {@link WallRow#lastShellClosedShowsHome}). An empty Workspace would then leave
