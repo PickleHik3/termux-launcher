@@ -10308,6 +10308,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             insets.getInsets(Type.systemBars() | Type.displayCutout()).bottom);
         boolean changed = mBottomKeptPx != kept;
         mBottomKeptPx = kept;
+        mSheets.applyBottomBand(com.termux.app.place.BottomInsets.sheetsBandPx(kept));
         View container = findViewById(R.id.terminal_root_container);
         if (container instanceof com.termux.app.place.BottomInsetFrameLayout) {
             ((com.termux.app.place.BottomInsetFrameLayout) container).setReachingChild(
@@ -19105,6 +19106,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public int restingPage() {
             return TermuxActivity.this.restingPage();
+        }
+
+        @Override public int sheetsBandPx() {
+            return mSheets.bottomBandPx();
         }
 
         @Override public boolean inAppKeyboardShown() {

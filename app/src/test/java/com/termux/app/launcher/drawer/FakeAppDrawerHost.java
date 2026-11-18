@@ -43,6 +43,13 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return viewRoot == null ? null : (T) viewRoot.findViewById(viewId);
     }
 
+    /** The band the host reaches through under the pill; tests set it. */
+    int sheetsBandPx;
+
+    @Override public int sheetsBandPx() {
+        return sheetsBandPx;
+    }
+
     @Override public int restingPage() {
         return TermuxAppSharedPreferences.terminalPageId();
     }

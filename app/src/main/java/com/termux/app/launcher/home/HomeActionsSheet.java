@@ -104,8 +104,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     @NonNull private final ModalSheetSlide slide;
     @NonNull private final android.graphics.Rect cardBounds = new android.graphics.Rect();
     private final int cardPadLeft, cardPadRight, cardPadBottom;
-    /** The navigation bar's height under the card, from the last {@link #applyInsets}. */
-    private int navInsetPx;
+    /** The band under the card's rows, from the last {@link #setBottomBandPx}. */
+    private int bottomBandPx;
     private boolean open;
     /** The rows for a layout that is locked (true) or not, so the lock row can redraw in place. */
     @NonNull private Function<Boolean, List<Item>> source = locked -> java.util.Collections.emptyList();
@@ -189,17 +189,27 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     }
 
     /**
-     * The window's insets: the card reaches the screen's bottom edge and its rows stay clear of
-     * the system bars. Called by the activity on every inset dispatch and read off the window
+     * The band under the pill the sheets layer reaches through
+     * ({@link com.termux.app.place.BottomInsets#sheetsBandPx}): the card's glass runs through it
+     * and its rows stay above it.
+     */
+    public void setBottomBandPx(int bandPx) {
+        int band = Math.max(0, bandPx);
+        if (band == bottomBandPx) return;
+        bottomBandPx = band;
+    }
+
+    /**
+     * The window's insets: the card's rows stay clear of the bars at its sides (the bottom is
+     * {@link #setBottomBandPx}'s). Called by the activity on every inset dispatch and read off the window
      * again on {@link #open}.
      */
     public void applyInsets(@NonNull WindowInsetsCompat insets) {
         Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
             | WindowInsetsCompat.Type.displayCutout());
-        navInsetPx = Math.max(0, bars.bottom);
         int left = cardPadLeft + bars.left;
         int right = cardPadRight + bars.right;
-        int bottom = cardPadBottom + navInsetPx;
+        int bottom = cardPadBottom + Math.max(0, bars.bottom);
         if (card.getPaddingLeft() != left || card.getPaddingRight() != right
             || card.getPaddingBottom() != bottom) {
             card.setPadding(left, card.getPaddingTop(), right, bottom);

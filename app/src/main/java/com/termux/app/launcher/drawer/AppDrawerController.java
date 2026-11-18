@@ -103,6 +103,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         @Nullable TermuxAppSharedPreferences preferences();
 
+        /**
+         * The band at the screen's bottom the drawer's host reaches through, under the gesture
+         * pill ({@link com.termux.app.place.BottomInsets#sheetsBandPx}); 0 while the system
+         * keyboard is up.
+         */
+        int sheetsBandPx();
+
         /** The half of the wall the drawer opens over: Home's or the Workspace's look. */
         int restingPage();
 

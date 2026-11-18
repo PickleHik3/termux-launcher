@@ -57,13 +57,15 @@ public class AppDrawerEdgeToEdgeTest {
         activity.setContentView(R.layout.activity_termux);
         mRoot = activity.findViewById(R.id.activity_termux_root_view);
         assertNotNull(mRoot);
-        // What fitsSystemWindows does on a real device, and what the activity then gives back.
-        mRoot.setPadding(0, STATUS_INSET_PX, 0, NAV_INSET_PX);
-        bleedDrawerHost(STATUS_INSET_PX, NAV_INSET_PX);
+        // What fitsSystemWindows does on a real device at the top, and what the activity then gives
+        // back; the root pads nothing at the bottom, the sheets layer reaches the screen's edge.
+        mRoot.setPadding(0, STATUS_INSET_PX, 0, 0);
+        bleedDrawerHost(STATUS_INSET_PX);
         layOutRoot();
 
         mHost = new FakeAppDrawerHost(activity, null);
         mHost.viewRoot = mRoot;
+        mHost.sheetsBandPx = NAV_INSET_PX;
         mHost.dockLayout = TestDockLayouts.defaultStyle(
             activity.getResources().getDisplayMetrics().density, DOCK_INSET_PX);
         mController = new AppDrawerController(mHost);
@@ -106,7 +108,7 @@ public class AppDrawerEdgeToEdgeTest {
         Frame bledOpen = openRect();
         Frame bledContent = contentBaseRect(bledOpen);
 
-        bleedDrawerHost(0, 0);
+        bleedDrawerHost(0);
         layOutRoot();
         Frame plainOpen = openRect();
         Frame plainContent = contentBaseRect(plainOpen);
@@ -115,12 +117,32 @@ public class AppDrawerEdgeToEdgeTest {
             STATUS_INSET_PX + OPEN_RADIUS_PX, (plainOpen.top + STATUS_INSET_PX) - bledOpen.top, 0.5f);
         assertEquals("an unbled host keeps the rectangle the drawer has always had",
             0f, plainOpen.top, 0.5f);
-        assertEquals("and exactly the navigation inset at the bottom",
-            NAV_INSET_PX, bledOpen.bottom - (plainOpen.bottom + STATUS_INSET_PX), 0.5f);
+        assertEquals("the bottom is the screen's edge either way: the band is the host's, not a bleed",
+            0f, bledOpen.bottom - (plainOpen.bottom + STATUS_INSET_PX), 0.5f);
         assertEquals("the grid's top edge did not move",
             plainContent.top + STATUS_INSET_PX, bledContent.top, 0.5f);
         assertEquals("nor its bottom",
             plainContent.bottom + STATUS_INSET_PX, bledContent.bottom, 0.5f);
+    }
+
+    /** A host whose band is 0 (the system keyboard is up) is not shortened at the bottom. */
+    @Test public void withNoBandTheDockedRectsEndTogether() {
+        ReflectionHelpers.setField(mController, "mRoundedStyle", false);
+        mHost.sheetsBandPx = 0;
+
+        Frame open = openRect();
+        Frame content = contentBaseRect(open);
+
+        assertEquals(HEIGHT_PX + OPEN_RADIUS_PX, open.bottom, 0.5f);
+        assertEquals(open.bottom, content.bottom, 0.5f);
+    }
+
+    /** The floating card keeps floating above the pill, and with no band it reaches the edge. */
+    @Test public void theRoundedRectFollowsTheHostsBand() {
+        ReflectionHelpers.setField(mController, "mRoundedStyle", true);
+        mHost.sheetsBandPx = 0;
+
+        assertEquals(HEIGHT_PX, openRect().bottom, 0.5f);
     }
 
     /** The rounded style is a floating sheet inside the bars, and keeps the rectangle it had. */
@@ -179,12 +201,13 @@ public class AppDrawerEdgeToEdgeTest {
 
     // ------------------------------------------------------------------ helpers
 
-    private void bleedDrawerHost(int topInsetPx, int bottomInsetPx) {
+    /** The host bleeds at the top only; the bottom band is the sheets layer's, from the host. */
+    private void bleedDrawerHost(int topInsetPx) {
         View host = mRoot.findViewById(R.id.app_drawer_host);
         ViewGroup.MarginLayoutParams margins =
             (ViewGroup.MarginLayoutParams) host.getLayoutParams();
         margins.topMargin = -topInsetPx;
-        margins.bottomMargin = -bottomInsetPx;
+        margins.bottomMargin = 0;
         host.setLayoutParams(margins);
     }
 

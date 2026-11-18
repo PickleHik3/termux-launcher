@@ -63,6 +63,16 @@ public final class BottomInsets {
     }
 
     /**
+     * The band at the screen's bottom the sheets layer reaches through, under the gesture pill:
+     * the kept band {@code keptPx}. A surface in the layer runs its glass through it and keeps its
+     * content above it. 0 while the system keyboard is up, when the layer stops at the root's
+     * padding.
+     */
+    public static int sheetsBandPx(int keptPx) {
+        return Math.max(0, keptPx);
+    }
+
+    /**
      * The stack's placement for the fit, the stack pass's own margin and flush padding, and the
      * dock owning the foot or not ({@code DockSpec#foot}).
      */
