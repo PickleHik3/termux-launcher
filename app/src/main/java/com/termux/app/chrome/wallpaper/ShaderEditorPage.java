@@ -23,16 +23,21 @@ import com.termux.app.chrome.scene.ShaderErrors;
 import com.termux.app.chrome.scene.ShaderSafety;
 import com.termux.app.chrome.scene.ShaderStore;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The shader editor: name, a monospace code box that scrolls sideways, Paste and Import file, the
- * error strip, the knobs (Quality, Frame rate), the Photo and Depth rows, Apply, Back to photo while a motion is in
- * use, and Delete. The page edits a draft; the host checks, saves and applies it
+ * The shader editor, top to bottom: name, the knobs (Quality, Frame rate), in the photo flow the
+ * copy step, the Photo row and the Depth area, Apply, Back to photo while a motion is in use,
+ * Delete, and last the shader itself: a monospace code box that scrolls sideways, Paste and Import
+ * file, the error strip. The page edits a draft; the host checks, saves and applies it
  * ({@link Actions#onApply}). Nothing is written until Apply.
  */
 public final class ShaderEditorPage {
@@ -112,6 +117,10 @@ public final class ShaderEditorPage {
     private final Actions mActions;
     private final View mRoot;
     private final ScrollView mScroll;
+    private final View mContent;
+    private final View mCopyGroup;
+    private final MaterialButton mCopy;
+    private final View mCodeHeading;
     private final TextInputEditText mName;
     private final TextInputEditText mCode;
     private final TextView mErrors;
@@ -158,12 +167,18 @@ public final class ShaderEditorPage {
     private boolean mBusy;
     /** Knobs are being set from code: their listeners stay quiet. */
     private boolean mBinding;
+    /** The instructions were copied since the page opened: Copy reads Copied. */
+    private boolean mCopied;
 
     public ShaderEditorPage(@NonNull Context context, boolean launcherIsHomeApp, @NonNull Actions actions) {
         mContext = context;
         mActions = actions;
         mRoot = LayoutInflater.from(context).inflate(R.layout.shader_editor_page, null, false);
         mScroll = mRoot.findViewById(R.id.shader_editor_scroll);
+        mContent = mRoot.findViewById(R.id.shader_editor_content);
+        mCopyGroup = mRoot.findViewById(R.id.shader_photo_flow_copy);
+        mCopy = mRoot.findViewById(R.id.shader_photo_flow_copy_button);
+        mCodeHeading = mRoot.findViewById(R.id.shader_code_heading);
         mName = mRoot.findViewById(R.id.shader_name);
         mCode = mRoot.findViewById(R.id.shader_code);
         mErrors = mRoot.findViewById(R.id.shader_errors);
@@ -239,6 +254,7 @@ public final class ShaderEditorPage {
             }
         });
 
+        mCopy.setOnClickListener(v -> copyInstructions());
         mPaste.setOnClickListener(v -> paste());
         mImport.setOnClickListener(v -> mActions.onImport());
         mApply.setOnClickListener(v -> apply());
@@ -312,12 +328,68 @@ public final class ShaderEditorPage {
             mAlso.setChecked(alsoPhone);
             mBack.setVisibility(motionInUse ? View.VISIBLE : View.GONE);
             mDelete.setVisibility(mIsNew ? View.GONE : View.VISIBLE);
+            setPhotoFlow(false);
             mScroll.scrollTo(0, 0);
         } finally {
             mBinding = false;
         }
         setHeldReason(heldReason);
         setBusy(false);
+    }
+
+    /**
+     * The photo flow: the copy step above the Photo row and the heading over the shader. Off for
+     * every shader opened by {@link #show}; the host turns it on for a new shader from a photo.
+     * Copy reads Copy again.
+     */
+    void setPhotoFlow(boolean on) {
+        mCopied = false;
+        if (!mCopy.getText().toString().equals(mContext.getString(R.string.photo_shader_copy))) {
+            mCopy.setText(R.string.photo_shader_copy);
+        }
+        int want = on ? View.VISIBLE : View.GONE;
+        if (mCopyGroup.getVisibility() != want) mCopyGroup.setVisibility(want);
+        if (mCodeHeading.getVisibility() != want) mCodeHeading.setVisibility(want);
+    }
+
+    /** Puts the AI instructions on the clipboard; the button then reads Copied until the page closes. */
+    private void copyInstructions() {
+        String text = readInstructions(mContext);
+        ClipboardManager cm = (ClipboardManager) mContext.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (text == null || cm == null) return;
+        try {
+            cm.setPrimaryClip(ClipData.newPlainText(mContext.getString(R.string.photo_shader_title), text));
+        } catch (RuntimeException e) {
+            return;
+        }
+        if (!mCopied) {
+            mCopied = true;
+            mCopy.setText(R.string.photo_shader_copied);
+        }
+    }
+
+    /** The AI instructions (the raw resource, English), or null when it cannot be read. */
+    @Nullable
+    static String readInstructions(@NonNull Context context) {
+        try (InputStream in = context.getResources().openRawResource(R.raw.photo_shader_instructions)) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * A system picker is about to open: no text field keeps focus, so none takes it back (and
+     * scrolls the page to itself) when the picker returns.
+     */
+    private void releaseFocus() {
+        if (mName.hasFocus()) mName.clearFocus();
+        if (mCode.hasFocus()) mCode.clearFocus();
+        if (!mContent.hasFocus()) mContent.requestFocus();
     }
 
     private static void checkByTag(@NonNull MaterialButtonToggleGroup group, @NonNull Object tag) {
@@ -403,6 +475,7 @@ public final class ShaderEditorPage {
     private void onPhotoAction(@NonNull ImageRowLogic.Action action) {
         if (action == ImageRowLogic.Action.REMOVE) setTexture(null);
         else if (action == ImageRowLogic.Action.CHOOSE || action == ImageRowLogic.Action.CHANGE) {
+            releaseFocus();
             mActions.onPickTexture(mId);
         }
     }
@@ -411,8 +484,13 @@ public final class ShaderEditorPage {
         switch (action) {
             case REMOVE: setDepth(null); break;
             case CHOOSE:
-            case CHANGE: mActions.onPickDepth(mId); break;
+            case CHOOSE_DEPTH:
+            case CHANGE:
+                releaseFocus();
+                mActions.onPickDepth(mId);
+                break;
             case MAKE:
+            case GENERATE_DEPTH:
             case TRY_AGAIN: startMake(); break;
             case CANCEL:
                 cancelRun();
@@ -423,7 +501,7 @@ public final class ShaderEditorPage {
         }
     }
 
-    // --- Make depth ---
+    // --- Generate depth ---
 
     private static final ExecutorService CHECK = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "ShaderDepthCheck");
@@ -431,7 +509,7 @@ public final class ShaderEditorPage {
         return t;
     });
 
-    /** Make: starts at once when the model is on the phone, else asks about the download first. */
+    /** Generate: starts at once when the model is on the phone, else asks about the download first. */
     private void startMake() {
         if (mTexture == null || mRun != ImageRowLogic.Run.IDLE || mReleased) return;
         mDepthFailed = false;
@@ -585,10 +663,6 @@ public final class ShaderEditorPage {
     }
 
     /** Paste: the clipboard's text into the code box, or the error strip's message when it has none. */
-    void pasteClipboard() {
-        paste();
-    }
-
     private void paste() {
         ClipboardManager cm = (ClipboardManager) mContext.getSystemService(Context.CLIPBOARD_SERVICE);
         ClipData clip = cm == null ? null : cm.getPrimaryClip();

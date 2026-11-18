@@ -42,6 +42,7 @@ final class ImageRowView {
     private final Context mContext;
     private final View mRoot;
     private final ImageView mThumb;
+    private final View mTextColumn;
     private final TextView mLabel;
     private final TextView mNote;
     private final LinearProgressIndicator mProgress;
@@ -58,6 +59,7 @@ final class ImageRowView {
         mContext = context;
         mRoot = root;
         mThumb = root.findViewById(R.id.image_row_thumb);
+        mTextColumn = root.findViewById(R.id.image_row_text);
         mLabel = root.findViewById(R.id.image_row_label);
         mNote = root.findViewById(R.id.image_row_note);
         mProgress = root.findViewById(R.id.image_row_progress);
@@ -75,7 +77,18 @@ final class ImageRowView {
      * Shows {@code row}. {@code name} fills the "named" labels (a file name); {@code thumb} is the
      * image to show when the row has a thumbnail.
      */
-    void bind(@NonNull ImageRowLogic.Row row, @Nullable String name, @Nullable File thumb) {
+    void bind(@Nullable ImageRowLogic.Row row, @Nullable String name, @Nullable File thumb) {
+        if (row == null) {
+            setVisible(mRoot, false);
+            mFirstAction = null;
+            mSecondAction = null;
+            clearThumb();
+            return;
+        }
+        setVisible(mRoot, true);
+        setVisible(mLabel, row.label != ImageRowLogic.Label.NONE);
+        setVisible(mTextColumn, row.label != ImageRowLogic.Label.NONE || row.note != ImageRowLogic.Note.NONE
+            || row.showProgress);
         setText(mLabel, labelText(row, name));
         int noteRes = noteRes(row.note);
         setText(mNote, noteRes == 0 ? "" : mContext.getString(noteRes));
@@ -112,15 +125,14 @@ final class ImageRowView {
             case DEPTH_MAKING: return mContext.getString(R.string.shader_depth_making);
             case DEPTH_MADE: return mContext.getString(R.string.shader_depth_made);
             case DEPTH_NAMED: return mContext.getString(R.string.shader_depth_named, n);
-            case DEPTH_NONE:
-            default: return mContext.getString(R.string.shader_depth_none);
+            case NONE:
+            default: return "";
         }
     }
 
     @StringRes
     private static int noteRes(@NonNull ImageRowLogic.Note note) {
         switch (note) {
-            case CHOOSE_PHOTO_FIRST: return R.string.shader_depth_choose_photo_first;
             case MAY_NOT_MATCH: return R.string.shader_depth_may_not_match;
             case FAILED: return R.string.shader_depth_failed;
             case NONE:
@@ -134,6 +146,8 @@ final class ImageRowView {
             case CHANGE: return R.string.shader_image_change;
             case REMOVE: return R.string.shader_image_remove;
             case MAKE: return R.string.shader_depth_make;
+            case GENERATE_DEPTH: return R.string.shader_depth_generate;
+            case CHOOSE_DEPTH: return R.string.shader_depth_choose;
             case CANCEL: return R.string.shader_depth_cancel;
             case TRY_AGAIN: return R.string.shader_depth_try_again;
             case CHOOSE:

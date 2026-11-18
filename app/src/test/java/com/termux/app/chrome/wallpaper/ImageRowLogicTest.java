@@ -3,6 +3,7 @@ package com.termux.app.chrome.wallpaper;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.chrome.scene.ShaderStore;
@@ -38,22 +39,19 @@ public class ImageRowLogicTest {
     }
 
     @Test
-    public void depth_noPhotoSaysChooseAPhotoFirstAndMakeIsOff() {
-        ImageRowLogic.Row r = depth(false, null, false, ImageRowLogic.Run.IDLE, 0, false);
-        assertEquals(ImageRowLogic.Label.DEPTH_NONE, r.label);
-        assertEquals(ImageRowLogic.Note.CHOOSE_PHOTO_FIRST, r.note);
-        assertFalse(r.noteIsError);
-        assertFalse(r.firstEnabled);
-        actions(r, ImageRowLogic.Action.MAKE, null);
+    public void depth_noPhotoAndNoDepthShowsNothing() {
+        assertNull(depth(false, null, false, ImageRowLogic.Run.IDLE, 0, false));
+        assertNull(depth(false, null, false, ImageRowLogic.Run.IDLE, 0, true));
     }
 
     @Test
-    public void depth_photoChosenOffersMakeAndChoose() {
+    public void depth_photoChosenOffersGenerateDepthAndChooseDepthImage() {
         ImageRowLogic.Row r = depth(true, null, false, ImageRowLogic.Run.IDLE, 0, false);
+        assertEquals(ImageRowLogic.Label.NONE, r.label);
         assertEquals(ImageRowLogic.Note.NONE, r.note);
         assertTrue(r.firstEnabled);
         assertFalse(r.showProgress);
-        actions(r, ImageRowLogic.Action.MAKE, ImageRowLogic.Action.CHOOSE);
+        actions(r, ImageRowLogic.Action.GENERATE_DEPTH, ImageRowLogic.Action.CHOOSE_DEPTH);
     }
 
     @Test
@@ -122,10 +120,10 @@ public class ImageRowLogicTest {
     @Test
     public void depth_failedShowsTheErrorLineWithTryAgainAndChoose() {
         ImageRowLogic.Row r = depth(true, null, false, ImageRowLogic.Run.IDLE, 0, true);
-        assertEquals(ImageRowLogic.Label.DEPTH_NONE, r.label);
+        assertEquals(ImageRowLogic.Label.NONE, r.label);
         assertEquals(ImageRowLogic.Note.FAILED, r.note);
         assertTrue(r.noteIsError);
-        actions(r, ImageRowLogic.Action.TRY_AGAIN, ImageRowLogic.Action.CHOOSE);
+        actions(r, ImageRowLogic.Action.TRY_AGAIN, ImageRowLogic.Action.CHOOSE_DEPTH);
     }
 
     @Test
@@ -142,6 +140,10 @@ public class ImageRowLogicTest {
                     for (boolean changed : new boolean[] {false, true}) {
                         for (boolean failed : new boolean[] {false, true}) {
                             ImageRowLogic.Row r = depth(photo, name, changed, run, 5, failed);
+                            if (r == null) {
+                                assertFalse(photo || name != null || run != ImageRowLogic.Run.IDLE);
+                                continue;
+                            }
                             assertNotNull(r.first);
                             assertEquals(r.showThumb, r.label == ImageRowLogic.Label.DEPTH_MADE
                                 || r.label == ImageRowLogic.Label.DEPTH_NAMED);
