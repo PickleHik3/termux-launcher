@@ -344,6 +344,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return com.termux.app.wall.UseAs.read(prefs == null ? null : prefs.getUseAs());
     }
 
+    /**
+     * The keyboard switch's state: the layout's own answer, which is also what the dirty compare
+     * starts from. The frame's view lags it (the editor raises the keyboard after it opens), so it
+     * answers only where there is no layout session.
+     */
+    static boolean keyboardSwitchOn(@Nullable LayoutEditorController layout, boolean frameUp) {
+        return keyboardSwitchOn(layout == null ? null : (Boolean) layout.isKeyboardShown(), frameUp);
+    }
+
+    static boolean keyboardSwitchOn(@Nullable Boolean placeAnswer, boolean frameUp) {
+        return placeAnswer != null ? placeAnswer : frameUp;
+    }
+
     @Nullable
     private TermuxInAppKeyboard keyboard() {
         return mHost.inAppKeyboard();
@@ -2279,8 +2292,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case ELEMENT:
                     return layout != null && item.element != null && layout.isShown(item.element);
                 case KEYBOARD:
-                    // What the frame draws, as the Keyboard card's eye reads it.
-                    return mHost.isInAppKeyboardShown();
+                    // The Keyboard card's eye and this switch share one answer.
+                    return keyboardSwitchOn(layout, mHost.isInAppKeyboardShown());
                 case SEARCH_FIELD:
                     return mDock.option(com.termux.app.surfaces.cards.DockCard.Option.SEARCH_FIELD);
                 case DRAWER_TILE:
@@ -3265,7 +3278,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     // The keyboard reads what the frame draws: the one answer the switch and the
                     // preview can share.
                     if (element == null)
-                        return mHost.isInAppKeyboardShown() ? 1 : 0;
+                        return keyboardSwitchOn(layout, mHost.isInAppKeyboardShown()) ? 1 : 0;
                     return layout.isShown(element) ? 1 : 0;
                 }
                 case STYLE:
