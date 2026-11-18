@@ -184,6 +184,17 @@ public class StackRendererTest {
             com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL);
         com.termux.app.place.StackScene.Motion motion = new com.termux.app.place.StackScene.Motion();
         float[] fractions = {0.4f, 0.8f, 1f};
+        for (float fraction : fractions) {
+            // Fraction 1 is the wall standing on the arriving page, an offset of a whole width.
+            com.termux.app.place.PlaceChromeTravel.Frame frame =
+                com.termux.app.place.PlaceChromeTravel.at(row,
+                    com.termux.app.wall.PaneWallPage.WIDGETS, -fraction * WIDTH, WIDTH, states);
+            com.termux.app.place.StackScene.travel(false, frame.keyboardReveal,
+                frame.dockReveal, 300, 200, 120, motion);
+            mRenderer.setTravel(motion.dockTravelPx, motion.keyboardSharePx, 0f);
+            mRenderer.setSink(0f, 0f, 0f, 0f);
+            frames.flush("test");
+        }
         assertEquals(0f, mContainer.getTranslationY(), 0f);
         int before = writes();
         mRenderer.onLanding();
@@ -194,6 +205,28 @@ public class StackRendererTest {
         assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
     }
 
+    @Test public void aCrossingToAKeyboardDownPageLandsOnTheRestItAlreadyStood() {
+        FramePipeline frames = attached();
+        // Terminal with its keyboard up to Home with it down, the keyboard laid out the whole way:
+        // the seam's last frame draws the stack the keyboard's height lower (reveal 0) and the
+        // landing, with the keyboard now down, stands the same number as its rest.
+        com.termux.app.place.StackScene.Motion motion = new com.termux.app.place.StackScene.Motion();
+        com.termux.app.place.StackScene.travel(false, 0f, 1f, 300, 200, 120, motion);
+        mRenderer.setTravel(motion.dockTravelPx, motion.keyboardSharePx, 0f);
+        mRenderer.setSink(0f, 0f, 0f, 0f);
+        frames.flush("test");
+        assertEquals(300f, mContainer.getTranslationY(), 0f);
+        int before = writes();
+        mKeyboardDownPx = 300;
+        mRenderer.onLanding();
+        mRenderer.setTravel(0f, 0f, 0f);
+        mRenderer.setSink(0f, 0f, 0f, 0f);
+        frames.flush("test");
+        assertEquals("the landing writes nothing for the keyboard", before, writes());
+        assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
+        assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
+        assertEquals(300f, mContainer.getTranslationY(), 0f);
+    }
 
     @Test public void aKeyboardLaidOutButDownStandsTheStackItsHeightLowerAtRest() {
         mKeyboardDownPx = 300;

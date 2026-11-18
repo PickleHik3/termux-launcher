@@ -167,7 +167,8 @@ public class CrossingViewsTest {
             committed = from;
             here = half(from, false);
             there = half(across(from), false);
-            states = place -> new Rest(false, false, true);
+            // The Terminal keeps its keyboard up, Home has none: the keyboard travels with the way.
+            states = place -> new Rest(place == PaneWallPage.TERMINAL, false, true);
         }
 
         /** The status bar rides with the page or the stack travels: what a frame puts away from rest. */
@@ -188,7 +189,7 @@ public class CrossingViewsTest {
             }
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
             if (answers.relayout()) crossing.seam().standLayout();
-            float translation = crossing.stack(answers, answers.dockReveal(), 0, 200, 150);
+            float translation = crossing.stack(answers, answers.dockReveal(), 300, 200, 150);
             if (crossing.holdsContent()) crossing.coverAt(translation);
             crossing.rideBar(frame, true, WIDTH);
             crossing.fade(frame.statusReveal, frame.dockReveal);

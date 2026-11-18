@@ -74,6 +74,13 @@ public class DockHiddenRowIconTest {
             .build());
     }
 
+    @Test
+    public void theSlideStandsHomesRowsAlone() {
+        PlaceLayout travel = SeamTravel.withDockOf(WINDOW, HOME);
+        assertTrue(PlaceChromePolicy.appsShown(travel));
+        assertTrue(alone(travel));
+        assertTrue(alone(HOME));
+    }
 
     @Test
     public void theRowKeepsHomesIconInTheWindowThroughTheSlideAndAfterTheSettle() {

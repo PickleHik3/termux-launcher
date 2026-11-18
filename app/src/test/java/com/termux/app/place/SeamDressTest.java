@@ -69,11 +69,9 @@ public class SeamDressTest {
             assertSame(HOME, SeamDress.stackPage(HOME, TERMINAL, DockPlan.SLIDE_OUT, progress));
     }
 
-
     @Test
     public void aSlideThatSpringsBackGivesTheCommittedDressBack() {
-        // Out to past the swap and back to rest: the same function, read back down.
-        float[] way = {0f, 0.3f, 0.6f, 0.9f, 0.6f, 0.3f, 0f};
+        // Out and back to rest: the same function, read back down.
         assertSame(TERMINAL, SeamDress.stackPage(TERMINAL, HOME, DockPlan.SLIDE_IN, 0f));
     }
 
@@ -109,16 +107,6 @@ public class SeamDressTest {
     }
 
     // ---- how the stack crosses when the halves dress it differently
-
-    @Test
-    public void halvesDressedAlikeKeepTheRowsPlan() {
-    }
-
-
-
-
-
-
 
     // ---- the dress as a value
 

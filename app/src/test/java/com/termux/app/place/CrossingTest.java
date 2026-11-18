@@ -110,7 +110,7 @@ public class CrossingTest {
         return half(page, keyboardUp, false);
     }
 
-    /** With {@code apart}, the window's stack is sized apart from Home's: a whole-stack dip. */
+    /** With {@code apart}, the window's stack is sized apart from Home's: a stack dressed apart. */
     private static SeamCrossing.Endpoint half(@NonNull PaneWallPage page, boolean keyboardUp,
                                           boolean apart) {
         Dress dress = new DressResolver(new Stored()).dressOf(page);
@@ -129,11 +129,6 @@ public class CrossingTest {
         float dockPx = Float.NaN, keyboardPx = Float.NaN, sinkPx = Float.NaN;
         float statusAlpha = Float.NaN, sideAlpha = Float.NaN, barX = Float.NaN;
         int coverPx = -1;
-        int folds;
-        // The picture of the committed half's stack, and the terminal page's pre-size.
-        boolean pictureTaken = true;
-        int pictures, pictureDrops;
-        float pictureReveal = Float.NaN, pictureSlide = Float.NaN, slide = Float.NaN;
         int covers;
         final List<PaneWallPage> preRolls = new ArrayList<>();
         // The row: told both rests once, dressed every frame, laid out once at the landing.
@@ -437,6 +432,60 @@ public class CrossingTest {
 
     @Test
     public void landLeavesNoCrossingState() {
+        for (PaneWallPage from : BOTH) {
+            Drive drive = new Drive(from, from == PaneWallPage.TERMINAL, false);
+            Crossing crossing = drive.crossing;
+            Moves moves = drive.moves;
+            assertTrue("idle before", crossing.idle());
+            // Everything a slide takes: the hold, a keyboard and the content pre-rolled, the band
+            // the chrome's edge rises through and its cover, a fold and a melt, the seam's stand.
+            crossing.preRollKeyboard(across(from), 640);
+            assertTrue(crossing.giveRoomBack(120, 0));
+            crossing.heldOverlap(300);
+            for (float f = STEP; f <= 0.6f; f += STEP) drive.step(f);
+            crossing.coverAt(40f);
+            crossing.beadShare(0.6f);
+            crossing.roomChange(across(from), 120);
+            assertEquals(Arrays.asList(across(from)), moves.preRolls);
+            assertEquals(260, moves.coverPx);
+            assertTrue(crossing.holdsContent());
+            assertEquals(520, crossing.heldReservationPx());
+            assertNotNull(crossing.heldRest(PageRef.HOME));
+            assertFalse(crossing.idle());
+
+            Crossing.Landing landing = crossing.land(PageRef.of(across(from)), REVISION);
+            assertTrue(landing.held());
+            assertTrue(landing.keyboardPreRolled());
+            assertTrue(landing.contentPreRolled());
+            assertTrue(landing.beadsMelted());
+            assertFalse(landing.storeMoved());
+            // In the one step: the cover off the window in front, the stack, its rows and the bar
+            // back at rest, and no dress of the leaving half left to draw for a frame: the row
+            // lays out the arriving rest, which its frames ended on, so the Tray's card and the
+            // frame band of the half it left are gone at the landing (the Beads border line).
+            assertEquals(0, moves.coverPx);
+            assertEquals(0f, moves.dockPx, 0f);
+            assertEquals(0f, moves.keyboardPx, 0f);
+            assertEquals(0f, moves.sinkPx, 0f);
+            assertEquals(1f, moves.statusAlpha, 0f);
+            assertEquals(1f, moves.sideAlpha, 0f);
+            assertEquals(0f, moves.barX, 0f);
+            assertEquals(1, moves.morphEnds);
+            assertSame(restOf(across(from)), moves.landed);
+            assertNull(crossing.heldRest(PageRef.HOME));
+            assertNull(crossing.heldRest(PageRef.TERMINAL));
+            assertNull(crossing.heldArrangement(PageRef.HOME));
+            assertTrue(Float.isNaN(crossing.beadShare()));
+            assertFalse(crossing.holdsContent());
+            assertFalse(crossing.keyboardPreRolled());
+            assertNull(crossing.keyboardPlace());
+            assertFalse(crossing.contentPreRolled());
+            assertFalse(crossing.crossing());
+            assertNull(crossing.seam().layout());
+            // The page's commit reads the stack's dress, which goes with the crossing's end.
+            crossing.end();
+            assertTrue(from + ": nothing left", crossing.idle());
+        }
     }
 
     @Test
@@ -462,11 +511,10 @@ public class CrossingTest {
 
     @Test
     public void aHoldLetGoOnItsOwnHandsBackNothingOfAnEarlierSeam() {
-        // A crossing that stood the seam's layout lands, and its seam's landing says so...
+        // A crossing lands and ends...
         Drive drive = new Drive(PaneWallPage.WIDGETS, false, false);
         for (float f = STEP; f <= 1f + 1e-6f; f += STEP) drive.step(Math.min(1f, f));
-        Crossing.Landing landed = drive.crossing.land(PageRef.of(PaneWallPage.TERMINAL), REVISION);
-        assertTrue(landed.seam().laidOut());
+        drive.crossing.land(PageRef.of(PaneWallPage.TERMINAL), REVISION);
         drive.crossing.end();
         // ...and a keyboard swipe after it lets its hold go with nothing for the seam to do.
         drive.crossing.preRollKeyboard(PaneWallPage.TERMINAL, 500);
@@ -476,43 +524,6 @@ public class CrossingTest {
         assertFalse(released.seam().barTravelled());
         assertFalse(released.seam().redressesBack(PaneWallPage.WIDGETS));
         assertFalse(released.storeMoved());
-    }
-
-    /**
-     * Halves dressed apart, both standing a stack, either way: the leaving stack is pictured
-     * once, before the row hears of the crossing, and each stack rides with its own page
-     * (SeamDress#stacksRide): the picture out with the committed page, whole, the stack dressed
-     * for the other half in with the arriving page, at its rest, the row wearing the arriving
-     * rest from the first frame. Neither covers the window in front, so the terminal's page,
-     * laid out at the Terminal's rest, has its own stack under it all the way. The landing takes
-     * the picture away and puts the stack back at its place.
-     */
-    @Test
-    public void aWholeStackDipRidesEachStackWithItsPage() {
-    }
-
-    /** Turned back, both stacks ride back with their pages to where they stood. */
-    @Test
-    public void aRideTurnedBackPutsBothStacksBackWithTheirPages() {
-        Drive back = new Drive(PaneWallPage.WIDGETS, false, true, true);
-        back.step(0.4f);
-        assertEquals(-0.4f, back.moves.pictureSlide, 1e-4f);
-        assertEquals(0.6f, back.moves.slide, 1e-4f);
-        back.step(0f);
-        assertEquals("Home's dock back with its page", 0f, back.moves.pictureSlide, 1e-4f);
-        assertEquals("the Terminal's stack off with its page", 1f, back.moves.slide, 1e-4f);
-        back.crossing.land(PageRef.of(PaneWallPage.WIDGETS), REVISION);
-        assertEquals(0f, back.moves.slide, 0f);
-        back.crossing.end();
-        assertTrue(back.crossing.idle());
-    }
-
-
-    @Test
-    public void halvesDressedAlikeArePicturedNever() {
-        Drive drive = new Drive(PaneWallPage.TERMINAL, true, false);
-        drive.step(0.3f);
-        assertEquals(0, drive.moves.pictures);
     }
 
     /**
@@ -603,6 +614,11 @@ public class CrossingTest {
             HOME_2_ARRANGED, HOME, stack, false);
         SeamCrossing.Endpoint there = SeamCrossing.Endpoint.of(HOME_3, dress, null,
             HOME_3_ARRANGED, HOME_WITH_INDEX, stack, false);
+        // Pages whose bottom rows differ and both stand rows plan no slide (nothing is laid out
+        // on the way), yet they still cross: the row's morph runs and the rows swap at the landing.
+        assertNotEquals(EdgeStackPolicy.stack(HOME, Edge.BOTTOM),
+            EdgeStackPolicy.stack(HOME_WITH_INDEX, Edge.BOTTOM));
+        assertSame(SeamTravel.DockPlan.NONE, SeamTravel.dockPlan(HOME, HOME_WITH_INDEX));
         assertTrue(SeamCrossing.crosses(here, there));
         Moves moves = new Moves();
         Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
@@ -615,7 +631,9 @@ public class CrossingTest {
         for (float fraction = STEP; fraction < 1f; fraction += STEP) {
             Frame frame = PlaceChromeTravel.homePages(home, 2, 3, -fraction * WIDTH, WIDTH);
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
-            if (answers.relayout()) crossing.seam().standLayout();
+            assertFalse("the rows swap at the landing, not at " + fraction, answers.relayout());
+            assertFalse(answers.restyle());
+            assertEquals("the rows stay whole at " + fraction, 1f, answers.dockReveal(), 1e-4f);
             assertEquals("the row on the pager's way at " + fraction,
                 SeamTravel.otherEndProgress(frame, HOME_2), moves.dressed.fraction(), 1e-4f);
         }
@@ -634,7 +652,9 @@ public class CrossingTest {
         assertEquals("a Home reader by kind is the committed page, whatever the pager committed to",
             HOME_2, crossing.heldCommittedPage(PaneWallPage.WIDGETS));
         assertNull("no Workspace end is held", crossing.heldCommittedPage(PaneWallPage.TERMINAL));
-        crossing.land(HOME_3, REVISION);
+        Crossing.Landing landed = crossing.land(HOME_3, REVISION);
+        assertFalse("the arriving page's rows are laid out by the landing's own pass",
+            landed.seam().laidOut());
         assertNull("landed, the store answers", crossing.heldCommittedPage(PaneWallPage.WIDGETS));
         assertEquals(1, moves.morphEnds);
         assertSame(rest3, moves.landed);

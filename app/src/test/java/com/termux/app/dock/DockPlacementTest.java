@@ -167,22 +167,55 @@ public class DockPlacementTest {
     }
 
 
+    @Test
+    public void workspaceToHomeTheRowsStayTheWorkspacesAndHomesPeekComesAtTheLanding() {
+        assertEquals(DockPlan.NONE, SeamTravel.dockPlan(WITH_EXTRA_KEYS, APPS_OVER_AZ));
+        // The Workspace's keyboard is still up on every frame: the card is refused to the end,
+        // and the landing on Home alone brings Peek, the same answer it commits.
+        for (float progress : new float[] {0.25f, 0.5f, 0.99f, 1f}) {
+            assertFalse("at " + progress, travelAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS,
+                PaneWallPage.WIDGETS, APPS_OVER_AZ, progress));
+        }
+        assertTrue(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false));
+        assertTrue(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, true));
+    }
+
+    @Test
+    public void homeToWorkspaceTheRowsStayHomesAndTheWorkspacesTrayComesAtTheLanding() {
+        assertEquals(DockPlan.NONE, SeamTravel.dockPlan(APPS_OVER_AZ, WITH_EXTRA_KEYS));
+        for (float progress : new float[] {0f, 0.25f, 0.5f, 0.99f, 1f}) {
+            assertTrue("at " + progress, travelAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ,
+                PaneWallPage.TERMINAL, WITH_EXTRA_KEYS, progress));
+        }
+        assertFalse(settleAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS, WORKSPACE_KEYBOARD_UP));
+    }
 
     @Test
     public void aSlideThatFallsBackWearsTheLookItStartedWith() {
-        // Past the swap and back under it: the committed rows again, the committed answer.
-        assertTrue(travelAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS, PaneWallPage.WIDGETS,
-            APPS_OVER_AZ, 0.7f));
-        boolean back = travelAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS,
-            PaneWallPage.WIDGETS, APPS_OVER_AZ, 0.3f);
-        assertFalse(back);
-        assertEquals(settleAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS, WORKSPACE_KEYBOARD_UP),
-            back);
-        assertFalse(travelAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, PaneWallPage.TERMINAL,
-            WITH_EXTRA_KEYS, 0.7f));
-        assertEquals(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false),
-            travelAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, PaneWallPage.TERMINAL,
-                WITH_EXTRA_KEYS, 0f));
+        // Rows that differ never swap on the way: out and back, the committed answer all along.
+        boolean workspace = settleAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS,
+            WORKSPACE_KEYBOARD_UP);
+        for (float progress : new float[] {0f, 0.3f, 0.7f, 0.3f, 0f}) {
+            assertEquals("from the Workspace at " + progress, workspace,
+                travelAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS, PaneWallPage.WIDGETS,
+                    APPS_OVER_AZ, progress));
+        }
+        boolean home = settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false);
+        for (float progress : new float[] {0f, 0.3f, 0.7f, 0.3f, 0f}) {
+            assertEquals("from Home at " + progress, home,
+                travelAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, PaneWallPage.TERMINAL,
+                    WITH_EXTRA_KEYS, progress));
+        }
+    }
+
+    @Test
+    public void aFoldOutNeverStandsHomesRowsSoItsLookChangesAtTheLanding() {
+        // Home's rows plus the extra keys on the Workspace: the stack stands the Workspace's rows
+        // to the landing, which alone brings Peek.
+        assertEquals(DockPlan.NONE, SeamTravel.dockPlan(APPS_AZ_AND_KEYS, APPS_OVER_AZ));
+        assertFalse(travelAnswer(PaneWallPage.TERMINAL, APPS_AZ_AND_KEYS, PaneWallPage.WIDGETS,
+            APPS_OVER_AZ, 0.99f));
+        assertTrue(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false));
     }
 
     @Test

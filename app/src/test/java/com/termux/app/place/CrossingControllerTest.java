@@ -436,7 +436,6 @@ public class CrossingControllerTest {
         assertEquals(1, host.count("beginNavStripFade"));
         assertEquals(1, host.count("beginTopBandFade"));
         assertEquals(1, moves.morphBegins);
-        assertTrue("something moved with the first frame", host.movedTrue > 0);
         DockLayout fromRest = moves.leaving;
         DockLayout toRest = moves.arriving;
         assertEquals(restRowsPx(CrossingTest.restOf(from)), restRowsPx(fromRest));
@@ -470,7 +469,6 @@ public class CrossingControllerTest {
         }
         drag(sign * WIDTH);
         assertEquals("at the far end the row wears the arriving rest", end, moves.rowsPx());
-        assertTrue(host.chromeTravelMoved);
 
         // The finger lets go past the middle: the wall lands on the other page, the settle lands
         // the crossing.

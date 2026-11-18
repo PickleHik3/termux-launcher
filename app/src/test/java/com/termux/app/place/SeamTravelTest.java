@@ -133,8 +133,6 @@ public class SeamTravelTest {
         return layout(slots);
     }
 
-
-
     /** A window whose bottom stack is, outermost first, {@code outermostFirst}. */
     private static PlaceLayout windowStacking(Element... outermostFirst) {
         Map<Element, Slot> slots = new EnumMap<>(Element.class);
@@ -144,12 +142,6 @@ public class SeamTravelTest {
         }
         return layout(slots);
     }
-
-
-
-
-
-
 
     // ---- the fold lands on Home's rest (#94: "the dock moves down, then snaps back up") -------
 
@@ -174,7 +166,6 @@ public class SeamTravelTest {
             + (stack.contains(Element.AZ) ? azPx(stack) : 0);
     }
 
-
     @Test
     public void homesRowsRestTallerThanTheWindowsLessTheExtraKeysByTheAzChin() {
         // The shipped order: the extra keys outermost, under the letters. On Home the letters are
@@ -186,13 +177,24 @@ public class SeamTravelTest {
     }
 
     @Test
-    public void aFoldOutEndsWhereHomesStackRestsChinAndFlushPaddingIncluded() {
-        int windowRows = restRowsPx(workspaceWithDock());
-        int homeRows = restRowsPx(homeWithDock());
-        int growth = homeRows - windowRows;
+    public void rowsThatDifferButBothHalvesStandStayPutAndSwapAtTheLanding() {
+        // Nothing is laid out or slid on the way for rows that differ: the plan is none, the rows
+        // stay whole, and the stack's lanes stand both sides' rows (D1-A).
+        PlaceLayout window = windowStacking(Element.APPS, Element.EXTRA_KEYS, Element.AZ);
+        PlaceLayout[][] pairs = {
+            {homeAppsOnly(), workspaceWithDock()}, {workspaceWithDock(), homeAppsOnly()},
+            {workspaceWithDock(), homeWithDock()}, {homeWithDock(), workspaceWithDock()},
+            {window, homeWithDock()}};
+        for (PlaceLayout[] pair : pairs) {
+            assertSame(DockPlan.NONE, SeamTravel.dockPlan(pair[0], pair[1]));
+        }
+        for (float q : new float[] {0f, 0.3f, 0.5f, 0.8f, 1f}) {
+            assertEquals(1f, SeamTravel.dockReveal(DockPlan.NONE, q), EPSILON);
+        }
+        assertFalse(SeamTravel.committedRowsLeave(DockPlan.NONE));
+        assertFalse(SeamTravel.showsOtherDock(DockPlan.NONE, 0.5f));
+        assertFalse(SeamTravel.showsOtherDock(DockPlan.NONE, 1f));
     }
-
-
 
     @Test
     public void theSameRowsOnBothHalvesStayPut() {
@@ -235,8 +237,6 @@ public class SeamTravelTest {
         assertTrue(SeamTravel.showsOtherDock(DockPlan.SLIDE_IN, 0.01f));
         assertEquals(0.01f, SeamTravel.dockReveal(DockPlan.SLIDE_IN, 0.01f), EPSILON);
     }
-
-
 
     @Test
     public void theExchangedLayoutTakesOnlyTheDockRows() {

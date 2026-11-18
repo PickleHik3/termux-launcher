@@ -295,20 +295,24 @@ public class SeamCrossingTest {
                 false, false);
     }
 
-    /** The invariants of a crossing between halves dressed alike, frame by frame. */
-    private static void assertOnlyTheExtraKeysFold(@NonNull Drive drive) {
-        assertOnlyTheExtraKeysFold(drive, true);
-    }
-
     /**
-     * The same, where the halves' Dock designs may differ ({@code sameDesign} false): a band only
-     * one of them carries eases and beads only one draws melt over the fold, the rows standing.
+     * Halves whose rows differ and stand them both keep the stack as it stands to the landing:
+     * nothing is laid out, dressed or sunk on the way, the rows stay whole and the keyboard
+     * follows the frame's own reveal.
      */
-    private static void assertOnlyTheExtraKeysFold(@NonNull Drive drive, boolean sameDesign) {
+    private static void assertNothingStandsMidWay(@NonNull Drive drive) {
+        for (Step step : drive.steps) {
+            assertFalse("nothing to lay out at " + step.fraction, step.relayout);
+            assertFalse("nothing to dress at " + step.fraction, step.restyle);
+            assertFalse("nothing sinks at " + step.fraction, step.rowsSink);
+            assertNull(step.layout);
+            assertNull(step.stackDressPage);
+            assertEquals("the rows stay whole at " + step.fraction, 1f, step.dockReveal, EPSILON);
+            assertEquals("the keyboard keeps its own travel at " + step.fraction,
+                step.frameKeyboardReveal, step.keyboardReveal, EPSILON);
+        }
         assertFalse(drive.barFirst);
     }
-
-
 
     /**
      * The one layout with its bottom rows in another order, outermost first: the window's, and
@@ -339,6 +343,17 @@ public class SeamCrossingTest {
 
 
     /** Home's own layout with the index put away: only the window stands the A-Z row. */
+    private static Stored homeLayoutOn() {
+        Stored stored = new Stored();
+        stored.homeLayout = true;
+        return stored;
+    }
+
+    /** Home's own layout with the pinned apps put away: the index alone on its dock. */
+    private static PlaceLayout homeWithoutApps() {
+        return home().withSlot(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS).withHidden(true));
+    }
+
     private static PlaceLayout homeWithoutAz() {
         return home().withSlot(Element.AZ, Slot.on(Edge.BOTTOM, Element.AZ).withHidden(true));
     }
@@ -365,50 +380,216 @@ public class SeamCrossingTest {
     }
 
 
-    /**
-     * Rows that differ between halves dressed alike are swapped once each way, on a frame where
-     * none of them shows, and never dressed again: there is nothing to dress.
-     */
-    private static void assertRowsSwapOnlyWhileHidden(@NonNull Drive drive) {
+    /** The bands and the Search field the other half rests with, drawn by the last frame. */
+    private static void assertBandsLandOnTheOtherHalfsRest(@NonNull Drive drive) {
+        Step last = drive.last();
+        assertEquals(1f, last.progress, EPSILON);
+        assertEquals("all of the rows showing", 1f, last.dockReveal, EPSILON);
+        assertEquals("the Wall strip's row as the other half rests",
+            restShare(drive.there, DockStyle.WALL_STRIP), last.stripShare, EPSILON);
+        assertEquals("the Search field as the other half rests",
+            drive.there.dress.searchField() ? 1f : 0f, last.fieldShare, EPSILON);
+        assertEquals("the stack is dressed alike on both halves", drive.here.stack,
+            drive.there.stack);
+    }
+
+    @Test
+    public void homesOwnWithoutTheAppsRowKeepsTheStackToTheLandingBothWays() {
+        // The rows differ and both halves stand them: they swap at the landing, not on the way.
+        for (PaneWallPage from : BOTH) {
+            Drive drive = homeOwn(homeLayoutOn(), from, homeWithoutApps(), false).slow(0f, 1f);
+            assertNothingStandsMidWay(drive);
+            assertBandsLandOnTheOtherHalfsRest(drive);
+            SeamCrossing.Landing landing = drive.crossing.land();
+            assertFalse("the rows are laid out by the landing's own pass", landing.laidOut());
+            drive.crossing.end();
+            assertFalse(landing.redressesBack(PaneWallPage.TERMINAL));
+            assertFalse(landing.redressesBack(PaneWallPage.WIDGETS));
+        }
+    }
+
+    @Test
+    public void homesOwnWithoutTheAppsRowAndTheWindowsKeyboardSinkNothing() {
+        for (PaneWallPage from : BOTH) {
+            Drive drive = homeOwn(homeLayoutOn(), from, homeWithoutApps(), true).slow(0f, 1f);
+            assertNothingStandsMidWay(drive);
+            assertBandsLandOnTheOtherHalfsRest(drive);
+        }
+    }
+
+    @Test
+    public void homesOwnWithoutTheAppsRowReversedMidWayComesBackAsItLeft() {
+        for (PaneWallPage from : BOTH) {
+            Drive drive = homeOwn(homeLayoutOn(), from, homeWithoutApps(), false)
+                .slow(0f, 0.7f).slow(0.7f, 0f);
+            assertNothingStandsMidWay(drive);
+            assertNull(drive.last().layout);
+            assertNull(drive.last().stackDressPage);
+            assertEquals(1f, drive.last().dockReveal, EPSILON);
+            SeamCrossing.Landing landing = drive.crossing.land();
+            assertFalse(landing.laidOut());
+            drive.crossing.end();
+            assertFalse(landing.redressesBack(from));
+        }
+    }
+
+    @Test
+    public void homesOwnFlingThatSkipsTheWayBackLaysNothingOutAtSettle() {
+        // The drawer or reduced motion took the frames back: the settle has nothing to put back,
+        // for the crossing laid nothing out and dressed nothing.
+        for (PaneWallPage from : BOTH) {
+            Drive drive = homeOwn(homeLayoutOn(), from, homeWithoutApps(), false)
+                .run(0f, 0.3f, 0.9f);
+            assertEquals(0, drive.count(s -> s.restyle));
+            SeamCrossing.Landing landing = drive.crossing.land();
+            assertFalse(landing.laidOut());
+            drive.crossing.end();
+            assertFalse(landing.redressesBack(from));
+            assertNull(drive.crossing.stackDressPage());
+        }
+    }
+
+    @Test
+    public void homesOwnDesignEasesTheStripWithThePageAndStandsNothing() {
+        // Another Dock design on Home, the same rows less the extra keys: the Wall strip's row
+        // follows Home's share, and nothing is laid out or dressed on the way.
+        for (PaneWallPage from : BOTH) {
+            Stored stored = homeLayoutOn();
+            stored.designs.put(HOME_PAGE, DockStyle.WALL_STRIP);
+            Drive drive = homeOwn(stored, from, home(), false).slow(0f, 1f);
+            assertNothingStandsMidWay(drive);
+            float previous = Float.NaN;
+            for (Step step : drive.steps) {
+                float homeShare = from == PaneWallPage.WIDGETS
+                    ? 1f - clamp01(step.progress) : clamp01(step.progress);
+                assertEquals("the strip follows Home at " + step.fraction, homeShare,
+                    step.stripShare, EPSILON);
+                if (!Float.isNaN(previous)) {
+                    assertTrue("one way at " + step.fraction, from == PaneWallPage.WIDGETS
+                        ? step.stripShare <= previous + EPSILON
+                        : step.stripShare >= previous - EPSILON);
+                }
+                previous = step.stripShare;
+                assertEquals("no Search field on either half", 0f, step.fieldShare, EPSILON);
+            }
+            assertTrue(drive.count(s -> s.bandsMoved) > 10);
+            assertBandsLandOnTheOtherHalfsRest(drive);
+            SeamCrossing.Landing landing = drive.crossing.land();
+            assertTrue(landing.bandsMoved());
+            // Landed, the band is the committed design's again until the commit dresses the page.
+            assertEquals(0f, drive.crossing.designShare(DockStyle.WALL_STRIP, 0f), EPSILON);
+            assertNull(drive.crossing.committedDesign());
+            drive.crossing.end();
+        }
+    }
+
+    @Test
+    public void homesOwnDesignWithoutTheAppsRowEasesTheStripAndKeepsTheRowsToTheLanding() {
+        for (PaneWallPage from : BOTH) {
+            Stored stored = homeLayoutOn();
+            stored.designs.put(HOME_PAGE, DockStyle.WALL_STRIP);
+            stored.searchFields.put(HOME_PAGE, true);
+            Drive drive = homeOwn(stored, from, homeWithoutApps(), false).slow(0f, 1f);
+            assertNothingStandsMidWay(drive);
+            assertTrue(drive.count(s -> s.bandsMoved) > 10);
+            assertBandsLandOnTheOtherHalfsRest(drive);
+        }
+    }
+
+    @Test
+    public void homesOwnLensBeadsMeltIntoTheSlabAsHomeLeavesAndBackOut() {
+        Stored stored = homeLayoutOn();
+        stored.designs.put(HOME_PAGE, DockStyle.LENS_BEADS);
+        Drive drive = drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+            window(), false, true).slow(0f, 1f);
+        assertNothingStandsMidWay(drive);
+        float previous = 1f;
+        for (Step step : drive.steps) {
+            if (!step.active) continue;
+            // The rows stay up: the beads melt over the way, as Home leaves.
+            assertEquals("Home's share at " + step.fraction, 1f - clamp01(step.progress),
+                step.beadShare, EPSILON);
+            assertTrue(step.beadShare <= previous + EPSILON);
+            previous = step.beadShare;
+        }
+        assertEquals("the window's slab at the end", 0f, drive.last().beadShare, EPSILON);
+        assertBandsLandOnTheOtherHalfsRest(drive);
+        Drive back = drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+            window(), false, true).slow(0f, 0.6f).slow(0.6f, 0f);
+        assertEquals("whole beads back on Home", 1f, back.last().beadShare, EPSILON);
+    }
+
+    @Test
+    public void theSearchFieldKeepsHomesBeadsSoTheyMeltInAsHomeArrives() {
+        // #84: Lens beads with the Search field keep their beads (the field in a capsule of its
+        // own under them), so a slide in from the window's slab melts them in as Home comes.
+        Stored stored = homeLayoutOn();
+        stored.designs.put(HOME_PAGE, DockStyle.LENS_BEADS);
+        stored.searchFields.put(HOME_PAGE, true);
+        // Home's row alone on its dock (the index put away), where it wears beads.
+        Drive drive = drive(stored, PaneWallPage.TERMINAL, window(), false, PaneWallPage.WIDGETS,
+            homeWithoutAz(), false, false).slow(0f, 1f);
+        assertTrue("the beads melt in with Home's half",
+            drive.count(s -> !Float.isNaN(s.beadShare)) > 0);
+        float last = Float.NaN;
+        for (Step step : drive.steps) if (!Float.isNaN(step.beadShare)) last = step.beadShare;
+        assertEquals("whole beads once Home has come", 1f, last, 0.05f);
+        assertBandsLandOnTheOtherHalfsRest(drive);
+    }
+
+    @Test
+    public void homesOwnWithoutTheAzRowKeepsTheStackToTheLandingBothWays() {
+        for (PaneWallPage from : BOTH) {
+            Drive drive = homeOwn(homeLayoutOn(), from, homeWithoutAz(), false).slow(0f, 1f);
+            assertNothingStandsMidWay(drive);
+            assertBandsLandOnTheOtherHalfsRest(drive);
+            Drive back = homeOwn(homeLayoutOn(), from, homeWithoutAz(), false)
+                .slow(0f, 0.7f).slow(0.7f, 0f);
+            assertNothingStandsMidWay(back);
+            assertNull(back.last().layout);
+        }
+    }
+
+    @Test
+    public void homesOwnWithOnlyTheExtraKeysApartStandsStillAsTheSharedLayoutDoes() {
+        for (PaneWallPage from : BOTH) {
+            Drive drive = homeOwn(homeLayoutOn(), from, home(), false).slow(0f, 1f);
+            assertNothingStandsMidWay(drive);
+            assertBandsLandOnTheOtherHalfsRest(drive);
+            Drive fling = homeOwn(homeLayoutOn(), from, home(), false).run(0f, 0.3f, 0.9f, 1f);
+            assertNothingStandsMidWay(fling);
+            assertBandsLandOnTheOtherHalfsRest(fling);
+            Drive back = homeOwn(homeLayoutOn(), from, home(), false)
+                .slow(0f, 0.6f).slow(0.6f, 0f);
+            assertNothingStandsMidWay(back);
+        }
+    }
+
+    @Test
+    public void homesOwnWithoutTheBarLaysTheWorkspacesBarOverHomeFromTheFirstFrame() {
+        Drive drive = drive(homeLayoutOn(), PaneWallPage.WIDGETS, homeWithoutBar(), false,
+            PaneWallPage.TERMINAL, window(), false, false).slow(0f, 1f);
+        // One shape across the wall: the bar has no dress of Home's to take off first.
         assertFalse(drive.barFirst);
+        for (Step step : drive.steps) {
+            assertFalse("nothing to dress again at " + step.fraction, step.restyle);
+            assertEquals("the rows stay whole at " + step.fraction, 1f, step.dockReveal, EPSILON);
+        }
+        // The window's bar is stood over Home from the first frame into the window's half, once.
+        assertEquals(1, drive.count(s -> s.relayout));
+        Step first = null;
+        for (Step step : drive.steps) if (step.relayout && first == null) first = step;
+        assertNotNull(first);
+        assertTrue(first.progress > 0f);
+        PlaceLayout stood = SeamTravel.withStatusOf(homeWithoutBar(), window());
+        assertEquals(stood, first.layout);
+        assertEquals(stood, drive.last().layout);
+        // The bar rides with the window's page while any of Home shows, and stands at its rest
+        // once the frame is the window's alone.
+        assertTrue(drive.steps.get(drive.steps.size() / 2).rides);
+        assertFalse(drive.last().rides);
+        assertBandsLandOnTheOtherHalfsRest(drive);
     }
-
-    @Test
-    public void homesOwnWithoutTheAppsRowSwapsTheRowsWhileHiddenBothWays() {
-    }
-
-    @Test
-    public void homesOwnWithoutTheAppsRowSinksTheRowsIntoTheWindowsKeyboard() {
-    }
-
-    @Test
-    public void homesOwnWithoutTheAppsRowReversedMidWayComesBackWithItsOwnRows() {
-    }
-
-    @Test
-    public void homesOwnFlingThatSkipsTheWayBackLaysTheCommittedRowsOutAtSettle() {
-        // The drawer or reduced motion took the frames back past the swap: the settle lays the
-        // committed rows out again, and has no dress to put back, the halves wearing one.
-    }
-
-    @Test
-    public void homesOwnDesignFoldsTheExtraKeysAndEasesTheStripWithThePage() {
-        // Another Dock design on Home, the same rows less the extra keys: the extra keys fold as
-        // on the shared layout, the Wall strip's row follows Home's share, and nothing dips.
-    }
-
-    @Test
-    public void homesOwnDesignWithoutTheAppsRowSwapsTheRowsAndEasesTheStrip() {
-    }
-
-
-
-    @Test
-    public void homesOwnWithoutTheAzRowSwapsTheRowsWhileHiddenBothWays() {
-    }
-
-
-
 
     private static float clamp01(float value) {
         return value < 0f ? 0f : value > 1f ? 1f : value;
@@ -416,43 +597,19 @@ public class SeamCrossingTest {
 
     // ---- (c) Minimal mode on in a window ----
 
-    /** The dress changes only where none of the stack shows, and only with its rows. */
-    private static void assertDressSwapsOnlyWhileHidden(@NonNull Drive drive) {
-        PaneWallPage previous = null;
-        for (Step step : drive.steps) {
-            if (step.restyle) {
-                assertTrue("a restyle is a layout pass at " + step.fraction, step.relayout);
-                assertTrue("the dock is hidden at the swap, " + step.fraction,
-                    step.dockReveal <= 2f * SLOW * MAX_CURVE_SLOPE + EPSILON);
-                assertTrue("the keyboard is hidden at the swap, " + step.fraction,
-                    step.keyboardReveal <= step.dockReveal + EPSILON);
-                assertTrue(step.stackDressPage != previous);
-            } else {
-                assertSame("the dress holds at " + step.fraction, previous, step.stackDressPage);
-            }
-            previous = step.stackDressPage;
-        }
-    }
-
-
-
-
-
-
-
-
-
     @Test
     public void minimalWindowReversedMidWayComesBackDressedAsItLeft() {
         Stored stored = new Stored();
         stored.minimal = true;
+        // The window's minimal layout dresses the stack apart from Home's (its sizes): the
+        // stack is neither laid out nor dressed on the way, out or back.
         Drive drive = drive(stored, PaneWallPage.TERMINAL, minimalWindow(), true,
             PaneWallPage.WIDGETS, home(), false, false).slow(0f, 0.8f).slow(0.8f, 0f);
-        assertDressSwapsOnlyWhileHidden(drive);
-        assertEquals(2, drive.count(s -> s.restyle));
+        assertNothingStandsMidWay(drive);
         assertEquals(1f, drive.last().keyboardReveal, EPSILON);
         assertEquals(1f, drive.last().dockReveal, EPSILON);
         assertNull(drive.last().stackDressPage);
+        assertFalse(drive.crossing.land().redressesBack(PaneWallPage.WIDGETS));
     }
 
     /**
@@ -480,8 +637,8 @@ public class SeamCrossingTest {
                     assertFalse(step.layout.slot(Element.STATUS).hidden);
                 }
             }
-            // The stack is still dressed for the arriving half's Margin where none of it shows.
-            assertTrue(drive.count(s -> s.restyle && s.restyleShape) > 0);
+            // The stack is not dressed again on the way: the bar eases, the landing re-dresses.
+            assertEquals(0, drive.count(s -> s.restyle));
         }
     }
 
@@ -667,6 +824,20 @@ public class SeamCrossingTest {
 
     // ---- Rest ----
 
+    @Test
+    public void aFrameThatNeverReachesTheOtherHalfAnswersTheTravelsOwnReveals() {
+        SeamCrossing crossing = new SeamCrossing();
+        Frame frame = PlaceChromeTravel.rest(PaneWallPage.TERMINAL, new Rest(true, false));
+        SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
+        assertEquals(frame.dockReveal, answers.dockReveal(), EPSILON);
+        assertEquals(frame.keyboardReveal, answers.keyboardReveal(), EPSILON);
+        assertFalse(answers.relayout());
+        assertFalse(answers.moved());
+        assertFalse(crossing.rideBar(frame, true));
+        assertFalse(answers.barRedressed());
+        assertNull(crossing.layout());
+        assertNull(crossing.other());
+    }
 
     // ---- The rows the seam stands wear their own half's design ----
 
@@ -678,12 +849,37 @@ public class SeamCrossingTest {
     }
 
     @Test
-    public void theRowsTheSeamStandsAreLaidOutInTheirOwnHalfsDesign() {
+    public void theRowsAHalfStandsKeepTheCommittedHalfsDesignToTheLanding() {
         // The developer's phone: Home's own layout with the pinned apps and the index, the
-        // Workspace with the extra keys alone. A row slid in from Home was held to the
-        // Workspace's bead fit for the whole slide (118 px) and grew at the settle (143 px).
-        // Since round 9 a half with no apps row wears no design (WornDockDesign), whatever it
-        // stores, so the halves differ here by Home's Lens beads against the Workspace's tray.
+        // Workspace with the extra keys alone. Since round 9 a half with no apps row wears no
+        // design (WornDockDesign), so the halves differ by Home's Lens beads against the
+        // Workspace's tray. The seam stands no other rows on the way (the rows swap at the
+        // landing), so the rows keep laying out in the committed half's design.
+        for (PaneWallPage from : BOTH) {
+            Stored stored = homeLayoutOn();
+            stored.designs.put(HOME_PAGE, DockStyle.LENS_BEADS);
+            stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
+            boolean fromHome = from == PaneWallPage.WIDGETS;
+            Drive drive = fromHome
+                ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                    keysOnlyWindow(), true, false)
+                : drive(stored, PaneWallPage.TERMINAL, keysOnlyWindow(), true,
+                    PaneWallPage.WIDGETS, home(), false, false);
+            DockStyle committed = fromHome ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY;
+            assertNull("no crossing, no design", drive.crossing.rowsDesign());
+            int n = Math.round(1f / SLOW);
+            for (int i = 0; i <= n; i++) {
+                Step step = drive.step(i / (float) n);
+                if (!step.active) continue;
+                String at = from + " at " + step.fraction;
+                assertNull(at, step.layout);
+                assertEquals(at, committed, drive.crossing.rowsDesign());
+                assertEquals(at, committed, drive.crossing.committedDesign());
+            }
+            drive.crossing.land();
+            assertNull(drive.crossing.rowsDesign());
+            drive.crossing.end();
+        }
     }
 
     /**
@@ -694,6 +890,31 @@ public class SeamCrossingTest {
      */
     @Test
     public void aDockOffWorkspaceCrossesWithTheDesignItsSlabWears() {
+        for (PaneWallPage from : BOTH) {
+            Stored stored = homeLayoutOn();
+            stored.designs.put(HOME_PAGE, DockStyle.PEEK_GLASS);
+            stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
+            boolean fromHome = from == PaneWallPage.WIDGETS;
+            Drive drive = fromHome
+                ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                    keysOnlyWindow(), true, false)
+                : drive(stored, PaneWallPage.TERMINAL, keysOnlyWindow(), true, PaneWallPage.WIDGETS,
+                    home(), false, false);
+            assertSame(DockStyle.LENS_BEADS, drive.window(fromHome).dress.dockDesign());
+            drive.slow(0f, 1f);
+            // At rest on either page the resolver answers; the crossing holds the same answers.
+            assertSame(from + ": the committed page", worn(drive.here),
+                drive.crossing.committedDesign());
+            assertSame(DockStyle.GLASS_TRAY, worn(drive.window(fromHome)));
+            assertSame(DockStyle.PEEK_GLASS, worn(drive.home(fromHome)));
+            // The rows stand as the committed page's to the landing, in its design.
+            assertSame(from + ": the rows on the way", worn(drive.here),
+                drive.crossing.rowsDesign());
+            assertFalse("never dressed apart", drive.count(s -> s.restyle) > 0);
+            drive.crossing.land();
+            assertNull(drive.crossing.rowsDesign());
+            drive.crossing.end();
+        }
     }
 
     // ---- The dock's foot under the gesture pill ----
@@ -726,11 +947,132 @@ public class SeamCrossingTest {
         return out;
     }
 
+    /**
+     * The developer's crossing: the Workspace with its keyboard up and the extra keys alone, Home
+     * with the pinned apps and the index, keyboard down. Both stand rows, so no other rows are
+     * stood on the way and the foot answers the live keyboard throughout.
+     */
+    private static Drive footDrive(@NonNull PaneWallPage from) {
+        Stored stored = homeLayoutOn();
+        stored.designs.put(HOME_PAGE, DockStyle.PEEK_GLASS);
+        return from == PaneWallPage.WIDGETS
+            ? drive(stored, PaneWallPage.WIDGETS, home(), false, PaneWallPage.TERMINAL,
+                keysOnlyWindow(), true, false)
+            : drive(stored, PaneWallPage.TERMINAL, keysOnlyWindow(), true, PaneWallPage.WIDGETS,
+                home(), false, false);
+    }
 
+    /** A Workspace with no dock rows at all, the bar alone: Home's rows slide in over it. */
+    private static PlaceLayout rowlessWindow() {
+        return window()
+            .withSlot(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS).withHidden(true))
+            .withSlot(Element.AZ, Slot.on(Edge.BOTTOM, Element.AZ).withHidden(true))
+            .withSlot(Element.EXTRA_KEYS,
+                Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS).withHidden(true));
+    }
 
+    /** The slide in: Home's rows rise over a window that stands none, keyboard down on Home. */
+    private static Drive slideInDrive() {
+        return drive(new Stored(), PaneWallPage.TERMINAL, rowlessWindow(), false,
+            PaneWallPage.WIDGETS, home(), false, false);
+    }
 
+    @Test
+    public void theFootAnswersTheLiveKeyboardThroughoutWhenNoRowsAreStood() {
+        for (PaneWallPage from : BOTH) {
+            Drive drive = footDrive(from);
+            List<Boolean> keyboards = footKeyboards(drive, slowWay(0f, 1f));
+            assertSame(SeamTravel.DockPlan.NONE,
+                SeamTravel.dockPlan(drive.here.layout, drive.there.layout));
+            for (int i = 0; i < keyboards.size(); i++) assertTrue("at " + i, keyboards.get(i));
+            // The settle reads the live keyboard, as it is then, and finds nothing held.
+            drive.crossing.land(across(from));
+            assertFalse(drive.crossing.footKeyboardUp(false));
+            assertTrue(drive.crossing.footKeyboardUp(true));
+            drive.crossing.end();
+        }
+    }
 
+    private static PaneWallPage across(PaneWallPage page) {
+        return page == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS;
+    }
 
+    @Test
+    public void aSlideInStandsTheFootOfTheArrivingHalfFromItsFirstFrame() {
+        Drive drive = slideInDrive();
+        List<Boolean> keyboards = footKeyboards(drive, slowWay(0f, 1f));
+        assertSame(SeamTravel.DockPlan.SLIDE_IN,
+            SeamTravel.dockPlan(drive.here.layout, drive.there.layout));
+        assertTrue("short of the other half the live keyboard answers", keyboards.get(0));
+        assertFalse("Home's rows own the foot by the end", keyboards.get(keyboards.size() - 1));
+        // Parity: the settle on Home reads the live keyboard, down there, and finds the same.
+        boolean travelled = keyboards.get(keyboards.size() - 1);
+        drive.crossing.land();
+        assertEquals(travelled, drive.crossing.footKeyboardUp(drive.there.keyboardUp));
+        drive.crossing.end();
+    }
+
+    @Test
+    public void aSlideInThatFallsBackPutsTheFootBackWithTheCommittedRows() {
+        Drive drive = slideInDrive();
+        float[] out = slowWay(0f, 0.7f);
+        float[] back = slowWay(0.7f, 0f);
+        float[] way = new float[out.length + back.length + 1];
+        System.arraycopy(out, 0, way, 0, out.length);
+        System.arraycopy(back, 0, way, out.length, back.length);
+        way[way.length - 1] = 0f;
+        List<Boolean> keyboards = footKeyboards(drive, way);
+        assertTrue("Home's rows had it on the way", keyboards.contains(false));
+        assertTrue("the live keyboard again", keyboards.get(keyboards.size() - 1));
+        drive.crossing.land();
+        assertTrue(drive.crossing.footKeyboardUp(true));
+        drive.crossing.end();
+    }
+
+    /**
+     * Pong round 12: the crossing landed on Home and ended, and the settle's first geometry pass
+     * still read the Workspace's keyboard up, so the foot dropped for a pass before the keyboard's
+     * state caught up. The travelled answer holds through the landing until the live keyboard
+     * agrees, for a few passes at most.
+     */
+    @Test
+    public void theFootHoldsThroughTheLandingUntilTheKeyboardStateLands() {
+        Drive drive = slideInDrive();
+        List<Boolean> keyboards = footKeyboards(drive, slowWay(0f, 1f));
+        boolean travelled = keyboards.get(keyboards.size() - 1);
+        assertFalse(travelled);
+        drive.crossing.land(PaneWallPage.WIDGETS);
+        // Landed, then ended: the page's commit has run, the keyboard has not yet gone.
+        assertEquals("through the commit", travelled, drive.crossing.footKeyboardUp(true));
+        drive.crossing.end();
+        assertEquals("crossing just ended, keyboard state not yet committed", travelled,
+            drive.crossing.footKeyboardUp(true));
+        // The keyboard's state lands: the live answer, the same, and the hold is gone.
+        assertEquals(travelled, drive.crossing.footKeyboardUp(false));
+        assertTrue("nothing held after", drive.crossing.footKeyboardUp(true));
+    }
+
+    @Test
+    public void aKeyboardThatNeverLandsGivesTheFootBackAfterAFewPasses() {
+        Drive drive = slideInDrive();
+        footKeyboards(drive, slowWay(0f, 1f));
+        drive.crossing.land(PaneWallPage.WIDGETS);
+        drive.crossing.end();
+        for (int i = 0; i < SeamCrossing.LANDED_FOOT_READS; i++)
+            assertFalse("held, pass " + i, drive.crossing.footKeyboardUp(true));
+        assertTrue("the fail-safe lets go", drive.crossing.footKeyboardUp(true));
+    }
+
+    @Test
+    public void aSlideThatFallsBackHoldsNothingAtItsLanding() {
+        Drive drive = slideInDrive();
+        footKeyboards(drive, slowWay(0f, 0.7f));
+        footKeyboards(drive, slowWay(0.7f, 0.6f));
+        // The wall went back to the Workspace without a frame under the swap to undo it.
+        drive.crossing.land(PaneWallPage.TERMINAL);
+        drive.crossing.end();
+        assertTrue(drive.crossing.footKeyboardUp(true));
+    }
 
     @Test
     public void atRestTheLiveKeyboardAnswers() {
