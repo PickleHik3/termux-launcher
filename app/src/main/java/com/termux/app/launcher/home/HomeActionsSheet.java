@@ -52,10 +52,7 @@ import java.util.function.Function;
  * <p>The card runs down under the navigation bar and pads its rows above it, as the Appearance
  * editor's sheet and the drawer plane do. The activity hands it the window's insets ({@link
  * #applyInsets}): the shell's root fits the system windows and consumes them, so a dispatch never
- * reaches an overlay standing after it in the content frame. The under-pill strip a Docked dock
- * continues into is the decor's topmost child and would paint over the card's foot, so the sheet
- * reports how much of the band under the bar it covers ({@link Listener#onNavBandCovered}) and the
- * activity fades the strip out by as much.
+ * reaches an overlay standing after it in the content frame.
  */
 public final class HomeActionsSheet extends CoordinatorLayout {
 
@@ -67,12 +64,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
          * settled hidden, so nothing of that surface draws over the closing card.
          */
         void onHomeAction(@NonNull Item item);
-
-        /**
-         * How much of the band under the navigation bar the card now covers, 0 to 1
-         * ({@link HomeActionsSheetPolicy#navBandCover}); back to 0 once the sheet is put away.
-         */
-        default void onNavBandCovered(float covered) { }
 
         /** The Lock layout row was tapped; the sheet stays up and redraws its rows. */
         default void onLayoutLockChanged(boolean locked) { }
@@ -115,8 +106,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     private final int cardPadLeft, cardPadRight, cardPadBottom;
     /** The navigation bar's height under the card, from the last {@link #applyInsets}. */
     private int navInsetPx;
-    /** The last cover told to the listener, so a settle that changes nothing tells it nothing. */
-    private float reportedCover;
     private boolean open;
     /** The rows for a layout that is locked (true) or not, so the lock row can redraw in place. */
     @NonNull private Function<Boolean, List<Item>> source = locked -> java.util.Collections.emptyList();
@@ -186,13 +175,12 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         behaviorCallback = new BottomSheetBehavior.BottomSheetCallback() {
             @Override public void onStateChanged(@NonNull View bottomSheet, int newState) {
                 if (newState == BottomSheetBehavior.STATE_HIDDEN) finishClosing();
-                else if (newState == BottomSheetBehavior.STATE_EXPANDED) reportCover();
+
             }
             @Override public void onSlide(@NonNull View bottomSheet, float slideOffset) {
                 // A layout mid-slide reports the card's resting offset; the slide owns the dim.
                 if (slide.isRunning()) return;
                 scrim.setAlpha(Math.max(0f, Math.min(1f, 1f + slideOffset)));
-                reportCover();
             }
         };
         behavior.addBottomSheetCallback(behaviorCallback);
@@ -216,16 +204,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             || card.getPaddingBottom() != bottom) {
             card.setPadding(left, card.getPaddingTop(), right, bottom);
         }
-        if (open) reportCover();
-    }
-
-    /** Tells the listener how much of the band under the navigation bar the card covers. */
-    private void reportCover() {
-        int drawnTop = card.getTop() + Math.round(card.getTranslationY());
-        float cover = HomeActionsSheetPolicy.navBandCover(drawnTop, getHeight(), navInsetPx);
-        if (cover == reportedCover) return;
-        reportedCover = cover;
-        listener.onNavBandCovered(cover);
     }
 
     /** Whether the sheet is up, or on its way up. */
@@ -291,10 +269,9 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         ViewCompat.setAccessibilityPaneTitle(card, title);
     }
 
-    /** Each step of the slide: the dim and the cover of the nav band follow the card. */
+    /** Each step of the slide: the dim follows the card. */
     private void onSlideFrame() {
         scrim.setAlpha(slide.scrimAlpha());
-        reportCover();
     }
 
     /**
@@ -376,10 +353,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         scrim.setAlpha(0f);
         setVisibility(GONE);
         slide.reset();
-        if (reportedCover != 0f) {
-            reportedCover = 0f;
-            listener.onNavBandCovered(0f);
-        }
         if (wasShown) listener.onSheetClosed();
         Runnable action = afterHidden;
         if (action != null) {

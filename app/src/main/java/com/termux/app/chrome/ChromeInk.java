@@ -1368,9 +1368,6 @@ public final class ChromeInk {
         new EnumMap<>(GlassBackdropCache.Band.class);
     @NonNull private final Map<GlassBackdropCache.Band, BandEvenOut> mBandEvenOut =
         new EnumMap<>(GlassBackdropCache.Band.class);
-    /** The decor nav strip's: it has no band, so it is kept on its own. */
-    @Nullable private EvenOutPolicy mStripEvenOutPolicy;
-    @NonNull private final BandEvenOut mStripEvenOut = new BandEvenOut();
     @NonNull private final Rect mTmpEvenOutRect = new Rect();
 
     /**
@@ -1389,17 +1386,6 @@ public final class ChromeInk {
                 memo.matrix = null;
                 changedEvenOut();
             }
-        }
-    }
-
-    /** {@link #setBandEvenOutPolicy} for the decor nav strip, which carries no band. */
-    public void setStripEvenOutPolicy(@Nullable EvenOutPolicy policy) {
-        if (samePolicy(mStripEvenOutPolicy, policy)) return;
-        mStripEvenOutPolicy = policy;
-        mStripEvenOut.measured = false;
-        if (policy == null && mStripEvenOut.matrix != null) {
-            mStripEvenOut.matrix = null;
-            changedEvenOut();
         }
     }
 
@@ -1436,21 +1422,6 @@ public final class ChromeInk {
     }
 
     /**
-     * {@link #bandEvenOutMatrix} for the decor nav strip at {@code screenRect}: the frost of the
-     * surface right above it, so measured on the dock's glass; its frame is up whenever this
-     * is asked (the strip's frost site), so it stands on no page dim.
-     */
-    @Nullable
-    public android.graphics.ColorMatrix stripEvenOutMatrix(@NonNull Rect screenRect) {
-        EvenOutPolicy policy = mStripEvenOutPolicy;
-        if (policy == null) return null;
-        readMode();
-        toRootSpace(screenRect, mTmpEvenOutRect);
-        return measureEvenOut(mStripEvenOut, policy, mTmpEvenOutRect,
-            glassFor(GlassBackdropCache.Band.DOCK), true);
-    }
-
-    /**
      * {@code band}'s matrix as last measured, measuring nothing: a Glass drag's tick keeps it
      * until the release's pass re-measures. Null while the band has no even-out.
      */
@@ -1460,12 +1431,6 @@ public final class ChromeInk {
         if (!mBandEvenOutPolicies.containsKey(band)) return null;
         BandEvenOut memo = mBandEvenOut.get(band);
         return memo == null ? null : memo.matrix;
-    }
-
-    /** {@link #lastBandEvenOutMatrix} for the decor nav strip. */
-    @Nullable
-    public android.graphics.ColorMatrix lastStripEvenOutMatrix() {
-        return mStripEvenOutPolicy == null ? null : mStripEvenOut.matrix;
     }
 
     @Nullable

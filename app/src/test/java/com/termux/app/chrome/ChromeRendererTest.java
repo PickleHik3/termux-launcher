@@ -300,7 +300,6 @@ public class ChromeRendererTest {
 
         assertEquals(0, chrome.blurCache().residentRadiiCount());
         assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY));
-        assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
         assertEquals(0, surfaces.applied.size());
 
         mainLooper().idle();

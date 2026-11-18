@@ -9397,7 +9397,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.ledger().invalidateRect(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
                 mChrome.ledger().invalidateRect(SurfaceDirtyLedger.Backdrop.ACCESSORY);
-                mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
             }
 
             @Override public void onKeyboardClosed() {
@@ -22559,14 +22558,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Index of each chrome band's slot in the per-band memo below. */
     private static final int EVEN_OUT_KEYBOARD = 0;
     private static final int EVEN_OUT_DOCK = 1;
-    private static final int EVEN_OUT_STRIP = 2;
     /** What each band's even-out was last built from, so an unchanged pass builds nothing. */
     @NonNull private final com.termux.app.chrome.ChromeInk.EvenOutPolicy[] mBandEvenOutStage =
-        new com.termux.app.chrome.ChromeInk.EvenOutPolicy[3];
+        new com.termux.app.chrome.ChromeInk.EvenOutPolicy[2];
     @NonNull private final com.termux.app.chrome.ChromeInk.EvenOutPolicy[] mBandEvenOutKept =
-        new com.termux.app.chrome.ChromeInk.EvenOutPolicy[3];
-    @NonNull private final boolean[] mBandEvenOutInherits = new boolean[3];
-    @NonNull private final int[] mBandEvenOutOpacity = {-1, -1, -1};
+        new com.termux.app.chrome.ChromeInk.EvenOutPolicy[2];
+    @NonNull private final boolean[] mBandEvenOutInherits = new boolean[2];
+    @NonNull private final int[] mBandEvenOutOpacity = {-1, -1};
 
     /**
      * Tells the chrome bands their even-out (ADR 0014, wave 2c; ChromeInk.bandEvenOutPolicy): by
@@ -22589,8 +22587,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             bandEvenOut(EVEN_OUT_DOCK, com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
                 TermuxAppSharedPreferences.SurfaceSlot.DOCK, mPreferences != null
                     ? mPreferences.getAppBarOpacity(half) : 100, stage, half));
-        mChrome.ink().setStripEvenOutPolicy(
-            bandEvenOut(EVEN_OUT_STRIP, null, null, 100, stage, half));
     }
 
     /** {@link com.termux.app.chrome.ChromeInk#bandEvenOutPolicy}, rebuilt only when an input moved. */
