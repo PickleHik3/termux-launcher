@@ -59,6 +59,12 @@ public final class FramePipeline {
     private final ArrayList<BooleanSupplier> mHoldSteps = new ArrayList<>(2);
     private int mFirstFrameAttempts;
     private int mDirty;
+    /** Steps asked for the next frame after the current one ({@link #requestNextFrame}). */
+    private int mNextDirty;
+    /** Pre-draw hooks run so far; a next-frame step waits until one runs after its request. */
+    private int mPreDraws;
+    /** {@link #mPreDraws} when the waiting next-frame steps were asked for. */
+    private int mNextAskedAt;
     /** Steps run on every drawn frame without asking for one ({@link #arm}). */
     private int mArmed;
     /** The steps that run only in the pre-draw hook ({@link FrameStep#drawStep}). */
@@ -162,6 +168,18 @@ public final class FramePipeline {
         if (Counters.enabled && (mAfterPass || step == FrameStep.CHROME_COMMIT)) {
             recordLateCaller(step.ordinal());
         }
+        bookFrame();
+    }
+
+    /**
+     * Records that {@code step} has work that waits for the next booked pass, which starts after
+     * the current frame: never in this frame's pre-draw hook, never in a pass already running.
+     * For a step the frame being drawn leaves behind (the landed frame's settle).
+     */
+    public void requestNextFrame(@NonNull FrameStep step) {
+        if (mDestroyed) return;
+        mNextDirty |= 1 << step.ordinal();
+        mNextAskedAt = mPreDraws;
         bookFrame();
     }
 
@@ -279,6 +297,7 @@ public final class FramePipeline {
     public void destroy() {
         mDestroyed = true;
         mDirty = 0;
+        mNextDirty = 0;
         for (int i = mSteppedHolds.size() - 1; i >= 0; i--) {
             mSteppedHolds.get(i).release(Hold.LANDING, "destroyed");
         }
@@ -328,6 +347,13 @@ public final class FramePipeline {
         if (mDestroyed) return;
         View root = mRoot;
         boolean framed = root != null && root.isAttachedToWindow();
+        // A pass in the same frame's animation phase as the ask is still that frame: the step
+        // waits for a pass after the frame has drawn.
+        boolean nextDue = !framed || mPreDraws != mNextAskedAt;
+        if (nextDue) {
+            mDirty |= mNextDirty;
+            mNextDirty = 0;
+        }
         // Stepped holds tick on real frames only: a post without a window would spin.
         if (framed && !mSteppedHolds.isEmpty()) stepHolds();
         if (mDirty != 0 && !mDestroyed) {
@@ -336,6 +362,11 @@ public final class FramePipeline {
             mAfterPass = framed;
             // A draw step waits for the pre-draw hook: make sure this frame draws.
             if (framed && (mDirty & DRAW_STEPS) != 0 && !mDestroyed) root.invalidate();
+        }
+        if (mNextDirty != 0 && !mDestroyed) {
+            // Still waiting on this frame: it is made to draw, so the wait ends on the next pass.
+            if (framed && !nextDue) root.invalidate();
+            bookFrame();
         }
         if (!mSteppedHolds.isEmpty()) bookHoldFrame();
     }
@@ -374,6 +405,7 @@ public final class FramePipeline {
     private boolean onPreDraw() {
         View root = mRoot;
         if (mDestroyed || root == null) return true;
+        mPreDraws++;
         mAfterPass = false;
         if (mFirstFrameDrawn) {
             mDirty |= mArmed;
@@ -384,6 +416,8 @@ public final class FramePipeline {
         // The window's first frame: the whole table runs, whatever was asked (a held frame past
         // the first few runs only what was asked since, so a long relaunch hold costs no table).
         boolean laidOutBefore = root.isLayoutRequested();
+        mDirty |= mNextDirty;
+        mNextDirty = 0;
         mInFirstFrame = true;
         try {
             if (mFirstFrameAttempts++ <= FIRST_FRAME_MAX_HELD) mDirty = allSteps();
@@ -474,7 +508,7 @@ public final class FramePipeline {
         }
         // A step that asked again from inside the table gets the next frame; a draw step left for
         // this frame's pre-draw hook does not book another.
-        if ((preDraw ? mDirty : mDirty & ~DRAW_STEPS) != 0 && !mDestroyed) bookFrame();
+        if (((preDraw ? mDirty : mDirty & ~DRAW_STEPS) | mNextDirty) != 0 && !mDestroyed) bookFrame();
     }
 
     private void runLate(int index, @NonNull Runnable step) {

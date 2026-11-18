@@ -43,6 +43,14 @@ public final class FirstLayout {
     }
 
     /**
+     * Posts {@code action} on the view's own frame clock, ahead of its next traversal: for a view's
+     * own redraw pacing. Off a window it waits in the view's queue until an attach.
+     */
+    public static void nextFrame(@NonNull View view, @NonNull Runnable action) {
+        view.postOnAnimation(action);
+    }
+
+    /**
      * Runs {@code action} once, when the view's window has drawn (inside the draw callback, so it
      * may only post work). The listener is let go on the next main-loop turn.
      */
@@ -62,9 +70,23 @@ public final class FirstLayout {
      */
     @NonNull
     public static Handle afterNextLayout(@NonNull View view, long backstopMs, @NonNull Runnable action) {
-        Handle handle = new Handle(view, Handle.AFTER_LAYOUT, action, null);
+        return afterNextLayout(view, backstopMs, byBackstop -> action.run());
+    }
+
+    /** What {@link #afterNextLayout(View, long, LayoutAction)} runs, told which way it came. */
+    public interface LayoutAction {
+        /** {@code byBackstop}: no layout came and the backstop ran it; false: the layout did. */
+        void run(boolean byBackstop);
+    }
+
+    /** As {@link #afterNextLayout(View, long, Runnable)}, telling the action what released it. */
+    @NonNull
+    public static Handle afterNextLayout(@NonNull View view, long backstopMs,
+                                         @NonNull LayoutAction action) {
+        Handle handle = new Handle(view, Handle.AFTER_LAYOUT, null, null);
+        handle.mLayoutAction = action;
         view.addOnLayoutChangeListener(handle);
-        view.postDelayed(handle.mFire, backstopMs);
+        view.postDelayed(handle.mFireBackstop, backstopMs);
         return handle;
     }
 
@@ -84,6 +106,8 @@ public final class FirstLayout {
         @Nullable private ViewTreeObserver mObserver;
         private boolean mFinished;
         private final Runnable mFire = this::fire;
+        private final Runnable mFireBackstop = () -> fire(true);
+        @Nullable private LayoutAction mLayoutAction;
         private final Runnable mDetach = this::detach;
 
         private Handle(@NonNull View view, int kind, @Nullable Runnable action,
@@ -109,6 +133,7 @@ public final class FirstLayout {
             if (mFinished) return;
             mFinished = true;
             mAction = null;
+            mLayoutAction = null;
             detach();
         }
 
@@ -146,16 +171,24 @@ public final class FirstLayout {
         }
 
         private void fire() {
+            fire(false);
+        }
+
+        private void fire(boolean byBackstop) {
             if (mFinished) return;
             Runnable action = mAction;
+            LayoutAction layoutAction = mLayoutAction;
             mFinished = true;
             mAction = null;
+            mLayoutAction = null;
             detach();
             if (action != null) action.run();
+            if (layoutAction != null) layoutAction.run(byBackstop);
         }
 
         private void detach() {
             mView.removeCallbacks(mFire);
+            mView.removeCallbacks(mFireBackstop);
             mView.removeCallbacks(mDetach);
             ViewTreeObserver observer = mObserver;
             mObserver = null;

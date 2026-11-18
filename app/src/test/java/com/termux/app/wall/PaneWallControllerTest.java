@@ -36,7 +36,21 @@ import android.app.Application;
 public class PaneWallControllerTest {
 
     /** A host with a number of Home pages and windows, each with one in front. */
-    private static final class Host implements PaneWallController.Host, WallHome, WallDisplay {
+    private static final class Host implements WallFacts, WallHome, WallDisplay,
+            WallPose.Reader {
+        final WallTerminal terminal = new WallTerminal() {
+            @Override public int count() { return innerCount(PaneWallPage.TERMINAL); }
+            @Override public int index() { return innerIndex(PaneWallPage.TERMINAL); }
+            @Override public void show(int index) { showInnerPage(PaneWallPage.TERMINAL, index); }
+            @Override public boolean canStartShell() { return canStartWorkspace(); }
+            @Override public boolean startShell() { return startWorkspaceShell(); }
+            @Override public void stepBegin(int steps) { onInnerStepBegin(PaneWallPage.TERMINAL, steps); }
+            @Override public void step(int steps, float fromPx) { onInnerStep(PaneWallPage.TERMINAL, steps, fromPx); }
+        };
+        final WallLanding landing = new WallLanding() {
+            @Override public void committed(PaneWallPage page) { onWallPageChanged(page); }
+            @Override public void landed(PaneWallPage page) { onWallPageSettled(page); }
+        };
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -70,11 +84,11 @@ public class PaneWallControllerTest {
         @Override public WallPages wallPages() { return pages; }
         @Override public void bind(int pageId) { boundDisplay = pageId; }
         @Override public void landed(int pageId) { landedDisplay = pageId; }
-        @Override public void onWallPageChanged(PaneWallPage page) { changes.add(page); }
-        @Override public void onWallPageSettled(PaneWallPage page) { settled.add(page); }
+        public void onWallPageChanged(PaneWallPage page) { changes.add(page); }
+        public void onWallPageSettled(PaneWallPage page) { settled.add(page); }
         @Override public UseAs useAs() { return useAs; }
-        @Override public boolean canStartWorkspace() { return canStart; }
-        @Override public boolean startWorkspaceShell() {
+        public boolean canStartWorkspace() { return canStart; }
+        public boolean startWorkspaceShell() {
             shellsStarted++;
             if (!windowArrives) return true;
             // The shell's window arrives with it, as the session client adds it.
@@ -85,26 +99,26 @@ public class PaneWallControllerTest {
         }
         @Override public boolean isPlankTiltEnabled() { return !reduced; }
         @Override public boolean hasWindow() { return hasWindow; }
-        @Override public int innerCount(PaneWallPage page) {
+        public int innerCount(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? homePages
                 : page == PaneWallPage.TERMINAL ? (hasWindow ? windows : 0) : 1;
         }
-        @Override public int innerIndex(PaneWallPage page) {
+        public int innerIndex(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? homePage
                 : page == PaneWallPage.TERMINAL ? current : 0;
         }
-        @Override public void showInnerPage(PaneWallPage page, int index) {
+        public void showInnerPage(PaneWallPage page, int index) {
             if (page == PaneWallPage.WIDGETS) homePage = index;
             if (page == PaneWallPage.TERMINAL) current = index;
         }
-        @Override public void onInnerStepBegin(PaneWallPage page, int steps) { stepBegun = steps; }
-        @Override public void onInnerStep(PaneWallPage page, int steps, float fromPx) {
+        public void onInnerStepBegin(PaneWallPage page, int steps) { stepBegun = steps; }
+        public void onInnerStep(PaneWallPage page, int steps, float fromPx) {
             stepped = steps;
             steppedFrom = fromPx;
             current += steps;
         }
-        @Override public void onTerminalOffScreenChanged(boolean offScreen) {
-            terminalOffScreen = offScreen;
+        @Override public void onWallPose(WallPose pose, int changed) {
+            if ((changed & WallPose.OFF_SCREEN) != 0) terminalOffScreen = pose.terminalOffScreen();
         }
     }
 
@@ -129,7 +143,10 @@ public class PaneWallControllerTest {
         layout.addView(widgets);
         layout.addView(terminal);
         PaneWallController made = new PaneWallController(layout, withHost);
+        made.setTerminal(withHost.terminal);
+        made.setLanding(withHost.landing);
         made.setHome(withHost);
+        made.addPoseReader(withHost);
         made.setDisplay(withHost);
         made.attachTerminalPage(terminal);
         layout.setPageView(PaneWallPage.WIDGETS, widgets);
@@ -586,7 +603,10 @@ public class PaneWallControllerTest {
         View terminal = new FrameLayout(activity);
         layout.addView(terminal);
         PaneWallController made = new PaneWallController(layout, withHost);
+        made.setTerminal(withHost.terminal);
+        made.setLanding(withHost.landing);
         made.setHome(withHost);
+        made.addPoseReader(withHost);
         made.setDisplay(withHost);
         made.attachTerminalPage(terminal);
         made.attachWidgetsPage(LayoutInflater.from(activity));
@@ -1185,6 +1205,67 @@ public class PaneWallControllerTest {
         assertEquals(com.termux.app.page.PageKind.TERMINAL, pages.frontKind());
         assertSame(window, pages.front());
         assertTrue(asks.get() >= 1);
+    }
+
+    /** A Terminal seam that records what the wall asks of it, in order. */
+    private static final class RecordingTerminal implements WallTerminal {
+        final java.util.List<String> calls = new java.util.ArrayList<>();
+        boolean canStart;
+        int windows = 3;
+        int shellsStarted;
+        @Override public int count() { return windows; }
+        @Override public int index() { return 1; }
+        @Override public void stepBegin(int steps) { calls.add("stepBegin " + steps); }
+        @Override public void step(int steps, float fromPx) { calls.add("step " + steps); }
+        @Override public boolean canStartShell() { return canStart; }
+        @Override public boolean startShell() { shellsStarted++; return true; }
+    }
+
+    @Test public void aLandingOnHomeTellsTheLandingOnceRecordsTheFrontAndStartsNoShell() {
+        controller.goHome(false);
+        com.termux.app.page.Pages registry =
+            new com.termux.app.page.Pages(com.termux.app.page.PageHost.NONE, () -> { });
+        controller.setPages(registry);
+        RecordingTerminal terminal = new RecordingTerminal();
+        terminal.canStart = true;
+        controller.setTerminal(terminal);
+        java.util.List<PaneWallPage> landed = new java.util.ArrayList<>();
+        controller.setLanding(new WallLanding() {
+            @Override public void landed(PaneWallPage page) { landed.add(page); }
+        });
+        int id = wall.currentPageId();
+
+        controller.onWallCellSettled(id, PaneWallPage.WIDGETS);
+
+        assertEquals(Collections.singletonList(PaneWallPage.WIDGETS), landed);
+        assertEquals(id, registry.frontId());
+        assertEquals(0, terminal.shellsStarted);
+    }
+
+    @Test public void aLandingOnTheEmptyTerminalPageStartsOneShellUntilTheWindowArrives() {
+        host.hasWindow = false;
+        controller.refreshPages();
+        RecordingTerminal terminal = new RecordingTerminal();
+        terminal.canStart = true;
+        controller.setTerminal(terminal);
+        int id = wall.currentPageId();
+
+        controller.onWallCellSettled(id, PaneWallPage.TERMINAL);
+        assertEquals(1, terminal.shellsStarted);
+        controller.onWallCellSettled(id, PaneWallPage.TERMINAL);
+        assertEquals("the window has not arrived: no second shell", 1, terminal.shellsStarted);
+    }
+
+    @Test public void aBorderStepOnTheTerminalBeginsThenStepsOnce() {
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        RecordingTerminal terminal = new RecordingTerminal();
+        controller.setTerminal(terminal);
+
+        wall.beginPlainDrag();
+        wall.dragTo(-600f);
+        wall.endDrag(-3000f);
+
+        assertEquals(Arrays.asList("stepBegin 1", "step 1"), terminal.calls);
     }
 
     private static void idle() {

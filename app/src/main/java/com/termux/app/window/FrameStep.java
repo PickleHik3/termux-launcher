@@ -9,11 +9,24 @@ package com.termux.app.window;
 public enum FrameStep {
 
     /**
+     * The wall's landing settle, left by the landed frame for the next one ({@code
+     * LandedFrameSettle}): asked with {@link FramePipeline#requestNextFrame}, so it never runs in
+     * the frame that landed.
+     */
+    PAGE_SETTLE,
+
+    /**
      * The structure point (ADR 0030 section 1): the front page's one-time on-front and off-front
      * work, run once when the recorded front changed, before the chrome commit so what it changes
      * is in this frame's structure.
      */
     PAGE_FRONT,
+
+    /**
+     * The chrome geometry pass {@code GeometryScheduler} booked: structure written before the
+     * frame's layout, so the layout takes what it writes.
+     */
+    GEOMETRY,
 
     /**
      * The accessory chrome's commit: one whole build and apply of the chrome spec. Asked for

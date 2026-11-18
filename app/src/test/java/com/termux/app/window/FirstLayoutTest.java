@@ -157,4 +157,25 @@ public class FirstLayoutTest {
 
         assertEquals(0, runs[0]);
     }
+
+    @Test
+    public void aLayoutWaitTellsItsActionWhichWayItWasReleased() {
+        View view = newAttachedView();
+        // The window's own first layout comes before the wait starts.
+        Shadows.shadowOf(RuntimeEnvironment.getApplication().getMainLooper()).idle();
+        java.util.List<Boolean> ways = new java.util.ArrayList<>();
+        FirstLayout.afterNextLayout(view, 160L, ways::add);
+        Shadows.shadowOf(RuntimeEnvironment.getApplication().getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(500));
+        assertEquals(java.util.Collections.singletonList(Boolean.TRUE), ways);
+
+        View laidOut = newAttachedView();
+        java.util.List<Boolean> byLayout = new java.util.ArrayList<>();
+        FirstLayout.afterNextLayout(laidOut, 160L, byLayout::add);
+        laidOut.layout(0, 0, 10, 10);
+        Shadows.shadowOf(RuntimeEnvironment.getApplication().getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(500));
+        assertEquals("once, by the layout, and the backstop never runs it again",
+            java.util.Collections.singletonList(Boolean.FALSE), byLayout);
+    }
 }

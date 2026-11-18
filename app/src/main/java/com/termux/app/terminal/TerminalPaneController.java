@@ -26,7 +26,6 @@ import android.view.TouchDelegate;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
 import android.view.ViewConfiguration;
-import android.view.ViewTreeObserver;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.PathInterpolator;
@@ -521,6 +520,8 @@ public class TerminalPaneController {
      * lease is last to go) is logged as {@link TerminalView#CAUSE_RETURN_HOLD}.
      */
     private boolean mReturnHoldInSpan;
+    /** The return hold is being given back with the rest unchanged: the panes' pending sizes go. */
+    private boolean mReturnHoldDropsPending;
     /**
      * Owns the grid's pause through the transitions this controller drives (focus growth, a
      * resize-key burst, a divider or float drag), so they share one resize with whatever else is
@@ -2038,12 +2039,8 @@ public class TerminalPaneController {
         private int mSecondColumns;
         private int mSecondRows;
         @Nullable private View mReadoutHost;
-        @Nullable private ViewTreeObserver mReadoutObserver;
+        @Nullable private com.termux.app.window.FirstLayout.Handle mReadoutWait;
         private final Runnable mReadoutDown = this::takeReadoutDown;
-        private final ViewTreeObserver.OnPreDrawListener mReadoutUpdate = () -> {
-            updateReadout();
-            return true;
-        };
 
         /**
          * The drag began at ({@code x}, {@code y}) on {@code host}, which posts its timer. The
@@ -2105,11 +2102,11 @@ public class TerminalPaneController {
             if (mReadFirst == null) return;
             mReadoutLive = true;
             mReadoutHost = host;
-            ViewTreeObserver observer = host.getViewTreeObserver();
-            if (observer.isAlive()) {
-                observer.addOnPreDrawListener(mReadoutUpdate);
-                mReadoutObserver = observer;
-            }
+            // Refreshed before each frame until the drag's read-out ends.
+            mReadoutWait = com.termux.app.window.FirstLayout.beforeEachDrawUntil(host, () -> {
+                updateReadout();
+                return !mReadoutLive;
+            });
             updateReadout();
         }
 
@@ -2142,10 +2139,8 @@ public class TerminalPaneController {
 
         /** The drag ended: the read-out stays {@link DragResizePause#READOUT_LINGER_MS} more. */
         private void endReadout() {
-            if (mReadoutObserver != null && mReadoutObserver.isAlive()) {
-                mReadoutObserver.removeOnPreDrawListener(mReadoutUpdate);
-            }
-            mReadoutObserver = null;
+            if (mReadoutWait != null) mReadoutWait.cancel();
+            mReadoutWait = null;
             if (mReadoutLive) updateReadout();
             mReadoutLive = false;
             mReadFirst = null;
@@ -2204,19 +2199,33 @@ public class TerminalPaneController {
     /** True while any host surface owns transient terminal geometry. */
     public boolean isHostSurfaceResizeInProgress() { return mHostSurfaceResizeDepth > 0; }
 
-    /** The launcher left the screen: hold the grid until {@link #finishReturnHold}. */
-    public void beginReturnHold() {
-        if (mReturnHoldActive) return;
+    /**
+     * The launcher left the screen: hold the grid until {@link #finishReturnHold}. False when a
+     * return hold was already open.
+     */
+    public boolean beginReturnHold() {
+        if (mReturnHoldActive) return false;
         mReturnHoldActive = true;
         mReturnHoldInSpan = true;
         beginHostSurfaceResize();
+        return true;
     }
 
-    /** The layout it came back to has settled: give back the return hold's lease. */
-    public void finishReturnHold() {
+    /**
+     * The layout it came back to has come: give back the return hold's lease. {@code resize}
+     * false when the rest and the room are the ones it left with: the panes on screen drop what
+     * the burst of the return made pending, so no PTY hears a size. A parked neighbour, a Home
+     * float and a hosted float keep their rest layout behaviour either way.
+     */
+    public void finishReturnHold(boolean resize) {
         if (!mReturnHoldActive) return;
         mReturnHoldActive = false;
-        finishHostSurfaceResizeKeepingBottom();
+        mReturnHoldDropsPending = !resize;
+        try {
+            finishHostSurfaceResizeKeepingBottom();
+        } finally {
+            mReturnHoldDropsPending = false;
+        }
     }
 
     /** The cover last applied, so a frame that repeats it touches no pane. */
@@ -6314,6 +6323,29 @@ public class TerminalPaneController {
         applyAttentionHold();
     }
 
+    /**
+     * The wall's pose moved ({@link com.termux.app.wall.WallPose.Reader}): the terminal's rims
+     * fade with the slide, or with their own page while the transition fades it; and when the page
+     * parks off screen or returns, every pane it holds, tiled and floating alike, is told by hand
+     * (none go INVISIBLE with their page any more) to pause what INVISIBLE used to pause for free.
+     */
+    public void onWallPose(@NonNull com.termux.app.wall.WallPose pose, int changed) {
+        if ((changed & com.termux.app.wall.WallPose.RIMS) != 0) {
+            setRimTravelAlpha(pose.terminalRimAlpha());
+        }
+        if ((changed & com.termux.app.wall.WallPose.OFF_SCREEN) != 0) {
+            boolean offScreen = pose.terminalOffScreen();
+            // The attention glow's endless pulse is held while away.
+            setTerminalOffScreen(offScreen);
+            for (TerminalView view : getVisiblePaneViews()) {
+                view.setWallPageOffScreen(offScreen);
+            }
+            // The one frame of a slide the borders are re-dressed in: the page's first frame
+            // back on screen.
+            if (!offScreen) onTerminalPlaceShown();
+        }
+    }
+
     private void applyAttentionHold() {
         for (PaneContentFrame frame : mPaneFrames.values()) {
             android.graphics.drawable.Drawable foreground = frame.getForeground();
@@ -6459,7 +6491,8 @@ public class TerminalPaneController {
         }
         String cause = mReturnHoldInSpan ? TerminalView.CAUSE_RETURN_HOLD : "resume";
         mReturnHoldInSpan = false;
-        java.util.HashSet<TerminalView> visible = new java.util.HashSet<>(getVisiblePaneViews());
+        java.util.HashSet<TerminalView> tiled = new java.util.HashSet<>(getVisiblePaneViews());
+        java.util.HashSet<TerminalView> visible = new java.util.HashSet<>(tiled);
         // A Home float laid out during the hold is owed that size: discarded, its shell never gets
         // an emulator and the pane draws nothing but black.
         visible.addAll(shownHomeFloatPaneViews());
@@ -6479,8 +6512,13 @@ public class TerminalPaneController {
                 }
                 continue;
             }
-            if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
-            else view.resumeTerminalSizeUpdatesDiscardingPending();
+            if (visible.contains(view)) {
+                if (mReturnHoldDropsPending && tiled.contains(view)) {
+                    view.resumeTerminalSizeUpdatesDiscardingPending();
+                } else {
+                    view.setTerminalSizeUpdatesPaused(false, allowZeroHeight, cause);
+                }
+            } else view.resumeTerminalSizeUpdatesDiscardingPending();
         }
     }
 

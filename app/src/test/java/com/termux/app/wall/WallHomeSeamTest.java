@@ -49,11 +49,12 @@ public class WallHomeSeamTest {
         PaneWallLayout layout = new PaneWallLayout(activity);
         FrameLayout terminal = new FrameLayout(activity);
         layout.addView(terminal);
-        controller = new PaneWallController(layout, new PaneWallController.Host() {
-            @Override public boolean reducedMotion() { return true; }
-            @Override public boolean hasWindow() { return true; }
-            @Override public WallPages wallPages() { return pages; }
-        });
+        controller = new PaneWallController(layout,
+            new WallFacts() {
+                @Override public boolean reducedMotion() { return true; }
+                @Override public boolean hasWindow() { return true; }
+                @Override public WallPages wallPages() { return pages; }
+            });
         controller.setHome(home);
         controller.attachTerminalPage(terminal);
         FrameLayout widgets = new FrameLayout(activity);

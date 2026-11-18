@@ -34,7 +34,13 @@ import android.app.Application;
 public class TerminalBodySwipeWallTest {
 
     /** A row of three Home pages and some windows, whose terminal gives the swipe away or not. */
-    private static final class Host implements PaneWallController.Host, WallHome {
+    private static final class Host implements WallFacts, WallHome {
+        final WallTerminal terminal = new WallTerminal() {
+            @Override public int count() { return innerCount(PaneWallPage.TERMINAL); }
+            @Override public int index() { return innerIndex(PaneWallPage.TERMINAL); }
+            @Override public void show(int index) { showInnerPage(PaneWallPage.TERMINAL, index); }
+            @Override public void step(int steps, float fromPx) { onInnerStep(PaneWallPage.TERMINAL, steps, fromPx); }
+        };
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -49,18 +55,18 @@ public class TerminalBodySwipeWallTest {
 
         @Override public boolean reducedMotion() { return false; }
         @Override public boolean isPlankTiltEnabled() { return true; }
-        @Override public int innerCount(PaneWallPage page) {
+        public int innerCount(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? 3 : page == PaneWallPage.TERMINAL ? windows : 1;
         }
-        @Override public int innerIndex(PaneWallPage page) {
+        public int innerIndex(PaneWallPage page) {
             return page == PaneWallPage.WIDGETS ? homePage
                 : page == PaneWallPage.TERMINAL ? current : 0;
         }
-        @Override public void showInnerPage(PaneWallPage page, int index) {
+        public void showInnerPage(PaneWallPage page, int index) {
             if (page == PaneWallPage.WIDGETS) homePage = index;
             if (page == PaneWallPage.TERMINAL) current = index;
         }
-        @Override public void onInnerStep(PaneWallPage page, int steps, float fromPx) {
+        public void onInnerStep(PaneWallPage page, int steps, float fromPx) {
             stepped = steps;
             current += steps;
         }
@@ -104,6 +110,7 @@ public class TerminalBodySwipeWallTest {
             ViewGroup.LayoutParams.MATCH_PARENT));
         wall.addView(page);
         row = new PaneWallController(wall, host);
+        row.setTerminal(host.terminal);
         row.setHome(host);
         row.attachTerminalPage(page);
         row.attachWidgetsPage(LayoutInflater.from(activity));

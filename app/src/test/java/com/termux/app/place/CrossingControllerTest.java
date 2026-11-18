@@ -361,9 +361,10 @@ public class CrossingControllerTest {
         View widgets = new FrameLayout(activity);
         layout.addView(widgets);
         layout.addView(terminal);
-        wallCtl = new PaneWallController(layout, new PaneWallController.Host() {
-            @Override public boolean reducedMotion() { return true; }
-        });
+        wallCtl = new PaneWallController(layout,
+            new com.termux.app.wall.WallFacts() {
+                @Override public boolean reducedMotion() { return true; }
+            });
         wallCtl.attachTerminalPage(terminal);
         layout.setPageView(PaneWallPage.WIDGETS, widgets);
         layout.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),

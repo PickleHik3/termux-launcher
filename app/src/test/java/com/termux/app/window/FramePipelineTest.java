@@ -74,9 +74,64 @@ public class FramePipelineTest {
     }
 
     @Test
-    public void thePageFrontIsTheTablesFirstStepAndTheChromeCommitFollowsIt() {
-        assertEquals(0, FrameStep.PAGE_FRONT.ordinal());
-        assertEquals(1, FrameStep.CHROME_COMMIT.ordinal());
+    public void thePageSettleIsTheTablesFirstStepThenPageFrontGeometryAndTheChromeCommit() {
+        assertEquals(0, FrameStep.PAGE_SETTLE.ordinal());
+        assertEquals(1, FrameStep.PAGE_FRONT.ordinal());
+        assertEquals(2, FrameStep.GEOMETRY.ordinal());
+        assertEquals(3, FrameStep.CHROME_COMMIT.ordinal());
+    }
+
+    @Test
+    public void aStepAskedForTheNextFrameDuringAPreDrawWaitsForTheNextBookedPass() {
+        int[] runs = {0};
+        frames.bind(FrameStep.PAGE_SETTLE, () -> runs[0]++);
+        chromeStep = () -> frames.requestNextFrame(FrameStep.PAGE_SETTLE);
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        runs[0] = 0;
+
+        frames.requestFrame(FrameStep.CHROME_COMMIT);
+        assertTrue(draws(root));
+        assertEquals("not in the frame that asked", 0, runs[0]);
+
+        chromeStep = () -> { };
+        frames.runBookedFrameForTest();
+        assertEquals("in the next booked pass", 1, runs[0]);
+        frames.runBookedFrameForTest();
+        assertEquals("once", 1, runs[0]);
+    }
+
+    @Test
+    public void aStepAskedForTheNextFrameAtRestRunsInTheNextBookedPass() {
+        int[] runs = {0};
+        frames.bind(FrameStep.PAGE_SETTLE, () -> runs[0]++);
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        runs[0] = 0;
+
+        frames.requestNextFrame(FrameStep.PAGE_SETTLE);
+        assertEquals(0, runs[0]);
+        frames.runBookedFrameForTest();
+        assertEquals(1, runs[0]);
+    }
+
+    @Test
+    public void aStepAskedForTheNextFrameNeverRunsOnceDestroyed() {
+        int[] runs = {0};
+        frames.bind(FrameStep.PAGE_SETTLE, () -> runs[0]++);
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        runs[0] = 0;
+
+        frames.requestNextFrame(FrameStep.PAGE_SETTLE);
+        frames.destroy();
+        frames.runBookedFrameForTest();
+        frames.requestNextFrame(FrameStep.PAGE_SETTLE);
+        frames.runBookedFrameForTest();
+        assertEquals(0, runs[0]);
     }
 
     @Test
