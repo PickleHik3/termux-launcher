@@ -59,13 +59,4 @@ final class AppDrawerKeyboardSeparation {
         return Math.min(frameTopPx, -radiusPx);
     }
 
-    /**
-     * The under-pill strip's opacity: the drawer's cross-fade {@code 1 - p}, given back as the
-     * keyboard is revealed below the plane. At {@code reveal 0} this is the old fade exactly.
-     */
-    static float navStripAlpha(float progress, float reveal) {
-        float p = AppDrawerTransitionGeometry.clamp01(progress);
-        float k = AppDrawerTransitionGeometry.clamp01(reveal);
-        return 1f - p * (1f - k);
-    }
 }

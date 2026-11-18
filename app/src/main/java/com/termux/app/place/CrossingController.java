@@ -292,12 +292,6 @@ public final class CrossingController {
         /** The status bar's Margin ease for this frame. */
         void syncStatusMarginEase(@NonNull com.termux.app.place.SeamCrossing.Answers seam);
 
-        /** The strip under the pill fading with the finger. */
-        void syncNavStripFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame);
-
-        /** The strip under the pill begun fading between the ends. */
-        void beginNavStripFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there);
-
         /** The top band begun fading between the ends. */
         void beginTopBandFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there);
 
@@ -431,8 +425,6 @@ public final class CrossingController {
             mHost.promptFieldUnderPalette());
         Trace.endSection();
         Trace.beginSection("Travel.blends");
-        // The strip under the pill crosses from the one dress to the other with the finger.
-        mHost.syncNavStripFade(frame);
         // A stack whose halves differ in look blends its glass with the wall.
         syncStackLookBlend(seam);
         // The band behind the system bar crosses with the bar's glass by the same share, written
@@ -822,8 +814,6 @@ public final class CrossingController {
         beginStackLookBlend(therePage);
         mHost.legibilityCrossingBegan();
         if (mCrossing.seam().lookBlends()) mHost.beginLegendBlend(herePage, therePage);
-        // The strip under the pill stands still through the crossing and crosses dresses by alpha.
-        mHost.beginNavStripFade(herePage, therePage);
         mHost.beginTopBandFade(herePage, therePage);
         // From here to the landing the chrome travels over the wallpaper: its bands keep the
         // even-out they stand on, so the ground moving under them asks for no whole apply each

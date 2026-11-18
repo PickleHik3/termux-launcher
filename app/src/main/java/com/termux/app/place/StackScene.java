@@ -114,15 +114,16 @@ public final class StackScene {
     }
 
     /**
-     * Adds the resting keyboard's share ({@link #keyboardTranslationPx}) to a crossing's motion
-     * into {@code out}: a keyboard that is down never takes part in a crossing's own travel (the
-     * crossing brings it up first), so the two never count the same pixels twice.
+     * Tops a crossing's motion up to the resting keyboard's share ({@link #keyboardTranslationPx})
+     * into {@code out}: what the motion already carries of the keyboard (its last frame, still
+     * held on the frame the crossing lands) is not added again, so the keyboard is counted once.
      */
     public static void withKeyboardRest(@NonNull Motion in, float restSharePx, @NonNull Motion out) {
         out.set(in);
-        if (restSharePx <= 0f) return;
-        out.dockTravelPx += restSharePx;
-        out.keyboardSharePx += restSharePx;
+        float missing = restSharePx - in.keyboardSharePx;
+        if (missing <= 0f) return;
+        out.dockTravelPx += missing;
+        out.keyboardSharePx += missing;
     }
 
     /**
@@ -394,8 +395,12 @@ public final class StackScene {
         out.ty[V_UNDER] = -share;
         out.clipped[V_UNDER] = false;
         out.ty[V_KEYBOARD] = 0f;
-        int hidden = inColumn ? BottomInsets.keyboardTravelHiddenPx(m.dockTravelPx, share,
-                g.belowKeyboardInColumnPx, g.stackPaddingBottomPx)
+        // A keyboard that wears its foot is cut with its own share, which no band holds (none
+        // stands under it): the foot goes under the pill with the keys.
+        int hidden = inColumn ? BottomInsets.keyboardTravelHiddenPx(m.dockTravelPx,
+                g.keyboardFootPx > 0 ? m.keyboardSharePx : share, g.belowKeyboardInColumnPx,
+                g.stackPaddingBottomPx, g.keyboardFootPx,
+                BottomInsets.keyboardKeysPx(g.keyboardHeightPx, g.keyboardFootPx))
             : Math.round(share);
         if (hidden <= 0) {
             out.clipped[V_KEYBOARD] = false;

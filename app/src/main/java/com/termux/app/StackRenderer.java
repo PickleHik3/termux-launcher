@@ -45,18 +45,29 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         @Nullable View view(int id);
         /** The keyboard's measured height, about to be laid out; 0 while unmeasured. */
         int keyboardDesiredHeightPx();
+        /**
+         * The foot of that height, below the keys, while the keyboard wears one
+         * ({@link com.termux.app.place.BottomInsets#keyboardFootPx}), else 0.
+         */
+        default int keyboardFootPx() {
+            return 0;
+        }
         /** Whether bands stand under the keyboard. */
         boolean underKeyboardBandsShown();
         /** Whether the in-app keyboard is up: the plank then tilts the glass host alone. */
         boolean keyboardShown();
         /**
-         * The in-app keyboard's laid-out height while it stands laid out but down, else 0: the
-         * stack stands this much lower at rest ({@link StackScene#keyboardTranslationPx}).
+         * The in-app keyboard's keys' height (its foot not counted) while it stands laid out but
+         * down, else 0: the stack stands this much lower at rest ({@link StackScene#keyboardTranslationPx}).
          */
         default int keyboardDownLaidOutPx() {
             return 0;
         }
-        /** Whether Home's side stands in front (a Home page is committed), else the Workspace's. */
+        /**
+         * Whether Home's side stands in front, else the Workspace's: the kind the wall committed
+         * to ({@code Pages#committedKind}), which is the arrival from the commit on, so the landing
+         * frame's rest is the side the crossing arrived at.
+         */
         default boolean frontIsHome() {
             return false;
         }
@@ -472,6 +483,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         int measured = mViews.keyboardDesiredHeightPx();
         g.keyboardHeightPx = measured > 0 ? measured
             : keyboard == null ? 0 : Math.max(0, keyboard.getHeight());
+        g.keyboardFootPx = Math.min(g.keyboardHeightPx, Math.max(0, mViews.keyboardFootPx()));
         g.keyboardTopPx = keyboard == null ? 0
             : keyboard.getTop() + (column != null ? column.getTop() : 0);
         g.underShown = under != null && mViews.underKeyboardBandsShown();

@@ -269,13 +269,11 @@ public final class ChromeRenderer {
     public static final int SCOPE_ACCESSORY_RENDER = 1;
     /** Invalidates the dock/unified accessory crop alone: its geometry moved under a settled plane. */
     public static final int SCOPE_DOCK_BACKDROP = 1 << 1;
-    /** Invalidates the under-pill nav strip's crop alone: the strip was rebuilt or re-laid out. */
-    public static final int SCOPE_NAV_STRIP_BACKDROP = 1 << 7;
     /**
-     * Invalidates the dock/unified accessory crop and the under-pill nav strip's crop — what the
-     * old reason-keyword path ({@code "wallpaper"}, {@code "style"}, {@code "blur"}) marked dirty.
+     * Invalidates the dock/unified accessory crop — what the old reason-keyword path
+     * ({@code "wallpaper"}, {@code "style"}, {@code "blur"}) marked dirty.
      */
-    public static final int SCOPE_BACKDROPS = SCOPE_DOCK_BACKDROP | SCOPE_NAV_STRIP_BACKDROP;
+    public static final int SCOPE_BACKDROPS = SCOPE_DOCK_BACKDROP;
     /** Invalidates the keyboard-local crop as well; only the paths that touched all three pass it. */
     public static final int SCOPE_KEYBOARD_BACKDROP = 1 << 2;
     /** Throws away the shared pre-blurred wallpaper frames — the most expensive thing to request. */
@@ -591,9 +589,6 @@ public final class ChromeRenderer {
         }
         if ((scopes & SCOPE_DOCK_BACKDROP) != 0) {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
-        }
-        if ((scopes & SCOPE_NAV_STRIP_BACKDROP) != 0) {
-            mLedger.markDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
         }
         if ((scopes & SCOPE_KEYBOARD_BACKDROP) != 0) {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);

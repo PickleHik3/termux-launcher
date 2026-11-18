@@ -67,35 +67,6 @@ public class AppDrawerKeyboardSeparationTest {
         ReflectionHelpers.setField(controller, "mSeedRadiusPx", 40f);
     }
 
-    // ------------------------------------------------------------------ the strip under the pill
-
-    @Test public void dockedStripIsTheKeyboardsGlassWithTheKeyboardUp() {
-        docked();
-        reveal(1f);
-
-        applyFrame(1f);
-
-        assertEquals(1f, host.decorNavStripAlpha, 0f);
-    }
-
-    @Test public void dockedStripStillFadesUnderThePlaneWithTheKeyboardDown() {
-        docked();
-        reveal(0f);
-
-        applyFrame(1f);
-        assertEquals(0f, host.decorNavStripAlpha, 0f);
-        applyFrame(0.25f);
-        assertEquals(0.75f, host.decorNavStripAlpha, 1e-6f);
-    }
-
-    @Test public void stripAlphaFollowsTheReveal() {
-        assertEquals(1f, AppDrawerKeyboardSeparation.navStripAlpha(0f, 0f), 0f);
-        assertEquals(0f, AppDrawerKeyboardSeparation.navStripAlpha(1f, 0f), 0f);
-        assertEquals(0.5f, AppDrawerKeyboardSeparation.navStripAlpha(1f, 0.5f), 1e-6f);
-        assertEquals(1f, AppDrawerKeyboardSeparation.navStripAlpha(1f, 1f), 0f);
-        assertEquals(0.6f, AppDrawerKeyboardSeparation.navStripAlpha(0.5f, 0.2f), 1e-6f);
-    }
-
     // ------------------------------------------------------------------ the plane's bottom
 
     @Test public void dockedPlaneEndsOnePaneGapAboveTheKeyboardWithPaneCorners() {

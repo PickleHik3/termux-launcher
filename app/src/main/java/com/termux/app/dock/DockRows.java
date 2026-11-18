@@ -207,12 +207,11 @@ public final class DockRows {
 
     /**
      * What shows for {@code chrome}: the dock's rows while it has any, the stack while the dock,
-     * the keyboard or a status bar along the bottom stands in it. Where the navigation strip
-     * carries the dock's glass ({@code glassOnNavStrip}) the dock's own sheet stands down.
+     * the keyboard or a status bar along the bottom stands in it.
      */
     @NonNull
     public static Shown presence(@NonNull ChromeSpec chrome, boolean bottomStatusBar,
-                                 boolean glassOnNavStrip, boolean underKeyboard,
+                                 boolean underKeyboard,
                                  boolean ticksAreTheDocks, @Nullable DockSurfaceSpec surface) {
         boolean dock = chrome.toolbarShown;
         boolean apps = dock && chrome.appsRowEnabled;
@@ -220,7 +219,7 @@ public final class DockRows {
         return new Shown(
             stackShown(dock, chrome.keyboardShown, bottomStatusBar),
             dock,
-            dock && !glassOnNavStrip,
+            dock,
             apps,
             dock && chrome.azRowEnabled,
             dock && chrome.extraKeysRowEnabled,
@@ -247,19 +246,18 @@ public final class DockRows {
      * status bar is on the stack while it is shown ({@link #setStatusBarShown}) and stands along
      * the bottom ({@code statusBarOnBottomEdge}).
      */
-    public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge,
-                      boolean glassOnNavStrip) {
-        apply(chrome, statusBarOnBottomEdge, glassOnNavStrip, null);
+    public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge) {
+        apply(chrome, statusBarOnBottomEdge, null);
     }
 
     /**
-     * {@link #apply(ChromeSpec, boolean, boolean)} with the rows that stand for either side:
+     * {@link #apply(ChromeSpec, boolean)} with the rows that stand for either side:
      * {@code union}'s rows show whichever side is in front, so a row of the other side's lane is
      * laid out and dressed at rest. Null shows the front layout's rows alone.
      */
     public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge,
-                      boolean glassOnNavStrip, @Nullable Union union) {
-        Shown shown = presence(chrome, mStatusBarShown && statusBarOnBottomEdge, glassOnNavStrip,
+                      @Nullable Union union) {
+        Shown shown = presence(chrome, mStatusBarShown && statusBarOnBottomEdge,
             mShown.underKeyboard, mViews.pageTicksAreTheDocks(), surfaceOf(mLayout));
         announce(shown);
         // The in-app keyboard stays laid out while down (D1-A): the container it stands in stays

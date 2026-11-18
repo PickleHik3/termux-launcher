@@ -111,8 +111,6 @@ public final class SheetsController {
 
         /** The session in front; null when there is none. */
         @Nullable com.termux.terminal.TerminalSession currentSession();
-        /** The decor strip under the pill, faded as a sheet's card covers it (the dock's overlay). */
-        void setHomeSheetDecorNavStripAlpha(float alpha);
         /** The wallpaper door a row may open, made ready on arm and let go when the sheet is gone. */
         void prepareWallpaperDoor();
         void releasePreparedWallpaper();
@@ -828,9 +826,6 @@ public final class SheetsController {
                 new com.termux.app.launcher.home.HomeActionsSheet.Listener() {
                     @Override public void onHomeAction(
                             @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) { }
-                    @Override public void onNavBandCovered(float covered) {
-                        mHost.setHomeSheetDecorNavStripAlpha(1f - covered);
-                    }
                     @Override public void onSheetClosed() {
                         TerminalView terminalView = mHost.terminalView();
                         if (terminalView != null) terminalView.onContextMenuClosed(null);
@@ -879,10 +874,6 @@ public final class SheetsController {
                     }
                     @Override public void onSheetGone() {
                         mHost.releasePreparedWallpaper();
-                    }
-                    // The card runs under the pill; the strip above it fades as the card arrives.
-                    @Override public void onNavBandCovered(float covered) {
-                        mHost.setHomeSheetDecorNavStripAlpha(1f - covered);
                     }
                     @Override public void onLayoutLockChanged(boolean locked) {
                         com.termux.app.launcher.home.HomeSettings.setLayoutLocked(

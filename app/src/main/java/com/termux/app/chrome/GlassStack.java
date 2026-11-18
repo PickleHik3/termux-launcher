@@ -37,8 +37,7 @@ public final class GlassStack {
         /** {@link GlassRefraction#SEAM_BOTTOM} and friends: edges another surface continues past. */
         public final int seams;
         /**
-         * Where this view's piece of the light model starts: 0 for a surface that renders its top,
-         * more for the strip that continues another surface below it ({@link #continuedBelow}).
+         * Where this view's piece of the light model starts: 0 for a surface that renders its top.
          */
         public final float sliceStart;
         /** How much of the light model this view renders; less than 1 leaves the rest to a strip. */
@@ -104,20 +103,6 @@ public final class GlassStack {
         @NonNull public Spec withSlice(float end, boolean withFoot) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
                 sliceStart, end, withFoot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
-        }
-
-        /**
-         * This glass continued below its own view, by the strip under the system navigation pill:
-         * the rest of the same light model ({@code [sliceEnd, 1]}), and every value but the slice
-         * the same, so the two read as one slab. The strip has no edge of its own (its top runs on
-         * into this surface, the rest into the screen), so it wears no rim and every edge is a seam.
-         * Its {@link #band} is the surface's: the strip draws that band's veil and frost but is no
-         * measurement of it ({@link GlassStack#buildContinuation}).
-         */
-        @NonNull public Spec continuedBelow() {
-            return new Spec(blurRadiusDp, tintAlpha, grainPercent, 0f, false, look,
-                ChromeEdgeRule.ALL, sliceEnd, 1f, foot, stackAlphaPercent, tintColor, band,
-                tintStrengthPercent);
         }
 
         @NonNull public Spec withStackAlpha(int percent) {
@@ -311,52 +296,6 @@ public final class GlassStack {
         }
         Drawable material = layers.size() == 1
             ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
-        if (spec.stackAlphaPercent < 100)
-            applyStackAlpha(material, Math.round(255f * spec.stackAlphaPercent / 100f));
-        return material;
-    }
-
-    /**
-     * The frost a stack's backdrop is drawn through: {@code evenOut} (the matrix the surface above
-     * last drew its frame through, or null for none) composed ahead of the frost at the spec's
-     * opacity. What {@link #build} dresses its own backdrop with, for a strip whose backdrop is a
-     * view of its own ({@link Spec#continuedBelow}): the same matrix over the same blurred frame
-     * leaves no step where the strip meets the surface it continues.
-     */
-    @Nullable
-    public static android.graphics.ColorFilter frostFilter(@NonNull Spec spec,
-                                                          @Nullable android.graphics.ColorMatrix evenOut) {
-        return GlassFilters.withEvenOut(evenOut,
-            GlassFilters.frost(Math.round(spec.tintAlpha * 100f)));
-    }
-
-    /**
-     * The tint of a strip that continues another surface's glass ({@link Spec#continuedBelow}),
-     * without its backdrop, which the strip draws in a view of its own through
-     * {@link #frostFilter}: the same layers {@link #build} lays over a frame, its slice of the
-     * light model, the band's veil and the grain, under the same stack alpha. The band is only
-     * the veil's: nothing is noted to the ink under its name, so the surface above keeps the
-     * measurement that is its own.
-     */
-    @NonNull
-    public static Drawable buildContinuation(@NonNull GlassSurfaceFactory glass, @NonNull Spec spec) {
-        boolean bare = spec.blurRadiusDp <= 0 && spec.tintAlpha <= 0f && spec.grainPercent <= 0
-            && spec.tintColor == null;
-        if (bare) return new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
-        Drawable material;
-        if (spec.tintColor != null) {
-            List<Drawable> layers = new ArrayList<>(3);
-            layers.add(new android.graphics.drawable.ColorDrawable(spec.tintColor));
-            int veil = glass.bandVeil(spec.band);
-            if (android.graphics.Color.alpha(veil) > 0)
-                layers.add(new android.graphics.drawable.ColorDrawable(veil));
-            if (spec.grainPercent > 0) layers.add(glass.grainLayer(spec.grainPercent));
-            material = layers.size() == 1
-                ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
-        } else {
-            material = glass.continuationSurface(spec.tintAlpha, spec.sliceStart, spec.sliceEnd,
-                spec.foot, spec.grainPercent, spec.band, spec.tintStrengthPercent);
-        }
         if (spec.stackAlphaPercent < 100)
             applyStackAlpha(material, Math.round(255f * spec.stackAlphaPercent / 100f));
         return material;

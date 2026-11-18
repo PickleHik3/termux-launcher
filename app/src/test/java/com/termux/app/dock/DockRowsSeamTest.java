@@ -160,7 +160,7 @@ public class DockRowsSeamTest {
         DockRows rows = new DockRows(views);
         DockLayout dock = rest(device, PageRef.HOME);
         rows.applyLayout(dock);
-        rows.apply(chrome(HOME, false), false, false);
+        rows.apply(chrome(HOME, false), false);
 
         assertTrue("the stack is up", views.stack);
         assertTrue("the dock's glass host is up", views.surface);
@@ -185,7 +185,7 @@ public class DockRowsSeamTest {
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
         rows.applyLayout(rest(device, PageRef.TERMINAL));
-        rows.apply(chrome(WINDOW, false), false, false);
+        rows.apply(chrome(WINDOW, false), false);
 
         assertTrue(views.stack);
         assertTrue(views.row(Element.APPS));
@@ -200,7 +200,7 @@ public class DockRowsSeamTest {
         FakeViews views = new FakeViews();
         views.ticksAreTheDocks = false;
         DockRows rows = new DockRows(views);
-        rows.apply(chrome(WINDOW, false), false, false);
+        rows.apply(chrome(WINDOW, false), false);
         // The dock's height counts the band, so a gone band would be a gap.
         assertEquals(DockRows.PageBand.HELD, views.pageBand);
     }
@@ -209,7 +209,7 @@ public class DockRowsSeamTest {
     public void aWindowWithoutDockRowsHidesTheDockAndKeepsTheStackOnlyForWhatStandsInIt() {
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
-        rows.apply(chrome(WINDOW_BARE, false), false, false);
+        rows.apply(chrome(WINDOW_BARE, false), false);
         assertFalse("nothing stands in the stack", views.stack);
         assertFalse(views.surface);
         assertFalse(views.dockGlass);
@@ -220,12 +220,12 @@ public class DockRowsSeamTest {
         for (Element element : Element.values())
             assertFalse(element + " has no row on screen", rows.isRowOnScreen(element));
 
-        rows.apply(chrome(WINDOW_BARE, true), false, false);
+        rows.apply(chrome(WINDOW_BARE, true), false);
         assertTrue("the keyboard stands in the stack", views.stack);
         assertFalse("but the dock's rows stay away", views.surface);
 
         rows.setStatusBarShown(true);
-        rows.apply(chrome(WINDOW_BARE, false), true, false);
+        rows.apply(chrome(WINDOW_BARE, false), true);
         assertTrue("a status bar along the bottom keeps the stack up", views.stack);
         assertTrue(rows.isRowOnScreen(Element.STATUS));
         assertFalse(views.surface);
@@ -242,19 +242,19 @@ public class DockRowsSeamTest {
         assertTrue(rows.statusBarShown());
         assertFalse("shown again, nothing moves", rows.setStatusBarShown(true));
 
-        rows.apply(chrome(WINDOW_BARE, false), false, false);
+        rows.apply(chrome(WINDOW_BARE, false), false);
         assertFalse("along the top it is no band of the stack",
             rows.isRowOnScreen(Element.STATUS));
         assertFalse(views.stack);
 
-        rows.apply(chrome(WINDOW_BARE, false), true, false);
+        rows.apply(chrome(WINDOW_BARE, false), true);
         assertTrue("along the bottom it is", rows.isRowOnScreen(Element.STATUS));
         assertTrue(views.stack);
 
         // Put away in the Layout editor: gone, and gone from the stack at the next pass.
         assertTrue(rows.setStatusBarShown(false));
         assertFalse(views.statusBar);
-        rows.apply(chrome(WINDOW_BARE, false), true, false);
+        rows.apply(chrome(WINDOW_BARE, false), true);
         assertFalse(rows.isRowOnScreen(Element.STATUS));
         assertFalse("nothing stands in the stack", views.stack);
     }
@@ -284,16 +284,6 @@ public class DockRowsSeamTest {
     }
 
     @Test
-    public void theDockSheetStandsDownWhereTheNavStripCarriesTheGlass() {
-        FakeViews views = new FakeViews();
-        DockRows rows = new DockRows(views);
-        rows.apply(chrome(WINDOW, false), false, true);
-        assertTrue(views.surface);
-        assertFalse(views.dockGlass);
-        assertTrue("the rows still show", views.row(Element.APPS));
-    }
-
-    @Test
     public void midCrossingTheStackShowsTheRowsOfTheHalfItStands() {
         Snapshot.Builder device = device(half(HOME, DockStyle.LENS_BEADS),
             half(WINDOW, DockStyle.GLASS_TRAY));
@@ -303,7 +293,7 @@ public class DockRowsSeamTest {
         DockRows rows = new DockRows(views);
         rows.applyLayout(DockGeometry.compute(device.rows(PageRef.HOME).arrangement(towardHome)
             .build()));
-        rows.apply(chrome(towardHome, false), false, false);
+        rows.apply(chrome(towardHome, false), false);
         assertTrue("Home's pinned apps", views.row(Element.APPS));
         assertFalse("without the window's extra keys", views.row(Element.EXTRA_KEYS));
         assertFalse(rows.isRowOnScreen(Element.EXTRA_KEYS));
@@ -312,7 +302,7 @@ public class DockRowsSeamTest {
         PlaceLayout towardWindow = SeamTravel.withDockOf(HOME, WINDOW);
         rows.applyLayout(DockGeometry.compute(device.rows(PageRef.TERMINAL)
             .arrangement(towardWindow).build()));
-        rows.apply(chrome(towardWindow, false), false, false);
+        rows.apply(chrome(towardWindow, false), false);
         assertTrue(views.row(Element.APPS));
         assertTrue("the window's extra keys come with its rows", views.row(Element.EXTRA_KEYS));
     }
@@ -330,7 +320,7 @@ public class DockRowsSeamTest {
 
             // Resting in a window: the window's design.
             rows.applyLayout(rest(device, PageRef.TERMINAL));
-            rows.apply(chrome(WINDOW, false), false, false);
+            rows.apply(chrome(WINDOW, false), false);
             assertSame(DockSurfaceSpec.forStyle(windowDesign), rows.surface());
 
             // A slide toward Home stands Home's rows while the window is still committed: the
@@ -339,7 +329,7 @@ public class DockRowsSeamTest {
             PlaceLayout towardHome = SeamTravel.withDockOf(WINDOW, HOME);
             rows.applyLayout(DockGeometry.compute(device.rows(PageRef.HOME)
                 .arrangement(towardHome).build()));
-            rows.apply(chrome(towardHome, false), false, false);
+            rows.apply(chrome(towardHome, false), false);
             assertSame("home beads " + homeBeads, DockSurfaceSpec.forStyle(homeDesign),
                 rows.surface());
             assertSame(rows.surface(), rows.shown().surface);
@@ -391,24 +381,24 @@ public class DockRowsSeamTest {
 
         rows.applyLayout(rest(device, PageRef.TERMINAL));
         assertEquals("the first design is a change", 1, subscriber.calls);
-        rows.apply(chrome(WINDOW, false), false, false);
+        rows.apply(chrome(WINDOW, false), false);
         assertEquals("the first rows are a change", 2, subscriber.calls);
 
         // The same answer again, as every chrome pass at rest hands it: no announcement, though
         // the views are written again (other code shares some of them, e.g. the letters' slot).
         int writes = views.log.size();
         rows.applyLayout(rest(device, PageRef.TERMINAL));
-        rows.apply(chrome(WINDOW, false), false, false);
-        rows.apply(chrome(WINDOW, false), false, false);
+        rows.apply(chrome(WINDOW, false), false);
+        rows.apply(chrome(WINDOW, false), false);
         assertEquals(2, subscriber.calls);
         assertTrue("the views are written every pass", views.log.size() > writes);
 
         // The keyboard rising changes nothing a row shows.
-        rows.apply(chrome(WINDOW, true), false, false);
+        rows.apply(chrome(WINDOW, true), false);
         assertEquals(2, subscriber.calls);
 
         // The pinned apps leave: one announcement.
-        rows.apply(chrome(WINDOW_BARE, false), false, false);
+        rows.apply(chrome(WINDOW_BARE, false), false);
         assertEquals(3, subscriber.calls);
         assertFalse(subscriber.seen.get(2).rowOnScreen(Element.APPS));
 
@@ -426,7 +416,7 @@ public class DockRowsSeamTest {
         assertEquals(5, subscriber.calls);
 
         rows.removeListener(subscriber);
-        rows.apply(chrome(WINDOW, false), false, false);
+        rows.apply(chrome(WINDOW, false), false);
         assertEquals("a removed subscriber hears nothing", 5, subscriber.calls);
     }
 
@@ -435,10 +425,10 @@ public class DockRowsSeamTest {
         // A drag on the pinned apps is cancelled while its source is still on screen.
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
-        rows.apply(chrome(WINDOW, false), false, false);
+        rows.apply(chrome(WINDOW, false), false);
         Subscriber subscriber = new Subscriber(views);
         rows.addListener(subscriber);
-        rows.apply(chrome(WINDOW_BARE, false), false, false);
+        rows.apply(chrome(WINDOW_BARE, false), false);
         assertEquals(1, subscriber.calls);
         assertTrue("the row was still shown when its subscribers heard it leave",
             subscriber.appsPagerWhenTold.get(0));
@@ -468,19 +458,19 @@ public class DockRowsSeamTest {
         DockRows rows = new DockRows(views);
         DockRows.Union both = new DockRows.Union(true, false, true);
         // Home in front: the Workspace's extra keys are its lane, laid out and shown.
-        rows.apply(chrome(HOME, false), false, false, both);
+        rows.apply(chrome(HOME, false), false, both);
         assertTrue("the extra keys stand for the Workspace", views.row(Element.EXTRA_KEYS));
         assertTrue(views.row(Element.APPS));
         assertFalse("what the readers ask is the front layout's",
             rows.isRowOnScreen(Element.EXTRA_KEYS));
         // The landing's commit on the Workspace changes no row's visibility.
         views.log.clear();
-        rows.apply(chrome(WINDOW, false), false, false, both);
+        rows.apply(chrome(WINDOW, false), false, both);
         assertTrue(views.row(Element.EXTRA_KEYS));
         assertTrue(views.row(Element.APPS));
         assertTrue(rows.isRowOnScreen(Element.EXTRA_KEYS));
         // And back: the front layout's answer changes, the views do not.
-        rows.apply(chrome(HOME, false), false, false, both);
+        rows.apply(chrome(HOME, false), false, both);
         assertTrue(views.row(Element.EXTRA_KEYS));
     }
 
@@ -489,9 +479,9 @@ public class DockRowsSeamTest {
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
         DockRows.Union both = new DockRows.Union(true, false, true);
-        rows.apply(chrome(HOME, false), false, false, both);
+        rows.apply(chrome(HOME, false), false, both);
         assertFalse(views.row(Element.AZ));
-        rows.apply(chrome(WINDOW, false), false, false, both);
+        rows.apply(chrome(WINDOW, false), false, both);
         assertFalse(views.row(Element.AZ));
     }
 
@@ -499,9 +489,9 @@ public class DockRowsSeamTest {
     public void withoutAUnionTheFrontLayoutAloneDecidesAsBefore() {
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
-        rows.apply(chrome(WINDOW, false), false, false);
+        rows.apply(chrome(WINDOW, false), false);
         assertTrue(views.row(Element.EXTRA_KEYS));
-        rows.apply(chrome(HOME, false), false, false);
+        rows.apply(chrome(HOME, false), false);
         assertFalse("no union, no lane", views.row(Element.EXTRA_KEYS));
     }
 
@@ -517,7 +507,7 @@ public class DockRowsSeamTest {
                 .build().restOf(PageRef.TERMINAL));
         // The bare Workspace shows no apps row of its own: Home's lane sizes the row.
         rows.setOtherLayout(home);
-        rows.apply(chrome(WINDOW_BARE, false), false, false,
+        rows.apply(chrome(WINDOW_BARE, false), false,
             new DockRows.Union(true, false, false));
         rows.applyLayout(bare);
         assertEquals(home.appsBarHeightPx, (int) views.heights.get(Element.APPS));
@@ -546,7 +536,7 @@ public class DockRowsSeamTest {
         // At rest with the owner of the rows in front.
         rows.setOtherLayout(arrivingLayout);
         rows.setLanes(owner, owner, owner, null);
-        rows.apply(chrome(leavingPlace, false), false, false,
+        rows.apply(chrome(leavingPlace, false), false,
             new DockRows.Union(true, true, false));
         rows.applyLayout(leavingLayout);
         int apps = views.heights.get(Element.APPS);
@@ -563,7 +553,7 @@ public class DockRowsSeamTest {
         assertEquals("az in the commit pass", az, (int) views.heights.get(Element.AZ));
         assertEquals("the apps row's page band in the commit pass", band, views.pageBandHeight);
         // The settle: the rows are renewed for the arriving side, then laid out again.
-        rows.apply(chrome(arrivingPlace, false), false, false,
+        rows.apply(chrome(arrivingPlace, false), false,
             new DockRows.Union(true, true, false));
         rows.applyLayout(arrivingLayout);
         assertEquals("apps after the settle", apps, (int) views.heights.get(Element.APPS));
@@ -622,13 +612,13 @@ public class DockRowsSeamTest {
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
         rows.setKeyboardLaidOut(true);
-        rows.apply(chrome(WINDOW_BARE, false), false, false);
+        rows.apply(chrome(WINDOW_BARE, false), false);
         assertTrue("the container stays laid out for the down keyboard", views.stack);
         assertFalse("what readers ask still says the stack has nothing to show",
             rows.stackShown());
 
         rows.setKeyboardLaidOut(false);
-        rows.apply(chrome(WINDOW_BARE, false), false, false);
+        rows.apply(chrome(WINDOW_BARE, false), false);
         assertFalse(views.stack);
     }
 }

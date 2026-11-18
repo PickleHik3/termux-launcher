@@ -42,6 +42,8 @@ public final class StackGeometry {
     public int keyboardTopPx;
     public int keyboardWidthPx;
     public int keyboardHeightPx;
+    /** Of that height, the foot below the keys (BottomInsets#keyboardFootPx): the keys are the rest. */
+    public int keyboardFootPx;
     /** How far the column's bottom stands under the keyboard: bands, their air, its padding. */
     public int belowKeyboardInColumnPx;
 
@@ -80,6 +82,7 @@ public final class StackGeometry {
         keyboardTopPx = o.keyboardTopPx;
         keyboardWidthPx = o.keyboardWidthPx;
         keyboardHeightPx = o.keyboardHeightPx;
+        keyboardFootPx = o.keyboardFootPx;
         belowKeyboardInColumnPx = o.belowKeyboardInColumnPx;
         underShown = o.underShown;
         underTopPx = o.underTopPx;
