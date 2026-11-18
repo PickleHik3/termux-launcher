@@ -3,9 +3,9 @@ package com.termux.app.statusbar;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.statusbar.StatusBarLensMetrics.Bar;
 import com.termux.app.statusbar.StatusBarLensMetrics.MarkBuffer;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -18,8 +18,8 @@ import java.util.List;
  */
 public class StatusBarLensMarkBufferTest {
 
-    private static final List<PaneWallPage> RING = Arrays.asList(PaneWallPage.WIDGETS,
-        PaneWallPage.TERMINAL, PaneWallPage.DISPLAY);
+    private static final List<PageKind> RING = Arrays.asList(PageKind.HOME,
+        PageKind.TERMINAL, PageKind.DISPLAY);
     private static final float DENSITY = 2f;
     private static final int BAR_W = 800;
 
@@ -28,7 +28,7 @@ public class StatusBarLensMarkBufferTest {
         MarkBuffer buffer = new MarkBuffer();
         Bar bar = new Bar(BAR_W, 136, DENSITY, false, false, 0.6f, 24, 48, 50f, 60f, 12f);
         for (float offset = -1.6f * BAR_W; offset <= 1.6f * BAR_W; offset += BAR_W / 7f) {
-            assertTrue(StatusBarLensMetrics.marks(bar, RING, PaneWallPage.TERMINAL, offset, BAR_W,
+            assertTrue(StatusBarLensMetrics.marks(bar, RING, PageKind.TERMINAL, offset, BAR_W,
                 buffer).isEmpty());
         }
     }

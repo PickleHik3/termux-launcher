@@ -4,10 +4,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.InnerPages;
 import com.termux.app.place.PlaceChromeTravel.Rest;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -29,11 +29,11 @@ public class WindowSlideChromeTravelTest {
     private static final int DOCK_PX = 250;
 
     /** The row as it stands: Home on the left, the Workspace's windows on the right. */
-    private static final List<PaneWallPage> ROW =
-        Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+    private static final List<PageKind> ROW =
+        Arrays.asList(PageKind.HOME, PageKind.TERMINAL);
 
     /** Home with its keyboard down and no status bar; the Workspace with its keyboard up. */
-    private static final PlaceChromeTravel.States STATES = place -> place == PaneWallPage.WIDGETS
+    private static final PlaceChromeTravel.States STATES = place -> place == PageKind.HOME
         ? new Rest(false, false, false) : new Rest(true, false, true);
 
     /** A window with windows on both sides. */
@@ -44,14 +44,14 @@ public class WindowSlideChromeTravelTest {
     private static final InnerPages FIRST_WINDOW = steps -> steps > 0;
 
     private static Frame at(float offsetFraction, InnerPages inner) {
-        return PlaceChromeTravel.at(ROW, PaneWallPage.TERMINAL, offsetFraction * WIDTH, WIDTH,
+        return PlaceChromeTravel.at(ROW, PageKind.TERMINAL, offsetFraction * WIDTH, WIDTH,
             STATES, inner);
     }
 
     private static void assertStaysOnWorkspace(Frame frame) {
-        assertSame(PaneWallPage.TERMINAL, frame.from);
-        assertSame(PaneWallPage.TERMINAL, frame.toward);
-        assertEquals(0f, SeamTravel.otherHalfProgress(frame, PaneWallPage.TERMINAL), EPSILON);
+        assertSame(PageKind.TERMINAL, frame.from);
+        assertSame(PageKind.TERMINAL, frame.toward);
+        assertEquals(0f, SeamTravel.otherHalfProgress(frame, PageKind.TERMINAL), EPSILON);
         assertEquals(1f, frame.keyboardReveal, EPSILON);
         assertEquals(1f, frame.dockReveal, EPSILON);
         assertEquals(1f, frame.statusReveal, EPSILON);
@@ -81,9 +81,9 @@ public class WindowSlideChromeTravelTest {
     public void slideFromTheFirstWindowStillCrossesTheSeamToHome() {
         // No window on the left of the first one: the drag brings Home in, as it always has.
         Frame frame = at(0.5f, FIRST_WINDOW);
-        assertSame(PaneWallPage.WIDGETS, frame.from);
-        assertSame(PaneWallPage.TERMINAL, frame.toward);
-        assertEquals(0.5f, SeamTravel.otherHalfProgress(frame, PaneWallPage.TERMINAL), EPSILON);
+        assertSame(PageKind.HOME, frame.from);
+        assertSame(PageKind.TERMINAL, frame.toward);
+        assertEquals(0.5f, SeamTravel.otherHalfProgress(frame, PageKind.TERMINAL), EPSILON);
         assertTrue(frame.keyboardReveal < 1f);
     }
 
@@ -91,13 +91,13 @@ public class WindowSlideChromeTravelTest {
     public void withoutInnerPagesTheOffsetReadsAsThePlaceOnTheLeft() {
         // What the chrome did before: the previous window's slide was read as Home's.
         Frame frame = at(0.5f, null);
-        assertSame(PaneWallPage.WIDGETS, frame.from);
-        assertTrue(SeamTravel.otherHalfProgress(frame, PaneWallPage.TERMINAL) > 0f);
+        assertSame(PageKind.HOME, frame.from);
+        assertTrue(SeamTravel.otherHalfProgress(frame, PageKind.TERMINAL) > 0f);
     }
 
     @Test
     public void atRestNothingIsAsked() {
-        Frame frame = PlaceChromeTravel.at(ROW, PaneWallPage.TERMINAL, 0f, WIDTH, STATES,
+        Frame frame = PlaceChromeTravel.at(ROW, PageKind.TERMINAL, 0f, WIDTH, STATES,
             steps -> {
                 throw new AssertionError("asked at rest");
             });

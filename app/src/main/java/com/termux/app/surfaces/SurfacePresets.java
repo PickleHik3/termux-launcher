@@ -8,8 +8,8 @@ import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.SeamDress;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.FrostStops;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -627,8 +627,8 @@ public final class SurfacePresets {
      */
     @NonNull
     public static Map<String, Object> captureLook(@NonNull TermuxAppSharedPreferences prefs) {
-        Map<String, Object> look = captureLook(prefs, PaneWallPage.TERMINAL);
-        Map<String, Object> home = captureLook(prefs, PaneWallPage.WIDGETS);
+        Map<String, Object> look = captureLook(prefs, PageKind.TERMINAL);
+        Map<String, Object> home = captureLook(prefs, PageKind.HOME);
         if (!halfCells(home).equals(halfCells(look))) {
             look.put(KEY_HOME_LOOK, Boolean.TRUE);
             for (Map.Entry<String, Object> entry : halfCells(home).entrySet())
@@ -643,7 +643,7 @@ public final class SurfacePresets {
      */
     @NonNull
     public static Map<String, Object> captureLook(@NonNull TermuxAppSharedPreferences prefs,
-                                                  @NonNull PaneWallPage half) {
+                                                  @NonNull PageKind half) {
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL, prefs.getSurfaceMaterial(pageOf(half)));
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, prefs.getSurfaceMaterialIntensity(pageOf(half)));
@@ -703,7 +703,7 @@ public final class SurfacePresets {
      * The page id a screen kind's look values are read and written under: the wall for Home's, the
      * Terminal page for any other, and "no page" (all) for none.
      */
-    static int pageOf(@Nullable PaneWallPage screen) {
+    static int pageOf(@Nullable PageKind screen) {
         return screen == null ? TermuxAppSharedPreferences.PAGE_ALL
             : SeamDress.lookPageId(screen, TermuxAppSharedPreferences.terminalPageId());
     }
@@ -755,8 +755,8 @@ public final class SurfacePresets {
      * cells in place of the Workspace's.
      */
     @NonNull
-    static Preset halfOf(@NonNull Preset preset, @NonNull PaneWallPage half) {
-        boolean home = half == PaneWallPage.WIDGETS && hasHomeLook(preset);
+    static Preset halfOf(@NonNull Preset preset, @NonNull PageKind half) {
+        boolean home = half == PageKind.HOME && hasHomeLook(preset);
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : preset.values.entrySet()) {
             String key = entry.getKey();
@@ -1244,7 +1244,7 @@ public final class SurfacePresets {
      * (the glass ink, rim, motion, hue, vibrancy and edge) are one for the wall, as a Look's are.
      */
     public static void applyCustom(@NonNull TermuxAppSharedPreferences prefs,
-                                   @NonNull Preset custom, @NonNull PaneWallPage half) {
+                                   @NonNull Preset custom, @NonNull PageKind half) {
         SharedPreferences store = prefs.getSharedPreferences();
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
@@ -1257,7 +1257,7 @@ public final class SurfacePresets {
 
     /** One half's live look as a Custom, under the plain keys ({@link #captureLook}). */
     @NonNull
-    static Preset customOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull PaneWallPage half) {
+    static Preset customOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull PageKind half) {
         return new Preset(CUSTOM_ID, R.string.termux_surface_preset_custom,
             captureLook(prefs, half));
     }
@@ -1300,7 +1300,7 @@ public final class SurfacePresets {
     static void applyEach(@NonNull TermuxAppSharedPreferences prefs, @NonNull Preset preset) {
         // The Workspace's look lands on both halves; Home's own, where the look names it, then
         // lands on Home's per-half cells alone.
-        applyHalf(prefs, halfOf(preset, PaneWallPage.TERMINAL), null, false);
+        applyHalf(prefs, halfOf(preset, PageKind.TERMINAL), null, false);
         if (!hasHomeLook(preset))
             return;
         // The halves are pages now (ADR 0015 6): Home's values are the wall's, and what the
@@ -1313,19 +1313,19 @@ public final class SurfacePresets {
         for (SurfaceSlot slot : slots)
             for (SurfaceProperty property : properties)
                 workspace[slot.ordinal()][property.ordinal()] =
-                    cellValue(prefs, slot, property, pageOf(PaneWallPage.TERMINAL));
-        String workspaceMaterial = prefs.getSurfaceMaterial(pageOf(PaneWallPage.TERMINAL));
-        int workspaceIntensity = prefs.getSurfaceMaterialIntensity(pageOf(PaneWallPage.TERMINAL));
-        applyHalf(prefs, halfOf(preset, PaneWallPage.WIDGETS), PaneWallPage.WIDGETS, true);
-        if (!workspaceMaterial.equals(prefs.getSurfaceMaterial(pageOf(PaneWallPage.TERMINAL))))
-            prefs.setSurfaceMaterial(pageOf(PaneWallPage.TERMINAL), workspaceMaterial);
-        if (workspaceIntensity != prefs.getSurfaceMaterialIntensity(pageOf(PaneWallPage.TERMINAL)))
-            prefs.setSurfaceMaterialIntensity(pageOf(PaneWallPage.TERMINAL), workspaceIntensity);
+                    cellValue(prefs, slot, property, pageOf(PageKind.TERMINAL));
+        String workspaceMaterial = prefs.getSurfaceMaterial(pageOf(PageKind.TERMINAL));
+        int workspaceIntensity = prefs.getSurfaceMaterialIntensity(pageOf(PageKind.TERMINAL));
+        applyHalf(prefs, halfOf(preset, PageKind.HOME), PageKind.HOME, true);
+        if (!workspaceMaterial.equals(prefs.getSurfaceMaterial(pageOf(PageKind.TERMINAL))))
+            prefs.setSurfaceMaterial(pageOf(PageKind.TERMINAL), workspaceMaterial);
+        if (workspaceIntensity != prefs.getSurfaceMaterialIntensity(pageOf(PageKind.TERMINAL)))
+            prefs.setSurfaceMaterialIntensity(pageOf(PageKind.TERMINAL), workspaceIntensity);
         for (SurfaceSlot slot : slots) {
             for (SurfaceProperty property : properties) {
                 if (!TermuxAppSharedPreferences.isPerPage(slot, property)) continue;
                 int want = workspace[slot.ordinal()][property.ordinal()];
-                if (cellValue(prefs, slot, property, pageOf(PaneWallPage.TERMINAL)) != want)
+                if (cellValue(prefs, slot, property, pageOf(PageKind.TERMINAL)) != want)
                     writeWorkspaceCell(prefs, slot, property, want);
             }
         }
@@ -1339,7 +1339,7 @@ public final class SurfacePresets {
      * the whole wall and are written for both, as is the reset of the per-surface extras.
      */
     public static void applyLook(@NonNull TermuxAppSharedPreferences prefs,
-                                 @NonNull Preset preset, @NonNull PaneWallPage half) {
+                                 @NonNull Preset preset, @NonNull PageKind half) {
         SharedPreferences store = prefs.getSharedPreferences();
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
@@ -1352,11 +1352,11 @@ public final class SurfacePresets {
 
     /**
      * A Look picked on the Global (Customization) card: {@link #applyLook(TermuxAppSharedPreferences,
-     * Preset, PaneWallPage)} after clearing the cells read before Base ({@link #clearBeneathLook}),
+     * Preset, PageKind)} after clearing the cells read before Base ({@link #clearBeneathLook}),
      * in the same one editor, so every surface on every page wears it (developer, 2026-11-03).
      */
     public static void applyGlobalLook(@NonNull TermuxAppSharedPreferences prefs,
-                                       @NonNull Preset preset, @NonNull PaneWallPage half) {
+                                       @NonNull Preset preset, @NonNull PageKind half) {
         SharedPreferences store = prefs.getSharedPreferences();
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
@@ -1494,7 +1494,7 @@ public final class SurfacePresets {
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null || pageId < 0)
             return;
-        Preset look = halfOf(preset, PaneWallPage.WIDGETS);
+        Preset look = halfOf(preset, PageKind.HOME);
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (isPageCell(slot, property))
@@ -1519,7 +1519,7 @@ public final class SurfacePresets {
                                      @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
         if (prefs.lookGrid().has(property.grid, slot.element, pageId))
             return cellValue(prefs, slot, property, pageId);
-        return cellValue(prefs, slot, property, pageOf(PaneWallPage.WIDGETS));
+        return cellValue(prefs, slot, property, pageOf(PageKind.HOME));
     }
 
     /**
@@ -1551,7 +1551,7 @@ public final class SurfacePresets {
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null || pageId < 0)
             return false;
-        Preset look = halfOf(preset, PaneWallPage.WIDGETS);
+        Preset look = halfOf(preset, PageKind.HOME);
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (!isPageCell(slot, property))
@@ -1593,8 +1593,8 @@ public final class SurfacePresets {
      * as ever.
      */
     private static void applyAtHalf(@NonNull TermuxAppSharedPreferences prefs,
-                                    @NonNull Preset look, @NonNull PaneWallPage half) {
-        if (half != PaneWallPage.TERMINAL || !TermuxAppSharedPreferences.hasTerminalPage()) {
+                                    @NonNull Preset look, @NonNull PageKind half) {
+        if (half != PageKind.TERMINAL || !TermuxAppSharedPreferences.hasTerminalPage()) {
             applyHalf(prefs, look, half, false);
             return;
         }
@@ -1632,12 +1632,12 @@ public final class SurfacePresets {
         if (own != null) return intOf(own);
         Object base = look.values.get(cellKey(null, property));
         return base != null ? intOf(base)
-            : cellValue(prefs, null, property, pageOf(PaneWallPage.WIDGETS));
+            : cellValue(prefs, null, property, pageOf(PageKind.HOME));
     }
 
     /** Whether the Workspace's worn values are read as the Terminal page's own; see {@link #wornOn}. */
-    private static boolean pageScoped(@NonNull PaneWallPage half) {
-        return half == PaneWallPage.TERMINAL && TermuxAppSharedPreferences.hasTerminalPage();
+    private static boolean pageScoped(@NonNull PageKind half) {
+        return half == PageKind.TERMINAL && TermuxAppSharedPreferences.hasTerminalPage();
     }
 
     /**
@@ -1647,7 +1647,7 @@ public final class SurfacePresets {
      * to a Workspace or both-halves write.
      */
     private static void applyHalf(@NonNull TermuxAppSharedPreferences prefs,
-                                  @NonNull Preset preset, @Nullable PaneWallPage half,
+                                  @NonNull Preset preset, @Nullable PageKind half,
                                   boolean cellsOnly) {
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
@@ -1667,10 +1667,10 @@ public final class SurfacePresets {
     /** Whether a write for {@code half} touches a surface cell; see {@link #applyHalf}. */
     private static boolean touchesCell(@NonNull SurfaceSlot slot,
                                        @NonNull SurfaceProperty property,
-                                       @Nullable PaneWallPage half, boolean cellsOnly) {
+                                       @Nullable PageKind half, boolean cellsOnly) {
         if (TermuxAppSharedPreferences.isPerPage(slot, property))
             return true;
-        return !cellsOnly && half != PaneWallPage.WIDGETS;
+        return !cellsOnly && half != PageKind.HOME;
     }
 
     private static void applyOne(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key,
@@ -1679,7 +1679,7 @@ public final class SurfacePresets {
     }
 
     private static void applyOne(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key,
-                                 @NonNull Object value, @Nullable PaneWallPage half) {
+                                 @NonNull Object value, @Nullable PageKind half) {
         switch (key) {
             // Style is never part of a Look: a stored look from before this rule may still carry
             // the key, and it is ignored on apply and in matches().
@@ -1756,7 +1756,7 @@ public final class SurfacePresets {
         }
         SurfaceEditorRows.Row cell = rowOfKey(key);
         if (cell != null) {
-            if (half != PaneWallPage.WIDGETS || TermuxAppSharedPreferences.isPerPage(cell.slot,
+            if (half != PageKind.HOME || TermuxAppSharedPreferences.isPerPage(cell.slot,
                     cell.property))
                 writeCell(prefs, cell.slot, cell.property, pageOf(half), intOf(value));
             return;
@@ -1781,7 +1781,7 @@ public final class SurfacePresets {
      */
     public static boolean matches(@NonNull TermuxAppSharedPreferences prefs,
                                   @NonNull Preset preset) {
-        return matches(prefs, preset, PaneWallPage.TERMINAL);
+        return matches(prefs, preset, PageKind.TERMINAL);
     }
 
     /**
@@ -1790,7 +1790,7 @@ public final class SurfacePresets {
      * shows on that half. Values not held per half are compared as they are for both.
      */
     public static boolean matches(@NonNull TermuxAppSharedPreferences prefs,
-                                  @NonNull Preset preset, @NonNull PaneWallPage half) {
+                                  @NonNull Preset preset, @NonNull PageKind half) {
         Preset look = halfOf(preset, half);
         boolean scoped = pageScoped(half);
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
@@ -1819,7 +1819,7 @@ public final class SurfacePresets {
 
     /**
      * Whether one screen wears this preset in what it holds itself: {@link #matches(
-     * TermuxAppSharedPreferences, Preset, PaneWallPage)} asked of that half's own values only — its
+     * TermuxAppSharedPreferences, Preset, PageKind)} asked of that half's own values only — its
      * per-half cells and numbers, and on the Workspace the terminal's cells, which are the
      * Workspace's alone. The values held once for the wall (the glass ink, rim, motion, hue,
      * vibrancy and edge) are left out: a Look picked on the other screen writes them for both,
@@ -1827,7 +1827,7 @@ public final class SurfacePresets {
      * own Look and glass; the two meet only through the Match rows).
      */
     public static boolean wornOn(@NonNull TermuxAppSharedPreferences prefs,
-                                 @NonNull Preset preset, @NonNull PaneWallPage half) {
+                                 @NonNull Preset preset, @NonNull PageKind half) {
         Preset look = halfOf(preset, half);
         boolean scoped = pageScoped(half);
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
@@ -1856,7 +1856,7 @@ public final class SurfacePresets {
     }
 
     /** Whether a plain preset key is one {@code half} holds itself; see {@link #wornOn}. */
-    private static boolean isOwnKey(@NonNull String key, @NonNull PaneWallPage half) {
+    private static boolean isOwnKey(@NonNull String key, @NonNull PageKind half) {
         if (isHalfKey(key))
             return true;
         SurfaceEditorRows.Row cell = rowOfKey(key);
@@ -1866,7 +1866,7 @@ public final class SurfacePresets {
     /** The live value behind a preset key, or null for a key this build does not know. */
     @Nullable
     private static Object currentOne(@NonNull TermuxAppSharedPreferences prefs,
-                                     @NonNull String key, @NonNull PaneWallPage half) {
+                                     @NonNull String key, @NonNull PageKind half) {
         switch (key) {
             case TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE:
                 return null;

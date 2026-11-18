@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.SeamDress;
@@ -12,7 +13,6 @@ import com.termux.app.place.SeamTravel.DockPlan;
 import com.termux.app.place.Slot;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -148,11 +148,11 @@ public class DockPlacementTest {
      * the page the activity's stackDressPage reads), laid out by that page's rows, read for that
      * page. The keyboard is the one the activity reads, still up from the Workspace.
      */
-    private static boolean travelAnswer(PaneWallPage committed, PlaceLayout committedLayout,
-                                        PaneWallPage other, PlaceLayout otherLayout,
+    private static boolean travelAnswer(PageKind committed, PlaceLayout committedLayout,
+                                        PageKind other, PlaceLayout otherLayout,
                                         float progress) {
         DockPlan plan = SeamTravel.dockPlan(committedLayout, otherLayout);
-        PaneWallPage rowsPage = SeamDress.stackPage(committed, other, plan, progress);
+        PageKind rowsPage = SeamDress.stackPage(committed, other, plan, progress);
         PlaceLayout standing = rowsPage == committed ? committedLayout
             : SeamTravel.withDockOf(committedLayout, otherLayout);
         return DockPlacement.peekCardStandsOn(rowsPage, true, true, standing, false,
@@ -160,7 +160,7 @@ public class DockPlacementTest {
     }
 
     /** The answer the settle commits on {@code page}, at rest there with its own layout. */
-    private static boolean settleAnswer(PaneWallPage page, PlaceLayout layout,
+    private static boolean settleAnswer(PageKind page, PlaceLayout layout,
                                         boolean keyboardShown) {
         return DockPlacement.peekCardStandsOn(page, true, true, layout, false, keyboardShown,
             false, false);
@@ -173,37 +173,37 @@ public class DockPlacementTest {
         // The Workspace's keyboard is still up on every frame: the card is refused to the end,
         // and the landing on Home alone brings Peek, the same answer it commits.
         for (float progress : new float[] {0.25f, 0.5f, 0.99f, 1f}) {
-            assertFalse("at " + progress, travelAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS,
-                PaneWallPage.WIDGETS, APPS_OVER_AZ, progress));
+            assertFalse("at " + progress, travelAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS,
+                PageKind.HOME, APPS_OVER_AZ, progress));
         }
-        assertTrue(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false));
-        assertTrue(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, true));
+        assertTrue(settleAnswer(PageKind.HOME, APPS_OVER_AZ, false));
+        assertTrue(settleAnswer(PageKind.HOME, APPS_OVER_AZ, true));
     }
 
     @Test
     public void homeToWorkspaceTheRowsStayHomesAndTheWorkspacesTrayComesAtTheLanding() {
         assertEquals(DockPlan.NONE, SeamTravel.dockPlan(APPS_OVER_AZ, WITH_EXTRA_KEYS));
         for (float progress : new float[] {0f, 0.25f, 0.5f, 0.99f, 1f}) {
-            assertTrue("at " + progress, travelAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ,
-                PaneWallPage.TERMINAL, WITH_EXTRA_KEYS, progress));
+            assertTrue("at " + progress, travelAnswer(PageKind.HOME, APPS_OVER_AZ,
+                PageKind.TERMINAL, WITH_EXTRA_KEYS, progress));
         }
-        assertFalse(settleAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS, WORKSPACE_KEYBOARD_UP));
+        assertFalse(settleAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS, WORKSPACE_KEYBOARD_UP));
     }
 
     @Test
     public void aSlideThatFallsBackWearsTheLookItStartedWith() {
         // Rows that differ never swap on the way: out and back, the committed answer all along.
-        boolean workspace = settleAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS,
+        boolean workspace = settleAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS,
             WORKSPACE_KEYBOARD_UP);
         for (float progress : new float[] {0f, 0.3f, 0.7f, 0.3f, 0f}) {
             assertEquals("from the Workspace at " + progress, workspace,
-                travelAnswer(PaneWallPage.TERMINAL, WITH_EXTRA_KEYS, PaneWallPage.WIDGETS,
+                travelAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS, PageKind.HOME,
                     APPS_OVER_AZ, progress));
         }
-        boolean home = settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false);
+        boolean home = settleAnswer(PageKind.HOME, APPS_OVER_AZ, false);
         for (float progress : new float[] {0f, 0.3f, 0.7f, 0.3f, 0f}) {
             assertEquals("from Home at " + progress, home,
-                travelAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, PaneWallPage.TERMINAL,
+                travelAnswer(PageKind.HOME, APPS_OVER_AZ, PageKind.TERMINAL,
                     WITH_EXTRA_KEYS, progress));
         }
     }
@@ -213,9 +213,9 @@ public class DockPlacementTest {
         // Home's rows plus the extra keys on the Workspace: the stack stands the Workspace's rows
         // to the landing, which alone brings Peek.
         assertEquals(DockPlan.NONE, SeamTravel.dockPlan(APPS_AZ_AND_KEYS, APPS_OVER_AZ));
-        assertFalse(travelAnswer(PaneWallPage.TERMINAL, APPS_AZ_AND_KEYS, PaneWallPage.WIDGETS,
+        assertFalse(travelAnswer(PageKind.TERMINAL, APPS_AZ_AND_KEYS, PageKind.HOME,
             APPS_OVER_AZ, 0.99f));
-        assertTrue(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false));
+        assertTrue(settleAnswer(PageKind.HOME, APPS_OVER_AZ, false));
     }
 
     @Test
@@ -223,9 +223,9 @@ public class DockPlacementTest {
         // No rows travel, so nothing of the dock goes out of sight: the Workspace's keyboard
         // alone refuses the card there, and the look changes as the slide lands.
         assertEquals(DockPlan.NONE, SeamTravel.dockPlan(APPS_OVER_AZ, APPS_OVER_AZ));
-        assertFalse(travelAnswer(PaneWallPage.TERMINAL, APPS_OVER_AZ, PaneWallPage.WIDGETS,
+        assertFalse(travelAnswer(PageKind.TERMINAL, APPS_OVER_AZ, PageKind.HOME,
             APPS_OVER_AZ, 0.99f));
-        assertTrue(settleAnswer(PaneWallPage.WIDGETS, APPS_OVER_AZ, false));
+        assertTrue(settleAnswer(PageKind.HOME, APPS_OVER_AZ, false));
     }
 
 }

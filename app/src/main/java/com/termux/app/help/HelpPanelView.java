@@ -16,7 +16,7 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.termux.R;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.TermuxConstants;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -84,7 +84,7 @@ public final class HelpPanelView extends FrameLayout {
     private Listener listener;
     /** The stack the last render drew, so the page can redraw itself when only it changed. */
     private HelpNavigation navigation;
-    private PaneWallPage place = PaneWallPage.TERMINAL;
+    private PageKind place = PageKind.TERMINAL;
     private boolean practiceAvailable;
     /** Help home's practice list, open where it stands; not a page, so not a navigation frame. */
     private boolean practiceListOpen;

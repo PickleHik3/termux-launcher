@@ -1,8 +1,8 @@
 package com.termux.app.terminal;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -11,18 +11,18 @@ import static org.junit.Assert.assertTrue;
 public class SelectedChipOnScreenTest {
     @Test
     public void onHomeTheSelectedChipIsAWindowToGoTo() {
-        assertFalse(TerminalWindowBar.selectedChipOnScreen(PaneWallPage.WIDGETS));
+        assertFalse(TerminalWindowBar.selectedChipOnScreen(PageKind.HOME));
     }
 
     @Test
     public void onTheAssistantTheSelectedChipIsAWindowToGoTo() {
-        assertFalse(TerminalWindowBar.selectedChipOnScreen(PaneWallPage.ASSISTANT));
+        assertFalse(TerminalWindowBar.selectedChipOnScreen(PageKind.ASSISTANT));
     }
 
     @Test
     public void onTheWorkspaceAndDisplayTheSelectedChipOffersItsClose() {
-        assertTrue(TerminalWindowBar.selectedChipOnScreen(PaneWallPage.TERMINAL));
-        assertTrue(TerminalWindowBar.selectedChipOnScreen(PaneWallPage.DISPLAY));
+        assertTrue(TerminalWindowBar.selectedChipOnScreen(PageKind.TERMINAL));
+        assertTrue(TerminalWindowBar.selectedChipOnScreen(PageKind.DISPLAY));
     }
 
     @Test

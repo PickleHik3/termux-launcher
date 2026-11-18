@@ -2,10 +2,10 @@ package com.termux.app.place.layout;
 
 import androidx.annotation.NonNull;
 
-import com.termux.app.wall.WallPages.PageKind;
 
 import java.util.EnumMap;
 import java.util.Map;
+import com.termux.app.page.PageKind;
 
 /**
  * Every layout at one moment (ADR 0020 §5): the kind documents and the shared sizes. A retired

@@ -5,10 +5,10 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.MotionLog;
 import com.termux.app.dock.DockLayout;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.terminal.GeometryScheduler;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * A crossing (ADR 0012): one slide of the wall between Home and the Workspace, from the first frame
@@ -36,8 +36,8 @@ import com.termux.app.wall.PaneWallPage;
  * needs nothing of its own: the rests stay, so no measurement jumps. {@link #land} clears everything the crossing held in one step; the stack's
  * dress, which the page's commit still reads, goes at {@link #end}.
  *
- * <p>Its adapter is only what moves: the {@link Stack}, the {@link Bar}, the {@link Cover}, the
- * {@link Keyboard} and the {@link Dock}'s row. Frames read and write fields only; nothing here
+ * <p>Its adapter is only what moves: the {@link Stack}, the {@link Bar}, the {@link Cover} and the
+ * {@link Keyboard}; the dock's rows travel with their side, so a crossing asks nothing of them. Frames read and write fields only; nothing here
  * allocates after {@link #begin}.
  */
 public final class Crossing {
@@ -75,11 +75,7 @@ public final class Crossing {
     /** The in-app keyboard, brought up for a slide. */
     public interface Keyboard {
         /** Bring the keyboard up below the screen for {@code target}'s half, quietly. */
-        void preRoll(@NonNull PaneWallPage target);
-    }
-
-    /** The dock's pinned row. Rows travel with their side, so a crossing asks nothing of it. */
-    public interface Dock {
+        void preRoll(@NonNull PageKind target);
     }
 
     /** What a landing has left to do, read before the next crossing. The same object each time. */
@@ -121,12 +117,11 @@ public final class Crossing {
     @NonNull private final Bar mBar;
     @NonNull private final Cover mCover;
     @NonNull private final Keyboard mKeyboard;
-    @NonNull private final Dock mDock;
 
     private final SeamCrossing mSeam = new SeamCrossing();
 
     // ---- What a crossing holds from begin ----
-    @Nullable private PaneWallPage mCommitted;
+    @Nullable private PageKind mCommitted;
     /** The ends as the crossing began: the committed page's, and the other's it first reached. */
     @Nullable private SeamCrossing.Endpoint mHere;
     @Nullable private SeamCrossing.Endpoint mThere;
@@ -142,10 +137,10 @@ public final class Crossing {
     private int mHeldReservationPx;
     private int mHeldOverlapPx;
     private boolean mKeyboardPreRolled;
-    @Nullable private PaneWallPage mKeyboardPlace;
+    @Nullable private PageKind mKeyboardPlace;
     private boolean mContentPreRolled;
     @Nullable private GeometryScheduler.Transition mGridHold;
-    @Nullable private PaneWallPage mRoomArriving;
+    @Nullable private PageKind mRoomArriving;
     private int mRoomChangePx;
     private int mCoverPx;
 
@@ -157,12 +152,11 @@ public final class Crossing {
     private final SeamCrossing.Landing mNoSeam = new SeamCrossing.Landing();
 
     public Crossing(@NonNull Stack stack, @NonNull Bar bar, @NonNull Cover cover,
-                    @NonNull Keyboard keyboard, @NonNull Dock dock) {
+                    @NonNull Keyboard keyboard) {
         mStack = stack;
         mBar = bar;
         mCover = cover;
         mKeyboard = keyboard;
-        mDock = dock;
     }
 
     // ---- Begin and frame ----
@@ -324,7 +318,7 @@ public final class Crossing {
      * the crossing began on (C6). Null while none runs, or the committed end is of another kind.
      */
     @Nullable
-    public PageRef heldCommittedPage(@NonNull PaneWallPage kind) {
+    public PageRef heldCommittedPage(@NonNull PageKind kind) {
         SeamCrossing.Endpoint here = mHere;
         if (mCommitted == null || here == null || here.page.kind != kind) return null;
         return here.page;
@@ -395,7 +389,7 @@ public final class Crossing {
      * The keyboard brought up for {@code target}'s half for the rest of the slide, under the hold
      * ({@code reservationPx} is the room it is taken at, if it begins the hold).
      */
-    public void preRollKeyboard(@NonNull PaneWallPage target, int reservationPx) {
+    public void preRollKeyboard(@NonNull PageKind target, int reservationPx) {
         hold(reservationPx);
         mKeyboardPreRolled = true;
         mKeyboardPlace = target;
@@ -408,7 +402,7 @@ public final class Crossing {
 
     /** The page the pre-rolled keyboard travels toward; null while nothing is pre-rolled. */
     @Nullable
-    public PaneWallPage keyboardPlace() {
+    public PageKind keyboardPlace() {
         return mKeyboardPlace;
     }
 
@@ -434,7 +428,7 @@ public final class Crossing {
     }
 
     /** Whether the room change toward {@code arriving} is known for this crossing. */
-    public boolean knowsRoomToward(@NonNull PaneWallPage arriving) {
+    public boolean knowsRoomToward(@NonNull PageKind arriving) {
         return arriving == mRoomArriving;
     }
 
@@ -444,7 +438,7 @@ public final class Crossing {
     }
 
     /** Notes the room change toward {@code arriving}, worked out once per crossing. */
-    public void roomChange(@NonNull PaneWallPage arriving, int px) {
+    public void roomChange(@NonNull PageKind arriving, int px) {
         mRoomArriving = arriving;
         mRoomChangePx = px;
     }

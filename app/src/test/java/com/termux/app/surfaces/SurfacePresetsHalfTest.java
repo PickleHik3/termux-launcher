@@ -1,11 +1,11 @@
 package com.termux.app.surfaces;
 
-import com.termux.app.wall.PaneWallPage;
 import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -109,8 +109,8 @@ public class SurfacePresetsHalfTest {
         // Home's cells are all named, so the status bar Home never detached follows Home's Base.
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
             TermuxAppSharedPreferences.PAGE_WALL));
-        assertTrue(SurfacePresets.matches(preferences, look, PaneWallPage.TERMINAL));
-        assertTrue(SurfacePresets.matches(preferences, look, PaneWallPage.WIDGETS));
+        assertTrue(SurfacePresets.matches(preferences, look, PageKind.TERMINAL));
+        assertTrue(SurfacePresets.matches(preferences, look, PageKind.HOME));
     }
 
     @Test
@@ -118,7 +118,7 @@ public class SurfacePresetsHalfTest {
         // Base is wall-wide: the Workspace's 2 is replaced by Home's 40 on the one wall value.
         preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(), 2);
         preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 40);
-        SurfacePresets.Preset home = saved(SurfacePresets.captureLook(preferences, PaneWallPage.WIDGETS));
+        SurfacePresets.Preset home = saved(SurfacePresets.captureLook(preferences, PageKind.HOME));
         assertFalse(SurfacePresets.hasHomeLook(home));
 
         SurfacePresets.apply(preferences, home);
@@ -134,10 +134,10 @@ public class SurfacePresetsHalfTest {
         SurfacePresets.Preset solid = preset("solid");
         SurfacePresets.apply(preferences, clear);
 
-        SurfacePresets.applyLook(preferences, solid, PaneWallPage.TERMINAL);
+        SurfacePresets.applyLook(preferences, solid, PageKind.TERMINAL);
 
-        assertTrue(SurfacePresets.matches(preferences, solid, PaneWallPage.TERMINAL));
-        assertFalse(SurfacePresets.matches(preferences, solid, PaneWallPage.WIDGETS));
+        assertTrue(SurfacePresets.matches(preferences, solid, PageKind.TERMINAL));
+        assertFalse(SurfacePresets.matches(preferences, solid, PageKind.HOME));
         // Base is the wall's, so the Look lands on the Workspace as the Terminal page's own
         // surface values: its dock shows Solid's number, Home's dock keeps Clear's.
         assertEquals(solid.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
@@ -156,7 +156,7 @@ public class SurfacePresetsHalfTest {
     public void lookOnHome_leavesTheTerminalAlone() {
         preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 88);
 
-        SurfacePresets.applyLook(preferences, preset("stock"), PaneWallPage.WIDGETS);
+        SurfacePresets.applyLook(preferences, preset("stock"), PageKind.HOME);
 
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
         assertEquals(88, preferences.getTerminalBackgroundOpacity());

@@ -3,9 +3,9 @@ package com.termux.app.place;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /**
  * The landing split: a slide whose stack changed into the arriving half's dress on the way
@@ -14,7 +14,7 @@ import org.junit.Test;
  */
 public class SeamLandingDressTest {
 
-    private static SeamCrossing.Landing landing(boolean dressDiffered, PaneWallPage dressedFor) {
+    private static SeamCrossing.Landing landing(boolean dressDiffered, PageKind dressedFor) {
         SeamCrossing.Landing landing = new SeamCrossing.Landing();
         landing.dressDiffered = dressDiffered;
         landing.dressedFor = dressedFor;
@@ -23,19 +23,19 @@ public class SeamLandingDressTest {
 
     @Test
     public void aStackAlreadyInTheLandedHalfsDressDefersTheReDress() {
-        assertTrue(landing(true, PaneWallPage.TERMINAL).stackDressedFor(PaneWallPage.TERMINAL));
-        assertTrue(landing(true, PaneWallPage.WIDGETS).stackDressedFor(PaneWallPage.WIDGETS));
+        assertTrue(landing(true, PageKind.TERMINAL).stackDressedFor(PageKind.TERMINAL));
+        assertTrue(landing(true, PageKind.HOME).stackDressedFor(PageKind.HOME));
         assertTrue("the display shares the Workspace's half",
-            landing(true, PaneWallPage.TERMINAL).stackDressedFor(PaneWallPage.DISPLAY));
+            landing(true, PageKind.TERMINAL).stackDressedFor(PageKind.DISPLAY));
     }
 
     @Test
     public void aStackStillInTheOtherHalfsDressReDressesInTheLandedFrame() {
         assertFalse("released before the swap frame: never changed dress",
-            landing(true, null).stackDressedFor(PaneWallPage.TERMINAL));
+            landing(true, null).stackDressedFor(PageKind.TERMINAL));
         assertFalse("came back past the swap",
-            landing(true, PaneWallPage.TERMINAL).stackDressedFor(PaneWallPage.WIDGETS));
+            landing(true, PageKind.TERMINAL).stackDressedFor(PageKind.HOME));
         assertFalse("halves that dress the stack alike change nothing mid-slide",
-            landing(false, PaneWallPage.TERMINAL).stackDressedFor(PaneWallPage.TERMINAL));
+            landing(false, PageKind.TERMINAL).stackDressedFor(PageKind.TERMINAL));
     }
 }

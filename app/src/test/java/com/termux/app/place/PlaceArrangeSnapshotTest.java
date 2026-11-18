@@ -14,7 +14,6 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 

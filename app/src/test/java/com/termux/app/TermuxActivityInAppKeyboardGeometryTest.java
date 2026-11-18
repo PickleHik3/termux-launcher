@@ -14,6 +14,7 @@ import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
 import com.termux.app.place.PlaceLayout;
@@ -23,7 +24,6 @@ import com.termux.app.terminal.inappkeyboard.FloatingKeyboardController;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallController;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
@@ -520,7 +520,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         PaneWallController wall = buildWall();
         wall.landOnColdStart(preferences.getLauncherStartIn());
-        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(PageKind.HOME, wall.currentPage());
 
         // The keyboard is built after the wall, remembering itself up (no saved state).
         hostKeyboard(null);
@@ -529,7 +529,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         // And the wall put it down, not the user: the terminal gets it back like it does after
         // any Widgets -> Terminal move.
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         assertTrue(mController.isVisible());
     }
 
@@ -542,7 +542,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         PaneWallController wall = buildWall();
         wall.landOnColdStart(preferences.getLauncherStartIn());
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
 
         hostKeyboard(null);
         assertTrue(mController.isVisible());

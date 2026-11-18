@@ -8,7 +8,7 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.os.Build;
 
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PaneWallPolicy;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
@@ -83,6 +83,6 @@ public class ExtraKeysDefaultRowTest {
     public void theSecondShippedPageIsLeftAlone() {
         String empty = TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS2;
         assertSame(empty, ExtraKeysDefaultRow.forWall(empty,
-            java.util.Collections.singletonList(PaneWallPage.TERMINAL)));
+            java.util.Collections.singletonList(PageKind.TERMINAL)));
     }
 }

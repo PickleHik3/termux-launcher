@@ -3,6 +3,7 @@ package com.termux.app.wall;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 
 import java.util.List;
@@ -67,7 +68,7 @@ public final class WallLookKinds implements LookGrid.PageKinds {
      * in the file and are no longer read.
      */
     @NonNull
-    public static LookGrid.Kind of(@NonNull WallPages.PageKind kind) {
-        return kind == WallPages.PageKind.HOME ? LookGrid.Kind.HOME : LookGrid.Kind.TERMINAL;
+    public static LookGrid.Kind of(@NonNull PageKind kind) {
+        return kind == PageKind.HOME ? LookGrid.Kind.HOME : LookGrid.Kind.TERMINAL;
     }
 }

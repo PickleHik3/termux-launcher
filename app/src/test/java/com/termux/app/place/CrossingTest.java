@@ -17,12 +17,12 @@ import com.termux.app.dock.DockGeometry;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import org.junit.Test;
@@ -44,8 +44,8 @@ public class CrossingTest {
     /** The steepest the look's curve climbs per unit of the wall's way (a smoothstep over SeamFade's stretch). */
 
     private static final float DENSITY = 2.625f;
-    static final List<PaneWallPage> ROW =
-        Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+    static final List<PageKind> ROW =
+        Arrays.asList(PageKind.HOME, PageKind.TERMINAL);
     private static final WallShape SHAPE = WallShape.of(LayoutStyle.DOCKED, 12, 8);
 
     /** A window with the pinned apps and the extra keys along the bottom. */
@@ -96,25 +96,25 @@ public class CrossingTest {
         @Override public boolean drawerTile(@NonNull LayoutVariant variant) {
             return variant == LayoutVariant.HOME;
         }
-        @Override public boolean shows(@NonNull com.termux.app.wall.WallPages.PageKind kind,
+        @Override public boolean shows(@NonNull com.termux.app.page.PageKind kind,
                                        @NonNull Element element) {
-            return kind != com.termux.app.wall.WallPages.PageKind.HOME
+            return kind != com.termux.app.page.PageKind.HOME
                 || element != Element.EXTRA_KEYS;
         }
         @NonNull @Override public WallShape shape() { return SHAPE; }
     }
 
-    static SeamCrossing.Endpoint half(@NonNull PaneWallPage page, boolean keyboardUp) {
+    static SeamCrossing.Endpoint half(@NonNull PageKind page, boolean keyboardUp) {
         return half(page, keyboardUp, false);
     }
 
     /** With {@code apart}, the window's stack is sized apart from Home's: a stack dressed apart. */
-    private static SeamCrossing.Endpoint half(@NonNull PaneWallPage page, boolean keyboardUp,
+    private static SeamCrossing.Endpoint half(@NonNull PageKind page, boolean keyboardUp,
                                           boolean apart) {
         Dress dress = new DressResolver(new Stored()).dressOf(page);
-        PlaceLayout layout = page == PaneWallPage.WIDGETS ? HOME : WINDOW;
-        float dock = apart && page != PaneWallPage.WIDGETS ? 0.8f : 1f;
-        ResolvedArrangement arranged = page == PaneWallPage.WIDGETS ? HOME_ARRANGED
+        PlaceLayout layout = page == PageKind.HOME ? HOME : WINDOW;
+        float dock = apart && page != PageKind.HOME ? 0.8f : 1f;
+        ResolvedArrangement arranged = page == PageKind.HOME ? HOME_ARRANGED
             : WORKSPACE_ARRANGED;
         return SeamCrossing.Endpoint.of(PageRef.of(page), dress, null, arranged, layout,
             SeamDress.StackDress.of(dress.shape(), dock, 1f, 0), keyboardUp);
@@ -123,12 +123,12 @@ public class CrossingTest {
     // ---- The adapter, recorded ----
 
     private static final class Moves implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
-            Crossing.Keyboard, Crossing.Dock {
+            Crossing.Keyboard {
         float dockPx = Float.NaN, keyboardPx = Float.NaN, sinkPx = Float.NaN;
         float statusAlpha = Float.NaN, sideAlpha = Float.NaN, barX = Float.NaN;
         int coverPx = -1;
         int covers;
-        final List<PaneWallPage> preRolls = new ArrayList<>();
+        final List<PageKind> preRolls = new ArrayList<>();
 
         @Override public void translate(float dock, float keyboard) {
             dockPx = dock;
@@ -144,7 +144,7 @@ public class CrossingTest {
             coverPx = px;
             covers++;
         }
-        @Override public void preRoll(@NonNull PaneWallPage target) { preRolls.add(target); }
+        @Override public void preRoll(@NonNull PageKind target) { preRolls.add(target); }
     }
 
     static final int REVISION = 7;
@@ -153,35 +153,35 @@ public class CrossingTest {
 
     private static final class Drive {
         final Moves moves = new Moves();
-        final Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
-        final PaneWallPage committed;
+        final Crossing crossing = new Crossing(moves, moves, moves, moves);
+        final PageKind committed;
         final SeamCrossing.Endpoint here, there;
         final PlaceChromeTravel.States states;
 
-        Drive(@NonNull PaneWallPage from, boolean fromKeyboard, boolean toKeyboard) {
+        Drive(@NonNull PageKind from, boolean fromKeyboard, boolean toKeyboard) {
             this(from, fromKeyboard, toKeyboard, false);
         }
 
-        Drive(@NonNull PaneWallPage from, boolean fromKeyboard, boolean toKeyboard,
+        Drive(@NonNull PageKind from, boolean fromKeyboard, boolean toKeyboard,
               boolean apart) {
             committed = from;
-            PaneWallPage to = from == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL
-                : PaneWallPage.WIDGETS;
+            PageKind to = from == PageKind.HOME ? PageKind.TERMINAL
+                : PageKind.HOME;
             here = half(from, fromKeyboard, apart);
             there = half(to, toKeyboard, apart);
             states = place -> new Rest(place == committed ? fromKeyboard : toKeyboard, false, true);
         }
 
         Frame frameAt(float fraction) {
-            float offset = committed == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
+            float offset = committed == PageKind.HOME ? -fraction * WIDTH : fraction * WIDTH;
             return PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states);
         }
 
         SeamCrossing.Answers step(float fraction) {
             Frame frame = frameAt(fraction);
-            PaneWallPage other = SeamTravel.otherHalfPage(frame, committed);
+            PageKind other = SeamTravel.otherHalfPage(frame, committed);
             if (other != null && other != crossing.seam().other()) {
-                boolean fromHome = committed == PaneWallPage.WIDGETS;
+                boolean fromHome = committed == PageKind.HOME;
                 crossing.begin(here, there, SeamCrossing.Stage.of(false, () -> false, true),
                     fromHome ? HOME_REST : WORKSPACE_REST, fromHome ? WORKSPACE_REST : HOME_REST,
                     REVISION);
@@ -200,14 +200,14 @@ public class CrossingTest {
         return l.combinedHeight(0, false);
     }
 
-    static final PaneWallPage[] BOTH = {PaneWallPage.TERMINAL, PaneWallPage.WIDGETS};
+    static final PageKind[] BOTH = {PageKind.TERMINAL, PageKind.HOME};
 
-    static DockLayout restOf(PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? HOME_REST : WORKSPACE_REST;
+    static DockLayout restOf(PageKind page) {
+        return page == PageKind.HOME ? HOME_REST : WORKSPACE_REST;
     }
 
-    static PaneWallPage across(PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS;
+    static PageKind across(PageKind page) {
+        return page == PageKind.HOME ? PageKind.TERMINAL : PageKind.HOME;
     }
 
     @Test
@@ -221,7 +221,7 @@ public class CrossingTest {
     public void theKeyboardTravelsWithTheHalfThatHasItOpen() {
         // The window has it open and Home does not: it goes with the window, on the look's curve both
         // ways out and in.
-        Drive out = new Drive(PaneWallPage.TERMINAL, true, false);
+        Drive out = new Drive(PageKind.TERMINAL, true, false);
         for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
             float fraction = Math.min(1f, f);
             SeamCrossing.Answers answers = out.step(fraction);
@@ -229,7 +229,7 @@ public class CrossingTest {
                 1f - StackScene.materialShare(fraction),
                 answers.keyboardReveal(), 1e-4f);
         }
-        Drive in = new Drive(PaneWallPage.WIDGETS, false, true);
+        Drive in = new Drive(PageKind.HOME, false, true);
         for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
             float fraction = Math.min(1f, f);
             SeamCrossing.Answers answers = in.step(fraction);
@@ -240,7 +240,7 @@ public class CrossingTest {
 
     @Test
     public void midSlideEveryReaderStandsInTheHeldArrangement() {
-        Drive drive = new Drive(PaneWallPage.TERMINAL, false, false);
+        Drive drive = new Drive(PageKind.TERMINAL, false, false);
         drive.step(0.3f);
         // A layout that changed under the slide is not what the chrome stands in.
         ResolvedArrangement changed = ResolvedArrangement.of(HOME, LayoutStyle.FLOATING,
@@ -254,7 +254,7 @@ public class CrossingTest {
         assertSame(HOME_ARRANGED, drive.crossing.heldArrangement(PageRef.HOME));
         assertSame(WORKSPACE_ARRANGED, drive.crossing.heldArrangement(PageRef.TERMINAL));
         // At rest the committed arrangement is the answer, and nothing is held for any reader.
-        drive.crossing.land(PageRef.of(PaneWallPage.WIDGETS), REVISION);
+        drive.crossing.land(PageRef.of(PageKind.HOME), REVISION);
         drive.crossing.end();
         assertSame(changed, drive.crossing.arrangement(changed));
         assertNull(drive.crossing.heldArrangement(PageRef.HOME));
@@ -263,7 +263,7 @@ public class CrossingTest {
 
     @Test
     public void aStoreThatMovesMidSlideIsAppliedAtTheLandingAndNotBefore() {
-        for (PaneWallPage from : BOTH) {
+        for (PageKind from : BOTH) {
             Drive drive = new Drive(from, false, false);
             for (float f = STEP; f <= 0.5f; f += STEP) drive.step(f);
             // The store moves under the slide (a layout seeded, a setting written): the readers
@@ -286,8 +286,8 @@ public class CrossingTest {
 
     @Test
     public void landLeavesNoCrossingState() {
-        for (PaneWallPage from : BOTH) {
-            Drive drive = new Drive(from, from == PaneWallPage.TERMINAL, false);
+        for (PageKind from : BOTH) {
+            Drive drive = new Drive(from, from == PageKind.TERMINAL, false);
             Crossing crossing = drive.crossing;
             Moves moves = drive.moves;
             assertTrue("idle before", crossing.idle());
@@ -341,8 +341,8 @@ public class CrossingTest {
     @Test
     public void aKeyboardSwipeLetsTheHoldGoInOneStep() {
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
-        crossing.preRollKeyboard(PaneWallPage.TERMINAL, 500);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
+        crossing.preRollKeyboard(PageKind.TERMINAL, 500);
         crossing.heldOverlap(200);
         // The swipe's frame goes through the crossing: the stack, all of it the keyboard's, and
         // the cover under it.
@@ -361,17 +361,17 @@ public class CrossingTest {
     @Test
     public void aHoldLetGoOnItsOwnHandsBackNothingOfAnEarlierSeam() {
         // A crossing lands and ends...
-        Drive drive = new Drive(PaneWallPage.WIDGETS, false, false);
+        Drive drive = new Drive(PageKind.HOME, false, false);
         for (float f = STEP; f <= 1f + 1e-6f; f += STEP) drive.step(Math.min(1f, f));
-        drive.crossing.land(PageRef.of(PaneWallPage.TERMINAL), REVISION);
+        drive.crossing.land(PageRef.of(PageKind.TERMINAL), REVISION);
         drive.crossing.end();
         // ...and a keyboard swipe after it lets its hold go with nothing for the seam to do.
-        drive.crossing.preRollKeyboard(PaneWallPage.TERMINAL, 500);
+        drive.crossing.preRollKeyboard(PageKind.TERMINAL, 500);
         Crossing.Landing released = drive.crossing.releaseHold();
         assertFalse(released.seam().laidOut());
         assertFalse(released.seam().bandsMoved());
         assertFalse(released.seam().barTravelled());
-        assertFalse(released.seam().redressesBack(PaneWallPage.WIDGETS));
+        assertFalse(released.seam().redressesBack(PageKind.HOME));
         assertFalse(released.storeMoved());
     }
 
@@ -383,9 +383,9 @@ public class CrossingTest {
     @Test
     public void aCrossingLeavesNothingOfTheRoomToPutBackAtTheLanding() {
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
         assertFalse(crossing.holdsContent());
-        crossing.land(PageRef.of(PaneWallPage.TERMINAL), REVISION);
+        crossing.land(PageRef.of(PageKind.TERMINAL), REVISION);
         crossing.end();
         assertTrue(crossing.idle());
     }
@@ -394,7 +394,7 @@ public class CrossingTest {
     @Test
     public void theCoverIsOnlyEverAppliedUnderAHold() {
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
         crossing.heldOverlap(200);
         crossing.coverAt(0f);
         assertEquals(-1, moves.coverPx);
@@ -406,8 +406,8 @@ public class CrossingTest {
 
     // ---- Between two Home pages (#173 slice E) ----
 
-    private static final PageRef HOME_2 = PageRef.of(PaneWallPage.WIDGETS, 2);
-    private static final PageRef HOME_3 = PageRef.of(PaneWallPage.WIDGETS, 3);
+    private static final PageRef HOME_2 = PageRef.of(PageKind.HOME, 2);
+    private static final PageRef HOME_3 = PageRef.of(PageKind.HOME, 3);
     /** Home page 3's own layout: Home's, with the index shown beside the pinned apps. */
     private static final PlaceLayout HOME_WITH_INDEX = new PlaceLayout(Edge.TOP,
         RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.HIDDEN,
@@ -418,7 +418,7 @@ public class CrossingTest {
     private static final ResolvedArrangement HOME_3_ARRANGED = ResolvedArrangement.of(
         HOME_WITH_INDEX, LayoutStyle.DOCKED, DockStyle.GLASS_TRAY, false, false,
         PlaceOrientation.PORTRAIT, LayoutVariant.page(3,
-            com.termux.app.wall.WallPages.PageKind.HOME), HOME_3);
+            com.termux.app.page.PageKind.HOME), HOME_3);
 
     /** One snapshot holding both Home pages' halves, the other in {@code otherHome}. */
     private static DockGeometry.Snapshot twoHomes() {
@@ -456,7 +456,7 @@ public class CrossingTest {
         DockGeometry.Snapshot rests = twoHomes();
         DockLayout rest2 = DockGeometry.compute(rests.restOf(HOME_2));
         DockLayout rest3 = DockGeometry.compute(rests.restOf(HOME_3));
-        Dress dress = new DressResolver(new Stored()).dressOf(PaneWallPage.WIDGETS);
+        Dress dress = new DressResolver(new Stored()).dressOf(PageKind.HOME);
         SeamDress.StackDress stack = SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0);
         SeamCrossing.Endpoint here = SeamCrossing.Endpoint.of(HOME_2, dress, null,
             HOME_2_ARRANGED, HOME, stack, false);
@@ -469,7 +469,7 @@ public class CrossingTest {
         assertSame(SeamTravel.DockPlan.NONE, SeamTravel.dockPlan(HOME, HOME_WITH_INDEX));
         assertTrue(SeamCrossing.crosses(here, there));
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
         Rest home = new Rest(false, false, true);
         crossing.begin(here, there, SeamCrossing.Stage.of(false, () -> false, true), rest2,
             rest3, REVISION);
@@ -489,21 +489,21 @@ public class CrossingTest {
         assertNull("a kind neither end has is the store's to answer",
             crossing.heldArrangement(PageRef.TERMINAL));
         assertNull(crossing.heldRest(PageRef.TERMINAL));
-        assertNull(crossing.heldArrangement(PageRef.of(PaneWallPage.DISPLAY, 7)));
+        assertNull(crossing.heldArrangement(PageRef.of(PageKind.DISPLAY, 7)));
         assertEquals("a Home reader by kind is the committed page, whatever the pager committed to",
-            HOME_2, crossing.heldCommittedPage(PaneWallPage.WIDGETS));
-        assertNull("no Workspace end is held", crossing.heldCommittedPage(PaneWallPage.TERMINAL));
+            HOME_2, crossing.heldCommittedPage(PageKind.HOME));
+        assertNull("no Workspace end is held", crossing.heldCommittedPage(PageKind.TERMINAL));
         Crossing.Landing landed = crossing.land(HOME_3, REVISION);
         assertFalse("the arriving page's rows are laid out by the landing's own pass",
             landed.seam().laidOut());
-        assertNull("landed, the store answers", crossing.heldCommittedPage(PaneWallPage.WIDGETS));
+        assertNull("landed, the store answers", crossing.heldCommittedPage(PageKind.HOME));
         crossing.end();
         assertTrue(crossing.idle());
     }
 
     @Test
     public void twoHomePagesThatDressAlikeAreNoCrossing() {
-        Dress dress = new DressResolver(new Stored()).dressOf(PaneWallPage.WIDGETS);
+        Dress dress = new DressResolver(new Stored()).dressOf(PageKind.HOME);
         SeamDress.StackDress stack = SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0);
         SeamCrossing.Endpoint here = SeamCrossing.Endpoint.of(HOME_2, dress, null,
             HOME_2_ARRANGED, HOME, stack, false);

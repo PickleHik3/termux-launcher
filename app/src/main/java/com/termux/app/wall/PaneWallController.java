@@ -7,6 +7,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.PaneSurfaceStyle;
 
 /**
@@ -225,10 +226,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int id = NO_ID;
         if (mKnownPages != null) {
             for (WallPages.Page page : mKnownPages.pages()) {
-                if (page.kind == WallPages.PageKind.TERMINAL) { id = page.id; break; }
+                if (page.kind == PageKind.TERMINAL) { id = page.id; break; }
             }
-        } else if (mFacts.useAs().rowPages().contains(PaneWallPage.TERMINAL)) {
-            id = PaneWallLayout.kindPageId(PaneWallPage.TERMINAL);
+        } else if (mFacts.useAs().rowPages().contains(PageKind.TERMINAL)) {
+            id = PaneWallLayout.kindPageId(PageKind.TERMINAL);
         }
         if (mPages == null || mTerminalStops == null) id = NO_ID;
         if (mTerminalStopsId != NO_ID && mTerminalStopsId != id && mPages != null) {
@@ -243,11 +244,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         java.util.List<Integer> ids = new java.util.ArrayList<>();
         if (mKnownPages != null) {
             for (WallPages.Page page : mKnownPages.pages()) {
-                if (page.kind == WallPages.PageKind.DISPLAY) ids.add(page.id);
+                if (page.kind == PageKind.DISPLAY) ids.add(page.id);
             }
-        } else if (mFacts.useAs().rowPages().contains(PaneWallPage.DISPLAY)) {
+        } else if (mFacts.useAs().rowPages().contains(PageKind.DISPLAY)) {
             // A row laid out from the kinds alone holds one Display cell under the kind's own id.
-            ids.add(PaneWallLayout.kindPageId(PaneWallPage.DISPLAY));
+            ids.add(PaneWallLayout.kindPageId(PageKind.DISPLAY));
         }
         syncRegistered(mDisplayPageFactory, mDisplayPages, ids);
     }
@@ -291,8 +292,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         java.util.List<Integer> homes = new java.util.ArrayList<>();
         if (mKnownPages != null) {
             for (WallPages.Page home : mKnownPages.homePages()) homes.add(home.id);
-        } else if (mFacts.useAs().rowPages().contains(PaneWallPage.WIDGETS)) {
-            homes.add(PaneWallLayout.kindPageId(PaneWallPage.WIDGETS));
+        } else if (mFacts.useAs().rowPages().contains(PageKind.HOME)) {
+            homes.add(PaneWallLayout.kindPageId(PageKind.HOME));
         }
         // The new pages go in before the old ones leave, so a switch between ids never empties
         // the declared glass for a moment.
@@ -317,7 +318,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** Records the cell the wall rests on as the front, when it is not moving. */
     private void recordFront() {
         if (mPages == null || mWall.isMoving()) return;
-        mPages.landed(mWall.currentPageId(), mWall.currentPage().pageKind());
+        mPages.landed(mWall.currentPageId(), mWall.currentPage());
     }
 
     @NonNull
@@ -327,7 +328,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** The terminal's pane host is the Workspace's page while a terminal window is in front. */
     public void attachTerminalPage(@NonNull View paneHost) {
-        mWall.setPageView(PaneWallPage.TERMINAL, paneHost);
+        mWall.setPageView(PageKind.TERMINAL, paneHost);
     }
 
     /**
@@ -360,18 +361,18 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int before = mWall.currentPageId();
         mWall.setCells(cells(hasWindow));
         // The empty Terminal page shows its card, not a blank view, until a window arrives.
-        mWall.setKindReady(PaneWallPage.TERMINAL, hasWindow);
+        mWall.setKindReady(PageKind.TERMINAL, hasWindow);
         int after = mWall.currentPageId();
         // The bindings follow the list: a bound page that went hands its view to another.
-        int home = mWall.boundPageId(PaneWallPage.WIDGETS);
+        int home = mWall.boundPageId(PageKind.HOME);
         if (after != before && home == after) bindHome(after);
         else bindRunOf(home);
         // A kind-only cell holds every page of its kind: handed the wall, it turns to its last.
-        if (after != before && after < 0 && mWall.currentPage() != PaneWallPage.TERMINAL) {
-            PaneWallPage kind = mWall.currentPage();
+        if (after != before && after < 0 && mWall.currentPage() != PageKind.TERMINAL) {
+            PageKind kind = mWall.currentPage();
             showInner(kind, Math.max(0, innerCount(kind) - 1));
         }
-        int display = mWall.boundPageId(PaneWallPage.DISPLAY);
+        int display = mWall.boundPageId(PageKind.DISPLAY);
         bindDisplay(display >= 0 ? display : -1);
         syncHomePages();
         syncDisplayPages();
@@ -381,13 +382,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // The last window closed under the wall: the empty Terminal page keeps its cell, and the
         // wall hands to the Home page beside it (ADR 0015). Closing a window is not a landing,
         // so no shell starts.
-        if (lostWindow && !mWorkspacePending && mWall.currentPage() == PaneWallPage.TERMINAL) {
+        if (lostWindow && !mWorkspacePending && mWall.currentPage() == PageKind.TERMINAL) {
             goToLastHomePage(false);
         }
         // The Terminal page asked for before its window: the wall goes there once one arrives.
-        if (mWorkspacePending && hasWindow && has(PaneWallPage.TERMINAL)) {
+        if (mWorkspacePending && hasWindow && has(PageKind.TERMINAL)) {
             mWorkspacePending = false;
-            mWall.goTo(PaneWallPage.TERMINAL, false);
+            mWall.goTo(PageKind.TERMINAL, false);
         }
     }
 
@@ -408,13 +409,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         boolean homeAfterTerminal = false;
         if (pages != null) {
             for (WallPages.Page page : pages.pages()) {
-                PaneWallPage kind = PaneWallPolicy.kindOf(page.kind);
-                if (kind == PaneWallPage.WIDGETS && !homeShown) continue;
-                if (kind == PaneWallPage.WIDGETS && hasTerminal) homeAfterTerminal = true;
-                hasHome |= kind == PaneWallPage.WIDGETS;
-                hasTerminal |= kind == PaneWallPage.TERMINAL;
+                PageKind kind = page.kind;
+                if (kind == PageKind.HOME && !homeShown) continue;
+                if (kind == PageKind.HOME && hasTerminal) homeAfterTerminal = true;
+                hasHome |= kind == PageKind.HOME;
+                hasTerminal |= kind == PageKind.TERMINAL;
                 // The Assistant page stands off the default order as a Display page does.
-                hasDisplay |= kind == PaneWallPage.DISPLAY || kind == PaneWallPage.ASSISTANT;
+                hasDisplay |= kind == PageKind.DISPLAY || kind == PageKind.ASSISTANT;
                 out.add(new PaneWallLayout.Cell(page.id, kind, pages.displayName(page, null)));
             }
         }
@@ -426,7 +427,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             mHasDisplayPage = false;
             out.clear();
             // The Terminal page is on the row whether or not it has a window.
-            for (PaneWallPage kind : mFacts.useAs().rowPages()) {
+            for (PageKind kind : mFacts.useAs().rowPages()) {
                 out.add(new PaneWallLayout.Cell(PaneWallLayout.kindPageId(kind), kind, null));
             }
             return out;
@@ -438,7 +439,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /** Whether the wall has a cell of {@code kind}. */
-    private boolean has(@NonNull PaneWallPage kind) {
+    private boolean has(@NonNull PageKind kind) {
         return mWall.boundPageId(kind) != PaneWallLayout.NO_PAGE;
     }
 
@@ -456,7 +457,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             mAssistantPage = null;
             if (mPages != null && mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
             mAssistantPageId = -1;
-            mWall.setPageView(PaneWallPage.ASSISTANT, null);
+            mWall.setPageView(PageKind.ASSISTANT, null);
             mWall.removeView(view);
             return;
         }
@@ -467,12 +468,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             mAssistantPage = assistant;
             mWall.addView(view);
             mAssistantView = view;
-            mWall.setPageView(PaneWallPage.ASSISTANT, view);
+            mWall.setPageView(PageKind.ASSISTANT, view);
             if (view instanceof com.termux.app.assistant.AssistantPageView) {
                 ((com.termux.app.assistant.AssistantPageView) view).applyStyle(mStyle);
             }
         }
-        if (id >= 0) mWall.bind(PaneWallPage.ASSISTANT, id);
+        if (id >= 0) mWall.bind(PageKind.ASSISTANT, id);
         if (mPages != null && mAssistantPage != null && mAssistantPageId != id) {
             if (mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
             mPages.put(id, mAssistantPage);
@@ -503,7 +504,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private void bindDisplay(int pageId) {
         if (pageId >= 0) {
             mDisplayPageId = pageId;
-            mWall.bind(PaneWallPage.DISPLAY, pageId);
+            mWall.bind(PageKind.DISPLAY, pageId);
         }
         if (pageId == mBoundDisplayPageId) return;
         mBoundDisplayPageId = pageId;
@@ -523,18 +524,18 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public boolean goToDisplayPage(int pageId, boolean animate) {
         WallPages pages = mKnownPages;
         if (pages == null) {
-            if (!has(PaneWallPage.DISPLAY)) return false;
+            if (!has(PageKind.DISPLAY)) return false;
             mWorkspacePending = false;
-            return mWall.goTo(PaneWallPage.DISPLAY, animate);
+            return mWall.goTo(PageKind.DISPLAY, animate);
         }
         int id = pageId;
-        if (mWall.kindOf(id) == PaneWallPage.DISPLAY) {
+        if (mWall.kindOf(id) == PageKind.DISPLAY) {
             mLastDisplayPageId = id;
         } else {
             WallPages.Page target = pages.displayTarget(currentPageId(), mLastDisplayPageId);
             id = target == null ? PaneWallLayout.NO_PAGE : target.id;
         }
-        if (mWall.kindOf(id) != PaneWallPage.DISPLAY) return false;
+        if (mWall.kindOf(id) != PageKind.DISPLAY) return false;
         return goToPage(id, animate);
     }
 
@@ -550,14 +551,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * slide: the arriving cell's kind, live or still (ADR 0016 section 3).
      */
     @Nullable
-    public PaneWallPage kindAt(int steps) {
+    public PageKind kindAt(int steps) {
         int id = steps == 0 ? mWall.currentPageId() : mWall.neighbourId(steps);
         return id == PaneWallLayout.NO_PAGE ? null : mWall.kindOf(id);
     }
 
     /** The cells {@link #mCellKinds} was read from. */
     @Nullable private java.util.List<PaneWallLayout.Cell> mCellKindsOf;
-    @NonNull private java.util.List<PaneWallPage> mCellKinds = java.util.Collections.emptyList();
+    @NonNull private java.util.List<PageKind> mCellKinds = java.util.Collections.emptyList();
 
     /**
      * The page kinds of the wall's cells, one entry per cell in cell order: what the chrome
@@ -566,10 +567,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * cells change.
      */
     @NonNull
-    public java.util.List<PaneWallPage> cellKinds() {
+    public java.util.List<PageKind> cellKinds() {
         java.util.List<PaneWallLayout.Cell> cells = mWall.cells();
         if (cells != mCellKindsOf) {
-            java.util.List<PaneWallPage> kinds = new java.util.ArrayList<>(cells.size());
+            java.util.List<PageKind> kinds = new java.util.ArrayList<>(cells.size());
             for (PaneWallLayout.Cell cell : cells) kinds.add(cell.kind);
             mCellKinds = java.util.Collections.unmodifiableList(kinds);
             mCellKindsOf = cells;
@@ -578,7 +579,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /** {@link #slideCellKinds}' list during a far jump; reused, so a frame allocates nothing. */
-    @NonNull private final java.util.ArrayList<PaneWallPage> mSlideKinds =
+    @NonNull private final java.util.ArrayList<PageKind> mSlideKinds =
         new java.util.ArrayList<>();
 
     /**
@@ -589,13 +590,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * the content's room and the chrome never travelled toward the arriving place.
      */
     @NonNull
-    public java.util.List<PaneWallPage> slideCellKinds() {
-        java.util.List<PaneWallPage> kinds = cellKinds();
+    public java.util.List<PageKind> slideCellKinds() {
+        java.util.List<PageKind> kinds = cellKinds();
         int left = mWall.jumpLeftCellIndex();
         int side = mWall.jumpSide();
         if (left < 0 || side == 0) return kinds;
         int at = currentCellIndex();
-        PaneWallPage leftKind = kinds.get(left);
+        PageKind leftKind = kinds.get(left);
         mSlideKinds.clear();
         for (int i = 0; i < kinds.size(); i++) {
             boolean onLeftSide = side > 0 ? i > at : i < at;
@@ -616,17 +617,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * (ADR 0016). A Home page of the run the wall is on is shown by the frame where it stands.
      */
     private boolean goToPage(int pageId, boolean animate) {
-        PaneWallPage kind = mWall.kindOf(pageId);
+        PageKind kind = mWall.kindOf(pageId);
         if (kind == null) return false;
         mWorkspacePending = false;
-        if (kind == PaneWallPage.WIDGETS && mWall.currentPage() == PaneWallPage.WIDGETS
+        if (kind == PageKind.HOME && mWall.currentPage() == PageKind.HOME
             && !mWall.isMoving() && sameRun(mWall.currentPageId(), pageId)) {
             boolean changed = pageId != mWall.currentPageId();
             bindHome(pageId);
             mWall.follow(pageId);
             // A page change inside the run lands as a slide does: the front is recorded and the
             // host's settle refreshes what follows the current page (the glyph row).
-            if (changed) onWallCellSettled(pageId, PaneWallPage.WIDGETS);
+            if (changed) onWallCellSettled(pageId, PageKind.HOME);
             return true;
         }
         return mWall.goToCell(pageId, animate);
@@ -634,11 +635,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** Bind the view of page {@code pageId}'s kind to it: the binding a landing makes. */
     private void bindCell(int pageId) {
-        PaneWallPage kind = mWall.kindOf(pageId);
+        PageKind kind = mWall.kindOf(pageId);
         if (kind == null) return;
-        if (kind == PaneWallPage.WIDGETS) {
+        if (kind == PageKind.HOME) {
             bindHome(pageId);
-        } else if (kind == PaneWallPage.DISPLAY) {
+        } else if (kind == PageKind.DISPLAY) {
             if (pageId >= 0) bindDisplay(pageId);
             else mWall.bind(kind, pageId);
         } else {
@@ -652,28 +653,28 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * frame still shows it (W5: never one run's page while bound to another).
      */
     private void bindHome(int pageId) {
-        if (mWall.kindOf(pageId) != PaneWallPage.WIDGETS) return;
-        mWall.takePicture(PaneWallPage.WIDGETS, pageId);
+        if (mWall.kindOf(pageId) != PageKind.HOME) return;
+        mWall.takePicture(PageKind.HOME, pageId);
         bindRunOf(pageId);
         int index = homeIndexOf(pageId);
-        if (index >= 0 && innerIndex(PaneWallPage.WIDGETS) != index) {
-            showInner(PaneWallPage.WIDGETS, index);
+        if (index >= 0 && innerIndex(PageKind.HOME) != index) {
+            showInner(PageKind.HOME, index);
         }
-        mWall.bind(PaneWallPage.WIDGETS, pageId);
+        mWall.bind(PageKind.HOME, pageId);
     }
 
     /** Hand the host the run of Home cells that holds page {@code pageId}. */
     private void bindRunOf(int pageId) {
-        if (pageId < 0 || mWall.kindOf(pageId) != PaneWallPage.WIDGETS) {
+        if (pageId < 0 || mWall.kindOf(pageId) != PageKind.HOME) {
             bindRun(0, -1);
             return;
         }
         java.util.List<PaneWallLayout.Cell> cells = mWall.cells();
         int at = mWall.indexOfCell(pageId);
         int start = at;
-        while (start > 0 && cells.get(start - 1).kind == PaneWallPage.WIDGETS) start--;
+        while (start > 0 && cells.get(start - 1).kind == PageKind.HOME) start--;
         int end = at;
-        while (end + 1 < cells.size() && cells.get(end + 1).kind == PaneWallPage.WIDGETS) end++;
+        while (end + 1 < cells.size() && cells.get(end + 1).kind == PageKind.HOME) end++;
         int first = homeIndexOf(cells.get(start).pageId);
         int last = first + end - start;
         // Every Home page in one run: the default order's run.
@@ -688,7 +689,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int to = mWall.indexOfCell(b);
         if (from < 0 || to < 0) return false;
         for (int i = Math.min(from, to); i <= Math.max(from, to); i++) {
-            if (cells.get(i).kind != PaneWallPage.WIDGETS) return false;
+            if (cells.get(i).kind != PageKind.HOME) return false;
         }
         return true;
     }
@@ -698,8 +699,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (pageId < 0) return -1;
         int index = 0;
         for (PaneWallLayout.Cell cell : mWall.cells()) {
-            if (cell.pageId == pageId) return cell.kind == PaneWallPage.WIDGETS ? index : -1;
-            if (cell.kind == PaneWallPage.WIDGETS) index++;
+            if (cell.pageId == pageId) return cell.kind == PageKind.HOME ? index : -1;
+            if (cell.kind == PageKind.HOME) index++;
         }
         return -1;
     }
@@ -709,7 +710,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (mKnownPages == null) return PaneWallLayout.NO_PAGE;
         int at = 0;
         for (PaneWallLayout.Cell cell : mWall.cells()) {
-            if (cell.kind != PaneWallPage.WIDGETS) continue;
+            if (cell.kind != PageKind.HOME) continue;
             if (at++ == index) return cell.pageId;
         }
         return PaneWallLayout.NO_PAGE;
@@ -718,7 +719,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private int homeCount() {
         int count = 0;
         for (PaneWallLayout.Cell cell : mWall.cells()) {
-            if (cell.kind == PaneWallPage.WIDGETS) count++;
+            if (cell.kind == PageKind.HOME) count++;
         }
         return count;
     }
@@ -733,10 +734,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * way) has not bound the frame yet, and the frame's old page must not pull the wall back.
      */
     public void onHomePageTurned() {
-        if (mKnownPages == null || mWall.currentPage() != PaneWallPage.WIDGETS) return;
+        if (mKnownPages == null || mWall.currentPage() != PageKind.HOME) return;
         if (mWall.isMoving()) return;
-        if (mWall.boundPageId(PaneWallPage.WIDGETS) != mWall.currentPageId()) return;
-        int id = homeIdAt(innerIndex(PaneWallPage.WIDGETS));
+        if (mWall.boundPageId(PageKind.HOME) != mWall.currentPageId()) return;
+        int id = homeIdAt(innerIndex(PageKind.HOME));
         if (id != PaneWallLayout.NO_PAGE && sameRun(mWall.currentPageId(), id)) mWall.follow(id);
     }
 
@@ -765,8 +766,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (id != PaneWallLayout.NO_PAGE) {
             return bindFirst ? goToHomeBound(id, animate) : goToPage(id, animate);
         }
-        showInner(PaneWallPage.WIDGETS, index);
-        return goTo(PaneWallPage.WIDGETS, animate);
+        showInner(PageKind.HOME, index);
+        return goTo(PageKind.HOME, animate);
     }
 
     /**
@@ -775,7 +776,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * a position at once), so the wall, not the frame, decides which Home page shows.
      */
     public boolean goToHomePageAt(int index, boolean animate) {
-        int count = Math.max(1, innerCount(PaneWallPage.WIDGETS));
+        int count = Math.max(1, innerCount(PageKind.HOME));
         return goToHomePage(Math.max(0, Math.min(count - 1, index)), animate, true);
     }
 
@@ -786,8 +787,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public boolean goToHomePageOne(boolean animate) {
         if (!mFacts.useAs().showsHomePage()) return false;
         int index = homeIndexOf(mWall.currentPageId());
-        if (index < 0 && mWall.currentPage() == PaneWallPage.WIDGETS) {
-            index = innerIndex(PaneWallPage.WIDGETS);
+        if (index < 0 && mWall.currentPage() == PageKind.HOME) {
+            index = innerIndex(PageKind.HOME);
         }
         if (PaneWallPolicy.restsOnHomePageOne(mWall.currentPage(), mWall.isMoving(), index)) return false;
         if (mKnownPages != null && homeCount() == 0) return false;
@@ -816,13 +817,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public com.termux.app.launcher.widget.WidgetPaneView.Seam homeSeam() {
         return new com.termux.app.launcher.widget.WidgetPaneView.Seam() {
             @Override public boolean canLeaveForward() {
-                return mWall.currentPage() == PaneWallPage.WIDGETS && !mWall.isMoving()
+                return mWall.currentPage() == PageKind.HOME && !mWall.isMoving()
                     && mWall.areGesturesEnabled()
                     && mWall.neighbourId(1) != PaneWallLayout.NO_PAGE;
             }
             // A Home run after the Terminal page leaves backward from its first page.
             @Override public boolean canLeaveBackward() {
-                return mWall.currentPage() == PaneWallPage.WIDGETS && !mWall.isMoving()
+                return mWall.currentPage() == PageKind.HOME && !mWall.isMoving()
                     && mWall.areGesturesEnabled()
                     && mWall.neighbourId(-1) != PaneWallLayout.NO_PAGE;
             }
@@ -837,16 +838,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /** The Home pages or windows the wall's view of {@code kind} holds; Home's come from its seam. */
-    private int innerCount(@NonNull PaneWallPage kind) {
-        return kind == PaneWallPage.WIDGETS ? mHome.count() : mTerminal.count();
+    private int innerCount(@NonNull PageKind kind) {
+        return kind == PageKind.HOME ? mHome.count() : mTerminal.count();
     }
 
-    private int innerIndex(@NonNull PaneWallPage kind) {
-        return kind == PaneWallPage.WIDGETS ? mHome.index() : mTerminal.index();
+    private int innerIndex(@NonNull PageKind kind) {
+        return kind == PageKind.HOME ? mHome.index() : mTerminal.index();
     }
 
-    private void showInner(@NonNull PaneWallPage kind, int index) {
-        if (kind == PaneWallPage.WIDGETS) mHome.show(index);
+    private void showInner(@NonNull PageKind kind, int index) {
+        if (kind == PageKind.HOME) mHome.show(index);
         else mTerminal.show(index);
     }
 
@@ -863,7 +864,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             com.termux.R.layout.view_widget_pane, mWall, false);
         mWall.addView(frame, 0);
         mWidgetsPage = frame;
-        mWall.setPageView(PaneWallPage.WIDGETS, frame);
+        mWall.setPageView(PageKind.HOME, frame);
         applyStyle(mStyle);
         return frame;
     }
@@ -890,7 +891,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             com.termux.R.layout.view_x11_pane, mWall, false);
         mWall.addView(frame);
         mDisplayWindow = frame;
-        mWall.setPageView(PaneWallPage.DISPLAY, frame);
+        mWall.setPageView(PageKind.DISPLAY, frame);
         applyStyle(mStyle);
         return frame;
     }
@@ -909,7 +910,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         com.termux.app.x11.X11PaneFrame frame = mDisplayWindow;
         if (frame == null) return;
         mDisplayWindow = null;
-        mWall.setPageView(PaneWallPage.DISPLAY, null);
+        mWall.setPageView(PageKind.DISPLAY, null);
         refreshPages();
         mWall.removeView(frame);
     }
@@ -932,7 +933,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** The kind of the page the wall is on. */
     @NonNull
-    public PaneWallPage currentPage() {
+    public PageKind currentPage() {
         return mWall.currentPage();
     }
 
@@ -963,7 +964,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     private boolean terminalHasPixels() {
         boolean pixels = mWall.isTerminalHostOnScreen();
-        boolean record = mWall.currentPage() == PaneWallPage.TERMINAL;
+        boolean record = mWall.currentPage() == PageKind.TERMINAL;
         if (mWall.isMoving() || pixels == record) {
             mDisagreementLogged = false;
         } else if (!mDisagreementLogged) {
@@ -976,7 +977,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** The wall's state in one line, for the log. */
     @NonNull
     public String describeState() {
-        View terminal = mWall.pageView(PaneWallPage.TERMINAL);
+        View terminal = mWall.pageView(PageKind.TERMINAL);
         return "page=" + mWall.currentPage() + " moving=" + mWall.isMoving()
             + " dragging=" + mWall.isDragging() + " offset=" + mWall.offsetPx()
             + " pageId=" + mWall.currentPageId() + " displayPage=" + mBoundDisplayPageId
@@ -1003,7 +1004,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
                                   @Nullable android.view.animation.Interpolator interpolator,
                                   @Nullable Runnable onEnd, @Nullable FirstDrawGate clock) {
         mNudgeFromWindow = fromWindow;
-        mWall.nudgePage(PaneWallPage.TERMINAL, fromPx, durationMs, interpolator, onEnd, clock);
+        mWall.nudgePage(PageKind.TERMINAL, fromPx, durationMs, interpolator, onEnd, clock);
     }
 
     /** The window the terminal page's current nudge left; see {@link #nudgeTerminalPage}. */
@@ -1030,18 +1031,18 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public float rowPosition() {
         int homes = rowHomeCount();
         int windows = rowWindowCount();
-        PaneWallPage current = mWall.currentPage();
+        PageKind current = mWall.currentPage();
         int restAt = rowIndexOfCell(mWall.currentPageId(), homes, windows);
         int width = mWall.getWidth();
         float at = restAt;
-        if (width > 0 && current == PaneWallPage.WIDGETS) {
+        if (width > 0 && current == PageKind.HOME) {
             at = WallParallax.innerPosition(restAt,
                 mHome.shiftFraction(), WallParallax.ADJACENT);
-        } else if (width > 0 && current == PaneWallPage.TERMINAL) {
-            float nudgePx = mWall.nudgePx(PaneWallPage.TERMINAL);
+        } else if (width > 0 && current == PageKind.TERMINAL) {
+            float nudgePx = mWall.nudgePx(PageKind.TERMINAL);
             if (nudgePx != 0f) {
                 int from = mNudgeFromWindow == WallParallax.ADJACENT ? WallParallax.ADJACENT
-                    : rowIndexOf(PaneWallPage.TERMINAL, mNudgeFromWindow,
+                    : rowIndexOf(PageKind.TERMINAL, mNudgeFromWindow,
                         PaneWallLayout.NO_PAGE, homes, windows);
                 at = WallParallax.innerPosition(restAt, nudgePx / width, from);
             }
@@ -1074,30 +1075,30 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** Where page {@code pageId}'s cell stands on the wallpaper's row. */
     private int rowIndexOfCell(int pageId, int homes, int windows) {
-        PaneWallPage kind = mWall.kindOf(pageId);
+        PageKind kind = mWall.kindOf(pageId);
         if (kind == null) return 0;
-        int index = kind == PaneWallPage.WIDGETS && pageId >= 0 ? homeIndexOf(pageId)
+        int index = kind == PageKind.HOME && pageId >= 0 ? homeIndexOf(pageId)
             : innerIndex(kind);
         return rowIndexOf(kind, index, pageId, homes, windows);
     }
 
-    private int rowIndexOf(@NonNull PaneWallPage kind, int index, int pageId, int homes,
+    private int rowIndexOf(@NonNull PageKind kind, int index, int pageId, int homes,
                            int windows) {
         WallPages pages = mKnownPages;
         if ((mDefaultOrder && !mHasDisplayPage) || pages == null) {
             return WallParallax.rowIndex(kind, index, homes, windows);
         }
         WallPages.Stop stop;
-        if (kind == PaneWallPage.DISPLAY) {
+        if (kind == PageKind.DISPLAY) {
             int id = pageId >= 0 ? pageId : mDisplayPageId;
             if (id < 0) return 0;
             stop = WallPages.Stop.of(id);
-        } else if (kind == PaneWallPage.ASSISTANT) {
+        } else if (kind == PageKind.ASSISTANT) {
             WallPages.Page assistant = pages.assistant();
             int id = pageId >= 0 ? pageId : assistant == null ? -1 : assistant.id;
             if (id < 0) return 0;
             stop = WallPages.Stop.of(id);
-        } else if (kind == PaneWallPage.WIDGETS) {
+        } else if (kind == PageKind.HOME) {
             java.util.List<WallPages.Page> homePages = pages.homePages();
             if (homePages.isEmpty()) return 0;
             stop = WallPages.Stop.of(homePages.get(
@@ -1111,12 +1112,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     private int rowHomeCount() {
-        return Math.max(1, innerCount(PaneWallPage.WIDGETS));
+        return Math.max(1, innerCount(PageKind.HOME));
     }
 
     private int rowWindowCount() {
-        if (!has(PaneWallPage.TERMINAL)) return 0;
-        return Math.max(1, innerCount(PaneWallPage.TERMINAL));
+        if (!has(PageKind.TERMINAL)) return 0;
+        return Math.max(1, innerCount(PageKind.TERMINAL));
     }
 
     /**
@@ -1131,11 +1132,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public boolean goTo(@Nullable String name) {
         WallPages pages = mKnownPages;
         if (pages == null) {
-            PaneWallPage page = PaneWallPolicy.parsePage(mWall.pages(), mWall.currentPage(), name);
+            PageKind page = PaneWallPolicy.parsePage(mWall.pages(), mWall.currentPage(), name);
             if (page == null) return false;
             mWorkspacePending = false;
-            if (page == PaneWallPage.WIDGETS && PaneWallPolicy.namesHome(name))
-                showInner(PaneWallPage.WIDGETS, Math.max(0, mHome.pressPage()));
+            if (page == PageKind.HOME && PaneWallPolicy.namesHome(name))
+                showInner(PageKind.HOME, Math.max(0, mHome.pressPage()));
             return mWall.goTo(page, true);
         }
         if (name == null) return false;
@@ -1165,7 +1166,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     private int homeKeyPage(@NonNull WallPages pages, int current) {
         WallPages.Page home = pages.home();
-        boolean homeIsHome = home != null && home.kind == WallPages.PageKind.HOME;
+        boolean homeIsHome = home != null && home.kind == PageKind.HOME;
         int id = homeIdAt(homeIsHome ? Math.max(0, mHome.pressPage()) : 0);
         if (id != PaneWallLayout.NO_PAGE) return id;
         WallPages.Page target = pages.homeTarget(current);
@@ -1176,7 +1177,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * Go to a page of kind {@code page}: the current cell when it is of that kind, else the page
      * its view is bound to.
      */
-    public boolean goTo(@NonNull PaneWallPage page, boolean animate) {
+    public boolean goTo(@NonNull PageKind page, boolean animate) {
         mWorkspacePending = false;
         return mWall.goTo(page, animate);
     }
@@ -1187,13 +1188,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * the Terminal entry does into an empty row. False when the wall has no Terminal page.
      */
     public boolean goToWorkspace(boolean animate) {
-        if (!has(PaneWallPage.TERMINAL)) return false;
+        if (!has(PageKind.TERMINAL)) return false;
         mWorkspacePending = false;
-        if (mWall.currentPage() == PaneWallPage.TERMINAL && !mWall.isMoving()) {
+        if (mWall.currentPage() == PageKind.TERMINAL && !mWall.isMoving()) {
             startShellOnLanding();
             return true;
         }
-        return goTo(PaneWallPage.TERMINAL, animate);
+        return goTo(PageKind.TERMINAL, animate);
     }
 
     /**
@@ -1216,7 +1217,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     /** Back to the Terminal page's cell, from wherever the wall stands. */
     public void returnToTerminal(boolean animate) {
-        goTo(PaneWallPage.TERMINAL, animate);
+        goTo(PageKind.TERMINAL, animate);
     }
 
     /**
@@ -1250,13 +1251,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private boolean homeIsAssistantPage() {
         WallPages pages = mFacts.wallPages();
         WallPages.Page home = pages == null ? null : pages.home();
-        return home != null && home.kind == WallPages.PageKind.ASSISTANT;
+        return home != null && home.kind == PageKind.ASSISTANT;
     }
 
     private boolean homeIsTerminalPage() {
         WallPages pages = mFacts.wallPages();
         WallPages.Page home = pages == null ? null : pages.home();
-        return home != null && home.kind == WallPages.PageKind.TERMINAL;
+        return home != null && home.kind == PageKind.TERMINAL;
     }
 
     /**
@@ -1265,17 +1266,17 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     public void goToLastHomePage(boolean animate) {
         if (!mFacts.useAs().showsHomePage()) {
-            goTo(PaneWallPage.TERMINAL, animate);
+            goTo(PageKind.TERMINAL, animate);
             return;
         }
         if (mKnownPages != null) {
             java.util.List<PaneWallLayout.Cell> cells = mWall.cells();
-            int terminal = mWall.indexOfCell(mWall.boundPageId(PaneWallPage.TERMINAL));
+            int terminal = mWall.indexOfCell(mWall.boundPageId(PageKind.TERMINAL));
             int id = PaneWallLayout.NO_PAGE;
-            if (terminal > 0 && cells.get(terminal - 1).kind == PaneWallPage.WIDGETS) {
+            if (terminal > 0 && cells.get(terminal - 1).kind == PageKind.HOME) {
                 id = cells.get(terminal - 1).pageId;
             } else if (terminal >= 0 && terminal + 1 < cells.size()
-                && cells.get(terminal + 1).kind == PaneWallPage.WIDGETS) {
+                && cells.get(terminal + 1).kind == PageKind.HOME) {
                 id = cells.get(terminal + 1).pageId;
             } else {
                 id = homeIdAt(homeCount() - 1);
@@ -1285,9 +1286,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
                 return;
             }
         }
-        showInner(PaneWallPage.WIDGETS,
-            WallRow.lastHomePage(innerCount(PaneWallPage.WIDGETS)));
-        goTo(PaneWallPage.WIDGETS, animate);
+        showInner(PageKind.HOME,
+            WallRow.lastHomePage(innerCount(PageKind.HOME)));
+        goTo(PageKind.HOME, animate);
     }
 
     /**
@@ -1295,7 +1296,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * press's page.
      */
     public void landOnColdStart(@Nullable String startIn) {
-        if (WallRow.coldStart(mFacts.useAs().startIn(startIn)) == PaneWallPage.TERMINAL) {
+        if (WallRow.coldStart(mFacts.useAs().startIn(startIn)) == PageKind.TERMINAL) {
             landInWorkspace();
         } else {
             goHome(false);
@@ -1306,13 +1307,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // A cold start or a restored state is not a landing: with no window yet the wall waits on
         // the Terminal page's card for its windows, and starts no shell of its own.
         if (!mFacts.hasWindow()) mWorkspacePending = true;
-        if (has(PaneWallPage.TERMINAL)) mWall.goTo(PaneWallPage.TERMINAL, false);
+        if (has(PageKind.TERMINAL)) mWall.goTo(PageKind.TERMINAL, false);
     }
 
     /** The page in front, as a row position. */
     @NonNull
     public WallRow.Position currentPosition() {
-        PaneWallPage page = mWall.currentPage();
+        PageKind page = mWall.currentPage();
         return new WallRow.Position(page, innerIndex(page));
     }
 
@@ -1346,14 +1347,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int index = state.getInt(ARG_INDEX, 0);
         // The windows come back with the terminal's own saved state, which may not be there yet:
         // a count of 0 means "not known yet", and the Workspace is waited for.
-        int windows = has(PaneWallPage.TERMINAL) ? innerCount(PaneWallPage.TERMINAL) : 0;
+        int windows = has(PageKind.TERMINAL) ? innerCount(PageKind.TERMINAL) : 0;
         WallRow.Position position = WallRow.restore(half, index,
-            innerCount(PaneWallPage.WIDGETS), windows);
+            innerCount(PageKind.HOME), windows);
         if (WallRow.HALF_WORKSPACE.equals(half) && windows <= 0) {
             landInWorkspace();
             return true;
         }
-        if (position.kind == PaneWallPage.WIDGETS) {
+        if (position.kind == PageKind.HOME) {
             // wall_index is the global Home-page index: the run that holds it is bound first.
             goToHomePage(position.index, false);
         } else {
@@ -1365,18 +1366,18 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     // ---- PaneWallLayout.Listener -----------------------------------------------------------
 
     @Override
-    public void onWallPageChanged(@NonNull PaneWallPage page) {
+    public void onWallPageChanged(@NonNull PageKind page) {
         mLanding.committed(page);
     }
 
     @Override
-    public void onWallCellChanged(int pageId, @NonNull PaneWallPage page) {
+    public void onWallCellChanged(int pageId, @NonNull PageKind page) {
         mLanding.committed(page);
-        if (mPages != null) mPages.committed(pageId, page.pageKind());
+        if (mPages != null) mPages.committed(pageId, page);
     }
 
     @Override
-    public void onWallPageSettled(@NonNull PaneWallPage page) {
+    public void onWallPageSettled(@NonNull PageKind page) {
         onWallCellSettled(mWall.currentPageId(), page);
     }
 
@@ -1388,15 +1389,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * that lands elsewhere starts none (W3).
      */
     @Override
-    public void onWallCellSettled(int pageId, @NonNull PaneWallPage page) {
-        if (page != PaneWallPage.TERMINAL) mLandingShellStarted = false;
-        if (page == PaneWallPage.DISPLAY && pageId >= 0) mLastDisplayPageId = pageId;
+    public void onWallCellSettled(int pageId, @NonNull PageKind page) {
+        if (page != PageKind.TERMINAL) mLandingShellStarted = false;
+        if (page == PageKind.DISPLAY && pageId >= 0) mLastDisplayPageId = pageId;
         bindCell(pageId);
         // Recorded before the host's settle, which applies the typing claim and reads the front.
-        if (mPages != null) mPages.landed(pageId, page.pageKind());
+        if (mPages != null) mPages.landed(pageId, page);
         mLanding.landed(page);
-        if (page == PaneWallPage.TERMINAL) startShellOnLanding();
-        if (page == PaneWallPage.DISPLAY && mBoundDisplayPageId >= 0) {
+        if (page == PageKind.TERMINAL) startShellOnLanding();
+        if (page == PageKind.DISPLAY && mBoundDisplayPageId >= 0) {
             mDisplay.landed(mBoundDisplayPageId);
         }
     }
@@ -1404,19 +1405,19 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     // The windows page inside the Workspace's view by the border drag; Home's pages page inside
     // the widget grid by its own swipe, so the wall never steps inside Home.
     @Override
-    public boolean hasInnerPage(@NonNull PaneWallPage page, int steps) {
-        return page == PaneWallPage.TERMINAL && WallRow.hasInnerStep(innerIndex(page),
+    public boolean hasInnerPage(@NonNull PageKind page, int steps) {
+        return page == PageKind.TERMINAL && WallRow.hasInnerStep(innerIndex(page),
             innerCount(page), steps);
     }
 
     @Override
-    public void onInnerStepBegin(@NonNull PaneWallPage page, int steps) {
-        if (page == PaneWallPage.TERMINAL) mTerminal.stepBegin(steps);
+    public void onInnerStepBegin(@NonNull PageKind page, int steps) {
+        if (page == PageKind.TERMINAL) mTerminal.stepBegin(steps);
     }
 
     @Override
-    public void onInnerStep(@NonNull PaneWallPage page, int steps, float fromPx) {
-        if (page == PaneWallPage.TERMINAL) mTerminal.step(steps, fromPx);
+    public void onInnerStep(@NonNull PageKind page, int steps, float fromPx) {
+        if (page == PageKind.TERMINAL) mTerminal.step(steps, fromPx);
         else mTerminal.dropDeparture();
     }
 
@@ -1426,27 +1427,27 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * kind-only Home cell's last page).
      */
     @Override
-    public void onWallDragBegin(@NonNull PaneWallPage page) {
+    public void onWallDragBegin(@NonNull PageKind page) {
         mWorkspacePending = false;
         // Off the first window a kind-only Home cell, which holds every Home page, comes in on
         // its last page, the one beside the seam.
         int left = mWall.neighbourId(-1);
-        if (page == PaneWallPage.TERMINAL && left < 0 && left != PaneWallLayout.NO_PAGE
-            && mWall.kindOf(left) == PaneWallPage.WIDGETS
-            && innerIndex(PaneWallPage.TERMINAL) == 0) {
-            int last = WallRow.lastHomePage(innerCount(PaneWallPage.WIDGETS));
-            if (innerIndex(PaneWallPage.WIDGETS) != last) {
-                showInner(PaneWallPage.WIDGETS, last);
+        if (page == PageKind.TERMINAL && left < 0 && left != PaneWallLayout.NO_PAGE
+            && mWall.kindOf(left) == PageKind.HOME
+            && innerIndex(PageKind.TERMINAL) == 0) {
+            int last = WallRow.lastHomePage(innerCount(PageKind.HOME));
+            if (innerIndex(PageKind.HOME) != last) {
+                showInner(PageKind.HOME, last);
             }
         }
         // Leaving Home, the Terminal page's window beside the seam waits in front: the first
         // window when the Terminal page stands on Home's right, the last on its left.
-        if (page != PaneWallPage.WIDGETS) return;
-        int windows = innerCount(PaneWallPage.TERMINAL);
-        if (windows <= 0 || !has(PaneWallPage.TERMINAL)) return;
-        boolean right = mWall.indexOfCell(mWall.boundPageId(PaneWallPage.TERMINAL))
+        if (page != PageKind.HOME) return;
+        int windows = innerCount(PageKind.TERMINAL);
+        if (windows <= 0 || !has(PageKind.TERMINAL)) return;
+        boolean right = mWall.indexOfCell(mWall.boundPageId(PageKind.TERMINAL))
             > mWall.indexOfCell(mWall.currentPageId());
-        showInner(PaneWallPage.TERMINAL, right ? 0 : windows - 1);
+        showInner(PageKind.TERMINAL, right ? 0 : windows - 1);
     }
 
     /**
@@ -1455,13 +1456,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * 0015 asks nothing live under the finger), so a drag that springs back changes no binding.
      */
     @Override
-    public void onWallDragHeading(@NonNull PaneWallPage page, int steps) {
+    public void onWallDragHeading(@NonNull PageKind page, int steps) {
     }
 
     @Override
-    public boolean isBorderPagingEnabled(@NonNull PaneWallPage page) {
+    public boolean isBorderPagingEnabled(@NonNull PageKind page) {
         // A Home page has no border; it pages by a plain swipe anywhere.
-        return page != PaneWallPage.WIDGETS;
+        return page != PageKind.HOME;
     }
 
     /**
@@ -1471,11 +1472,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * its border pages.
      */
     @Override
-    public boolean isBodySwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
+    public boolean isBodySwipePaging(@NonNull PageKind page, float rawX, float rawY) {
         // Each side asked only for its own page, so a terminal is never asked about a touch
         // on the Assistant page.
-        boolean terminal = page == PaneWallPage.TERMINAL && mFacts.bodySwipePagesWall(rawX, rawY);
-        boolean assistant = page == PaneWallPage.ASSISTANT
+        boolean terminal = page == PageKind.TERMINAL && mFacts.bodySwipePagesWall(rawX, rawY);
+        boolean assistant = page == PageKind.ASSISTANT
             && mAssistantView instanceof com.termux.app.assistant.AssistantPageView
             && ((com.termux.app.assistant.AssistantPageView) mAssistantView)
                 .bodySwipePagesWall(rawX, rawY);
@@ -1498,8 +1499,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * setting. Not the display window's picture, which takes every touch.
      */
     @Override
-    public boolean isSeamSwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
-        return page == PaneWallPage.TERMINAL && mFacts.seamSwipePagesWall(rawX, rawY);
+    public boolean isSeamSwipePaging(@NonNull PageKind page, float rawX, float rawY) {
+        return page == PageKind.TERMINAL && mFacts.seamSwipePagesWall(rawX, rawY);
     }
 
     @Override
@@ -1597,9 +1598,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     @Override
-    public void onPageSinkChanged(@NonNull PaneWallPage page, float scale) {
+    public void onPageSinkChanged(@NonNull PageKind page, float scale) {
         reaimPages();
-        if (page != PaneWallPage.TERMINAL) return;
+        if (page != PageKind.TERMINAL) return;
         mPose.setTerminalSinkScale(scale);
         tellPoseReaders(WallPose.SINK);
     }
@@ -1619,7 +1620,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     @Override
-    public boolean isPlankTiltEnabled(@NonNull PaneWallPage page) {
+    public boolean isPlankTiltEnabled(@NonNull PageKind page) {
         // Every page, the display window too: its picture is a SurfaceView a rotation leaves flat,
         // so the wall tips it only while a still copy stands in for the surface (SurfacePage), and
         // slides it flat until then.

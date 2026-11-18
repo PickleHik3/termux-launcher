@@ -11,9 +11,9 @@ import androidx.core.content.ContextCompat;
 
 import com.termux.R;
 import com.termux.app.chrome.OnGlass;
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.WindowChipInk;
 import com.termux.app.theme.SchemeTone;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -53,7 +53,7 @@ public class PlaceDisplayAccentContrastTest {
 
     private static int accent() {
         return StatusBarLensView.accentFor(RuntimeEnvironment.getApplication(),
-            PaneWallPage.DISPLAY);
+            PageKind.DISPLAY);
     }
 
     // ------------------------------------------------------------------ the two panels

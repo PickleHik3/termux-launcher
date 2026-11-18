@@ -11,13 +11,13 @@ import android.os.Build;
 
 import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -61,7 +61,7 @@ public class LayoutEditorSharedLayoutTest {
     }
 
     private LayoutEditorPlan onHome() {
-        return DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        return DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
     }
 
     @Test

@@ -5,8 +5,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
-import com.termux.app.wall.PaneWallPage;
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 
 /**
@@ -80,19 +80,19 @@ public enum EditorCard {
 
     /**
      * Whether the card's object stands on the {@code screen} kind of page ({@link
-     * PaneWallPage#WIDGETS} is Home's, anything else the Terminal's): Home only on Home, the
+     * PageKind#HOME} is Home's, anything else the Terminal's): Home only on Home, the
      * Workspace and the terminal only on the Terminal's, everything else on both.
      */
-    public boolean standsOn(@NonNull PaneWallPage screen) {
-        if (this == HOME || this == WIDGETS) return screen == PaneWallPage.WIDGETS;
-        if (this == TERMINAL || this == WORKSPACE) return screen != PaneWallPage.WIDGETS;
+    public boolean standsOn(@NonNull PageKind screen) {
+        if (this == HOME || this == WIDGETS) return screen == PageKind.HOME;
+        if (this == TERMINAL || this == WORKSPACE) return screen != PageKind.HOME;
         return true;
     }
 
     /** The card of the screen kind: Home's on Home, the Workspace's on the Terminal's. */
     @NonNull
-    public static EditorCard forScreen(@NonNull PaneWallPage screen) {
-        return screen == PaneWallPage.WIDGETS ? HOME : WORKSPACE;
+    public static EditorCard forScreen(@NonNull PageKind screen) {
+        return screen == PageKind.HOME ? HOME : WORKSPACE;
     }
 
     /** The card a surface opens. */

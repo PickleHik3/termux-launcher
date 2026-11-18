@@ -4,11 +4,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -19,8 +19,8 @@ import org.junit.Test;
  */
 public class PageTopInsetsTest {
 
-    private static final PaneWallPage HOME = PaneWallPage.WIDGETS;
-    private static final PaneWallPage WINDOW = PaneWallPage.TERMINAL;
+    private static final PageKind HOME = PageKind.HOME;
+    private static final PageKind WINDOW = PageKind.TERMINAL;
 
     private static final int BAR = 120;
     private static final int COMPACT_BAR = 72;
@@ -50,7 +50,7 @@ public class PageTopInsetsTest {
      * thickness, less the canvas's reach up under it, plus the page's own inset. The model of the
      * content column the activity lays out (EdgeStackView.overlayFollowing, PaneWallLayout).
      */
-    private static int pageTopPx(PaneWallPage page, PaneWallPage committed, boolean wallAtRest,
+    private static int pageTopPx(PageKind page, PageKind committed, boolean wallAtRest,
                                  PlaceLayout onScreen, PlaceLayout home,
                                  EdgeStackPolicy.Metrics metrics) {
         boolean reaches = PageTopInsets.canvasReachesUnderBar(committed, wallAtRest);
@@ -62,7 +62,7 @@ public class PageTopInsetsTest {
     }
 
     /** {@link #pageTopPx}, Home on a Home layout that puts the bar away. */
-    private static int pageTopPx(PaneWallPage page, PaneWallPage committed, boolean wallAtRest,
+    private static int pageTopPx(PageKind page, PageKind committed, boolean wallAtRest,
                                  PlaceLayout onScreen, EdgeStackPolicy.Metrics metrics) {
         return pageTopPx(page, committed, wallAtRest, onScreen, HOME_LAYOUT, metrics);
     }
@@ -70,7 +70,7 @@ public class PageTopInsetsTest {
     @Test
     public void theCanvasStandsBelowTheBarOnlyWhileTheWallRestsOnTheWorkspace() {
         assertFalse(PageTopInsets.canvasReachesUnderBar(WINDOW, true));
-        assertFalse(PageTopInsets.canvasReachesUnderBar(PaneWallPage.DISPLAY, true));
+        assertFalse(PageTopInsets.canvasReachesUnderBar(PageKind.DISPLAY, true));
         assertTrue("a slide from the Workspace", PageTopInsets.canvasReachesUnderBar(WINDOW,
             false));
         assertTrue("resting on Home", PageTopInsets.canvasReachesUnderBar(HOME, true));
@@ -117,7 +117,7 @@ public class PageTopInsetsTest {
             assertEquals("below the bar", bar, window);
             assertEquals(window, pageTopPx(HOME, HOME, true, WORKSPACE, WORKSPACE, m));
             assertEquals(window, pageTopPx(WINDOW, HOME, true, WORKSPACE, WORKSPACE, m));
-            for (PaneWallPage committed : new PaneWallPage[] {WINDOW, HOME}) {
+            for (PageKind committed : new PageKind[] {WINDOW, HOME}) {
                 assertEquals(committed.name(), window,
                     pageTopPx(HOME, committed, false, WORKSPACE, WORKSPACE, m));
                 assertEquals(committed.name(), window,

@@ -2,11 +2,11 @@ package com.termux.app.statusbar;
 
 import androidx.annotation.NonNull;
 
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
  * Everything the status bar's place marks are made of, worked out away from the canvas: how big
@@ -119,7 +119,7 @@ public final class StatusBarLensMetrics {
             set(left, top, right, bottom);
         }
 
-        /** Refilled by {@link #marks(Bar, List, PaneWallPage, float, int, boolean, MarkBuffer)}. */
+        /** Refilled by {@link #marks(Bar, List, PageKind, float, int, boolean, MarkBuffer)}. */
         void set(float left, float top, float right, float bottom) {
             this.left = left;
             this.top = top;
@@ -210,7 +210,7 @@ public final class StatusBarLensMetrics {
 
     /** One place's mark: where it is, how it is painted, and what a finger may land on. */
     public static final class Mark {
-        public PaneWallPage page;
+        public PageKind page;
         /** Bar widths from the place on screen: 0 at home, ±1 at the ends. */
         public float t;
         /** How far from home the mark is, 0 at home and 1 at either end. */
@@ -251,7 +251,7 @@ public final class StatusBarLensMetrics {
             target = new Box(0f, 0f, 0f, 0f);
         }
 
-        void set(PaneWallPage page, float t, float presence, boolean home, float centerX,
+        void set(PageKind page, float t, float presence, boolean home, float centerX,
                  float centerY, float sizePx, float radiusPx, float glyphSizePx, float glyphInk,
                  float ink, float effectiveInk, float fadeOuterAlpha, float glow, boolean fades,
                  boolean fadesFromNearEnd) {
@@ -275,7 +275,7 @@ public final class StatusBarLensMetrics {
     }
 
     /**
-     * Where {@link #marks(Bar, List, PaneWallPage, float, int, boolean, MarkBuffer)} writes: the
+     * Where {@link #marks(Bar, List, PageKind, float, int, boolean, MarkBuffer)} writes: the
      * marks of the last call, refilled in place by the next one. The lens view holds one so a wall
      * drag, which lays the marks out on every frame, allocates nothing doing it. A list read from
      * it is good until the buffer's next use.
@@ -314,16 +314,16 @@ public final class StatusBarLensMetrics {
      * and hit-tests nothing without a second rule of its own.
      */
     @NonNull
-    public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PaneWallPage> pages,
-                                   @NonNull PaneWallPage current, float offsetPx,
+    public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PageKind> pages,
+                                   @NonNull PageKind current, float offsetPx,
                                    int wallWidthPx) {
         return marks(bar, pages, current, offsetPx, wallWidthPx, new MarkBuffer());
     }
 
-    /** {@link #marks(Bar, List, PaneWallPage, float, int)}, written into {@code buffer}. */
+    /** {@link #marks(Bar, List, PageKind, float, int)}, written into {@code buffer}. */
     @NonNull
-    public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PaneWallPage> pages,
-                                   @NonNull PaneWallPage current, float offsetPx, int wallWidthPx,
+    public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PageKind> pages,
+                                   @NonNull PageKind current, float offsetPx, int wallWidthPx,
                                    @NonNull MarkBuffer buffer) {
         buffer.clear();
         return buffer.marks();

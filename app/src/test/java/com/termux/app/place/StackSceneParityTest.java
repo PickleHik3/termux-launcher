@@ -7,8 +7,8 @@ import androidx.annotation.NonNull;
 
 import com.termux.app.chrome.StackMaterial;
 import com.termux.app.chrome.StackMaterial.RegionLook;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -183,7 +183,7 @@ public class StackSceneParityTest {
 
     /** Crossing#stack's stack, recorded. */
     private static final class Moves implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
-            Crossing.Keyboard, Crossing.Dock {
+            Crossing.Keyboard {
         float dockPx, keyboardPx, sinkPx;
         @Override public void translate(float dock, float keyboard) {
             dockPx = dock;
@@ -193,14 +193,14 @@ public class StackSceneParityTest {
         @Override public void alpha(float status, float side) {}
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}
-        @Override public void preRoll(@NonNull PaneWallPage target) {}
+        @Override public void preRoll(@NonNull PageKind target) {}
     }
 
     // ---- Parity with today -----------------------------------------------------------------
 
     @Test public void theTravelIsCrossingStacks() {
         Moves moves = new Moves();
-        Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
+        Crossing crossing = new Crossing(moves, moves, moves, moves);
         SeamCrossing.Answers seam = new SeamCrossing.Answers();
         StackScene.Motion motion = new StackScene.Motion();
         for (boolean floating : BOOLS) for (boolean kbUp : BOOLS) for (boolean sink : BOOLS) {
@@ -417,8 +417,8 @@ public class StackSceneParityTest {
         StackScene.Motion motion = new StackScene.Motion();
         StackScene.Frame frame = new StackScene.Frame();
         StackScene.Frame rest = new StackScene.Frame();
-        PageRef home2 = PageRef.of(com.termux.app.wall.PaneWallPage.WIDGETS, 2);
-        PageRef display = PageRef.of(com.termux.app.wall.PaneWallPage.DISPLAY, 7);
+        PageRef home2 = PageRef.of(com.termux.app.page.PageKind.HOME, 2);
+        PageRef display = PageRef.of(com.termux.app.page.PageKind.DISPLAY, 7);
         PageRef[][] pairs = {{PageRef.HOME, home2}, {PageRef.TERMINAL, display}};
         for (PageRef[] pair : pairs) for (boolean floating : BOOLS) for (boolean up : BOOLS) {
             StackEnd from = end(pair[0], up, floating);

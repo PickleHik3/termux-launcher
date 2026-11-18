@@ -17,7 +17,6 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -33,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import android.app.Application;
+import com.termux.app.page.PageKind;
 
 /**
  * The editor's host: every door opens the editor (on its object), the wallpaper picker stands
@@ -713,7 +713,7 @@ public class AppearanceSurfaceControllerTest {
         boolean inPlace;
 
         @Override public void presentInPlace(@Nullable EditorCard card,
-                                             @Nullable PaneWallPage place,
+                                             @Nullable PageKind place,
                                              @Nullable Runnable onSettled) {
             inPlace = true;
             present(card, place, onSettled);
@@ -724,7 +724,7 @@ public class AppearanceSurfaceControllerTest {
             this.veiled = veiled;
         }
 
-        @Override public void present(@Nullable EditorCard card, @Nullable PaneWallPage place,
+        @Override public void present(@Nullable EditorCard card, @Nullable PageKind place,
                                       @Nullable Runnable onSettled) {
             if (events != null && !presented) events.add("present");
             veiledAtPresent = veiled;

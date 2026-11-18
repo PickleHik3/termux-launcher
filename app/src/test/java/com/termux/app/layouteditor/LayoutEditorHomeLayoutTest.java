@@ -12,6 +12,7 @@ import android.os.Build;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -19,7 +20,6 @@ import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -64,21 +64,21 @@ public class LayoutEditorHomeLayoutTest {
     @Test
     public void openedOnAHomePageItEditsTheHomeLayout() {
         assertEquals(com.termux.app.place.KindFixtures.HOME_PAGE,
-            DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT).variant());
+            DraftedSession.enter(places, PageKind.HOME, PORTRAIT).variant());
         assertEquals(LayoutVariant.NORMAL,
-            DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT).variant());
+            DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT).variant());
         places.setMinimal(true);
         assertEquals("minimal mode is the Workspace's", com.termux.app.place.KindFixtures.HOME_PAGE,
-            DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT).variant());
+            DraftedSession.enter(places, PageKind.HOME, PORTRAIT).variant());
         assertEquals(LayoutVariant.MINIMAL,
-            DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT).variant());
+            DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT).variant());
     }
 
     @Test
     public void theHomeTrayHoldsTheBarTheDockRowsAndTheKeyboard() {
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         places.setAzRowShown(PORTRAIT, true);
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         // Fresh from its seed: the extra keys are put away, and so is the keyboard, but only the
         // keyboard is the Home layout's to bring back. The bar comes shown (#90).
         assertEquals(Arrays.asList(LayoutEditorPlan.TrayItem.KEYBOARD), plan.trayItems());
@@ -105,7 +105,7 @@ public class LayoutEditorHomeLayoutTest {
     public void aWindowsTrayStillOffersTheFullSet() {
         places.setStatusBarEdge(PORTRAIT, Edge.TOP);
         places.setExtraKeys(PORTRAIT, RowPlacement.BOTTOM);
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
         plan.drop(Bar.STATUS_BAR, null);
         plan.drop(Bar.EXTRA_KEYS, null);
         assertTrue(plan.trayItems().contains(LayoutEditorPlan.TrayItem.STATUS_BAR));
@@ -129,7 +129,7 @@ public class LayoutEditorHomeLayoutTest {
 
     @Test
     public void theHomeKeyboardChipIsAlwaysOn() {
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         assertFalse(places.isHomeKeyboardAlwaysOn());
         assertEquals(LayoutEditorPlan.Drop.LIVE,
             plan.restore(LayoutEditorPlan.TrayItem.KEYBOARD));
@@ -149,11 +149,11 @@ public class LayoutEditorHomeLayoutTest {
      */
     @Test
     public void reopenedWithAlwaysOnTheKeyboardStandsOnTheCanvasAndCanBePutAway() {
-        LayoutEditorPlan first = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan first = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         first.restore(LayoutEditorPlan.TrayItem.KEYBOARD);
         assertTrue(places.isHomeKeyboardAlwaysOn());
 
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         assertTrue("the canvas is handed the keyboard", plan.shownLayout().keyboardShown);
         assertFalse(plan.trayItems().contains(LayoutEditorPlan.TrayItem.KEYBOARD));
 
@@ -166,7 +166,7 @@ public class LayoutEditorHomeLayoutTest {
     @Test
     public void editsOnHomeLeaveTheWorkspaceLayoutAlone() {
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         plan.drop(Bar.APPS_ROW, Edge.TOP);
         assertEquals(Edge.TOP, plan.shownLayout().slot(Element.APPS).edge);
         Slot workspace = places.forVariant(LayoutVariant.NORMAL).slot(PORTRAIT, Element.APPS);
@@ -186,7 +186,7 @@ public class LayoutEditorHomeLayoutTest {
 
     @Test
     public void theHomeLayoutsDesignIsItsOwnOneValueForBothOrientations() {
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         plan.showOrientation(PlaceOrientation.LANDSCAPE);
         assertEquals("live whichever orientation the toggle shows", LayoutEditorPlan.Drop.LIVE,
             plan.setDockStyle(DockStyle.WALL_STRIP));
@@ -231,7 +231,7 @@ public class LayoutEditorHomeLayoutTest {
 
     @Test
     public void theWorkspaceLayoutOffersItsDockDesign() {
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
         assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());
         assertEquals("Home's dock is the same one (ADR 0023 §1)", DockStyle.LENS_BEADS,
@@ -241,7 +241,7 @@ public class LayoutEditorHomeLayoutTest {
 
     @Test
     public void aPickedDockStyleIsUnsavedAndDiscardPutsItBack() {
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         plan.setDockStyle(DockStyle.WALL_STRIP);
         assertTrue(plan.isDirty());
 
@@ -252,7 +252,7 @@ public class LayoutEditorHomeLayoutTest {
 
     @Test
     public void theHomeFilterCarriesTheDockStyleChoice() {
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
         plan.showHome(true);
         plan.setDockStyle(DockStyle.LENS_BEADS);
         plan.showHome(false);

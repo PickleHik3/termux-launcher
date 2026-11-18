@@ -9,8 +9,8 @@ import com.termux.app.dock.DockPlacement;
 import com.termux.app.dock.DockRows;
 import com.termux.app.dock.DockSurfaceSpec;
 import com.termux.app.dock.UnderKeyboardBand;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Stack layout (ADR 0011): the whole bottom stack as a pure function of one snapshot. The dock's
@@ -218,7 +218,7 @@ public final class StackLayout {
 
         Base(@NonNull DockLayout dock, @NonNull DockGeometry.Half half,
              @NonNull PlaceLayout arrangement, boolean toolbarShown, boolean keyboardShown,
-             int imeLiftPx, @NonNull PaneWallPage rowsPage) {
+             int imeLiftPx, @NonNull PageKind rowsPage) {
             // On Home the card stands on the keyboard too (D11), so Floating's gap goes with it.
             // Read for the page whose rows the stack stands, as the activity dresses the dock.
             boolean peekCardStands = DockPlacement.peekCardStandsOn(rowsPage,

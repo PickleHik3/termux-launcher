@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PageOverviewPolicy.Kind;
 import com.termux.app.wall.PageOverviewPolicy.Removal;
 
@@ -175,8 +176,8 @@ public class PageOverviewPolicyTest {
         assertEquals("the window in front", WallRow.window(2),
             PageOverviewPolicy.wallPosition(1, s, 2));
         assertEquals(WallRow.homePage(1), PageOverviewPolicy.wallPosition(2, s, 2));
-        assertEquals(PaneWallPage.DISPLAY, PageOverviewPolicy.wallPosition(3, s, 2).kind);
-        assertEquals(PaneWallPage.ASSISTANT, PageOverviewPolicy.wallPosition(4, s, 2).kind);
+        assertEquals(PageKind.DISPLAY, PageOverviewPolicy.wallPosition(3, s, 2).kind);
+        assertEquals(PageKind.ASSISTANT, PageOverviewPolicy.wallPosition(4, s, 2).kind);
     }
 
     @Test

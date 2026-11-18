@@ -9,10 +9,10 @@ import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockGeometry;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import org.junit.Test;
@@ -46,8 +46,8 @@ public class TerminalRoundTripParityTest {
 
     private static final int WIDTH = 1000;
     private static final float STEP = 0.05f;
-    private static final List<PaneWallPage> ROW =
-        Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL);
+    private static final List<PageKind> ROW =
+        Arrays.asList(PageKind.HOME, PageKind.TERMINAL);
 
     private final LayoutFixtures.Fixture f;
     private final boolean floating;
@@ -60,13 +60,13 @@ public class TerminalRoundTripParityTest {
     // ---- The adapter: only the page's inset is read ----
 
     private static final class Views implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
-            Crossing.Keyboard, Crossing.Dock {
+            Crossing.Keyboard {
         @Override public void translate(float dockPx, float keyboardPx) {}
         @Override public void sink(float px) {}
         @Override public void alpha(float status, float side) {}
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}
-        @Override public void preRoll(@NonNull PaneWallPage target) {}
+        @Override public void preRoll(@NonNull PageKind target) {}
     }
 
     private static final class Stored implements DressResolver.Source {
@@ -81,9 +81,9 @@ public class TerminalRoundTripParityTest {
         @Override public boolean drawerTile(@NonNull LayoutVariant variant) {
             return variant == LayoutVariant.HOME;
         }
-        @Override public boolean shows(@NonNull com.termux.app.wall.WallPages.PageKind kind,
+        @Override public boolean shows(@NonNull com.termux.app.page.PageKind kind,
                                        @NonNull Element element) {
-            return kind != com.termux.app.wall.WallPages.PageKind.HOME
+            return kind != com.termux.app.page.PageKind.HOME
                 || element != Element.EXTRA_KEYS;
         }
         @NonNull @Override public WallShape shape() {
@@ -92,14 +92,14 @@ public class TerminalRoundTripParityTest {
     }
 
     private final Views views = new Views();
-    private final Crossing crossing = new Crossing(views, views, views, views, views);
+    private final Crossing crossing = new Crossing(views, views, views, views);
 
-    private SeamCrossing.Endpoint end(@NonNull PaneWallPage page) {
+    private SeamCrossing.Endpoint end(@NonNull PageKind page) {
         Dress dress = new DressResolver(new Stored()).dressOf(page);
         PageRef ref = PageRef.of(page);
         PlaceLayout layout = f.layoutOf(ref);
         LayoutStyle style = floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED;
-        ResolvedArrangement arranged = page == PaneWallPage.WIDGETS
+        ResolvedArrangement arranged = page == PageKind.HOME
             ? ResolvedArrangement.of(layout, style, f.homeDesign, true, true,
                 PlaceOrientation.PORTRAIT, LayoutVariant.HOME, PageRef.HOME)
             : ResolvedArrangement.of(layout, style, DockStyle.GLASS_TRAY, false, false,
@@ -108,7 +108,7 @@ public class TerminalRoundTripParityTest {
             SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0), false);
     }
 
-    private DockLayout dockRest(@NonNull PaneWallPage page) {
+    private DockLayout dockRest(@NonNull PageKind page) {
         PageRef ref = PageRef.of(page);
         return DockGeometry.compute(f.snapshot(ref, floating).restOf(ref));
     }
@@ -120,15 +120,15 @@ public class TerminalRoundTripParityTest {
     }
 
     /** One slide from {@code from}, landed on the other half, asserting the page every frame. */
-    private void slide(@NonNull PaneWallPage from, int restPx) {
-        PaneWallPage to = from == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL
-            : PaneWallPage.WIDGETS;
+    private void slide(@NonNull PageKind from, int restPx) {
+        PageKind to = from == PageKind.HOME ? PageKind.TERMINAL
+            : PageKind.HOME;
         String way = f + (floating ? ", Floating" : ", Docked") + ", " + from + " → " + to;
         PlaceChromeTravel.States states = place -> new Rest(false, false, true);
         boolean begun = false;
         for (float t = STEP; t <= 1f + 1e-4f; t += STEP) {
             float fraction = Math.min(1f, t);
-            float offset = from == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
+            float offset = from == PageKind.HOME ? -fraction * WIDTH : fraction * WIDTH;
             Frame frame = PlaceChromeTravel.at(ROW, from, offset, WIDTH, states);
             if (!begun) {
                 crossing.begin(end(from), end(to), SeamCrossing.Stage.of(false, () -> false,
@@ -151,10 +151,10 @@ public class TerminalRoundTripParityTest {
         int restPx = terminalPagePx();
         assertEquals(f.heightPx - f.settle(PageRef.TERMINAL, false, floating).contentReservationPx,
             restPx);
-        slide(PaneWallPage.TERMINAL, restPx);
-        slide(PaneWallPage.WIDGETS, restPx);
+        slide(PageKind.TERMINAL, restPx);
+        slide(PageKind.HOME, restPx);
         // And again: the second round trip finds everything as the first left it.
-        slide(PaneWallPage.TERMINAL, restPx);
-        slide(PaneWallPage.WIDGETS, restPx);
+        slide(PageKind.TERMINAL, restPx);
+        slide(PageKind.HOME, restPx);
     }
 }

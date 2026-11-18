@@ -10,10 +10,10 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -51,7 +51,7 @@ public class LayoutEditorSearchFieldTest {
     public void theToggleIsOfferedWithThePickerOnEitherHalf() {
         for (boolean homeLayout : new boolean[] {false, true}) {
             com.termux.app.place.KindFixtures.onHomePage(places);
-            for (PaneWallPage page : PaneWallPage.values()) {
+            for (PageKind page : PageKind.values()) {
                 LayoutEditorPlan plan = DraftedSession.enter(places, page, PORTRAIT);
                 assertEquals(page.name(), LayoutEditorPlan.Drop.LIVE,
                     plan.setSearchField(!plan.searchField()));
@@ -62,7 +62,7 @@ public class LayoutEditorSearchFieldTest {
 
     @Test
     public void theToggleWritesTheEditedLayoutAndLeavesTheDesign() {
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
         plan.setDockStyle(DockStyle.LENS_BEADS);
         assertFalse(plan.searchField());
 
@@ -80,7 +80,7 @@ public class LayoutEditorSearchFieldTest {
     @Test
     public void aToggleFlippedOnAHomePageIsEveryPages() {
         com.termux.app.place.KindFixtures.onHomePage(places);
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         plan.setSearchField(true);
         assertTrue(places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).searchField());
         assertTrue("the Workspace reads the same one (ADR 0023 §1)",
@@ -89,7 +89,7 @@ public class LayoutEditorSearchFieldTest {
 
     @Test
     public void aToggledFieldIsUnsavedAndDiscardPutsItBack() {
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         assertFalse(plan.isDirty());
         plan.setSearchField(true);
         assertTrue(plan.isDirty());
@@ -101,7 +101,7 @@ public class LayoutEditorSearchFieldTest {
 
     @Test
     public void toggledBackItIsCleanAgain() {
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
         plan.setSearchField(true);
         plan.setSearchField(false);
         assertFalse(plan.isDirty());
@@ -109,7 +109,7 @@ public class LayoutEditorSearchFieldTest {
 
     @Test
     public void thePickerNeverWritesThePromptLine() {
-        LayoutEditorPlan plan = DraftedSession.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
         assertEquals(LayoutEditorPlan.Drop.NONE, plan.setDockStyle(DockStyle.PROMPT_LINE));
         assertEquals(DockStyle.GLASS_TRAY, plan.dockStyle());
         assertFalse(plan.isDirty());

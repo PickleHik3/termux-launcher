@@ -12,11 +12,10 @@ import android.os.Build;
 
 import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.KindFixtures;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -51,7 +50,7 @@ public class LayoutEditorPlanHomeDockTest {
         places.setShownPages(KindFixtures.pages(8, 1, 1, 8));
     }
 
-    private LayoutEditorPlan open(PaneWallPage page) {
+    private LayoutEditorPlan open(PageKind page) {
         return DraftedSession.enter(places, page, PlaceOrientation.PORTRAIT);
     }
 
@@ -61,7 +60,7 @@ public class LayoutEditorPlanHomeDockTest {
 
     @Test
     public void aHomePageWithNoLayoutEditsHomesDockAndDrawsIt() {
-        LayoutEditorPlan plan = open(PaneWallPage.WIDGETS);
+        LayoutEditorPlan plan = open(PageKind.HOME);
         plan.setDockStyle(DockStyle.PEEK_GLASS);
         plan.setSearchField(true);
         plan.setDrawerTile(true);
@@ -71,21 +70,21 @@ public class LayoutEditorPlanHomeDockTest {
         assertTrue(prefs.getBoolean("layout.home.drawer_tile", false));
         assertFalse("no page layout of its own", prefs.contains("layout.page1.dock_design"));
         assertEquals(DockStyle.PEEK_GLASS, plan.dockStyle());
-        assertEquals(DockStyle.PEEK_GLASS, dresses().dressOf(PaneWallPage.WIDGETS).dockDesign());
-        assertTrue(dresses().dressOf(PaneWallPage.WIDGETS).searchField());
-        assertTrue(dresses().dressOf(PaneWallPage.WIDGETS).drawerTile());
-        assertTrue(dresses().searchFieldOf(PaneWallPage.WIDGETS));
-        assertTrue(dresses().drawerTileOf(PaneWallPage.WIDGETS));
+        assertEquals(DockStyle.PEEK_GLASS, dresses().dressOf(PageKind.HOME).dockDesign());
+        assertTrue(dresses().dressOf(PageKind.HOME).searchField());
+        assertTrue(dresses().dressOf(PageKind.HOME).drawerTile());
+        assertTrue(dresses().searchFieldOf(PageKind.HOME));
+        assertTrue(dresses().drawerTileOf(PageKind.HOME));
         assertTrue("the Terminal wears the same dock (ADR 0023 §1)",
-            dresses().searchFieldOf(PaneWallPage.TERMINAL));
+            dresses().searchFieldOf(PageKind.TERMINAL));
         assertEquals("the Terminal wears the same dock (ADR 0023 §1)", DockStyle.PEEK_GLASS,
-            dresses().dockDesignOf(PaneWallPage.TERMINAL));
+            dresses().dockDesignOf(PageKind.TERMINAL));
     }
 
     @Test
     public void aHomePageWithItsOwnLayoutEditsTheSameDock() {
         places.setShownPages(KindFixtures.pages(1, 1, 1, 8));
-        LayoutEditorPlan plan = open(PaneWallPage.WIDGETS);
+        LayoutEditorPlan plan = open(PageKind.HOME);
         plan.setDockStyle(DockStyle.PEEK_GLASS);
         plan.setSearchField(true);
         plan.setDrawerTile(true);
@@ -94,13 +93,13 @@ public class LayoutEditorPlanHomeDockTest {
         assertTrue(prefs.getBoolean("layout.home.search_field", false));
         assertTrue(prefs.getBoolean("layout.home.drawer_tile", false));
         assertFalse(prefs.contains("layout.page1.dock_design"));
-        assertEquals(DockStyle.PEEK_GLASS, dresses().dockDesignOf(PaneWallPage.WIDGETS));
-        assertTrue(dresses().searchFieldOf(PaneWallPage.WIDGETS));
+        assertEquals(DockStyle.PEEK_GLASS, dresses().dockDesignOf(PageKind.HOME));
+        assertTrue(dresses().searchFieldOf(PageKind.HOME));
     }
 
     @Test
     public void aTerminalPageEditorWritesTheOneDockHomeHolds() {
-        LayoutEditorPlan plan = open(PaneWallPage.TERMINAL);
+        LayoutEditorPlan plan = open(PageKind.TERMINAL);
         plan.setDockStyle(DockStyle.PEEK_GLASS);
         plan.setSearchField(true);
 
@@ -111,11 +110,11 @@ public class LayoutEditorPlanHomeDockTest {
 
     @Test
     public void discardingPutsHomesDockBack() {
-        LayoutEditorPlan plan = open(PaneWallPage.WIDGETS);
+        LayoutEditorPlan plan = open(PageKind.HOME);
         plan.setDockStyle(DockStyle.PEEK_GLASS);
         assertTrue(plan.isDirty());
         plan.revert();
-        assertEquals(DockStyle.GLASS_TRAY, dresses().dockDesignOf(PaneWallPage.WIDGETS));
+        assertEquals(DockStyle.GLASS_TRAY, dresses().dockDesignOf(PageKind.HOME));
     }
 
     /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */

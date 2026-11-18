@@ -11,6 +11,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 
 import com.termux.app.launcher.home.HomePageTransition;
+import com.termux.app.page.PageKind;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -94,13 +95,13 @@ public class WallArrivingPoseTest {
         wall.addView(terminal);
         wall.setReducedMotion(false);
         wall.setPages(PaneWallPolicy.availablePages(false, true, false));
-        wall.setPageView(PaneWallPage.WIDGETS, widgets);
-        wall.setPageView(PaneWallPage.TERMINAL, terminal);
+        wall.setPageView(PageKind.HOME, widgets);
+        wall.setPageView(PageKind.TERMINAL, terminal);
         wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         wall.layout(0, 0, WIDTH, HEIGHT);
         wall.setPageTransition(effect);
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
     }
 
     /** The wall's running slide ticker, or null once it has ended. */
@@ -123,7 +124,7 @@ public class WallArrivingPoseTest {
     public void homeEasesInFromTheWorkspaceUnderEveryEffect() {
         for (HomePageTransition effect : HomePageTransition.values()) {
             build(effect);
-            wall.goTo(PaneWallPage.WIDGETS, true);
+            wall.goTo(PageKind.HOME, true);
             List<float[]> home = new ArrayList<>();
             List<float[]> workspace = new ArrayList<>();
             // The slide's own ticker, stepped one 16 ms frame at a time: its update listener is

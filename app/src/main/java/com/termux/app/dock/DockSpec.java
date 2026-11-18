@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.page.PageKind;
 
 /**
  * The dock as one surface (ADR 0018 §1, D3, D8, D11): where its glass stands, what shape it has,
@@ -23,9 +24,6 @@ import com.termux.app.chrome.GlassRefraction;
  * stack under it instead of the screen's edge.
  */
 public final class DockSpec {
-
-    /** The kind of page in front (ADR 0018 §3). */
-    public enum PageKind { HOME, TERMINAL, DISPLAY, ASSISTANT }
 
     /** What the card's bottom edge meets. */
     public enum Base {

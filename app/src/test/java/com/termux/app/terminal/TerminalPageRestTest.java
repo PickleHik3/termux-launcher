@@ -8,7 +8,6 @@ import com.termux.app.page.Rest;
 import com.termux.app.place.PlaceKeyboard;
 import com.termux.app.terminal.io.ExtraKeySetResolver;
 import com.termux.app.terminal.io.ExtraKeysTarget;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.PaneWallPolicy;
 import com.termux.app.wall.WallLookKinds;
 import com.termux.app.wall.WallPages;
@@ -33,14 +32,14 @@ public class TerminalPageRestTest {
             Rest rest = TerminalRest.of(in);
             String at = in.toString();
             assertEquals(at, !previewing && PlaceKeyboard.keyboardOnEnter(
-                PaneWallPage.TERMINAL, remembered, minimal, alwaysOn), rest.keyboardUp);
+                PageKind.TERMINAL, remembered, minimal, alwaysOn), rest.keyboardUp);
             assertEquals(at,
-                ExtraKeySetResolver.targetFor(PaneWallPage.TERMINAL, false, false),
+                ExtraKeySetResolver.targetFor(PageKind.TERMINAL, false, false),
                 ExtraKeysTarget.forPage(rest.keys));
             assertEquals(at, PageKind.TERMINAL, rest.keys);
             assertEquals(at, !inApp, rest.systemIme);
             assertEquals(at, bar, rest.statusBar);
-            assertEquals(at, PaneWallPolicy.showsWindowChips(PaneWallPage.TERMINAL),
+            assertEquals(at, PaneWallPolicy.showsWindowChips(PageKind.TERMINAL),
                 rest.windowChips);
             assertEquals(at, PageKind.TERMINAL, rest.look);
         }
@@ -48,7 +47,7 @@ public class TerminalPageRestTest {
 
     @Test
     public void theLookIsTheWorkspacesTerminalKind() {
-        assertEquals(LookGrid.Kind.TERMINAL, WallLookKinds.of(WallPages.PageKind.TERMINAL));
+        assertEquals(LookGrid.Kind.TERMINAL, WallLookKinds.of(PageKind.TERMINAL));
         assertTrue(TerminalRest.of(new Rest.Inputs.Builder().build()).windowChips);
     }
 }

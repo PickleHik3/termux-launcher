@@ -9,9 +9,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
-import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -86,12 +85,12 @@ public class PlaceLayoutKindVisibilityTest {
     @Test
     public void aNewInstallsPagesResolveToTheirKinds() {
         PlaceLayoutStore store = store();
-        PlaceLayout terminal = store.resolve(PORTRAIT, PaneWallPage.TERMINAL);
+        PlaceLayout terminal = store.resolve(PORTRAIT, PageKind.TERMINAL);
         assertTrue(terminal.slot(Element.APPS).hidden);
         assertTrue(terminal.slot(Element.AZ).hidden);
         assertFalse(terminal.slot(Element.EXTRA_KEYS).hidden);
         assertFalse(terminal.slot(Element.STATUS).hidden);
-        PlaceLayout home = store.resolve(PORTRAIT, PaneWallPage.WIDGETS);
+        PlaceLayout home = store.resolve(PORTRAIT, PageKind.HOME);
         assertFalse(home.slot(Element.APPS).hidden);
         assertFalse(home.slot(Element.AZ).hidden);
         assertTrue(home.slot(Element.EXTRA_KEYS).hidden);
@@ -103,8 +102,8 @@ public class PlaceLayoutKindVisibilityTest {
         PlaceLayoutStore store = store();
         store.setKindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS, true);
         launcher.setShowTerminalToolbar(false);
-        assertTrue(store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.EXTRA_KEYS).hidden);
-        assertTrue(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.EXTRA_KEYS).hidden);
+        assertTrue(store.resolve(PORTRAIT, PageKind.TERMINAL).slot(Element.EXTRA_KEYS).hidden);
+        assertTrue(store.resolve(PORTRAIT, PageKind.HOME).slot(Element.EXTRA_KEYS).hidden);
     }
 
     @Test
@@ -112,17 +111,17 @@ public class PlaceLayoutKindVisibilityTest {
         PlaceLayoutStore store = store();
         store.setKindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS, true);
         assertTrue(store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
-        assertTrue(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.EXTRA_KEYS).hidden);
+        assertTrue(store.resolve(PORTRAIT, PageKind.HOME).slot(Element.EXTRA_KEYS).hidden);
         assertFalse("the Workspace still docks it",
-            store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.EXTRA_KEYS).hidden);
+            store.resolve(PORTRAIT, PageKind.TERMINAL).slot(Element.EXTRA_KEYS).hidden);
     }
 
     @Test
     public void aKindsVisibilityIsPerOrientation() {
         PlaceLayoutStore store = store();
         store.setKindShows(PageKind.TERMINAL, PORTRAIT, Element.APPS, true);
-        assertFalse(store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
-        assertTrue(store.resolve(LANDSCAPE, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
+        assertFalse(store.resolve(PORTRAIT, PageKind.TERMINAL).slot(Element.APPS).hidden);
+        assertTrue(store.resolve(LANDSCAPE, PageKind.TERMINAL).slot(Element.APPS).hidden);
         assertFalse("Home is its own kind", store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
     }
 
@@ -228,11 +227,11 @@ public class PlaceLayoutKindVisibilityTest {
     @Test
     public void anUpgraderKeepsTheDockOnTheTerminalPage() {
         PlaceLayoutStore store = upgrade(true, true, true);
-        PlaceLayout terminal = store.resolve(PORTRAIT, PaneWallPage.TERMINAL);
+        PlaceLayout terminal = store.resolve(PORTRAIT, PageKind.TERMINAL);
         assertFalse(terminal.slot(Element.APPS).hidden);
         assertFalse(terminal.slot(Element.AZ).hidden);
         assertFalse(terminal.slot(Element.EXTRA_KEYS).hidden);
-        assertFalse(store.resolve(PORTRAIT, PaneWallPage.WIDGETS).slot(Element.APPS).hidden);
+        assertFalse(store.resolve(PORTRAIT, PageKind.HOME).slot(Element.APPS).hidden);
     }
 
     @Test
@@ -260,9 +259,9 @@ public class PlaceLayoutKindVisibilityTest {
         assertTrue(store.kindShows(PageKind.TERMINAL, LANDSCAPE, Element.APPS));
         assertTrue(store.kindShows(PageKind.HOME, PORTRAIT, Element.STATUS));
         assertFalse("hidden in landscape only", store.kindShows(PageKind.HOME, LANDSCAPE, Element.STATUS));
-        assertFalse(store.resolve(LANDSCAPE, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
-        assertTrue(store.resolve(PORTRAIT, PaneWallPage.TERMINAL).slot(Element.APPS).hidden);
-        assertTrue(store.resolve(LANDSCAPE, PaneWallPage.WIDGETS).slot(Element.STATUS).hidden);
+        assertFalse(store.resolve(LANDSCAPE, PageKind.TERMINAL).slot(Element.APPS).hidden);
+        assertTrue(store.resolve(PORTRAIT, PageKind.TERMINAL).slot(Element.APPS).hidden);
+        assertTrue(store.resolve(LANDSCAPE, PageKind.HOME).slot(Element.STATUS).hidden);
     }
 
     @Test

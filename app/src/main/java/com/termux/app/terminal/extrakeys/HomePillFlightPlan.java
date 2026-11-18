@@ -3,8 +3,8 @@ package com.termux.app.terminal.extrakeys;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.io.ExtraKeysTarget;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Which flight the Home pill makes at a settle: from Home to a page whose docked bar stands
@@ -36,13 +36,13 @@ public final class HomePillFlightPlan {
      * @param targetAfter where the extra keys go once the settle has landed
      */
     @NonNull
-    public static Flight decide(@NonNull PaneWallPage before, @NonNull PaneWallPage after,
+    public static Flight decide(@NonNull PageKind before, @NonNull PageKind after,
                                 boolean pillShownBefore, boolean dockedBarVisibleBefore,
                                 boolean dockedBarAfter, boolean switchOn, boolean motionAllowed,
                                 @Nullable ExtraKeysTarget targetAfter) {
         if (!switchOn || !motionAllowed) return Flight.NONE;
-        boolean fromHome = before == PaneWallPage.WIDGETS;
-        boolean toHome = after == PaneWallPage.WIDGETS;
+        boolean fromHome = before == PageKind.HOME;
+        boolean toHome = after == PageKind.HOME;
         if (fromHome && !toHome) {
             return pillShownBefore && dockedBarAfter ? Flight.TO_DOCK : Flight.NONE;
         }

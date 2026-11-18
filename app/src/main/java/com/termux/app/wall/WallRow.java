@@ -2,6 +2,7 @@ package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.app.page.PageKind;
 
 /**
  * The wall's row as a list of pages (ADR 0008): Home page 1 … Home page n, then the Workspace's
@@ -11,7 +12,7 @@ import androidx.annotation.Nullable;
  * <p>The wall does not hold a view per page. Home's pages are the widget grid's own pages, paged
  * by a plain swipe inside the grid; the windows are the terminal's, shown one at a time in its
  * pane host and paged by the border drag. The wall slides between the three views
- * ({@link PaneWallPage}), and a step inside one of them is that view's own page change. A
+ * ({@link PageKind}), and a step inside one of them is that view's own page change. A
  * {@link Position} names a page by its kind and its index within that kind.
  */
 public final class WallRow {
@@ -37,10 +38,10 @@ public final class WallRow {
 
     /** One page of the row: its kind, and which one of that kind counting from 0. */
     public static final class Position {
-        @NonNull public final PaneWallPage kind;
+        @NonNull public final PageKind kind;
         public final int index;
 
-        public Position(@NonNull PaneWallPage kind, int index) {
+        public Position(@NonNull PageKind kind, int index) {
             this.kind = kind;
             this.index = Math.max(0, index);
         }
@@ -63,18 +64,18 @@ public final class WallRow {
 
     @NonNull
     public static Position homePage(int index) {
-        return new Position(PaneWallPage.WIDGETS, index);
+        return new Position(PageKind.HOME, index);
     }
 
     @NonNull
     public static Position window(int index) {
-        return new Position(PaneWallPage.TERMINAL, index);
+        return new Position(PageKind.TERMINAL, index);
     }
 
     /** The half a kind of page belongs to: Home, or the Workspace (its windows, the display's too). */
     @NonNull
-    public static String halfOf(@NonNull PaneWallPage kind) {
-        return kind == PaneWallPage.WIDGETS ? HALF_HOME : HALF_WORKSPACE;
+    public static String halfOf(@NonNull PageKind kind) {
+        return kind == PageKind.HOME ? HALF_HOME : HALF_WORKSPACE;
     }
 
     /**
@@ -138,9 +139,9 @@ public final class WallRow {
      * The display window is one of the Workspace's windows, so Display lands there too.
      */
     @NonNull
-    public static PaneWallPage coldStart(@Nullable String startIn) {
+    public static PageKind coldStart(@Nullable String startIn) {
         return START_IN_WORKSPACE.equals(startIn) || START_IN_DISPLAY.equals(startIn)
-            ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS;
+            ? PageKind.TERMINAL : PageKind.HOME;
     }
 
     /**
@@ -152,9 +153,9 @@ public final class WallRow {
      * {@link #restore} does.
      */
     @NonNull
-    public static PaneWallPage openingKind(@Nullable String savedHalf, @Nullable String startIn) {
+    public static PageKind openingKind(@Nullable String savedHalf, @Nullable String startIn) {
         if (savedHalf == null) return coldStart(startIn);
-        return HALF_WORKSPACE.equals(savedHalf) ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS;
+        return HALF_WORKSPACE.equals(savedHalf) ? PageKind.TERMINAL : PageKind.HOME;
     }
 
     /**

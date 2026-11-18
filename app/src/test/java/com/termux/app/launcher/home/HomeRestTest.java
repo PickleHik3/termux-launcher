@@ -9,7 +9,6 @@ import com.termux.app.page.Rest;
 import com.termux.app.place.PlaceKeyboard;
 import com.termux.app.terminal.io.ExtraKeySetResolver;
 import com.termux.app.terminal.io.ExtraKeysTarget;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.PaneWallPolicy;
 import com.termux.app.wall.WallLookKinds;
 import com.termux.app.wall.WallPages;
@@ -40,16 +39,16 @@ public class HomeRestTest {
             Rest rest = HomeRest.of(in);
             String at = in.toString();
             boolean today = !in.overviewPreviewing && (in.floatAsksKeyboard
-                || PlaceKeyboard.keyboardOnEnter(PaneWallPage.WIDGETS, in.keyboardRemembered,
+                || PlaceKeyboard.keyboardOnEnter(PageKind.HOME, in.keyboardRemembered,
                     in.minimal, in.homeAlwaysOn));
             assertEquals(at, today, rest.keyboardUp);
             assertEquals(at,
-                ExtraKeySetResolver.targetFor(PaneWallPage.WIDGETS, in.floatFocused,
+                ExtraKeySetResolver.targetFor(PageKind.HOME, in.floatFocused,
                     in.floatIsDisplay),
                 ExtraKeysTarget.forPage(rest.keys));
             assertTrue(at, rest.systemIme);
             assertEquals(at, in.barShown, rest.statusBar);
-            assertEquals(at, PaneWallPolicy.showsWindowChips(PaneWallPage.WIDGETS),
+            assertEquals(at, PaneWallPolicy.showsWindowChips(PageKind.HOME),
                 rest.windowChips);
             assertEquals(at, PageKind.HOME, rest.look);
         }
@@ -57,7 +56,7 @@ public class HomeRestTest {
 
     @Test
     public void theLookIsHomes() {
-        assertEquals(LookGrid.Kind.HOME, WallLookKinds.of(WallPages.PageKind.HOME));
+        assertEquals(LookGrid.Kind.HOME, WallLookKinds.of(PageKind.HOME));
     }
 
     @Test

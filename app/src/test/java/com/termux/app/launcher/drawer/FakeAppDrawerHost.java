@@ -1,6 +1,5 @@
 package com.termux.app.launcher.drawer;
 
-import com.termux.app.wall.PaneWallPage;
 import android.content.Context;
 import android.view.View;
 import android.widget.EditText;

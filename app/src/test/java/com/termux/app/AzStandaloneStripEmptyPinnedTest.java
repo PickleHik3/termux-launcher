@@ -27,13 +27,13 @@ import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.After;
@@ -332,7 +332,7 @@ public class AzStandaloneStripEmptyPinnedTest {
         PlaceLayout layout = arrangement;
         PlaceLayoutStore store = ReflectionHelpers.callInstanceMethod(screen, "placeLayoutStore");
         assertNotNull(store);
-        for (PaneWallPage place : PaneWallPage.values())
+        for (PageKind place : PageKind.values())
             for (PlaceOrientation orientation : PlaceOrientation.values())
                 for (Element element : Element.values())
                     store.setSlot(orientation, element, layout.slot(element));

@@ -1,8 +1,8 @@
 package com.termux.app.statusbar;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -13,7 +13,7 @@ public class StatusStatsClusterPolicyTest {
 
     /** One bar across the wall (#90): the readings keep the row's end on every page. */
     @Test public void noPlaceCentresOrReverses() {
-        for (PaneWallPage page : PaneWallPage.values())
+        for (PageKind page : PageKind.values())
             assertFalse(page.name(), StatusStatsClusterPolicy.centeredReversed(page));
     }
 

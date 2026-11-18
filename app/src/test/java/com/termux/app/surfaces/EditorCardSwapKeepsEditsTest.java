@@ -11,11 +11,11 @@ import android.os.Build;
 import android.view.View;
 
 import com.termux.app.layouteditor.LayoutEditorController;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.FrostStops;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -68,16 +68,16 @@ public class EditorCardSwapKeepsEditsTest {
 
     @Test
     public void theWorkspacesGlassOutlivesASwipeToHomeAndBack() {
-        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
+        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PageKind.TERMINAL);
         moveStrip(editor, Row.FROST, 70);
         moveStrip(editor, Row.OPACITY, 65);
         assertWorkspaceKept(editor);
 
-        swipe(editor, PaneWallPage.WIDGETS);
+        swipe(editor, PageKind.HOME);
         assertEquals("the Home card followed the swipe", EditorCard.HOME, editor.shownCard());
         assertWorkspaceKept(editor);
 
-        swipe(editor, PaneWallPage.TERMINAL);
+        swipe(editor, PageKind.TERMINAL);
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
         assertWorkspaceKept(editor);
         assertEquals("Frost reads back where it was left", 75, model(editor).value(Row.FROST));
@@ -86,12 +86,12 @@ public class EditorCardSwapKeepsEditsTest {
 
     @Test
     public void bothScreensEditsAcrossSwipesAreStoredByDone() {
-        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
+        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PageKind.TERMINAL);
         moveStrip(editor, Row.FROST, 70);
         moveStrip(editor, Row.OPACITY, 65);
-        swipe(editor, PaneWallPage.WIDGETS);
+        swipe(editor, PageKind.HOME);
         moveStrip(editor, Row.OPACITY, 33);
-        swipe(editor, PaneWallPage.TERMINAL);
+        swipe(editor, PageKind.TERMINAL);
         // Home's 33 is Home pages' own cell; the Workspace keeps its 65 (overhaul §1).
         assertWorkspaceKept(editor);
         assertEquals("Home's edit is kept too", 33, kindValue(LookGrid.Property.OPACITY,
@@ -113,7 +113,7 @@ public class EditorCardSwapKeepsEditsTest {
 
     @Test
     public void collapsingToPeekKeepsTheCardAndItsEdits() {
-        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
+        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PageKind.TERMINAL);
         moveStrip(editor, Row.FROST, 70);
         moveStrip(editor, Row.OPACITY, 65);
 
@@ -124,7 +124,7 @@ public class EditorCardSwapKeepsEditsTest {
         assertEquals(EditorCardSheet.DETENT_PEEK, sheet.detent());
         assertWorkspaceKept(editor);
 
-        editor.present(EditorCard.WORKSPACE, PaneWallPage.TERMINAL, null);
+        editor.present(EditorCard.WORKSPACE, PageKind.TERMINAL, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(EditorCard.WORKSPACE, editor.shownCard());
         assertEquals("a door naming the card raises it from peek", EditorCardSheet.DETENT_HALF,
@@ -136,7 +136,7 @@ public class EditorCardSwapKeepsEditsTest {
 
     @Test
     public void thePageLabelRaisesItsCardOverTheEditsKept() {
-        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PaneWallPage.TERMINAL);
+        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PageKind.TERMINAL);
         moveStrip(editor, Row.FROST, 70);
         moveStrip(editor, Row.OPACITY, 65);
         assertTrue(editor.consumeBack());
@@ -184,7 +184,7 @@ public class EditorCardSwapKeepsEditsTest {
 
     // ------------------------------------------------------------------------------- the drive
 
-    private SurfaceEditorController open(EditorCard card, PaneWallPage place) {
+    private SurfaceEditorController open(EditorCard card, PageKind place) {
         LayoutEditorController layout = layoutEditor();
         EditorTestHarness harness = new EditorTestHarness(preferences, (method, args) -> {
             switch (method) {
@@ -211,10 +211,10 @@ public class EditorCardSwapKeepsEditsTest {
      * The editor shown {@code half}'s page by a door: the page swipe retired with the halves
      * (ADR 0015 §6), and a door naming the other page is the one path left.
      */
-    private static void swipe(SurfaceEditorController editor, PaneWallPage half) {
+    private static void swipe(SurfaceEditorController editor, PageKind half) {
         ReflectionHelpers.callInstanceMethod(editor, "showPage",
-            org.robolectric.util.ReflectionHelpers.ClassParameter.from(PaneWallPage.class,
-                half == PaneWallPage.WIDGETS ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL),
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(PageKind.class,
+                half == PageKind.HOME ? PageKind.HOME : PageKind.TERMINAL),
             org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true));
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
@@ -229,7 +229,7 @@ public class EditorCardSwapKeepsEditsTest {
                 switch (method.getName()) {
                     case "context": return context;
                     case "places": return places;
-                    case "placeOnScreen": return PaneWallPage.TERMINAL;
+                    case "placeOnScreen": return PageKind.TERMINAL;
                     case "placeOrientation": return PlaceOrientation.PORTRAIT;
                     case "extraKeySlots": return new ArrayList<>();
                     case "extraKeyCount":

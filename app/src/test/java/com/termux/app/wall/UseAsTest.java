@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorCard;
 import com.termux.app.surfaces.EditorRows;
 
@@ -39,8 +40,8 @@ public class UseAsTest {
         assertTrue(home.offersHomeStartIn());
         for (EditorCard card : EditorCard.values()) assertTrue(card.name(), home.reaches(card));
         assertSame(EditorCard.HOME, home.doorCard(EditorCard.HOME));
-        assertSame(PaneWallPage.WIDGETS, home.editorPlace(PaneWallPage.WIDGETS));
-        assertSame(PaneWallPage.WIDGETS, home.homePage());
+        assertSame(PageKind.HOME, home.editorPlace(PageKind.HOME));
+        assertSame(PageKind.HOME, home.homePage());
     }
 
     @Test public void terminalOnlyTakesHomeAway() {
@@ -48,11 +49,11 @@ public class UseAsTest {
         assertFalse(terminal.showsHomePage());
         assertFalse(terminal.showsHomeSettings());
         assertFalse(terminal.offersHomeStartIn());
-        assertSame(PaneWallPage.TERMINAL, terminal.homePage());
+        assertSame(PageKind.TERMINAL, terminal.homePage());
     }
 
     @Test public void terminalOnlyRowIsTheWorkspaceAloneWindowOrNot() {
-        assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), UseAs.TERMINAL.rowPages());
+        assertEquals(Collections.singletonList(PageKind.TERMINAL), UseAs.TERMINAL.rowPages());
         assertEquals(PaneWallPolicy.rowPages(true), UseAs.HOME.rowPages());
     }
 
@@ -89,8 +90,8 @@ public class UseAsTest {
         assertNull(terminal.doorCard(EditorCard.HOME));
         assertSame(EditorCard.WORKSPACE, terminal.doorCard(EditorCard.WORKSPACE));
         assertSame(EditorCard.APPEARANCE, terminal.doorCard(EditorCard.APPEARANCE));
-        assertNull("never stands the editor on a Home page", terminal.editorPlace(PaneWallPage.WIDGETS));
-        assertSame(PaneWallPage.TERMINAL, terminal.editorPlace(PaneWallPage.TERMINAL));
+        assertNull("never stands the editor on a Home page", terminal.editorPlace(PageKind.HOME));
+        assertSame(PageKind.TERMINAL, terminal.editorPlace(PageKind.TERMINAL));
         assertEquals("settings-home hidden by terminal -> REST", terminal.doorLine("settings-home"));
     }
 
@@ -104,9 +105,9 @@ public class UseAsTest {
     }
 
     @Test public void choosingTerminalOnlyOnHomeMovesTheWall() {
-        assertTrue(UseAs.TERMINAL.leaves(PaneWallPage.WIDGETS));
-        assertFalse(UseAs.TERMINAL.leaves(PaneWallPage.TERMINAL));
-        assertFalse(UseAs.HOME.leaves(PaneWallPage.WIDGETS));
+        assertTrue(UseAs.TERMINAL.leaves(PageKind.HOME));
+        assertFalse(UseAs.TERMINAL.leaves(PageKind.TERMINAL));
+        assertFalse(UseAs.HOME.leaves(PageKind.HOME));
         assertFalse(UseAs.TERMINAL.leaves(null));
     }
 }

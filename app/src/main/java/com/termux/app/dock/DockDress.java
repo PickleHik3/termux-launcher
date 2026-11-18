@@ -95,12 +95,12 @@ final class DockDress {
      */
     @NonNull
     com.termux.app.dock.DockGeometry.Snapshot dockSnapshot(
-            @NonNull PlaceLayout arrangement, @NonNull com.termux.app.wall.PaneWallPage rowsPage) {
+            @NonNull PlaceLayout arrangement, @NonNull com.termux.app.page.PageKind rowsPage) {
         PlaceOrientation orientation = mHost.currentPlaceOrientation();
         DisplayMetrics metrics = mHost.displayMetrics();
         return com.termux.app.dock.DockGeometry.Snapshot.builder(
-                dockHalf(com.termux.app.wall.PaneWallPage.WIDGETS, orientation, arrangement),
-                dockHalf(com.termux.app.wall.PaneWallPage.TERMINAL, orientation, arrangement))
+                dockHalf(com.termux.app.page.PageKind.HOME, orientation, arrangement),
+                dockHalf(com.termux.app.page.PageKind.TERMINAL, orientation, arrangement))
             .preferencesAvailable(mHost.hasPreferences())
             .rows(mHost.arrangedPageOf(rowsPage))
             .arrangement(arrangement)
@@ -126,7 +126,7 @@ final class DockDress {
      */
     @NonNull
     com.termux.app.dock.DockGeometry.Half dockHalf(
-            @NonNull com.termux.app.wall.PaneWallPage page, @NonNull PlaceOrientation orientation,
+            @NonNull com.termux.app.page.PageKind page, @NonNull PlaceOrientation orientation,
             @NonNull PlaceLayout fallbackLayout) {
         return dockHalf(mHost.arrangedPageOf(page), orientation, fallbackLayout);
     }
@@ -234,7 +234,7 @@ final class DockDress {
     /** The slab the dock wears on {@code page}: its Dock design's. */
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec(
-            @NonNull com.termux.app.wall.PaneWallPage page) {
+            @NonNull com.termux.app.page.PageKind page) {
         return com.termux.app.dock.DockSurfaceSpec.forStyle(wornDockDesign(page));
     }
 
@@ -244,7 +244,7 @@ final class DockDress {
      */
     @NonNull
     com.termux.app.dock.DockStyle wornDockDesign(
-            @NonNull com.termux.app.wall.PaneWallPage page) {
+            @NonNull com.termux.app.page.PageKind page) {
         ResolvedArrangement arranged = mHost.arrangementOf(page);
         return com.termux.app.dock.WornDockDesign.of(arranged.design(), arranged.layout());
     }
@@ -255,8 +255,8 @@ final class DockDress {
      * the same, as it is between Home and a window on one layout: the swipe never re-dresses the
      * dock there.
      */
-    void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
-                                                    @NonNull com.termux.app.wall.PaneWallPage to) {
+    void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.page.PageKind from,
+                                                    @NonNull com.termux.app.page.PageKind to) {
         if (!mHost.hasPreferences() || mHost.chrome() == null) return;
         // A slide in dressed the slab for this page on its first frame: it already wears it.
         boolean travelled = mHost.dockDesignTravelledTo() == to;
@@ -292,7 +292,7 @@ final class DockDress {
     /** What a dock dress reads that a commit can move, as it stands now (CommitDockDress). */
     @NonNull
     private com.termux.app.dock.CommitDockDress.Inputs commitDockDressInputs() {
-        com.termux.app.wall.PaneWallPage rowsPage = mHost.stackDressPage();
+        com.termux.app.page.PageKind rowsPage = mHost.stackDressPage();
         boolean drawerTile = mHost.hasPreferences() && mHost.arrangementOf(rowsPage).drawerTile();
         return new com.termux.app.dock.CommitDockDress.Inputs(mHost.lastWallPage(), rowsPage,
             committedDockDesign(), mHost.committedSearchField(), drawerTile, mHost.arrangementRevision(),
@@ -355,7 +355,7 @@ final class DockDress {
 
     /** The store pinned to the layout {@code page}'s dock is dressed by. */
     @Nullable
-    PlaceLayoutStore dockStoreOf(@NonNull com.termux.app.wall.PaneWallPage page) {
+    PlaceLayoutStore dockStoreOf(@NonNull com.termux.app.page.PageKind page) {
         PlaceLayoutStore store = mHost.placeLayoutStore();
         // A layout's dock is its own: each page wears its kind's layout (ADR 0020 §1).
         return store == null ? null : store.forVariant(mHost.layoutOf(page));

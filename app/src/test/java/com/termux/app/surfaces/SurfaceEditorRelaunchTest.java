@@ -1,6 +1,5 @@
 package com.termux.app.surfaces;
 
-import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -18,6 +17,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.Slot;
@@ -265,7 +265,7 @@ public class SurfaceEditorRelaunchTest {
 
     private static int stop(SurfaceEditorController editor) {
         return ReflectionHelpers.callInstanceMethod(editor, "matchingStop",
-            ReflectionHelpers.ClassParameter.from(PaneWallPage.class, PaneWallPage.TERMINAL));
+            ReflectionHelpers.ClassParameter.from(PageKind.class, PageKind.TERMINAL));
     }
 
     /** An activity with the views the editor looks for, and an editor over it. */

@@ -524,6 +524,27 @@ public class WindowSourceRulesTest {
         assertNone(problems);
     }
 
+    /**
+     * One kind enum for pages (ADR 0030 section 1): the older kind types are gone, and nothing outside
+     * {@code app/page/PageKind.java} declares an enum of the four page kinds. Storage keys
+     * ({@code LookGrid.Kind}, {@code LayoutKind}) are read from {@code PageKind}; they are not page kinds.
+     */
+    @Test
+    public void onlyPageKindNamesPageKinds() throws IOException {
+        java.util.regex.Pattern old = java.util.regex.Pattern.compile(
+            "\\bPaneWallPage\\b|\\bWallPages\\.PageKind\\b|\\bDockSpec\\.PageKind\\b"
+                + "|\\bPageSwitchModel\\.Kind\\b|\\benum\\s+(PageKind|Kind)\\s*\\{\\s*HOME\\s*,");
+        List<String> problems = new ArrayList<>();
+        for (Map.Entry<String, String> source : sources().entrySet()) {
+            if (source.getKey().equals("app/page/PageKind.java")) continue;
+            String[] lines = source.getValue().split("\n", -1);
+            for (int i = 0; i < lines.length; i++) {
+                if (old.matcher(lines[i]).find()) problems.add(source.getKey() + ":" + (i + 1) + " " + lines[i].trim());
+            }
+        }
+        assertNone(problems);
+    }
+
     @Test
     public void theNewPackagesHaveNoAllowListEntries() {
         List<String> all = new ArrayList<>();

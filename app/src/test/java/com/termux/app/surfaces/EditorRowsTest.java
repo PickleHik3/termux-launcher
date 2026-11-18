@@ -1,7 +1,7 @@
 package com.termux.app.surfaces;
 
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -143,7 +143,7 @@ public class EditorRowsTest {
             Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.WALLPAPER_DIM, Row.RIM, Row.TINT_HUE,
             Row.SECTION_LINKS, Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES, Row.LINK_SHEETS),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
-        for (PaneWallPage frame : PaneWallPage.values()) {
+        for (PageKind frame : PageKind.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
                 assertEquals(row + " with the frame on " + frame, TermuxAppSharedPreferences.PAGE_WALL,
                     EditorRows.pageFor(EditorCard.HOME, row));
@@ -268,7 +268,7 @@ public class EditorRowsTest {
         for (EditorCard card : new EditorCard[] {EditorCard.DOCK, EditorCard.STATUS,
             EditorCard.KEYBOARD}) {
             for (Row row : new Row[] {Row.OPACITY, Row.TINT, Row.FROST}) {
-                for (PaneWallPage half : PaneWallPage.values())
+                for (PageKind half : PageKind.values())
                     assertEquals(card + " " + row, TermuxAppSharedPreferences.PAGE_WALL, EditorRows.pageFor(card, row));
             }
         }
@@ -276,7 +276,7 @@ public class EditorRowsTest {
 
     @Test
     public void theTerminalShapesAndPlacesAreOneValueForTheWall() {
-        for (PaneWallPage half : PaneWallPage.values()) {
+        for (PageKind half : PageKind.values()) {
             assertEquals(TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(EditorCard.TERMINAL, Row.OPACITY));
             for (EditorCard card : EditorCard.values()) {
                 for (Row row : new Row[] {Row.CORNERS, Row.MARGIN, Row.HEIGHT,

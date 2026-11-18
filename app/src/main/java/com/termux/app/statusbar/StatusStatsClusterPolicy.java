@@ -1,8 +1,8 @@
 package com.termux.app.statusbar;
 
 import androidx.annotation.NonNull;
+import com.termux.app.page.PageKind;
 
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * The CPU/RAM/battery/weather cluster's order and centring: it keeps the row's end in its usual
@@ -21,7 +21,7 @@ public final class StatusStatsClusterPolicy {
      * wall (#90). Home's bar carries the window chips as every window's does, so its readings keep
      * the row's end and the bar stands still on the swipe.
      */
-    public static boolean centeredReversed(@NonNull PaneWallPage page) {
+    public static boolean centeredReversed(@NonNull PageKind page) {
         return false;
     }
 

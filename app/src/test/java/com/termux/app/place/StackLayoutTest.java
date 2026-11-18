@@ -279,7 +279,7 @@ public class StackLayoutTest {
         // The travel's rest reservation (CrossingController) and the pass agree, so a crossing
         // onto a Display page in overlay mode lands without a jump.
         StackLayout.RestInput in = rest(committedTo(PageRef.TERMINAL, 0f),
-            PageRef.of(com.termux.app.wall.PaneWallPage.DISPLAY));
+            PageRef.of(com.termux.app.page.PageKind.DISPLAY));
         in.keyboardOverlays = true;
         StackLayout.Input down = window(false);
         down.keyboardOverlays = true;

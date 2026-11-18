@@ -3,6 +3,7 @@ package com.termux.app.wall;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorCard;
 
 import java.util.ArrayList;
@@ -65,15 +66,15 @@ public enum UseAs {
      * Home page it does not have.
      */
     @NonNull
-    public List<PaneWallPage> rowPages() {
+    public List<PageKind> rowPages() {
         if (this == HOME) return PaneWallPolicy.rowPages(true);
-        return Collections.singletonList(PaneWallPage.TERMINAL);
+        return Collections.singletonList(PageKind.TERMINAL);
     }
 
     /** Where the home press lands, and where a page taken away hands the wall. */
     @NonNull
-    public PaneWallPage homePage() {
-        return this == HOME ? PaneWallPolicy.homePage() : PaneWallPage.TERMINAL;
+    public PageKind homePage() {
+        return this == HOME ? PaneWallPolicy.homePage() : PageKind.TERMINAL;
     }
 
     /**
@@ -120,16 +121,16 @@ public enum UseAs {
      * the editor stands on the page on screen (null) instead.
      */
     @Nullable
-    public PaneWallPage editorPlace(@Nullable PaneWallPage place) {
-        return this == TERMINAL && place == PaneWallPage.WIDGETS ? null : place;
+    public PageKind editorPlace(@Nullable PageKind place) {
+        return this == TERMINAL && place == PageKind.HOME ? null : place;
     }
 
     /**
      * Whether a switch to this mode with {@code onScreen} in front moves the wall: choosing
      * Terminal only while on the Home page goes to the Workspace.
      */
-    public boolean leaves(@Nullable PaneWallPage onScreen) {
-        return this == TERMINAL && onScreen == PaneWallPage.WIDGETS;
+    public boolean leaves(@Nullable PageKind onScreen) {
+        return this == TERMINAL && onScreen == PageKind.HOME;
     }
 
     /** The line a door to something this mode took away logs: {@code "<door> hidden by terminal -> REST"}. */

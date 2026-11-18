@@ -33,6 +33,7 @@ import com.termux.app.launcher.popup.AppMenuCard;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.layouteditor.LayoutEditorPlan;
 import com.termux.app.material.M3;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayoutStore;
@@ -43,7 +44,6 @@ import com.termux.app.surfaces.SurfaceLongPressRoute.Answer;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Box;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Target;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Zone;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 
 import java.util.ArrayList;
@@ -98,7 +98,7 @@ public final class SurfaceLongPress {
         @Nullable PlaceLayoutStore places();
 
         /** The page on screen, whose layout a Hide writes. */
-        @NonNull PaneWallPage page();
+        @NonNull PageKind page();
 
         @NonNull PlaceOrientation orientation();
 

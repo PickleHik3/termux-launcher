@@ -10,7 +10,6 @@ import androidx.preference.Preference;
 
 import com.termux.R;
 import com.termux.app.launcher.home.HomeSettings;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Home: the section for the Home half — the Appearance editor first, then every gesture, widgets

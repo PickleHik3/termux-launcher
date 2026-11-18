@@ -2,8 +2,8 @@ package com.termux.app.place.layout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.app.page.PageKind;
 
-import com.termux.app.wall.WallPages.PageKind;
 
 /**
  * The layouts a page can wear (ADR 0020 §1, ADR 0025): Home's, the Workspace's, and

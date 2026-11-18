@@ -6,8 +6,8 @@ import static org.junit.Assert.assertSame;
 import android.app.Application;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.WallPages.PageKind;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;

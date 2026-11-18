@@ -16,6 +16,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.ChromeInk;
 import com.termux.app.chrome.ChromeShade;
+import com.termux.app.page.PageKind;
 import com.termux.app.theme.TextScale;
 
 /**
@@ -44,7 +45,7 @@ public final class PageCardView extends View {
     private final RectF mRect = new RectF();
     private final Rect mBounds = new Rect();
     private final int mPageId;
-    @NonNull private final PaneWallPage mKind;
+    @NonNull private final PageKind mKind;
     @NonNull private String mName;
     @Nullable private Bitmap mPicture;
 
@@ -52,7 +53,7 @@ public final class PageCardView extends View {
      * The card still of page {@code pageId}, of {@code kind}, naming {@code name} (null: none)
      * until it has a picture.
      */
-    public PageCardView(@NonNull Context context, int pageId, @NonNull PaneWallPage kind,
+    public PageCardView(@NonNull Context context, int pageId, @NonNull PageKind kind,
                         @Nullable String name) {
         super(context);
         mPageId = pageId;
@@ -71,7 +72,7 @@ public final class PageCardView extends View {
     public int pageId() { return mPageId; }
 
     /** The page's kind, whose icon the card wears. */
-    @NonNull public PaneWallPage kind() { return mKind; }
+    @NonNull public PageKind kind() { return mKind; }
 
     /** The name the card shows. */
     @NonNull public String name() { return mName; }
@@ -163,7 +164,7 @@ public final class PageCardView extends View {
     private void drawIcon(@NonNull Canvas canvas, float cx, float cy, float size) {
         float h = size / 2f;
         switch (mKind) {
-            case WIDGETS: {
+            case HOME: {
                 // Four tiles: a grid of widgets.
                 float gap = size / 8f;
                 float tile = (size - gap) / 2f;

@@ -9,7 +9,6 @@ import com.termux.app.page.Rest;
 import com.termux.app.place.PlaceKeyboard;
 import com.termux.app.terminal.io.ExtraKeySetResolver;
 import com.termux.app.terminal.io.ExtraKeysTarget;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.WallLookKinds;
 import com.termux.app.wall.WallPages;
 import com.termux.shared.termux.settings.preferences.LookGrid;
@@ -29,12 +28,12 @@ public class AssistantRestTest {
             Rest rest = AssistantRest.of(new Rest.Inputs(remembered, minimal, alwaysOn, previewing, inApp));
             String at = "bits=" + bits;
             boolean today = !previewing
-                && PlaceKeyboard.keyboardOnEnter(PaneWallPage.ASSISTANT, remembered, minimal, alwaysOn);
+                && PlaceKeyboard.keyboardOnEnter(PageKind.ASSISTANT, remembered, minimal, alwaysOn);
             assertEquals(at, today, rest.keyboardUp);
             assertEquals(at, !inApp, rest.systemIme);
             assertEquals(at, PageKind.ASSISTANT, rest.keys);
             assertEquals(at,
-                ExtraKeySetResolver.targetFor(PaneWallPage.ASSISTANT, false, false),
+                ExtraKeySetResolver.targetFor(PageKind.ASSISTANT, false, false),
                 ExtraKeysTarget.forPage(rest.keys));
             assertTrue(at, rest.statusBar);
             assertTrue(at, rest.windowChips);
@@ -44,7 +43,7 @@ public class AssistantRestTest {
 
     @Test
     public void theLookIsTheWorkspacesTerminalKind() {
-        assertEquals(LookGrid.Kind.TERMINAL, WallLookKinds.of(WallPages.PageKind.ASSISTANT));
+        assertEquals(LookGrid.Kind.TERMINAL, WallLookKinds.of(PageKind.ASSISTANT));
         assertFalse(AssistantRest.of(new Rest.Inputs(true, false, false, false, true)).systemIme);
     }
 }

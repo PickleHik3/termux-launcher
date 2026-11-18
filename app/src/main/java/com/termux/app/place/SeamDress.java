@@ -3,9 +3,9 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.SeamTravel.DockPlan;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.Objects;
 
@@ -130,8 +130,8 @@ public final class SeamDress {
      * that reverses reads it back through the same swap.
      */
     @NonNull
-    public static PaneWallPage stackPage(@NonNull PaneWallPage committed,
-                                         @Nullable PaneWallPage other, @NonNull DockPlan plan,
+    public static PageKind stackPage(@NonNull PageKind committed,
+                                         @Nullable PageKind other, @NonNull DockPlan plan,
                                          float progress) {
         return other != null && SeamTravel.showsOtherDock(plan, progress) ? other : committed;
     }
@@ -148,42 +148,42 @@ public final class SeamDress {
      *                   page's commit dresses the status bar in its own half's look, the one
      *                   every later pass reads
      */
-    public static boolean wearsHome(@NonNull Surface surface, @NonNull PaneWallPage committed,
-                                    @NonNull PaneWallPage stackPage, boolean seamTravel) {
+    public static boolean wearsHome(@NonNull Surface surface, @NonNull PageKind committed,
+                                    @NonNull PageKind stackPage, boolean seamTravel) {
         switch (surface) {
-            case STACK: return stackPage == PaneWallPage.WIDGETS;
-            case STATUS: return !seamTravel && committed == PaneWallPage.WIDGETS;
+            case STACK: return stackPage == PageKind.HOME;
+            case STATUS: return !seamTravel && committed == PageKind.HOME;
             case FRAME:
-            default: return committed == PaneWallPage.WIDGETS;
+            default: return committed == PageKind.HOME;
         }
     }
 
     /**
      * The page whose look values {@code surface} wears on this frame (ADR 0015): the page whose
-     * dress it wears ({@link #wearsHome}), {@link PaneWallPage#WIDGETS} for Home's and
-     * {@link PaneWallPage#TERMINAL} for the Terminal's. The stack's look so changes with its
+     * dress it wears ({@link #wearsHome}), {@link PageKind#HOME} for Home's and
+     * {@link PageKind#TERMINAL} for the Terminal's. The stack's look so changes with its
      * rows, where none of it shows; the status bar wears the Terminal's through a slide and its
      * own page's at rest; the frame its committed page's.
      */
     @NonNull
-    public static PaneWallPage lookPage(@NonNull Surface surface, @NonNull PaneWallPage committed,
-                                        @NonNull PaneWallPage stackPage, boolean seamTravel) {
-        return wearsHome(surface, committed, stackPage, seamTravel) ? PaneWallPage.WIDGETS
-            : PaneWallPage.TERMINAL;
+    public static PageKind lookPage(@NonNull Surface surface, @NonNull PageKind committed,
+                                        @NonNull PageKind stackPage, boolean seamTravel) {
+        return wearsHome(surface, committed, stackPage, seamTravel) ? PageKind.HOME
+            : PageKind.TERMINAL;
     }
 
     /** The kind of screen a page is, for its look values: Home's or the Terminal's. */
     @NonNull
-    public static PaneWallPage screenOf(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL;
+    public static PageKind screenOf(@NonNull PageKind page) {
+        return page == PageKind.HOME ? PageKind.HOME : PageKind.TERMINAL;
     }
 
     /**
      * The id a page's look values are read under: the wall (Base) for Home's pages, which hold no
      * look of their own, and the Terminal page's id for any other page.
      */
-    public static int lookPageId(@NonNull PaneWallPage page, int terminalPageId) {
-        return page == PaneWallPage.WIDGETS ? TermuxAppSharedPreferences.PAGE_WALL
+    public static int lookPageId(@NonNull PageKind page, int terminalPageId) {
+        return page == PageKind.HOME ? TermuxAppSharedPreferences.PAGE_WALL
             : terminalPageId;
     }
 
@@ -195,9 +195,9 @@ public final class SeamDress {
      *
      * @param page the kind of page the surface wears ({@link #lookPage})
      */
-    public static int lookPageId(@NonNull PaneWallPage page, int homePageId, int displayPageId,
+    public static int lookPageId(@NonNull PageKind page, int homePageId, int displayPageId,
                                  int terminalPageId) {
-        if (page == PaneWallPage.WIDGETS)
+        if (page == PageKind.HOME)
             return homePageId >= 0 ? homePageId : TermuxAppSharedPreferences.PAGE_WALL;
         return displayPageId >= 0 ? displayPageId : terminalPageId;
     }

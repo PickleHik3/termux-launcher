@@ -1,9 +1,9 @@
 package com.termux.app.layouteditor;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.layout.LayoutStore;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Opens a layout session the way the Appearance editor does: its draft over the layouts first,
@@ -14,7 +14,7 @@ final class DraftedSession {
 
     private DraftedSession() {}
 
-    static LayoutEditorPlan enter(PlaceLayoutStore places, PaneWallPage place,
+    static LayoutEditorPlan enter(PlaceLayoutStore places, PageKind place,
                                   PlaceOrientation orientation) {
         LayoutStore documents = places.layouts();
         if (documents != null && !documents.isDraftOpen())

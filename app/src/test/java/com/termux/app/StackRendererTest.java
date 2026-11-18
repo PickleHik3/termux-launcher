@@ -182,20 +182,20 @@ public class StackRendererTest {
             new com.termux.app.place.PlaceChromeTravel.States() {
                 @androidx.annotation.NonNull @Override
                 public com.termux.app.place.PlaceChromeTravel.Rest restOf(
-                    @androidx.annotation.NonNull com.termux.app.wall.PaneWallPage place) {
+                    @androidx.annotation.NonNull com.termux.app.page.PageKind place) {
                     return new com.termux.app.place.PlaceChromeTravel.Rest(
-                        place == com.termux.app.wall.PaneWallPage.TERMINAL, false);
+                        place == com.termux.app.page.PageKind.TERMINAL, false);
                 }
             };
-        java.util.List<com.termux.app.wall.PaneWallPage> row = java.util.Arrays.asList(
-            com.termux.app.wall.PaneWallPage.WIDGETS, com.termux.app.wall.PaneWallPage.TERMINAL);
+        java.util.List<com.termux.app.page.PageKind> row = java.util.Arrays.asList(
+            com.termux.app.page.PageKind.HOME, com.termux.app.page.PageKind.TERMINAL);
         com.termux.app.place.StackScene.Motion motion = new com.termux.app.place.StackScene.Motion();
         float[] fractions = {0.4f, 0.8f, 1f};
         for (float fraction : fractions) {
             // Fraction 1 is the wall standing on the arriving page, an offset of a whole width.
             com.termux.app.place.PlaceChromeTravel.Frame frame =
                 com.termux.app.place.PlaceChromeTravel.at(row,
-                    com.termux.app.wall.PaneWallPage.WIDGETS, -fraction * WIDTH, WIDTH, states);
+                    com.termux.app.page.PageKind.HOME, -fraction * WIDTH, WIDTH, states);
             com.termux.app.place.StackScene.travel(false, frame.keyboardReveal,
                 frame.dockReveal, 300, 200, 120, motion);
             mRenderer.setTravel(motion.dockTravelPx, motion.keyboardSharePx, 0f);

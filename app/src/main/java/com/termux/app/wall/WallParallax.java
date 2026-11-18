@@ -1,6 +1,7 @@
 package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
+import com.termux.app.page.PageKind;
 
 /**
  * Where the wallpaper sits under the wall: the parallax's geometry, pure and tested.
@@ -64,12 +65,12 @@ public final class WallParallax {
      * and window {@code index} — the display window by its place in the row — comes after every
      * Home page. An index past its kind's end is held at the kind's last page.
      */
-    public static int rowIndex(@NonNull PaneWallPage kind, int index, int homeCount,
+    public static int rowIndex(@NonNull PageKind kind, int index, int homeCount,
                                int windowCount) {
         int homes = Math.max(1, homeCount);
         int windows = Math.max(0, windowCount);
         switch (kind) {
-            case WIDGETS:
+            case HOME:
                 return clamp(index, 0, homes - 1);
             case TERMINAL:
             default:

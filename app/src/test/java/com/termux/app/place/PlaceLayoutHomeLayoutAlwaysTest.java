@@ -11,8 +11,8 @@ import android.os.Build;
 
 import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -74,7 +74,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         // A Home layout that differs lives on as the Home page's own (version 16).
         assertFalse(upgraded.hasHomeLayout());
         assertEquals(KindFixtures.HOME_PAGE,
-            DressResolver.of(upgraded).layoutOf(PaneWallPage.WIDGETS));
+            DressResolver.of(upgraded).layoutOf(PageKind.HOME));
         assertEquals(Edge.BOTTOM, upgraded.forVariant(KindFixtures.HOME_PAGE)
             .slot(PlaceOrientation.PORTRAIT, Element.APPS).edge);
     }
@@ -85,7 +85,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         assertFalse(fresh.hasHomeLayout());
         assertEquals(PlaceLayoutStore.MIGRATION_VERSION,
             prefs.getInt(PlaceLayoutStore.KEY_MIGRATED, 0));
-        assertEquals(LayoutVariant.HOME, DressResolver.of(fresh).layoutOf(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.HOME, DressResolver.of(fresh).layoutOf(PageKind.HOME));
     }
 
     /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */

@@ -12,8 +12,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.core.graphics.ColorUtils;
 import com.termux.app.notice.TerminalDress;
+import com.termux.app.page.PageKind;
 import com.termux.app.statusbar.StatusBarLensView;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * How the help centre is dressed, and the handful of view shapes it is built from: the launcher's
@@ -36,15 +36,15 @@ final class HelpStyle {
     private final Context context;
     private final float density;
 
-    private HelpStyle(Context context, PaneWallPage place) {
+    private HelpStyle(Context context, PageKind place) {
         this.context = context;
         this.dress = TerminalDress.stored(context);
         this.accent = StatusBarLensView.accentFor(context,
-            place == null ? PaneWallPage.TERMINAL : place);
+            place == null ? PageKind.TERMINAL : place);
         this.density = context.getResources().getDisplayMetrics().density;
     }
 
-    static HelpStyle of(Context context, PaneWallPage place) {
+    static HelpStyle of(Context context, PageKind place) {
         return new HelpStyle(context, place);
     }
 

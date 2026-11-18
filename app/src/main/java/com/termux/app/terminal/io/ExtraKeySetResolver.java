@@ -3,7 +3,7 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 
@@ -61,13 +61,13 @@ public final class ExtraKeySetResolver {
      * window, else Home.
      */
     @NonNull
-    public static ExtraKeysTarget targetFor(@Nullable PaneWallPage settledPlace,
+    public static ExtraKeysTarget targetFor(@Nullable PageKind settledPlace,
                                             boolean homeFloatFocused, boolean homeFloatIsDisplay) {
         if (settledPlace == null) return ExtraKeysTarget.TERMINAL;
         switch (settledPlace) {
             case DISPLAY: return ExtraKeysTarget.DISPLAY;
             case ASSISTANT: return ExtraKeysTarget.ASSISTANT;
-            case WIDGETS:
+            case HOME:
                 if (homeFloatFocused) {
                     return homeFloatIsDisplay ? ExtraKeysTarget.DISPLAY : ExtraKeysTarget.TERMINAL;
                 }

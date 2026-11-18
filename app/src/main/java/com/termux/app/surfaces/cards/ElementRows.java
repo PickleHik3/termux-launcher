@@ -5,8 +5,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
-import com.termux.app.wall.PaneWallPage;
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.surfaces.EditorCard;
 import com.termux.app.surfaces.EditorRows.Row;
@@ -129,9 +129,9 @@ public final class ElementRows {
      * content (the Workspace's terminal, Home's widgets), which has no eye.
      */
     @NonNull
-    public static List<Item> rows(@NonNull PaneWallPage screen) {
+    public static List<Item> rows(@NonNull PageKind screen) {
         List<Item> out = new ArrayList<>(SHARED);
-        out.add(screen == PaneWallPage.WIDGETS ? Item.WIDGETS : Item.TERMINAL);
+        out.add(screen == PageKind.HOME ? Item.WIDGETS : Item.TERMINAL);
         return Collections.unmodifiableList(out);
     }
 
@@ -152,9 +152,9 @@ public final class ElementRows {
 
     /** The screen card that holds the list: Home's on Home, the Workspace's on the Workspace. */
     @Nullable
-    public static PaneWallPage screenOf(@NonNull EditorCard card) {
-        if (card == EditorCard.HOME) return PaneWallPage.WIDGETS;
-        if (card == EditorCard.WORKSPACE) return PaneWallPage.TERMINAL;
+    public static PageKind screenOf(@NonNull EditorCard card) {
+        if (card == EditorCard.HOME) return PageKind.HOME;
+        if (card == EditorCard.WORKSPACE) return PageKind.TERMINAL;
         return null;
     }
 }

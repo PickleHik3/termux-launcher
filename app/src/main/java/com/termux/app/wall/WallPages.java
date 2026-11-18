@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import com.termux.app.page.PageKind;
 
 /**
  * The wall's ordered pages and its home (ADR 0015, page list design 2026-10-27). Immutable: every
@@ -25,9 +26,6 @@ import java.util.Objects;
  * window ({@link #homeIsDisplayWindow()}); then {@link #home()} is null.
  */
 public final class WallPages {
-
-    /** What a page is. */
-    public enum PageKind { HOME, TERMINAL, DISPLAY, ASSISTANT }
 
     /** Why an edit was refused. */
     public enum Error {

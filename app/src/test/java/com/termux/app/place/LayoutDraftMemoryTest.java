@@ -9,10 +9,10 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.layout.LayoutKind;
 import com.termux.app.place.layout.LayoutStore;
 import com.termux.app.place.layout.LayoutsJson;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -57,14 +57,14 @@ public class LayoutDraftMemoryTest {
 
     @Test
     public void theKeyboardMemoryIsWrittenPastTheDraft() {
-        places.setKeyboardOpen(PaneWallPage.TERMINAL, true);
-        assertTrue(places.wasKeyboardOpen(PaneWallPage.TERMINAL));
+        places.setKeyboardOpen(PageKind.TERMINAL, true);
+        assertTrue(places.wasKeyboardOpen(PageKind.TERMINAL));
         assertFalse("no unsaved edit", documents.isDraftDirty());
         assertEquals(Boolean.TRUE, file().current().kind(LayoutKind.TERMINAL).wide()
             .get(LayoutsJson.KEYBOARD_OPEN));
         documents.discardDraft();
         assertTrue("Discard leaves it as the place left it",
-            places.wasKeyboardOpen(PaneWallPage.TERMINAL));
+            places.wasKeyboardOpen(PageKind.TERMINAL));
     }
 
     @Test

@@ -7,8 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.SuggestionBarView;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 
 /**
  * What a crossing moves ({@link Crossing}'s adapter), and the last values it wrote, so a frame that
@@ -19,10 +18,10 @@ import com.termux.app.wall.PaneWallPage;
  *
  * <p>The activity gives it what only the activity has through its {@link Host}: the window's
  * views, the travel's shares it keeps for its own layout passes, the pane and wall controllers,
- * the keyboard and the dock's row.
+ * and the keyboard.
  */
 public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
-        Crossing.Keyboard, Crossing.Dock {
+        Crossing.Keyboard {
 
     /** What only the activity can give the adapter. */
     public interface Host {
@@ -38,11 +37,7 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         /** The travel cover the pane controller holds for the window in front. */
         void coverWindowInFront(int px);
         /** The in-app keyboard brought up below the screen for {@code target}'s half, quietly. */
-        void preRollKeyboard(@NonNull PaneWallPage target);
-        /** The dock's pinned row; null before it is inflated. */
-        @Nullable SuggestionBarView dockRow();
-        /** One of the row's icons was drawn again: the reflection shows it as the icon does. */
-        void onDockRowContentChanged();
+        void preRollKeyboard(@NonNull PageKind target);
         /** The stack's one writer of transforms: the sink, the cut and the slide go through it. */
         @NonNull com.termux.app.StackRenderer stackRenderer();
     }
@@ -75,7 +70,7 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
     }
 
     @Override
-    public void preRoll(@NonNull PaneWallPage target) {
+    public void preRoll(@NonNull PageKind target) {
         mHost.preRollKeyboard(target);
     }
 
