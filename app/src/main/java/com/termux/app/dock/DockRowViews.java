@@ -79,7 +79,7 @@ public final class DockRowViews implements DockRows.Views {
                 break;
             case TICKS:
             default:
-                // The row's ticks show or hide it themselves (SuggestionBarView#publishPageIndicator).
+                // The row's ticks show or hide it themselves (SuggestionBarView#publishPageTicks).
                 break;
         }
     }

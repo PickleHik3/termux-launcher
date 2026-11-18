@@ -321,7 +321,10 @@ public class SuggestionBarRailFormTest {
         DockRailScrollView scroll = railInScroll(7, 3, true);
         SuggestionBarView rail = (SuggestionBarView) scroll.getChildAt(0);
         PageTickStripView ticks = new PageTickStripView(context);
-        rail.setPageIndicator(ticks);
+        com.termux.app.launcher.paging.PageTicksWriter writer =
+            new com.termux.app.launcher.paging.PageTicksWriter();
+        writer.bind(ticks);
+        rail.setPageTicksListener(writer::write);
 
         assertEquals("the row's two ticks", 2, ticks.getPageCount());
         assertEquals("the second the most-used page's", 1, ticks.getDynamicPageIndex());
@@ -340,7 +343,10 @@ public class SuggestionBarRailFormTest {
         DockRailScrollView scroll = railInScroll(7, 3, false);
         SuggestionBarView rail = (SuggestionBarView) scroll.getChildAt(0);
         PageTickStripView ticks = new PageTickStripView(context);
-        rail.setPageIndicator(ticks);
+        com.termux.app.launcher.paging.PageTicksWriter writer =
+            new com.termux.app.launcher.paging.PageTicksWriter();
+        writer.bind(ticks);
+        rail.setPageTicksListener(writer::write);
         assertEquals(1, ticks.getPageCount());
         assertEquals(View.INVISIBLE, ticks.getVisibility());
     }

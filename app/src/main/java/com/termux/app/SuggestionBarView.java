@@ -142,7 +142,8 @@ import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.DockPagingModel;
 import com.termux.app.dock.DockDropPolicy;
 import com.termux.app.dock.DockReorderPolicy;
-import com.termux.app.launcher.paging.PageTickStripView;
+import com.termux.app.launcher.paging.PageTicks;
+import com.termux.app.launcher.paging.PageTicksListener;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.theme.ThemeUtils;
@@ -567,8 +568,8 @@ public final class SuggestionBarView extends GridLayout
     private final int[] badgedIconLocation = new int[2];
     /** Set once a badged icon's quick reply has given its stream up to the drawer. */
     private boolean quickReplyHandedOff;
-    /** The page ticks this row carries off the dock; null while it is the dock's own row. */
-    @Nullable private PageTickStripView pageIndicator;
+    /** Whoever draws this row's page ticks; told them on every publish. */
+    @Nullable private PageTicksListener pageTicksListener;
     /**
      * How many most-used apps the column on screen holds after its last pin: what the last
      * committed render put there, so the rail's ticks follow the column as drawn rather than a
@@ -863,7 +864,7 @@ public final class SuggestionBarView extends GridLayout
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
         // A render ends in a layout pass, so this is where the ticks learn what the row now holds.
-        publishPageIndicator();
+        publishPageTicks();
     }
 
     /**
@@ -954,7 +955,7 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null && activeAzLetter == null
             && TextUtils.isEmpty(lastInput.trim()) && !drawerTileDragging) {
             reload();
-            publishPageIndicator();
+            publishPageTicks();
         }
     }
 
@@ -996,7 +997,7 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null && activeAzLetter == null
             && TextUtils.isEmpty(lastInput.trim()) && !drawerTileDragging) {
             reload();
-            publishPageIndicator();
+            publishPageTicks();
         }
     }
 
@@ -1027,7 +1028,7 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null && activeAzLetter == null
             && TextUtils.isEmpty(lastInput.trim()) && !drawerTileDragging) {
             reload();
-            publishPageIndicator();
+            publishPageTicks();
         }
     }
 
@@ -2660,7 +2661,7 @@ public final class SuggestionBarView extends GridLayout
             captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
         }
         // The matches are the row's content now, so they are what the ticks count.
-        publishPageIndicator();
+        publishPageTicks();
     }
 
     /** The letter whose first page this touch last warmed; null between touches. */
@@ -3344,7 +3345,7 @@ public final class SuggestionBarView extends GridLayout
         activeAzCandidates = new ArrayList<>();
         invalidateAzRenderState();
         reloadWithInput(lastInput, lastTerminalView);
-        publishPageIndicator();
+        publishPageTicks();
     }
 
     /**
@@ -4049,7 +4050,7 @@ public final class SuggestionBarView extends GridLayout
             invalidate();
             // No layout pass follows a render that changed nothing, and the ticks may have been
             // told something else since the column was last laid out: they hear what stands.
-            publishPageIndicator();
+            publishPageTicks();
             // The page asked for is the page already on screen, so as far as any caller keeping
             // track of what it rendered is concerned, this rendered it.
             return true;
@@ -9842,7 +9843,7 @@ public final class SuggestionBarView extends GridLayout
         setTranslationX(0f);
         setAlpha(1f);
         setRowInteractionActive(false);
-        publishPageIndicator();
+        publishPageTicks();
         invalidate();
     }
 
@@ -9914,73 +9915,65 @@ public final class SuggestionBarView extends GridLayout
         if (overflowInteractionListener != null) {
             overflowInteractionListener.onOverflowPagePositionChanged(swipePagePosition);
         }
-        publishPageIndicator();
+        publishPageTicks();
     }
 
     /**
-     * The one strip of page ticks, handed to the row by whichever host the row is standing in. The
-     * dock used to paint its own set from an FX layer over the glass while a finger owned the row,
-     * which is why a row moved off the dock showed two indicators at once and neither knew about
-     * the other; there is one now, and it travels with the row.
-     *
-     * <p>The strip being put down is reset first, so a band that is on screen but no longer bound
-     * cannot be left holding the last row's pages.
+     * Who is told the row's page ticks: the owner of the one strip, wherever the row is standing.
+     * The dock used to paint its own set from an FX layer over the glass while a finger owned the
+     * row, which is why a row moved off the dock showed two indicators at once and neither knew
+     * about the other; the row only says what the ticks are now, and the owner draws them.
+     * The listener is told the current ticks at once.
      */
-    public void setPageIndicator(@Nullable PageTickStripView indicator) {
-        if (pageIndicator == indicator) return;
-        PageTickStripView previous = pageIndicator;
-        pageIndicator = indicator;
-        if (previous != null) {
-            previous.setPages(1, 0f, -1);
-            previous.setVisibility(INVISIBLE);
-        }
-        publishPageIndicator();
-    }
-
-    /** The strip this bar is currently feeding, or null while it has none. */
-    @Nullable
-    PageTickStripView boundPageIndicator() {
-        return pageIndicator;
+    public void setPageTicksListener(@Nullable PageTicksListener listener) {
+        if (pageTicksListener == listener) return;
+        pageTicksListener = listener;
+        publishPageTicks();
     }
 
     /**
-     * Hands the strip what it draws: how many pages the bar has and where between them it stands.
-     * Cheap and idempotent — the strip invalidates only on a real change — so every path that can
-     * move the bar between pages ends here instead of each of them knowing about the strip.
+     * What the strip draws: how many pages the bar has and where between them it stands.
      *
      * <p>Whichever set of pages the bar is showing is the one the ticks count: the matches for a
      * held letter while the A–Z index has the row, the pinned apps otherwise. That is the same
      * choice the dock's FX ticks made, kept in the one place the page model already lives.
      */
-    public void publishPageIndicator() {
-        PageTickStripView indicator = pageIndicator;
-        if (indicator == null) return;
+    @NonNull
+    public PageTicks pageTicks() {
         boolean azPages = hasAzOverflowPages();
         boolean overflow = azPages || hasPinnedOverflowPages();
-        indicator.setVerticalForm(vertical);
-        indicator.setGlassInk(glassBackdrop, glassInk);
-        indicator.setAccentColor(resolvePageIndicatorAccentColor());
+        int accent = resolvePageIndicatorAccentColor();
         if (!azPages && railCarriesMostUsed()) {
             // The rail's two pages are the pins and the most-used apps after them in one column:
             // the same two ticks a row shows, the second warm, lit by the scroll, not a page turn.
-            indicator.setPages(2, railScrollPagePosition(), 1);
-            indicator.setVisibility(VISIBLE);
-            return;
+            return new PageTicks(2, railScrollPagePosition(), 1, true, vertical,
+                glassBackdrop, glassInk, accent);
         }
         int pages = azPages ? getAzVisiblePageCount()
             : (overflow ? getPinnedVisiblePageCount() : 1);
         float position = azPages ? getAzVisualPagePosition()
             : (overflow ? getPinnedVisualPagePosition() : 0f);
-        indicator.setPages(pages, position, azPages ? -1 : getPinnedDynamicPageIndex());
-        // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
-        // gained a page would otherwise grow by it and shove the terminal.
-        indicator.setVisibility(overflow ? VISIBLE : INVISIBLE);
+        // Not shown is INVISIBLE rather than GONE (the writer's): the band the ticks hold is the
+        // row's own air, and a row that gained a page would otherwise grow by it.
+        return new PageTicks(pages, position, azPages ? -1 : getPinnedDynamicPageIndex(),
+            overflow, vertical, glassBackdrop, glassInk, accent);
+    }
+
+    /**
+     * Hands the listener the ticks. Cheap and idempotent (the strip invalidates only on a real
+     * change), so every path that can move the bar between pages ends here instead of each of them
+     * knowing about the strip.
+     */
+    public void publishPageTicks() {
+        PageTicksListener listener = pageTicksListener;
+        if (listener == null) return;
+        listener.onPageTicks(pageTicks());
     }
 
     /** A rail's scroll moved its column, so the ticks move with it. */
     @Override
     public void onRailScrolled() {
-        if (vertical) publishPageIndicator();
+        if (vertical) publishPageTicks();
     }
 
     /**
@@ -10021,15 +10014,14 @@ public final class SuggestionBarView extends GridLayout
      *
      * <p>Pushed in by the activity, which is the only thing that owns a measurer, and read by the
      * two painted things the dock lends colours to rather than draws itself: the page ticks
-     * ({@link PageTickStripView}) and the drawer's A&ndash;Z rope, neither of which is a band of its
+     * (the page ticks) and the drawer's A&ndash;Z rope, neither of which is a band of its
      * own. One value for both, so the rope and the dock's own A&ndash;Z rail cannot disagree.</p>
      */
     public void setGlassInk(int surfaceColor, int inkColor) {
         if (glassBackdrop == surfaceColor && glassInk == inkColor) return;
         glassBackdrop = surfaceColor;
         glassInk = inkColor;
-        PageTickStripView indicator = pageIndicator;
-        if (indicator != null) indicator.setGlassInk(surfaceColor, inkColor);
+        publishPageTicks();
     }
 
     /** The opaque colour measured under this dock; see {@link #setGlassInk}. */
@@ -10397,7 +10389,7 @@ public final class SuggestionBarView extends GridLayout
         pageSwitchAnimating = false;
         // The reset moved the row back onto a whole page, so the ticks are told the same way every
         // other path that moves it tells them.
-        publishPageIndicator();
+        publishPageTicks();
         clearAzFocusedEntry();
         List<View> animatedViews = new ArrayList<>(launchTouchAnimators.keySet());
         for (View view : animatedViews) {

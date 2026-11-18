@@ -92,6 +92,7 @@ public class TermuxActivityPageIndicatorTest {
     /** The bar standing on {@code edge}, with the strip it was handed there. */
     private SuggestionBarView standOn(TermuxActivity activity, Edge edge) {
         SuggestionBarView bar = lendBar(activity);
+        activity.wirePageTicks();
         PlaceLayout layout = layoutWithAppsOn(edge);
         activity.applyEdgeStacks(layout);
         activity.syncPinnedAppsHost(layout);
@@ -140,7 +141,7 @@ public class TermuxActivityPageIndicatorTest {
             TermuxActivity activity = inflate();
             SuggestionBarView bar = standOn(activity, edge);
 
-            PageTickStripView bound = bar.boundPageIndicator();
+            PageTickStripView bound = activity.boundPageTickStrip();
             assertNotNull("the row is fed a strip on " + edge, bound);
             // The host the bar was lent to is inside the host the strip is a band of, so the pair
             // travels together whichever edge the walk puts them on.
@@ -163,7 +164,7 @@ public class TermuxActivityPageIndicatorTest {
         for (Edge edge : Edge.values()) {
             TermuxActivity activity = inflate();
             SuggestionBarView bar = standOn(activity, edge);
-            PageTickStripView bound = bar.boundPageIndicator();
+            PageTickStripView bound = activity.boundPageTickStrip();
             LinearLayout host = (LinearLayout) bound.getParent();
 
             int rowIndex = host.indexOfChild(bandHolding(host, bar));
@@ -195,11 +196,12 @@ public class TermuxActivityPageIndicatorTest {
         ReflectionHelpers.setField(activity, "mPreferences", preferences);
 
         SuggestionBarView bar = lendBar(activity);
+        activity.wirePageTicks();
         PlaceLayout layout = topRowUnderTheIndex();
         activity.applyEdgeStacks(layout);
         activity.syncPinnedAppsHost(layout);
 
-        PageTickStripView strip = bar.boundPageIndicator();
+        PageTickStripView strip = activity.boundPageTickStrip();
         assertNotNull(strip);
         LinearLayout host = (LinearLayout) strip.getParent();
         View row = bandHolding(host, bar);
@@ -245,7 +247,7 @@ public class TermuxActivityPageIndicatorTest {
         ReflectionHelpers.setField(activity, "mPreferences", preferences);
 
         SuggestionBarView bar = standOn(activity, Edge.TOP);
-        PageTickStripView strip = bar.boundPageIndicator();
+        PageTickStripView strip = activity.boundPageTickStrip();
         assertNotNull(strip);
         LinearLayout host = (LinearLayout) strip.getParent();
         View row = bandHolding(host, bar);
@@ -279,7 +281,8 @@ public class TermuxActivityPageIndicatorTest {
     public void thePageBeingShownIsTheAccentAndTheRestAreItMutedOnEveryEdge() {
         for (Edge edge : Edge.values()) {
             TermuxActivity activity = inflate();
-            PageTickStripView strip = standOn(activity, edge).boundPageIndicator();
+            standOn(activity, edge);
+            PageTickStripView strip = activity.boundPageTickStrip();
             assertNotNull(strip);
             strip.setAccentColor(Color.rgb(0x34, 0x5C, 0xA8));
             strip.setPages(3, 1f);

@@ -450,6 +450,18 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void theAppsRowWritesNoTickStrip() throws IOException {
+        String file = "app/SuggestionBarView.java";
+        String text = new String(Files.readAllBytes(root().resolve(file)),
+            java.nio.charset.StandardCharsets.UTF_8);
+        List<String> problems = new ArrayList<>();
+        if (text.contains("PageTickStripView")) {
+            problems.add(file + " still mentions PageTickStripView");
+        }
+        assertNone(problems);
+    }
+
+    @Test
     public void theNewPackagesHaveNoAllowListEntries() {
         List<String> all = new ArrayList<>();
         for (List<String> list : Arrays.asList(UPWARD_IMPORTS, CYCLE_PAIRS, LONGER_CYCLES,

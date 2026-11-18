@@ -212,7 +212,10 @@ public class SuggestionBarPageCommitTest {
     @Test
     public void aSettleCutShortLeavesNoHalfSlideBehind() {
         PageTickStripView ticks = new PageTickStripView(context);
-        row.setPageIndicator(ticks);
+        com.termux.app.launcher.paging.PageTicksWriter writer =
+            new com.termux.app.launcher.paging.PageTicksWriter();
+        writer.bind(ticks);
+        row.setPageTicksListener(writer::write);
         row.reload();
 
         swipeLeft();
