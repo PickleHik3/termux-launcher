@@ -457,6 +457,24 @@ public class WindowSourceRulesTest {
         assertNone(problems);
     }
 
+    /** The pages are re-read once after the wall's seams are set, not at every commit the landing hears. */
+    @Test
+    public void theLandingDoesNotReReadThePagesAtEveryCommit() throws IOException {
+        String activity = sources().get("app/TermuxActivity.java");
+        int at = activity.indexOf("setLanding(new com.termux.app.wall.WallLanding() {");
+        assertTrue("WallLanding seam not found", at >= 0);
+        int open = activity.indexOf('{', at);
+        int depth = 0;
+        int end = open;
+        for (int i = open; i < activity.length(); i++) {
+            char c = activity.charAt(i);
+            if (c == '{') depth++;
+            else if (c == '}' && --depth == 0) { end = i; break; }
+        }
+        assertTrue("the landing re-reads the pages at every commit",
+            !activity.substring(open, end).contains("refreshPages()"));
+    }
+
     @Test
     public void theBarsHaveNoWallpaperTwin() throws IOException {
         Path layout = root().resolve("../../../../main/res/layout/activity_termux.xml").normalize();

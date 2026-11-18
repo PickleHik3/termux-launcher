@@ -25469,6 +25469,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 dropTerminalDepartureSnapshot();
             }
         });
+        // The constructor's own pass ran before the Terminal seam was there: its restore is asked now.
+        mPaneWallController.refreshPages();
         mPaneWallController.setLanding(new com.termux.app.wall.WallLanding() {
             @Override public void landed(
                     @NonNull com.termux.app.page.PageKind page) {
@@ -25532,8 +25534,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         && mTermuxTerminalSessionActivityClient != null)
                         mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
                 });
-        // The constructor's own pass ran before the Terminal seam was there: its restore is asked now.
-        mPaneWallController.refreshPages();
             }
         });
         mPaneWallController.setKeyboardSwipe(new com.termux.app.wall.WallKeyboardSwipe() {
