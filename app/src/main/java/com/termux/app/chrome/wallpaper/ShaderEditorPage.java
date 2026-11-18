@@ -44,13 +44,18 @@ public final class ShaderEditorPage {
         @Nullable public final String texture;
         /** The texture the shader was saved with, to remove when it changed. */
         @Nullable public final String savedTexture;
+        /** The iChannel1 (depth) file name inside the shader's folder, or null. */
+        @Nullable public final String depth;
+        /** The depth the shader was saved with, to remove when it changed. */
+        @Nullable public final String savedDepth;
         public final boolean isNew;
         /** Opened from a bundled example: Apply saves a copy under {@link #id}, a fresh one. */
         public final boolean isExample;
 
         Draft(@NonNull String id, @NonNull String name, @NonNull String source,
               @NonNull ShaderSafety.Quality quality, int rateHz, @Nullable String texture,
-              @Nullable String savedTexture, boolean isNew, boolean isExample) {
+              @Nullable String savedTexture, @Nullable String depth, @Nullable String savedDepth,
+              boolean isNew, boolean isExample) {
             this.isExample = isExample;
             this.id = id;
             this.name = name;
@@ -59,13 +64,16 @@ public final class ShaderEditorPage {
             this.rateHz = rateHz;
             this.texture = texture;
             this.savedTexture = savedTexture;
+            this.depth = depth;
+            this.savedDepth = savedDepth;
             this.isNew = isNew;
         }
 
         /** The same draft under another name. */
         @NonNull
         Draft withName(@NonNull String other) {
-            return new Draft(id, other, source, quality, rateHz, texture, savedTexture, isNew, isExample);
+            return new Draft(id, other, source, quality, rateHz, texture, savedTexture, depth, savedDepth, isNew,
+                isExample);
         }
     }
 
@@ -120,6 +128,8 @@ public final class ShaderEditorPage {
     private int mRateValue = 30;
     @Nullable private String mTexture;
     @Nullable private String mSavedTexture;
+    @Nullable private String mDepth;
+    @Nullable private String mSavedDepth;
     /** What is saved for the open shader, and whether it is the one in use, for {@link #updateApply}. */
     @Nullable private String mSavedSource;
     @Nullable private ShaderStore.Meta mSavedMeta;
@@ -307,8 +317,8 @@ public final class ShaderEditorPage {
     @NonNull
     public Draft draft() {
         String name = ShaderEditorLogic.nameOrDefault(textOf(mName), mContext.getString(R.string.shader_default_name));
-        return new Draft(mId, name, textOf(mCode), mQualityValue, mRateValue, mTexture, mSavedTexture, mIsNew,
-            mIsExample);
+        return new Draft(mId, name, textOf(mCode), mQualityValue, mRateValue, mTexture, mSavedTexture, mDepth,
+            mSavedDepth, mIsNew, mIsExample);
     }
 
     @NonNull

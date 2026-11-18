@@ -115,10 +115,54 @@ public class ShaderEditorLogicTest {
         assertEquals(ShaderEditorLogic.Slot.EXAMPLES_HEADING, ShaderEditorLogic.listOrder(0, 1).get(0).kind);
     }
 
+    private static ShaderEditorPage.Draft withImages(String tex, String depth) {
+        return new ShaderEditorPage.Draft("id", "Aurora", "a", ShaderSafety.Quality.HALF, 30, tex, null, depth,
+            null, false, false);
+    }
+
+    private static final com.termux.app.chrome.scene.ShaderStore.Meta SAVED_IMAGES =
+        new com.termux.app.chrome.scene.ShaderStore.Meta("Aurora", ShaderSafety.Quality.HALF, 30, "p.jpg", "d.png");
+
+    @Test
+    public void canApply_unchangedImagesAreOff() {
+        assertFalse(ShaderEditorLogic.canApply(withImages("p.jpg", "d.png"), "a", SAVED_IMAGES, true));
+    }
+
+    @Test
+    public void canApply_changingOrRemovingThePhotoOrTheDepthTurnsItOn() {
+        assertTrue(ShaderEditorLogic.canApply(withImages("q.jpg", "d.png"), "a", SAVED_IMAGES, true));
+        assertTrue(ShaderEditorLogic.canApply(withImages(null, "d.png"), "a", SAVED_IMAGES, true));
+        assertTrue(ShaderEditorLogic.canApply(withImages("p.jpg", "e.png"), "a", SAVED_IMAGES, true));
+        assertTrue(ShaderEditorLogic.canApply(withImages("p.jpg", null), "a", SAVED_IMAGES, true));
+        assertTrue(ShaderEditorLogic.canApply(
+            withImages("p.jpg", com.termux.app.chrome.scene.ShaderStore.MADE_DEPTH_FILE), "a", SAVED_IMAGES, true));
+    }
+
+    @Test
+    public void canApply_applyRulesAreUnchangedForNotInUse() {
+        assertTrue(ShaderEditorLogic.canApply(withImages("p.jpg", "d.png"), "a", SAVED_IMAGES, false));
+    }
+
+    @Test
+    public void aPhotoChangeClearsAMadeDepthAndKeepsAPickedOne() {
+        assertEquals(null,
+            ShaderEditorLogic.depthAfterPhotoChange(com.termux.app.chrome.scene.ShaderStore.MADE_DEPTH_FILE));
+        assertEquals("d.png", ShaderEditorLogic.depthAfterPhotoChange("d.png"));
+        assertEquals(null, ShaderEditorLogic.depthAfterPhotoChange(null));
+    }
+
+    @Test
+    public void onlyAnUnsavedFileIsDroppedAtOnce() {
+        assertEquals("made-depth.png", ShaderEditorLogic.unsavedFileToDrop("made-depth.png", null));
+        assertEquals(null, ShaderEditorLogic.unsavedFileToDrop("made-depth.png", "made-depth.png"));
+        assertEquals(null, ShaderEditorLogic.unsavedFileToDrop(null, "d.png"));
+    }
+
     private static ShaderEditorPage.Draft draft(String src, String name, ShaderSafety.Quality q, int hz,
                                                 String tex, boolean isNew, boolean isExample) {
-        return new ShaderEditorPage.Draft("id", name, src, q, hz, tex, tex, isNew, isExample);
+        return new ShaderEditorPage.Draft("id", name, src, q, hz, tex, tex, null, null, isNew, isExample);
     }
+
 
     private static final com.termux.app.chrome.scene.ShaderStore.Meta SAVED =
         new com.termux.app.chrome.scene.ShaderStore.Meta("Aurora", ShaderSafety.Quality.HALF, 30, null, null);

@@ -763,7 +763,7 @@ public final class WallpaperLiveHost {
             return;
         }
         applyShader(new ShaderEditorPage.Draft(id, meta.name, source, meta.quality, meta.rateHz, meta.texture,
-            meta.texture, false, false), id);
+            meta.texture, meta.depth, meta.depth, false, false), id);
     }
 
     /** A tap on an example's tile: applies a copy of it, as Apply does from its editor. */
@@ -773,7 +773,7 @@ public final class WallpaperLiveHost {
         if (example == null || example.source == null) return;
         ShaderStore.Meta meta = example.meta();
         applyShader(new ShaderEditorPage.Draft(ShaderStore.newId(), meta.name, example.source, meta.quality,
-            meta.rateHz, null, null, true, true), slug);
+            meta.rateHz, null, null, null, null, true, true), slug);
     }
 
     /**
@@ -831,9 +831,12 @@ public final class WallpaperLiveHost {
         try {
             ShaderStore.writeSource(app, d.id, d.source);
             ShaderStore.writeMeta(app, d.id, new ShaderStore.Meta(d.name, d.quality, d.rateHz, d.texture,
-                ShaderStore.readMeta(app, d.id).depth));
+                d.depth));
             if (d.savedTexture != null && !d.savedTexture.equals(d.texture)) {
                 ShaderStore.removeTexture(app, d.id, d.savedTexture);
+            }
+            if (d.savedDepth != null && !d.savedDepth.equals(d.depth)) {
+                ShaderStore.removeTexture(app, d.id, d.savedDepth);
             }
             return true;
         } catch (IOException | RuntimeException e) {
