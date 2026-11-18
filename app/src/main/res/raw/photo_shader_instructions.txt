@@ -1,0 +1,30 @@
+Write one GLSL ES 3.00 fragment shader that turns the attached photo into a calm,
+continuously moving wallpaper. Return only the shader, in one code block.
+
+Contract (Shadertoy style):
+- Entry point: void mainImage(out vec4 fragColor, in vec2 fragCoord). No #version line,
+  no main(), no uniform declarations.
+- iChannel0 is the attached photo (v = 0 is its bottom row). iChannelResolution[0].xy is
+  its size. Centre-crop it to cover iResolution.xy and never stretch it. Zoom in about 4%
+  so that moving the lookup never reaches the photo's border.
+- iChannel1 is a depth map of the same photo, aligned with it (white = near, black = far),
+  or empty. It is empty when iChannelResolution[1].x == 0.0: the shader must look right
+  both ways.
+- Also available: iResolution, iTime, iMouse (pixels; z > 0 while a finger is down),
+  tlTouchAge (seconds since the finger lifted, 0 while it is down),
+  tlPageOffset (0..1 as the home screen pages slide).
+- Not available: any other texture, buffers or feedback passes, audio, cubemaps.
+
+Rules:
+- Keep the photo recognisable: move where it is sampled by a few pixels; do not redraw it.
+- Barely noticeable at rest: sway periods of 8-15 s, drift of 45-90 s, different phases
+  across the image so nothing moves in step.
+- With depth: near things move more than far ones, and the view shifts slightly with
+  tlPageOffset. Without depth: derive masks (sky, foliage, highlights) from the photo's
+  own colours.
+- A touch pushes the image near iMouse.xy and eases out over about 2 s using tlTouchAge.
+- It runs at 30 frames a second on a phone all day: at most 8 texture samples per pixel,
+  no loop longer than 4 steps, no noise function with more than 3 octaves.
+- If I paste back a compile error, fix it and return the whole shader again.
+
+Say what moves in comments at the top of the shader. Write nothing outside the code block.
