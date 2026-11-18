@@ -877,35 +877,70 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ready.run();
             return;
         }
-        final boolean[] answered = {false};
-        final ViewTreeObserver.OnGlobalLayoutListener[] listener = {null};
-        final Runnable stopListening = () -> {
-            ViewTreeObserver observer = content.getViewTreeObserver();
-            if (listener[0] != null && observer.isAlive())
-                observer.removeOnGlobalLayoutListener(listener[0]);
-            listener[0] = null;
-        };
-        listener[0] = () -> {
-            if (answered[0] || !isLaidOut(root) || !isLaidOut(content))
-                return;
-            answered[0] = true;
-            stopListening.run();
+        cancelFrameWait();
+        // The first pre-draw pass that finds both laid out answers; the backstop answers when none
+        // does. Either ends the other, and the session's end ends both.
+        final FrameWait wait = new FrameWait(content);
+        mFrameWait = wait;
+        final Runnable answerReady = () -> {
+            if (mFrameWait == wait)
+                mFrameWait = null;
             ready.run();
         };
-        content.getViewTreeObserver().addOnGlobalLayoutListener(listener[0]);
-        content.postDelayed(() -> {
-            if (answered[0])
-                return;
-            answered[0] = true;
-            stopListening.run();
+        wait.ready = answerReady;
+        wait.handle = com.termux.app.window.FirstLayout.beforeEachDrawUntil(content, () -> {
+            if (!isLaidOut(root) || !isLaidOut(content))
+                return false;
+            // Answered on the main loop, outside the draw pass.
+            wait.stopBackstop();
+            content.post(answerReady);
+            return true;
+        });
+        wait.backstop = () -> {
+            wait.handle.cancel();
+            if (mFrameWait == wait)
+                mFrameWait = null;
             if (hasSize(root) && hasSize(content))
                 ready.run();
             else
                 failed.run();
-        }, FRAME_WAIT_MS);
+        };
+        content.postDelayed(wait.backstop, FRAME_WAIT_MS);
     }
 
     private static final long FRAME_WAIT_MS = 1000L;
+
+    /** The wait {@link #awaitFrame} has open: its pre-draw watch, its answer and its backstop. */
+    private static final class FrameWait {
+        @NonNull final View view;
+        com.termux.app.window.FirstLayout.Handle handle;
+        Runnable ready;
+        Runnable backstop;
+
+        FrameWait(@NonNull View view) {
+            this.view = view;
+        }
+
+        void stopBackstop() {
+            view.removeCallbacks(backstop);
+        }
+
+        void cancel() {
+            handle.cancel();
+            view.removeCallbacks(backstop);
+            view.removeCallbacks(ready);
+        }
+    }
+
+    @Nullable private FrameWait mFrameWait;
+
+    /** Drops an open {@link #awaitFrame}: it answers neither way. */
+    private void cancelFrameWait() {
+        FrameWait wait = mFrameWait;
+        mFrameWait = null;
+        if (wait != null)
+            wait.cancel();
+    }
 
     private static boolean isLaidOut(@NonNull View view) {
         return hasSize(view) && !view.isLayoutRequested();
@@ -6036,6 +6071,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         commitThemePreview();
         mSession = false;
         mCarriedNext = null;
+        cancelFrameWait();
         mWallpaperToken++;
         mWallpaperSettled = false;
         mWallpaperWaiter = null;

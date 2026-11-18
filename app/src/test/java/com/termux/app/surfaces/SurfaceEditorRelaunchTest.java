@@ -147,6 +147,43 @@ public class SurfaceEditorRelaunchTest {
         assertEquals(0, newGlass.followed);
     }
 
+    /**
+     * The wait for the launcher's first frame is the first-layout helper's, so it goes with the
+     * session: an editor closed before the frame answers neither way.
+     */
+    @Test
+    public void aFrameWaitEndsWithTheSession() {
+        SurfaceEditorController editor = editorOnNewActivity();
+        editor.beginSession();
+        lastRoot.requestLayout();
+        int[] answers = {0, 0};
+
+        editor.awaitFrame(() -> answers[0]++, () -> answers[1]++);
+        assertEquals("a layout is still owed", 0, answers[0] + answers[1]);
+        editor.endSession();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertEquals("ready", 0, answers[0]);
+        assertEquals("failed", 0, answers[1]);
+    }
+
+    @Test
+    public void aFrameWaitAnswersOnceTheFrameIsLaidOut() {
+        SurfaceEditorController editor = editorOnNewActivity();
+        editor.beginSession();
+        lastRoot.requestLayout();
+        int[] answers = {0, 0};
+
+        editor.awaitFrame(() -> answers[0]++, () -> answers[1]++);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertEquals("ready once", 1, answers[0]);
+        assertEquals("never failed", 0, answers[1]);
+    }
+
+    /** The root the last {@link #editorOnNewActivity} built. */
+    private View lastRoot;
+
     /** One activity's repository draft, as the host adapts it. */
     private static final class FakeGlass implements SurfaceEditorController.WidgetGlassDraft {
         boolean dirty;
@@ -256,6 +293,7 @@ public class SurfaceEditorRelaunchTest {
         root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         activity.setContentView(root, new ViewGroup.LayoutParams(1080, 2000));
+        lastRoot = root;
         return new SurfaceEditorController(host(activity, themed, glass));
     }
 
