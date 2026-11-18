@@ -130,4 +130,54 @@ public class StackLandingParityTest {
                 .sameTransforms(frame(height, rest.dockTravelPx)));
         }
     }
+
+    /** The Terminal's flush padding (px) a pass stands while the keyboard is down. */
+    private static final int FLUSH_PX = 19;
+
+    /**
+     * The Terminal's pass as the activity fills it: flush absorption stood down while Home is on
+     * screen (the crossing toward the Terminal), on while the Terminal is.
+     */
+    private StackLayout.Result terminalPass(boolean up, boolean floating, boolean flushAllowed) {
+        StackLayout.Input in = f.pass(PageRef.TERMINAL, up, floating);
+        in.flush = (content, margin) -> FLUSH_PX;
+        in.flushAllowed = flushAllowed && in.flushAllowed;
+        return StackLayout.layout(in, new com.termux.app.dock.DockGeometry());
+    }
+
+    /**
+     * The Terminal's flush padding is part of its rest, not of the pass: the container is laid
+     * out as tall for a pass that stands it as for one that does not (Home on screen, a crossing
+     * toward the Terminal), so the landing, where the gate flips, writes the clip the crossing's
+     * last frame stood, Docked and Floating, the keyboard up or down at each end.
+     */
+    @Test public void theTerminalsFlushPaddingMovesNoContainerHeightAcrossALanding() {
+        for (int kept : KEPT) for (boolean floating : BOOLS) {
+            int restFlush = terminalPass(false, floating, true).flushPaddingPx;
+            for (boolean upFrom : BOOLS) for (boolean upTo : BOOLS)
+                for (boolean flushFrom : BOOLS) for (boolean flushTo : BOOLS) {
+                StackLayout.Result a = terminalPass(upFrom, floating, flushFrom);
+                StackLayout.Result b = terminalPass(upTo, floating, flushTo);
+                String at = f.name + " floating=" + floating + " kept=" + kept + " up="
+                    + upFrom + "/" + upTo + " flush=" + flushFrom + "/" + flushTo;
+                int hA = containerHeightWithFlush(a, kept, upFrom, restFlush);
+                int hB = containerHeightWithFlush(b, kept, upTo, restFlush);
+                assertEquals(at + " height", hA, hB);
+                int kbA = upFrom ? 0 : f.keyboardLaidOutPx();
+                for (float travel : new float[] {0f, kbA, kbA + kept}) {
+                    assertTrue(at + " clip travel=" + travel,
+                        frame(hA, travel).sameTransforms(frame(hB, travel)));
+                }
+            }
+        }
+    }
+
+    /** The container's height as the pass writes it, the flush slack included. */
+    private int containerHeightWithFlush(StackLayout.Result r, int kept, boolean up,
+                                         int restFlushPx) {
+        BottomInsets insets = BottomInsets.forKept(0, kept, !up, r.bottomMarginPx,
+            r.flushBottomInsetPx);
+        return StackScene.containerHeightPx(r.stackHeightPx + insets.stackExtraHeightPx,
+            up ? 0 : f.keyboardLaidOutPx(), StackLanes.flushSlackPx(restFlushPx, r.flushPaddingPx));
+    }
 }

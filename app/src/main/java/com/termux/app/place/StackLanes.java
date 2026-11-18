@@ -206,6 +206,16 @@ public final class StackLanes {
     }
 
     /**
+     * How much taller the container is laid out than a pass stands the Terminal's flush padding:
+     * the padding it rests with less the pass's own, never negative. The padding is part of the
+     * Terminal's rest, and its gate flips at the landing (Home on screen stands none), so the
+     * container is laid out for it on both sides and no landing changes its height.
+     */
+    public static int flushSlackPx(int restFlushPx, int passFlushPx) {
+        return Math.max(0, restFlushPx - Math.max(0, passFlushPx));
+    }
+
+    /**
      * How much taller the band is than the front side's rest: the other side's rows at rest less
      * the front's, never negative. The container stands this much taller and the slab starts this
      * far below its top, so what shows at rest is the front rest's stack.

@@ -228,7 +228,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
 
     /** The wall's travel: the stack drawn {@code dockPx} lower, {@code keyboardPx} of it the keyboard's. */
     public void setTravel(float dockPx, float keyboardPx, float imeLiftPx) {
-        float lift = Math.max(0f, imeLiftPx);
+        // Negative while the system keyboard rides in: the stack is drawn lower than laid out.
+        float lift = imeLiftPx;
         // A share that has not moved changes nothing the last apply did not already write; a
         // layout pass that moved the stack's bottom asks with apply() itself.
         if (mMotion.dockTravelPx == dockPx && mMotion.keyboardSharePx == keyboardPx

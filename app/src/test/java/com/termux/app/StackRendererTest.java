@@ -93,6 +93,13 @@ public class StackRendererTest {
         Counters.clear();
     }
 
+    @Test public void aNegativeImeLiftDrawsTheContainerLower() {
+        FramePipeline frames = attached();
+        mRenderer.setTravel(10f, 0f, -300f);
+        frames.flush("test");
+        assertEquals(310f, mContainer.getTranslationY(), 0f);
+    }
+
     /** The renderer on a pipeline with no window: its step runs when the table is flushed. */
     private FramePipeline attached() {
         FramePipeline frames = new FramePipeline();

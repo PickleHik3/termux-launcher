@@ -228,14 +228,8 @@ public final class CrossingController {
         /** The terminal's flush padding it last rested with. */
         int terminalRestFlushPaddingPx();
 
-        /** Whether the travel's pre-roll of the keyboard may run. */
-        boolean canPreRollTravelKeyboard();
-
         /** The content held at the room it was committed with. */
         void beginTravelHold();
-
-        /** The keyboard brought up below the screen for the frame's arriving place. */
-        void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame);
 
         /** Whether a keyboard swipe drives the travel. */
         boolean keyboardSwipeTravel();
@@ -444,19 +438,10 @@ public final class CrossingController {
         // And Lens beads only one half draws melt into the slab, or come out of it, the same way.
         syncSeamBeadMelt(seam);
         Trace.endSection();
-        Trace.beginSection("Travel.preRolls");
-        // The dock rows are always laid out by the layout on screen, the minimal one included
-        // (chromeRestOf), so only the keyboard is ever pre-rolled.
-        if (!mCrossing.keyboardPreRolled()
-            && com.termux.app.place.PlaceChromeTravel.needsKeyboardPreRoll(frame,
-                com.termux.app.place.PlaceChromeTravel.keyboardLaidOut(
-                    mHost.isInAppKeyboardShown(), mHost.keyboardDownLaidOutPx()))
-            && mHost.canPreRollTravelKeyboard()) {
-            mHost.preRollTravelKeyboard(frame);
-        }
+        // The keyboard is never pre-rolled for a crossing (ADR 0030 section 5): it stays laid out on
+        // a page that has it down, and one that is not laid out shows at the landing.
         // A crossing moves no page's room: each page's room is its own rest's (PageRoom), written
         // at rest, so nothing is given back or taken, and no pane resizes while it runs.
-        Trace.endSection();
         // Across the seam the dock's rows and the status bar are the halves' own: the stack is
         // given the other half's rows where none of them shows, and their reveal is the seam's.
         float dockReveal = syncSeamTravel(seam);

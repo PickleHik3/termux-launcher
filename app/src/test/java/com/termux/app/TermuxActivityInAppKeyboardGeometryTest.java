@@ -228,20 +228,6 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
-    public void blurredUnifiedKeyboardRevealWaitsOnlyForDestinationBackdrop() {
-        assertTrue(KeyboardGeometryChoreographer.shouldDeferReveal(
-            true, true, true, false));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
-            true, true, true, true));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
-            false, true, true, false));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
-            true, false, true, false));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
-            true, true, false, false));
-    }
-
-    @Test
     public void controllerIsCreatedLazilyWhenPreferenceBecomesEnabled() {
         TermuxAppSharedPreferences preferences = prepareActivity(false);
 

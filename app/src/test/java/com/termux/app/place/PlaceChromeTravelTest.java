@@ -181,10 +181,6 @@ public class PlaceChromeTravelTest {
         // The in-app keyboard stays laid out while it is down (D1-A): its show flag is false,
         // yet it is there for the crossing to bring up.
         assertTrue(PlaceChromeTravel.keyboardLaidOut(false, 340));
-        assertFalse(PlaceChromeTravel.needsKeyboardPreRoll(first,
-            PlaceChromeTravel.keyboardLaidOut(false, 340)));
-        assertTrue(PlaceChromeTravel.needsKeyboardPreRoll(first,
-            PlaceChromeTravel.keyboardLaidOut(false, 0)));
         assertFalse(PlaceChromeTravel.keyboardLaidOut(false, 0));
         assertTrue(PlaceChromeTravel.keyboardLaidOut(true, 0));
     }
@@ -208,20 +204,6 @@ public class PlaceChromeTravelTest {
             if (!Float.isNaN(last)) assertTrue("a step at " + px, Math.abs(t - last) < 12f);
             last = t;
         }
-    }
-
-    @Test
-    public void leavingAMinimalPlaceAsksForTheKeyboardToBePreRolled() {
-        PlaceChromeTravel.States s = states(true, true);
-        Frame atRest = at(PaneWallPage.DISPLAY, 0f, s);
-        assertFalse(PlaceChromeTravel.needsKeyboardPreRoll(atRest, false));
-        // The first pixel toward the terminal already shows some dock and some keyboard.
-        Frame first = at(PaneWallPage.DISPLAY, 4f, s);
-        assertTrue(PlaceChromeTravel.needsKeyboardPreRoll(first, false));
-        assertFalse(PlaceChromeTravel.needsKeyboardPreRoll(first, true));
-        // Pre-rolled at full height, both start all the way below the screen.
-        assertEquals(KEYBOARD + DOCK,
-            PlaceChromeTravel.stackTranslationPx(first, KEYBOARD, DOCK), 3f);
     }
 
     @Test
@@ -353,11 +335,10 @@ public class PlaceChromeTravelTest {
             assertEquals(chrome(1f - step / 10f), frame.chromeFraction, EPSILON);
             assertEquals(chrome(1f - step / 10f), frame.keyboardReveal, EPSILON);
         }
-        // The pre-roll still belongs to the first frame, before the reveal has moved.
+        // The first frame has not moved the reveal yet.
         PlaceChromeTravel.States display = states(true, true);
         Frame first = at(PaneWallPage.DISPLAY, 4f, display);
         assertEquals(0f, first.keyboardReveal, EPSILON);
-        assertTrue(PlaceChromeTravel.needsKeyboardPreRoll(first, false));
     }
 
     @Test

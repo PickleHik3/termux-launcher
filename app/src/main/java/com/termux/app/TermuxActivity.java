@@ -769,6 +769,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mKeyboardTravelSharePx;
     /** The share that the system IME's lift owns (applyDockImeOffset); the two are summed. */
     private float mDockImeLiftPx;
+    /** Who owns the system keyboard's insets and how its animation moves the stack. */
+    private final com.termux.app.place.SystemImeRide mImeRide = new com.termux.app.place.SystemImeRide();
+    private final Handler mImeRideHandler = new Handler(Looper.getMainLooper());
     /**
      * Set around a show or hide that the slide makes on its own behalf. Nobody asked for that
      * keyboard, so it is not reported as a user's intent to the display's keyboard policy, any
@@ -2176,14 +2179,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
         mTermuxActivityRootView.setOnApplyWindowInsetsListener(new TermuxActivityRootView.WindowInsetsListener());
         View content = findViewById(android.R.id.content);
+        com.termux.app.place.SystemImeAnimation.install(content, mImeRide,
+            new com.termux.app.place.SystemImeAnimation.Host() {
+                @Override public int laidForImePx() { return mLastDispatchedImeBottomPx; }
+                @Override public void writeRide(int offsetPx) { applyDockImeOffset(offsetPx); }
+                @Override public boolean suppressed() { return isSystemImeSuppressedByInAppKeyboard(); }
+            });
         content.setOnApplyWindowInsetsListener((v, insets) -> {
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
             noteRootFitBottom(insetsCompat);
             applyBottomKept(insetsCompat);
             applyAppDrawerEdgeBleed(insetsCompat);
+            mImeRide.onInsets(insetsCompat.isVisible(Type.ime()));
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
-            applyDockImeOffset(0);
             applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
             // The root consumes the insets, so the overlays after it in this frame are handed them.
@@ -7228,33 +7237,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             inAppKeyboardOnHome(), inAppKeyboardOnDisplay());
     }
 
-    /**
-     * True for every arrangement whose host crops no wallpaper: the floating keyboard, whose card
-     * is a solid panel, and the docked or split keyboard on a place it overlays, which paints one
-     * opaque fill. Nothing produces a backdrop for any of them, so nothing may wait on one.
-     */
-    private boolean paintsNoInAppKeyboardBackdrop() {
-        // The Display page's glass crops no wallpaper either: the display is its backdrop.
-        return inAppKeyboardMaterial() != KeyboardMaterialPolicy.Material.GLASS
-            || inAppKeyboardSeesThroughToDisplay();
-    }
-
-    /**
-     * Readiness of the keyboard-local (non-unified) blurred backdrop: the host draws a frame, and
-     * nothing has asked for it to be rebuilt since. Geometry no longer enters into it — the frame
-     * is sampled at the host's live position, so a host that moved is still showing the right
-     * wallpaper.
-     */
-    private boolean isInAppKeyboardLocalBackdropReady(@NonNull ChromeSpec state) {
-        // No backdrop is ever produced for these, so the reveal gate would wait for a bitmap that
-        // never arrives and hand the home screen to its 160 ms backstop on every open.
-        if (paintsNoInAppKeyboardBackdrop()) return true;
-        View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
-        if (surfaceHost == null) return true;
-        return mInAppKeyboardBackdropBitmap != null
-            && !mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
-    }
-
     private void ensureDecorNavBarSurfaceOverlay() {
         if (mDecorNavBarSurfaceOverlay != null) {
             return;
@@ -7817,17 +7799,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // between the dock/keyboard bottom and the strip. This makes them meet exactly.
         int measured = measuredUnderPillStripHeightPx();
         int targetHeight = measured > 0 ? measured : mNavBarHeight;
-        if (mKeyboardGeometry.isCloseGeometryPending()) {
-            // Closing makes the keyboard GONE before RelativeLayout has produced dock-only bounds.
-            // During that pass measuredUnderPillStripHeightPx() samples the old full-height host and
-            // misses the newly restored flush padding, exposing a sharp wallpaper seam. Oversizing
-            // the decor glass by that known inset is safe (it sits behind the dock) and keeps the
-            // seam covered until the destination layout is observed.
-            View accessoryContainer = findViewById(R.id.accessory_stack_container);
-            int pendingFlushInset = accessoryContainer != null
-                ? Math.max(0, accessoryContainer.getPaddingBottom()) : 0;
-            targetHeight = Math.max(targetHeight, mNavBarHeight + pendingFlushInset);
-        }
         return targetHeight;
     }
 
@@ -9821,10 +9792,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.beginSection("Chrome.navStrip");
             applyDecorNavBarSurfaceState(state);
             Trace.endSection();
-            Trace.beginSection("Chrome.keyboardGeometry");
-            mKeyboardGeometry.completePendingOpenReveal(state);
-            mKeyboardGeometry.completePendingCloseGeometry(state);
-            Trace.endSection();
             configureAccessoryTopEdgeFx(false, state.barAlpha);
             resetAzOverflowAffordanceState();
             if (mDock.dockPlankController() != null) {
@@ -9877,10 +9844,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAccessoryRenderEffectBackdrop(state);
         Trace.endSection();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
-        Trace.beginSection("Chrome.keyboardGeometry");
-        mKeyboardGeometry.completePendingOpenReveal(state);
-        mKeyboardGeometry.completePendingCloseGeometry(state);
-        Trace.endSection();
         updateAzOverflowAffordance();
         // The keyboard going up or down, or the dock lifting, does not always lay the dock host out
         // again, yet it decides whether the Peek card may stand: read it again before the next draw.
@@ -10020,12 +9983,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return TermuxActivity.this.buildChromeSpec();
             }
 
-            @Override public void applyChromeSpec(@NonNull ChromeSpec spec) {
-                // The gates apply against settled layout, which is what a pending accessory
-                // render was about to do after the draw: run it here instead of twice.
-                mChrome.applySettled(spec);
-            }
-
             @Override public void applyKeyboardSurfaceState(@NonNull ChromeSpec spec) {
                 applyInAppKeyboardSurfaceState(spec);
             }
@@ -10053,22 +10010,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mStackRenderer.applyAtRest();
             }
 
-            @Override public boolean keyboardGlassSurface() {
-                return isInAppKeyboardGlassSurface();
-            }
-
-            @Override public boolean keyboardBackdropReady(@NonNull ChromeSpec spec) {
-                // The unified default-dock surface waits on the shared accessory crop; a
-                // capsule/local surface waits on its own keyboard backdrop bitmap.
-                return shouldUseUnifiedDefaultKeyboardGlassSurface(spec)
-                    ? isUnifiedAccessoryBackdropReady(spec)
-                    : isInAppKeyboardLocalBackdropReady(spec);
-            }
-
-            @Override public boolean dockBackdropSafeForDestination(@NonNull ChromeSpec spec) {
-                return isDockBackdropSafeForCurrentDestination(spec);
-            }
-
             @Override public void invalidateTransitionCrops() {
                 // Geometry-dependent crops only; the shared full-frame blur is preserved.
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
@@ -10076,15 +10017,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
                 mChrome.ledger().invalidateRect(SurfaceDirtyLedger.Backdrop.ACCESSORY);
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
-            }
-
-            @Override public void invalidateCloseSettledCrops() {
-                mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP
-                    | ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
-            }
-
-            @Override public void invalidateAccessoryCrop() {
-                mChrome.requestSync(ChromeRenderer.SCOPE_DOCK_BACKDROP);
             }
 
             @Override public void onKeyboardClosed() {
@@ -10109,16 +10041,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return !isFinishing() && !isDestroyed();
             }
         });
-
-    /**
-     * Whether the dock's backdrop may keep drawing through the keyboard's close. It used to hold a
-     * crop cut for the keyboard-era height, which scaled into the dock-only bounds would have shown
-     * the wrong wallpaper for a frame; the shared frame is sampled at the view's live bounds, so
-     * whatever the dock is laid out to next, it shows the wallpaper behind it.
-     */
-    private boolean isDockBackdropSafeForCurrentDestination(@NonNull ChromeSpec state) {
-        return true;
-    }
 
     private boolean shouldUseWallpaperPassthroughMode() {
         return mPreferences != null
@@ -10697,7 +10619,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
 
     private void applyDockImeOffset(int imeLiftPx) {
-        mDockImeLiftPx = Math.max(0, imeLiftPx);
+        mDockImeLiftPx = imeLiftPx;
         applyAccessoryStackTranslation();
     }
 
@@ -10873,7 +10795,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int computeDockImeLiftPx(@NonNull WindowInsetsCompat insets) {
         // Insets can retain the previous app's mid-transition IME snapshot across a home resume.
         // Accept them only after an input flow in this activity explicitly requested the IME.
-        if (!mKeyboardGeometry.acceptsSystemImeInsets() || isSystemImeSuppressedByInAppKeyboard()) {
+        if (!mImeRide.owns() || isSystemImeSuppressedByInAppKeyboard()) {
             return 0;
         }
         View root = mTermuxActivityRootView;
@@ -10921,16 +10843,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public boolean shouldAcceptSystemImeLayout() {
-        return mKeyboardGeometry.acceptsSystemImeInsets();
+        return mImeRide.owns();
     }
 
     /** Marks subsequent IME insets as activity-owned rather than inherited from the previous app. */
     public void onSystemImeRequested() {
-        mKeyboardGeometry.onSystemImeRequested();
+        com.termux.app.window.Hold hold = mImeRide.request(android.os.SystemClock::uptimeMillis);
+        if (hold != null) {
+            mImeRide.onWaitEnded(() -> {
+                View root = mTermuxActivityRootView;
+                if (root != null) root.requestApplyInsets();
+            });
+            hold.armBackstop(mImeRideHandler);
+        }
+        mKeyboardGeometry.requestApplyInsets();
     }
 
     private void resetInheritedImeLayoutState() {
-        mKeyboardGeometry.onSystemImeReleased();
+        mImeRide.release();
         mImeLiftPx = 0;
         applyDockImeOffset(0);
     }
@@ -17543,7 +17473,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // rows reach over the front's, the slab starting that far below the container's top.
         int passRowsPx = state.toolbarShown
             ? stack.dock.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0;
-        int laneSlackPx = laneSlackPx(stackIn.dock, measuredToolbarHeightPx, passRowsPx);
+        // And at the Terminal's rest flush padding, which its gate stands only while it is on
+        // screen: the container is as tall either side of the landing.
+        int laneSlackPx = laneSlackPx(stackIn.dock, measuredToolbarHeightPx, passRowsPx)
+            + com.termux.app.place.StackLanes.flushSlackPx(mTerminalRestFlushPaddingPx,
+                stack.flushPaddingPx);
         boolean laneSlackChanged = laneSlackPx != mLaneSlackPx;
         mLaneSlackPx = laneSlackPx;
         if (laneSlackChanged) applyAccessorySurfaceBounds(state);
@@ -24175,16 +24109,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Brings the keyboard up at its full height for the rest of the slide, held below the screen
-     * by the travel's translation until the wall reveals it. It is shown the way the arriving
-     * place would show it at settle — only earlier, and quietly.
-     */
-    private void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
-        preRollTravelKeyboard(frame.toward != mLastWallPage
-            && chromeRestOf(frame.toward).keyboardReveal() > 0f ? frame.toward : frame.from);
-    }
-
-    /**
      * The same, for the keyboard of {@code target}: the place a slide is travelling toward, or the
      * place on screen for a keyboard swipe that raises it under the finger.
      */
@@ -24981,9 +24905,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int measuredExtraKeysRowPx() { return TermuxActivity.this.measuredExtraKeysRowPx(); }
         @Override public int appliedContentReservationPx() { return TermuxActivity.this.appliedContentReservationPx(); }
         @Override public int terminalRestFlushPaddingPx() { return mTerminalRestFlushPaddingPx; }
-        @Override public boolean canPreRollTravelKeyboard() { return TermuxActivity.this.canPreRollTravelKeyboard(); }
         @Override public void beginTravelHold() { TermuxActivity.this.beginTravelHold(); }
-        @Override public void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.preRollTravelKeyboard(frame); }
         @Override public boolean keyboardSwipeTravel() { return mKeyboardSwipeTravel; }
         @Override public void syncKeyboardMaterialTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.syncKeyboardMaterialTravel(frame); }
         // ---- dock ------------------------------------------------------------------
