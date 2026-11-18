@@ -36,7 +36,13 @@ import android.app.Application;
 public class PaneWallControllerTest {
 
     /** A host with a number of Home pages and windows, each with one in front. */
-    private static final class Host implements PaneWallController.Host {
+    private static final class Host implements PaneWallController.Host, WallHome {
+        @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
+        @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
+        @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
+        @Override public void bindRun(int first, int last) { }
+        @Override public int pressPage() { return homePress; }
+        @Override public float shiftFraction() { return homeShift; }
         boolean reduced = true;
         boolean hasWindow = true;
         int homePages = 3;
@@ -60,7 +66,6 @@ public class PaneWallControllerTest {
 
         @Override public boolean reducedMotion() { return reduced; }
         int homePress;
-        @Override public int homePressPage() { return homePress; }
         @Override public WallPages wallPages() { return pages; }
         @Override public void bindDisplayPage(int pageId) { boundDisplay = pageId; }
         @Override public void onDisplayPageLanded(int pageId) { landedDisplay = pageId; }
@@ -75,9 +80,6 @@ public class PaneWallControllerTest {
             windows = 1;
             current = 0;
             return true;
-        }
-        @Override public float innerShiftFraction(PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? homeShift : 0f;
         }
         @Override public boolean isPlankTiltEnabled() { return !reduced; }
         @Override public boolean hasWindow() { return hasWindow; }
@@ -125,6 +127,7 @@ public class PaneWallControllerTest {
         layout.addView(widgets);
         layout.addView(terminal);
         PaneWallController made = new PaneWallController(layout, withHost);
+        made.setHome(withHost);
         made.attachTerminalPage(terminal);
         layout.setPageView(PaneWallPage.WIDGETS, widgets);
         layout.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
@@ -580,6 +583,7 @@ public class PaneWallControllerTest {
         View terminal = new FrameLayout(activity);
         layout.addView(terminal);
         PaneWallController made = new PaneWallController(layout, withHost);
+        made.setHome(withHost);
         made.attachTerminalPage(terminal);
         made.attachWidgetsPage(LayoutInflater.from(activity));
         android.view.ViewGroup.MarginLayoutParams margins =

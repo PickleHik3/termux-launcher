@@ -24795,8 +24795,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @NonNull java.util.List<com.termux.app.wall.PaneWallPage> placesOf(@NonNull java.util.List<com.termux.app.wall.PaneWallPage> pages) { return TermuxActivity.this.placesOf(pages); }
         @Override public com.termux.app.wall.WallPages wallPages() { return TermuxActivity.this.wallPages(); }
         @Override public int homePageInFront() { return TermuxActivity.this.homePageInFront(); }
-        @Override public int homeRunFirst() { return mHomeRunFirst; }
-        @Override public int homeRunLast() { return mHomeRunLast; }
+        @Override public int homeRunFirst() { return mHomeSeam.runFirst(); }
+        @Override public int homeRunLast() { return mHomeSeam.runLast(); }
         @Override public boolean hasWidgetPaneController() { return mWidgetPaneController != null; }
         @Override public float homePageShiftFraction() { return mWidgetPaneController.homePageShiftFraction(); }
         @Override public boolean isHomePageSettling() { return mWidgetPaneController.isHomePageSettling(); }
@@ -25702,11 +25702,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public com.termux.app.wall.WallPages wallPages() {
                     return TermuxActivity.this.wallPages();
                 }
-                @Override public void bindHomeRun(int first, int last) {
-                    mHomeRunFirst = first;
-                    mHomeRunLast = last;
-                    if (mWidgetPaneController != null) mWidgetPaneController.setHomeRun(first, last);
-                }
                 @Override public void showInnerPage(@NonNull com.termux.app.wall.PaneWallPage page,
                                                     int index) {
                     showWallInnerPage(page, index);
@@ -25717,18 +25712,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onDisplayPageLanded(int pageId) {
                     onDisplayPageLandedAt(pageId);
-                }
-                // Edit pages' default page, held to the pages there are now.
-                @Override public int homePressPage() {
-                    return Math.max(0, Math.min(TermuxActivity.this.wallPages().homeIndex(),
-                        wallInnerCount(com.termux.app.wall.PaneWallPage.WIDGETS) - 1));
-                }
-                // Home's own swipe between Home pages, for the wallpaper's pan over the row.
-                @Override public float innerShiftFraction(
-                        @NonNull com.termux.app.wall.PaneWallPage page) {
-                    return page == com.termux.app.wall.PaneWallPage.WIDGETS
-                        && mWidgetPaneController != null
-                        ? mWidgetPaneController.homePageShiftFraction() : 0f;
                 }
                 @Override public void onInnerStepBegin(
                         @NonNull com.termux.app.wall.PaneWallPage page, int steps) {
@@ -25978,6 +25961,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     });
                 }
             });
+        // Before anything lands the wall: Home's pages, run and press page come from the seam.
+        mPaneWallController.setHome(mHomeSeam);
         mPaneWallController.attachTerminalPage(paneHost, (x, out) ->
             mPaneController != null && mPaneController.bottomPaneEdgeAt(x, out));
         // The Widgets page is built before the widget controller looks its grid up, so the
@@ -27906,8 +27891,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The wall's pages and its home (ADR 0015): the one source of Start in and the Home page. */
     private com.termux.app.wall.WallPagesStore mWallPagesStore;
     /** The Home run the wall bound the Home frame to (ADR 0015, A2a); -1 last for every page. */
-    private int mHomeRunFirst = 0;
-    private int mHomeRunLast = -1;
+    /** The wall's way into Home; it also keeps the Home run the wall last bound. */
+    private final com.termux.app.launcher.home.HomeWallSeam mHomeSeam =
+        new com.termux.app.launcher.home.HomeWallSeam(() -> mWidgetPaneController,
+            () -> TermuxActivity.this.wallPages());
     @Nullable private com.termux.app.wall.WallPagesStore.Listener mWallPagesListener;
     /** Prunes and drops page looks; no other work (readers build their own PageLook). */
     @Nullable private com.termux.app.look.PageLook mPageLookPruner;
@@ -31551,19 +31538,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.wall.WallRow.hasWorkspace(mTermuxService != null, rowWindowCount());
     }
 
-    /** How many Home pages or windows the wall's view of that kind holds. */
+    /** How many windows the wall's view of that kind holds; Home's pages come from {@link #mHomeSeam}. */
     private int wallInnerCount(@NonNull com.termux.app.wall.PaneWallPage page) {
-        if (page == com.termux.app.wall.PaneWallPage.WIDGETS) {
-            return mWidgetPaneController == null ? 1 : mWidgetPaneController.homePageCount();
-        }
         return rowWindowCount();
     }
 
     /** Which Home page or window is in front, the display window counted at its row place. */
     private int wallInnerIndex(@NonNull com.termux.app.wall.PaneWallPage page) {
-        if (page == com.termux.app.wall.PaneWallPage.WIDGETS) {
-            return mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
-        }
         return rowCurrentIndex();
     }
 
@@ -31572,10 +31553,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * at once and without a slide.
      */
     private void showWallInnerPage(@NonNull com.termux.app.wall.PaneWallPage page, int index) {
-        if (page == com.termux.app.wall.PaneWallPage.WIDGETS) {
-            if (mWidgetPaneController != null) mWidgetPaneController.showHomePage(index);
-            return;
-        }
         if (mPaneController == null || index == rowCurrentIndex()) return;
         int window = index;
         if (mCurrentWSession == null || window < 0 || window >= mCurrentWSession.windows.size()) {
@@ -31616,7 +31593,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetPaneController != null) {
             mWidgetPaneController.setSeam(mPaneWallController.homeSeam());
             // The Home run the wall bound before the grid existed.
-            mWidgetPaneController.setHomeRun(mHomeRunFirst, mHomeRunLast);
+            mWidgetPaneController.setHomeRun(mHomeSeam.runFirst(), mHomeSeam.runLast());
         }
         attachWidgetHintCover();
         Bundle state = mPendingWallState;
