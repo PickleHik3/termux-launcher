@@ -424,10 +424,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                         : String.valueOf(parent))
                     + " lane=" + (host.getParent() == stack ? stack.getLane(host) : -1)
                     + " vis=" + host.getVisibility() + " h=" + host.getHeight()
-                    + " child=" + (host instanceof ViewGroup && ((ViewGroup) host).getChildCount() > 0
-                        ? ((ViewGroup) host).getChildAt(0).getVisibility() + "/a"
-                            + ((ViewGroup) host).getChildAt(0).getAlpha() + "/h"
-                            + ((ViewGroup) host).getChildAt(0).getHeight() : "none")
                     + " want=" + want + " tx=" + host.getTranslationX()
                     + " ends=" + mHasEnds + " p=" + mEndsProgress);
                 if (!mHasEnds) mDiagAfter--;
