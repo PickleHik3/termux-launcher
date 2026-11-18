@@ -16,9 +16,16 @@ import java.util.function.BooleanSupplier;
  */
 public final class Pages {
 
+    /** The pages of a cell that holds several, one in front at a time: the Workspace's windows. */
+    public interface Stops {
+        /** The page in front inside the cell, or null when it holds none. */
+        @Nullable Page current();
+    }
+
     @NonNull private final PageHost mHost;
     @NonNull private final Runnable mRequestFrontStep;
     @NonNull private final Map<Integer, Page> mPages = new HashMap<>();
+    @NonNull private final Map<Integer, Stops> mStops = new HashMap<>();
     @Nullable private BooleanSupplier mHomeDefault;
 
     private int mFrontId = -1;
@@ -43,13 +50,36 @@ public final class Pages {
         mPages.put(pageId, page);
     }
 
+    /** Puts the pages of cell {@code cellId} behind {@code stops}; {@link #resolve} asks it. */
+    public void putStops(int cellId, @NonNull Stops stops) {
+        mStops.put(cellId, stops);
+    }
+
     public void remove(int pageId) {
         mPages.remove(pageId);
+        mStops.remove(pageId);
     }
 
     @Nullable
     public Page page(int pageId) {
         return mPages.get(pageId);
+    }
+
+    /** The page put under {@code id}, else the current page of the stops under it, else null. */
+    @Nullable
+    private Page resolve(int id) {
+        Page page = mPages.get(id);
+        if (page != null) return page;
+        Stops stops = mStops.get(id);
+        return stops == null ? null : stops.current();
+    }
+
+    /**
+     * The page in front inside a cell changed (a window step, a window opened or closed): asks for
+     * the front step when that made the front differ from the applied page. Does nothing otherwise.
+     */
+    public void innerChanged() {
+        if (front() != mApplied) mRequestFrontStep.run();
     }
 
     /**
@@ -61,7 +91,7 @@ public final class Pages {
         mCommittedId = pageId;
         mCommittedKind = kind;
         Page applied = mApplied;
-        if (applied != null && mPages.get(pageId) != applied) {
+        if (applied != null && resolve(pageId) != applied) {
             mApplied = null;
             applied.offFront();
         }
@@ -101,7 +131,7 @@ public final class Pages {
     /** The registered page for the recorded front, or null for a page not behind the contract. */
     @Nullable
     public Page front() {
-        return mFrontId < 0 ? null : mPages.get(mFrontId);
+        return mFrontId < 0 ? null : resolve(mFrontId);
     }
 
     /** How far the wall has moved from the front page, clamped to 0..1; 0 at rest. */

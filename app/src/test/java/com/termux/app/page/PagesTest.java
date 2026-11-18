@@ -232,4 +232,84 @@ public class PagesTest {
         pages.applyFront();
         assertEquals(List.of("ASSISTANT:off", "ASSISTANT:on"), log);
     }
+
+    /** The windows of a cell: whichever page is current is the one in front. */
+    private static final class FakeStops implements Pages.Stops {
+        Page current;
+        @Override public Page current() { return current; }
+    }
+
+    @Test
+    public void stopsResolveAsTheFront() {
+        FakePage w1 = new FakePage(PageKind.TERMINAL, log);
+        FakeStops stops = new FakeStops();
+        stops.current = w1;
+        pages.putStops(5, stops);
+        pages.landed(5, PageKind.TERMINAL);
+        assertSame(w1, pages.front());
+        stops.current = null;
+        assertNull(pages.front());
+    }
+
+    @Test
+    public void anInnerChangeAsksOnceAndTheStepRunsOffThenOn() {
+        FakePage w1 = new FakePage(PageKind.TERMINAL, log);
+        FakePage w2 = new FakePage(PageKind.TERMINAL, log);
+        FakeStops stops = new FakeStops();
+        stops.current = w1;
+        pages.putStops(5, stops);
+        pages.landed(5, PageKind.TERMINAL);
+        pages.applyFront();
+        asks = 0;
+        log.clear();
+        stops.current = w2;
+        pages.innerChanged();
+        assertEquals(1, asks);
+        pages.applyFront();
+        assertEquals(1, w1.off);
+        assertEquals(2, w2.on + w1.on);
+        assertEquals(1, w2.on);
+        assertEquals(List.of("TERMINAL:off", "TERMINAL:on"), log);
+    }
+
+    @Test
+    public void anInnerChangeWithNoNewFrontAsksNothing() {
+        FakePage w1 = new FakePage(PageKind.TERMINAL, log);
+        FakeStops stops = new FakeStops();
+        stops.current = w1;
+        pages.putStops(5, stops);
+        pages.landed(5, PageKind.TERMINAL);
+        pages.applyFront();
+        asks = 0;
+        pages.innerChanged();
+        assertEquals(0, asks);
+    }
+
+    @Test
+    public void aCommitFromTheStopsCellToHomeRunsTheCurrentWindowsOffFrontOnce() {
+        FakePage w1 = new FakePage(PageKind.TERMINAL, log);
+        FakePage home = new FakePage(PageKind.HOME, log);
+        FakeStops stops = new FakeStops();
+        stops.current = w1;
+        pages.putStops(5, stops);
+        pages.put(1, home);
+        pages.landed(5, PageKind.TERMINAL);
+        pages.applyFront();
+        pages.committed(1, PageKind.HOME);
+        assertEquals(1, w1.off);
+        pages.landed(1, PageKind.HOME);
+        pages.applyFront();
+        assertEquals(1, w1.off);
+        assertEquals(1, home.on);
+    }
+
+    @Test
+    public void removingTheCellDropsItsStops() {
+        FakeStops stops = new FakeStops();
+        stops.current = new FakePage(PageKind.TERMINAL, log);
+        pages.putStops(5, stops);
+        pages.landed(5, PageKind.TERMINAL);
+        pages.remove(5);
+        assertNull(pages.front());
+    }
 }
