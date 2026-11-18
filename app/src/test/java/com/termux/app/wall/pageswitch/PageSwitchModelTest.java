@@ -101,6 +101,19 @@ public class PageSwitchModelTest {
         assertEquals("A", cells(in).get(4).fullName);
     }
 
+    @Test public void theRowOrderIsHomeTerminalAssistantDisplay() {
+        assertEquals(java.util.Arrays.asList(PageSwitchModel.Kind.HOME,
+            PageSwitchModel.Kind.TERMINAL, PageSwitchModel.Kind.ASSISTANT,
+            PageSwitchModel.Kind.DISPLAY), PageSwitchModel.ROW);
+        assertEquals(3, PageSwitchModel.rowIndex(PageSwitchModel.Kind.DISPLAY));
+    }
+
+    @Test public void displayIsNamedFromTheDisplayKindName() {
+        Input in = wall();
+        in.kindNames = new String[] {"H", "T", "A", "Disp"};
+        assertEquals("Disp", cells(in).get(4).fullName);
+    }
+
     @Test public void theCurrentCellClosesAndTheOthersGo() {
         Input in = wall();
         PageSwitchModel m = PageSwitchModel.build(in);

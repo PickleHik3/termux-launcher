@@ -18,6 +18,15 @@ public final class PageSwitchModel {
     /** The four page kinds, in the order the row shows them. */
     public enum Kind { HOME, TERMINAL, ASSISTANT, DISPLAY }
 
+    /** The panel's row order; {@code kindNames} and the glyph row follow it. */
+    public static final List<Kind> ROW = Collections.unmodifiableList(
+        java.util.Arrays.asList(Kind.HOME, Kind.TERMINAL, Kind.ASSISTANT, Kind.DISPLAY));
+
+    /** Where a kind sits in the panel's row. */
+    public static int rowIndex(@NonNull Kind kind) {
+        return ROW.indexOf(kind);
+    }
+
     /** What releasing on a cell does. */
     public enum Action {
         /** Close the panel: the cell is where the user already is. */
@@ -93,7 +102,7 @@ public final class PageSwitchModel {
         /** The page kind the wall is on, and its page. */
         @NonNull public Kind currentKind = Kind.HOME;
         public int currentPageId = -1;
-        /** Page-kind names in {@link Kind} order. */
+        /** Page-kind names in {@link #ROW} order. */
         @NonNull public String[] kindNames = {"Home", "Terminal", "Assistant", "Display"};
     }
 
@@ -226,7 +235,7 @@ public final class PageSwitchModel {
     private static Cell cell(Input in, Kind kind, int number, @Nullable String title,
                              boolean current, Target target) {
         String shownTitle = title == null || title.isEmpty() ? null : title;
-        StringBuilder name = new StringBuilder(in.kindNames[kind.ordinal()]);
+        StringBuilder name = new StringBuilder(in.kindNames[rowIndex(kind)]);
         if (number > 0) name.append(' ').append(number);
         if (shownTitle != null) name.append(" · ").append(shownTitle);
         return new Cell(kind, number, shownTitle, name.toString(), current, target);
