@@ -76,8 +76,9 @@ public final class HomeGlass {
             surface = new Surface(kind + "@" + Integer.toHexString(System.identityHashCode(slab)),
                 priority, redress == null ? null : k -> redress.run());
             mSurfaces.put(slab, surface);
+            // Only a new slab changes what Home declares; a repeat wear only asks for the picture.
+            mRedeclare.run();
         }
-        mRedeclare.run();
         return mGlass.livePicture(surface.element,
             blurDp * slab.getResources().getDisplayMetrics().density, LivePicture.class);
     }
