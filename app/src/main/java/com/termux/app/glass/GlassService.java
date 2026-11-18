@@ -15,6 +15,9 @@ import com.termux.app.window.FramePipeline;
 import com.termux.app.window.FrameStep;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * The glass service (ADR 0029 section 1): every glass surface registers one entry
@@ -41,6 +44,18 @@ public final class GlassService {
         boolean commitLive();
     }
 
+    /**
+     * The recorder's side of a Live picture, held by the host. The picture is an Object because
+     * this package does not know the chrome's types; {@link #livePicture} casts it back.
+     */
+    public interface LiveSource {
+        /** The Live picture of {@code surface} at {@code radiusPx} and the budget's {@code priority}; null for none. */
+        @Nullable Object attach(@NonNull View surface, float radiusPx, int priority);
+
+        /** Lets go of the picture {@code surface} holds. */
+        void detach(@NonNull View surface);
+    }
+
     /** Re-dresses in one commit at most this many times the entries there are, then stops. */
     private static final int REDRESS_ROUNDS = 4;
 
@@ -49,6 +64,9 @@ public final class GlassService {
     @NonNull private final HashMap<String, Redress> mRedress = new HashMap<>();
     @Nullable private final FramePipeline mFrames;
     @Nullable private LiveCore mCore;
+    @Nullable private LiveSource mLiveSource;
+    /** Owner to the elements it registered through {@link #declare}. */
+    @NonNull private final HashMap<String, Set<String>> mDeclared = new HashMap<>();
     private int mPolicyEvents;
     @Nullable private BroadcastReceiver mPowerSave;
     private boolean mLiveHeld;
@@ -82,6 +100,64 @@ public final class GlassService {
 
     public void setLiveCore(@Nullable LiveCore core) {
         mCore = core;
+    }
+
+    public void setLiveSource(@Nullable LiveSource source) {
+        mLiveSource = source;
+    }
+
+    /**
+     * {@code element}'s Live picture at {@code radiusPx}, as a {@code type}: null when it has no
+     * entry, when its granted kind is not Live (a picture it held is let go), when no source is
+     * set, or when the source's picture is not a {@code type}.
+     */
+    @Nullable
+    public <P> P livePicture(@NonNull String element, float radiusPx, @NonNull Class<P> type) {
+        GlassEntry entry = mRegistry.entry(element);
+        if (entry == null) return null;
+        LiveSource source = mLiveSource;
+        if (mRegistry.granted(element) != GlassKind.LIVE) {
+            if (source != null) source.detach(entry.view);
+            return null;
+        }
+        if (source == null) return null;
+        Object picture = source.attach(entry.view, radiusPx, entry.priority);
+        return type.isInstance(picture) ? type.cast(picture) : null;
+    }
+
+    /**
+     * Makes {@code entries} the whole set {@code owner} has registered: new ones register (and,
+     * with {@code redressNew}, are told their kind through their redress), the ones declared again
+     * only take the redress, the ones left out are let go. An entry refused as a twin is not the
+     * owner's, so letting go never takes another view's element.
+     */
+    public void declare(@NonNull String owner, @NonNull List<GlassEntry> entries,
+                        boolean redressNew) {
+        Set<String> old = mDeclared.get(owner);
+        Set<String> now = new HashSet<>();
+        for (int i = 0; i < entries.size(); i++) {
+            GlassEntry entry = entries.get(i);
+            boolean known = old != null && old.contains(entry.element);
+            GlassKind kind = register(entry, entry.redress);
+            if (kind == null) continue;
+            now.add(entry.element);
+            if (!known && redressNew && entry.redress != null) entry.redress.onGranted(kind);
+        }
+        if (old != null) {
+            for (String element : old) {
+                if (now.contains(element)) continue;
+                GlassEntry held = mRegistry.entry(element);
+                if (held != null && mLiveSource != null) mLiveSource.detach(held.view);
+                unregister(element);
+            }
+        }
+        if (now.isEmpty()) mDeclared.remove(owner);
+        else mDeclared.put(owner, now);
+    }
+
+    /** Lets go of everything {@code owner} declared. */
+    public void undeclare(@NonNull String owner) {
+        declare(owner, java.util.Collections.emptyList(), false);
     }
 
     /** The Live core took its first picture or let go of its last: the commit runs on every drawn frame while one is held. */

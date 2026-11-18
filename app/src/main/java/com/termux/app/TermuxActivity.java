@@ -2130,6 +2130,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mFrames.bind(com.termux.app.window.FrameStep.GEOMETRY, mGeometryHost::runBookedFrame);
         mPages.setHomeDefault(() -> mPaneWallController != null
             && mPaneWallController.goToHomePageOne(isVisible()));
+        // The pages' glass lives in the glass service as long as the pages are registered, and
+        // its Live pictures come from the recorder, made on the first ask.
+        mPages.setGlass(mGlass);
+        mGlass.setLiveSource(new com.termux.app.glass.GlassService.LiveSource() {
+            @Nullable @Override
+            public Object attach(@NonNull View surface, float radiusPx, int priority) {
+                com.termux.app.chrome.LiveBackdrop recorder = liveBackdrop();
+                if (recorder == null) return null;
+                com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
+                recorder.setStoredBake(cache.bakedVibrancy(), cache.bakedFrameTint());
+                int rank = priority == com.termux.app.glass.GlassEntry.PRIORITY_WIDGET
+                    ? com.termux.app.chrome.LiveBackdrop.RANK_WIDGET
+                    : priority == com.termux.app.glass.GlassEntry.PRIORITY_FLOAT
+                    ? com.termux.app.chrome.LiveBackdrop.RANK_FLOAT
+                    : com.termux.app.chrome.LiveBackdrop.RANK_CHROME;
+                return recorder.attach(surface, radiusPx, rank);
+            }
+
+            @Override
+            public void detach(@NonNull View surface) {
+                if (mLiveBackdrop != null) mLiveBackdrop.detach(surface);
+            }
+        });
         // The bottom stack's writer is a step of the frame table, on the pipeline's guards.
         mStackRenderer.attach(mFrames);
         // The top stack's writer joins it: the bar's ride, the strip and the chips' slide.

@@ -3,7 +3,13 @@ package com.termux.app.page;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.glass.GlassEntry;
+import com.termux.app.glass.GlassService;
+
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
 
@@ -27,6 +33,8 @@ public final class Pages {
     @NonNull private final Map<Integer, Page> mPages = new HashMap<>();
     @NonNull private final Map<Integer, Stops> mStops = new HashMap<>();
     @Nullable private BooleanSupplier mHomeDefault;
+    @Nullable private GlassService mGlass;
+    private static final String GLASS_OWNER = "pages";
 
     private int mFrontId = -1;
     @Nullable private PageKind mFrontKind;
@@ -48,6 +56,7 @@ public final class Pages {
 
     public void put(int pageId, @NonNull Page page) {
         mPages.put(pageId, page);
+        declareGlass(true);
     }
 
     /** Puts the pages of cell {@code cellId} behind {@code stops}; {@link #resolve} asks it. */
@@ -58,6 +67,40 @@ public final class Pages {
     public void remove(int pageId) {
         mPages.remove(pageId);
         mStops.remove(pageId);
+        declareGlass(true);
+    }
+
+    /** The glass service the pages' entries register with; null lets them all go. */
+    public void setGlass(@Nullable GlassService glass) {
+        if (mGlass != null && mGlass != glass) mGlass.undeclare(GLASS_OWNER);
+        mGlass = glass;
+        declareGlass(false);
+    }
+
+    /**
+     * Declares the glass of every registered page and of each cell's current page: it lives as
+     * long as the page is registered, not as long as it is in front. Several Home pages share one
+     * view and declare the same entries, so the first of an element wins.
+     */
+    public void declareGlass() {
+        declareGlass(false);
+    }
+
+    private void declareGlass(boolean redressNew) {
+        GlassService glass = mGlass;
+        if (glass == null) return;
+        List<GlassEntry> all = new ArrayList<>();
+        for (Page page : mPages.values()) page.declareGlass(all);
+        for (Stops stops : mStops.values()) {
+            Page page = stops.current();
+            if (page != null) page.declareGlass(all);
+        }
+        HashSet<String> seen = new HashSet<>();
+        List<GlassEntry> list = new ArrayList<>(all.size());
+        for (int i = 0; i < all.size(); i++) {
+            if (seen.add(all.get(i).element)) list.add(all.get(i));
+        }
+        glass.declare(GLASS_OWNER, list, redressNew);
     }
 
     @Nullable

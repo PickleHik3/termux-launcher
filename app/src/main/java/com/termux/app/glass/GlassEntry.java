@@ -44,6 +44,11 @@ public final class GlassEntry {
     @NonNull public final WindowLayer layer;
     /** Asked on every drawn frame; null for a surface the service need not visit each frame. */
     @Nullable public final Frame frame;
+    /**
+     * Told its kind when a policy event moves it, and, for a declared entry, when it is newly
+     * registered ({@link GlassService#declare}); null for a surface that dresses itself.
+     */
+    @Nullable public final GlassService.Redress redress;
 
     public GlassEntry(@NonNull String element, @NonNull View view, @NonNull GlassKind wants,
                       int priority) {
@@ -52,11 +57,18 @@ public final class GlassEntry {
 
     public GlassEntry(@NonNull String element, @NonNull View view, @NonNull GlassKind wants,
                       int priority, @NonNull WindowLayer layer, @Nullable Frame frame) {
+        this(element, view, wants, priority, layer, frame, null);
+    }
+
+    public GlassEntry(@NonNull String element, @NonNull View view, @NonNull GlassKind wants,
+                      int priority, @NonNull WindowLayer layer, @Nullable Frame frame,
+                      @Nullable GlassService.Redress redress) {
         this.element = element;
         this.view = view;
         this.wants = wants;
         this.priority = Math.max(PRIORITY_DOCK, Math.min(PRIORITY_WIDGET, priority));
         this.layer = layer;
         this.frame = frame;
+        this.redress = redress;
     }
 }
