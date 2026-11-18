@@ -832,12 +832,14 @@ public final class SeamCrossing {
 
     /**
      * Whether the status bar wears the other half's dress on this frame, the {@code seamTravel}
-     * the bar's dress reads ({@link SeamDress#wearsHome}): the Workspace's while the wall slides
-     * across the seam ({@link #sliding}), never on a slide between two Home pages, where the bar
-     * is Home's on both ends.
+     * the bar's dress reads ({@link SeamDress#wearsHome}): the Workspace's while a bar that rides
+     * with its page slides across the seam ({@link #sliding}). Never on a slide between two Home
+     * pages, where the bar is Home's on both ends, and never for a bar both ends stand alike
+     * ({@link #barStill}): that one stays put in the committed page's look and its glass blends
+     * with the wall.
      */
     public boolean barDressedAcross() {
-        return sliding() && !mRun.oneKind;
+        return sliding() && !mRun.oneKind && !mRun.barStill;
     }
 
     /**

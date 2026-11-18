@@ -1265,12 +1265,53 @@ public class SeamCrossingTest {
         }
     }
 
-    /** Across the seam the bar's dress reads as it did: the Workspace's while the wall slides. */
+    /** A bar both ends stand alike stays put and keeps the committed page's look through the slide. */
     @Test
-    public void acrossTheSeamTheBarIsDressedAcrossWhileTheWallSlides() {
-        Drive drive = oneLayout(PaneWallPage.WIDGETS).slow(0f, 0.6f);
+    public void aStillBarIsNotDressedAcrossWhileTheWallSlides() {
+        for (PaneWallPage from : new PaneWallPage[] {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL}) {
+            Drive drive = oneLayout(from).slow(0f, 0.6f);
+            assertTrue(drive.crossing.sliding());
+            assertTrue(drive.crossing.barStill());
+            assertFalse(drive.crossing.barDressedAcross());
+            assertFalse(drive.crossing.oneKind());
+        }
+    }
+
+    /** A bar only the Workspace shows rides with its page, dressed for the Workspace's look. */
+    @Test
+    public void aRidingBarIsDressedAcrossWhileTheWallSlides() {
+        Drive drive = drive(new Stored(), PaneWallPage.WIDGETS, homeWithoutBar(), false,
+            PaneWallPage.TERMINAL, window(), false, false).slow(0f, 0.6f);
         assertTrue(drive.crossing.sliding());
-        assertEquals(drive.crossing.sliding(), drive.crossing.barDressedAcross());
+        assertFalse(drive.crossing.barStill());
+        assertTrue(drive.crossing.barDressedAcross());
         assertFalse(drive.crossing.oneKind());
+    }
+
+    /** The riding bar wears the Workspace's look: the other end from Home, the committed one from it. */
+    @Test
+    public void theRidingBarWearsTheOtherEndOnlyWhenThatIsTheWorkspace() {
+        Drive fromHome = drive(new Stored(), PaneWallPage.WIDGETS, homeWithoutBar(), false,
+            PaneWallPage.TERMINAL, window(), false, false).slow(0f, 0.6f);
+        assertTrue(fromHome.crossing.barRideWearsOther());
+        Drive toHome = drive(new Stored(), PaneWallPage.TERMINAL, window(), false,
+            PaneWallPage.WIDGETS, homeWithoutBar(), false, false).slow(0f, 0.6f);
+        assertFalse(toHome.crossing.barStill());
+        assertFalse(toHome.crossing.barRideWearsOther());
+    }
+
+    /** Between two Home pages the page that wears the bar is the one it wears. */
+    @Test
+    public void betweenHomePagesTheRidingBarWearsThePageThatWearsIt() {
+        Stored stored = new Stored();
+        SeamCrossing toward = new SeamCrossing();
+        toward.begin(homePage(stored, HOME_2, homeWithoutBar()), homePage(stored, HOME_3, home()),
+            SeamCrossing.Stage.of(false, () -> false, true));
+        assertTrue(toward.barRideWearsOther());
+        SeamCrossing away = new SeamCrossing();
+        away.begin(homePage(stored, HOME_3, home()), homePage(stored, HOME_2, homeWithoutBar()),
+            SeamCrossing.Stage.of(false, () -> false, true));
+        assertFalse(away.barRideWearsOther());
+        assertFalse(new SeamCrossing().barRideWearsOther());
     }
 }
