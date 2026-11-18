@@ -61,6 +61,10 @@ public final class FramePipeline {
     private int mDirty;
     /** Steps asked for the next frame after the current one ({@link #requestNextFrame}). */
     private int mNextDirty;
+    /** Pre-draw hooks run so far; a next-frame step waits until one runs after its request. */
+    private int mPreDraws;
+    /** {@link #mPreDraws} when the waiting next-frame steps were asked for. */
+    private int mNextAskedAt;
     /** Steps run on every drawn frame without asking for one ({@link #arm}). */
     private int mArmed;
     /** The steps that run only in the pre-draw hook ({@link FrameStep#drawStep}). */
@@ -175,6 +179,7 @@ public final class FramePipeline {
     public void requestNextFrame(@NonNull FrameStep step) {
         if (mDestroyed) return;
         mNextDirty |= 1 << step.ordinal();
+        mNextAskedAt = mPreDraws;
         bookFrame();
     }
 
@@ -340,10 +345,15 @@ public final class FramePipeline {
         mAnimationBooked = false;
         mPostBooked = false;
         if (mDestroyed) return;
-        mDirty |= mNextDirty;
-        mNextDirty = 0;
         View root = mRoot;
         boolean framed = root != null && root.isAttachedToWindow();
+        // A pass in the same frame's animation phase as the ask is still that frame: the step
+        // waits for a pass after the frame has drawn.
+        boolean nextDue = !framed || mPreDraws != mNextAskedAt;
+        if (nextDue) {
+            mDirty |= mNextDirty;
+            mNextDirty = 0;
+        }
         // Stepped holds tick on real frames only: a post without a window would spin.
         if (framed && !mSteppedHolds.isEmpty()) stepHolds();
         if (mDirty != 0 && !mDestroyed) {
@@ -352,6 +362,11 @@ public final class FramePipeline {
             mAfterPass = framed;
             // A draw step waits for the pre-draw hook: make sure this frame draws.
             if (framed && (mDirty & DRAW_STEPS) != 0 && !mDestroyed) root.invalidate();
+        }
+        if (mNextDirty != 0 && !mDestroyed) {
+            // Still waiting on this frame: it is made to draw, so the wait ends on the next pass.
+            if (framed && !nextDue) root.invalidate();
+            bookFrame();
         }
         if (!mSteppedHolds.isEmpty()) bookHoldFrame();
     }
@@ -390,6 +405,7 @@ public final class FramePipeline {
     private boolean onPreDraw() {
         View root = mRoot;
         if (mDestroyed || root == null) return true;
+        mPreDraws++;
         mAfterPass = false;
         if (mFirstFrameDrawn) {
             mDirty |= mArmed;
