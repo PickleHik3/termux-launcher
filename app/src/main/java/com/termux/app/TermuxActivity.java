@@ -1028,17 +1028,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mixKey(key, paneHost == null ? -1 : paneHost.getHeight());
     }
 
+    /** Longest the return hold waits for the pane host's layout before it is decided anyway. */
+    private static final long RETURN_WAIT_BACKSTOP_MS = 160L;
+
     /** One wait for the pane host's next layout, then the return hold is decided. */
     private void armReturnWait() {
         if (!mReturnHoldOpen || mIsInvalidState) return;
         cancelReturnWait();
         View paneHost = findViewById(R.id.terminal_pane_host);
         if (paneHost == null) {
-            finishReturnHold();
+            finishReturnHold(false);
             return;
         }
-        mReturnWait = com.termux.app.window.FirstLayout.afterNextLayout(paneHost, 160L,
-            this::finishReturnHold);
+        mReturnWait = com.termux.app.window.FirstLayout.afterNextLayout(paneHost,
+            RETURN_WAIT_BACKSTOP_MS, this::finishReturnHold);
     }
 
     private void cancelReturnWait() {
@@ -1047,7 +1050,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** Gives the panes' lease back: no size at all when the rest and the room are unchanged. */
-    private void finishReturnHold() {
+    private void finishReturnHold(boolean byBackstop) {
         mReturnWait = null;
         if (!mReturnHoldOpen) return;
         mReturnHoldOpen = false;
@@ -1056,7 +1059,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long room = returnRoomKey();
         boolean keep = mResumeRest.decide(rest, room) == ResumeRest.Decision.KEEP;
         android.util.Log.d(TerminalView.GEOMETRY_LOG_TAG, "return rest "
-            + (keep ? "unchanged" : "changed") + " reason=" + mResumeRest.reason(rest, room));
+            + (keep ? "unchanged" : "changed") + " reason=" + mResumeRest.reason(rest, room)
+            + " release=" + (byBackstop ? "backstop" : "signal"));
         mResumeRest.clear();
         mPaneController.finishReturnHold(!keep);
     }
