@@ -1681,7 +1681,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.glass.GlassService(mFrames);
 
     /** What a page asks of this window (ADR 0030): a field took or lost focus. */
-    private final com.termux.app.page.PageHost mPageHost = (page, focused) -> onPageFieldFocus(focused);
+    private final com.termux.app.page.PageHost mPageHost = new com.termux.app.page.PageHost() {
+        @Override public void fieldFocusChanged(
+                @NonNull com.termux.app.page.Page page, boolean focused) {
+            onPageFieldFocus(focused);
+        }
+        @Override public boolean lowerKeyboard() {
+            if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return false;
+            mInAppKeyboard.hide(
+                com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.USER_EVENT);
+            return true;
+        }
+    };
 
     /**
      * The page registry and the recorded front; its on-front and off-front work is the frame

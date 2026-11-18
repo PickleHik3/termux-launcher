@@ -726,8 +726,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWorkspacePending = false;
         if (kind == PaneWallPage.WIDGETS && mWall.currentPage() == PaneWallPage.WIDGETS
             && !mWall.isMoving() && sameRun(mWall.currentPageId(), pageId)) {
+            boolean changed = pageId != mWall.currentPageId();
             bindHome(pageId);
             mWall.follow(pageId);
+            // A page change inside the run lands as a slide does: the front is recorded and the
+            // host's settle refreshes what follows the current page (the glyph row).
+            if (changed) onWallCellSettled(pageId, PaneWallPage.WIDGETS);
             return true;
         }
         return mWall.goToCell(pageId, animate);
