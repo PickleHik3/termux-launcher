@@ -305,7 +305,6 @@ public class CrossingControllerTest {
                     return (PlaceChromeTravel.States) place -> restOfPlace(place);
                 case "keyboardDownLaidOutPx":
                 case "travelKeyboardLaidOutPx": return keyboardDownLaidOutPx;
-                case "canPreRollTravelKeyboard": return keyboardDownLaidOutPx > 0;
                 case "frameStandsDown": return (SeamCrossing.FrameGlass) () -> false;
                 case "chromeTravelMoved": return chromeTravelMoved;
                 case "setChromeTravelMoved":
@@ -504,6 +503,20 @@ public class CrossingControllerTest {
         assertEquals("no adapter write at rest after the landing", writes, moves.writes);
         assertFalse(crossing.crossing());
         assertEquals(1, moves.morphBegins);
+    }
+
+    @Test
+    public void aCrossingNeverPreRollsTheKeyboardEvenOneNotLaidOut() {
+        // ADR 0030 section 5: the pre-roll goes. A keyboard that is not laid out (put away, or
+        // the system IME standing in) shows at the landing; the crossing brings nothing up.
+        host.keyboardDownLaidOutPx = 0;
+        host.keyboardUpPlaces.add(PaneWallPage.TERMINAL);
+        wall.beginPlainDrag();
+        for (int i = 1; i <= 8; i++) {
+            drag(-i * 100f);
+            assertEquals("no pre-roll at " + i, 0, host.count("preRollTravelKeyboard"));
+        }
+        assertTrue(moves.preRolls.isEmpty());
     }
 
     @Test

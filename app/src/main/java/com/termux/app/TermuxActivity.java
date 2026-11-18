@@ -24024,16 +24024,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Brings the keyboard up at its full height for the rest of the slide, held below the screen
-     * by the travel's translation until the wall reveals it. It is shown the way the arriving
-     * place would show it at settle — only earlier, and quietly.
-     */
-    private void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
-        preRollTravelKeyboard(frame.toward != mLastWallPage
-            && chromeRestOf(frame.toward).keyboardReveal() > 0f ? frame.toward : frame.from);
-    }
-
-    /**
      * The same, for the keyboard of {@code target}: the place a slide is travelling toward, or the
      * place on screen for a keyboard swipe that raises it under the finger.
      */
@@ -24830,9 +24820,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int measuredExtraKeysRowPx() { return TermuxActivity.this.measuredExtraKeysRowPx(); }
         @Override public int appliedContentReservationPx() { return TermuxActivity.this.appliedContentReservationPx(); }
         @Override public int terminalRestFlushPaddingPx() { return mTerminalRestFlushPaddingPx; }
-        @Override public boolean canPreRollTravelKeyboard() { return TermuxActivity.this.canPreRollTravelKeyboard(); }
         @Override public void beginTravelHold() { TermuxActivity.this.beginTravelHold(); }
-        @Override public void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.preRollTravelKeyboard(frame); }
         @Override public boolean keyboardSwipeTravel() { return mKeyboardSwipeTravel; }
         @Override public void syncKeyboardMaterialTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) { TermuxActivity.this.syncKeyboardMaterialTravel(frame); }
         // ---- dock ------------------------------------------------------------------

@@ -340,16 +340,6 @@ public final class PlaceChromeTravel {
     }
 
     /**
-     * Whether a frame is going to show more keyboard than the stack lays out, which is the cue to
-     * pre-roll it: lay it out at its full height below the screen, so the slide can bring it up.
-     * Read off the places in play rather than the reveal, which is still 0 on the slide's first
-     * frames: the pre-roll belongs to the slide's first frame.
-     */
-    public static boolean needsKeyboardPreRoll(@NonNull Frame frame, boolean keyboardLaidOut) {
-        return !keyboardLaidOut && frame.keyboardInPlay;
-    }
-
-    /**
      * Whether the in-app keyboard is laid out for a crossing to move: shown, or down but still laid
      * out below the screen (D1-A), which is the keyboard's rest on a place that has it down. Its
      * show flag alone says nothing of that, so a crossing never pre-rolls a keyboard that is there.

@@ -456,6 +456,9 @@ public final class KeyboardGeometryChoreographer {
                 return;
             }
             mSurface.applyKeyboardSurfaceState(mSurface.buildChromeSpec());
+            // The crops cut for the stack without the keyboard are rebuilt by this frame's render,
+            // as the gate's render sync used to be: nothing waits for them.
+            if (openingFromGone) mSurface.requestAccessoryRenderSync();
             mSurface.requestStackRest();
         } else if (mSurface.keyboardStaysLaidOut()) {
             // Down is the scene's translation: the container is never put away, so it is measured
