@@ -294,6 +294,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         } else if (mFacts.useAs().rowPages().contains(PaneWallPage.WIDGETS)) {
             homes.add(PaneWallLayout.kindPageId(PaneWallPage.WIDGETS));
         }
+        // The new pages go in before the old ones leave, so a switch between ids never empties
+        // the declared glass for a moment.
+        for (int i = 0; i < homes.size(); i++) {
+            int id = homes.get(i);
+            if (mHomePages.containsKey(id)) continue;
+            com.termux.app.page.Page page = factory.apply(id);
+            mHomePages.put(id, page);
+            mPages.put(id, page);
+        }
         java.util.Iterator<java.util.Map.Entry<Integer, com.termux.app.page.Page>> it =
             mHomePages.entrySet().iterator();
         while (it.hasNext()) {
@@ -302,13 +311,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             if (kept) continue;
             mPages.remove(entry.getKey());
             it.remove();
-        }
-        for (int i = 0; i < homes.size(); i++) {
-            int id = homes.get(i);
-            if (mHomePages.containsKey(id)) continue;
-            com.termux.app.page.Page page = factory.apply(id);
-            mHomePages.put(id, page);
-            mPages.put(id, page);
         }
     }
 

@@ -402,6 +402,40 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void homeWidgetsAndFloatsReachGlassOnlyThroughTheHomePage() throws IOException {
+        List<String> problems = new ArrayList<>();
+        for (Map.Entry<String, String> source : sources().entrySet()) {
+            String path = source.getKey();
+            boolean home = path.startsWith("app/launcher/widget/")
+                || (path.startsWith("app/wall/WidgetPane") && path.endsWith(".java"))
+                || path.equals("app/terminal/HomeFloatLayer.java");
+            if (home) {
+                for (String banned : new String[]{"GlassService", "LiveBackdrop.RANK_", "attachLivePicture"}) {
+                    if (source.getValue().contains(banned)) problems.add(path + " mentions " + banned);
+                }
+            }
+        }
+        String activity = sources().get("app/TermuxActivity.java");
+        for (String banned : new String[]{"glassElement(\"widget\"", "attachWidgetLiveGlass", "RANK_WIDGET"}) {
+            if (activity.contains(banned)) problems.add("TermuxActivity mentions " + banned);
+        }
+        String pane = sources().get("app/terminal/TerminalPaneController.java");
+        int at = pane.indexOf("private void syncFloatLiveGlass(");
+        int open = at < 0 ? -1 : pane.indexOf('{', at);
+        int depth = 0;
+        int end = open;
+        for (int i = open; i >= 0 && i < pane.length(); i++) {
+            char c = pane.charAt(i);
+            if (c == '{') depth++;
+            else if (c == '}' && --depth == 0) { end = i; break; }
+        }
+        if (at < 0 || !pane.substring(open, end).contains("mHomeFloatGlass")) {
+            problems.add("syncFloatLiveGlass does not route Home floats through mHomeFloatGlass");
+        }
+        assertNone(problems);
+    }
+
+    @Test
     public void theBarsHaveNoWallpaperTwin() throws IOException {
         Path layout = root().resolve("../../../../main/res/layout/activity_termux.xml").normalize();
         String xml = new String(Files.readAllBytes(layout), java.nio.charset.StandardCharsets.UTF_8);
