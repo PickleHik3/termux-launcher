@@ -431,7 +431,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // The one path every dismissal takes: the Close button, Back, a place
                     // change, or onPause.
                     if (showing) return;
-                    if (holdDisplayKeyboardFocus() || returnFocusToDisplayWindow()) return;
+                    if (mDisplayKeys.holdDisplayKeyboardFocus() || returnFocusToDisplayWindow()) return;
                     View pane = mPaneController == null ? mTerminalView : mPaneController.getActivePaneView();
                     if (pane != null) pane.requestFocus();
                 }
@@ -1843,6 +1843,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mPreferences != null && mPreferences.isX11DisplayAutostartEnabled();
             }
         }, mDisplayServer, mDisplayPageBinding);
+    /** The Display place's use of the phone's own keyboard. */
+    private final com.termux.app.x11.DisplayKeys mDisplayKeys =
+        new com.termux.app.x11.DisplayKeys(new com.termux.app.x11.DisplayKeys.Host() {
+            @Nullable @Override public com.termux.app.x11.X11PaneFrame displayFrame() {
+                return mPaneWallController == null ? null : mPaneWallController.displayWindow();
+            }
+            @Override public boolean androidKeyboardEnabled() {
+                return mPreferences != null && mPreferences.isX11AndroidKeyboardEnabled();
+            }
+            @Override public boolean isDisplayWindowInFront() {
+                return TermuxActivity.this.isDisplayWindowInFront();
+            }
+            @Nullable @Override public com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard inAppKeyboard() {
+                return mInAppKeyboard;
+            }
+            @Override public boolean isDisplayTouchpadFrame() {
+                return TermuxActivity.this.isDisplayTouchpadFrame();
+            }
+            @Override public void onSystemImeRequested() { TermuxActivity.this.onSystemImeRequested(); }
+            @Override public boolean isImeVisible() { return TermuxActivity.this.isImeVisible(); }
+            @Override public void applyPlaceSystemImeOwner() { TermuxActivity.this.applyPlaceSystemImeOwner(); }
+            @Nullable @Override public View rootView() {
+                return findViewById(R.id.activity_termux_root_relative_layout);
+            }
+        }, mDisplayServer);
     /** The Display pages' one display view, and what they ask of this window. */
     private final com.termux.app.x11.DisplayPages mDisplayPages =
         new com.termux.app.x11.DisplayPages(new com.termux.app.x11.DisplayPageHost() {
@@ -1877,8 +1902,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void refreshEmptyState() { refreshDisplayEmptyStateReadiness(); }
             @Override public void restoreTypingClaim() { restoreInAppKeyboardTypingClaim(); }
-            @Override public void syncKeyboardRoute() { syncDisplayKeyboardRoute(); }
-            @Override public void hideSystemKeyboard() { hideDisplaySystemKeyboard(); }
+            @Override public void syncKeyboardRoute() { mDisplayKeys.syncDisplayKeyboardRoute(); }
+            @Override public void hideSystemKeyboard() { mDisplayKeys.hideDisplaySystemKeyboard(); }
             @Override public boolean handKeysToTerminal() { return returnKeysToTerminal(); }
             @NonNull @Override public com.termux.app.x11.DisplayFrameContentPolicy.Content frameContent() {
                 return mFrameContent.content();
@@ -2328,7 +2353,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyAppDrawerEdgeBleed(insetsCompat);
             mImeRide.onInsets(insetsCompat.isVisible(Type.ime()));
             mImeLiftPx = computeDockImeLiftPx(insetsCompat);
-            applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
+            mDisplayKeys.applyDisplayImeRoom(mDisplayKeys.displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
             // The root consumes the insets, so the overlays after it in this frame are handed them.
             if (mSheets.homeActionsSheetIfBuilt() != null) mSheets.homeActionsSheetIfBuilt().applyInsets(insetsCompat);
@@ -2873,7 +2898,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             androidx.core.view.ViewCompat.requestApplyInsets(contentView);
         // Preferences may have changed while the settings activity covered this one.
         if (!transientPause) initializeInAppKeyboard(null);
-        syncDisplayKeyboardRoute();
+        mDisplayKeys.syncDisplayKeyboardRoute();
         if (mInAppKeyboard != null) {
             if (!transientPause && !keyboardJustBuilt) mInAppKeyboard.onPreferencesReloaded();
             mInAppKeyboard.onResume();
@@ -3262,7 +3287,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mVoiceScreenMayHold = false;
         mVoiceScreenHold.release();
         // Nothing is typed into a display nobody is looking at.
-        hideDisplaySystemKeyboard();
+        mDisplayKeys.hideDisplaySystemKeyboard();
         // Rename owns the in-app-keyboard interceptor only while this activity is visible.
         mSheets.folderRenameController().onActivityPaused();
         if (mRenameCoordinator != null) mRenameCoordinator.onActivityPaused();
@@ -8117,7 +8142,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mKeyboardFrost == null) {
             mKeyboardFrost = new com.termux.app.chrome.KeyboardFrost(this, mGlass);
         }
-        mKeyboardFrost.show(surfaceHost, displayView(),
+        mKeyboardFrost.show(surfaceHost, mDisplayKeys.displayView(),
             mPreferences.getInAppKeyboardBlurRadius(stackLookPage()),
             getResources().getDisplayMetrics().density, cornerPx);
     }
@@ -25176,7 +25201,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isReducedMotionEnabled() || mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive()
             || appliedContentReservationPx() < 0) return 0;
         if (!canPreRollTravelKeyboard() || mInAppKeyboard.isTurnedOff()
-            || displayTakesSystemKeyboard() || isDisplayTouchpadFrame()) return 0;
+            || mDisplayKeys.displayTakesSystemKeyboard() || isDisplayTouchpadFrame()) return 0;
         boolean up = committedKeyboardVisible();
         if (opening == up) return 0;
         // On Home the finger raises the palette gesture's keyboard only; a down swipe that closes
@@ -26651,11 +26676,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void tearDownEmbeddedDisplayWindow(boolean wasInFront) {
         // Whoever owns typing now — an open palette or sheet keeps its claim — not nobody.
         restoreInAppKeyboardTypingClaim();
-        hideDisplaySystemKeyboard();
+        mDisplayKeys.hideDisplaySystemKeyboard();
         mDisplayPages.releaseFocus();
         mPaneWallController.detachDisplayWindow();
         syncDisplayEnvironment();
-        syncDisplayKeyboardRoute();
+        mDisplayKeys.syncDisplayKeyboardRoute();
         mDisplayUpOnRow = false;
         onWallPlacesChanged();
         // The window on its left took its place in front without the wall moving: the place
@@ -26737,7 +26762,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean returnFocusToDisplayWindow() {
         if (settledWallPage() != com.termux.app.page.PageKind.DISPLAY) return false;
-        com.termux.x11.LorieView display = displayView();
+        com.termux.x11.LorieView display = mDisplayKeys.displayView();
         if (display == null) return false;
         display.requestFocus();
         return true;
@@ -28153,7 +28178,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public boolean isKeyboardUp() {
                 // The phone's keyboard, where this place takes one, is up exactly while the IME is.
-                if (displayTakesSystemKeyboard()) return isImeVisible();
+                if (mDisplayKeys.displayTakesSystemKeyboard()) return isImeVisible();
                 // In mouse mode the keyboard view is up either way, as the pad's frame; what the
                 // policy is asking is whether a keyboard is the thing on screen.
                 if (isDisplayTouchpadFrame()) return mFrameContent.isKeyboardContent();
@@ -28304,8 +28329,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void afterRunningChanged(boolean running) {
             // A display that stopped has nothing left to type into.
-            if (!running) hideDisplaySystemKeyboard();
-            syncDisplayKeyboardRoute();
+            if (!running) mDisplayKeys.hideDisplaySystemKeyboard();
+            mDisplayKeys.syncDisplayKeyboardRoute();
             syncDisplayOnRow();
         }
 
@@ -28672,120 +28697,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     // ---- The Display place's keyboard ---------------------------------------------------------
 
-    /** Set from the moment the phone's keyboard is raised over the display until it goes down. */
-    private boolean mDisplaySystemKeyboardUp;
-
-    /** The display's own view, while the wall carries a display window at all. */
-    @Nullable
-    private com.termux.x11.LorieView displayView() {
-        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
-            ? null : mPaneWallController.displayWindow();
-        return frame == null ? null : frame.display();
-    }
-
-    /** Which keyboard a request lands on right now. */
-    @NonNull
-    private com.termux.app.x11.DisplayKeyboardRoute.Target keyboardRoute() {
-        return com.termux.app.x11.DisplayKeyboardRoute.decide(
-            mPreferences != null && mPreferences.isX11AndroidKeyboardEnabled(),
-            isDisplayWindowInFront(), mDisplayServer.isRunning(),
-            mInAppKeyboard != null && mInAppKeyboard.isEnabled());
-    }
-
-    /**
-     * True while the Display place is typed into with the phone's own keyboard. Every route into
-     * a keyboard on that place aims at it then, and the launcher's own stays down.
-     */
-    boolean displayTakesSystemKeyboard() {
-        return keyboardRoute() == com.termux.app.x11.DisplayKeyboardRoute.Target.SYSTEM_IME;
-    }
-
-    /**
-     * Raise or lower the phone's keyboard over the display. True when that is the route a
-     * keyboard request takes here and it was taken, so the caller leaves every other keyboard be.
-     */
-    private boolean applyDisplaySystemKeyboard(boolean show) {
-        if (!displayTakesSystemKeyboard()) return false;
-        com.termux.x11.LorieView display = displayView();
-        if (display == null) return false;
-        if (show) {
-            // Two keyboards over one display is nobody's idea of typing, so the launcher's goes
-            // down — unless it is only standing there as mouse mode's touchpad frame, which is
-            // not a keyboard anyone is typing on.
-            if (mInAppKeyboard != null && mInAppKeyboard.isVisible() && !isDisplayTouchpadFrame())
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
-            onSystemImeRequested();
-        }
-        display.setKeyboardVisible(show);
-        mDisplaySystemKeyboardUp = show;
-        return true;
-    }
-
-    /** The keyboard key, while the Display place takes the phone's keyboard. */
-    private boolean toggleDisplaySystemKeyboard() {
-        if (!displayTakesSystemKeyboard()) return false;
-        return applyDisplaySystemKeyboard(!isImeVisible());
-    }
-
-    /**
-     * Put the phone's keyboard down over the display, whatever raised it. Nothing happens unless
-     * this activity is the one that raised it, so a place that never asked for it is untouched.
-     */
-    private void hideDisplaySystemKeyboard() {
-        if (!mDisplaySystemKeyboardUp) return;
-        mDisplaySystemKeyboardUp = false;
-        com.termux.x11.LorieView display = displayView();
-        if (display != null) display.setKeyboardVisible(false);
-        applyDisplayImeRoom(0);
-    }
-
-    /**
-     * Re-decide who takes a keyboard request on the Display place — the setting can move while a
-     * display runs, and so can the place and the display. A launcher keyboard left standing on
-     * the place goes down, and the place is handed the system IME or has it taken back.
-     */
-    private void syncDisplayKeyboardRoute() {
-        if (displayTakesSystemKeyboard() && mInAppKeyboard != null && mInAppKeyboard.isVisible()
-                && !isDisplayTouchpadFrame()) {
-            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
-        }
-        applyPlaceSystemImeOwner();
-    }
-
-    /**
-     * The display's own view keeps the focus while the phone's keyboard types into it: a surface
-     * that would otherwise hand focus back to a terminal pane asks here first.
-     */
-    private boolean holdDisplayKeyboardFocus() {
-        if (!displayTakesSystemKeyboard()) return false;
-        com.termux.x11.LorieView display = displayView();
-        if (display == null) return false;
-        display.requestFocus();
-        return true;
-    }
-
-    /** The band the phone's keyboard covers on the Display place, and none anywhere else. */
-    private int displayImeRoomPx(@NonNull WindowInsetsCompat insets) {
-        if (!displayTakesSystemKeyboard() || !insets.isVisible(Type.ime())) return 0;
-        // The content root already sits above the navigation bar, so only the band the keyboard
-        // adds to it is new.
-        return Math.max(0, insets.getInsets(Type.ime()).bottom
-            - insets.getInsets(Type.navigationBars()).bottom);
-    }
-
-    /**
-     * Make room for the phone's keyboard over the display. The window is never resized for the
-     * system keyboard — the launcher's own keyboard owns that mode — so the content root gives up
-     * the band it covers itself: the wall, and with it the X screen, shrinks by exactly that much,
-     * and the dock, the extra keys and mouse mode's touchpad ride up above it.
-     */
-    private void applyDisplayImeRoom(int roomPx) {
-        View root = findViewById(R.id.activity_termux_root_relative_layout);
-        if (root == null || root.getPaddingBottom() == roomPx) return;
-        root.setPadding(root.getPaddingLeft(), root.getPaddingTop(), root.getPaddingRight(),
-            roomPx);
-    }
-
     /**
      * True while mouse mode's touchpad owns the keyboard frame: the frame then holds the pad or a
      * keyboard parked in front of it, and every request for the keyboard swaps the two instead of
@@ -28805,7 +28716,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     boolean toggleDisplayFrameKeyboard() {
         // With the phone's keyboard chosen for this place, the key is that keyboard's: the pad
         // keeps the frame it stands in and nothing is swapped.
-        if (toggleDisplaySystemKeyboard()) return true;
+        if (mDisplayKeys.toggleDisplaySystemKeyboard()) return true;
         if (!isDisplayTouchpadFrame()) return false;
         applyDisplayFrameDecision(mFrameContent.onKeyboardKey());
         return true;
@@ -28813,7 +28724,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The same, for a request that names which way it wants the keyboard. */
     private boolean applyDisplayFrameKeyboard(boolean show) {
-        if (applyDisplaySystemKeyboard(show)) return true;
+        if (mDisplayKeys.applyDisplaySystemKeyboard(show)) return true;
         if (!isDisplayTouchpadFrame()) return false;
         applyDisplayFrameDecision(mFrameContent.onKeyboardIntent(show));
         return true;
@@ -28821,7 +28732,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The text-focus policy's own show and hide, which swap the frame's content in mouse mode. */
     private boolean applyDisplayFrameTextFocus(boolean focused) {
-        if (applyDisplaySystemKeyboard(focused)) return true;
+        if (mDisplayKeys.applyDisplaySystemKeyboard(focused)) return true;
         if (!isDisplayTouchpadFrame()) return false;
         applyDisplayFrameDecision(mFrameContent.onTextFocus(focused));
         return true;
@@ -32726,7 +32637,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean showInAppKeyboard(boolean fromFocus) {
             // On the Display place the phone's own keyboard can be the keyboard, and it answers
             // even where the launcher's is switched off.
-            boolean system = displayTakesSystemKeyboard();
+            boolean system = mDisplayKeys.displayTakesSystemKeyboard();
             if (!system && (mInAppKeyboard == null || !mInAppKeyboard.isEnabled())) return false;
             // Switched off, a focus signal is ignored; a person asking by hand turns it back on.
             if (!system && mInAppKeyboard.isTurnedOff()) {
@@ -32737,7 +32648,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A focus source is a signal, not an order: on the Display place the policy decides
             // whether it means a keyboard, and it is the one that will close it again.
             if (fromFocus && mDisplayServer.controller() != null && mDisplayServer.controller().onTextFocusSignal(true)) return true;
-            if (system) return applyDisplaySystemKeyboard(true);
+            if (system) return mDisplayKeys.applyDisplaySystemKeyboard(true);
             // Asking for it by hand while mouse mode holds the frame brings the keyboard to the
             // front of it instead of raising a second one.
             if (!fromFocus && applyDisplayFrameKeyboard(true)) return true;
@@ -32748,10 +32659,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean hideInAppKeyboard(boolean fromFocus) {
-            boolean system = displayTakesSystemKeyboard();
+            boolean system = mDisplayKeys.displayTakesSystemKeyboard();
             if (!system && (mInAppKeyboard == null || !mInAppKeyboard.isEnabled())) return false;
             if (fromFocus && mDisplayServer.controller() != null && mDisplayServer.controller().onTextFocusSignal(false)) return true;
-            if (system) return applyDisplaySystemKeyboard(false);
+            if (system) return mDisplayKeys.applyDisplaySystemKeyboard(false);
             if (!fromFocus && applyDisplayFrameKeyboard(false)) return true;
             mInAppKeyboard.hide(fromFocus
                 ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.FOCUS
@@ -33355,7 +33266,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean displayTakesSystemKeyboard() {
-            return TermuxActivity.this.displayTakesSystemKeyboard();
+            return mDisplayKeys.displayTakesSystemKeyboard();
         }
 
         @Override public void showExtraKeysRowEditor() {

@@ -434,6 +434,20 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void theActivityDeclaresNoDisplaySystemKeyboardMethods() throws IOException {
+        List<String> problems = new ArrayList<>();
+        String activity = sources().get("app/TermuxActivity.java");
+        for (String name : new String[]{"displayView", "keyboardRoute", "displayTakesSystemKeyboard",
+                "applyDisplaySystemKeyboard", "toggleDisplaySystemKeyboard",
+                "hideDisplaySystemKeyboard", "syncDisplayKeyboardRoute", "holdDisplayKeyboardFocus",
+                "displayImeRoomPx", "applyDisplayImeRoom"}) {
+            if (java.util.regex.Pattern.compile("(?m)^    (private |public )?[\\w.<>]+ " + name + "\\(")
+                    .matcher(activity).find()) problems.add("TA declares " + name);
+        }
+        assertNone(problems);
+    }
+
+    @Test
     public void homeDoesItsPageEventsInTheHomePageNotTheHost() throws IOException {
         List<String> problems = new ArrayList<>();
         String host = sources().get("app/launcher/home/HomePageHost.java");
