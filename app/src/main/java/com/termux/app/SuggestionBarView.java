@@ -8311,7 +8311,9 @@ public final class SuggestionBarView extends GridLayout
                 + " loc=" + carryLocation[0] + "," + carryLocation[1] + " wh=" + getWidth() + "x" + getHeight()
                 + " ty=" + getTranslationY() + " rotX=" + getRotationX() + " parentTy="
                 + (getParent() instanceof View ? ((View) getParent()).getTranslationY() : 0f));
-        if (y < 0f || y >= getHeight() || getWidth() <= 0) {
+        // Just above or below the row is still the row until the icon is Home's: the lift's
+        // slab may sink the row under a finger near its top edge.
+        if (getWidth() <= 0 || !DockDropPolicy.carriedOverRow(y, 0f, getHeight(), density())) {
             carryLeave();
             return false;
         }
