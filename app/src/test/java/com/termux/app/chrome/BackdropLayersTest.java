@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.chrome.BackdropLayers.Follow;
 import com.termux.app.chrome.BackdropLayers.Holder;
 import com.termux.app.chrome.BackdropLayers.Layer;
 import com.termux.app.chrome.BackdropLayers.Mode;
@@ -258,5 +259,67 @@ public class BackdropLayersTest {
     @Test
     public void splittableSurfaceHasTheSameModeAtRestAndMoving() {
         assertEquals(BackdropLayers.mode(true, true), BackdropLayers.mode(true, false));
+    }
+
+    /**
+     * Pages that turn (a sink, Depth, Carousel, a rotation with perspective) are the frozen
+     * layer's slots drawn again at the pages' matrices: never a new capture, never the live
+     * pages (ADR 0029 section 3, whole-page slots).
+     */
+    @Test
+    public void aTurningPoseRedrawsTheSlotsAndNeverRecapturesOrGoesLive() {
+        float[] sunk = poses(pose(0f, 0.92f, 0f, 0f, 0f, 1f), flat(W, W));
+        float[] depth = poses(flat(-400f, 0f), pose(-W + 120f, 0.85f, 0f, 0f, W, 1f));
+        float[] carousel = poses(pose(-300f, 0.96f, 0.08f, 0f, 0f, 1f), flat(W - 300f, W));
+        float[] rotated = poses(pose(-200f, 0.9f, 0.2f, 0.0004f, 0f, 1f), flat(W - 200f, W));
+        for (float[] now : new float[][] {sunk, depth, carousel, rotated}) {
+            assertEquals(Follow.REDRAW, BackdropLayers.follow(REST, 2, now, 2));
+            // The held layer is kept: nothing asks for a capture, and the mode stays frozen.
+            assertFalse(BackdropLayers.needsRecord(Mode.FROZEN, Mode.FROZEN, true,
+                BackdropLayers.followShift(REST, 2, now, 2), true));
+            assertEquals(0f, BackdropLayers.followShift(REST, 2, now, 2), 0f);
+        }
+    }
+
+    @Test
+    public void aSlideOrAFadeIsOnlyMovedAndAChangedPageSetIsRecaptured() {
+        float[] slid = poses(flat(-300f, 0f), flat(W - 300f, W));
+        assertEquals(Follow.MOVE, BackdropLayers.follow(REST, 2, slid, 2));
+        assertEquals(-300f, BackdropLayers.followShift(REST, 2, slid, 2), 1e-3f);
+        float[] faded = poses(pose(-90f, 1f, 0f, 0f, 0f, 0.5f), pose(W - 90f, 1f, 0f, 0f, W, 0.5f));
+        assertEquals(Follow.MOVE, BackdropLayers.follow(REST, 2, faded, 2));
+        assertEquals(Follow.MOVE, BackdropLayers.follow(REST, 2, REST, 2));
+        float[] three = poses(flat(0f, 0f), flat(W, W), flat(2 * W, 2 * W));
+        assertEquals(Follow.RECAPTURE, BackdropLayers.follow(REST, 2, three, 3));
+        assertEquals(Follow.RECAPTURE, BackdropLayers.follow(REST, -1, REST, 2));
+        assertTrue(Float.isNaN(BackdropLayers.followShift(REST, 2, three, 3)));
+    }
+
+    /**
+     * Each page is one slot over its own untransformed bounds and a blur gutter, at a quarter
+     * scale: where the page stands is a matrix drawn later, not part of the slot. Three pages
+     * and the decor at the 1440 x 3200 budget screen fit {@link LiveBackdrop#MAX_PAGES_ATLAS_BYTES}.
+     */
+    @Test
+    public void aSlotIsAPagesOwnBoundsAndThreePagesWithDecorFitTheBudget() {
+        int[] out = new int[4];
+        BackdropLayers.slotBounds(1440, 3200, 100, out);
+        assertEquals(-100, out[0]);
+        assertEquals(-100, out[1]);
+        assertEquals(1540, out[2]);
+        assertEquals(3300, out[3]);
+        assertEquals(LiveBackdrop.layerBytes(1640, 3400), BackdropLayers.slotBytes(1440, 3200, 100));
+        assertEquals(410L * 850L * 4L, BackdropLayers.slotBytes(1440, 3200, 100));
+        long pages = 3 * BackdropLayers.slotBytes(1440, 3200, 100);
+        long decor = LiveBackdrop.layerBytes(1440, 400);
+        assertTrue(pages + decor <= LiveBackdrop.MAX_PAGES_ATLAS_BYTES);
+        // A fourth whole page does not fit beside three.
+        assertFalse(pages + BackdropLayers.slotBytes(1440, 3200, 100) + decor
+            <= LiveBackdrop.MAX_PAGES_ATLAS_BYTES);
+        // The pad is what the decor may take beside the pages, in the pages budget.
+        assertTrue(BackdropLayers.padWithin(LiveBackdrop.MAX_PAGES_ATLAS_BYTES, pages, 1440, 400,
+            true, 1440, 1) >= 0);
+        assertEquals(-1, BackdropLayers.padWithin(LiveBackdrop.MAX_PAGES_ATLAS_BYTES,
+            LiveBackdrop.MAX_PAGES_ATLAS_BYTES, 1440, 400, true, 1440, 1));
     }
 }

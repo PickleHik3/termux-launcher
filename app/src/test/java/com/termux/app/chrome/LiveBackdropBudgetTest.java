@@ -22,8 +22,8 @@ import android.app.Application;
 
 /**
  * Live blur's memory budget (docs/agents/performance.md rule 2): at most
- * {@link LiveBackdrop#MAX_LIVE_SURFACES} pictures, each one quarter-scale layer, under ten MiB in
- * all, and every picture released when Live goes off or a surface hides.
+ * {@link LiveBackdrop#MAX_LIVE_SURFACES} pictures, each one quarter-scale blur layer and a pages
+ * layer of whole pages, under {@link LiveBackdrop#BUDGET_BYTES} in all, and every picture released when Live goes off or a surface hides.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.TIRAMISU, application = Application.class)
@@ -33,8 +33,18 @@ public class LiveBackdropBudgetTest {
     public void theBudgetIsEightQuarterScaleScreens() {
         assertEquals(8, LiveBackdrop.MAX_LIVE_SURFACES);
         assertEquals(360L * 800L * 4L, LiveBackdrop.MAX_LAYER_BYTES);
-        assertEquals(8L * 360L * 800L * 4L, LiveBackdrop.BUDGET_BYTES);
-        assertTrue("under ten MiB", LiveBackdrop.BUDGET_BYTES < 10L * 1024L * 1024L);
+        // The pages layer's own share, outside the blur layer's: four quarter-scale budget
+        // screens an atlas (three whole pages and the decor), twice that with the refresh in flight.
+        assertEquals(4, LiveBackdrop.PAGE_LAYER_SLOTS);
+        assertEquals(4L * 360L * 800L * 4L, LiveBackdrop.MAX_PAGES_ATLAS_BYTES);
+        assertEquals(2L * 4L * 360L * 800L * 4L, LiveBackdrop.MAX_PAGES_LAYER_BYTES);
+        assertEquals(8L * (360L * 800L * 4L + 2L * 4L * 360L * 800L * 4L),
+            LiveBackdrop.BUDGET_BYTES);
+        // The worst case in all, eight pictures that each hold a blur layer and a full pages layer
+        // with its refresh in flight. Raised from ten MiB when the pages layer began to hold whole
+        // pages (ADR 0029 section 3); a real phone holds a few surfaces beneath the wall, and at
+        // rest only the atlas, not the refresh.
+        assertTrue("under 80 MiB", LiveBackdrop.BUDGET_BYTES < 80L * 1024L * 1024L);
     }
 
     @Test

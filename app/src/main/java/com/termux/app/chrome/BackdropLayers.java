@@ -19,9 +19,10 @@ import androidx.annotation.NonNull;
  *       dock, a float on the pinned layer), captured and blurred once, held at rest and while the
  *       wall moves, moved by the pages' travel ({@link Motion#TRAVEL}) and taken again behind the
  *       old picture when the pages change ({@link PageLayerRefresh}). Each page is pictured on its
- *       own at full opacity and composited at its alpha now ({@link #pageAlpha}). Until the first
- *       capture lands, and whenever that picture cannot be held (pages that turn, until their
- *       slots follow them), the pages are in the local layer, drawn as they are.</li>
+ *       own, whole and untransformed, at full opacity, and drawn at its matrix and alpha now
+ *       ({@link #pageAlpha}, {@link #follow}): pages that turn redraw the slots and are never
+ *       captured again. Until the first capture lands, and for a surface whose pages cannot all
+ *       be held within the layer's budget, the pages are in the local layer, drawn as they are.</li>
  *   <li>{@link Layer#LOCAL}: everything else beneath the surface, drawn from the views' own
  *       display lists and blurred, so whatever redraws beneath (a terminal printing, a clock)
  *       reaches the glass without a new recording. It is recorded again only when its views
@@ -145,6 +146,46 @@ public final class BackdropLayers {
         return Float.isNaN(shift) ? 0f : shift;
     }
 
+    /** What a held frozen layer does for the pages' poses this frame ({@link #follow}). */
+    public enum Follow {
+        /** Moved by one shared shift (and its alphas composited): a property, nothing recorded. */
+        MOVE,
+        /** The pages turn: the slots are drawn again at the poses' matrices, nothing captured. */
+        REDRAW,
+        /** Not the pages the layer holds (the counts differ): captured again. */
+        RECAPTURE
+    }
+
+    /**
+     * How a held frozen layer follows the poses in {@code now} since {@code recorded}: a shared
+     * shift is moved, any other change of matrix is a redraw of the slots (each page is held
+     * whole, so a turn needs no new picture), and only a different set of pages is a new capture.
+     */
+    @NonNull
+    public static Follow follow(@NonNull float[] recorded, int recordedPoses,
+                                @NonNull float[] now, int nowPoses) {
+        if (recordedPoses != nowPoses || recordedPoses < 0) return Follow.RECAPTURE;
+        return Float.isNaN(shift(recorded, recordedPoses, now, nowPoses, true))
+            ? Follow.REDRAW : Follow.MOVE;
+    }
+
+    /**
+     * The shift {@link #needsRecord} is asked about: the shared shift for pages that move, 0 for
+     * pages that turn (their slots are drawn again, so the layer is as good as held), NaN for a
+     * different set of pages.
+     */
+    public static float followShift(@NonNull float[] recorded, int recordedPoses,
+                                    @NonNull float[] now, int nowPoses) {
+        switch (follow(recorded, recordedPoses, now, nowPoses)) {
+            case MOVE:
+                return shift(recorded, recordedPoses, now, nowPoses, true);
+            case REDRAW:
+                return 0f;
+            default:
+                return Float.NaN;
+        }
+    }
+
     /**
      * Whether the page layer is captured again this frame: the mode changed, the pages drawn are
      * not the ones recorded, they did not move together ({@code shift} NaN), or the surface now
@@ -191,14 +232,27 @@ public final class BackdropLayers {
      */
     public static int pad(long baseBytes, int width, int height, boolean horizontal, int maxPadPx,
                           int slots) {
+        return padWithin(LiveBackdrop.MAX_LAYER_BYTES, baseBytes, width, height, horizontal,
+            maxPadPx, slots);
+    }
+
+    /**
+     * {@link #pad} against {@code budgetBytes} instead of a blur layer's share: the frozen pages
+     * layer's own atlas ({@link LiveBackdrop#MAX_PAGES_ATLAS_BYTES}), with {@code baseBytes} the
+     * whole pages already in it ({@link #slotBytes}) and {@code slots} the pictures the padded
+     * rect is cut into (the wall's decor: one).
+     */
+    public static int padWithin(long budgetBytes, long baseBytes, int width, int height,
+                                boolean horizontal, int maxPadPx, int slots) {
         int n = Math.max(1, slots);
-        if (!fits(baseBytes, n * width, height)) return -1;
+        if (!fitsWithin(budgetBytes, baseBytes, n * width, height)) return -1;
         int low = 0;
         int high = Math.max(0, maxPadPx);
         while (low < high) {
             int mid = (low + high + 1) >>> 1;
-            boolean ok = horizontal ? fits(baseBytes, n * (width + 2 * mid), height)
-                : fits(baseBytes, n * width, height + 2 * mid);
+            boolean ok = horizontal
+                ? fitsWithin(budgetBytes, baseBytes, n * (width + 2 * mid), height)
+                : fitsWithin(budgetBytes, baseBytes, n * width, height + 2 * mid);
             if (ok) low = mid;
             else high = mid - 1;
         }
@@ -222,7 +276,30 @@ public final class BackdropLayers {
 
     /** Whether a page layer of {@code width} x {@code height} fits beside {@code baseBytes}. */
     public static boolean fits(long baseBytes, int width, int height) {
-        return baseBytes + LiveBackdrop.layerBytes(width, height) <= LiveBackdrop.MAX_LAYER_BYTES;
+        return fitsWithin(LiveBackdrop.MAX_LAYER_BYTES, baseBytes, width, height);
+    }
+
+    /** Whether a layer of {@code width} x {@code height} fits beside {@code baseBytes} in {@code budgetBytes}. */
+    public static boolean fitsWithin(long budgetBytes, long baseBytes, int width, int height) {
+        return baseBytes + LiveBackdrop.layerBytes(width, height) <= budgetBytes;
+    }
+
+    /**
+     * A page's slot in the frozen layer, in the page's own coordinates into {@code out} (left,
+     * top, right, bottom): the page's bounds and {@code gutterPx} of the blur's reach around
+     * them. The slot holds the page as it is, untransformed; where the page stands is the pose's
+     * matrix, drawn later ({@link LivePicture}).
+     */
+    public static void slotBounds(int pageWidth, int pageHeight, int gutterPx, @NonNull int[] out) {
+        out[0] = -gutterPx;
+        out[1] = -gutterPx;
+        out[2] = pageWidth + gutterPx;
+        out[3] = pageHeight + gutterPx;
+    }
+
+    /** Bytes of a page's slot ({@link #slotBounds}) at the layer's quarter scale. */
+    public static long slotBytes(int pageWidth, int pageHeight, int gutterPx) {
+        return LiveBackdrop.layerBytes(pageWidth + 2 * gutterPx, pageHeight + 2 * gutterPx);
     }
 
     // ---- Backdrop layers -------------------------------------------------------------------

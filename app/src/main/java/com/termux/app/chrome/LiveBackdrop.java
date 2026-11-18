@@ -62,8 +62,9 @@ import java.util.ArrayList;
  * invalidates a view or schedules a frame: at rest nothing draws, so nothing records and nothing
  * blurs.</p>
  *
- * <p><b>Memory.</b> At most {@link #MAX_LIVE_SURFACES} pictures, each one blur layer and at most one
- * page layer, together at most {@link #MAX_LAYER_BYTES}: {@link #BUDGET_BYTES} in all. Pictures
+ * <p><b>Memory.</b> At most {@link #MAX_LIVE_SURFACES} pictures, each one blur layer (at most
+ * {@link #MAX_LAYER_BYTES}) and at most one pages layer (at most {@link #MAX_PAGES_LAYER_BYTES}
+ * with its refresh in flight): {@link #BUDGET_BYTES} in all. Pictures
  * are released when Live goes off, when their surface hides ({@link #detach}) and under memory
  * pressure ({@link #releaseAll}); a frozen page layer is let go as the wall settles.</p>
  */
@@ -82,8 +83,37 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     /** One picture's blur layer at most: a whole budget screen at a quarter scale, 4 bytes a pixel. */
     public static final long MAX_LAYER_BYTES = layerBytes(BUDGET_SCREEN_WIDTH, BUDGET_SCREEN_HEIGHT);
 
-    /** Every live layer together: about 8.8 MiB. */
-    public static final long BUDGET_BYTES = MAX_LIVE_SURFACES * MAX_LAYER_BYTES;
+    /**
+     * The pictures one frozen pages layer holds at most: three whole pages (the one a surface
+     * stands over and its neighbours) and the wall's decor, each a quarter-scale budget screen.
+     */
+    static final int PAGE_LAYER_SLOTS = 4;
+
+    /**
+     * One pages layer's atlas at most: {@link #PAGE_LAYER_SLOTS} x {@link #MAX_LAYER_BYTES}, which
+     * is 4 x (360 x 800 x 4) = 4,608,000 B at the 1440 x 3200 budget screen (about 2.6 MB on a
+     * 1080 x 2400 phone). A page is held whole, untransformed, so a turning transition draws it at
+     * its matrix and never captures again ({@link BackdropLayers#follow}).
+     */
+    public static final long MAX_PAGES_ATLAS_BYTES = PAGE_LAYER_SLOTS * MAX_LAYER_BYTES;
+
+    /**
+     * One picture's pages layer at most, with its refresh in flight: the held atlas and the one
+     * being taken behind it, 2 x {@link #MAX_PAGES_ATLAS_BYTES} = 9,216,000 B. A refresh never
+     * drops the held atlas for want of room, so nothing swaps at rest. Only the held atlas stays
+     * resident; the other lives from a capture's start until it lands.
+     */
+    public static final long MAX_PAGES_LAYER_BYTES = 2 * MAX_PAGES_ATLAS_BYTES;
+
+    /**
+     * Every live layer together, the worst case: eight pictures, each a blur layer and a full
+     * pages layer with its refresh in flight, 8 x (1,152,000 + 9,216,000) = 82,944,000 B (about
+     * 79 MiB at the budget screen). Only the surfaces beneath the wall (the dock, the nav strip,
+     * floats on the pinned layer) hold pages layers, and at rest each holds one atlas, so a
+     * phone's real figure is a few MiB.
+     */
+    public static final long BUDGET_BYTES =
+        MAX_LIVE_SURFACES * (MAX_LAYER_BYTES + MAX_PAGES_LAYER_BYTES);
 
     /**
      * A container on a live surface's path: draws one of its own children, now, into another
