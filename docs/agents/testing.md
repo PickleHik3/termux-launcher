@@ -49,6 +49,13 @@ and the `device-checker` play the swipes with `adb shell input`, and a Perfetto 
 over adb while they run (the launcher's `Wall.*` and `LiveBackdrop.*` sections name the steps).
 On pong, ask the developer before every such run: it drives their phone.
 
+A pong round for Home ⇄ Terminal motion is `scripts/pong-round.sh <outdir> [--start home1|home2]`.
+It leases pong, refuses unless the launcher is in front, records both crossings at every real
+frame, dumps and clears the motion log per crossing, and writes `summary.txt`: the build, the
+landings, the guard and INVARIANT counters, and the jumps in band brightness that stand alone
+(the swipe's own motion is a run of jumps), with a strip of frames around each. Look at the strips
+before calling a round clean. `RESCAN=1` re-scans a filled outdir without the device.
+
 Delete an item once it has been seen. Batched functional checks run through the host's
 `device-checker` agent where there is one; it gets the user-facing summary and the items, never
 the diff.
