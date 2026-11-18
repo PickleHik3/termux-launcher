@@ -28,7 +28,7 @@ import java.util.concurrent.Executors;
 /**
  * The Shader half of the wallpaper picker: the saved shaders in three columns, each a
  * phone-proportioned {@link SceneThumbView} with its name under it and a border on the one in
- * use, then New shader, and Back to photo while a video or a shader is in use. Tapping a shader
+ * use, then New shader beside From a photo, and Back to photo while a video or a shader is in use. Tapping a shader
  * applies it ({@link Listener#onPick}); its pencil opens the editor ({@link Listener#onOpen}). The shaders are read off the main thread.
  */
 public final class ShaderListPage {
@@ -48,6 +48,9 @@ public final class ShaderListPage {
         void onOpenExample(@NonNull String slug);
 
         void onNew();
+
+        /** From a photo: the steps card. */
+        void onFromPhoto();
 
         void onBackToPhoto();
     }
@@ -100,6 +103,7 @@ public final class ShaderListPage {
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         mRatio = LiveSceneLogic.frameHeight(1000, dm.widthPixels, dm.heightPixels) / 1000f;
         mRoot.findViewById(R.id.shader_new).setOnClickListener(v -> mListener.onNew());
+        mRoot.findViewById(R.id.shader_from_photo).setOnClickListener(v -> mListener.onFromPhoto());
         mBack.setOnClickListener(v -> mListener.onBackToPhoto());
     }
 
@@ -261,6 +265,11 @@ public final class ShaderListPage {
     @NonNull
     View newButton() {
         return mRoot.findViewById(R.id.shader_new);
+    }
+
+    @NonNull
+    View fromPhotoButton() {
+        return mRoot.findViewById(R.id.shader_from_photo);
     }
 
     @NonNull

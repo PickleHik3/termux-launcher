@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The Shader half of the wallpaper picker: the saved shaders in two columns (ShaderListPage
-     adds the tiles), New shader, and Back to photo while a video or a shader is in use. -->
+     adds the tiles), New shader beside From a photo, and Back to photo while a video or a shader is in use. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/shader_list_scroll"
     android:layout_width="match_parent"
@@ -28,16 +28,39 @@
             android:textAppearance="?attr/textAppearanceTitleMedium"
             android:textColor="?attr/colorOnSurface" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/shader_new"
-            style="@style/Widget.Material3.Button.TonalButton"
+        <!-- Two ways to start, equal width: each is one line that ellipsizes before it wraps. -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:minHeight="48dp"
-            android:text="@string/shader_new" />
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/shader_new"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:minHeight="48dp"
+                android:text="@string/shader_new" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/shader_from_photo"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:minHeight="48dp"
+                android:text="@string/shader_from_photo" />
+        </LinearLayout>
 
         <GridLayout
             android:id="@+id/shader_list_grid"
