@@ -737,4 +737,60 @@ public class ChromeInkTest {
         assertTrue(Math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) > 10);
         assertEquals(android.graphics.Color.rgb(0, 0, 0), ChromeInk.areaWeightedMean(top, areas, 0));
     }
+
+    /** A crossing votes on nothing: the polarity it began with is the one it ends with. */
+    @Test
+    public void aCrossingCastsNoVote() {
+        com.termux.app.glass.LegibilityStore store = new com.termux.app.glass.LegibilityStore();
+        ink.attachLegibility(store);
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.polarity());
+
+        store.beginCrossing();
+        wallpaper.other = 0xFFDDDDDD;
+        Rect moved = new Rect(0, 400, 1080, 500);
+        for (int i = 0; i < 3; i++) {
+            ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, moved, LIGHT_INK, NIGHT_INK,
+                OnGlass.TARGET_BODY_TEXT);
+            moved = new Rect(0, 400 + i + 1, 1080, 500);
+        }
+        assertEquals("a crossing's resolves moved no vote", ChromeInk.Polarity.PALE_INK,
+            ink.polarity());
+
+        store.endCrossing();
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, new Rect(0, 600, 1080, 700), LIGHT_INK,
+            NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+        assertEquals("at rest the vote counts as before", ChromeInk.Polarity.DARK_INK,
+            ink.polarity());
+    }
+
+    /** A crossing reads the wallpaper for nothing: bands answer from the sample they hold. */
+    @Test
+    public void aCrossingTakesNoWallpaperSample() {
+        com.termux.app.glass.LegibilityStore store = new com.termux.app.glass.LegibilityStore();
+        ink.attachLegibility(store);
+        final int[] reads = {0};
+        ink.backdrops().setSampler(new GlassBackdropCache.Sampler() {
+            @Override public int sampleWallpaper(@NonNull Rect screenRect) {
+                reads[0]++;
+                store.noteSample();
+                return STATUS_GLASS;
+            }
+        });
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        int atRest = reads[0];
+        assertTrue(atRest > 0);
+
+        store.beginCrossing();
+        for (int i = 0; i < 4; i++) {
+            ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, new Rect(0, 300 + i, 1080, 400),
+                LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+            ink.onGlass(GlassBackdropCache.Band.AZ_STRIP, AZ_RECT, LIGHT_INK, NIGHT_INK,
+                OnGlass.TARGET_LARGE_TEXT);
+        }
+        assertEquals(0, store.sampledInCrossing());
+        assertEquals("nothing was read in the crossing", atRest, reads[0]);
+    }
 }

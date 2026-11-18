@@ -431,7 +431,15 @@ public final class ChromeInk {
      * what it holds. Asked of the crossing itself at each read, so it cannot stick.
      */
     public void setMeasureFreeze(@Nullable GlassBackdropCache.Freeze freeze) {
-        mCache.setFreeze(freeze);
+        mMeasureFreeze = freeze;
+    }
+
+    @Nullable private GlassBackdropCache.Freeze mMeasureFreeze;
+
+    /** The glass store's crossing, or the freeze set by {@link #setMeasureFreeze}. */
+    private boolean measuringStopped() {
+        if (mLegibility != null && mLegibility.crossing()) return true;
+        return mMeasureFreeze != null && mMeasureFreeze.frozen();
     }
     /** Run when a band's veil demand changes, so the surface that draws it is rebuilt. */
     @Nullable private final Runnable mOnVeilChanged;
@@ -485,6 +493,7 @@ public final class ChromeInk {
         mSurfaces = surfaces;
         mBlurCache = blurCache;
         mOnVeilChanged = onVeilChanged;
+        mCache.setFreeze(this::measuringStopped);
         mCache.setSampler(new GlassBackdropCache.Sampler() {
             @Override public int sampleWallpaper(@NonNull Rect screenRect) {
                 return ChromeInk.this.sampleWallpaper(screenRect, DEFAULT_FRAME);
@@ -2706,6 +2715,8 @@ public final class ChromeInk {
     }
 
     private void vote(@NonNull GlassBackdropCache.Band band, @ColorInt int flatGlass) {
+        // A crossing casts no vote: the polarity it began with is the one the page lands with.
+        if (mLegibility != null && mLegibility.crossing()) return;
         Integer previous = mVotes.put(band, flatGlass);
         if (previous != null && previous == flatGlass) return;
         // A new or moved vote can move the mean past the hysteresis band. Nothing is recomputed
