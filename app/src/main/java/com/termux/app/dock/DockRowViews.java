@@ -133,6 +133,11 @@ public final class DockRowViews implements DockRows.Views {
         if (view == null) return false;
         ViewGroup.LayoutParams params = view.getLayoutParams();
         if (params == null || params.height == px) return false;
+        if (com.termux.app.chrome.MotionLog.enabled) {
+            com.termux.app.chrome.MotionLog.log("diag-rowheight", view.getResources()
+                .getResourceEntryName(viewId) + " " + params.height + "->" + px + " "
+                + com.termux.app.chrome.MotionLog.callers(10));
+        }
         params.height = px;
         view.setLayoutParams(params);
         return true;
