@@ -56,6 +56,22 @@ float never rebuilds its layer mid-swipe. The rest and layers switch and each pi
 test go; each layer keeps its own refresh trigger. Soft edges of translucent content may differ
 from one blurred composite at rest, as 0021 §2b already accepted while moving.
 
+Amendment, 2026-11-18. The pages layer behind a pane's or surface's glass is frozen at rest too:
+it is held, moved by the pages' travel, and never swapped for live pages when the wall starts or
+stops. Only the first capture of a surface (start-up) draws the pages live until it lands. It is
+taken again when the content behind it changes:
+
+- The wall reports a content generation: any invalidation under its pages (not while it moves,
+  when the pages move by their poses and the layer follows them).
+- A surface retakes its layer at most once per 250 ms (`PageLayerRefresh.REFRESH_INTERVAL_MS`),
+  and a change inside the interval is taken as soon as it ends, so the last change is always
+  seen. Nothing changed means nothing is captured: no work at rest.
+- The new picture replaces the old one when its capture lands; the old one is drawn until then,
+  so no frame has an empty layer. A surface holds one picture and has one in flight, both counted
+  against its share of the budget; when the two do not fit, the old one goes first.
+- A layer left off where it was taken (pages that moved by a shift) is retaken once the wall
+  rests, so the next swipe starts from a layer that matches.
+
 ## 4. Kinds change only on a policy event
 
 A surface asks for a kind. The service grants it from the Live blur policy and the slot budget at
