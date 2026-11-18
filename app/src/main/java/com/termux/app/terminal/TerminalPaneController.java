@@ -529,6 +529,7 @@ public class TerminalPaneController {
     @Nullable private GeometryScheduler mGeometry;
 
     @Nullable private Window mActiveWindow;
+    @Nullable private Runnable mOnActiveWindowChanged;
     @Nullable private Leaf mMaximizedLeaf;
 
     /** Fallback gap between tiled panes when no surface style is attached. */
@@ -1479,7 +1480,7 @@ public class TerminalPaneController {
         }
         boolean switched = mActiveWindow != w;
         Window previous = mActiveWindow;
-        mActiveWindow = w;
+        setActiveWindow(w);
         if (LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null) {
             // Stack lives in the foreground-presentation field, not the tree, so re-entering a
             // stacked window must re-establish it or the policy silently shows every pane.
@@ -1729,6 +1730,18 @@ public class TerminalPaneController {
 
     @Nullable public Window activeWindow() { return mActiveWindow; }
 
+    /** Told after the active window changed (a window step, one opened or closed). */
+    public void setOnActiveWindowChanged(@Nullable Runnable listener) {
+        mOnActiveWindowChanged = listener;
+    }
+
+    private void setActiveWindow(@Nullable Window w) {
+        if (mActiveWindow == w) return;
+        mActiveWindow = w;
+        Runnable listener = mOnActiveWindowChanged;
+        if (listener != null) listener.run();
+    }
+
     /** The window whose tree or floats contain {@code shell}, or null. */
     @Nullable public Window windowOf(@Nullable TerminalSession shell) {
         if (shell == null) return null;
@@ -1805,7 +1818,7 @@ public class TerminalPaneController {
             }
         }
         if (mActiveWindow == w) {
-            mActiveWindow = null;
+            setActiveWindow(null);
             mMaximizedLeaf = null;
         }
         return sessions;
@@ -2848,7 +2861,7 @@ public class TerminalPaneController {
             // Window's only pane -> remove the whole window; caller drops it from its session.
             detachPaneView(session);
             mWindows.remove(owner);
-            if (mActiveWindow == owner) mActiveWindow = null;
+            if (mActiveWindow == owner) setActiveWindow(null);
             return FINISHED_WINDOW;
         }
         Node sibling = (parent.a == owningLeaf) ? parent.b : parent.a;
@@ -3309,7 +3322,7 @@ public class TerminalPaneController {
         // A maximised pane would hide what was just pulled in; one of the consumed window's
         // was never this window's to keep.
         if (into == mActiveWindow || source == mActiveWindow) mMaximizedLeaf = null;
-        if (mActiveWindow == source) mActiveWindow = null;
+        if (mActiveWindow == source) setActiveWindow(null);
         // A managed window re-tiles around its new panes, as it does around a split.
         reapplyLayoutPolicy(into);
         if (into == mActiveWindow) {
@@ -3879,7 +3892,7 @@ public class TerminalPaneController {
         Leaf leaf = (Leaf) w.root;
         if (mActiveWindow == w) {
             // The pane host lets go of the pane before the float layer takes it.
-            mActiveWindow = null;
+            setActiveWindow(null);
             mMaximizedLeaf = null;
             render();
         }

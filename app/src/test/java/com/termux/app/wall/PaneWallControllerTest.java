@@ -1147,6 +1147,30 @@ public class PaneWallControllerTest {
     }
 
     /** Lets every spring and slide run out. */
+    @Test public void theTerminalCellsFrontIsTheStopsCurrentPageWhenTheWallRestsThere() {
+        host.pages = WallPagesMigration.seed("home", 0, "home", 1);
+        PaneWallController terminalOnly = newController(host);
+        terminalOnly.refreshPages();
+        java.util.concurrent.atomic.AtomicInteger asks = new java.util.concurrent.atomic.AtomicInteger();
+        com.termux.app.page.Pages pages = new com.termux.app.page.Pages(
+            com.termux.app.page.PageHost.NONE, asks::incrementAndGet);
+        com.termux.app.page.Page window = new com.termux.app.page.Page() {
+            @Override public com.termux.app.page.PageKind kind() { return com.termux.app.page.PageKind.TERMINAL; }
+            @Override public View view() { return new View(activity); }
+            @Override public com.termux.app.page.Rest rest(com.termux.app.page.Rest.Inputs in) { return null; }
+            @Override public void onFront() { }
+            @Override public void offFront() { }
+            @Override public boolean onBack() { return false; }
+        };
+        terminalOnly.setPages(pages);
+        terminalOnly.setTerminalStops(() -> window);
+        terminalOnly.goToPageId(host.pages.terminal().id, false);
+        idle();
+        assertEquals(com.termux.app.page.PageKind.TERMINAL, pages.frontKind());
+        assertSame(window, pages.front());
+        assertTrue(asks.get() >= 1);
+    }
+
     private static void idle() {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
             .idleFor(java.time.Duration.ofMillis(3000L));

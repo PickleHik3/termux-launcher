@@ -31,11 +31,11 @@ public final class HomePage implements Page {
 
     @NonNull @Override public View view() { return mHost.view(); }
 
-    /** Nothing calls this yet. */
+    /** What Home asks of the chrome while it is in front and still: {@link HomeRest}. */
     @NonNull
     @Override
     public Rest rest(@NonNull Rest.Inputs in) {
-        throw new UnsupportedOperationException("Home's rest arrives with #271 slice 1");
+        return HomeRest.of(in);
     }
 
     @Override

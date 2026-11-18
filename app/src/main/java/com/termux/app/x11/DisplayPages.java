@@ -123,13 +123,16 @@ public final class DisplayPages {
     /**
      * The display's view stops being able to take the keys; unless a terminal holds them, they
      * are handed to the active pane, once, with no retry: a key that finds no holder is delivered
-     * by the per-key safety net.
+     * by the per-key safety net. When the wall has committed to a Terminal the hand-back is left
+     * to that page's own front (TerminalPage.onFront).
      */
     public void releaseFocus() {
         View view = mHost.displayView();
         if (view == null) return;
         DisplayViewFocus.release(view, focused -> focused instanceof TerminalView,
-            mHost::handKeysToTerminal);
+            () -> {
+                if (mHost.committedKind() != com.termux.app.page.PageKind.TERMINAL) mHost.handKeysToTerminal();
+            });
     }
 
     /** What Back on the front Display page does now; PASS leaves it to the chain. */
