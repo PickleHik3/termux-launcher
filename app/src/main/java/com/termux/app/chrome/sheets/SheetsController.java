@@ -770,8 +770,9 @@ public final class SheetsController {
     }
 
     /**
-     * The drawer's host bleeds under the system bars and the cutout: negative margins of the
-     * insets' own size (see the activity's insets listener).
+     * The drawer's host bleeds under the status bar and the cutout: a negative top margin of the
+     * insets' own size (see the activity's insets listener). Its bottom is the screen's edge
+     * already, with the band under the pill from {@link #bottomBandPx}.
      */
     public void applyAppDrawerEdgeBleed(@NonNull androidx.core.view.WindowInsetsCompat insetsCompat) {
         View host = mHost.activity().findViewById(R.id.app_drawer_host);
@@ -782,15 +783,32 @@ public final class SheetsController {
             insetsCompat.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
                 | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
         int barTop = edges.top;
-        int barBottom = edges.bottom;
         android.view.ViewGroup.MarginLayoutParams margins = (android.view.ViewGroup.MarginLayoutParams) layoutParams;
-        if (margins.topMargin == -barTop && margins.bottomMargin == -barBottom) return;
+        if (margins.topMargin == -barTop && margins.bottomMargin == 0) return;
         margins.topMargin = -barTop;
-        margins.bottomMargin = -barBottom;
+        margins.bottomMargin = 0;
         host.setLayoutParams(margins);
     }
 
     // ================================================================== the actions sheets
+
+    /** The band under the pill the sheets layer reaches through ({@link #applyBottomBand}). */
+    private int mBottomBandPx;
+
+    /**
+     * The one owner's band ({@link com.termux.app.place.BottomInsets#sheetsBandPx}): kept here,
+     * handed to the actions sheets built or yet to be, and read by the drawer's host.
+     */
+    public void applyBottomBand(int bandPx) {
+        mBottomBandPx = bandPx;
+        if (mTerminalActionsSheet != null) mTerminalActionsSheet.setBottomBandPx(bandPx);
+        if (mHomeActionsSheet != null) mHomeActionsSheet.setBottomBandPx(bandPx);
+    }
+
+    /** The band the sheets layer reaches through under the pill; 0 while the system keyboard is up. */
+    public int bottomBandPx() {
+        return mBottomBandPx;
+    }
 
     @Nullable private com.termux.app.launcher.home.HomeActionsSheet mTerminalActionsSheet;
     @Nullable private com.termux.app.launcher.home.HomeActionsSheet mHomeActionsSheet;
@@ -841,6 +859,7 @@ public final class SheetsController {
                         mHost.releasePreparedWallpaper();
                     }
                 });
+            mTerminalActionsSheet.setBottomBandPx(mBottomBandPx);
             content.addView(mTerminalActionsSheet, new android.view.ViewGroup.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
         }
@@ -882,6 +901,7 @@ public final class SheetsController {
                         if (pane != null) pane.setLayoutLocked(locked);
                     }
                 });
+            mHomeActionsSheet.setBottomBandPx(mBottomBandPx);
             content.addView(mHomeActionsSheet, new android.view.ViewGroup.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
         }
