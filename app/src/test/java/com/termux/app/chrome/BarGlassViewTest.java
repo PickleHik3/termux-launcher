@@ -57,6 +57,7 @@ public class BarGlassViewTest {
         private final String mName;
         private final List<String> mLog;
         ColorFilter filter;
+        int alpha = 255;
 
         Marker(String name, List<String> log) {
             mName = name;
@@ -64,7 +65,7 @@ public class BarGlassViewTest {
         }
 
         @Override public void draw(@NonNull Canvas canvas) { mLog.add(mName); }
-        @Override public void setAlpha(int alpha) { }
+        @Override public void setAlpha(int alpha) { this.alpha = alpha; }
         @Override public void setColorFilter(ColorFilter colorFilter) { filter = colorFilter; }
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
@@ -155,5 +156,89 @@ public class BarGlassViewTest {
         view.draw(new Canvas());
         assertEquals(Arrays.asList("frost", "background"), log);
         assertTrue(view.frostShown());
+    }
+
+    /** A shown bar with a leaving frost, an arriving frost and a log of what draws. */
+    private BarGlassView crossing(List<String> log, Marker leaving, Marker arriving) {
+        BarGlassView view = add(IDS[1]);
+        attach();
+        view.setFrost(leaving);
+        view.setArrivingFrost(arriving);
+        view.setFrostShown(true);
+        view.layout(0, 0, 200, 40);
+        return view;
+    }
+
+    @Test
+    public void shareZeroDrawsOnlyTheLeavingFrostAndOneOnlyTheArriving() {
+        List<String> log = new ArrayList<>();
+        Marker leaving = new Marker("leaving", log);
+        Marker arriving = new Marker("arriving", log);
+        BarGlassView view = crossing(log, leaving, arriving);
+
+        view.setFrostShare(0f);
+        view.draw(new Canvas());
+        assertEquals(Arrays.asList("leaving"), log);
+
+        log.clear();
+        view.setFrostShare(1f);
+        view.draw(new Canvas());
+        assertEquals(Arrays.asList("arriving"), log);
+        assertEquals(255, arriving.alpha);
+    }
+
+    @Test
+    public void halfwayTheLeavingFrostStaysWholeUnderTheArrivingAtHalfAlpha() {
+        List<String> log = new ArrayList<>();
+        Marker leaving = new Marker("leaving", log);
+        Marker arriving = new Marker("arriving", log);
+        BarGlassView view = crossing(log, leaving, arriving);
+
+        view.setFrostShare(0.5f);
+        view.draw(new Canvas());
+        assertEquals(Arrays.asList("leaving", "arriving"), log);
+        assertEquals(255, leaving.alpha);
+        assertEquals(128, arriving.alpha);
+        assertEquals(200, arriving.getBounds().width());
+    }
+
+    @Test
+    public void settlingPromotesTheArrivingFrostAtHalfOrMoreAndDropsItBelow() {
+        List<String> log = new ArrayList<>();
+        Marker leaving = new Marker("leaving", log);
+        Marker arriving = new Marker("arriving", log);
+        BarGlassView view = crossing(log, leaving, arriving);
+        view.setFrostShare(0.5f);
+        assertTrue(view.settleFrost());
+        assertSame(arriving, view.getFrost());
+        assertEquals(null, view.getArrivingFrost());
+        assertEquals(255, arriving.alpha);
+        log.clear();
+        view.draw(new Canvas());
+        assertEquals("one frost draws after the settle", Arrays.asList("arriving"), log);
+
+        List<String> log2 = new ArrayList<>();
+        Marker leaving2 = new Marker("leaving", log2);
+        BarGlassView view2 = crossing(log2, leaving2, new Marker("arriving", log2));
+        view2.setFrostShare(0.49f);
+        assertFalse(view2.settleFrost());
+        assertSame(leaving2, view2.getFrost());
+        assertEquals(null, view2.getArrivingFrost());
+        view2.draw(new Canvas());
+        assertEquals(Arrays.asList("leaving"), log2);
+    }
+
+    @Test
+    public void withNoArrivingFrostTheShareChangesNothingAndDrawsNothingExtra() {
+        BarGlassView view = add(IDS[0]);
+        attach();
+        List<String> log = new ArrayList<>();
+        view.setFrost(new Marker("frost", log));
+        view.setFrostShown(true);
+        view.layout(0, 0, 200, 40);
+        view.setFrostShare(0.7f);
+        view.draw(new Canvas());
+        assertEquals(Arrays.asList("frost"), log);
+        assertFalse(view.settleFrost());
     }
 }

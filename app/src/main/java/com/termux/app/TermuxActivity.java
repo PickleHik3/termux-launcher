@@ -7607,6 +7607,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 bar.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeBarHere,
                     buildTerminalWindowBarBackground(host), mTopStackRenderer.glassShare()));
             }
+            // The frost crosses too, at the arriving look's blur and bend.
+            mChrome.frost().buildArrivingTopFrost();
         } finally {
             mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
         }
@@ -7645,6 +7647,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 strip.setAlpha(1f);
             }
             settleCrossfade(findViewById(R.id.terminal_window_bar_background));
+            if (mChrome != null) mChrome.frost().settleTopFrost();
         }
         mTopFadeActive = false;
         mTopFadeHerePage = null;
@@ -9598,7 +9601,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         for (int barId : barIds) {
             View bar = findViewById(barId);
             if (bar instanceof com.termux.app.chrome.BarGlassView
-                && drawableShowsFrame(((com.termux.app.chrome.BarGlassView) bar).getFrost(), frame))
+                && (drawableShowsFrame(((com.termux.app.chrome.BarGlassView) bar).getFrost(), frame)
+                    || drawableShowsFrame(((com.termux.app.chrome.BarGlassView) bar).getArrivingFrost(), frame)))
                 return true;
         }
         ImageView strip = mDecorNavBarBlurBackdrop;

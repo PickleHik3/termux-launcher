@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.chrome.BarGlassView;
 import com.termux.app.chrome.CrossfadeDrawable;
 import com.termux.app.place.SeamFade;
 import com.termux.app.window.FrameGuards;
@@ -275,6 +276,14 @@ public final class TopStackRenderer {
             }
         }
         shareOf(mViews.view(R.id.terminal_window_bar_background));
+        frostShare(strip);
+        frostShare(mViews.view(R.id.terminal_window_bar_background));
+        frostShare(mViews.view(R.id.terminal_window_bar_background_side));
+    }
+
+    /** The glass share on a bar view's arriving frost, which the frost crosses with. */
+    private void frostShare(@Nullable View view) {
+        if (view instanceof BarGlassView) ((BarGlassView) view).setFrostShare(mGlassShare);
     }
 
     /** Writes the share into {@code view}'s blend; whether it wears one. */

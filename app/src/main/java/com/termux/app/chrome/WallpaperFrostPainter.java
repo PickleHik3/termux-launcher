@@ -182,6 +182,101 @@ public final class WallpaperFrostPainter {
         mSurfaces.onWindowBarFrostEdge(paneApplied && paneFrost.drawsEdge());
     }
 
+    /** What an arriving frost was built at, per bar view, for the landing's ledger. */
+    @NonNull private final java.util.Map<BarGlassView, Integer> mArrivingRadius =
+        new java.util.WeakHashMap<>();
+    @NonNull private final java.util.Map<BarGlassView, SurfaceDirtyLedger.FrostRadius> mArrivingKey =
+        new java.util.WeakHashMap<>();
+
+    /**
+     * A crossing begins and the surfaces answer the arriving look: gives each bar view whose frost
+     * shows an arriving frost at that look's blur radius and refraction, when either differs from
+     * the installed frost's, so the frost crosses with the glass over it
+     * ({@link BarGlassView#setFrostShare}) instead of switching at the landing. Nothing is built
+     * when the two looks blur and bend alike, so no second drawable is held. When the cache has no
+     * frame at the arriving radius yet (a miss starts the blur and answers null) nothing is built
+     * either: the bar then switches at the landing, as before. The second frame is the cache's
+     * own, inside its bounded store.
+     */
+    public void buildArrivingTopFrost() {
+        View wallpaperFrame = mSurfaces.findChromeView(R.id.activity_termux_root_view);
+        if (wallpaperFrame == null || !mSurfaces.wallpaperPassthroughEnabled()) return;
+        if (mSurfaces.statusBarOnDockPlank()) return;
+        boolean capsule = mSurfaces.roundedDockStyle();
+        ChromeEdgeRule.TopLead lead = capsule ? ChromeEdgeRule.TopLead.NONE : mSurfaces.topStackLead();
+        boolean stripIsDockSheet = lead == ChromeEdgeRule.TopLead.DOCK_SHEET;
+        int blurRadiusDp = mSurfaces.effectiveStatusBarBlurRadiusDp();
+        int stripRadiusDp = stripIsDockSheet ? mSurfaces.effectiveDockBlurRadiusDp() : blurRadiusDp;
+        int paneSeams = mSurfaces.statusBarSeamEdges();
+        float rimCornerPx = capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f;
+        if (lead != ChromeEdgeRule.TopLead.NONE) {
+            arrive(R.id.terminal_status_bar_glass_surface,
+                mSurfaces.findChromeView(R.id.terminal_status_bar_background), wallpaperFrame,
+                stripRadiusDp, stripIsDockSheet ? SurfaceDirtyLedger.FrostRadius.OFF_DOCK
+                    : SurfaceDirtyLedger.FrostRadius.TOP_PANE,
+                0f, ChromeEdgeRule.seams(false, ChromeEdgeRule.flushEdges(
+                    com.termux.app.place.PlaceLayout.Edge.TOP), ChromeEdgeRule.BOTTOM),
+                stripIsDockSheet ? dockCover() : statusCover(), stripIsDockSheet ? dock() : status());
+        }
+        View barHost = mSurfaces.findChromeView(R.id.terminal_window_bar_host);
+        View mainCard = mSurfaces.findChromeView(R.id.terminal_window_bar_background);
+        View sideCard = mSurfaces.findChromeView(R.id.terminal_window_bar_background_side);
+        boolean barShown = barHost != null && barHost.getVisibility() == View.VISIBLE;
+        arrive(R.id.terminal_window_bar_background, barShown && mainCard != null ? mainCard : barHost,
+            wallpaperFrame, blurRadiusDp, SurfaceDirtyLedger.FrostRadius.TOP_PANE, rimCornerPx,
+            paneSeams, statusCover(), status());
+        if (barShown && sideCard != null && sideCard.getVisibility() == View.VISIBLE) {
+            arrive(R.id.terminal_window_bar_background_side, sideCard, wallpaperFrame, blurRadiusDp,
+                SurfaceDirtyLedger.FrostRadius.TOP_PANE, rimCornerPx, paneSeams, statusCover(),
+                status());
+        }
+    }
+
+    private void arrive(int viewId, @Nullable View bounds, @NonNull View wallpaperFrame,
+                        int radiusDp, @NonNull SurfaceDirtyLedger.FrostRadius key, float cornerPx,
+                        int seams, float cover, @NonNull ElementOn glass) {
+        View view = mSurfaces.findChromeView(viewId);
+        if (!(view instanceof BarGlassView) || bounds == null) return;
+        BarGlassView bar = (BarGlassView) view;
+        bar.setArrivingFrost(null);
+        SharedFrameDrawable installed = SharedFrameDrawable.of(bar.getFrost());
+        if (installed == null || !bar.frostShown() || radiusDp <= 0) return;
+        GlassRefraction.Look look = glass.refraction();
+        GlassRefraction.Look dressed = look == null ? null : look.withCover(cover);
+        boolean sameRadius = mBlurCache.radiusDpOf(installed.frame()) == radiusDp;
+        if (sameRadius && java.util.Objects.equals(dressed, installed.refractionLook())) return;
+        Bitmap frame = mBlurCache.obtain(radiusDp, wallpaperFrame);
+        if (frame == null) return;
+        SharedFrameDrawable arriving = new SharedFrameDrawable(frame, mBlurCache.frameRectRef(),
+            mSurfaces.wallpaperParallax(), GlassAnchor.screen(bar));
+        refract(arriving, look, cornerPx, seams, cover);
+        clarify(arriving, look, radiusDp, wallpaperFrame);
+        bar.setArrivingFrost(arriving);
+        mArrivingRadius.put(bar, radiusDp);
+        mArrivingKey.put(bar, key);
+    }
+
+    /**
+     * The crossing is over: each bar view's arriving frost is promoted or dropped by its share, and
+     * a promoted one's radius goes on the ledger so the landing's pass finds it installed and
+     * rebuilds nothing.
+     */
+    public void settleTopFrost() {
+        settleBar(R.id.terminal_status_bar_glass_surface);
+        settleBar(R.id.terminal_window_bar_background);
+        settleBar(R.id.terminal_window_bar_background_side);
+    }
+
+    private void settleBar(int viewId) {
+        View view = mSurfaces.findChromeView(viewId);
+        if (!(view instanceof BarGlassView)) return;
+        BarGlassView bar = (BarGlassView) view;
+        boolean promoted = bar.settleFrost();
+        Integer radius = mArrivingRadius.remove(bar);
+        SurfaceDirtyLedger.FrostRadius key = mArrivingKey.remove(bar);
+        if (promoted && radius != null && key != null) mLedger.setFrostRadiusDp(key, radius);
+    }
+
     public void clearTopPane() {
         mPassGate.invalidate();
         Slot statusFrost = barSlot(R.id.terminal_status_bar_glass_surface);

@@ -27,6 +27,10 @@ import com.termux.app.window.WindowLayer;
 public class BarGlassView extends View {
 
     @Nullable private Drawable mFrost;
+    /** The frost a crossing arrives at when it differs from {@link #mFrost}; null otherwise. */
+    @Nullable private Drawable mArrivingFrost;
+    /** How much of the arriving frost shows, 0..1. */
+    private float mFrostShare;
     @Nullable private ColorFilter mFrostFilter;
     private boolean mFrostShown;
     /** Made on each attach, once the id that names the entry is set. */
@@ -97,17 +101,84 @@ public class BarGlassView extends View {
         return mFrostShown;
     }
 
+    /**
+     * The frost the other half's look blurs to, laid over the frost as {@link #setFrostShare}
+     * rises; null for none. Dropped, not promoted, by {@link #settleFrost} below half.
+     */
+    public void setArrivingFrost(@Nullable Drawable frost) {
+        if (frost == mArrivingFrost) return;
+        if (mArrivingFrost != null) mArrivingFrost.setCallback(null);
+        mArrivingFrost = frost;
+        if (frost != null) {
+            frost.setCallback(this);
+            frost.setColorFilter(mFrostFilter);
+        }
+        invalidate();
+    }
+
+    @Nullable
+    public Drawable getArrivingFrost() {
+        return mArrivingFrost;
+    }
+
+    /** How much of the arriving frost shows; invalidates only on a change. */
+    public void setFrostShare(float share) {
+        float clamped = share < 0f ? 0f : Math.min(share, 1f);
+        if (clamped == mFrostShare) return;
+        mFrostShare = clamped;
+        if (mArrivingFrost != null) invalidate();
+    }
+
+    public float frostShare() {
+        return mFrostShare;
+    }
+
+    /**
+     * The crossing is over: the arriving frost becomes the frost at half or more, else it is
+     * dropped. No frost is left holding two. Whether the arriving one was promoted.
+     */
+    public boolean settleFrost() {
+        Drawable arriving = mArrivingFrost;
+        float share = mFrostShare;
+        mFrostShare = 0f;
+        if (arriving == null) return false;
+        mArrivingFrost = null;
+        if (share >= 0.5f) {
+            Drawable leaving = mFrost;
+            if (leaving != null) leaving.setCallback(null);
+            mFrost = arriving;
+            arriving.setAlpha(255);
+            invalidate();
+            return true;
+        }
+        arriving.setCallback(null);
+        invalidate();
+        return false;
+    }
+
     @Override
     protected boolean verifyDrawable(@NonNull Drawable who) {
-        return who == mFrost || super.verifyDrawable(who);
+        return who == mFrost || who == mArrivingFrost || super.verifyDrawable(who);
     }
 
     @Override
     public void draw(@NonNull Canvas canvas) {
         Drawable frost = mFrost;
-        if (mFrostShown && frost != null) {
-            frost.setBounds(0, 0, getWidth(), getHeight());
-            frost.draw(canvas);
+        Drawable arriving = mArrivingFrost;
+        float share = mFrostShare;
+        if (mFrostShown) {
+            // The leaving frost stays whole under the arriving one, which comes in at the share:
+            // an opaque frame keeps full coverage all the way (leaving*(1-s) + arriving*s), where
+            // two fades over each other would dip to 1 - s(1-s) and show the wall through.
+            if (frost != null && (arriving == null || share < 1f)) {
+                frost.setBounds(0, 0, getWidth(), getHeight());
+                frost.draw(canvas);
+            }
+            if (arriving != null && share > 0f) {
+                arriving.setBounds(0, 0, getWidth(), getHeight());
+                arriving.setAlpha(Math.round(255f * share));
+                arriving.draw(canvas);
+            }
         }
         super.draw(canvas);
     }

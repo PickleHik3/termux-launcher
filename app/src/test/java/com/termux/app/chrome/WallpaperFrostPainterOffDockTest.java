@@ -99,6 +99,47 @@ public class WallpaperFrostPainterOffDockTest {
         assertEquals(Boolean.FALSE, surfaces.windowBarEdge);
     }
 
+    /** A bar pair with its frost up, as the layout nests it. */
+    private BarGlassView[] barsWithFrost() {
+        BarGlassView statusFrost = bar(300, 24);
+        BarGlassView paneFrost = bar(300, 40);
+        surfaces.views.put(R.id.terminal_status_bar_glass_surface, statusFrost);
+        surfaces.views.put(R.id.terminal_window_bar_background, paneFrost);
+        surfaces.views.put(R.id.terminal_window_bar_host, (View) paneFrost.getParent());
+        chrome.frost().updateTopPane();
+        assertTrue(paneFrost.frostShown());
+        return new BarGlassView[] {statusFrost, paneFrost};
+    }
+
+    @Test
+    public void aCrossingBetweenLooksThatBlurAndBendAlikeBuildsNoSecondFrost() {
+        BarGlassView[] bars = barsWithFrost();
+        chrome.frost().buildArrivingTopFrost();
+        assertNull(bars[0].getArrivingFrost());
+        assertNull(bars[1].getArrivingFrost());
+    }
+
+    @Test
+    public void aCrossingToAnotherBlurRadiusGivesTheBarAnArrivingFrostThatSettlesIn() {
+        BarGlassView[] bars = barsWithFrost();
+        SharedFrameDrawable leaving = SharedFrameDrawable.of(bars[1].getFrost());
+        surfaces.statusBlurRadiusDp = 30;
+        chrome.frost().buildArrivingTopFrost();
+        SharedFrameDrawable arriving = SharedFrameDrawable.of(bars[1].getArrivingFrost());
+        assertNotNull(arriving);
+        assertSame(chrome.blurCache().obtain(30, wallpaperFrame), arriving.frame());
+        assertSame("the leaving frost is untouched", leaving, SharedFrameDrawable.of(bars[1].getFrost()));
+
+        bars[1].setFrostShare(1f);
+        chrome.frost().settleTopFrost();
+        assertNull(bars[1].getArrivingFrost());
+        assertSame(arriving, SharedFrameDrawable.of(bars[1].getFrost()));
+
+        // The landing's pass finds it installed at the arriving radius and builds nothing.
+        chrome.frost().updateTopPane();
+        assertSame(arriving, SharedFrameDrawable.of(bars[1].getFrost()));
+    }
+
     @Test
     public void aSheetOffTheDockShowsTheDocksOwnFrame() {
         surfaces.dockBlurRadiusDp = 14;
