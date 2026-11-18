@@ -38,7 +38,7 @@ final class PhotoShaderCard {
 
     /** The user guide, on the same docs base the help panel links to. */
     static final String GUIDE_URL =
-        "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/Photo_Shader_Wallpapers.md";
+        com.termux.app.help.HelpPanelView.DOCS_BASE + "Photo_Shader_Wallpapers.md";
 
     /** What the card asks of its host; on the main thread. */
     interface Listener {
