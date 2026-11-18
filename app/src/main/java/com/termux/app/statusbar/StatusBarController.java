@@ -131,6 +131,8 @@ public final class StatusBarController {
         @NonNull com.termux.app.chrome.ChromeEdgeRule.TopLead statusStripLead();
         /** A riding frame moved the chrome (the crossing's travel flag). */
         void markChromeTravelMoved();
+        /** The top stack's writer: the bar's ride, the strip and the chips' slide. */
+        @NonNull TopStackRenderer topStack();
 
         // -------------------------------------------------------------- widgets and cards
 
@@ -1189,15 +1191,12 @@ public final class StatusBarController {
         setTopStatusBarCollapsed(isStatusBarCompact(), false);
     }
 
-    /** Where the status bar was last drawn from its rest as it travels with the Workspace's page. */
-    private float mStatusTravelXPx;
-
     /**
-     * The status bar drawn where the Workspace's page stands (SeamTravel.workspaceScreenXPx) on
-     * any frame the crossing says it rides (SeamCrossing.rideBar), with the strip behind the system
-     * bar when it continues the bar's glass: a translation, and the bar dressed for that page
-     * rather than the one the wall has committed to, so its chips do not change while it is on
-     * screen. Whether it rides.
+     * The status bar's travel for this frame: whether the crossing rides it (SeamCrossing.rideBar)
+     * and, handed to the top stack's writer with the wall's progress, where it stands
+     * (SeamTravel.workspaceScreenXPx) with the strip behind the system bar when that continues the
+     * bar's glass; the bar is dressed for that page rather than the one the wall has committed to,
+     * so its chips do not change while it is on screen. Whether it rides.
      */
     public boolean syncStatusTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame,
                                      @NonNull com.termux.app.place.SeamCrossing.Answers seam) {
@@ -1209,19 +1208,28 @@ public final class StatusBarController {
             mHost.paneWallController() == null ? 0 : mHost.paneWallController().wall().getWidth());
         if (rides) {
             mHost.markChromeTravelMoved();
-            // The bar carries its place content with it: the strip does not also pan inside it.
+            // The place content's slide is the top stack's (TopStackRenderer); nothing else pans it.
             View strip = mHost.hotView(R.id.terminal_status_place_content);
             if (strip != null) {
-                if (strip.getTranslationX() != 0f) strip.setTranslationX(0f);
                 if (strip.getTranslationY() != 0f) strip.setTranslationY(0f);
                 if (strip.getAlpha() != 1f) strip.setAlpha(1f);
                 if (strip.getClipBounds() != null) strip.setClipBounds(null);
             }
         }
         if (seam.barRedressed()) mHost.syncPlaceBar();
-        // The strip behind the system bar stands with the bar on every riding frame, whatever
-        // pass of this frame dressed or showed it.
-        if (rides) syncStatusStripTravel();
+        // The top stack's writer takes the frame's share: the bar rides at the Workspace's page,
+        // with the strip behind the system bar and the chips standing where the scene puts them.
+        com.termux.app.place.SeamCrossing crossing = mHost.crossing().seam();
+        com.termux.app.wall.PageRef committed = crossing.committedEnd();
+        int widthPx = mHost.paneWallController() == null ? 0
+            : mHost.paneWallController().wall().getWidth();
+        TopStackRenderer top = mHost.topStack();
+        top.setWidth(widthPx);
+        if (committed != null) {
+            top.setProgress(com.termux.app.place.SeamTravel.otherEndProgress(frame, committed));
+        }
+        top.setRide(rides ? crossing.barScreenXPx(frame, widthPx) : Float.NaN,
+            crossing.barRideWearsOther());
         return rides;
     }
 
@@ -1280,40 +1288,6 @@ public final class StatusBarController {
         if (view == null) return;
         if (view.getId() == R.id.terminal_window_bar_host) mHost.resetBarMarginEase(view);
         else if (view.getScaleX() != 1f) view.setScaleX(1f);
-    }
-
-    /**
-     * The status bar, and the strip behind the system bar while it continues the bar's glass, at
-     * {@code x} from their rest. Their glass samples the wallpaper where it is drawn, and a
-     * transform alone redraws nothing, so the bar's backdrop is re-aimed with the move.
-     */
-    public void applyStatusTravelX(float x) {
-        boolean moved = x != mStatusTravelXPx;
-        mStatusTravelXPx = x;
-        if (moved) {
-            View host = mHost.hotView(R.id.terminal_window_bar_host);
-            if (host != null) host.setTranslationX(x);
-        }
-        // The strip follows on every call, moved or not: one shown since the last move (dressed
-        // for the Workspace as the ride began) must not stand at its rest while the bar arrives.
-        syncStatusStripTravel();
-        if (!moved) return;
-    }
-
-    /**
-     * The strip behind the system bar where the bar stands now: with it while the strip is the
-     * bar's own glass running up under the system bar (the lead it was last dressed for, not one
-     * read live mid-crossing, which can still answer for the half the bar left), at rest
-     * otherwise (StatusStripRide). Its frost samples where it is drawn; the glass service re-aims it.
-     */
-    public void syncStatusStripTravel() {
-        View strip = mHost.hotView(R.id.terminal_status_bar_background);
-        if (strip == null) return;
-        float stripX = com.termux.app.place.StatusStripRide.stripX(mStatusTravelXPx,
-            strip.getVisibility() == View.VISIBLE,
-            mHost.statusStripLead() == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR);
-        if (strip.getTranslationX() == stripX) return;
-        strip.setTranslationX(stripX);
     }
 
     /** {@link StatusBarWidgets#syncStatusBarInk}. */

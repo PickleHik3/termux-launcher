@@ -797,10 +797,37 @@ public final class SeamCrossing {
         return mRun.other != null && mRun.oneKind;
     }
 
+    /** The committed end the crossing was begun from, as a page; null while none runs. */
+    @Nullable
+    public PageRef committedEnd() {
+        return mRun.other == null ? null : mRun.committedEnd;
+    }
+
     /** The other end the crossing was begun for, as a page; null while none runs. */
     @Nullable
     public PageRef otherEnd() {
         return mRun.other == null ? null : mRun.otherEnd;
+    }
+
+    /**
+     * Whether both ends stand the bar alike, in one outline, so it stays put across the crossing
+     * and nothing but its glass and ink changes. The top stack's scene
+     * ({@code TopStackScene#shared}) is told the same through its ends' outline keys, so the two
+     * agree on which bar is one slab.
+     */
+    public boolean barStill() {
+        return mRun.other != null && mRun.barStill;
+    }
+
+    /**
+     * Whether the riding bar wears the other end's look ({@link #rideBar}): across the seam the
+     * Workspace's, which is the other end when the crossing began on Home; between two Home pages
+     * the page that wears the bar, when that is the other one.
+     */
+    public boolean barRideWearsOther() {
+        if (mRun.other == null) return false;
+        if (mRun.oneKind) return mRun.barEnd != null && mRun.barEnd.equals(mRun.otherEnd);
+        return mRun.committed == PaneWallPage.WIDGETS;
     }
 
     /**

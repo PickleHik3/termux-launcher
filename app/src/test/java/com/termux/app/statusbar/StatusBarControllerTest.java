@@ -194,37 +194,6 @@ public class StatusBarControllerTest {
         assertTrue(mBar.isStatusBarVertical());
     }
 
-    @Test
-    public void theTravelXIsWrittenOncePerChangedValue() {
-        CountingView host = new CountingView(RuntimeEnvironment.getApplication());
-        mHost.views.put(R.id.terminal_window_bar_host, host);
-        mBar.applyStatusTravelX(5f);
-        mBar.applyStatusTravelX(5f);
-        assertEquals(1, host.translations);
-        assertEquals(5f, host.getTranslationX(), 0f);
-        mBar.applyStatusTravelX(7f);
-        mBar.applyStatusTravelX(7f);
-        assertEquals(2, host.translations);
-        mBar.applyStatusTravelX(0f);
-        assertEquals(3, host.translations);
-        assertEquals(0f, host.getTranslationX(), 0f);
-    }
-
-    /** Counts its translation writes. */
-    private static final class CountingView extends View {
-        int translations;
-
-        CountingView(Context context) {
-            super(context);
-        }
-
-        @Override
-        public void setTranslationX(float translationX) {
-            translations++;
-            super.setTranslationX(translationX);
-        }
-    }
-
     /** Counts the grid holds the scheduler takes; posts nothing. */
     private static final class FakeGeometryHost implements GeometryScheduler.Host {
         int grids;
@@ -259,6 +228,8 @@ public class StatusBarControllerTest {
             return RuntimeEnvironment.getApplication().getResources();
         }
         @NonNull @Override public Context context() { return RuntimeEnvironment.getApplication(); }
+        final TopStackRenderer topStack = new TopStackRenderer(this::hotView);
+        @NonNull @Override public TopStackRenderer topStack() { return topStack; }
         @Override public void runOnUiThread(@NonNull Runnable action) { action.run(); }
         @Override public float dpToPx(float dp) {
             return dp * getResources().getDisplayMetrics().density;

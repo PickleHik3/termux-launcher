@@ -2069,6 +2069,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mPaneWallController.goToHomePageOne(isVisible()));
         // The bottom stack's writer is a step of the frame table, on the pipeline's guards.
         mStackRenderer.attach(mFrames);
+        // The top stack's writer joins it: the bar's ride, the strip and the chips' slide.
+        mTopStackRenderer.attach(mFrames);
         mRowsGuard.attach(mFrames.guards());
         mFrames.setLog((event, detail) -> {
             if (com.termux.app.chrome.MotionLog.enabled) com.termux.app.chrome.MotionLog.log(event, detail);
@@ -7461,12 +7463,68 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // the dresses they wore, and both cross by the one share of the way (SeamFade). Later
     // re-dresses in the crossing change nothing; the landing leaves each on the dress it reached.
 
+    /**
+     * A crossing begins, or reads its ends again for another page of the other half: the top
+     * stack's two ends, each with what its layout says of the bar, its look, and the chips and
+     * strip as they stand. The two ends draw the bar in one outline exactly when the seam says
+     * the bar stands still ({@link com.termux.app.place.SeamCrossing#barStill}), which the scene's
+     * {@code shared} must agree with. Inks are not read yet.
+     */
+    private void beginTopStack(@NonNull com.termux.app.wall.PageRef here,
+                               @NonNull com.termux.app.wall.PageRef there,
+                               @NonNull PlaceLayout hereLayout, @NonNull PlaceLayout thereLayout) {
+        boolean still = mCrossing.seam().barStill();
+        fillTopEnd(mTopEndHere, here, hereLayout, 0);
+        fillTopEnd(mTopEndThere, there, thereLayout, still ? 0 : 1);
+        View strip = findViewById(R.id.terminal_status_bar_glass_surface);
+        boolean stripHereShown = mTopFadeActive ? mTopFadeStripHere != null
+            : strip != null && strip.isShown();
+        mTopStackRenderer.begin(mTopEndHere, mTopEndThere, stripHereShown);
+    }
+
+    private void fillTopEnd(@NonNull com.termux.app.statusbar.TopStackScene.End end,
+                            @NonNull com.termux.app.wall.PageRef page, @NonNull PlaceLayout layout,
+                            int outlineKey) {
+        com.termux.app.place.Slot status = layout.slot(Element.STATUS);
+        end.barShown = !status.hidden;
+        end.edge = status.edge;
+        end.side = com.termux.app.page.Side.of(page.isHome());
+        end.lookId = lookIdOf(page);
+        end.outlineKey = outlineKey;
+        fillTopStripState(end);
+    }
+
+    /** The chips and the strip behind the system bar as they stand; one view of each for both ends. */
+    private void fillTopStripState(@NonNull com.termux.app.statusbar.TopStackScene.End end) {
+        View chips = findViewById(R.id.terminal_status_place_content);
+        end.chipsShown = chips != null && chips.getVisibility() == View.VISIBLE;
+        View strip = findViewById(R.id.terminal_status_bar_background);
+        end.stripShown = strip != null && strip.getVisibility() == View.VISIBLE;
+        end.stripDressedForBar =
+            mStatusStripLead == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR;
+    }
+
+    /**
+     * The top stack at rest on {@code front}'s side: the chips a wall to the right on Home, in
+     * place on the Workspace. Where the rest may have moved: the wall moved or was laid out, the
+     * place bar was synced, a crossing landed. Does not end a crossing.
+     */
+    private void restTopStack(@NonNull com.termux.app.wall.PaneWallPage front) {
+        if (mCrossing.crossing()) return;
+        com.termux.app.statusbar.TopStackScene.End end = mTopEndRest;
+        end.side = com.termux.app.page.Side.of(front == com.termux.app.wall.PaneWallPage.WIDGETS);
+        end.edge = mStatusBar.statusBarEdge();
+        fillTopStripState(end);
+        mTopStackRenderer.setWidth(
+            mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth());
+        mTopStackRenderer.rest(end);
+    }
+
     private boolean mTopFadeActive;
     @Nullable private com.termux.app.wall.PageRef mTopFadeHerePage;
     @Nullable private Drawable mTopFadeStripHere;
     @Nullable private Drawable mTopFadeBarHere;
     private boolean mTopFadeBuilt;
-    private float mTopFadeShare;
 
     /** A crossing between Home and the Workspace begins: the band and the bar keep their glass. */
     private void beginTopBandFade(@NonNull com.termux.app.wall.PageRef here,
@@ -7497,17 +7555,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View strip = findViewById(R.id.terminal_status_bar_glass_surface);
             if (strip != null) {
                 strip.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeStripHere,
-                    buildStatusInsetStripSurface(host), mTopFadeShare));
+                    buildStatusInsetStripSurface(host), mTopStackRenderer.glassShare()));
             }
             View bar = findViewById(R.id.terminal_window_bar_background);
             if (bar != null) {
                 bar.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeBarHere,
-                    buildTerminalWindowBarBackground(host), mTopFadeShare));
+                    buildTerminalWindowBarBackground(host), mTopStackRenderer.glassShare()));
             }
         } finally {
             mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
         }
-        applyTopBandFadeShare();
+        // The top stack's writer puts the blend's share (and the band's presence) on them.
+        mTopStackRenderer.requestApply();
     }
 
     /**
@@ -7526,35 +7585,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host == null || mChrome == null) return false;
         buildTopBandFadeEnds(host, com.termux.app.place.TopBandFadePlan.NONE);
         return true;
-    }
-
-    /** One frame of the crossing: the band and the bar at the wall's share of the way. */
-    private void syncTopBandFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) {
-        if (!mTopFadeActive || mTopFadeHerePage == null) return;
-        float share = com.termux.app.place.SeamFade.share(
-            com.termux.app.place.SeamTravel.otherEndProgress(wallFrame, mTopFadeHerePage));
-        if (share == mTopFadeShare) return;
-        mTopFadeShare = share;
-        if (mTopFadeBuilt) applyTopBandFadeShare();
-    }
-
-    private void applyTopBandFadeShare() {
-        View strip = findViewById(R.id.terminal_status_bar_glass_surface);
-        setCrossfadeShare(strip, mTopFadeShare);
-        // A band the leaving half did not show comes in by its alpha with the share, and goes
-        // the same way on a cancel; one it showed stays whole while its glass crosses.
-        if (strip != null) {
-            float alpha = com.termux.app.place.SeamFade.presence(mTopFadeStripHere != null, true,
-                mTopFadeShare);
-            if (strip.getAlpha() != alpha) strip.setAlpha(alpha);
-        }
-        setCrossfadeShare(findViewById(R.id.terminal_window_bar_background), mTopFadeShare);
-    }
-
-    private static void setCrossfadeShare(@Nullable View view, float share) {
-        Drawable background = view == null ? null : view.getBackground();
-        if (background instanceof com.termux.app.chrome.CrossfadeDrawable)
-            ((com.termux.app.chrome.CrossfadeDrawable) background).setShare(share);
     }
 
     /** The crossing is over: each blend gives way to the dress it reached, nothing rebuilt. */
@@ -7576,7 +7606,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTopFadeStripHere = null;
         mTopFadeBarHere = null;
         mTopFadeBuilt = false;
-        mTopFadeShare = 0f;
     }
 
     private static void settleCrossfade(@Nullable View view) {
@@ -10626,7 +10655,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Shown, or dressed again, while the bar rides: it stands where the bar stands from this
         // pass, not at its rest until the bar's next move.
-        mStatusBar.syncStatusStripTravel();
+        mTopStackRenderer.requestApply();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
     }
 
@@ -10660,7 +10689,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Shown, or dressed again, while the bar rides: it stands where the bar stands from this
         // pass, not at its rest until the bar's next move.
-        mStatusBar.syncStatusStripTravel();
+        mTopStackRenderer.requestApply();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
     }
 
@@ -10753,6 +10782,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return parent instanceof View ? ((View) parent).getId() : -1f;
             }
         });
+
+    /**
+     * The only writer of the top stack's transforms and the top band's blend
+     * ({@link com.termux.app.statusbar.TopStackRenderer}); the crossing hands it its ends at the
+     * begin ({@link #beginTopStack}), the wall's progress and the ride each frame
+     * (StatusBarController#syncStatusTravel), and the rest where it may have moved
+     * ({@link #restTopStack}).
+     */
+    private final com.termux.app.statusbar.TopStackRenderer mTopStackRenderer =
+        new com.termux.app.statusbar.TopStackRenderer(this::hotView);
+    private final com.termux.app.statusbar.TopStackScene.End mTopEndHere =
+        new com.termux.app.statusbar.TopStackScene.End();
+    private final com.termux.app.statusbar.TopStackScene.End mTopEndThere =
+        new com.termux.app.statusbar.TopStackScene.End();
+    private final com.termux.app.statusbar.TopStackScene.End mTopEndRest =
+        new com.termux.app.statusbar.TopStackScene.End();
 
     private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
         @Override public void laneMoved(@NonNull View host) {
@@ -24428,6 +24473,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void syncPlaceBar() { TermuxActivity.this.syncPlaceBar(); }
         @Override public @NonNull com.termux.app.chrome.ChromeEdgeRule.TopLead statusStripLead() { return mStatusStripLead; }
         @Override public void markChromeTravelMoved() { mChromeTravelMoved = true; }
+        @Override public @NonNull com.termux.app.statusbar.TopStackRenderer topStack() { return mTopStackRenderer; }
     }
 
     /**
@@ -24856,7 +24902,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void rideStatusX(float px) {
-            mStatusBar.applyStatusTravelX(px);
+            // The bar's x is the top stack's: StatusBarController#syncStatusTravel hands it to
+            // mTopStackRenderer with the wall's progress.
         }
 
         @Override
@@ -25002,7 +25049,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean syncStatusTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame, @NonNull com.termux.app.place.SeamCrossing.Answers seam) { return mStatusBar.syncStatusTravel(frame, seam); }
         @Override public void syncStatusMarginEase(@NonNull com.termux.app.place.SeamCrossing.Answers seam) { mStatusBar.syncStatusMarginEase(seam); }
         @Override public void syncNavStripFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) { TermuxActivity.this.syncNavStripFade(wallFrame); }
-        @Override public void syncTopBandFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) { TermuxActivity.this.syncTopBandFade(wallFrame); }
+        @Override public void beginTopStack(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there, @NonNull PlaceLayout hereLayout, @NonNull PlaceLayout thereLayout) { TermuxActivity.this.beginTopStack(here, there, hereLayout, thereLayout); }
         @Override public void beginNavStripFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there) { TermuxActivity.this.beginNavStripFade(here, there); }
         @Override public void beginTopBandFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there) { TermuxActivity.this.beginTopBandFade(here, there); }
         @Override public void syncSeamBandShare(@NonNull com.termux.app.place.SeamCrossing.Answers seam) { TermuxActivity.this.syncSeamBandShare(seam); }
@@ -25114,6 +25161,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             storeMoved = crossingLanding.storeMoved();
             // The stack's next frame is the landing's: it should write nothing new.
             mStackRenderer.onLanding();
+            mTopStackRenderer.onLanding();
             // And the next chrome commit is its landing's: within a side it may move rows to the
             // arriving page's edges; between Home and the Workspace it writes none.
             mRowsGuard.onLanding(
@@ -25203,6 +25251,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.endSection();
             Trace.beginSection("Settle.tail");
             mCrossing.end();
+            // The top stack rests on the page the wall landed on.
+            restTopStack(page);
             syncLegibilityCrossing();
             // What waits for the landed frame (the half's re-dress, the even-out's settle) runs
             // just after it.
@@ -26115,6 +26165,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     });
                 }
             });
+        // The chips rest a wall's width off on Home: a wall laid out at another width stands the
+        // top stack's rest again (an offset change alone is not told of it).
+        mPaneWallController.wall().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol) restTopStack(mLastWallPage);
+        });
         // Before anything lands the wall: Home's pages, run and press page come from the seam.
         mPaneWallController.setHome(mHomeSeam);
         // The display view stands on one Display page at a time (ADR 0015, A3b).
@@ -26572,17 +26627,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncPlaceBarOffset(float offsetPx) {
         mWallOffsetPx = offsetPx;
         int width = mPaneWallController == null ? 0 : mPaneWallController.wall().getWidth();
-        // The row's content is the same on every page (#90): the badge, the window chips and the
-        // readings stand still while the wall moves under them, so the strip never pans or fades
-        // with the wall. Only a bar riding with the Workspace's page moves, and the bar carries the
-        // strip with it (syncStatusTravel).
+        // The readings stand still while the wall moves under them (#90), so the row never fades
+        // or clips with the wall. The badge and the window chips are the Workspace's (ADR 0030
+        // section 2): they rest a wall to the right on Home and slide in with the Workspace's
+        // rows, which the top stack's renderer writes (TopStackRenderer), the bar carrying them
+        // when it rides.
         View strip = hotView(R.id.terminal_status_place_content);
         if (strip != null) {
-            if (strip.getTranslationX() != 0f) strip.setTranslationX(0f);
             if (strip.getTranslationY() != 0f) strip.setTranslationY(0f);
             if (strip.getAlpha() != 1f) strip.setAlpha(1f);
             if (strip.getClipBounds() != null) strip.setClipBounds(null);
         }
+        // At rest the top stack stands the front page's side; the wall moving or laid out again
+        // (its width) and the place bar's sync are the one place every rest change passes.
+        restTopStack(mLastWallPage);
         if (mPaneWallController == null) return;
         // The marks are the wall's cells, read around the current one (ADR 0016).
         com.termux.app.statusbar.StatusBarLensView lens = hotView(R.id.terminal_status_lens);

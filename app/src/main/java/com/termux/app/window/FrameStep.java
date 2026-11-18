@@ -31,6 +31,13 @@ public enum FrameStep {
     STACK,
 
     /**
+     * The top stack's writer: the status bar host's ride, the strip behind the system bar, the
+     * window chips' slide and the top band's blend, written from {@code TopStackScene}. Its owned
+     * properties are on the guards.
+     */
+    TOP_STACK,
+
+    /**
      * The glass commit (ADR 0029 section 1), always last: the glass service re-dresses every
      * surface whose kind a policy event moved, back to front, then records the Live layers of
      * this frame. It reads the frame's laid-out places, so it runs only in the pre-draw hook of a
