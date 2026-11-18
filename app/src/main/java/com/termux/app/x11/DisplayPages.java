@@ -131,4 +131,32 @@ public final class DisplayPages {
         DisplayViewFocus.release(view, focused -> focused instanceof TerminalView,
             mHost::handKeysToTerminal);
     }
+
+    /** What Back on the front Display page does now; PASS leaves it to the chain. */
+    @NonNull
+    public DisplayBackPolicy.Action back() {
+        Link link = mHost.link();
+        return DisplayBackPolicy.decide(mHost.isDisplayShowing(), mHost.isLayerOpen(),
+            mHost.isRunning(), link == null ? null : link.textFocus(), mHost.frameContent());
+    }
+
+    /**
+     * Back on a Display page: a keyboard the page raised goes down first; with nothing of its own
+     * to put down, the app on the display is told to go back. False when the display is stopped
+     * with nothing raised, so the chain's default (Home page 1) answers.
+     */
+    public boolean onBack() {
+        switch (back()) {
+            case LOWER_KEYBOARD:
+                mHost.lowerKeyboard();
+                return true;
+            case BACK_IN_APP:
+                Link link = mHost.link();
+                if (link != null) link.sendBack();
+                return true;
+            case PASS:
+            default:
+                return false;
+        }
+    }
 }

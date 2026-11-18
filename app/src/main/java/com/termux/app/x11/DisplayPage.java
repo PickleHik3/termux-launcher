@@ -57,9 +57,9 @@ public final class DisplayPage implements Page {
         mPages.leave();
     }
 
-    /** Back on the Display page arrives with its policy (slice 4). */
+    /** Back after everything raised over the page: the keyboard first, then the X app's own. */
     @Override
     public boolean onBack() {
-        return false;
+        return mPages.onBack();
     }
 }

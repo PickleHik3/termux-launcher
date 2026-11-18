@@ -27405,24 +27405,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Android's Back on the Display place: a keyboard the place raised goes down first, and with
-     * nothing of its own to put down the app on the display is told to go back. What it means is
-     * {@link com.termux.app.x11.DisplayBackPolicy}; this is where the answer is applied.
+     * Android's Back on the Display place, on the key path because X wants every key: the Display
+     * page's own Back ({@link com.termux.app.x11.DisplayPages#onBack}), answered once on the way
+     * up with the press swallowed, so nothing below the page sees half a Back. What the page
+     * leaves (PASS) goes the ordinary way, whose chain ends at Home page 1.
      */
     private boolean consumeDisplayBack(@NonNull KeyEvent event) {
-        com.termux.app.x11.DisplayBackPolicy.Action action =
-            com.termux.app.x11.DisplayBackPolicy.decide(isDisplayWindowShowing(), isLayerOpen(),
-                mDisplayServer.isRunning(),
-                mDisplayServer.controller() == null ? null : mDisplayServer.controller().textFocusPolicy().state(),
-                mFrameContent.content());
-        if (action == com.termux.app.x11.DisplayBackPolicy.Action.PASS) return false;
-        // Answered once, on the way up; the press is swallowed with it so nothing below the page
-        // sees half a Back.
-        if (event.getAction() != KeyEvent.ACTION_UP) return true;
-        if (action == com.termux.app.x11.DisplayBackPolicy.Action.LOWER_KEYBOARD)
-            lowerDisplayKeyboard();
-        else if (mDisplayServer.controller() != null)
-            mDisplayServer.controller().sendBackKey();
+        if (mDisplayPages.back() == com.termux.app.x11.DisplayBackPolicy.Action.PASS) return false;
+        if (event.getAction() == KeyEvent.ACTION_UP) mDisplayPages.onBack();
         return true;
     }
 
