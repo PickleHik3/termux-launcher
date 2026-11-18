@@ -324,6 +324,7 @@ public final class SuggestionBarView extends GridLayout
     private boolean rowHapticsEnabled = true;
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
     @Nullable private LauncherNotificationBadgeStore.Listener notificationBadgeListener;
+    /** The band the dock gave the row lying down ({@link #restHeightPx}). */
     private int dockRowHeightHintPx = 0;
     /**
      * The icon one slot draws lying down, as the dock resolved it: final, its slot fit and bead
@@ -607,33 +608,6 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private ValueAnimator swipePreviewReboundAnimator;
     private VelocityTracker swipeVelocityTracker;
     private boolean pageSwitchAnimating = false;
-    private boolean pendingDeferredRender = false;
-    private boolean suppressDrawUntilStableLayout = true;
-    private boolean stableLayoutRerenderPosted = false;
-    private boolean childLayoutPending = true;
-    private long stableLayoutSuppressedSinceUptimeMs = 0L;
-    private static final int MAX_DEFERRED_RENDER_ATTEMPTS = 8;
-    private int deferredRenderAttempts;
-    /**
-     * A render was turned away for want of stable bounds and nothing has rendered since. The
-     * bounded retries can be spent while the row is hidden (Minimal mode, a re-parenting), so this
-     * outlives them: the next layout pass that leaves the row stable re-issues the render.
-     */
-    private boolean renderLostWhileUnstable;
-    /**
-     * When a render was first turned away for want of stable bounds, and nothing has rendered
-     * since. It is the row's own clock: draw suppression keeps a separate one, which a release
-     * resets while the row may well still be deferring.
-     */
-    private long renderDeferredSinceUptimeMs = 0L;
-    /**
-     * Set once the row has waited out the anti-flicker window, or spent its retries, without ever
-     * reaching the height the dock's hint asked for. The hint stops deciding then: it is somebody
-     * else's idea of the band, and a home screen holding its icons back for a height it may never
-     * be given is worse off than one drawn a few pixels small. A new size, or a new hint, gives it
-     * its say back.
-     */
-    private boolean rowHeightHintWaived = false;
     private int lastSurfaceRenderSignature = 0;
     private boolean pendingPinnedMutationFeedback = false;
     private boolean suppressContextLongPressForSwipe = false;
@@ -643,7 +617,6 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private List<ShortcutInfo> activeAppMenuShortcuts;
     /** Rows being composed for the menu currently under construction, before it is shown. */
     private final List<MenuRow> pendingMenuRows = new ArrayList<>();
-    private static final long STABLE_LAYOUT_MAX_SUPPRESS_MS = 180L;
     @Nullable private TextView shortcutsMainRowView;
     private final Runnable azResetRunnable = this::clearAzPreviewWithFade;
     private static final long AZ_LAUNCH_CLEAR_DELAY_MS = 1000L;
@@ -802,7 +775,6 @@ public final class SuggestionBarView extends GridLayout
         super.onAttachedToWindow();
         setClipChildren(false);
         setClipToPadding(false);
-        prepareForWindowReentry();
         resetTransientVisualState();
         ViewParent parent = getParent();
         if (parent instanceof ViewGroup) {
@@ -858,9 +830,6 @@ public final class SuggestionBarView extends GridLayout
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
-        if (suppressDrawUntilStableLayout) {
-            return;
-        }
         if (swipePageDragging && Math.abs(swipeVisualOffsetPx) > 0.5f) {
             int currentAlpha = clamp(Math.round(255f * (1f - (0.10f * swipeDragProgress))), 0, 255);
             // Clipped along the paging axis only: the page-swap is contained to the bar's own
@@ -893,37 +862,8 @@ public final class SuggestionBarView extends GridLayout
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        // A genuine layout pass is new information: the bounded defer in renderButtons may try
-        // its full budget again, and the dock's height hint gets its say back now that the row is
-        // a size it never had when the hint was overruled.
-        if (changed) {
-            deferredRenderAttempts = 0;
-            renderDeferredSinceUptimeMs = 0L;
-            rowHeightHintWaived = false;
-        }
-        scheduleStableDrawReleaseIfPossible();
-        if (renderLostWhileUnstable) post(this::reissueLostRender);
         // A render ends in a layout pass, so this is where the ticks learn what the row now holds.
         publishPageIndicator();
-    }
-
-    /**
-     * Re-issues a render the row had to drop while it had no stable bounds. Posted from
-     * {@link #onLayout} because the bounds are only readable once the pass has finished; a row
-     * that is still unstable leaves the flag set for the next pass.
-     */
-    private void reissueLostRender() {
-        if (!renderLostWhileUnstable || !hostVisible || !isAttachedToWindow()
-            || !hasStableRenderBounds()) {
-            return;
-        }
-        renderLostWhileUnstable = false;
-        reload();
-    }
-
-    /** Whether a render is still owed to the row because it was dropped while unstable. */
-    boolean isRenderLostWhileUnstable() {
-        return renderLostWhileUnstable;
     }
 
     /**
@@ -1631,7 +1571,6 @@ public final class SuggestionBarView extends GridLayout
         // The slots on screen were laid along the old axis; the next render says what stands now.
         railMostUsedSlots = 0;
         lastSurfaceRenderSignature = 0;
-        childLayoutPending = true;
         requestLayout();
         return true;
     }
@@ -2003,33 +1942,7 @@ public final class SuggestionBarView extends GridLayout
         if (Math.abs(this.iconScale - iconScale) < 0.0001f) return;
         this.iconScale = iconScale;
         invalidateRenderedIconCaches();
-        childLayoutPending = true;
         requestLayout();
-        scheduleSlotIconResize();
-    }
-
-    /**
-     * The dock row's height, for the form that lies down. It is remembered while the bar stands
-     * up — the dock keeps handing its own row height over whichever edge the bar is on — but it
-     * changes nothing there: a rail's icons and slots come from the rail's own metrics.
-     */
-    public void setDockRowHeightHintPx(int dockRowHeightHintPx) {
-        int clamped = Math.max(0, dockRowHeightHintPx);
-        if (this.dockRowHeightHintPx == clamped) {
-            return;
-        }
-        this.dockRowHeightHintPx = clamped;
-        if (vertical) {
-            return;
-        }
-        // A new hint is a new question, so it is asked afresh even if the last one was overruled.
-        rowHeightHintWaived = false;
-        renderDeferredSinceUptimeMs = 0L;
-        invalidateRenderedIconCaches();
-        childLayoutPending = true;
-        requestLayout();
-        invalidate();
-        scheduleStableDrawReleaseIfPossible();
         scheduleSlotIconResize();
     }
 
@@ -2049,10 +1962,8 @@ public final class SuggestionBarView extends GridLayout
             return;
         }
         invalidateRenderedIconCaches();
-        childLayoutPending = true;
         requestLayout();
         invalidate();
-        scheduleStableDrawReleaseIfPossible();
         // The slots already built keep the size they were built at until something resizes
         // them; nothing else re-renders the row when only the dock's size moved.
         scheduleSlotIconResize();
@@ -2080,16 +1991,9 @@ public final class SuggestionBarView extends GridLayout
         dockRailIconPx = railIcon;
         dockRailSlotLengthPx = railSlot;
         if (vertical && !railChanged) return;
-        // A new hint is a new question, so it is asked afresh even if the last one was overruled.
-        if (hintChanged) {
-            rowHeightHintWaived = false;
-            renderDeferredSinceUptimeMs = 0L;
-        }
         invalidateRenderedIconCaches();
-        childLayoutPending = true;
         requestLayout();
         invalidate();
-        scheduleStableDrawReleaseIfPossible();
         if (vertical) {
             // A rail's slots are its pitch long, so they are built again at the new one.
             post(this::reload);
@@ -2142,15 +2046,6 @@ public final class SuggestionBarView extends GridLayout
         notificationBadgesEnabled = enabled;
         notificationBadgePackages = enabled ? LauncherNotificationBadgeStore.getActivePackages() : Collections.emptySet();
         invalidateNotificationBadgeViews();
-    }
-
-    public void prepareForWindowReentry() {
-        suppressDrawUntilStableLayout = true;
-        stableLayoutRerenderPosted = false;
-        childLayoutPending = true;
-        stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
-        invalidate();
-        scheduleStableDrawReleaseIfPossible();
     }
 
     public void setInheritedTintColor(int inheritedTintColor) {
@@ -2419,15 +2314,9 @@ public final class SuggestionBarView extends GridLayout
                 pendingCatalogRefreshRender = false;
                 post(() -> reloadWithInput(lastInput, lastTerminalView));
             }
-            // A render dropped while hidden is otherwise re-issued only by a layout pass, and
-            // coming back into view need not lay the row out again.
-            if (renderLostWhileUnstable) post(this::reissueLostRender);
-            scheduleStableDrawReleaseIfPossible();
             return;
         }
         searchGeneration++;
-        pendingDeferredRender = false;
-        stableLayoutRerenderPosted = false;
         removeCallbacks(azResetRunnable);
         removeCallbacks(azPostLaunchClearRunnable);
         clearAzFocusedEntry();
@@ -4069,49 +3958,6 @@ public final class SuggestionBarView extends GridLayout
      * one.
      */
     private boolean renderButtons(@NonNull List<LauncherAppEntry> entries, boolean azPreview) {
-        if (renderDeferredSinceUptimeMs == 0L && !hasStableRenderBounds()) {
-            renderDeferredSinceUptimeMs = SystemClock.uptimeMillis();
-        }
-        waiveRowHeightHintIfOverdue();
-        if (!hasStableRenderBounds()) {
-            renderLostWhileUnstable = true;
-            // A gate on the home screen is anti-flicker, never a mute switch: a row with nothing in
-            // it yet stays dark until its bounds settle, but a row that is already showing icons
-            // keeps showing them. One frame of icons at the wrong size beats a blank dock.
-            if (getChildCount() == 0) {
-                suppressDrawUntilStableLayout = true;
-                childLayoutPending = true;
-                if (stableLayoutSuppressedSinceUptimeMs == 0L) {
-                    stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
-                }
-            }
-            // Bounded, not clock-bounded: a dock that can never stabilize (hidden, or measured
-            // 1x1 in a test fixture) must stop reposting, or the main queue never drains and
-            // Robolectric's idle() livelocks. The next real reload or size change retries.
-            if (!pendingDeferredRender && deferredRenderAttempts < MAX_DEFERRED_RENDER_ATTEMPTS) {
-                deferredRenderAttempts++;
-                pendingDeferredRender = true;
-                final List<LauncherAppEntry> deferredEntries = new ArrayList<>(entries);
-                final boolean deferredAzPreview = azPreview;
-                post(() -> {
-                    pendingDeferredRender = false;
-                    if (!hostVisible || !isAttachedToWindow()) {
-                        scheduleStableDrawReleaseIfPossible();
-                        return;
-                    }
-                    renderButtons(deferredEntries, deferredAzPreview);
-                });
-            }
-            // Every way out of a deferral ends here. The gate's only way back is its timeout, and
-            // the timeout only runs while something keeps asking — a give-up that asked nobody is
-            // what left the row muted with no layout pass coming to free it.
-            scheduleStableDrawReleaseIfPossible();
-            return false;
-        }
-        pendingDeferredRender = false;
-        renderLostWhileUnstable = false;
-        deferredRenderAttempts = 0;
-        renderDeferredSinceUptimeMs = 0L;
         int buttonCount = Math.max(1, maxButtonCount);
         int renderStartCol = 0;
         List<PinnedItem> pinnedForSlots = new ArrayList<>();
@@ -4200,12 +4046,7 @@ public final class SuggestionBarView extends GridLayout
 
         int surfaceRenderSignature = computeSurfaceRenderSignature(entries, azPreview, pinnedSurface, buttonCount);
         if (surfaceRenderSignature != 0 && surfaceRenderSignature == lastSurfaceRenderSignature && getChildCount() > 0) {
-            pendingDeferredRender = false;
-            if (suppressDrawUntilStableLayout) {
-                scheduleStableDrawReleaseIfPossible();
-            } else {
-                invalidate();
-            }
+            invalidate();
             // No layout pass follows a render that changed nothing, and the ticks may have been
             // told something else since the column was last laid out: they hear what stands.
             publishPageIndicator();
@@ -4215,18 +4056,6 @@ public final class SuggestionBarView extends GridLayout
         }
         railMostUsedSlots = mostUsedSlots;
 
-        boolean keepCurrentFrameVisible = hasStableDisplayLayout() && surfaceRenderSignature != 0 && surfaceRenderSignature != lastSurfaceRenderSignature;
-        if (!keepCurrentFrameVisible) {
-            suppressDrawUntilStableLayout = true;
-            childLayoutPending = true;
-            if (stableLayoutSuppressedSinceUptimeMs == 0L) {
-                stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
-            }
-        } else {
-            suppressDrawUntilStableLayout = false;
-            childLayoutPending = false;
-            stableLayoutSuppressedSinceUptimeMs = 0L;
-        }
         resetTransientVisualState();
         folderDragHoverIndex = -1;
         reorderDiscard();
@@ -4451,11 +4280,7 @@ public final class SuggestionBarView extends GridLayout
         }
         lastSurfaceRenderSignature = surfaceRenderSignature;
         requestLayout();
-        if (!keepCurrentFrameVisible) {
-            scheduleStableDrawReleaseIfPossible();
-        } else {
-            invalidate();
-        }
+        invalidate();
         return true;
     }
 
@@ -4637,7 +4462,7 @@ public final class SuggestionBarView extends GridLayout
         // The axis, and the row height only while there is a row: the dock keeps pushing its own
         // row height at a bar standing on a side, and that must not read as a new surface.
         signature = (31 * signature) + (vertical ? 1 : 0);
-        signature = (31 * signature) + rowHeightHintPx();
+        signature = (31 * signature) + restHeightPx();
         // The icon the dock handed over, which outranks the hint whenever it is set.
         signature = (31 * signature) + (vertical ? 0 : dockIconSizePx);
         signature = (31 * signature) + Math.max(1, buttonCount);
@@ -5006,7 +4831,7 @@ public final class SuggestionBarView extends GridLayout
 
     /**
      * One rail icon, across the rail, as the dock handed it. Zero while it has handed none, and a
-     * rail with no size draws no icons, as a row does ({@link #hasStableRenderBounds}).
+     * rail with no size draws no icons,.
      */
     private int railIconSizePx() {
         return dockRailIconPx;
@@ -5025,13 +4850,16 @@ public final class SuggestionBarView extends GridLayout
         dockRailSlotLengthPx = slot;
         if (!vertical) return;
         invalidateRenderedIconCaches();
-        childLayoutPending = true;
         requestLayout();
         invalidate();
     }
 
-    /** The dock row's height hint, which only the form that lies down is sized by. */
-    private int rowHeightHintPx() {
+    /**
+     * The row's rest height: the band the dock's last answer ({@link #setDockLayout}) gave the row
+     * lying down, in pixels. Zero standing up, or before any answer. The stack's writer reads it
+     * to place the Home side's row host; the row reads no other view's geometry to place itself.
+     */
+    public int restHeightPx() {
         return vertical ? 0 : dockRowHeightHintPx;
     }
 
@@ -10171,11 +9999,13 @@ public final class SuggestionBarView extends GridLayout
     private float railScrollPagePosition() {
         ViewParent parent = getParent();
         if (!(parent instanceof View)) return 0f;
-        View host = (View) parent;
-        int inside = host.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
+        // The scroller the rail sits in: its scroll is what the ticks follow, a read for the
+        // indicator and not a number the rail places itself by.
+        View scroller = (View) parent;
+        int inside = scroller.getHeight() - scroller.getPaddingTop() - scroller.getPaddingBottom();
         int range = getHeight() - inside;
         if (range <= 0) return 0f;
-        return Math.max(0f, Math.min(1f, host.getScrollY() / (float) range));
+        return Math.max(0f, Math.min(1f, scroller.getScrollY() / (float) range));
     }
 
     /** The ticks' accent: the launcher's own, which is what the dock's ticks were drawn from. */
@@ -10601,170 +10431,6 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
-    /**
-     * Whether the bar has been given bounds worth rendering into. The floors are the axis's: a
-     * rail is one icon wide and the whole edge long, so the lying-down row's 120dp width floor
-     * would refuse every rail there is and defer the render forever.
-     */
-    private boolean hasStableRenderBounds() {
-        if (!isLaidOut()) {
-            return false;
-        }
-        // No size handed over: nothing is drawn rather than icons at a guessed size.
-        if (iconSizePx() <= 0) {
-            return false;
-        }
-        if (vertical) {
-            // A tolerance below one icon, not an exact fit: the host's band is a rounded 58dp
-            // less two rounded 10dp paddings, which can land a pixel or two under the icon.
-            // The rail's own height is wrap_content and, before the first vertical render, still
-            // the one-row height of the previous form; gate the length on the host instead.
-            int minStableWidth = Math.max(1, railIconSizePx() - dp(4));
-            int minStableLength = Math.max(1, railSlotLengthPx());
-            View host = getParent() instanceof View ? (View) getParent() : null;
-            int lengthPx = host != null ? Math.max(host.getHeight(), getHeight()) : getHeight();
-            return getWidth() >= minStableWidth && lengthPx >= minStableLength;
-        }
-        int minStableWidth = Math.max(1, dp(120));
-        // The shortest box the dock ever hands the row, not a figure of the view's own: a floor
-        // above it holds back every render of a row that small, for good (issue #49).
-        int minStableHeight = Math.max(1,
-            com.termux.app.dock.DockLayoutPolicy.minRowContentPx(screenDensity()));
-        if (getWidth() < minStableWidth || getHeight() < minStableHeight) {
-            return false;
-        }
-        // The floors above are the ones that never lapse. The hint is
-        // the dock's idea of the band the row was given — furniture the row is not (the page-tick
-        // strip) sits in that band too, and a hint handed over ahead of the next layout pass
-        // describes a row that does not exist yet — so it only ever holds the first frame back,
-        // and {@link #waiveRowHeightHintIfOverdue} decides when it has held long enough.
-        int hint = rowHeightHintWaived ? 0 : rowHeightHintPx();
-        return hint <= 0 || getHeight() >= Math.max(minStableHeight, hint - dp(4));
-    }
-
-    /**
-     * Lets the dock's height hint go once it has had its say and the row is still not the height it
-     * asked for — either the anti-flicker window has run out or the deferred renders have. The
-     * standing form has no equivalent to waive: a rail is gated on its own icon and slot metrics,
-     * which are constants rather than a figure another view hands it.
-     */
-    private void waiveRowHeightHintIfOverdue() {
-        if (rowHeightHintWaived || vertical || rowHeightHintPx() <= 0) {
-            return;
-        }
-        boolean windowSpent = renderDeferredSinceUptimeMs != 0L
-            && SystemClock.uptimeMillis() - renderDeferredSinceUptimeMs >= STABLE_LAYOUT_MAX_SUPPRESS_MS;
-        if (windowSpent || deferredRenderAttempts >= MAX_DEFERRED_RENDER_ATTEMPTS) {
-            rowHeightHintWaived = true;
-        }
-    }
-
-    /**
-     * Whether the slots have actually been placed apart from one another. Which way "apart" runs
-     * is the axis's too: a rail's slots differ by their top, a row's by their left.
-     */
-    private boolean hasStableChildLayout() {
-        if (!childLayoutPending) {
-            return true;
-        }
-        int meaningfulChildren = 0;
-        int firstPosition = Integer.MIN_VALUE;
-        boolean foundDistinctSlot = false;
-        int minChildWidth;
-        int minChildHeight;
-        if (vertical) {
-            minChildWidth = Math.max(dp(18), Math.min(getWidth(), railIconSizePx() - dp(4)));
-            minChildHeight = Math.max(dp(18), Math.min(railSlotLengthPx(), getHeight()));
-        } else {
-            minChildWidth = Math.max(dp(18), getWidth() / Math.max(2, maxButtonCount * 2));
-            minChildHeight = Math.max(dp(18), Math.min(Math.max(dp(18), rowHeightHintPx() - dp(8)), getHeight()));
-        }
-
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
-            if (child == null || child.getVisibility() != VISIBLE || child.getAlpha() <= 0.01f) {
-                continue;
-            }
-            meaningfulChildren++;
-            if (child.getWidth() < minChildWidth || child.getHeight() < minChildHeight) {
-                return false;
-            }
-            int position = vertical ? child.getTop() : child.getLeft();
-            if (firstPosition == Integer.MIN_VALUE) {
-                firstPosition = position;
-            } else if (Math.abs(position - firstPosition) >= dp(8)) {
-                foundDistinctSlot = true;
-            }
-        }
-
-        return meaningfulChildren <= 1 || foundDistinctSlot;
-    }
-
-    public boolean hasStableDisplayLayout() {
-        return isAttachedToWindow()
-            && hasStableRenderBounds()
-            && hasStableChildLayout()
-            && !suppressDrawUntilStableLayout;
-    }
-
-    private void scheduleStableDrawReleaseIfPossible() {
-        if (!hostVisible || !suppressDrawUntilStableLayout || stableLayoutRerenderPosted) {
-            return;
-        }
-        waiveRowHeightHintIfOverdue();
-        // The timeout must be able to expire even while render bounds never stabilize (e.g. the
-        // bar stuck at a collapsed height after a crash-restart mid-layout) — otherwise draw
-        // suppression holds the bar blank indefinitely.
-        if (hasStableDrawSuppressionExpired()) {
-            releaseStableDrawSuppression();
-            return;
-        }
-        if (!hasStableRenderBounds()) {
-            postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
-            return;
-        }
-        stableLayoutRerenderPosted = true;
-        post(() -> {
-            stableLayoutRerenderPosted = false;
-            if (hasStableDrawSuppressionExpired()) {
-                releaseStableDrawSuppression();
-                return;
-            }
-            if (!hostVisible || !isAttachedToWindow()) {
-                return;
-            }
-            // Bounds that were stable when this was posted and are not now, or slots not placed
-            // apart yet: keep asking. The chain must run until the timeout fires, because the
-            // timeout is the only thing that can free a row whose bounds never settle — a check
-            // that returned here without re-posting left the gate closed for good.
-            if (!hasStableRenderBounds() || !hasStableChildLayout()) {
-                if (suppressDrawUntilStableLayout) {
-                    postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
-                }
-                return;
-            }
-            resetTransientVisualState();
-            suppressDrawUntilStableLayout = false;
-            childLayoutPending = false;
-            stableLayoutSuppressedSinceUptimeMs = 0L;
-            invalidate();
-        });
-    }
-
-    private boolean hasStableDrawSuppressionExpired() {
-        if (!suppressDrawUntilStableLayout || stableLayoutSuppressedSinceUptimeMs == 0L)
-            return false;
-        return SystemClock.uptimeMillis() - stableLayoutSuppressedSinceUptimeMs
-            >= STABLE_LAYOUT_MAX_SUPPRESS_MS;
-    }
-
-    private void releaseStableDrawSuppression() {
-        suppressDrawUntilStableLayout = false;
-        childLayoutPending = false;
-        stableLayoutSuppressedSinceUptimeMs = 0L;
-        invalidate();
-    }
-
     private static float lerp(float start, float end, float t) {
         return start + ((end - start) * t);
     }
@@ -11022,8 +10688,8 @@ public final class SuggestionBarView extends GridLayout
     /**
      * One icon's size in the form the bar is standing in: exactly what the dock handed over
      * ({@link #setDockLayout}), the slot's icon lying down and the rail's standing up. Zero while
-     * it has handed none, and a row with no size draws no icons rather than guess one
-     * ({@link #hasStableRenderBounds}). Package-visible for the tests.
+     * it has handed none, and a row with no size draws no icons rather than guess one.
+     * Package-visible for the tests.
      */
     int iconSizePx() {
         return vertical ? railIconSizePx() : dockIconSizePx;

@@ -437,6 +437,19 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void theAppsRowHasNoStableBoundsWait() throws IOException {
+        String file = "app/SuggestionBarView.java";
+        String text = new String(Files.readAllBytes(root().resolve(file)),
+            java.nio.charset.StandardCharsets.UTF_8);
+        List<String> problems = new ArrayList<>();
+        for (String word : new String[]{"suppressDrawUntilStableLayout", "hasStableRenderBounds",
+            "renderLostWhileUnstable", "getParent().getHeight", "host.getHeight"}) {
+            if (text.contains(word)) problems.add(file + " still mentions " + word);
+        }
+        assertNone(problems);
+    }
+
+    @Test
     public void theNewPackagesHaveNoAllowListEntries() {
         List<String> all = new ArrayList<>();
         for (List<String> list : Arrays.asList(UPWARD_IMPORTS, CYCLE_PAIRS, LONGER_CYCLES,

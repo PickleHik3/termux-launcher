@@ -71,7 +71,9 @@ public class SuggestionBarIconSizeTest {
     public void aRowHandedNoSizeHasNoIcon() {
         SuggestionBarView bar = inHostOf(1234);
         assertEquals("no size, no icon, whatever the host is", 0, bar.iconSizePx());
-        bar.setDockRowHeightHintPx(140);
+        bar.setDockLayout(dock());
+        bar.setDockIconSizePx(0);
+        assertTrue("the dock handed a band", bar.restHeightPx() > 0);
         assertEquals("a band is not an icon", 0, bar.iconSizePx());
     }
 
