@@ -49,6 +49,11 @@ public class DockRowsSeamTest {
         false, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
         PlaceLayout.KeyboardForm.DOCKED, 4, 5);
 
+    /** A Home layout that puts every dock row away. */
+    private static final PlaceLayout HOME_BARE = new PlaceLayout(Edge.TOP, RowPlacement.HIDDEN,
+        false, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
+        PlaceLayout.KeyboardForm.DOCKED, 4, 5);
+
     // ---- the fake adapter ----
 
     /** The accessory views as a test sees them: their state, and every write in order. */
@@ -516,6 +521,63 @@ public class DockRowsSeamTest {
             new DockRows.Union(true, false, false));
         rows.applyLayout(bare);
         assertEquals(home.appsBarHeightPx, (int) views.heights.get(Element.APPS));
+    }
+
+    // ---- a landing sizes a lane row from its own side's rest ----
+
+    private static void assertLaneRowsKeepTheirHeightAtTheLanding(boolean homeHasTheRows,
+                                                                   DockStyle design) {
+        PlaceLayout homeLayout = homeHasTheRows ? HOME : HOME_BARE;
+        PlaceLayout windowLayout = homeHasTheRows ? WINDOW_BARE : WINDOW;
+        Snapshot.Builder device = device(half(homeLayout, design), half(windowLayout, design));
+        DockLayout home = rest(device, PageRef.HOME);
+        DockLayout window = rest(device, PageRef.TERMINAL);
+        com.termux.app.page.Side owner = homeHasTheRows
+            ? com.termux.app.page.Side.HOME : com.termux.app.page.Side.WORKSPACE;
+        com.termux.app.page.Side arriving = homeHasTheRows
+            ? com.termux.app.page.Side.WORKSPACE : com.termux.app.page.Side.HOME;
+        DockLayout leavingLayout = homeHasTheRows ? home : window;
+        DockLayout arrivingLayout = homeHasTheRows ? window : home;
+        PlaceLayout leavingPlace = homeHasTheRows ? HOME : WINDOW;
+        PlaceLayout arrivingPlace = homeHasTheRows ? WINDOW_BARE : HOME_BARE;
+
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        // At rest with the owner of the rows in front.
+        rows.setOtherLayout(arrivingLayout);
+        rows.setLanes(owner, owner, owner, null);
+        rows.apply(chrome(leavingPlace, false), false, false,
+            new DockRows.Union(true, true, false));
+        rows.applyLayout(leavingLayout);
+        int apps = views.heights.get(Element.APPS);
+        int az = views.heights.get(Element.AZ);
+        assertTrue("the fixture's rows have a height", apps > 0);
+
+        // The landing: the front and the other layout already describe the arriving side while
+        // the rows still show the leaving side's.
+        rows.setOtherLayout(leavingLayout);
+        rows.setLanes(arriving, owner, owner, null);
+        rows.applyLayout(arrivingLayout);
+        assertEquals("apps in the commit pass", apps, (int) views.heights.get(Element.APPS));
+        assertEquals("az in the commit pass", az, (int) views.heights.get(Element.AZ));
+        // The settle: the rows are renewed for the arriving side, then laid out again.
+        rows.apply(chrome(arrivingPlace, false), false, false,
+            new DockRows.Union(true, true, false));
+        rows.applyLayout(arrivingLayout);
+        assertEquals("apps after the settle", apps, (int) views.heights.get(Element.APPS));
+        assertEquals("az after the settle", az, (int) views.heights.get(Element.AZ));
+    }
+
+    @Test
+    public void homesLaneRowsKeepTheirHeightWhenTheLandingIsOnTheWorkspace() {
+        assertLaneRowsKeepTheirHeightAtTheLanding(true, DockStyle.GLASS_TRAY);
+        assertLaneRowsKeepTheirHeightAtTheLanding(true, DockStyle.LENS_BEADS);
+    }
+
+    @Test
+    public void theWorkspacesLaneRowsKeepTheirHeightWhenTheLandingIsOnHome() {
+        assertLaneRowsKeepTheirHeightAtTheLanding(false, DockStyle.GLASS_TRAY);
+        assertLaneRowsKeepTheirHeightAtTheLanding(false, DockStyle.LENS_BEADS);
     }
 
     // ---- D1-A step 2b: a lane wears its own side's layout; a keyboard alone keeps the stack ----

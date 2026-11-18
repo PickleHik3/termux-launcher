@@ -284,11 +284,16 @@ public final class DockRows {
         mLayout = layout;
         Shown shown = mShown;
         if (shown.surface != layout.surface) announce(shown.withSurface(layout.surface));
-        // A row the front layout does not show but the other side's lane does is sized by that
-        // side's rest, so it stands laid out at its own height.
+        // A row in a side's lane is sized by that side's rest whichever side is in front, so a
+        // page change or a landing never moves it. A row in no lane (the shared stack) is sized
+        // by the front layout, or by the other side's rest while only that side shows it.
         DockLayout other = mOtherLayout;
-        DockLayout appsFrom = mShown.apps || other == null ? layout : other;
-        DockLayout azFrom = mShown.az || other == null ? layout : other;
+        DockLayout appsFrom = mLaneSides[0] != null
+            ? LaneDress.layoutFor(mLaneSides[0], mFrontSide, layout, other)
+            : (mShown.apps || other == null ? layout : other);
+        DockLayout azFrom = mLaneSides[1] != null
+            ? LaneDress.layoutFor(mLaneSides[1], mFrontSide, layout, other)
+            : (mShown.az || other == null ? layout : other);
         boolean moved = mViews.setRowHeight(Element.APPS, appsFrom.appsBarHeightPx);
         moved |= mViews.setPageBandHeight(layout.indicatorBandHeightPx);
         moved |= mViews.setRowHeight(Element.AZ, azFrom.azRowHeightPx);
