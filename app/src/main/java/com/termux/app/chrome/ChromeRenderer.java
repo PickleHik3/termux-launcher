@@ -528,7 +528,6 @@ public final class ChromeRenderer {
         }
         // The scopes ride in the section name so a trace shows which kind of request each caller
         // made; the concatenation only happens while a trace is being recorded.
-        LandingDiag.writeDeep("Chrome.requestSync scopes=" + scopes);
         Trace.beginSection(tracing() ? "Chrome.requestSync " + scopes : "Chrome.requestSync");
         try {
             sync(scopes);
@@ -544,7 +543,6 @@ public final class ChromeRenderer {
      * this one left something stale. With nothing pending it is a plain apply.
      */
     public void applySettled(@NonNull ChromeSpec spec) {
-        LandingDiag.writeDeep("Chrome.applySettled pending=" + mRenderSyncPending);
         if (!mRenderSyncPending) {
             mSurfaces.applyChromeSpec(spec);
             return;
@@ -563,7 +561,6 @@ public final class ChromeRenderer {
         // states, because the apply asks unconditionally (Pong, 2026-09-09).
         long dirtyBefore = mLedger.dirtyGeneration();
         mRenderSyncRunning = true;
-        LandingDiag.write("Chrome.renderSync");
         Trace.beginSection("Chrome.renderSync");
         try {
             mSurfaces.applyChromeSpec(spec);
@@ -743,7 +740,6 @@ public final class ChromeRenderer {
         mCommitPending = true;
         // An empty marker inside whoever booked the commit, so a trace names the caller of every
         // whole apply (the booking is once per frame at most, so this costs nothing at rest).
-        LandingDiag.writeDeep("Chrome.bookCommit");
         Trace.beginSection("Chrome.bookCommit");
         Trace.endSection();
         mFrames.requestFrame(FrameStep.CHROME_COMMIT);
@@ -760,7 +756,6 @@ public final class ChromeRenderer {
             mFrostOwedToCommit = false;
             return;
         }
-        LandingDiag.write("Chrome.commit");
         Trace.beginSection("Chrome.commit");
         // The commit applies the whole spec, which is the very pass an accessory render asked for
         // before it would run a moment later: that render is withdrawn (a request made during or

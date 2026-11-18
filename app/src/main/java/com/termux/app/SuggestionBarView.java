@@ -800,7 +800,6 @@ public final class SuggestionBarView extends GridLayout
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        com.termux.app.chrome.LandingDiag.attach("SuggestionBar.attached", this);
         setClipChildren(false);
         setClipToPadding(false);
         prepareForWindowReentry();
@@ -845,7 +844,6 @@ public final class SuggestionBarView extends GridLayout
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        com.termux.app.chrome.LandingDiag.attach("SuggestionBar.detached", this);
         LauncherNotificationBadgeStore.removeListener(notificationBadgeListener);
         notificationBadgeListener = null;
         if (configRepository != null) configRepository.removeListener(configListener);

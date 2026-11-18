@@ -42,47 +42,6 @@ public final class LandingDiag {
             + "ms callers=" + MotionLog.callers(6));
     }
 
-    /** A writer's caller trace with the view-dispatch frames skipped, while armed. */
-    public static void writeDeep(@NonNull String what) {
-        if (!armed()) return;
-        MotionLog.log("diag-write", what + " +" + (SystemClock.uptimeMillis() - sLandedAt)
-            + "ms callers=" + deepCallers(10));
-    }
-
-    /** An attach or detach of {@code v}, armed or not (motion log on): its ancestors and the add/remove site. */
-    public static void attach(@NonNull String what, @NonNull View v) {
-        if (!MotionLog.enabled) return;
-        StringBuilder chain = new StringBuilder();
-        android.view.ViewParent p = v.getParent();
-        for (int i = 0; p instanceof View && i < 8; i++, p = p.getParent()) {
-            View pv = (View) p;
-            if (chain.length() > 0) chain.append('<');
-            chain.append(pv.getClass().getSimpleName());
-            if (pv.getId() != View.NO_ID) {
-                try { chain.append('/').append(pv.getResources().getResourceEntryName(pv.getId())); }
-                catch (RuntimeException ignored) { chain.append('/').append(pv.getId()); }
-            }
-        }
-        MotionLog.log("diag-attach", what + (sArmed ? " +" + (SystemClock.uptimeMillis() - sLandedAt) + "ms" : "")
-            + " parents=" + chain + " callers=" + deepCallers(12));
-    }
-
-    private static String deepCallers(int count) {
-        StackTraceElement[] stack = new Throwable().getStackTrace();
-        StringBuilder out = new StringBuilder();
-        int kept = 0;
-        for (int i = 2; i < stack.length && kept < count; i++) {
-            String cls = stack[i].getClassName();
-            String m = stack[i].getMethodName();
-            if (m.startsWith("dispatch") || cls.startsWith("com.termux.app.chrome.LandingDiag")) continue;
-            if (out.length() > 0) out.append('>');
-            out.append(cls.substring(cls.lastIndexOf('.') + 1)).append('.').append(m).append(':')
-                .append(stack[i].getLineNumber());
-            kept++;
-        }
-        return out.toString();
-    }
-
     /** One timed step of the settle: {@code step=<name> ms=<dur>}. */
     public static void step(@NonNull String name, long startMs) {
         if (!MotionLog.enabled) return;
