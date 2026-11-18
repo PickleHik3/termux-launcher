@@ -410,6 +410,26 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void theBarsHaveNoWallpaperTwin() throws IOException {
+        Path layout = root().resolve("../../../../main/res/layout/activity_termux.xml").normalize();
+        String xml = new String(Files.readAllBytes(layout), java.nio.charset.StandardCharsets.UTF_8);
+        List<String> problems = new ArrayList<>();
+        for (String twin : new String[]{"terminal_status_bar_wallpaper_backdrop",
+            "terminal_window_bar_wallpaper_backdrop", "terminal_window_bar_wallpaper_backdrop_side"}) {
+            if (xml.contains("@+id/" + twin + "\"")) problems.add("twin still declared: " + twin);
+        }
+        for (String glass : new String[]{"terminal_status_bar_glass_surface",
+            "terminal_window_bar_background", "terminal_window_bar_background_side"}) {
+            java.util.regex.Matcher tag = java.util.regex.Pattern
+                .compile("<([\\w.]+)[^>]*?@\\+id/" + glass + "\"", java.util.regex.Pattern.DOTALL)
+                .matcher(xml);
+            if (!tag.find() || !"com.termux.app.chrome.BarGlassView".equals(tag.group(1)))
+                problems.add(glass + " is not a BarGlassView");
+        }
+        assertNone(problems);
+    }
+
+    @Test
     public void theNewPackagesHaveNoAllowListEntries() {
         List<String> all = new ArrayList<>();
         for (List<String> list : Arrays.asList(UPWARD_IMPORTS, CYCLE_PAIRS, LONGER_CYCLES,

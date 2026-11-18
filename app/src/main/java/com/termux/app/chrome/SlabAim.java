@@ -34,9 +34,26 @@ public final class SlabAim implements GlassEntry.Frame {
     @Nullable private WallpaperParallax mParallax;
     @Nullable private GlassService mGlass;
     @Nullable private String mElement;
+    /** The element name and place the entry registers under; null names it after the slab. */
+    @Nullable private final String mFixedElement;
+    @NonNull private final WindowLayer mLayer;
+    private final int mPriority;
 
+    /** A pane slab: "slab@hash" on the pages layer, behind widgets and floats. */
     public SlabAim(@NonNull View view) {
+        this(view, null, WindowLayer.PAGES, GlassEntry.PRIORITY_WIDGET);
+    }
+
+    /**
+     * A surface that keeps its own element name, layer and priority: a bar's glass view, which
+     * draws its frost inside itself and registers once under its id's name.
+     */
+    public SlabAim(@NonNull View view, @Nullable String element, @NonNull WindowLayer layer,
+                   int priority) {
         mView = view;
+        mFixedElement = element;
+        mLayer = layer;
+        mPriority = priority;
     }
 
     /** The wallpaper pan the slab's frame follows; null for none. */
@@ -45,18 +62,18 @@ public final class SlabAim implements GlassEntry.Frame {
     }
 
     /**
-     * Registers the slab with its window's glass service as a Wallpaper surface on the pages
-     * layer. Safe to call twice; nothing when the window has no service (a preview, a card).
+     * Registers the slab with its window's glass service as a Wallpaper surface on its layer. Safe to call twice; nothing when the window has no service (a preview, a card).
      */
     public void attach() {
         if (mGlass != null) return;
         GlassService glass = GlassService.of(mView);
         if (glass == null) return;
-        String element = "slab@" + Integer.toHexString(System.identityHashCode(mView));
-        // The slab's own place in the layer is behind widgets and floats: the worst priority. It
+        String element = mFixedElement != null ? mFixedElement
+            : "slab@" + Integer.toHexString(System.identityHashCode(mView));
+        // A pane slab's place in its layer is behind widgets and floats: the worst priority. It
         // is Wallpaper, so it never takes a Live slot.
         if (glass.register(new GlassEntry(element, mView, GlassKind.WALLPAPER,
-            GlassEntry.PRIORITY_WIDGET, WindowLayer.PAGES, this), null) == null) return;
+            mPriority, mLayer, this), null) == null) return;
         mGlass = glass;
         mElement = element;
         // The first frame after attaching draws the slab where it stands now.

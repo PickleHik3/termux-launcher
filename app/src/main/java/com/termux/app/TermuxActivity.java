@@ -4703,9 +4703,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mParallaxFrostViews == null) {
             mParallaxFrostViews = new View[] {
-                findViewById(R.id.terminal_status_bar_wallpaper_backdrop),
-                findViewById(R.id.terminal_window_bar_wallpaper_backdrop),
-                findViewById(R.id.terminal_window_bar_wallpaper_backdrop_side),
                 findViewById(R.id.accessory_blur_backdrop),
                 findViewById(R.id.inapp_keyboard_view_host),
                 findViewById(R.id.accessory_under_keyboard_stack),
@@ -9515,13 +9512,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // fading out of included: the frosts, the dock's backdrop, the under-pill strip and the
         // keyboard host's background.
         int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.terminal_sheet_wallpaper_backdrop,
-            R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop,
-            R.id.terminal_window_bar_wallpaper_backdrop_side,
-            R.id.terminal_status_bar_wallpaper_backdrop, R.id.accessory_blur_backdrop,
+            R.id.app_drawer_wallpaper_backdrop, R.id.accessory_blur_backdrop,
             R.id.place_off_dock_plank_frost, R.id.place_az_bar_host_frost};
         for (int frostId : frostIds) {
             ImageView frost = findViewById(frostId);
             if (frost != null && drawableShowsFrame(frost.getDrawable(), frame)) return true;
+        }
+        // The bars' glass views hold their own frost.
+        int[] barIds = {R.id.terminal_status_bar_glass_surface, R.id.terminal_window_bar_background,
+            R.id.terminal_window_bar_background_side};
+        for (int barId : barIds) {
+            View bar = findViewById(barId);
+            if (bar instanceof com.termux.app.chrome.BarGlassView
+                && drawableShowsFrame(((com.termux.app.chrome.BarGlassView) bar).getFrost(), frame))
+                return true;
         }
         ImageView strip = mDecorNavBarBlurBackdrop;
         if (strip != null && drawableShowsFrame(strip.getDrawable(), frame)) return true;
@@ -10285,15 +10289,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int mainRight = want[com.termux.app.chrome.CameraHoleGeometry.MAIN_RIGHT];
         int sideLeft = want[com.termux.app.chrome.CameraHoleGeometry.SIDE_LEFT];
         int sideRight = want[com.termux.app.chrome.CameraHoleGeometry.SIDE_RIGHT];
-        // Each card is drawn by two layers, its tint and rim and its wallpaper frost, and both
-        // stand at the card's margins: a frost left at the host's width draws the whole bar.
+        // Each card's view draws its wallpaper frost under its tint and rim, so one set of
+        // margins places both.
         boolean changed = false;
         changed |= setBarCardMargins(main, mainLeft, mainRight);
-        View mainFrost = findViewById(R.id.terminal_window_bar_wallpaper_backdrop);
-        if (mainFrost != null) changed |= setBarCardMargins(mainFrost, mainLeft, mainRight);
         changed |= setBarCardMargins(side, sideLeft, sideRight);
-        View sideFrost = findViewById(R.id.terminal_window_bar_wallpaper_backdrop_side);
-        if (sideFrost != null) changed |= setBarCardMargins(sideFrost, sideLeft, sideRight);
         if (side.getVisibility() == View.VISIBLE != sideWanted) {
             side.setVisibility(sideWanted ? View.VISIBLE : View.GONE);
             changed = true;
@@ -10302,9 +10302,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // round it: each layer clips to the card's own rounded rect, inner ends included.
         boolean cut = sideWanted || mainLeft != 0 || mainRight != 0;
         clipBarCardLayer(main, cut);
-        clipBarCardLayer(mainFrost, cut);
         clipBarCardLayer(side, cut);
-        clipBarCardLayer(sideFrost, cut);
         // The slot (clock, pinned cards, media) stands in the main card only.
         View slot = findViewById(R.id.terminal_top_widget_area);
         if (slot != null) changed |= setBarCardMargins(slot, mainLeft, mainRight);
@@ -10332,9 +10330,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyWindowBarDeckSlab();
     }
 
-    /** The layers that draw the split bar's two cards: each card's frost and its tint and rim. */
-    private static final int[] BAR_CARD_LAYERS = {R.id.terminal_window_bar_wallpaper_backdrop,
-        R.id.terminal_window_bar_background, R.id.terminal_window_bar_wallpaper_backdrop_side,
+    /** The layers that draw the split bar's two cards: each card's frost, tint and rim. */
+    private static final int[] BAR_CARD_LAYERS = {R.id.terminal_window_bar_background,
         R.id.terminal_window_bar_background_side};
 
     /**
@@ -24040,8 +24037,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /** The bar host's plain glass layers: what a Margin ease stretches, and nothing else. */
-    private static final int[] BAR_GLASS_LAYERS = {R.id.terminal_window_bar_wallpaper_backdrop,
-        R.id.terminal_window_bar_background, R.id.terminal_window_bar_wallpaper_backdrop_side,
+    private static final int[] BAR_GLASS_LAYERS = {R.id.terminal_window_bar_background,
         R.id.terminal_window_bar_background_side, R.id.terminal_status_lens};
 
     /**

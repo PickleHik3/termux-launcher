@@ -1298,18 +1298,13 @@ public final class StatusBarController {
         // for the Workspace as the ride began) must not stand at its rest while the bar arrives.
         syncStatusStripTravel();
         if (!moved) return;
-        View backdrop = mHost.hotView(R.id.terminal_window_bar_wallpaper_backdrop);
-        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-        View sideBackdrop = mHost.hotView(R.id.terminal_window_bar_wallpaper_backdrop_side);
-        if (sideBackdrop != null && sideBackdrop.getVisibility() == View.VISIBLE)
-            sideBackdrop.invalidate();
     }
 
     /**
      * The strip behind the system bar where the bar stands now: with it while the strip is the
      * bar's own glass running up under the system bar (the lead it was last dressed for, not one
      * read live mid-crossing, which can still answer for the half the bar left), at rest
-     * otherwise (StatusStripRide). Its backdrop samples where it is drawn, so it is re-aimed.
+     * otherwise (StatusStripRide). Its frost samples where it is drawn; the glass service re-aims it.
      */
     public void syncStatusStripTravel() {
         View strip = mHost.hotView(R.id.terminal_status_bar_background);
@@ -1319,8 +1314,6 @@ public final class StatusBarController {
             mHost.statusStripLead() == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR);
         if (strip.getTranslationX() == stripX) return;
         strip.setTranslationX(stripX);
-        View backdrop = mHost.hotView(R.id.terminal_status_bar_wallpaper_backdrop);
-        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
     }
 
     /** {@link StatusBarWidgets#syncStatusBarInk}. */

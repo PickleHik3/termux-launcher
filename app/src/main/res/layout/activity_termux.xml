@@ -83,18 +83,9 @@
             android:visibility="gone"
             android:background="?attr/termuxColorSurfaceBase">
 
-            <!-- Wallpaper-mode frost: the dock's pre-blurred wallpaper frame at this band's place
-                 on screen (the Wallpaper backdrop kind). WallpaperFrostPainter.updateTopPane()
-                 installs it. -->
-            <ImageView
-                android:id="@+id/terminal_status_bar_wallpaper_backdrop"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="fitXY"
-                android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <View
+            <!-- The strip's glass draws the wallpaper frost itself (WallpaperFrostPainter
+                 installs it) and registers with the glass service. -->
+            <com.termux.app.chrome.BarGlassView
                 android:id="@+id/terminal_status_bar_glass_surface"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
@@ -155,32 +146,15 @@
                 android:clipToPadding="false"
                 android:visibility="gone">
 
-                <!-- Wallpaper-mode frost twin of terminal_status_bar_wallpaper_backdrop; both
-                     crops come from the same shared blur frame so the seam is invisible. -->
-                <ImageView
-                    android:id="@+id/terminal_window_bar_wallpaper_backdrop"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="fitXY"
-                    android:importantForAccessibility="no"
-                    android:visibility="gone" />
-
-                <View
+                <com.termux.app.chrome.BarGlassView
                     android:id="@+id/terminal_window_bar_background"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />
 
                 <!-- The second card when the camera stands mid-bar: the bar splits round the
                      hole into two cards, this one the narrower. Gone otherwise. -->
-                <ImageView
-                    android:id="@+id/terminal_window_bar_wallpaper_backdrop_side"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="fitXY"
-                    android:importantForAccessibility="no"
-                    android:visibility="gone" />
 
-                <View
+                <com.termux.app.chrome.BarGlassView
                     android:id="@+id/terminal_window_bar_background_side"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"

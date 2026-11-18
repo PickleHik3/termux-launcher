@@ -79,15 +79,17 @@ public class TermuxActivityExtraKeysLayoutParamsTest {
         activity.setContentView(R.layout.activity_termux);
 
         int[][] sheets = {
-            {R.id.terminal_status_bar_background, R.id.terminal_status_bar_wallpaper_backdrop},
-            {R.id.terminal_window_bar_host, R.id.terminal_window_bar_wallpaper_backdrop},
+            {R.id.terminal_status_bar_background, R.id.terminal_status_bar_glass_surface},
+            {R.id.terminal_window_bar_host, R.id.terminal_window_bar_background},
             {R.id.place_az_bar_host_glass, R.id.place_az_bar_host_frost},
             {R.id.place_off_dock_plank_glass, R.id.place_off_dock_plank_frost},
         };
         for (int[] sheet : sheets) {
             ViewGroup glass = activity.findViewById(sheet[0]);
             View frost = activity.findViewById(sheet[1]);
-            assertTrue(frost instanceof android.widget.ImageView);
+            // The bars' glass views hold their own frost; the others have an ImageView for it.
+            assertTrue(frost instanceof android.widget.ImageView
+                || frost instanceof com.termux.app.chrome.BarGlassView);
             assertSame(glass, frost.getParent());
             for (int i = 0; i < glass.getChildCount(); i++) {
                 String name = glass.getChildAt(i).getClass().getName();

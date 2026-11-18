@@ -543,6 +543,15 @@ public final class GlassSurfaceFactory {
         return shared != null && shared.refracts();
     }
 
+    /** As {@link #frostDrawsEdge(android.widget.ImageView)}, for the frost a bar's glass view holds. */
+    public static boolean frostDrawsEdge(@Nullable BarGlassView bar) {
+        if (bar == null || bar.getVisibility() != android.view.View.VISIBLE || !bar.frostShown()) {
+            return false;
+        }
+        SharedFrameDrawable shared = SharedFrameDrawable.of(bar.getFrost());
+        return shared != null && shared.refracts();
+    }
+
     /**
      * The dock's outline with nothing drawn: what its host wears in place of
      * {@link #rimUnderGlass} while the dock's program draws its edge, so the capsule still clips to
