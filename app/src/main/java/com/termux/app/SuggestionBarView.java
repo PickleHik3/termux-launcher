@@ -863,26 +863,6 @@ public final class SuggestionBarView extends GridLayout
         removeCallbacks(dockMorphSettleBackstop);
     }
 
-    /** TEMPORARY diag (diag-frame): the row's state, appended to {@code sb}. */
-    public void diagState(@NonNull StringBuilder sb) {
-        sb.append("bar vis=").append(getVisibility()).append(" a=").append(getAlpha())
-            .append(" h=").append(getHeight()).append(" kids=").append(getChildCount())
-            .append(" suppress=").append(suppressDrawUntilStableLayout)
-            .append(" pending=").append(childLayoutPending);
-        for (int i = 0; i < 3 && i < slotIcons.size(); i++) {
-            SlotIcon icon = slotIcons.get(i);
-            sb.append(" [slot=").append(icon.slot.getVisibility()).append('/')
-                .append(icon.slot.getAlpha()).append(" box=").append(icon.box.getVisibility())
-                .append('/').append(icon.box.getAlpha()).append('/').append(icon.box.getWidth());
-            if (icon.image != null) {
-                sb.append(" img=").append(icon.image.getVisibility()).append('/')
-                    .append(icon.image.getAlpha()).append('/').append(icon.image.getWidth())
-                    .append(icon.image.getDrawable() == null ? "/nodrawable" : "/drawable");
-            }
-            sb.append(']');
-        }
-    }
-
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (suppressDrawUntilStableLayout) {
@@ -2382,7 +2362,6 @@ public final class SuggestionBarView extends GridLayout
     }
 
     public void prepareForWindowReentry() {
-        com.termux.app.chrome.LandingDiag.write("SuggestionBar.prepareForWindowReentry");
         suppressDrawUntilStableLayout = true;
         stableLayoutRerenderPosted = false;
         childLayoutPending = true;
@@ -4307,7 +4286,6 @@ public final class SuggestionBarView extends GridLayout
      * one.
      */
     private boolean renderButtons(@NonNull List<LauncherAppEntry> entries, boolean azPreview) {
-        com.termux.app.chrome.LandingDiag.write("SuggestionBar.renderButtons entries=" + entries.size() + " az=" + azPreview);
         if (renderDeferredSinceUptimeMs == 0L && !hasStableRenderBounds()) {
             renderDeferredSinceUptimeMs = SystemClock.uptimeMillis();
         }
@@ -4471,7 +4449,6 @@ public final class SuggestionBarView extends GridLayout
         reorderDiscard();
         setTranslationX(0f);
         setAlpha(1f);
-        com.termux.app.chrome.LandingDiag.write("SuggestionBar.removeAllViews kids=" + getChildCount());
         removeAllViews();
         slotIcons.clear();
         drawerTileSlot = null;
@@ -10989,7 +10966,6 @@ public final class SuggestionBarView extends GridLayout
             suppressDrawUntilStableLayout = false;
             childLayoutPending = false;
             stableLayoutSuppressedSinceUptimeMs = 0L;
-            com.termux.app.chrome.LandingDiag.write("SuggestionBar.stableDrawReleased");
             invalidate();
         });
     }
@@ -11002,7 +10978,6 @@ public final class SuggestionBarView extends GridLayout
     }
 
     private void releaseStableDrawSuppression() {
-        com.termux.app.chrome.LandingDiag.write("SuggestionBar.releaseStableDrawSuppression");
         suppressDrawUntilStableLayout = false;
         childLayoutPending = false;
         stableLayoutSuppressedSinceUptimeMs = 0L;

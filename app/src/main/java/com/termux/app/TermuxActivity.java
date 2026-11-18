@@ -6432,39 +6432,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void restyleChromeForHalfIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
                                                @NonNull com.termux.app.wall.PaneWallPage to) {
-        if (mPreferences == null || mChrome == null) {
-            if (MotionLog.enabled) MotionLog.log("diag-settle", "restyle early-return nullPrefsOrChrome");
+        if (mPreferences == null || mChrome == null) return;
+        if (dressOf(from).shape().equals(dressOf(to).shape()) && !looksDifferAcross(from, to))
             return;
-        }
-        if (dressOf(from).shape().equals(dressOf(to).shape()) && !looksDifferAcross(from, to)) {
-            if (MotionLog.enabled) MotionLog.log("diag-settle", "restyle early-return halvesAgree from="
-                + from + " to=" + to);
-            return;
-        }
-        if (MotionLog.enabled) MotionLog.log("diag-settle", "restyle run from=" + from + " to=" + to);
-        long d = android.os.SystemClock.uptimeMillis();
-        final long d0 = d;
         // Traced: 58-88 ms on pong, so it must never run inside a landing's frame.
         Trace.beginSection("Wall.halfRedress");
         // A dock dress a landing's commit made before this one is no longer what it wears.
         mHalfRedressCount++;
         try {
             redressChromeFromState(false);
-            com.termux.app.chrome.LandingDiag.step("redressChromeFromState", d); d = android.os.SystemClock.uptimeMillis();
             updateAppLauncherBarHeight();
-            com.termux.app.chrome.LandingDiag.step("updateAppLauncherBarHeight", d); d = android.os.SystemClock.uptimeMillis();
             setTerminalToolbarHeight(true);
-            com.termux.app.chrome.LandingDiag.step("setTerminalToolbarHeight", d); d = android.os.SystemClock.uptimeMillis();
             refreshTerminalWindowBar();
-            com.termux.app.chrome.LandingDiag.step("refreshTerminalWindowBar", d); d = android.os.SystemClock.uptimeMillis();
             if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
-            com.termux.app.chrome.LandingDiag.step("keyboard.onPreferencesReloaded", d); d = android.os.SystemClock.uptimeMillis();
             applySuggestionBarSurfaceStyling();
-            com.termux.app.chrome.LandingDiag.step("applySuggestionBarSurfaceStyling", d); d = android.os.SystemClock.uptimeMillis();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-            com.termux.app.chrome.LandingDiag.step("requestSync", d);
-            com.termux.app.chrome.LandingDiag.step("restyle-total", d0);
         } finally {
             Trace.endSection();
         }
@@ -6511,19 +6494,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void runLandingSettle() {
         if (isDestroyed()) return;
-        long diagT0 = android.os.SystemClock.uptimeMillis();
-        if (MotionLog.enabled) MotionLog.log("diag-settle", "runLandingSettle enter pending="
-            + (mHalfRestyleFrom != null) + " from=" + mHalfRestyleFrom + " to=" + mHalfRestyleTo
-            + " crossing=" + mCrossing.crossing());
         flushLandingRestyle();
-        com.termux.app.chrome.LandingDiag.step("flushLandingRestyle", diagT0);
         // The re-dress has laid the bar out at the Margin it eased to; whatever it found to do,
         // no ease outlives the crossing.
         if (!mCrossing.crossing()) mStatusBar.resetStatusMarginEase();
-        long diagT1 = android.os.SystemClock.uptimeMillis();
         if (mChrome != null && !mCrossing.crossing()) mChrome.settleEvenOut();
-        com.termux.app.chrome.LandingDiag.step("settleEvenOut", diagT1);
-        com.termux.app.chrome.LandingDiag.step("runLandingSettle", diagT0);
     }
 
     /**
@@ -8188,7 +8163,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** {@link #applyInAppKeyboardHostMaterial}'s dressing; true when the bed frosts the display. */
     private boolean dressInAppKeyboardHost(@NonNull ChromeSpec state) {
-        com.termux.app.chrome.LandingDiag.write("TermuxActivity.dressInAppKeyboardHost shown=" + state.keyboardShown);
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
         if (surfaceHost == null) {
             return false;
@@ -25051,9 +25025,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mCrossing.land(landed != null ? landed : shownEndpointPageOf(page),
                     arrangementRevision());
             storeMoved = crossingLanding.storeMoved();
-            com.termux.app.chrome.LandingDiag.arm(getWindow(), mSuggestionBarView,
-                findViewById(R.id.apps_bar_plank_layer), findViewById(R.id.inapp_keyboard_container),
-                findViewById(R.id.inapp_keyboard_view_host));
             // The stack's next frame is the landing's: it should write nothing new.
             mStackRenderer.onLanding();
             // And the next chrome commit is its landing's: within a side it may move rows to the

@@ -58,7 +58,6 @@ public final class DockRowViews implements DockRows.Views {
         if (bar == null) return false;
         int visibility = shown ? View.VISIBLE : View.GONE;
         if (bar.getVisibility() == visibility) return false;
-        com.termux.app.chrome.LandingDiag.write("DockRowViews.statusBar shown=" + shown);
         bar.setVisibility(visibility);
         return true;
     }
@@ -96,7 +95,6 @@ public final class DockRowViews implements DockRows.Views {
         if (under == null) return false;
         int visibility = shown ? View.VISIBLE : View.GONE;
         if (under.getVisibility() == visibility) return false;
-        com.termux.app.chrome.LandingDiag.write("DockRowViews.underKeyboard shown=" + shown);
         under.setVisibility(visibility);
         return true;
     }
@@ -121,11 +119,7 @@ public final class DockRowViews implements DockRows.Views {
 
     private void show(int viewId, boolean shown) {
         View view = mFinder.find(viewId);
-        if (view != null) {
-            com.termux.app.chrome.LandingDiag.write("DockRowViews.show id=" + viewId + " shown=" + shown
-                + " was=" + view.getVisibility());
-            view.setVisibility(shown ? View.VISIBLE : View.GONE);
-        }
+        if (view != null) view.setVisibility(shown ? View.VISIBLE : View.GONE);
     }
 
     private boolean height(int viewId, int px) {
@@ -133,7 +127,6 @@ public final class DockRowViews implements DockRows.Views {
         if (view == null) return false;
         ViewGroup.LayoutParams params = view.getLayoutParams();
         if (params == null || params.height == px) return false;
-        com.termux.app.chrome.LandingDiag.write("DockRowViews.height id=" + viewId + " " + params.height + "->" + px);
         params.height = px;
         view.setLayoutParams(params);
         return true;
