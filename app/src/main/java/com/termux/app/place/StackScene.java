@@ -56,9 +56,6 @@ public final class StackScene {
         public float rowsCutPx;
         public float sheetSinkPx;
         public float sheetCutPx;
-        /** For a fold that holds the A-Z row: that row's own layers' sink, uncut. */
-        public float heldSinkPx;
-        public boolean holdsAz;
 
         /** Nothing moved; the IME's lift is kept, a rest's own. */
         public void rest() {
@@ -69,25 +66,21 @@ public final class StackScene {
 
         /** Every layer sunk {@code px}, all of it cut: a sink into the keyboard's top edge. */
         public void sink(float px) {
-            layerSink(px, px, px, px, 0f, false);
+            layerSink(px, px, px, px);
         }
 
-        public void layerSink(float rowsPx, float rowsCutPx, float sheetPx, float sheetCutPx,
-                              float heldPx, boolean holdsAz) {
+        public void layerSink(float rowsPx, float rowsCutPx, float sheetPx, float sheetCutPx) {
             rowsSinkPx = rowsPx;
             this.rowsCutPx = rowsCutPx;
             sheetSinkPx = sheetPx;
             this.sheetCutPx = sheetCutPx;
-            heldSinkPx = heldPx;
-            this.holdsAz = holdsAz;
         }
 
         public void set(@NonNull Motion o) {
             dockTravelPx = o.dockTravelPx;
             keyboardSharePx = o.keyboardSharePx;
             imeLiftPx = o.imeLiftPx;
-            layerSink(o.rowsSinkPx, o.rowsCutPx, o.sheetSinkPx, o.sheetCutPx, o.heldSinkPx,
-                o.holdsAz);
+            layerSink(o.rowsSinkPx, o.rowsCutPx, o.sheetSinkPx, o.sheetCutPx);
         }
     }
 
@@ -348,9 +341,8 @@ public final class StackScene {
         for (int i = 0; i < StackGeometry.LAYER_COUNT; i++) {
             int v = V_LAYER0 + i;
             boolean sheet = i == StackGeometry.HOST;
-            boolean held = m.holdsAz && isAzLayer(i);
-            out.ty[v] = held ? m.heldSinkPx : sheet ? m.sheetSinkPx : m.rowsSinkPx;
-            int hidden = held ? 0 : Math.round(sheet ? m.sheetCutPx : m.rowsCutPx);
+            out.ty[v] = sheet ? m.sheetSinkPx : m.rowsSinkPx;
+            int hidden = Math.round(sheet ? m.sheetCutPx : m.rowsCutPx);
             if (hidden <= 0) {
                 out.clipped[v] = false;
             } else {
@@ -389,11 +381,6 @@ public final class StackScene {
         out.clipTop[v] = -Math.max(h, displayHeightPx);
         out.clipRight[v] = 2 * width;
         out.clipBottom[v] = Math.max(0, h - hidden);
-    }
-
-    private static boolean isAzLayer(int layer) {
-        return layer == StackGeometry.AZ_UNDERLAY || layer == StackGeometry.AZ_OVERLAY
-            || layer == StackGeometry.AZ_LABEL;
     }
 
     // ---- The body surface ------------------------------------------------------------------

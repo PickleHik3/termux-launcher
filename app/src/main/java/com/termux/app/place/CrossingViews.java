@@ -133,7 +133,7 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
      */
     private void applyLayerSink(@NonNull StackScene.Motion motion) {
         mHost.stackRenderer().setSink(motion.rowsSinkPx, motion.rowsCutPx, motion.sheetSinkPx,
-            motion.sheetCutPx, motion.heldSinkPx, motion.holdsAz);
+            motion.sheetCutPx);
     }
 
     /**

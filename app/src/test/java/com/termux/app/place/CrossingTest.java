@@ -119,7 +119,7 @@ public class CrossingTest {
         ResolvedArrangement arranged = page == PaneWallPage.WIDGETS ? HOME_ARRANGED
             : WORKSPACE_ARRANGED;
         return SeamCrossing.Endpoint.of(PageRef.of(page), dress, null, arranged, layout,
-            SeamDress.StackDress.of(dress.shape(), dock, 1f, 0), keyboardUp, -1);
+            SeamDress.StackDress.of(dress.shape(), dock, 1f, 0), keyboardUp);
     }
 
     // ---- The adapter, recorded ----
@@ -600,9 +600,9 @@ public class CrossingTest {
         Dress dress = new DressResolver(new Stored()).dressOf(PaneWallPage.WIDGETS);
         SeamDress.StackDress stack = SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0);
         SeamCrossing.Endpoint here = SeamCrossing.Endpoint.of(HOME_2, dress, null,
-            HOME_2_ARRANGED, HOME, stack, false, -1);
+            HOME_2_ARRANGED, HOME, stack, false);
         SeamCrossing.Endpoint there = SeamCrossing.Endpoint.of(HOME_3, dress, null,
-            HOME_3_ARRANGED, HOME_WITH_INDEX, stack, false, -1);
+            HOME_3_ARRANGED, HOME_WITH_INDEX, stack, false);
         assertTrue(SeamCrossing.crosses(here, there));
         Moves moves = new Moves();
         Crossing crossing = new Crossing(moves, moves, moves, moves, moves);
@@ -647,9 +647,9 @@ public class CrossingTest {
         Dress dress = new DressResolver(new Stored()).dressOf(PaneWallPage.WIDGETS);
         SeamDress.StackDress stack = SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0);
         SeamCrossing.Endpoint here = SeamCrossing.Endpoint.of(HOME_2, dress, null,
-            HOME_2_ARRANGED, HOME, stack, false, -1);
+            HOME_2_ARRANGED, HOME, stack, false);
         SeamCrossing.Endpoint alike = SeamCrossing.Endpoint.of(HOME_3, dress, null,
-            HOME_2_ARRANGED, HOME, stack, false, -1);
+            HOME_2_ARRANGED, HOME, stack, false);
         assertFalse(SeamCrossing.crosses(here, alike));
         assertFalse("one page with itself", SeamCrossing.crosses(here, here));
     }

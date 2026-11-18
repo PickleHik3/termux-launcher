@@ -58,12 +58,11 @@ public final class SeamCrossing {
         @NonNull final PlaceLayout layout;
         @NonNull final SeamDress.StackDress stack;
         final boolean keyboardUp;
-        final int restRowsPx;
 
         private Endpoint(@NonNull PageRef page, @NonNull Dress dress,
                          @Nullable PageLook.Snapshot look,
                          @Nullable ResolvedArrangement arrangement, @NonNull PlaceLayout layout,
-                         @NonNull SeamDress.StackDress stack, boolean keyboardUp, int restRowsPx) {
+                         @NonNull SeamDress.StackDress stack, boolean keyboardUp) {
             this.page = page;
             this.dress = dress;
             this.look = look;
@@ -71,7 +70,6 @@ public final class SeamCrossing {
             this.layout = layout;
             this.stack = stack;
             this.keyboardUp = keyboardUp;
-            this.restRowsPx = restRowsPx;
         }
 
         /**
@@ -87,21 +85,7 @@ public final class SeamCrossing {
         public static Endpoint of(@NonNull PageRef page, @NonNull Dress dress,
                                   @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
                                   boolean keyboardUp) {
-            return new Endpoint(page, dress, null, null, layout, stack, keyboardUp, -1);
-        }
-
-        /**
-         * @param restRowsPx the dock rows' height as the page's layout lays them out at rest, less
-         *                   the extra keys row itself: each row's own air as its neighbours there
-         *                   give it (the A-Z row's chin and crown, the apps row's air alone or
-         *                   shared). Negative while unknown, and a fold then reads no difference.
-         * @see #of(PageRef, Dress, PlaceLayout, SeamDress.StackDress, boolean)
-         */
-        @NonNull
-        public static Endpoint of(@NonNull PageRef page, @NonNull Dress dress,
-                                  @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
-                                  boolean keyboardUp, int restRowsPx) {
-            return new Endpoint(page, dress, null, null, layout, stack, keyboardUp, restRowsPx);
+            return new Endpoint(page, dress, null, null, layout, stack, keyboardUp);
         }
 
         /**
@@ -111,16 +95,15 @@ public final class SeamCrossing {
          * @param look        the page's Look ({@code PageLook#of}); null where there is none
          * @param arrangement the page's resolved arrangement, held from the crossing's begin to
          *                    its landing
-         * @see #of(PageRef, Dress, PlaceLayout, SeamDress.StackDress, boolean, int)
+         * @see #of(PageRef, Dress, PlaceLayout, SeamDress.StackDress, boolean)
          */
         @NonNull
         public static Endpoint of(@NonNull PageRef page, @NonNull Dress dress,
                                   @Nullable PageLook.Snapshot look,
                                   @NonNull ResolvedArrangement arrangement,
                                   @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
-                                  boolean keyboardUp, int restRowsPx) {
-            return new Endpoint(page, dress, look, arrangement, layout, stack, keyboardUp,
-                restRowsPx);
+                                  boolean keyboardUp) {
+            return new Endpoint(page, dress, look, arrangement, layout, stack, keyboardUp);
         }
 
         @NonNull

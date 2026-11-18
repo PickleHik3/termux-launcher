@@ -674,12 +674,12 @@ public final class CrossingController {
             com.termux.app.place.SeamCrossing.Endpoint.of(herePage, hereDress,
                 mHost.pageLookOf(herePage), hereArrangement, hereLayout,
                 stackDressOf(hereDress, herePage, orientation),
-                keyboardUp, com.termux.app.dock.DockMorph.rowsPx(hereRest));
+                keyboardUp);
         com.termux.app.place.SeamCrossing.Endpoint there =
             com.termux.app.place.SeamCrossing.Endpoint.of(therePage, thereDress,
                 mHost.pageLookOf(therePage), thereArrangement, thereLayout,
                 stackDressOf(thereDress, therePage, orientation),
-                keyboardUp, com.termux.app.dock.DockMorph.rowsPx(thereRest));
+                keyboardUp);
         // Two Home pages that dress alike are a plain flip.
         if (!com.termux.app.place.SeamCrossing.crosses(here, there)) return false;
         mHomeCrossRest = mHost.chromeRestOf(com.termux.app.wall.PaneWallPage.WIDGETS);
@@ -799,26 +799,18 @@ public final class CrossingController {
         boolean otherHome = therePage.isHome();
         // A keyboard in the stack, not one floating in a frame of its own: the committed half's
         // as it is up now, the other's as it wants one on arrival.
-        // And each half's dock rows at rest, less the extra keys, so a fold travels from one
-        // half's rest to the other's (SeamCrossing.foldRestGrowthPx); unknown before the
-        // preferences are read.
-        int committedRowsPx = mHost.preferences() == null ? -1
-            : com.termux.app.dock.DockMorph.rowsPx(hereRest);
-        int otherRowsPx = mHost.preferences() == null ? -1
-            : com.termux.app.dock.DockMorph.rowsPx(thereRest);
         // Each end carries its page's arrangement, held for the crossing's life with the revision
         // it was resolved at: from here every chrome reader reads them (arrangementOf).
         com.termux.app.place.SeamCrossing.Endpoint here =
             com.termux.app.place.SeamCrossing.Endpoint.of(herePage, committedDress,
                 mHost.pageLookOf(herePage), mHost.committedArrangement(), committed,
                 stackDressOf(committedDress, herePage, orientation),
-                mHost.committedKeyboardVisible() && !mHost.isKeyboardFloating(), committedRowsPx);
+                mHost.committedKeyboardVisible() && !mHost.isKeyboardFloating());
         com.termux.app.place.SeamCrossing.Endpoint there =
             com.termux.app.place.SeamCrossing.Endpoint.of(therePage, otherDress,
                 mHost.pageLookOf(therePage), otherArrangement, otherLayout,
                 stackDressOf(otherDress, therePage, orientation),
-                mHost.inAppKeyboard() != null && mHost.inAppKeyboard().isEnabled() && mHost.wantsKeyboardOnEnter(other),
-                otherRowsPx);
+                mHost.inAppKeyboard() != null && mHost.inAppKeyboard().isEnabled() && mHost.wantsKeyboardOnEnter(other));
         // The pages turn across the seam by the page transition; a bar that cannot stand still
         // then fades in place rather than riding a turned page (SeamCrossing.Stage#pagesSlide).
         boolean pagesSlide = mHost.paneWallController() == null

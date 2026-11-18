@@ -258,7 +258,7 @@ final class DockDress {
     void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
                                                     @NonNull com.termux.app.wall.PaneWallPage to) {
         if (!mHost.hasPreferences() || mHost.chrome() == null) return;
-        // A pictured dip dressed the slab for this page on its first frame: it already wears it.
+        // A slide in dressed the slab for this page on its first frame: it already wears it.
         boolean travelled = mHost.dockDesignTravelledTo() == to;
         if (travelled) mHost.setDockDesignTravelledTo(null);
         boolean sameDress = !travelled && dockSurfaceSpec(from).equals(dockSurfaceSpec(to))

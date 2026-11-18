@@ -170,6 +170,12 @@ public class CrossingViewsTest {
             states = place -> new Rest(false, false, true);
         }
 
+        /** The status bar rides with the page or the stack travels: what a frame puts away from rest. */
+        boolean somethingMoved() {
+            return (mHost.barX != 0f && !Float.isNaN(mHost.barX))
+                || (mHost.dockPx != 0f && !Float.isNaN(mHost.dockPx));
+        }
+
         void step(float fraction) {
             float offset = committed == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
             Frame frame = PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states);
@@ -187,10 +193,6 @@ public class CrossingViewsTest {
             crossing.rideBar(frame, true, WIDTH);
             crossing.fade(frame.statusReveal, frame.dockReveal);
         }
-    }
-
-    private float layerSink(int id) {
-        return mHost.views.get(id).getTranslationY();
     }
 
     /** Every view the frames moved is back where it is laid out, as the settle finds it. */
@@ -213,14 +215,13 @@ public class CrossingViewsTest {
         for (PaneWallPage from : BOTH) {
             setUp();
             Drive drive = new Drive(from);
-            boolean folded = false;
+            boolean moved = false;
             for (float f = STEP; f < 1f; f += STEP) {
                 drive.step(f);
-                // Home stands the window's rows less the extra keys: the rows fold with the way.
-                if (layerSink(R.id.accessory_row_stack) != 0f) folded = true;
+                if (drive.somethingMoved()) moved = true;
             }
             drive.step(1f);
-            assertTrue(from + ": the rows sank with the fold on the way", folded);
+            assertTrue(from + ": the frames moved nothing on the way", moved);
             drive.crossing.land(PageRef.of(across(from)), REVISION);
             assertAtRest(from + " landed across");
             drive.crossing.end();
@@ -234,7 +235,7 @@ public class CrossingViewsTest {
             setUp();
             Drive drive = new Drive(from);
             for (float f = STEP; f <= 0.5f; f += STEP) drive.step(f);
-            assertTrue(from + ": the rows sank mid-way", layerSink(R.id.accessory_row_stack) != 0f);
+            assertTrue(from + ": the frames moved nothing mid-way", drive.somethingMoved());
             // A finger that turns back: the frames retrace to where the wall left.
             for (float f = 0.5f; f > 0f; f -= STEP) drive.step(f);
             drive.step(0f);
@@ -252,8 +253,7 @@ public class CrossingViewsTest {
             Drive drive = new Drive(from);
             for (float f = STEP; f <= 0.3f; f += STEP) drive.step(f);
             drive.step(0.3f);
-            assertTrue(from + ": the frame moved something",
-                layerSink(R.id.accessory_row_stack) != 0f);
+            assertTrue(from + ": the frame moved something", drive.somethingMoved());
             mWrites.count = 0;
             drive.step(0.3f);
             assertEquals(from + ": views written by a repeated frame", 0, mWrites.count);

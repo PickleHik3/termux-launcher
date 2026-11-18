@@ -104,7 +104,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private final StackScene.Motion mEffective = new StackScene.Motion();
     private final StackGeometry mGeometry = new StackGeometry();
     private final StackScene.Frame mFrame = new StackScene.Frame();
-    private float mSlideX;
     /**
      * The crossing's two ends by side and its progress between them, set by the wall's frames and
      * cleared at the landing; with none the scene is the front side at rest. The ends are made
@@ -238,13 +237,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     }
 
     /** The layers' sink and cut ({@link StackScene.Motion#layerSink}). */
-    public void setSink(float rowsPx, float rowsCutPx, float sheetPx, float sheetCutPx,
-                        float heldPx, boolean holdsAz) {
+    public void setSink(float rowsPx, float rowsCutPx, float sheetPx, float sheetCutPx) {
         StackScene.Motion m = mMotion;
         if (mApplied && m.rowsSinkPx == rowsPx && m.rowsCutPx == rowsCutPx
-            && m.sheetSinkPx == sheetPx && m.sheetCutPx == sheetCutPx && m.heldSinkPx == heldPx
-            && m.holdsAz == holdsAz) return;
-        m.layerSink(rowsPx, rowsCutPx, sheetPx, sheetCutPx, heldPx, holdsAz);
+            && m.sheetSinkPx == sheetPx && m.sheetCutPx == sheetCutPx) return;
+        m.layerSink(rowsPx, rowsCutPx, sheetPx, sheetCutPx);
         requestApply();
     }
 
@@ -280,13 +277,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     public void clearEnds() {
         if (!mHasEnds) return;
         mHasEnds = false;
-        requestApply();
-    }
-
-    /** The stack drawn {@code px} across from its rest, riding with the arriving page. */
-    public void setSlideX(float px) {
-        if (mApplied && mSlideX == px) return;
-        mSlideX = px;
         requestApply();
     }
 
@@ -348,7 +338,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
 
         boolean containerMoved = writeTy(StackScene.V_CONTAINER, container,
             mFrame.ty[StackScene.V_CONTAINER] + plankTy(PLANK_CONTAINER));
-        writePlank(StackScene.V_CONTAINER, container, PLANK_CONTAINER, mSlideX);
+        writePlank(StackScene.V_CONTAINER, container, PLANK_CONTAINER, 0f);
         containerMoved |= writeClip(StackScene.V_CONTAINER, container);
         if (containerMoved) {
             // The dock's and the keyboard's glass sample the wallpaper through this translation;
@@ -400,8 +390,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
 
     /**
      * Each side's lane rows across by their side's slide: the scene's {@code sideTx} less the part
-     * the container itself already rides ({@link #setSlideX}), so the rows stand where the scene
-     * puts them. A row in no lane stands at 0. At rest the front side's lane writes nothing.
+     * the container's own, so the rows stand where the scene puts them. A row in no lane stands at 0. At rest the front side's lane writes nothing.
      */
     private void writeLanes() {
         View rowStack = mViews.view(R.id.accessory_row_stack);
@@ -415,7 +404,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                 int lane = stack.getLane(host);
                 if (lane != StackLanes.STACK) {
                     want = mFrame.sideTx[(lane == StackLanes.HOME ? Side.HOME : Side.WORKSPACE)
-                        .ordinal()] - mSlideX;
+                        .ordinal()];
                 }
             }
             if (host != mWrittenLaneView[i]) {

@@ -106,7 +106,7 @@ public class StackRendererTest {
 
     @Test public void aFrameEqualToTheLastWritesNothing() {
         mRenderer.setTravel(120f, 0f, 0f);
-        mRenderer.setSink(40f, 40f, 40f, 40f, 0f, false);
+        mRenderer.setSink(40f, 40f, 40f, 40f);
         assertEquals(120f, mContainer.getTranslationY(), 0f);
         assertNotNull(mContainer.getClipBounds());
         assertEquals(40f, mRows.getTranslationY(), 0f);
@@ -114,11 +114,11 @@ public class StackRendererTest {
         mRenderer.apply();
         mRenderer.applyAtRest();
         mRenderer.setTravel(120f, 0f, 0f);
-        mRenderer.setSink(40f, 40f, 40f, 40f, 0f, false);
+        mRenderer.setSink(40f, 40f, 40f, 40f);
         assertEquals(before, writes());
         // Back at rest: everything put back, once.
         mRenderer.setTravel(0f, 0f, 0f);
-        mRenderer.setSink(0f, 0f, 0f, 0f, 0f, false);
+        mRenderer.setSink(0f, 0f, 0f, 0f);
         assertEquals(0f, mContainer.getTranslationY(), 0f);
         assertNull(mContainer.getClipBounds());
         assertNull(mRows.getClipBounds());
@@ -131,7 +131,7 @@ public class StackRendererTest {
         FramePipeline frames = attached();
         mRenderer.setTravel(120f, 0f, 0f);
         frames.flush("test");
-        mRenderer.setSink(40f, 40f, 40f, 40f, 0f, false);
+        mRenderer.setSink(40f, 40f, 40f, 40f);
         frames.flush("test");
         assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
         mContainer.setTranslationY(7f);
@@ -144,7 +144,7 @@ public class StackRendererTest {
     @Test public void onAPipelineTheStepAloneWrites() {
         FramePipeline frames = attached();
         mRenderer.setTravel(120f, 0f, 0f);
-        mRenderer.setSink(40f, 40f, 40f, 40f, 0f, false);
+        mRenderer.setSink(40f, 40f, 40f, 40f);
         assertEquals(0f, mContainer.getTranslationY(), 0f);
         assertEquals(0f, mRows.getTranslationY(), 0f);
         frames.flush("test");
@@ -157,11 +157,11 @@ public class StackRendererTest {
         FramePipeline frames = attached();
         // The crossing's last frame already stands the rest; the landing puts back nothing.
         mRenderer.setTravel(0f, 0f, 0f);
-        mRenderer.setSink(0f, 0f, 0f, 0f, 0f, false);
+        mRenderer.setSink(0f, 0f, 0f, 0f);
         frames.flush("test");
         mRenderer.onLanding();
         mRenderer.setTravel(0f, 0f, 0f);
-        mRenderer.setSink(0f, 0f, 0f, 0f, 0f, false);
+        mRenderer.setSink(0f, 0f, 0f, 0f);
         frames.flush("test");
         assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
         assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
@@ -188,7 +188,7 @@ public class StackRendererTest {
         int before = writes();
         mRenderer.onLanding();
         mRenderer.setTravel(0f, 0f, 0f);
-        mRenderer.setSink(0f, 0f, 0f, 0f, 0f, false);
+        mRenderer.setSink(0f, 0f, 0f, 0f);
         frames.flush("test");
         assertEquals(before, writes());
         assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
@@ -225,12 +225,12 @@ public class StackRendererTest {
     @Test public void aLandingThatMovesTheStackIsCounted() {
         FramePipeline frames = attached();
         mRenderer.setTravel(120f, 0f, 0f);
-        mRenderer.setSink(40f, 40f, 40f, 40f, 0f, false);
+        mRenderer.setSink(40f, 40f, 40f, 40f);
         frames.flush("test");
         // The last crossing frame left the stack sunk: the landing snaps it back.
         mRenderer.onLanding();
         mRenderer.setTravel(0f, 0f, 0f);
-        mRenderer.setSink(0f, 0f, 0f, 0f, 0f, false);
+        mRenderer.setSink(0f, 0f, 0f, 0f);
         frames.flush("test");
         assertTrue(Counters.countOf(FrameGuards.LANDING_WROTE) > 0);
         // Only that frame: the next change is not a landing's.
@@ -257,7 +257,7 @@ public class StackRendererTest {
 
         // Keyboard up: the glass host carries it on top of its sink, the container lets go.
         mKeyboardShown = true;
-        mRenderer.setSink(40f, 40f, 40f, 40f, 0f, false);
+        mRenderer.setSink(40f, 40f, 40f, 40f);
         assertEquals(43f, mHost.getTranslationY(), 0f);
         assertEquals(1f, mHost.getRotationX(), 0f);
         assertEquals(120f, mContainer.getTranslationY(), 0f);

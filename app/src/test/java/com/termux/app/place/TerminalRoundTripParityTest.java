@@ -109,7 +109,7 @@ public class TerminalRoundTripParityTest {
             : ResolvedArrangement.of(layout, style, DockStyle.GLASS_TRAY, false, false,
                 PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL, PageRef.TERMINAL);
         return SeamCrossing.Endpoint.of(ref, dress, null, arranged, layout,
-            SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0), false, -1);
+            SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0), false);
     }
 
     private DockLayout dockRest(@NonNull PaneWallPage page) {
