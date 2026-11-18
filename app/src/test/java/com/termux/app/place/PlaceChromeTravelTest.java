@@ -174,6 +174,43 @@ public class PlaceChromeTravelTest {
     }
 
     @Test
+    public void aKeyboardLaidOutButDownNeedsNoPreRoll() {
+        PlaceChromeTravel.States s = states(true, true);
+        Frame first = at(PaneWallPage.DISPLAY, 4f, s);
+        assertTrue(first.keyboardInPlay);
+        // The in-app keyboard stays laid out while it is down (D1-A): its show flag is false,
+        // yet it is there for the crossing to bring up.
+        assertTrue(PlaceChromeTravel.keyboardLaidOut(false, 340));
+        assertFalse(PlaceChromeTravel.needsKeyboardPreRoll(first,
+            PlaceChromeTravel.keyboardLaidOut(false, 340)));
+        assertTrue(PlaceChromeTravel.needsKeyboardPreRoll(first,
+            PlaceChromeTravel.keyboardLaidOut(false, 0)));
+        assertFalse(PlaceChromeTravel.keyboardLaidOut(false, 0));
+        assertTrue(PlaceChromeTravel.keyboardLaidOut(true, 0));
+    }
+
+    @Test
+    public void theKeyboardsTravelHeightIsItsLaidOutHeightShownOrDown() {
+        assertEquals(380, PlaceChromeTravel.keyboardLaidOutPx(true, 380, 0));
+        assertEquals(340, PlaceChromeTravel.keyboardLaidOutPx(false, 0, 340));
+        assertEquals(0, PlaceChromeTravel.keyboardLaidOutPx(false, 0, 0));
+        assertEquals(0, PlaceChromeTravel.keyboardLaidOutPx(false, 380, -5));
+    }
+
+    @Test
+    public void theKeyboardsTravelIsBetweenTheEndsAndContinuousAcrossTheSeam() {
+        PlaceChromeTravel.States s = states(true, false);
+        float last = Float.NaN;
+        for (int px = 0; px <= 400; px += 4) {
+            Frame f = at(PaneWallPage.DISPLAY, px, s);
+            float t = StackScene.keyboardTranslationPx(f.keyboardReveal, 340);
+            assertTrue(t >= 0f && t <= 340f);
+            if (!Float.isNaN(last)) assertTrue("a step at " + px, Math.abs(t - last) < 12f);
+            last = t;
+        }
+    }
+
+    @Test
     public void leavingAMinimalPlaceAsksForTheKeyboardToBePreRolled() {
         PlaceChromeTravel.States s = states(true, true);
         Frame atRest = at(PaneWallPage.DISPLAY, 0f, s);

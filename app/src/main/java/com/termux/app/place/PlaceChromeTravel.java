@@ -350,6 +350,24 @@ public final class PlaceChromeTravel {
     }
 
     /**
+     * Whether the in-app keyboard is laid out for a crossing to move: shown, or down but still laid
+     * out below the screen (D1-A), which is the keyboard's rest on a place that has it down. Its
+     * show flag alone says nothing of that, so a crossing never pre-rolls a keyboard that is there.
+     */
+    public static boolean keyboardLaidOut(boolean shown, int downLaidOutPx) {
+        return shown || downLaidOutPx > 0;
+    }
+
+    /**
+     * The keyboard's height a crossing moves: as laid out shown, or as laid out down. The one
+     * number the travel's reveal scales ({@link StackScene#keyboardTranslationPx}), so the rest's
+     * share is never added on top of it.
+     */
+    public static int keyboardLaidOutPx(boolean shown, int shownPx, int downLaidOutPx) {
+        return Math.max(0, shown ? shownPx : downLaidOutPx);
+    }
+
+    /**
      * How far the content reaches past the top of the stack while the wall travels with chrome
      * pre-rolled: exactly what keeps the room the chrome takes from the content where it was
      * committed. The stack can grow for the slide; the content does not hear of it until settle.

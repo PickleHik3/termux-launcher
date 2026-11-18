@@ -101,4 +101,33 @@ public class StackLandingParityTest {
             }
         }
     }
+
+    /**
+     * With no pre-roll the keyboard is laid out the whole crossing, shown or down (D1-A): the
+     * crossing's last frame stands the keyboard {@code (1 - reveal) * laidOutPx} down, which is
+     * what the landing's rest stands for the same keyboard, so the landing writes the same
+     * container translation and clips, down to up and up to down, the keyboard counted once.
+     */
+    @Test public void aKeyboardLaidOutTheWholeCrossingLandsOnTheTransformsItsLastFrameStood() {
+        for (int kept : KEPT) for (boolean floating : BOOLS) for (boolean upTo : BOOLS)
+            for (PageRef to : PAGES) {
+            StackLayout.Result r = f.settle(to, upTo, floating);
+            BottomInsets land = BottomInsets.forKept(0, kept, !upTo, r.bottomMarginPx,
+                r.flushBottomInsetPx);
+            int kb = f.keyboardLaidOutPx();
+            int height = containerHeight(r, land, upTo ? 0 : kb);
+            // The crossing's last frame: the keyboard laid out (up or down), reveal of the end.
+            StackScene.Motion last = new StackScene.Motion();
+            StackScene.travel(false, upTo ? 1f : 0f, 1f, kb, 0, 0, last);
+            // The landing's rest: nothing of the crossing, plus the down keyboard's own share.
+            StackScene.Motion rest = new StackScene.Motion();
+            StackScene.withKeyboardRest(new StackScene.Motion(),
+                StackScene.keyboardTranslationPx(0f, upTo ? 0 : kb), rest);
+            String at = f.name + " to=" + to + " floating=" + floating + " upTo=" + upTo
+                + " kept=" + kept;
+            assertEquals(at + " travel", last.dockTravelPx, rest.dockTravelPx, 0f);
+            assertTrue(at + " clips", frame(height, last.dockTravelPx)
+                .sameTransforms(frame(height, rest.dockTravelPx)));
+        }
+    }
 }

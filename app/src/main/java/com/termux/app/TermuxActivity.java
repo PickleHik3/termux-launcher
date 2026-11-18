@@ -24832,7 +24832,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) { return TermuxActivity.this.wantsKeyboardOnEnter(place); }
         @Override public int keyboardMeasureHeightPx() { return mKeyboardGeometry.measureHeightPx(); }
         @Override public int keyboardDesiredHeightPx() { return mKeyboardGeometry.desiredHeightPx(); }
-        @Override public int travelKeyboardLaidOutPx() { return TermuxActivity.this.travelKeyboardLaidOutPx(); }
+        @Override public int travelKeyboardLaidOutPx() {
+            return com.termux.app.place.PlaceChromeTravel.keyboardLaidOutPx(isInAppKeyboardShown(),
+                TermuxActivity.this.travelKeyboardLaidOutPx(), mKeyboardDownLaidOutPx);
+        }
         @Override public int keyboardDownLaidOutPx() { return mKeyboardDownLaidOutPx; }
         @Override public boolean displayWindowInFront() { return isDisplayWindowInFront(); }
         @Override public int imeLiftPx() { return mImeLiftPx; }
@@ -25036,12 +25039,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // it: the landed frame already shows what the half's re-dress would, which follows it.
             mLandingStackDressed = seamLanding.stackDressedFor(page)
                 || seamLanding.lookBlendedOnto(page);
+            // A keyboard laid out down that the arriving place wants is shown where the travel
+            // already stood it (reveal 1, translation 0): quietly, with no reveal and no second
+            // movement. One the place does not want stays laid out down.
+            boolean quietShow = !keyboardPreRolled && !leavingKeyboardUp && page != left
+                && mKeyboardDownLaidOutPx > 0 && mInAppKeyboard != null
+                && !mInAppKeyboard.isVisible() && wantsKeyboardOnEnter(page);
             Trace.beginSection("Settle.placeState");
+            if (quietShow) {
+                mQuietKeyboardChange = true;
+                mKeyboardOpensBelowScreen = true;
+            }
             try {
                 syncPlaceState(page, leavingKeyboardUp);
             } finally {
+                mQuietKeyboardChange = false;
+                mKeyboardOpensBelowScreen = false;
                 mLandingStackDressed = false;
                 Trace.endSection();
+            }
+            // The display hears the keyboard come up as the place's own, as it heard the shown
+            // keyboard's own listener before the show went quiet.
+            if (quietShow && page == com.termux.app.wall.PaneWallPage.DISPLAY
+                && mDisplayServer.controller() != null && mInAppKeyboard.isVisible()) {
+                mDisplayServer.controller().onUserKeyboardIntent(true);
             }
             Trace.beginSection("Settle.away");
             if (beadsMelted) mDock.applyDockBeadMelt(true);

@@ -331,8 +331,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mLandingPending = false;
         if (guard != null) guard.check();
         readGeometry(container);
-        StackScene.withKeyboardRest(mMotion,
-            StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx()), mEffective);
+        // A crossing's own travel carries the laid-out keyboard at the seam's reveal
+        // (PlaceChromeTravel#keyboardLaidOutPx), so the rest's share joins only at rest.
+        StackScene.withKeyboardRest(mMotion, mHasEnds ? 0f
+            : StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx()), mEffective);
         if (mHasEnds) {
             StackScene.at(mFromHome ? mEndHome : mEndWorkspace, mToHome ? mEndHome : mEndWorkspace,
                 mEndsProgress, mEffective, mGeometry, mFrame);
