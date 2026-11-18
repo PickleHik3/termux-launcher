@@ -360,7 +360,6 @@ public class SheetsControllerTest {
         }
         @Nullable @Override public com.termux.app.launcher.drawer.AppDrawerController.AppDrawerDockChoreographyTarget dockChoreographyTarget() { return null; }
         @Nullable @Override public com.termux.terminal.TerminalSession currentSession() { return null; }
-        @Override public void setHomeSheetDecorNavStripAlpha(float alpha) { }
         @Override public void prepareWallpaperDoor() { }
         @Override public void releasePreparedWallpaper() { }
         @Override public boolean shouldUseWallpaperPassthroughMode() { return false; }

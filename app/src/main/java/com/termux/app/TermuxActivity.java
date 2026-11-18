@@ -1645,21 +1645,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * first read. See {@link #applyWallpaperRenderZoomIfChanged()}.
      */
     private int mAppliedWallpaperRenderZoomPercent = -1;
-    @Nullable private FrameLayout mDecorNavBarSurfaceOverlay;
-    /**
-     * The app drawer's cross-fade of the under-pill strip; 1 whenever the drawer is not engaged.
-     * The strip is the topmost decor child, so the open plane cannot cover it — it fades out under
-     * the plane's arriving bottom edge instead, and is handed back at 1 when the drawer closes.
-     */
-    private float mAppDrawerNavStripAlpha = 1f;
-    /**
-     * Home's long-press sheet's fade of the same strip, 1 less the share of the band under the
-     * navigation bar its card covers: the card runs under the pill, and the strip would paint over
-     * its foot. Multiplies the drawer's, so neither owner hands the other's fade back.
-     */
-    private float mHomeSheetNavStripAlpha = 1f;
-    @Nullable private ImageView mDecorNavBarBlurBackdrop;
-    @Nullable private View mDecorNavBarTintOverlay;
     @Nullable private Bitmap mInAppKeyboardBackdropBitmap;
     /**
      * Memo of the color scheme's keyboard-background override, keyed on the raw persisted JSON.
@@ -4729,9 +4714,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         for (View frost : mParallaxFrostViews) {
             if (frost != null && frost.getVisibility() == View.VISIBLE) frost.invalidate();
         }
-        // The under-pill strip lives in the decor, built after the views above are looked up.
-        View strip = mDecorNavBarBlurBackdrop;
-        if (strip != null && strip.getVisibility() == View.VISIBLE) strip.invalidate();
     }
 
     /** The offset the wall's live position asks for; 0 while nothing pans. */
@@ -5338,9 +5320,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public float dockCover() {
                 return mDockGlassCover;
             }
-            @Override public float navStripCover() {
-                return mNavStripGlassCover;
-            }
             @Override public void applyDockSurfaceGlass(
                 @NonNull com.termux.app.chrome.GlassRefraction.Program program) {
                 mDock.applyDockSurfaceGlass(program);
@@ -5389,7 +5368,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * backdrop, so its edge follows an opacity change.
      */
     private float mDockGlassCover = -1f;
-    private float mNavStripGlassCover = -1f;
 
     /**
      * The row's icons moved off or back onto their places (a page swipe, a page switch): the
@@ -5693,9 +5671,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Floating hands the host back its capsule (dockFloats).
             mDock.applyDockSurfaceShape(host, mDock.dockFloats(), mDock.dockShapeHeightPx(), true, true);
             if (recutOnly) {
-                // The strip under the pill continues the card: its crop is cut again with the
-                // next pass that runs anyway.
-                if (mChrome != null) mChrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
                 return;
             }
         } else {
@@ -5705,7 +5680,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mChrome != null)
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
-                | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
     /** Whether the chrome is travelling with the wall: a crossing, a slide, or its transforms. */
@@ -7126,44 +7101,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSheets.applyAppDrawerEdgeBleed(insetsCompat);
     }
 
-    private boolean shouldShowDecorNavBarSurface(@NonNull ChromeSpec state) {
-        // Floating capsules leave the gesture-pill inset showing wallpaper; edge-to-edge surfaces
-        // (dock glass, or the embedded keyboard's own background) continue under the pill, and so
-        // does the Peek glass card under either Style, as its foot (dockFloats). Bands
-        // under the keyboard are a card with air under it under Floating, so nothing above the
-        // pill runs down into it and the pill shows wallpaper too; Docked they join the frame
-        // flush to the edge and the strip continues them.
-        if (underKeyboardBandsShown() && arrangement().floating()) return false;
-        // The editor's sheet already runs under the gesture pill; this strip is the decor's
-        // topmost child and painted the dock's glass foot over it, so the inset read untinted.
-        if (mSurfaceEditor.isActive()) return false;
-        // A keyboard that wears the band as its own foot reaches the edge itself.
-        if (inAppKeyboardFootPx() > 0) return false;
-        return shouldShowDecorNavBarSurface(state.toolbarShown, state.keyboardShown,
-            mNavBarHeight, mKeyboardGeometry.lastImeVisible() || isImeVisible(),
-            mDock.dockFloats(),
-            isInAppKeyboardCapsule());
-    }
-
-    static boolean shouldShowDecorNavBarSurface(boolean toolbarShown, boolean keyboardShown,
-                                                int navBarHeight, boolean imeVisible,
-                                                boolean roundedDockStyle,
-                                                boolean keyboardCapsule) {
-        if (navBarHeight <= 0 || imeVisible)
-            return false;
-        // With the keyboard down the dock's own surface reaches under the pill (DockSpec, D8);
-        // the strip is the keyboard's foot alone until the keyboard's view owns it (wave S).
-        return keyboardShown && !keyboardCapsule;
-    }
-
-    private boolean shouldUseDockDecorNavBarSurface(@NonNull ChromeSpec state) {
-        // The dock body always renders in-content (accessory_surface_host + refraction), in front of
-        // the terminal dim, in BOTH keyboard states — so keyboard-off no longer routes the dock
-        // through the behind-content decor overlay (which the terminal dim darkened, making it read
-        // darker than the keyboard-on dock). The decor overlay is now the under-pill nav strip only.
-        return false;
-    }
-
     /**
      * The default edge-to-edge dock and a glass-matched keyboard are one rectangular material.
      * Render one backdrop through both instead of placing two independently cropped glass layers
@@ -7240,206 +7177,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             inAppKeyboardOnHome(), inAppKeyboardOnDisplay());
     }
 
-    private void ensureDecorNavBarSurfaceOverlay() {
-        if (mDecorNavBarSurfaceOverlay != null) {
-            return;
-        }
-        if (getWindow() == null || !(getWindow().getDecorView() instanceof FrameLayout)) {
-            return;
-        }
-
-        FrameLayout decorRoot = (FrameLayout) getWindow().getDecorView();
-        FrameLayout surfaceOverlay = new FrameLayout(this);
-        // Shell chrome under the gesture bar, placed by absolute geometry like the rest of it.
-        surfaceOverlay.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        surfaceOverlay.setVisibility(View.GONE);
-        surfaceOverlay.setClickable(false);
-        surfaceOverlay.setFocusable(false);
-        surfaceOverlay.setClipChildren(true);
-        surfaceOverlay.setClipToPadding(true);
-        surfaceOverlay.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-
-        ImageView blurBackdrop = new ImageView(this);
-        blurBackdrop.setScaleType(ImageView.ScaleType.FIT_XY);
-        blurBackdrop.setVisibility(View.GONE);
-        surfaceOverlay.addView(blurBackdrop, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ));
-
-        View tintOverlay = new View(this);
-        surfaceOverlay.addView(tintOverlay, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        ));
-
-        FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            0,
-            Gravity.BOTTOM
-        );
-        // Add as the TOPMOST decor child (not index 0). At index 0 the overlay sat behind the
-        // activity content, so the terminal/root dim (activity_termux_root_view's background, set by
-        // applyUnifiedBackgroundDim) composited OVER the finished nav glass — while the dock, being a
-        // descendant of that root, draws after the dim and stays bright. That fixed, opacity- and
-        // wallpaper-independent darkening of the under-pill strip is removed by drawing the strip
-        // after the dim, matching the dock. The strip is non-clickable/non-focusable and confined to
-        // the gesture-nav inset, and the system gesture pill renders above the app window regardless.
-        decorRoot.addView(surfaceOverlay, overlayParams);
-
-        mDecorNavBarSurfaceOverlay = surfaceOverlay;
-        mDecorNavBarBlurBackdrop = blurBackdrop;
-        mDecorNavBarTintOverlay = tintOverlay;
-        // The strip is the docked keyboard's background run on under the pill, so it wears the
-        // terminal effect the keyboard does; it lives outside the chrome's root, so it is adopted.
-        if (mChromeRetroEffect != null) mChromeRetroEffect.adopt(surfaceOverlay);
-        mChrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
-    }
-
-    /** The drawer's cross-fade of the under-pill strip. See {@link #mAppDrawerNavStripAlpha}. */
-    private void setAppDrawerDecorNavStripAlpha(float alpha) {
-        float clamped = Math.max(0f, Math.min(1f, alpha));
-        if (mAppDrawerNavStripAlpha == clamped) return;
-        mAppDrawerNavStripAlpha = clamped;
-        if (mDecorNavBarSurfaceOverlay != null) mDecorNavBarSurfaceOverlay.setAlpha(decorNavStripAlpha());
-    }
-
-    /** Home's long-press sheet's fade of the under-pill strip. See {@link #mHomeSheetNavStripAlpha}. */
-    private void setHomeSheetDecorNavStripAlpha(float alpha) {
-        float clamped = Math.max(0f, Math.min(1f, alpha));
-        if (mHomeSheetNavStripAlpha == clamped) return;
-        mHomeSheetNavStripAlpha = clamped;
-        if (mDecorNavBarSurfaceOverlay != null) mDecorNavBarSurfaceOverlay.setAlpha(decorNavStripAlpha());
-    }
-
-    /** The strip's opacity: what both the drawer and Home's sheet leave of it. */
-    private float decorNavStripAlpha() {
-        return mAppDrawerNavStripAlpha * mHomeSheetNavStripAlpha;
-    }
-
-    private void removeDecorNavBarSurfaceOverlay() {
-        if (mDecorNavBarSurfaceOverlay == null) {
-            return;
-        }
-        clearDecorNavBarBackdrop();
-        if (mChromeRetroEffect != null) mChromeRetroEffect.drop(mDecorNavBarSurfaceOverlay);
-        ViewParent parent = mDecorNavBarSurfaceOverlay.getParent();
-        if (parent instanceof ViewGroup) {
-            ((ViewGroup) parent).removeView(mDecorNavBarSurfaceOverlay);
-        }
-        mDecorNavBarSurfaceOverlay = null;
-        mDecorNavBarBlurBackdrop = null;
-        mDecorNavBarTintOverlay = null;
-    }
-
-    private void hideDecorNavBarSurfaceOverlay(boolean clearBackdrop) {
-        if (mDecorNavBarSurfaceOverlay != null) {
-            mDecorNavBarSurfaceOverlay.setVisibility(View.GONE);
-        }
-        if (clearBackdrop) {
-            clearDecorNavBarBackdrop();
-        }
-    }
-
-    private void applyDecorNavBarSurfaceBounds(@NonNull FrameLayout overlay, boolean visible) {
-        ViewGroup.LayoutParams layoutParams = overlay.getLayoutParams();
-        if (!(layoutParams instanceof FrameLayout.LayoutParams)) {
-            return;
-        }
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) layoutParams;
-        int targetHeight = visible ? resolveDecorNavBarSurfaceHeightPx() : 0;
-        int targetHorizontalMargin = 0;
-        int targetBottomMargin = 0;
-        mDock.applyDockSurfaceShape(overlay, false, targetHeight, false, false);
-        if (params.width != ViewGroup.LayoutParams.MATCH_PARENT ||
-            params.height != targetHeight ||
-            params.gravity != Gravity.BOTTOM ||
-            params.leftMargin != targetHorizontalMargin ||
-            params.rightMargin != targetHorizontalMargin ||
-            params.bottomMargin != targetBottomMargin) {
-            params.width = ViewGroup.LayoutParams.MATCH_PARENT;
-            params.height = targetHeight;
-            params.gravity = Gravity.BOTTOM;
-            params.leftMargin = targetHorizontalMargin;
-            params.rightMargin = targetHorizontalMargin;
-            params.bottomMargin = targetBottomMargin;
-            overlay.setLayoutParams(params);
-            mChrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
-        }
-    }
-
-    private void applyDecorNavBarSurfaceState(@NonNull ChromeSpec state) {
-        boolean visible = shouldShowDecorNavBarSurface(state);
-        if (mNavFadeActive && !mCrossing.crossing()) endNavStripFade();
-        if (mNavFadeActive && applyDecorNavBarSurfaceFade(state, visible)) return;
-        if (!visible) {
-            hideDecorNavBarSurfaceOverlay(true);
-            return;
-        }
-
-        ensureDecorNavBarSurfaceOverlay();
-        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
-        if (overlay == null) {
-            return;
-        }
-
-        applyDecorNavBarSurfaceBounds(overlay, true);
-        // Re-applied on every chrome pass: a restyle while the drawer or Home's sheet is open must
-        // not hand the strip back at full opacity over the plane or the card.
-        overlay.setAlpha(decorNavStripAlpha());
-
-        if (mDecorNavBarTintOverlay != null) {
-            mDecorNavBarTintOverlay.setBackground(buildDecorNavBarTint(state));
-            mDecorNavBarTintOverlay.setAlpha(1f);
-            mDecorNavBarTintOverlay.setVisibility(View.VISIBLE);
-        }
-
-        if (navStripBlurEnabled(state)) {
-            updateDecorNavBarBackdrop(state);
-        } else {
-            clearDecorNavBarBackdrop();
-        }
-
-        overlay.setVisibility(View.VISIBLE);
-        // The Peek glass reflection runs on down the card's foot.
-        syncPeekReflection();
-    }
-
-    // ---- The under-pill strip across the seam ----------------------------------------------
-    //
-    // The strip stands still at the screen's foot while the wall crosses between Home and the
-    // Workspace, and the stack's dress, which it continues, changes halves on the crossing's first
-    // frame. So it does not change with it there: it keeps the dress it began in (or none, where
-    // the committed half has no strip) beside the other half's, built once, and the two cross by
-    // alpha with the finger (SeamFade), so either end of the way shows exactly that end's strip.
-
-    /** Whether the strip is crossing between the halves' dresses. */
-    private boolean mNavFadeActive;
-    /** The crossing's committed end, the way's share is read from. */
-    @Nullable private com.termux.app.wall.PageRef mNavFadeHerePage;
-    /** Whether the strip showed as the crossing began, and the tint it wore then. */
-    private boolean mNavFadeHereShown;
-    @Nullable private Drawable mNavFadeHereTint;
-    /** Whether the other half's dress has been read yet (the stack wore it on a pass). */
-    private boolean mNavFadeThereKnown;
-    private boolean mNavFadeThereShown;
-    /** How much of the other half's strip shows, 0 to 1 (SeamFade#share). */
-    private float mNavFadeShare;
-
-    /** A crossing between Home and the Workspace begins: the strip keeps what it wears. */
-    private void beginNavStripFade(@NonNull com.termux.app.wall.PageRef here,
-                                   @NonNull com.termux.app.wall.PageRef there) {
-        endNavStripFade();
-        if (here.isHome() == there.isHome()) return;
-        mNavFadeActive = true;
-        mNavFadeHerePage = here;
-        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
-        mNavFadeHereShown = overlay != null && overlay.getVisibility() == View.VISIBLE;
-        mNavFadeHereTint = mNavFadeHereShown && mDecorNavBarTintOverlay != null
-            ? mDecorNavBarTintOverlay.getBackground() : null;
-    }
-
-    /** The strip's crossing is over; the pass that follows dresses it plainly. */
     // ---- The band behind the system bar and the bar across the seam ---------------------------
     //
     // On pong (TopBandDiag) the strip's glass behind the system status bar was re-dressed into the
@@ -7573,125 +7310,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             view.setBackground(((com.termux.app.chrome.CrossfadeDrawable) background).endpoint());
     }
 
-    private void endNavStripFade() {
-        mNavFadeActive = false;
-        mNavFadeHerePage = null;
-        mNavFadeHereShown = false;
-        mNavFadeHereTint = null;
-        mNavFadeThereKnown = false;
-        mNavFadeThereShown = false;
-        mNavFadeShare = 0f;
-    }
-
-    /**
-     * The strip on a pass mid-crossing. While the stack still wears the committed half's dress
-     * the plain pass dresses it (false). The first pass in the other half's dress builds that
-     * half's strip once beside the one the crossing began with; every later pass changes nothing.
-     * Whether it handled the strip.
-     */
-    private boolean applyDecorNavBarSurfaceFade(@NonNull ChromeSpec state, boolean visible) {
-        if (mCrossing.seam().stackDressPage() == null) {
-            // Back in the committed half's dress (a dip drawn back before its swap): the plain
-            // pass dresses the strip, and the next swap builds the other half's again.
-            mNavFadeThereKnown = false;
-            return false;
-        }
-        if (!mNavFadeThereKnown) {
-            if (!mNavFadeHereShown && !visible) return false;
-            mNavFadeThereKnown = true;
-            mNavFadeThereShown = visible;
-            ensureDecorNavBarSurfaceOverlay();
-            FrameLayout overlay = mDecorNavBarSurfaceOverlay;
-            if (overlay == null) return true;
-            Drawable thereTint = null;
-            if (visible) {
-                applyDecorNavBarSurfaceBounds(overlay, true);
-                thereTint = buildDecorNavBarTint(state);
-                if (navStripBlurEnabled(state)) updateDecorNavBarBackdrop(state);
-            }
-            if (mDecorNavBarTintOverlay != null) {
-                mDecorNavBarTintOverlay.setBackground(new com.termux.app.chrome.CrossfadeDrawable(
-                    mNavFadeHereTint, thereTint, mNavFadeShare));
-                mDecorNavBarTintOverlay.setAlpha(1f);
-                mDecorNavBarTintOverlay.setVisibility(View.VISIBLE);
-            }
-            overlay.setVisibility(View.VISIBLE);
-            syncPeekReflection();
-        }
-        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
-        if (overlay != null) overlay.setAlpha(navStripFadeAlpha());
-        return true;
-    }
-
-    /** The strip's opacity mid-crossing: the drawer's and sheet's, by how much of it stands. */
-    private float navStripFadeAlpha() {
-        return decorNavStripAlpha() * com.termux.app.place.SeamFade.presence(mNavFadeHereShown,
-            mNavFadeThereShown, mNavFadeShare);
-    }
-
-    /**
-     * One frame of the crossing: the strip's two dresses at the wall's share of the way. A
-     * redraw of the strip, nothing built.
-     */
-    private void syncNavStripFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) {
-        if (!mNavFadeActive || mNavFadeHerePage == null) return;
-        float share = com.termux.app.place.SeamFade.share(
-            com.termux.app.place.SeamTravel.otherEndProgress(wallFrame, mNavFadeHerePage));
-        if (share == mNavFadeShare) return;
-        mNavFadeShare = share;
-        if (!mNavFadeThereKnown) return;
-        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
-        if (overlay == null) return;
-        Drawable tint = mDecorNavBarTintOverlay == null ? null
-            : mDecorNavBarTintOverlay.getBackground();
-        if (tint instanceof com.termux.app.chrome.CrossfadeDrawable)
-            ((com.termux.app.chrome.CrossfadeDrawable) tint).setShare(share);
-        overlay.setAlpha(navStripFadeAlpha());
-    }
-
-    /**
-     * The blur radius of the glass the under-pill strip continues: the keyboard's own while it is
-     * up — it may be detached from Base — and the dock's otherwise, so the frost under the pill is
-     * the frost directly above it.
-     */
-    private int navStripBlurRadiusDp(@NonNull ChromeSpec state) {
-        return state.keyboardShown && isInAppKeyboardGlassSurface()
-            ? getEffectiveInAppKeyboardBlurRadius() : state.blurRadiusDp;
-    }
-
-    /** The same surface's frost gate: the keyboard blurs by its own radius, the dock by its own. */
-    private boolean navStripBlurEnabled(@NonNull ChromeSpec state) {
-        if (!state.keyboardShown) return state.blurEnabled;
-        return isInAppKeyboardGlassSurface()
-            && ChromePolicy.dockBlurEnabled(getEffectiveInAppKeyboardBlurRadius());
-    }
-
-    /**
-     * The under-pill strip's tint: the bottom slice {@code [f, 1]} of the same light model the
-     * surface directly above it renders as {@code [0, f]}, so one foot lands under the pill.
-     *
-     * <p>Which surface that is depends on the keyboard. The strip used to take the dock's material
-     * in both states, which was right only while the keyboard followed Base: a keyboard with its
-     * own opacity — or a scheme background colour — painted itself near-solid and left the strip
-     * under it at the dock's opacity, so the material visibly stopped at the keyboard's bottom edge
-     * and the gesture-nav band read as bare wallpaper. The strip now takes whichever surface is
-     * above it, which is what makes the two read as one slab in both states.
-     */
-    @NonNull
-    private Drawable buildDecorNavBarTint(@NonNull ChromeSpec state) {
-        // A keyboard overlaying its place is an opaque panel that answers to neither the slider
-        // nor the scheme colour, so the strip takes the same fill: at the glass alpha it would
-        // leave the material stopping at the keyboard's bottom edge, which is the very seam
-        // this method exists to close.
-        if (inAppKeyboardMaterial() == KeyboardMaterialPolicy.Material.SOLID)
-            return buildInAppKeyboardSolidSurface(0f);
-        // The keyboard's own stack, continued below it: the same spec, scheme colour, stack
-        // alpha and band veil included, on the rest of the light model. Its frame and frost are
-        // the backdrop view's (updateDecorNavBarBackdrop, navStripFrostFilter).
-        return com.termux.app.chrome.GlassStack.buildContinuation(mChrome.glass(),
-            navStripSpec(state));
-    }
-
     /**
      * The docked keyboard's glass as {@link #buildInAppKeyboardSurfaceBackground} builds it, with
      * the band it is drawn as given by the caller (the keyboard notes its own, the strip only
@@ -7711,8 +7329,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 inAppKeyboardOnHome(), inAppKeyboardOnDisplay());
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
         int blurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
-        // Render only the keyboard's slice of the shared light model; the under-pill nav strip
-        // renders the remainder so the single foot lands under the pill (navStripSpec).
         // Docked, the keyboard is a slice of the frame: only the edge the model says faces the
         // opening wears a rim, and the rest (its joins, the screen's edges and the strip under
         // the pill it continues into) are seams. A card keeps its rim all round.
@@ -7727,26 +7343,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withStackAlpha(capsule && !floating ? 100
                 : com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences, stackLookPage()))
             .withRim(capsule ? !floating : modelRim != com.termux.app.chrome.ChromeEdgeRule.NONE)
-            .withSlice(defaultDockGlassFootFraction(), false)
             .withSeams(capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
                 : com.termux.app.chrome.ChromeEdgeRule.ALL & ~modelRim)
             .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
                 Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)))
             .withBand(band);
-    }
-
-    /**
-     * The under-pill strip's glass: the docked keyboard's spec continued below it
-     * ({@link com.termux.app.chrome.GlassStack.Spec#continuedBelow}), so one foot lands under the
-     * pill and the strip reads as the keyboard's own background. It repeats the keyboard band's
-     * veil where the keyboard's last pass asked for one (the unified glass's veil-only layer asks
-     * too), and no veil otherwise.
-     */
-    @NonNull
-    private com.termux.app.chrome.GlassStack.Spec navStripSpec(@NonNull ChromeSpec state) {
-        return inAppKeyboardGlassSpec(state, false, 0f, mKeyboardBandAskedThisPass
-                ? com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD : null)
-            .continuedBelow();
     }
 
     /**
@@ -7760,84 +7361,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isInAppKeyboardOpacityLinked())
             return state.barAlpha;
         return getInAppKeyboardBackgroundOpacityPercent() / 100f;
-    }
-
-    @Nullable
-    private Rect buildDecorNavBarBackdropTargetRect(int topOverscanPx) {
-        if (getWindow() == null || getWindow().getDecorView() == null || resolveDecorNavBarSurfaceHeightPx() <= 0) {
-            return null;
-        }
-        View decorView = getWindow().getDecorView();
-        int decorWidth = decorView.getWidth();
-        int decorHeight = decorView.getHeight();
-        if (decorWidth <= 0 || decorHeight <= 0) {
-            return null;
-        }
-
-        decorView.getLocationOnScreen(mTmpParentLocation);
-        int horizontalMargin = 0;
-        int bottomMargin = 0;
-        int surfaceHeight = Math.min(Math.max(1, resolveDecorNavBarSurfaceHeightPx()), decorHeight);
-        int bottom = mTmpParentLocation[1] + decorHeight - bottomMargin;
-        // Overscan the crop UPWARD past the strip top (the seam with the dock/keyboard) so the
-        // refraction edge band lands above the visible strip; the dock overscans down by the same
-        // amount, so their blurred wallpaper meets seamlessly at the seam.
-        int top = Math.max(mTmpParentLocation[1], bottom - surfaceHeight - Math.max(0, topOverscanPx));
-        return new Rect(
-            mTmpParentLocation[0] + horizontalMargin,
-            top,
-            mTmpParentLocation[0] + decorWidth - horizontalMargin,
-            bottom
-        );
-    }
-
-    private int resolveDecorNavBarSurfaceHeightPx() {
-        if (mNavBarHeight <= 0) {
-            return 0;
-        }
-        // Default dock renders its body in-content; the decor overlay is the under-pill nav strip
-        // only. Size it from the in-content surface's actual bottom edge down to the screen bottom
-        // rather than from mNavBarHeight — the content's applied bottom inset can differ from the
-        // system-bars height by a few px, which otherwise leaves a thin wallpaper gap (or an overlap)
-        // between the dock/keyboard bottom and the strip. This makes them meet exactly.
-        int measured = measuredUnderPillStripHeightPx();
-        int targetHeight = measured > 0 ? measured : mNavBarHeight;
-        return targetHeight;
-    }
-
-    /**
-     * Distance from the in-content surface's bottom edge (keyboard host when shown, else the dock
-     * stack) to the screen bottom, so the under-pill decor strip fills exactly that span. Returns 0
-     * when geometry is not yet laid out (callers fall back to {@code mNavBarHeight}).
-     */
-    private int measuredUnderPillStripHeightPx() {
-        if (getWindow() == null || getWindow().getDecorView() == null) {
-            return 0;
-        }
-        // Use the glass host, not the stack container: the container has a bottom padding (flush
-        // centering) so its glass surface ends a few px above the container bottom. Sizing from the
-        // container left that padding band uncovered — the ~3-4dp wallpaper gap the user saw.
-        View content = findViewById(isInAppKeyboardShown()
-            ? R.id.inapp_keyboard_view_host : R.id.accessory_surface_host);
-        if (content == null || content.getHeight() <= 0 || content.getWidth() <= 0) {
-            return 0;
-        }
-        View decorView = getWindow().getDecorView();
-        if (decorView.getHeight() <= 0) {
-            return 0;
-        }
-        int[] decorLoc = new int[2];
-        int[] contentLoc = new int[2];
-        decorView.getLocationOnScreen(decorLoc);
-        content.getLocationOnScreen(contentLoc);
-        int screenBottom = decorLoc[1] + decorView.getHeight();
-        int contentBottom = contentLoc[1] + content.getHeight();
-        int height = screenBottom - contentBottom;
-        // Guard against transient layouts that would collapse or overshoot the strip.
-        if (height <= 0 || height > mNavBarHeight * 3) {
-            return 0;
-        }
-        return height;
     }
 
     private int resolveInAppKeyboardBackgroundColor() {
@@ -7936,35 +7459,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The keyboard always renders on the same glass material path as the dock. */
     private boolean isInAppKeyboardGlassSurface() {
         return true;
-    }
-
-    /**
-     * Fraction of the combined content+under-pill glass height occupied by the in-content surface
-     * (the keyboard host when the keyboard is shown, otherwise the dock stack). The content surface
-     * and the under-pill nav strip render adjacent slices ({@code [0, f]} and {@code [f, 1]}) of one
-     * shared light model so a single dark foot lands under the pill in both keyboard states. Returns
-     * 1 (no slicing) for the floating capsule or when there is no gesture-nav strip below.
-     */
-    private float defaultDockGlassFootFraction() {
-        if (mDock.dockFloats()) {
-            return 1f;
-        }
-        // The band is the stack's own (the keyboard's foot, or the dock's): the glass draws its
-        // whole span, nothing is left for a strip below.
-        if (mDockFootPx > 0 || inAppKeyboardFootPx() > 0) {
-            return 1f;
-        }
-        int navHeight = mNavBarHeight;
-        if (navHeight <= 0) {
-            return 1f;
-        }
-        View contentHost = findViewById(isInAppKeyboardShown()
-            ? R.id.inapp_keyboard_view_host : R.id.accessory_stack_container);
-        int contentHeight = contentHost != null ? contentHost.getHeight() : 0;
-        if (contentHeight <= 0) {
-            return 1f;
-        }
-        return contentHeight / (float) (contentHeight + navHeight);
     }
 
     /** True when the keyboard renders as the floating Rounded surface. */
@@ -8681,7 +8175,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GlassBackdropCache.Band band = noteInAppKeyboardBand(surfaceHost);
         if (band == null) return null;
         Drawable veil = mChrome.glass().veilOnlyLayer(band, inAppKeyboardGlassAlpha(state), 0f,
-            defaultDockGlassFootFraction(), false);
+            1f, false);
         if (veil == null) return null;
         // The layer is one flat colour, the band's veil as the call above just resolved it.
         java.util.List<Object> key = com.termux.app.chrome.HeldBackground.key("veil",
@@ -8900,139 +8394,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.ACCESSORY, currentTarget);
     }
 
-    private void clearDecorNavBarBackdrop() {
-        ImageView backdrop = mDecorNavBarBlurBackdrop;
-        if (backdrop != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                backdrop.setRenderEffect(null);
-            }
-            backdrop.setImageDrawable(null);
-            backdrop.setVisibility(View.GONE);
-        }
-        mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
-    }
-
-    private void updateDecorNavBarBackdrop(@NonNull ChromeSpec state) {
-        ImageView backdrop = mDecorNavBarBlurBackdrop;
-        FrameLayout overlay = mDecorNavBarSurfaceOverlay;
-        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (backdrop == null || overlay == null || wallpaperFrame == null) {
-            return;
-        }
-        // The keyboard's stack alpha fades its frame with its tint (GlassStack.build); the strip's
-        // frame is this view, so it is faded here by the same share the tint is.
-        backdrop.setAlpha(state.keyboardShown && isInAppKeyboardGlassSurface()
-            && !stackStandsDownOnFrame() ? navStripSpec(state).stackAlphaPercent / 100f : 1f);
-        // The frost of the surface right above: the keyboard's radius while it is up.
-        int stripRadiusDp = navStripBlurRadiusDp(state);
-        // Overscan the strip's blur bitmap upward past the seam with the dock/keyboard (default dock
-        // only) so the refraction edge band clears the visible seam and meets the dock's downward
-        // overscan. The bitmap is taller than the overlay; a negative top margin pushes the overscan
-        // above the overlay where clipChildren hides it.
-        int topOverscanPx = !mDock.dockFloats()
-            ? computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp) : 0;
-        Rect targetRect = buildDecorNavBarBackdropTargetRect(topOverscanPx);
-        if (targetRect == null) {
-            if (backdrop.getDrawable() != null) {
-                backdrop.setVisibility(View.VISIBLE);
-            } else {
-                clearDecorNavBarBackdrop();
-            }
-            return;
-        }
-        if (backdrop.getLayoutParams() instanceof FrameLayout.LayoutParams) {
-            FrameLayout.LayoutParams bp = (FrameLayout.LayoutParams) backdrop.getLayoutParams();
-            int surfaceHeight = Math.max(1, resolveDecorNavBarSurfaceHeightPx());
-            int targetBackdropHeight = surfaceHeight + Math.max(0, topOverscanPx);
-            if (bp.height != targetBackdropHeight || bp.topMargin != -topOverscanPx) {
-                bp.height = targetBackdropHeight;
-                bp.width = FrameLayout.LayoutParams.MATCH_PARENT;
-                bp.topMargin = -topOverscanPx;
-                bp.gravity = Gravity.TOP | Gravity.START;
-                backdrop.setLayoutParams(bp);
-            }
-        }
-
-        boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
-        float stripCover = mDock.dockGlassCover();
-        // Mid-drag the strip keeps the frame it shows at a moved radius, as the dock does.
-        if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) &&
-            stripCover == mNavStripGlassCover &&
-            (mGlassDragPreview
-                || mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == stripRadiusDp) &&
-            mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == usingManagedWallpaperSource &&
-            mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, targetRect) &&
-            backdrop.getDrawable() != null) {
-            // Frost and even-out as now; mid-drag the matrix last measured. The same instance
-            // when nothing moved, which re-dresses nothing.
-            backdrop.setColorFilter(navStripFrostFilter(state, !mGlassDragPreview));
-            backdrop.setVisibility(View.VISIBLE);
-            return;
-        }
-
-        com.termux.app.chrome.SharedFrameDrawable installed =
-            com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable());
-        Bitmap frame = mChrome.blurCache().obtain(stripRadiusDp, wallpaperFrame);
-        Rect frameRect = mChrome.blurCache().frameRectRef();
-        if (frame == null) {
-            // A blur in flight: the frame already up stays while it still describes this screen.
-            if (installed != null && installed.frameRect().equals(frameRect)) {
-                backdrop.setVisibility(View.VISIBLE);
-            } else {
-                clearDecorNavBarBackdrop();
-            }
-            return;
-        }
-        // The shared frame at the strip's own position — the strip lives in the decor, which
-        // nothing transforms — fading in over the frame a wallpaper change displaced, as the dock
-        // it abuts does, so the seam never shows two pictures.
-        if (installed != null) {
-            installed.setFrame(frame, frameRect, mChrome.blurCache().isCrossfadedRadius(stripRadiusDp)
-                && !ReducedMotion.isEnabled(this));
-        } else {
-            backdrop.setImageDrawable(new com.termux.app.chrome.SharedFrameDrawable(frame, frameRect,
-                mWallpaperParallax, com.termux.app.chrome.GlassAnchor.screen(backdrop)));
-        }
-        backdrop.invalidate();
-        mNavStripGlassCover = stripCover;
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Use the SAME AGSL glass refraction the content dock/keyboard backdrop uses (API 33+),
-            // not a plain blur, so this decor surface reads as the same material in both states: the
-            // keyboard-off dock+nav overlay and the keyboard-on under-pill strip now match the
-            // refraction-lit content dock instead of being a flatter, darker plain blur. Falls back
-            // to plain blur when the shader is unavailable (< API 33 or shader failure).
-            //
-            // Docked, every edge of the strip is a seam (the edge rule): its top runs on into the
-            // keyboard or the dock, the rest into the screen. The rim rect is pushed out past all
-            // four, so the strip draws no hairline and no bend of its own — the surface above has
-            // its bottom and sides seamed too, so neither bends there and the picture runs straight
-            // through. The capsule's overlay keeps the rim it always had. Its own program, not the
-            // dock's: the two effects were only apart because RenderEffect copies uniforms.
-            boolean capsuleOverlay = mDock.dockFloats();
-            int stripSeams = com.termux.app.chrome.ChromeEdgeRule.seams(capsuleOverlay,
-                com.termux.app.chrome.ChromeEdgeRule.flushEdges(PlaceLayout.Edge.BOTTOM),
-                capsuleOverlay ? 0 : com.termux.app.chrome.ChromeEdgeRule.TOP);
-            float density = getResources().getDisplayMetrics().density;
-            float reachPx = com.termux.app.chrome.GlassRefraction.seamReachPx(
-                com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook), density, 0f, 0f);
-            float[] rect = new float[4];
-            com.termux.app.chrome.GlassRefraction.rimRect(rect, 0f, 0f,
-                Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), reachPx,
-                stripSeams);
-            RenderEffect glass = mGlassEffects.buildNavStrip(rect[0], rect[1], rect[2], rect[3]);
-            backdrop.setRenderEffect(glass);
-        }
-
-        // Same content-aware light scatter the dock and keyboard backdrops apply, so the
-        // under-pill strip reads as the same glass material rather than a plain blur; evened out
-        // first on its own rect, as the dock is (ADR 0014).
-        backdrop.setColorFilter(navStripFrostFilter(state, true));
-        backdrop.setVisibility(View.VISIBLE);
-        mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, stripRadiusDp,
-            usingManagedWallpaperSource, targetRect);
-    }
-
 
 
     private boolean isAccessoryBlurHealthy(@NonNull ChromeSpec state) {
@@ -9049,12 +8410,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean accessoryHealthy = backdrop != null
                 && backdrop.getVisibility() == View.VISIBLE
                 && backdrop.getDrawable() != null;
-            if (shouldUseDockDecorNavBarSurface(state)) {
-                boolean decorHealthy = mDecorNavBarBlurBackdrop != null
-                    && mDecorNavBarBlurBackdrop.getVisibility() == View.VISIBLE
-                    && mDecorNavBarBlurBackdrop.getDrawable() != null;
-                return mDock.dockFloats() ? accessoryHealthy && decorHealthy : decorHealthy;
-            }
             return accessoryHealthy;
         }
         // Without RenderEffect the dock has no live blur of its own to be healthy; the renderer
@@ -9528,7 +8883,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return true;
         }
         // Every surface that samples the shared frame directly, the frame a crossfade is still
-        // fading out of included: the frosts, the dock's backdrop, the under-pill strip and the
+        // fading out of included: the frosts, the dock's backdrop and the
         // keyboard host's background.
         int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.terminal_sheet_wallpaper_backdrop,
             R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop,
@@ -9539,8 +8894,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ImageView frost = findViewById(frostId);
             if (frost != null && drawableShowsFrame(frost.getDrawable(), frame)) return true;
         }
-        ImageView strip = mDecorNavBarBlurBackdrop;
-        if (strip != null && drawableShowsFrame(strip.getDrawable(), frame)) return true;
         View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
         if (keyboardHost != null && drawableShowsFrame(keyboardHost.getBackground(), frame))
             return true;
@@ -9571,10 +8924,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Lens beads follow the row as it is laid out now; a pass that moved them and
         // re-installs nothing rebuilds the effect once below.
         boolean beadsMoved = mDock.refreshDockBeads();
-        if (shouldUseDockDecorNavBarSurface(state) && !mDock.dockFloats()) {
-            clearAccessoryRenderEffectBackdrop();
-            return;
-        }
         if (backdrop == null || surfaceHost == null || accessoryContainer == null || wallpaperFrame == null ||
             accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
             if (backdrop != null && shouldUseAccessoryRenderEffectBlur(state)
@@ -9790,21 +9139,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_underlay, toolbarOnlyBounds);
         applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_overlay, toolbarOnlyBounds);
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
-        boolean useDecorSurface = shouldUseDockDecorNavBarSurface(state);
         applyAccessoryAmbientVeil(accessoryContainer, state);
         Trace.endSection();
 
         // Which of the dock's views show is Dock rows' answer, one for every chrome spec, the dock
         // up or not. Its subscribers (onDockRowsChanged: a drag on the pinned apps, their page
         // ticks, the icon reflection) hear a change before the views move, so a drag is cancelled
-        // while its source is still on screen. Under the navigation strip's glass a Docked dock's
-        // own sheet stands down.
+        // while its source is still on screen.
         Trace.beginSection("Chrome.dockRows");
         View laidOutKeyboard = findViewById(R.id.inapp_keyboard_container);
         mDockRows.setKeyboardLaidOut(keyboardStaysLaidOut() && laidOutKeyboard != null
             && laidOutKeyboard.getVisibility() != View.GONE);
         mDockRows.apply(state, mStatusBar.statusBarEdge() == PlaceLayout.Edge.BOTTOM,
-            useDecorSurface && !mDock.dockFloats(), dockRowsUnion());
+            dockRowsUnion());
         Trace.endSection();
         if (state.toolbarShown && !state.appsRowEnabled) {
             mSuggestionBarExplicitSearchActive = false;
@@ -9829,13 +9176,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.beginSection("Chrome.dockInks");
             syncDockGlassInks(state.barAlpha);
             Trace.endSection();
-            // The keyboard first: the strip under the pill continues its glass, veil and frost
-            // included, and reads them as this pass leaves them.
             Trace.beginSection("Chrome.keyboardSurface");
             applyInAppKeyboardSurfaceState(state);
-            Trace.endSection();
-            Trace.beginSection("Chrome.navStrip");
-            applyDecorNavBarSurfaceState(state);
             Trace.endSection();
             configureAccessoryTopEdgeFx(false, state.barAlpha);
             resetAzOverflowAffordanceState();
@@ -9848,9 +9190,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         Trace.beginSection("Chrome.dockSheet");
         if (extraKeysBackground != null) {
-            // Keyboard-off, the dock continues into the under-pill nav strip, so it renders the top
-            // slice [0, f] of the shared model (strip renders [f, 1]) — one foot under the pill.
-            // Keyboard-on, the dock is a distinct plank above the keyboard, so it keeps the full model.
+            // The dock renders the full light model, foot included.
             // Under a joined Docked frame the frame's glass is this sheet, but where the row's
             // beads cut the frame (the host clips this sheet to them).
             extraKeysBackground.setBackground(dockSheetStandsDownOnFrame() ? null
@@ -9875,12 +9215,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Trace.beginSection("Chrome.topEdgeFx");
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         Trace.endSection();
-        // The keyboard first, as above: the strip continues what it was just dressed in.
         Trace.beginSection("Chrome.keyboardSurface");
         applyInAppKeyboardSurfaceState(state);
-        Trace.endSection();
-        Trace.beginSection("Chrome.navStrip");
-        applyDecorNavBarSurfaceState(state);
         Trace.endSection();
         // Wallpaper passthrough feeds every glass surface from the shared pre-blurred wallpaper, so
         // the live blur views have nothing left to contribute — and each one that keeps capturing
@@ -11055,7 +10391,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mKeyboardGeometry.onStop();
         applyDockImeOffset(0);
         clearAccessoryRenderEffectBackdrop();
-        hideDecorNavBarSurfaceOverlay(true);
         // mPackageRefreshRunnable stays posted: an install heard as the user leaves must still
         // reach the catalogue (its stopped half is data only).
         mAzGestureHandler.removeCallbacks(mLauncherCatalogWarmRunnable);
@@ -11237,7 +10572,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mUnclaimedDisplayListener = null;
         }
         clearAccessoryRenderEffectBackdrop();
-        removeDecorNavBarSurfaceOverlay();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.releaseResources();
         }
@@ -19615,10 +18949,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mChrome.frost().applyAppDrawer(frost);
         }
 
-        @Override public void setDecorNavStripAlpha(float alpha) {
-            setAppDrawerDecorNavStripAlpha(alpha);
-        }
-
         @Override public float searchKeyboardGapPx() {
             // A hairline of air, the keyboard's own 4dp gap: the card reads as ending above the
             // keyboard, not as a pane standing off it.
@@ -23319,43 +22649,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * {@link #dockFrostFilter} for the decor nav strip, measured on the strip itself; with
-     * {@code measure} false (a drag's tick) the matrix last measured.
-     */
-    @Nullable
-    private android.graphics.ColorFilter navStripFrostFilter(@NonNull ChromeSpec state,
-                                                             boolean measure) {
-        // Under the docked keyboard's own glass the strip is that glass continued: its frame goes
-        // through the matrix the surface right above drew its frame through, so the same blurred
-        // picture comes out the same on both sides of the keyboard's bottom edge. That surface is
-        // the unified dock glass where the keyboard stands transparent on it, and the keyboard's
-        // own stack otherwise. Under the joined Docked frame the strip keeps its own measure.
-        if (mChrome != null && state.keyboardShown && isInAppKeyboardGlassSurface()
-                && !stackStandsDownOnFrame()) {
-            com.termux.app.chrome.GlassBackdropCache.Band above =
-                shouldUseUnifiedDefaultKeyboardGlassSurface(state)
-                    && isUnifiedAccessoryBackdropReady(state)
-                    ? com.termux.app.chrome.GlassBackdropCache.Band.DOCK
-                    : mKeyboardBandAskedThisPass
-                        ? com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD : null;
-            return com.termux.app.chrome.GlassStack.frostFilter(navStripSpec(state),
-                above == null ? null : mChrome.ink().lastBandEvenOutMatrix(above));
-        }
-        android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
-            mPreferences != null ? mPreferences.getAppBarOpacity(stackLookPage()) : 100);
-        if (mChrome == null) return frost;
-        if (!measure) {
-            return com.termux.app.chrome.GlassFilters.withEvenOut(
-                mChrome.ink().lastStripEvenOutMatrix(), frost);
-        }
-        updateEvenOutPolicy();
-        Rect strip = buildDecorNavBarBackdropTargetRect(0);
-        if (strip == null) return frost;
-        return com.termux.app.chrome.GlassFilters.withEvenOut(
-            mChrome.ink().stripEvenOutMatrix(strip), frost);
-    }
-
-    /**
      * What terminal text on the default background stands on (TerminalHost#terminalTextSurface):
      * transparent off the wallpaper, where the palette's own background is the answer.
      */
@@ -23439,9 +22732,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mChromeRetroEffect == null) {
             View root = findViewById(R.id.activity_termux_root_view);
             if (root != null) mChromeRetroEffect = new com.termux.app.chrome.ChromeRetroEffect(root);
-            // The under-pill strip, when the decor already holds it (ensureDecorNavBarSurfaceOverlay).
-            if (mChromeRetroEffect != null && mDecorNavBarSurfaceOverlay != null)
-                mChromeRetroEffect.adopt(mDecorNavBarSurfaceOverlay);
         }
         if (mChromeRetroEffect != null) {
             mChromeRetroEffect.setOnHome(
@@ -24325,7 +23615,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void applyInAppKeyboardTypingClaim(boolean palette, boolean sheet, boolean drawer) { TermuxActivity.this.applyInAppKeyboardTypingClaim(palette, sheet, drawer); }
         // -------------------------------------------------------------- the actions sheets
         @Override public @Nullable TerminalSession currentSession() { return TermuxActivity.this.getCurrentSession(); }
-        @Override public void setHomeSheetDecorNavStripAlpha(float alpha) { TermuxActivity.this.setHomeSheetDecorNavStripAlpha(alpha); }
         @Override public void prepareWallpaperDoor() { TermuxActivity.this.prepareWallpaperDoor(); }
         @Override public void releasePreparedWallpaper() { TermuxActivity.this.releasePreparedWallpaper(); }
         @Override public boolean shouldUseWallpaperPassthroughMode() { return TermuxActivity.this.shouldUseWallpaperPassthroughMode(); }
@@ -24985,9 +24274,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int bottomStatusBandPx() { return mStatusBar.bottomStatusBandPx(); }
         @Override public boolean syncStatusTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame, @NonNull com.termux.app.place.SeamCrossing.Answers seam) { return mStatusBar.syncStatusTravel(frame, seam); }
         @Override public void syncStatusMarginEase(@NonNull com.termux.app.place.SeamCrossing.Answers seam) { mStatusBar.syncStatusMarginEase(seam); }
-        @Override public void syncNavStripFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) { TermuxActivity.this.syncNavStripFade(wallFrame); }
         @Override public void syncTopBandFade(@NonNull com.termux.app.place.PlaceChromeTravel.Frame wallFrame) { TermuxActivity.this.syncTopBandFade(wallFrame); }
-        @Override public void beginNavStripFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there) { TermuxActivity.this.beginNavStripFade(here, there); }
         @Override public void beginTopBandFade(@NonNull com.termux.app.wall.PageRef here, @NonNull com.termux.app.wall.PageRef there) { TermuxActivity.this.beginTopBandFade(here, there); }
         @Override public void syncSeamBandShare(@NonNull com.termux.app.place.SeamCrossing.Answers seam) { TermuxActivity.this.syncSeamBandShare(seam); }
         // ---- chrome travel state ---------------------------------------------------
@@ -25146,7 +24433,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The strip's crossing has landed on one end's dress: the commit below dresses it
             // plainly, as that end wears it.
             Trace.beginSection("Settle.fades");
-            endNavStripFade();
             endTopBandFade();
             mCrossingController.endStackLookBlend();
             Trace.endSection();

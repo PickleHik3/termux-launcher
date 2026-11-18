@@ -126,17 +126,6 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean applyWallpaperFrost(@NonNull ImageView frost);
 
         /**
-         * The under-pill navigation strip's opacity; 1 whenever the drawer is not engaged.
-         *
-         * <p>The one surface an open plane cannot cover. The strip is the topmost child of the
-         * decor view — above every pixel of the activity's content — so a plane that reaches the
-         * physical bottom edge still has the dock's band lying across it. It crosses over with the
-         * plane instead: full while the plane's bottom edge is still up at the dock, gone by the
-         * time the plane's own glass has arrived underneath it.
-         */
-        default void setDecorNavStripAlpha(float alpha) {}
-
-        /**
          * Home's grid, folders, widgets and page dots, faded by alpha alone while the plane covers
          * them; 1 whenever the drawer is not engaged. See {@link AppDrawerHomeCoverPolicy}.
          */
@@ -2163,14 +2152,6 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // After the bands: the hole follows the keyboard card where this frame has put it.
         if (scrimAroundKeyboard) applyKeyboardScrim(p);
         applyStatusBand(p);
-        // The under-pill strip lives on the decor, above every pixel of this, so it is the one
-        // surface that has to be faded rather than covered. Linear in p, which is what the plane's
-        // own bottom edge is: the two cross over exactly as the glass arrives underneath it. The
-        // built-in keyboard's reveal gives it back: the plane and the host's clip then stop above
-        // the keyboard, nothing of the drawer lies over the band under the pill, and a strip faded
-        // to 0 there left bare wallpaper where the keyboard's glass runs on under the pill.
-        mHost.setDecorNavStripAlpha(AppDrawerKeyboardSeparation.navStripAlpha(p,
-            mImePinTopPx > 0f ? 0f : k));
         mHost.setHomeContentAlpha(AppDrawerHomeCoverPolicy.homeAlpha(p));
 
         AppDrawerDockChoreographyTarget target = mDockTarget;
@@ -2395,7 +2376,6 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             // hidden mid-transition must still be handed back untransformed.
             applyBand(mStatusBarView, 0f, 0f, 1f);
             applyAlpha(mStatusInsetStripView, 1f);
-            mHost.setDecorNavStripAlpha(1f);
             mHost.setHomeContentAlpha(1f);
             AppDrawerDockChoreographyTarget target = mDockTarget;
             if (target != null) target.setDrawerTransitionProgress(0f);

@@ -335,7 +335,7 @@ public class DockControllerTest {
         mHost.views.put(R.id.apps_bar_row_host, rowHost);
         mHost.rows.apply(new ChromeSpec(PlaceChromePolicy.dockShown(HOME), false, 0, true,
             PlaceChromePolicy.appsRowShown(HOME), PlaceChromePolicy.azRowOnDock(HOME),
-            PlaceChromePolicy.extraKeysRowShown(HOME), 0.8f, 24), false, false);
+            PlaceChromePolicy.extraKeysRowShown(HOME), 0.8f, 24), false);
     }
 
     @Test

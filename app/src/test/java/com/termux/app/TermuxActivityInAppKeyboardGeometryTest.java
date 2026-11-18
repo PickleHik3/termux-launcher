@@ -156,30 +156,6 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
-    public void gestureNavigationSurfaceFollowsEdgeToEdgeSurfacesOnly() {
-        // Edge-to-edge keyboard or dock continues under the gesture pill.
-        assertTrue(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 72, false, false, false));
-        // The dock with the keyboard down reaches under the pill itself (DockSpec): no strip.
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            true, false, 72, false, false, false));
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 0, false, false, false));
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 72, true, false, false));
-        // A floating capsule keyboard leaves the pill inset showing wallpaper.
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 72, false, true, true));
-        // The keyboard's capsule decision is decoupled from the dock style: an edge-to-edge
-        // keyboard under the Rounded dock still owns the gesture-navigation surface.
-        assertTrue(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 72, false, true, false));
-        // The Rounded dock itself always floats — no continuation surface without a keyboard.
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            true, false, 72, false, true, false));
-    }
-
-    @Test
     public void unifiedKeyboardGlassIsExclusiveToDefaultDock() {
         assertTrue(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
             true, true, false, true));

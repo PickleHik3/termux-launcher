@@ -445,7 +445,6 @@ public class CrossingControllerTest {
         assertTrue("the crossing began", crossing.crossing());
         assertEquals(to, crossing.seam().other());
         assertEquals(1, host.count("flushLandingRestyle"));
-        assertEquals(1, host.count("beginNavStripFade"));
         assertEquals(1, host.count("beginTopBandFade"));
         assertEquals(1, moves.morphBegins);
         DockLayout fromRest = moves.leaving;
@@ -463,7 +462,6 @@ public class CrossingControllerTest {
             drag(sign * f * WIDTH);
             assertTrue(crossing.crossing());
             assertEquals("nothing begins again", 1, moves.morphBegins);
-            assertEquals(1, host.count("beginNavStripFade"));
             assertEquals(1, host.count("beginTopBandFade"));
             int rows = moves.rowsPx();
             int dir = Integer.signum(rows - last);
@@ -557,7 +555,6 @@ public class CrossingControllerTest {
         drag(-300f);
         drag(-100f);
         assertEquals("nothing begins twice", 1, moves.morphBegins);
-        assertEquals(1, host.count("beginNavStripFade"));
         assertEquals(1, host.count("beginTopBandFade"));
         assertEquals(1, host.count("flushLandingRestyle"));
         // Back at the start, the finger still down: the row stands the committed rest.
@@ -598,7 +595,7 @@ public class CrossingControllerTest {
         int layouts = host.count("syncPlaceLayout");
         int restyles = host.count("restyleDockSurface");
         int preRollKeyboard = host.count("preRollTravelKeyboard");
-        int begins = host.count("beginNavStripFade") + host.count("beginTopBandFade")
+        int begins = host.count("beginTopBandFade")
             + host.count("beginTravelHold") + host.count("flushLandingRestyle");
         int geometry = host.count("geometryRequestNow");
         int morphBegins = moves.morphBegins;
@@ -613,7 +610,7 @@ public class CrossingControllerTest {
         assertEquals(layouts, host.count("syncPlaceLayout"));
         assertEquals(restyles, host.count("restyleDockSurface"));
         assertEquals(preRollKeyboard, host.count("preRollTravelKeyboard"));
-        assertEquals(begins, host.count("beginNavStripFade") + host.count("beginTopBandFade")
+        assertEquals(begins, host.count("beginTopBandFade")
             + host.count("beginTravelHold") + host.count("flushLandingRestyle"));
         assertEquals("no geometry pass requested again", geometry,
             host.count("geometryRequestNow"));

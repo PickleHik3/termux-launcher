@@ -177,26 +177,6 @@ public class AppDrawerEdgeToEdgeTest {
         assertEquals("a full drawer has no second material at the top", 0f, strip.getAlpha(), 0.01f);
     }
 
-    /** The under-pill strip cannot be covered, so it crosses over with the plane and is restored. */
-    @Test public void theUnderPillStripCrossesOverWithThePlane() {
-        ReflectionHelpers.setField(mController, "mRoundedStyle", false);
-        Frame open = openRect();
-        ReflectionHelpers.setField(mController, "mOpenRect", open);
-        ReflectionHelpers.setField(mController, "mDockRect",
-            new Frame(0f, HEIGHT_PX - 400f, WIDTH_PX, HEIGHT_PX - NAV_INSET_PX));
-
-        applyFrame(0f);
-        assertEquals("nothing moved, so the strip is untouched", 1f, mHost.decorNavStripAlpha, 0.001f);
-
-        applyFrame(1f);
-        assertEquals("the plane's glass has arrived underneath it", 0f,
-            mHost.decorNavStripAlpha, 0.001f);
-
-        ReflectionHelpers.callInstanceMethod(mController, "onClosed",
-            ClassParameter.from(boolean.class, false));
-        assertEquals("a closed drawer hands the strip back", 1f, mHost.decorNavStripAlpha, 0.001f);
-    }
-
     // ------------------------------------------------------------------ helpers
 
     private void bleedDrawerHost(int topInsetPx, int bottomInsetPx) {

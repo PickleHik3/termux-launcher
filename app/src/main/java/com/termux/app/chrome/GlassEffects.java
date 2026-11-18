@@ -41,9 +41,6 @@ public final class GlassEffects {
         /** What the dock's tint covers of the gathered edge, as the last dress pass worked it out. */
         float dockCover();
 
-        /** The same for the strip under the pill. */
-        float navStripCover();
-
         /** Writes the dock style's own glass (soft rim, shelf, beads) on the dock's program. */
         @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
         void applyDockSurfaceGlass(@NonNull GlassRefraction.Program program);
@@ -61,7 +58,6 @@ public final class GlassEffects {
 
     @NonNull private final Host mHost;
     @Nullable private GlassRefraction.Program mDockRefraction;
-    @Nullable private GlassRefraction.Program mNavStripRefraction;
 
     private boolean mParamsValid = false;
     private float mBlurPx, mCapLeft, mCapTop, mCapRight, mCapBottom, mRadiusPx;
@@ -108,13 +104,7 @@ public final class GlassEffects {
     @Nullable
     public RenderEffect buildDock(float blurPx, float capLeft, float capTop, float capRight,
                                   float capBottom, float radiusPx) {
-        return build(false, blurPx, capLeft, capTop, capRight, capBottom, radiusPx);
-    }
-
-    /** The under-pill strip's effect: its own program, square, and never a key's lens. */
-    @Nullable
-    public RenderEffect buildNavStrip(float left, float top, float right, float bottom) {
-        return build(true, 0f, left, top, right, bottom, 0f);
+        return build(blurPx, capLeft, capTop, capRight, capBottom, radiusPx);
     }
 
     /** Rebuild + re-apply the dock's effect with the current lens state (no recapture). */
@@ -133,17 +123,16 @@ public final class GlassEffects {
     }
 
     @Nullable
-    private RenderEffect build(boolean navStrip, float blurPx, float capLeft, float capTop,
+    private RenderEffect build(float blurPx, float capLeft, float capTop,
                                float capRight, float capBottom, float radiusPx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             return null;
         }
         try {
-            GlassRefraction.Program program = navStrip ? mNavStripRefraction : mDockRefraction;
+            GlassRefraction.Program program = mDockRefraction;
             if (program == null) {
                 program = GlassRefraction.Program.create(mHost.density());
-                if (navStrip) mNavStripRefraction = program;
-                else mDockRefraction = program;
+                mDockRefraction = program;
             }
             if (program == null) {
                 return null;
@@ -151,7 +140,7 @@ public final class GlassEffects {
             // The view's own pixels are the content here, so the aim is identity.
             program.setAim(1f, 1f, 0f, 0f);
             // Peek glass: the dock's glass is the card, its rim on the card's top and sides.
-            float[] peek = navStrip ? null : mHost.peekGlassRect();
+            float[] peek = mHost.peekGlassRect();
             if (peek != null) {
                 program.setRect(peek[0], peek[1], peek[2], peek[3], peek[4]);
             } else {
@@ -163,16 +152,11 @@ public final class GlassEffects {
             // the last dress pass worked out, so a key's lens rebuilding this per frame reads no
             // preference.
             program.setLook(GlassStack.lookFor(mHost.fancierLook())
-                .withCover(Math.max(0f, navStrip ? mHost.navStripCover() : mHost.dockCover())));
-            // The Dock design's own glass (the Tray's soft rim and shelf); the keyboard's strip
-            // under the pill wears none of it.
-            if (navStrip) {
-                program.setDockSurface(0f, 0f);
-            } else {
-                mHost.applyDockSurfaceGlass(program);
-            }
+                .withCover(Math.max(0f, mHost.dockCover())));
+            // The Dock design's own glass (the Tray's soft rim and shelf).
+            mHost.applyDockSurfaceGlass(program);
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
-            if (!navStrip && mHost.keyLensActive() && mHost.keyLensIntensity() > 0f) {
+            if (mHost.keyLensActive() && mHost.keyLensIntensity() > 0f) {
                 mHost.keyLens(mLens);
                 program.setLens(mLens[0], mLens[1], mLens[2], mLens[3], mLens[4],
                     mHost.keyLensIntensity());
