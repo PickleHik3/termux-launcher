@@ -214,8 +214,117 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         "apps_bar_az_fx_overlay", "apps_bar_az_label_overlay", "inapp_keyboard_container",
         "accessory_under_keyboard_stack", "terminal_background"};
 
+    // diag-268g: why the landing guard's writes happened (temporary).
+    private String mDiagFirstChain268;
+    private String mDiagLastChain268;
+    private int mDiagRequests268;
+    private static final String[] DIAG_NAMES_268 = {"hasEnds", "fromHome", "toHome", "endsP",
+        "homeRoom", "wsRoom", "frontIsHome", "kbDownLaidOut", "restShare", "mDockTravel",
+        "mKbShare", "mImeLift", "mRowsSink", "mRowsCut", "mSheetSink", "mSheetCut",
+        "effDockTravel", "effKbShare", "g.kbHeight", "g.kbFoot", "g.belowKbInCol",
+        "g.stackPadBottom", "g.bodyHeight", "g.bodyLaidOutRoom", "g.displayHeight",
+        "g.containerHeight", "plankTyContainer"};
+    private float[] mDiagIn268 = new float[DIAG_NAMES_268.length];
+    private float[] mDiagPrev268 = new float[DIAG_NAMES_268.length];
+    private boolean mDiagHavePrev268;
+    private float mDiagRest268;
+
+    private static String diagChain268(int count) {
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        StringBuilder out = new StringBuilder();
+        int n = 0;
+        for (int i = 1; i < st.length && n < count; i++) {
+            String cls = st[i].getClassName();
+            if (cls.startsWith("android.") || cls.startsWith("java.") || cls.startsWith("com.android.")
+                || cls.startsWith("dalvik.") || cls.startsWith("androidx.")) continue;
+            if (out.length() > 0) out.append('>');
+            out.append(cls.substring(cls.lastIndexOf('.') + 1)).append('.')
+                .append(st[i].getMethodName()).append(':').append(st[i].getLineNumber());
+            n++;
+        }
+        return out.toString();
+    }
+
+    /** Fills this frame's inputs (after the scene), keeping the previous applied frame's. */
+    private void diagCapture268() {
+        float[] t = mDiagPrev268;
+        mDiagPrev268 = mDiagIn268;
+        mDiagIn268 = t;
+        float[] a = mDiagIn268;
+        int i = 0;
+        a[i++] = mHasEnds ? 1 : 0;
+        a[i++] = mFromHome ? 1 : 0;
+        a[i++] = mToHome ? 1 : 0;
+        a[i++] = mEndsProgress;
+        a[i++] = mEndHome.roomPx;
+        a[i++] = mEndWorkspace.roomPx;
+        a[i++] = mViews.frontIsHome() ? 1 : 0;
+        a[i++] = mViews.keyboardDownLaidOutPx();
+        a[i++] = mDiagRest268;
+        a[i++] = mMotion.dockTravelPx;
+        a[i++] = mMotion.keyboardSharePx;
+        a[i++] = mMotion.imeLiftPx;
+        a[i++] = mMotion.rowsSinkPx;
+        a[i++] = mMotion.rowsCutPx;
+        a[i++] = mMotion.sheetSinkPx;
+        a[i++] = mMotion.sheetCutPx;
+        a[i++] = mEffective.dockTravelPx;
+        a[i++] = mEffective.keyboardSharePx;
+        a[i++] = mGeometry.keyboardHeightPx;
+        a[i++] = mGeometry.keyboardFootPx;
+        a[i++] = mGeometry.belowKeyboardInColumnPx;
+        a[i++] = mGeometry.stackPaddingBottomPx;
+        a[i++] = mGeometry.bodyHeightPx;
+        a[i++] = mGeometry.bodyLaidOutRoomPx;
+        a[i++] = mGeometry.displayHeightPx;
+        a[i++] = mGeometry.containerHeightPx;
+        a[i++] = plankTy(PLANK_CONTAINER);
+    }
+
+    /** A landing frame wrote: the chain that asked, the inputs that moved, the parts of the values. */
+    private void diagLanding268() {
+        com.termux.app.chrome.MotionLog.log("diag-268g", "site=chain requests=" + mDiagRequests268
+            + " first=" + mDiagFirstChain268
+            + (mDiagLastChain268 != null && !mDiagLastChain268.equals(mDiagFirstChain268)
+                ? " last=" + mDiagLastChain268 : ""));
+        StringBuilder sb = new StringBuilder("site=inputs");
+        if (!mDiagHavePrev268) sb.append(" noprev");
+        for (int i = 0; i < DIAG_NAMES_268.length; i++) {
+            if (mDiagHavePrev268 && mDiagIn268[i] == mDiagPrev268[i]) continue;
+            sb.append(' ').append(DIAG_NAMES_268[i]).append('=');
+            if (mDiagHavePrev268) sb.append(mDiagPrev268[i]).append("->");
+            sb.append(mDiagIn268[i]);
+        }
+        com.termux.app.chrome.MotionLog.log("diag-268g", sb.toString());
+        StackEnd from = mHasEnds ? (mFromHome ? mEndHome : mEndWorkspace)
+            : (mViews.frontIsHome() ? mEndHome : mEndWorkspace);
+        StackEnd to = mHasEnds ? (mToHome ? mEndHome : mEndWorkspace) : from;
+        float p = mHasEnds ? mEndsProgress : 0f;
+        int cut = StackScene.bodyCutPx(from.roomPx, to.roomPx, p, mGeometry.bodyLaidOutRoomPx);
+        com.termux.app.chrome.MotionLog.log("diag-268g", "site=body fromRoom=" + from.roomPx
+            + " toRoom=" + to.roomPx + " p=" + p + " laidOutRoom=" + mGeometry.bodyLaidOutRoomPx
+            + " cut=" + cut + " bodyH=" + mGeometry.bodyHeightPx
+            + " clipBottom=" + (mFrame.clipped[StackScene.V_BODY] ? mFrame.clipBottom[StackScene.V_BODY] : -1)
+            + " containerClipBottom=" + (mFrame.clipped[StackScene.V_CONTAINER]
+                ? mFrame.clipBottom[StackScene.V_CONTAINER] : -1));
+        com.termux.app.chrome.MotionLog.log("diag-268g", "site=ty sum=" + mFrame.ty[StackScene.V_CONTAINER]
+            + " plank=" + plankTy(PLANK_CONTAINER)
+            + " = (effDockTravel=" + mEffective.dockTravelPx + " [motion="
+            + mMotion.dockTravelPx + " + restShare=" + mDiagRest268 + "]) - imeLift="
+            + mMotion.imeLiftPx);
+        mDiagFirstChain268 = null;
+        mDiagLastChain268 = null;
+        mDiagRequests268 = 0;
+    }
+
     /** A share changed: the step writes it on this frame (at once without a pipeline). */
     private void requestApply() {
+        if (mLandingPending && com.termux.app.chrome.MotionLog.enabled) {
+            String chain = diagChain268(8);
+            if (mDiagFirstChain268 == null) mDiagFirstChain268 = chain;
+            mDiagLastChain268 = chain;
+            mDiagRequests268++;
+        }
         FramePipeline frames = mFrames;
         if (frames != null) frames.requestFrame(FrameStep.STACK);
         else apply();
@@ -341,8 +450,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         readGeometry(container);
         // A crossing's own travel carries the laid-out keyboard at the seam's reveal
         // (PlaceChromeTravel#keyboardLaidOutPx), so the rest's share joins only at rest.
-        StackScene.withKeyboardRest(mMotion, mHasEnds ? 0f
-            : StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx()), mEffective);
+        mDiagRest268 = mHasEnds ? 0f
+            : StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx());
+        StackScene.withKeyboardRest(mMotion, mDiagRest268, mEffective);
         if (mHasEnds) {
             StackScene.at(mFromHome ? mEndHome : mEndWorkspace, mToHome ? mEndHome : mEndWorkspace,
                 mEndsProgress, mEffective, mGeometry, mFrame);
@@ -399,8 +509,16 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             // On a landing frame every change is counted: the scene at progress 1 is the rest.
             FrameGuards guards = mFrames.guards();
             if (landing) guards.setLanding(true);
-            for (int slot = 0; slot < mGuardSlots; slot++) guard.wrote(slot);
+            boolean diagWrote = false;
+            for (int slot = 0; slot < mGuardSlots; slot++) diagWrote |= guard.wrote(slot);
             if (landing) guards.setLanding(false);
+            if (com.termux.app.chrome.MotionLog.enabled) {
+                diagCapture268();
+                if (landing && diagWrote) diagLanding268();
+                mDiagHavePrev268 = true;
+            } else {
+                mDiagHavePrev268 = false;
+            }
         }
     }
 

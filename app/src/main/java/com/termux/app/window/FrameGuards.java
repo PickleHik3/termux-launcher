@@ -106,17 +106,20 @@ public final class FrameGuards {
         }
 
         /** After the write of {@code slot}: remembers it, and counts a change on a landing frame. */
-        public void wrote(int slot) {
+        public boolean wrote(int slot) {
             if (!Counters.enabled) {
                 mStale = true;
-                return;
+                return false;
             }
+            boolean changed = false;
             float now = mReadings[slot].read();
             if (!mStale && mLanding && Math.abs(now - mWritten[slot]) > EPSILON) {
                 Counters.violation(LANDING_WROTE, mName + " " + mProperties[slot]
                     + " was=" + mWritten[slot] + " now=" + now);
+                changed = true;
             }
             mWritten[slot] = now;
+            return changed;
         }
     }
 }
