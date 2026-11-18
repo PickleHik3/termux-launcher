@@ -440,7 +440,7 @@ public final class GlassSurfaceFactory {
      * The veil {@code band}'s glass is drawn with, for a surface that lays its own tint rather than
      * going through {@link #surface}: {@link Color#TRANSPARENT} for no band, or none needed.
      */
-    int bandVeil(@Nullable GlassBackdropCache.Band band) {
+    public int bandVeil(@Nullable GlassBackdropCache.Band band) {
         return band != null && mInk != null ? mInk.bandVeil(band) : Color.TRANSPARENT;
     }
 
