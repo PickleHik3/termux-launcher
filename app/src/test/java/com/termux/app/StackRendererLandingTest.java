@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config;
 /**
  * A crossing's landing frame draws what its last frame at progress 1 drew (#268): the keyboard's
  * rest share is counted once however the landing's frame is asked for, the body surface's cut
- * does not step through a front side that is stale at the landing, and a room set again to the
+ * stands on the side the wall committed to (the front's one owner), and a room set again to the
  * value it holds changes nothing. Docked (no air under the stack) and Floating (a gap), the
  * keyboard up and down on the side arrived at, with and without a keyboard foot.
  */
@@ -133,25 +133,26 @@ public class StackRendererLandingTest {
         }
     }
 
-    @Test public void theBodyCutOnTheLandingFrameIsTheLastCrossingFramesWhateverFrontIsHomeSays() {
+    @Test public void theBodyCutOnTheLandingFrameIsTheLastCrossingFramesOnTheCommittedSide() {
         for (int foot : FEET) for (boolean down : new boolean[] {false, true}) {
             String at = "foot=" + foot + " keyboardDown=" + down;
             build(0, foot, down);
-            mFrontHome = true; // the front side is committed only at the landing
+            mFrontHome = true; // Home is committed while the crossing runs
             lastCrossingFrame(!down);
             String last = clip(mBody);
             assertEquals(at + " cut at p=1", "[-1080,-1900][2160,1600]", last);
+            // The wall commits to the Terminal as the slide settles, before the landing's frame.
+            mFrontHome = false;
             mRenderer.onLanding();
             mFrames.flush("test");
-            assertEquals(at + " landing frame, front still Home", last, clip(mBody));
+            assertEquals(at + " landing frame", last, clip(mBody));
             // The same rooms handed again at the landing change nothing.
             mRenderer.setRooms(100, 400);
             mFrames.flush("test");
             assertEquals(at + " same rooms", last, clip(mBody));
-            mFrontHome = false;
             mRenderer.applyAtRest();
             mFrames.flush("test");
-            assertEquals(at + " front committed", last, clip(mBody));
+            assertEquals(at + " rest", last, clip(mBody));
         }
     }
 }

@@ -10082,6 +10082,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return isInAppKeyboardShown() ? 0 : mKeyboardDownLaidOutPx;
         }
         @Override public boolean frontIsHome() {
+            // The wall's commit, the one owner of the front side: set as the slide settles, so it
+            // already names the arrival on the landing's frame (mLastWallPage follows later).
+            com.termux.app.page.PageKind committed = mPages.committedKind();
+            if (committed != null) return committed == com.termux.app.page.PageKind.HOME;
             return mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS;
         }
         @Override public boolean othersOwnStack() {

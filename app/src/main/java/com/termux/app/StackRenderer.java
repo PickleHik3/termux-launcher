@@ -63,7 +63,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         default int keyboardDownLaidOutPx() {
             return 0;
         }
-        /** Whether Home's side stands in front (a Home page is committed), else the Workspace's. */
+        /**
+         * Whether Home's side stands in front, else the Workspace's: the kind the wall committed
+         * to ({@code Pages#committedKind}), which is the arrival from the commit on, so the landing
+         * frame's rest is the side the crossing arrived at.
+         */
         default boolean frontIsHome() {
             return false;
         }
@@ -125,10 +129,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private final StackEnd mEndHome = new StackEnd(PageRef.HOME);
     private final StackEnd mEndWorkspace = new StackEnd(PageRef.TERMINAL);
     private boolean mHasEnds;
-    /** The side the last crossing arrived at, held in front while the front side is stale. */
-    private boolean mArrivedHome;
-    private boolean mArrivedHeld;
-    private boolean mFrontAtEnd;
     private boolean mFromHome;
     private boolean mToHome;
     private float mEndsProgress;
@@ -230,7 +230,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * stands the arriving rest, so that apply should change nothing; any change is counted.
      */
     public void onLanding() {
-        endCrossing();
+        mHasEnds = false;
         mLandingPending = true;
         requestApply();
     }
@@ -272,7 +272,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         if (mHasEnds && mFromHome == fromHome && mToHome == toHome && mEndsProgress == progress
             && mApplied) return;
         mHasEnds = true;
-        mArrivedHeld = false;
         mFromHome = fromHome;
         mToHome = toHome;
         mEndsProgress = progress;
@@ -292,31 +291,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         requestApply();
     }
 
-    /**
-     * The ends clear: the side arrived at stands in front until {@link Views#frontIsHome} moves
-     * off what it says now, so a front side committed after the landing frame does not step the
-     * rest (the body's cut) back to the side left.
-     */
-    private void endCrossing() {
-        if (mHasEnds) {
-            mArrivedHome = mToHome;
-            mFrontAtEnd = mViews.frontIsHome();
-            mArrivedHeld = mFrontAtEnd != mArrivedHome;
-        }
-        mHasEnds = false;
-    }
-
-    /** The front side at rest: the arrival while the activity's answer is still the old one. */
-    private boolean frontIsHome() {
-        boolean answer = mViews.frontIsHome();
-        if (mArrivedHeld && answer != mFrontAtEnd) mArrivedHeld = false;
-        return mArrivedHeld ? mArrivedHome : answer;
-    }
-
     /** The crossing is over without a landing's own call: the lanes stand at the front rest. */
     public void clearEnds() {
         if (!mHasEnds) return;
-        endCrossing();
+        mHasEnds = false;
         requestApply();
     }
 
@@ -373,7 +351,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             StackScene.at(mFromHome ? mEndHome : mEndWorkspace, mToHome ? mEndHome : mEndWorkspace,
                 mEndsProgress, mEffective, mGeometry, mFrame);
         } else {
-            StackEnd front = frontIsHome() ? mEndHome : mEndWorkspace;
+            StackEnd front = mViews.frontIsHome() ? mEndHome : mEndWorkspace;
             StackScene.at(front, front, 0f, mEffective, mGeometry, mFrame);
         }
         mPlankTarget = plankTarget();
