@@ -35,7 +35,6 @@ import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.PointerIcon;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
 import android.view.accessibility.AccessibilityManager;
@@ -3448,8 +3447,6 @@ public final class TerminalView extends View {
     }
 
     private void onSizeChangedImpl(int w, int h, int oldw, int oldh) {
-        if (sMotionLogEnabled) diagRoom("pane-size", "old=" + oldw + "x" + oldh + " new=" + w + "x" + h
-            + " paused=" + mTerminalSizeUpdatesPaused + " anc=" + diagAncestors());
         if (mTerminalSizeUpdatesPaused) {
             // Held (ADR 0019): the grid is what it was, so its recording stays good and this
             // redraw does not count as new content; the resize that ends the hold retires it.
@@ -3587,57 +3584,6 @@ public final class TerminalView extends View {
         sMotionSink = sink;
     }
 
-    // diag-room: temporary instrumentation for the mid-slide resize (reverted before merge).
-    private void diagRoom(String what, String kv) {
-        motionLog("diag-room", what + " pane=" + (mTermSession == null ? "-"
-            : mTermSession.mHandle.substring(0, Math.min(8, mTermSession.mHandle.length())))
-            + " v=" + Integer.toHexString(System.identityHashCode(this)) + " " + kv);
-    }
-
-    /** App frames above the caller, android/java frames skipped, as {@code Class.method:line>...}. */
-    public static String diagCallers(int count) {
-        StackTraceElement[] stack = new Throwable().getStackTrace();
-        StringBuilder out = new StringBuilder();
-        int n = 0;
-        for (int i = 2; i < stack.length && n < count; i++) {
-            String cls = stack[i].getClassName();
-            if (cls.startsWith("android.") || cls.startsWith("java.") || cls.startsWith("com.android.")
-                || cls.startsWith("androidx.")) continue;
-            if (out.length() > 0) out.append('>');
-            out.append(cls.substring(cls.lastIndexOf('.') + 1)).append('.')
-                .append(stack[i].getMethodName()).append(':').append(stack[i].getLineNumber());
-            n++;
-        }
-        return out.toString();
-    }
-
-    private String diagAncestors() {
-        StringBuilder out = new StringBuilder();
-        android.view.ViewParent p = getParent();
-        for (int i = 0; i < 8 && p instanceof View; i++, p = p.getParent()) {
-            View v = (View) p;
-            String id = "";
-            try { if (v.getId() != View.NO_ID) id = v.getResources().getResourceEntryName(v.getId()); }
-            catch (Exception ignored) { }
-            ViewGroup.LayoutParams lp = v.getLayoutParams();
-            int mb = lp instanceof ViewGroup.MarginLayoutParams
-                ? ((ViewGroup.MarginLayoutParams) lp).bottomMargin : 0;
-            if (out.length() > 0) out.append('<');
-            out.append(v.getClass().getSimpleName()).append(id.isEmpty() ? "" : "#" + id)
-                .append(":h=").append(v.getHeight()).append(",t=").append(v.getTop())
-                .append(",pb=").append(v.getPaddingBottom()).append(",mb=").append(mb)
-                .append(",vis=").append(v.getVisibility());
-        }
-        return out.toString();
-    }
-
-    @Override
-    public void requestLayout() {
-        if (sMotionLogEnabled && mTermSession != null) diagRoom("pane-requestLayout",
-            "callers=" + diagCallers(8));
-        super.requestLayout();
-    }
-
     private static void motionLog(String event, String kv) {
         MotionSink sink = sMotionSink;
         if (sink != null) sink.log(event, kv);
@@ -3648,10 +3594,6 @@ public final class TerminalView extends View {
         // The session's emulator, not this view's: a freshly attached session already has a size.
         TerminalEmulator prior = mTermSession.getEmulator();
         String from = prior == null ? "none" : prior.mColumns + "x" + prior.mRows;
-        if (sMotionLogEnabled) diagRoom("resize", "from=" + from + " to=" + newColumns + "x" + newRows
-            + " viewEmu=" + (mEmulator == null ? "null" : mEmulator.mColumns + "x" + mEmulator.mRows
-            + (mEmulator == prior ? "" : "/other")) + " h=" + getHeight() + " cause=" + cause
-            + " callers=" + diagCallers(18));
         android.util.Log.d(GEOMETRY_LOG_TAG, "resize " + from + " -> " + newColumns + "x" + newRows
             + " cause=" + cause
             + " returnHold=" + CAUSE_RETURN_HOLD.equals(cause));
@@ -3986,8 +3928,6 @@ public final class TerminalView extends View {
     public void setTerminalSizeUpdatesPaused(boolean paused, boolean allowZeroHeightOnResume,
                                              @NonNull String resumeCause) {
         if (mTerminalSizeUpdatesPaused == paused) return;
-        if (sMotionLogEnabled) diagRoom("pause", "paused=" + paused + " pending="
-            + mTerminalSizeUpdatePending + " h=" + getHeight() + " callers=" + diagCallers(8));
         mTerminalSizeUpdatesPaused = paused;
         if (!paused && mTerminalSizeUpdatePending) {
             mTerminalSizeUpdatePending = false;
@@ -4057,8 +3997,6 @@ public final class TerminalView extends View {
 
     /** Resume a cached, currently hidden pane without delivering its stale detached geometry. */
     public void resumeTerminalSizeUpdatesDiscardingPending() {
-        if (sMotionLogEnabled) diagRoom("resume-discard", "paused=" + mTerminalSizeUpdatesPaused
-            + " pending=" + mTerminalSizeUpdatePending + " callers=" + diagCallers(8));
         if (mHeldGridSlackPx >= 0) retireScrollCache();
         mHeldGridSlackPx = -1;
         mTerminalSizeUpdatePending = false;

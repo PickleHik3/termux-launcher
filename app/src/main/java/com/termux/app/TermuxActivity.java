@@ -17533,23 +17533,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The content column fills the window to its bottom; what each page leaves of it is that
         // page's own rest (applyPageRooms). All it keeps of its old bottom margin is the system
         // keyboard's reach on Home.
-        if (com.termux.app.chrome.MotionLog.enabled && mCrossingController != null) {
-            String diag = "stack-pass page=" + mLastWallPage + " crossing=" + mCrossing.crossing()
-                + " holds=" + mCrossing.holdsContent() + " kbdShown=" + state.keyboardShown
-                + " kbdH=" + state.keyboardHeight + " overlays=" + keyboardOverlays
-                + " stackH=" + stack.stackHeightPx + " extra=" + bottomInsets.stackExtraHeightPx
-                + " accMb=" + accessoryBottomMarginPx + " contentRes=" + stack.contentReservationPx
-                + " homeImeReach=" + stack.homeImeReachPx + " kept=" + mBottomKeptPx
-                + " termRest=" + mCrossingController.travelRestReservationPx(
-                    com.termux.app.wall.PaneWallPage.TERMINAL)
-                + " homeRest=" + mCrossingController.travelRestReservationPx(
-                    com.termux.app.wall.PaneWallPage.WIDGETS);
-            if (!diag.equals(mDiagStackLine)) {
-                mDiagStackLine = diag;
-                com.termux.app.chrome.MotionLog.log("diag-room", diag + " callers="
-                    + com.termux.view.TerminalView.diagCallers(6));
-            }
-        }
         boolean overlapChanged = applyContentImeReach(stack.homeImeReachPx);
         boolean contentReservationChanged =
             stack.contentReservationPx != appliedContentReservationPx();
@@ -17641,8 +17624,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the system keyboard's on Home, which keeps its grid whole while the phone's keyboard is up;
      * it is the column's only bottom margin.
      */
-    private String mDiagStackLine;
-
     private boolean applyContentImeReach(int imeReachPx) {
         View content = findViewById(R.id.terminal_content_column);
         if (content == null) return false;
@@ -17651,9 +17632,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
         int bottomMargin = -Math.max(0, imeReachPx);
         if (marginParams.bottomMargin == bottomMargin) return false;
-        com.termux.app.chrome.MotionLog.log("diag-room", "content-ime-reach was="
-            + marginParams.bottomMargin + " now=" + bottomMargin + " crossing=" + mCrossing.crossing()
-            + " callers=" + com.termux.view.TerminalView.diagCallers(6));
         marginParams.bottomMargin = bottomMargin;
         content.setLayoutParams(marginParams);
         return true;
@@ -17771,8 +17749,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean applyBodySurfaceBottom(int roomPx) {
         if (roomPx == mBodySurfaceBottomPx) return false;
-        com.termux.app.chrome.MotionLog.log("diag-room", "body-surface-bottom was="
-            + mBodySurfaceBottomPx + " now=" + roomPx);
         mBodySurfaceBottomPx = roomPx;
         View body = findViewById(R.id.terminal_background);
         if (body == null || !(body.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
