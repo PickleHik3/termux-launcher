@@ -141,6 +141,14 @@ public final class PeekGlassReflection {
 
         /** Whether a page swipe or a page switch draws the icons away from their places now. */
         boolean iconsMoving();
+
+        /**
+         * The translationX the row's hosts carry now, from the row's parent up to the row stack:
+         * the lane's slide in a page crossing, which the reflection draws in, read at draw time.
+         */
+        default float laneTx() {
+            return 0f;
+        }
     }
 
     private final float mDensity;
@@ -339,7 +347,9 @@ public final class PeekGlassReflection {
         PeekGlassGeometry.Card card = mCard;
         if (!mShown || card == null) return;
         int save = canvas.save();
-        canvas.translate(-originX, -originY);
+        Row row = mRow;
+        canvas.translate(PeekGlassGeometry.rowDrawX(-originX, row == null ? 0f : row.laneTx()),
+            -originY);
         if (mLive) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Live.draw(canvas, mNode);
         } else if (!mStillSuspended) {
@@ -449,6 +459,11 @@ public final class PeekGlassReflection {
         dropDrawings();
         syncViews();
         requestStillCapture();
+    }
+
+    /** The row's lane host moved across: the reflection is drawn again where the row now stands. */
+    public void onLaneMoved() {
+        if (mShown) invalidateViews();
     }
 
     private void invalidateViews() {

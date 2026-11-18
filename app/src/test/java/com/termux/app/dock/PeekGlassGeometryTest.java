@@ -441,4 +441,9 @@ public class PeekGlassGeometryTest {
         assertFalse(PeekGlassGeometry.travelRecutsOnly(null, five, true));
         assertFalse(PeekGlassGeometry.travelRecutsOnly(five, null, true));
     }
+
+    @Test public void theReflectionStandsWhereTheLaneCarriesTheRow() {
+        org.junit.Assert.assertEquals(40f, PeekGlassGeometry.rowDrawX(40f, 0f), 0f);
+        org.junit.Assert.assertEquals(-947.3f, PeekGlassGeometry.rowDrawX(40f, -987.3f), 0.001f);
+    }
 }

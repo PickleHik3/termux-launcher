@@ -60,6 +60,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         default boolean frontIsHome() {
             return false;
         }
+        /**
+         * A lane host was just moved across: whatever draws the row from outside the host (the
+         * Peek glass reflection) draws it again where the host now stands.
+         */
+        default void laneMoved(@NonNull View host) {
+        }
         /** Whether the app drawer or an editor owns the stack's transforms for now. */
         default boolean othersOwnStack() {
             return false;
@@ -452,6 +458,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             if (host.getTranslationX() == want) continue;
             host.setTranslationX(want);
             mWriteCount++;
+            mViews.laneMoved(host);
         }
     }
 

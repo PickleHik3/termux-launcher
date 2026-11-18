@@ -5367,6 +5367,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 SuggestionBarView row = mSuggestionBarView;
                 return row != null && row.iconsOffTheirPlaces();
             }
+
+            @Override
+            public float laneTx() {
+                SuggestionBarView row = mSuggestionBarView;
+                View stack = findViewById(R.id.accessory_row_stack);
+                if (row == null || stack == null) return 0f;
+                float sum = 0f;
+                for (android.view.ViewParent p = row.getParent(); p instanceof View && p != stack;
+                     p = p.getParent()) {
+                    sum += ((View) p).getTranslationX();
+                }
+                return sum;
+            }
         };
 
     /**
@@ -10564,6 +10577,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
 
     private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
+        @Override public void laneMoved(@NonNull View host) {
+            if (mPeekReflection != null) mPeekReflection.onLaneMoved();
+        }
         @Nullable @Override public View view(int id) {
             return hotView(id);
         }

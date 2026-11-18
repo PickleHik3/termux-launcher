@@ -77,6 +77,15 @@ public final class PeekGlassGeometry {
     }
 
     /**
+     * Where the reflection's row is drawn across: the layout offset of the row in the host plus the
+     * translationX the row's lane hosts carry now (a page crossing slides them), so the reflection
+     * stands under the row where the row stands.
+     */
+    public static float rowDrawX(float layoutDx, float laneTx) {
+        return layoutDx + laneTx;
+    }
+
+    /**
      * How strongly the reflection shows at its top edge for the Reflection knob's {@code value}:
      * 0 is off, {@link #REFLECTION_MAX} is {@link #REFLECTION_MAX_ALPHA}.
      */

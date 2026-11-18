@@ -53,6 +53,7 @@ public class StackRendererLanesTest {
     }
 
     private final SparseArray<View> mViews = new SparseArray<>();
+    private final java.util.List<View> mMoved = new java.util.ArrayList<>();
     private boolean mFrontHome;
     private StackRenderer mRenderer;
     private Counted mContainer;
@@ -90,6 +91,7 @@ public class StackRendererLanesTest {
             @Override public boolean underKeyboardBandsShown() { return false; }
             @Override public boolean keyboardShown() { return false; }
             @Override public boolean frontIsHome() { return mFrontHome; }
+            @Override public void laneMoved(View host) { mMoved.add(host); }
         });
         Counters.clear();
         Counters.enable(true, null);
@@ -114,6 +116,18 @@ public class StackRendererLanesTest {
         mRenderer.apply();
         mRenderer.applyAtRest();
         assertEquals("a frame equal to the last writes nothing", 1, laneWrites());
+    }
+
+    @Test public void aLaneWriteReachesWhateverDrawsTheRowFromOutsideTheHost() {
+        mFrontHome = true;
+        mRenderer.apply();
+        mMoved.clear();
+        mRenderer.setEnds(true, false, 0.25f);
+        assertEquals("both moved lanes were announced", 2, mMoved.size());
+        org.junit.Assert.assertTrue(mMoved.contains(mHomeRow));
+        mMoved.clear();
+        mRenderer.setEnds(true, false, 0.25f);
+        assertEquals("a frame equal to the last announces nothing", 0, mMoved.size());
     }
 
     @Test public void onHomeTheWorkspacesLaneStandsOffToTheRight() {
