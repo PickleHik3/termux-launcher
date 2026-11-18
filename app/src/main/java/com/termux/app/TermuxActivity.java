@@ -13568,7 +13568,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherAzGestureFxLabelOverlayView.clearDrag();
         }
         if (clearPreview && mSuggestionBarView != null) {
-            mSuggestionBarView.clearAzPreview();
+            mSuggestionBarView.clearAzPreviewIfShowing();
         }
     }
 
