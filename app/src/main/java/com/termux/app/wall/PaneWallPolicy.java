@@ -305,6 +305,14 @@ public final class PaneWallPolicy {
     }
 
     /**
+     * Whether the wall already rests on Home page one: a Home page in front, still, whose global
+     * Home index is 0 ({@code homeIndex} is -1 when it is unknown).
+     */
+    public static boolean restsOnHomePageOne(@NonNull PaneWallPage current, boolean moving, int homeIndex) {
+        return current == PaneWallPage.WIDGETS && !moving && homeIndex == 0;
+    }
+
+    /**
      * How much of every page's outline shows for the wall standing {@code offsetPx} from a rest,
      * 0 to 1: all of it at either rest, none once the wall is {@link #OUTLINE_FADE_FRACTION} of a
      * width from both. A function of position alone, so a drag, a fling, a reversal and the
