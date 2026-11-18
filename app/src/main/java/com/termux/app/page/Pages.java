@@ -9,9 +9,10 @@ import java.util.function.BooleanSupplier;
 
 /**
  * The host's page registry and the recorded front (ADR 0030 sections 1 and 3). Main thread only.
- * A wall landing records the front here ({@link #landed}) and asks for the PAGE_FRONT frame step;
- * the step calls {@link #applyFront}, where each page's one-time on-front and off-front work runs.
- * Readers see the new front from the landing on, before the step has run.
+ * A wall commit ({@link #committed}) runs the applied page's off-front at once when the commit
+ * leaves it; a wall landing records the front here ({@link #landed}) and asks for the PAGE_FRONT
+ * frame step, whose {@link #applyFront} runs the new page's on-front at the structure point after
+ * the landing. Readers see the new front from the landing on, before the step has run.
  */
 public final class Pages {
 
@@ -22,6 +23,8 @@ public final class Pages {
 
     private int mFrontId = -1;
     @Nullable private PageKind mFrontKind;
+    private int mCommittedId = -1;
+    @Nullable private PageKind mCommittedKind;
     private float mProgress;
     /** The page whose on-front last ran; held so a removed page still gets its off-front. */
     @Nullable private Page mApplied;
@@ -49,9 +52,38 @@ public final class Pages {
         return mPages.get(pageId);
     }
 
-    /** Records the front; asks for the front step only when it differs from the recorded one. */
+    /**
+     * Records the page the wall committed to, when its slide began to settle there. When that page
+     * is not the applied one, the applied page's off-front runs now and the landing's front step
+     * runs only the new page's on-front.
+     */
+    public void committed(int pageId, @NonNull PageKind kind) {
+        mCommittedId = pageId;
+        mCommittedKind = kind;
+        Page applied = mApplied;
+        if (applied != null && mPages.get(pageId) != applied) {
+            mApplied = null;
+            applied.offFront();
+        }
+    }
+
+    public int committedId() {
+        return mCommittedId;
+    }
+
+    @Nullable
+    public PageKind committedKind() {
+        return mCommittedKind;
+    }
+
+    /**
+     * Records the front (and the commit with it); asks for the front step unless the front is
+     * unchanged and already applied.
+     */
     public void landed(int pageId, @NonNull PageKind kind) {
-        if (pageId == mFrontId && kind == mFrontKind) return;
+        mCommittedId = pageId;
+        mCommittedKind = kind;
+        if (pageId == mFrontId && kind == mFrontKind && mApplied == front()) return;
         mFrontId = pageId;
         mFrontKind = kind;
         mRequestFrontStep.run();

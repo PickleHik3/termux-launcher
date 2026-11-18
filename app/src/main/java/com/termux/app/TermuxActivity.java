@@ -1686,6 +1686,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final com.termux.app.page.Pages mPages = new com.termux.app.page.Pages(mPageHost,
         () -> mFrames.requestFrame(com.termux.app.window.FrameStep.PAGE_FRONT));
+    /** What every Home page asks of this window: its leave and shown work and its one view. */
+    private final com.termux.app.launcher.home.HomePageHost mHomePageHost =
+        new com.termux.app.launcher.home.HomePageHost() {
+            @Override public void dismissControls() {
+                if (mPaneWallController != null && mPaneWallController.widgetsPage() != null) {
+                    mPaneWallController.widgetsPage().dismissControls();
+                }
+            }
+            @Override public void leaving() {
+                batchWindowBarRefresh(() -> {
+                    if (mWidgetPaneController != null) mWidgetPaneController.onWallPageLeaving();
+                    // Leaving Home, a focused Home float gives the keyboard back to the window.
+                    if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
+                });
+            }
+            @Override public void shown() {
+                if (mWidgetPaneController != null) mWidgetPaneController.onWallPageShown(true);
+            }
+            @Override public boolean widgetBack() {
+                return mWidgetPaneController != null && mWidgetPaneController.onBackPressed();
+            }
+            @Override public boolean lowerFloatKeyboard() {
+                // The float keeps focus and the next press falls through as before. Home's
+                // always-on keyboard is not the float's to close.
+                if (mPaneController == null || mPaneController.focusedHomeFloat() == null
+                    || mInAppKeyboard == null || !mInAppKeyboard.isVisible()
+                    || wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) return false;
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.USER_EVENT);
+                return true;
+            }
+            @Nullable @Override public com.termux.app.page.PageKind committedKind() {
+                return mPages.committedKind();
+            }
+            @NonNull @Override public View view() {
+                return mPaneWallController.widgetsPage();
+            }
+        };
     /** The dock's element in the glass registry. */
     private static final String DOCK_GLASS = "dock";
     /** The dock's glass kind moved: its backdrop is dressed again. */
@@ -19818,7 +19856,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mSheets.terminalActionsSheetIfBuilt() != null) mSheets.terminalActionsSheetIfBuilt().closeImmediately();
             }
         });
-        registry.register(() -> mWidgetPaneController != null && mWidgetPaneController.onBackPressed());
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             @Override public boolean onBack() {
                 if (!mSheets.isCommandPaletteOpen()) return false;
@@ -19889,18 +19926,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 mSheets.closeAppDrawerImmediate(reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
             }
-        });
-        registry.register(() -> {
-            // Back over a focused Home float with the keyboard up closes the keyboard first (the
-            // float grows back); the float keeps focus, and the next press falls through as before.
-            // Home's always-on keyboard is not the float's to close.
-            if (!isWidgetsPageShowing() || mPaneController == null
-                || mPaneController.focusedHomeFloat() == null || mInAppKeyboard == null
-                || !mInAppKeyboard.isVisible()
-                || wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) return false;
-            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .HideReason.USER_EVENT);
-            return true;
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -24770,8 +24795,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @NonNull java.util.List<com.termux.app.wall.PaneWallPage> placesOf(@NonNull java.util.List<com.termux.app.wall.PaneWallPage> pages) { return TermuxActivity.this.placesOf(pages); }
         @Override public com.termux.app.wall.WallPages wallPages() { return TermuxActivity.this.wallPages(); }
         @Override public int homePageInFront() { return TermuxActivity.this.homePageInFront(); }
-        @Override public int homeRunFirst() { return mHomeRunFirst; }
-        @Override public int homeRunLast() { return mHomeRunLast; }
+        @Override public int homeRunFirst() { return mHomeSeam.runFirst(); }
+        @Override public int homeRunLast() { return mHomeSeam.runLast(); }
         @Override public boolean hasWidgetPaneController() { return mWidgetPaneController != null; }
         @Override public float homePageShiftFraction() { return mWidgetPaneController.homePageShiftFraction(); }
         @Override public boolean isHomePageSettling() { return mWidgetPaneController.isHomePageSettling(); }
@@ -25677,11 +25702,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public com.termux.app.wall.WallPages wallPages() {
                     return TermuxActivity.this.wallPages();
                 }
-                @Override public void bindHomeRun(int first, int last) {
-                    mHomeRunFirst = first;
-                    mHomeRunLast = last;
-                    if (mWidgetPaneController != null) mWidgetPaneController.setHomeRun(first, last);
-                }
                 @Override public void showInnerPage(@NonNull com.termux.app.wall.PaneWallPage page,
                                                     int index) {
                     showWallInnerPage(page, index);
@@ -25692,18 +25712,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onDisplayPageLanded(int pageId) {
                     onDisplayPageLandedAt(pageId);
-                }
-                // Edit pages' default page, held to the pages there are now.
-                @Override public int homePressPage() {
-                    return Math.max(0, Math.min(TermuxActivity.this.wallPages().homeIndex(),
-                        wallInnerCount(com.termux.app.wall.PaneWallPage.WIDGETS) - 1));
-                }
-                // Home's own swipe between Home pages, for the wallpaper's pan over the row.
-                @Override public float innerShiftFraction(
-                        @NonNull com.termux.app.wall.PaneWallPage page) {
-                    return page == com.termux.app.wall.PaneWallPage.WIDGETS
-                        && mWidgetPaneController != null
-                        ? mWidgetPaneController.homePageShiftFraction() : 0f;
                 }
                 @Override public void onInnerStepBegin(
                         @NonNull com.termux.app.wall.PaneWallPage page, int steps) {
@@ -25930,18 +25938,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         if (mPaneWallController.displayWindow() != null) {
                             mPaneWallController.displayWindow().dismissControls();
                         }
-                        if (mPaneWallController.widgetsPage() != null) {
-                            mPaneWallController.widgetsPage().dismissControls();
-                        }
-                        if (mWidgetPaneController != null
-                            && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
-                            mWidgetPaneController.onWallPageLeaving();
-                        }
-                        // Leaving Home, a focused Home float gives the keyboard back to the window.
-                        if (mPaneController != null
-                            && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
-                            mPaneController.releaseHomeFloatFocus();
-                        }
                         // Only the bar is re-dressed at release, beside the cheap put-aways above:
                         // it is the pager, and it names the place the wall has committed to. The
                         // rest waits for the settle (syncPlaceState).
@@ -25965,6 +25961,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     });
                 }
             });
+        // Before anything lands the wall: Home's pages, run and press page come from the seam.
+        mPaneWallController.setHome(mHomeSeam);
         mPaneWallController.attachTerminalPage(paneHost, (x, out) ->
             mPaneController != null && mPaneController.bottomPaneEdgeAt(x, out));
         // The Widgets page is built before the widget controller looks its grid up, so the
@@ -26076,10 +26074,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             flights.flyToDock(getTerminalToolbarViewPager());
         }
         noteTerminalPlaceMayBeVisible();
-        if (mWidgetPaneController != null) {
-            mWidgetPaneController.onWallPageShown(
-                page == com.termux.app.wall.PaneWallPage.WIDGETS);
-        }
         Trace.beginSection("Wall.displayAttachment");
         try {
             syncDisplayAttachment(page);
@@ -26483,6 +26477,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.WidgetPaneFrame page =
             mPaneWallController.attachWidgetsPage(getLayoutInflater());
         if (page == null) return;
+        // The Home pages register only now that their one view exists.
+        mPaneWallController.setHomePageFactory(
+            id -> new com.termux.app.launcher.home.HomePage(id, mHomePageHost));
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             // Widgets take what the dock and the floats leave of Live blur's budget.
@@ -27893,9 +27890,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The wall's pages and its home (ADR 0015): the one source of Start in and the Home page. */
     private com.termux.app.wall.WallPagesStore mWallPagesStore;
-    /** The Home run the wall bound the Home frame to (ADR 0015, A2a); -1 last for every page. */
-    private int mHomeRunFirst = 0;
-    private int mHomeRunLast = -1;
+    /** The wall's way into Home; it also keeps the Home run the wall last bound (ADR 0015, A2a). */
+    private final com.termux.app.launcher.home.HomeWallSeam mHomeSeam =
+        new com.termux.app.launcher.home.HomeWallSeam(() -> mWidgetPaneController,
+            () -> TermuxActivity.this.wallPages());
     @Nullable private com.termux.app.wall.WallPagesStore.Listener mWallPagesListener;
     /** Prunes and drops page looks; no other work (readers build their own PageLook). */
     @Nullable private com.termux.app.look.PageLook mPageLookPruner;
@@ -31539,31 +31537,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return com.termux.app.wall.WallRow.hasWorkspace(mTermuxService != null, rowWindowCount());
     }
 
-    /** How many Home pages or windows the wall's view of that kind holds. */
+    /** How many windows the wall's view of that kind holds; Home's pages come from {@link #mHomeSeam}. */
     private int wallInnerCount(@NonNull com.termux.app.wall.PaneWallPage page) {
-        if (page == com.termux.app.wall.PaneWallPage.WIDGETS) {
-            return mWidgetPaneController == null ? 1 : mWidgetPaneController.homePageCount();
-        }
         return rowWindowCount();
     }
 
-    /** Which Home page or window is in front, the display window counted at its row place. */
+    /** Which window is in front, the display window counted at its row place. */
     private int wallInnerIndex(@NonNull com.termux.app.wall.PaneWallPage page) {
-        if (page == com.termux.app.wall.PaneWallPage.WIDGETS) {
-            return mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
-        }
         return rowCurrentIndex();
     }
 
     /**
-     * Turn Home to a page, or the Workspace to a window — the display window by its row place —
-     * at once and without a slide.
+     * Turn the Workspace to a window — the display window by its row place — at once and without
+     * a slide; Home's pages turn through {@link #mHomeSeam}.
      */
     private void showWallInnerPage(@NonNull com.termux.app.wall.PaneWallPage page, int index) {
-        if (page == com.termux.app.wall.PaneWallPage.WIDGETS) {
-            if (mWidgetPaneController != null) mWidgetPaneController.showHomePage(index);
-            return;
-        }
         if (mPaneController == null || index == rowCurrentIndex()) return;
         int window = index;
         if (mCurrentWSession == null || window < 0 || window >= mCurrentWSession.windows.size()) {
@@ -31604,7 +31592,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetPaneController != null) {
             mWidgetPaneController.setSeam(mPaneWallController.homeSeam());
             // The Home run the wall bound before the grid existed.
-            mWidgetPaneController.setHomeRun(mHomeRunFirst, mHomeRunLast);
+            mWidgetPaneController.setHomeRun(mHomeSeam.runFirst(), mHomeSeam.runLast());
         }
         attachWidgetHintCover();
         Bundle state = mPendingWallState;

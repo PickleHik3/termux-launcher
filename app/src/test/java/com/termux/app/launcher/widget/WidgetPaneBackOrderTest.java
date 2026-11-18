@@ -41,6 +41,14 @@ public class WidgetPaneBackOrderTest {
                 @Override public void restoreWidgetSurfaceOrigin() { }
             });
         ReflectionHelpers.setField(fixture.activity, "mWidgetPaneController", paneController);
+        // Home's Back reaches the controller through the page registry's front: a Home page that
+        // is the recorded and applied front, with the activity's own host (which never needs view()).
+        com.termux.app.page.Pages pages = ReflectionHelpers.getField(fixture.activity, "mPages");
+        com.termux.app.launcher.home.HomePageHost host =
+            ReflectionHelpers.getField(fixture.activity, "mHomePageHost");
+        pages.put(1, new com.termux.app.launcher.home.HomePage(1, host));
+        pages.landed(1, com.termux.app.page.PageKind.HOME);
+        pages.applyFront();
         fixture.pane.picker().open();
         assertTrue(fixture.pane.picker().isOpen());
         return fixture;
@@ -70,6 +78,22 @@ public class WidgetPaneBackOrderTest {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         assertFalse(activity.consumeOverlayKeyDown(KeyEvent.KEYCODE_BACK, backDown()));
         assertFalse(activity.consumeOverlayKeyUp(KeyEvent.KEYCODE_BACK));
+    }
+
+    /** An open drawer closes before a widget pane's pending state is touched. */
+    @Test public void theDrawerClosesBeforeThePickerDoes() {
+        Fixture fixture = openThePicker();
+        com.termux.app.launcher.drawer.AppDrawerController drawer =
+            fixture.activity.getAppDrawerController();
+        ReflectionHelpers.setField(drawer, "mOpen", true);
+        ReflectionHelpers.setField(drawer, "mEngaged", true);
+
+        fixture.activity.onBackPressed();
+
+        assertFalse(drawer.isOpen());
+        assertTrue("the first Back belongs to the drawer", fixture.pane.picker().isOpen());
+        fixture.activity.onBackPressed();
+        assertFalse(fixture.pane.picker().isOpen());
     }
 
     /** A release let through on its own would reach the shell behind the pane that just closed. */
