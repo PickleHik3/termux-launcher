@@ -1478,7 +1478,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // into a status strip it does not reach the top of.
         float top = mRoundedStyle ? topBleed : (topBleed > 0f ? -cornerBleed : 0f);
         float bottom = mRoundedStyle
-            ? host.getHeight() - hostBleedBottomPx()
+            ? host.getHeight() - sheetsBandPx()
             : host.getHeight() + cornerBleed;
         return new Frame(inset, top, host.getWidth() - inset, bottom);
     }
@@ -1503,13 +1503,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (openRect == null) return null;
         if (mRoundedStyle || host == null) return openRect;
         return new Frame(openRect.left, hostBleedTopPx(), openRect.right,
-            host.getHeight() - hostBleedBottomPx() + mOpenRadiusPx);
+            host.getHeight() - sheetsBandPx() + mOpenRadiusPx);
     }
 
     /**
-     * How far the drawer host reaches past the padded content root, at the top and at the bottom.
+     * How far the drawer host reaches past the padded content root at the top.
      *
-     * <p>The activity writes these as negative margins from the same insets the two strips are
+     * <p>The activity writes this as a negative margin from the same insets the strip is
      * sized by, once per inset change and never on the touch path. Reading them back here is how
      * the content finds the safe area again without a second copy of the same two numbers — and it
      * is why a host that was never bled (a test tree, an activity whose insets never arrived) falls
@@ -1520,9 +1520,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return margins == null ? 0f : Math.max(0f, -margins.topMargin);
     }
 
-    private float hostBleedBottomPx() {
-        ViewGroup.MarginLayoutParams margins = hostMargins();
-        return margins == null ? 0f : Math.max(0f, -margins.bottomMargin);
+    /** The band at the screen's bottom the host reaches through, from the one owner. */
+    private float sheetsBandPx() {
+        return Math.max(0, mHost.sheetsBandPx());
     }
 
     @Nullable
@@ -1901,7 +1901,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean keyboardUp = base != null && rect.bottom < base.bottom;
         boolean runsUnderNav = !mRoundedStyle && host != null;
         float cardBottom = keyboardUp || !runsUnderNav ? rect.bottom : host.getHeight();
-        float navInset = runsUnderNav ? hostBleedBottomPx() : 0f;
+        float navInset = runsUnderNav ? sheetsBandPx() : 0f;
         return Math.round(AppDrawerContentInsetPolicy.contentBottomInsetPx(rect.bottom, cardBottom,
             navInset, keyboardUp, content.contentInsetPx()));
     }

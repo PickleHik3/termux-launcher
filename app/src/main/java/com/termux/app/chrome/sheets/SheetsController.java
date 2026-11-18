@@ -770,8 +770,9 @@ public final class SheetsController {
     }
 
     /**
-     * The drawer's host bleeds under the system bars and the cutout: negative margins of the
-     * insets' own size (see the activity's insets listener).
+     * The drawer's host bleeds under the status bar and the cutout: a negative top margin of the
+     * insets' own size (see the activity's insets listener). Its bottom is the screen's edge
+     * already, with the band under the pill from {@link #bottomBandPx}.
      */
     public void applyAppDrawerEdgeBleed(@NonNull androidx.core.view.WindowInsetsCompat insetsCompat) {
         View host = mHost.activity().findViewById(R.id.app_drawer_host);
@@ -782,11 +783,10 @@ public final class SheetsController {
             insetsCompat.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
                 | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
         int barTop = edges.top;
-        int barBottom = edges.bottom;
         android.view.ViewGroup.MarginLayoutParams margins = (android.view.ViewGroup.MarginLayoutParams) layoutParams;
-        if (margins.topMargin == -barTop && margins.bottomMargin == -barBottom) return;
+        if (margins.topMargin == -barTop && margins.bottomMargin == 0) return;
         margins.topMargin = -barTop;
-        margins.bottomMargin = -barBottom;
+        margins.bottomMargin = 0;
         host.setLayoutParams(margins);
     }
 

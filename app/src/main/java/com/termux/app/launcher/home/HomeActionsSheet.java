@@ -197,6 +197,11 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         int band = Math.max(0, bandPx);
         if (band == bottomBandPx) return;
         bottomBandPx = band;
+        int bottom = cardPadBottom + band;
+        if (card.getPaddingBottom() != bottom) {
+            card.setPadding(card.getPaddingLeft(), card.getPaddingTop(),
+                card.getPaddingRight(), bottom);
+        }
     }
 
     /**
@@ -209,7 +214,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             | WindowInsetsCompat.Type.displayCutout());
         int left = cardPadLeft + bars.left;
         int right = cardPadRight + bars.right;
-        int bottom = cardPadBottom + Math.max(0, bars.bottom);
+        int bottom = cardPadBottom + bottomBandPx;
         if (card.getPaddingLeft() != left || card.getPaddingRight() != right
             || card.getPaddingBottom() != bottom) {
             card.setPadding(left, card.getPaddingTop(), right, bottom);
