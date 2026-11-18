@@ -18,9 +18,12 @@ public class PlaceKeyboardTest {
     private static final PaneWallPage WINDOW = PaneWallPage.TERMINAL;
 
     @Test
-    public void homeHasNoKeyboardMemoryAndIsUpOnlyWhileAlwaysOn() {
-        assertFalse("remembered open means nothing on Home",
+    public void homeComesBackAsItWasLeftAndIsAlwaysUpWhileAlwaysOn() {
+        assertTrue("Home remembers its keyboard per visit",
             PlaceKeyboard.keyboardOnEnter(HOME, true, false, false));
+        assertFalse(PlaceKeyboard.keyboardOnEnter(HOME, false, false, false));
+        assertTrue("minimal mode leaves Home's memory alone",
+            PlaceKeyboard.keyboardOnEnter(HOME, true, true, false));
         assertTrue(PlaceKeyboard.keyboardOnEnter(HOME, false, false, true));
         assertTrue("minimal mode is the Workspace's",
             PlaceKeyboard.keyboardOnEnter(HOME, false, true, true));

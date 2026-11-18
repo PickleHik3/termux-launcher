@@ -19929,7 +19929,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!isWidgetsPageShowing() || mPaneController == null
                 || mPaneController.focusedHomeFloat() == null || mInAppKeyboard == null
                 || !mInAppKeyboard.isVisible()
-                || wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) return false;
+                || homeHoldsKeyboardUp()) return false;
             mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                 .HideReason.USER_EVENT);
             return true;
@@ -25286,6 +25286,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mOverviewHoldsPaneSizes = false;
             if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
         }
+    }
+
+    /**
+     * Whether Home keeps its keyboard up whatever a float does with it: always on, or a float
+     * restored with its keyboard. Home's memory of a visit is not this: a float's keyboard still
+     * goes with the float.
+     */
+    private boolean homeHoldsKeyboardUp() {
+        if (mOverviewPreviewing) return false;
+        if (mKeyboardForRestoredFloat) return true;
+        PlaceLayoutStore store = placeLayoutStore();
+        return store != null && store.isHomeKeyboardAlwaysOn();
     }
 
     /** Whether the place wants its keyboard up as the wall lands on it. */
@@ -33353,7 +33365,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // keyboard it raised goes with it, unless Home keeps one always on.
             if (mLastWallPage == com.termux.app.wall.PaneWallPage.WIDGETS && mInAppKeyboard != null
                 && mInAppKeyboard.isVisible()
-                && !wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.WIDGETS)) {
+                && !homeHoldsKeyboardUp()) {
                 mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                     .HideReason.USER_EVENT);
             }
