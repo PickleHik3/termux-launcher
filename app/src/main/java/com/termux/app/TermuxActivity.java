@@ -6155,11 +6155,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * While the top band's arriving end is built as a crossing begins: the arriving page's look id,
+     * which the status and stack reads answer so the builders dress it as the landing's re-dress
+     * will. {@link com.termux.app.place.TopBandFadePlan#NONE} otherwise.
+     */
+    private int mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+
+    /**
      * The half of the wall whose look values {@code surface} wears now (ADR 0013). Unlike the
      * shape, which Home wears only with a Home layout of its own, look values are always held per
      * half; until a half is edited both answer the same numbers.
      */
     private int lookPageId(@NonNull com.termux.app.place.SeamDress.Surface surface) {
+        if (mLookIdOverride != com.termux.app.place.TopBandFadePlan.NONE
+            && (surface == com.termux.app.place.SeamDress.Surface.STATUS
+                || surface == com.termux.app.place.SeamDress.Surface.STACK))
+            return mLookIdOverride;
         // Between two Home pages the bar is Home's on both ends (SeamCrossing#barDressedAcross).
         // Each surface reads the page it stands on (ADR 0015 §6): the Home page in front, the
         // bound Display page, or the Terminal's; mid-crossing the end the surface wears.
@@ -7347,6 +7358,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTopFadeStripHere = strip != null && strip.isShown() ? strip.getBackground() : null;
         View bar = findViewById(R.id.terminal_window_bar_background);
         mTopFadeBarHere = bar != null ? bar.getBackground() : null;
+        // A look apart: build the arriving end now, so the band crosses with the wall and the
+        // landing's re-dress finds it already in that dress.
+        int arriving = com.termux.app.place.TopBandFadePlan.arrivingLookAtBegin(
+            lookIdOf(here), lookIdOf(there));
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (arriving != com.termux.app.place.TopBandFadePlan.NONE && host != null && mChrome != null
+            && mCrossing.crossing())
+            buildTopBandFadeEnds(host, arriving);
+    }
+
+    /** Builds both crossfades, the arriving end under look {@code lookId}, once per crossing. */
+    private void buildTopBandFadeEnds(@NonNull View host, int lookId) {
+        mTopFadeBuilt = true;
+        mLookIdOverride = lookId;
+        try {
+            View strip = findViewById(R.id.terminal_status_bar_glass_surface);
+            if (strip != null) {
+                strip.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeStripHere,
+                    buildStatusInsetStripSurface(host), mTopFadeShare));
+            }
+            View bar = findViewById(R.id.terminal_window_bar_background);
+            if (bar != null) {
+                bar.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeBarHere,
+                    buildTerminalWindowBarBackground(host), mTopFadeShare));
+            }
+        } finally {
+            mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+        }
+        applyTopBandFadeShare();
     }
 
     /**
@@ -7363,18 +7403,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTopFadeBuilt) return true;
         View host = findViewById(R.id.terminal_window_bar_host);
         if (host == null || mChrome == null) return false;
-        mTopFadeBuilt = true;
-        View strip = findViewById(R.id.terminal_status_bar_glass_surface);
-        if (strip != null) {
-            strip.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeStripHere,
-                buildStatusInsetStripSurface(host), mTopFadeShare));
-        }
-        View bar = findViewById(R.id.terminal_window_bar_background);
-        if (bar != null) {
-            bar.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeBarHere,
-                buildTerminalWindowBarBackground(host), mTopFadeShare));
-        }
-        applyTopBandFadeShare();
+        buildTopBandFadeEnds(host, com.termux.app.place.TopBandFadePlan.NONE);
         return true;
     }
 
