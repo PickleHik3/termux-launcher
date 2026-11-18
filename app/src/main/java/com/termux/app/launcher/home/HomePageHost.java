@@ -5,30 +5,36 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.launcher.widget.WidgetPaneController;
 import com.termux.app.page.PageKind;
+import com.termux.app.wall.WidgetPaneFrame;
 
 /**
- * What a {@link HomePage} asks of the activity: Home's leave and shown work, which used to run at
- * the wall's commit and settle, and the one view every Home page shares. The page calls
- * {@link #dismissControls()} on every off-front and {@link #leaving()} only when the wall
- * committed to a page that is not Home. Main thread only.
+ * What a {@link HomePage} asks of the activity: facts about the window and a few narrow requests.
+ * The page itself does Home's front, off-front and back work with them. Main thread only.
  */
 public interface HomePageHost {
 
-    /** Closes Home's open controls. */
-    void dismissControls();
+    /** Home's widget controller; null before it is built. */
+    @Nullable WidgetPaneController widgets();
 
-    /** Home's leave work: its widgets go to rest and the floating Home focus is released. */
-    void leaving();
+    /** The widgets page's frame, which carries the controls; null before it is attached. */
+    @Nullable WidgetPaneFrame frame();
 
-    /** Home is the front: its widgets come alive. */
-    void shown();
+    /** Runs {@code work} with the window bar refreshing once, after it. */
+    void batchBarRefresh(@NonNull Runnable work);
 
-    /** Back over a widget edit commits it, else over the picker closes it; true when it did. */
-    boolean widgetBack();
+    /** A focused Home float gives the keyboard back to the window. */
+    void releaseHomeFloatFocus();
 
-    /** Back over a focused Home float with the keyboard up lowers the keyboard; true when it did. */
-    boolean lowerFloatKeyboard();
+    /** Whether a Home float has the focus. */
+    boolean homeFloatFocused();
+
+    /** Whether Home keeps its keyboard up whatever a float does with it. */
+    boolean homeHoldsKeyboardUp();
+
+    /** Hides the in-app keyboard as the user's own event; false when it is not up. */
+    boolean lowerKeyboard();
 
     /** The kind the wall last committed to, or null before any commit. */
     @Nullable PageKind committedKind();

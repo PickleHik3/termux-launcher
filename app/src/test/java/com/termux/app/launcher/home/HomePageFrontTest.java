@@ -7,11 +7,14 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.launcher.widget.WidgetPaneController;
 import com.termux.app.page.Page;
 import com.termux.app.page.PageHost;
 import com.termux.app.page.PageKind;
 import com.termux.app.page.Pages;
 import com.termux.app.page.Rest;
+
+import com.termux.app.wall.WidgetPaneFrame;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -22,15 +25,27 @@ public class HomePageFrontTest {
 
     private static final class CountingHost implements HomePageHost {
         final Pages pages;
+        /** Counts of what the page asked: the frame read (dismiss), the batch, the float release. */
         int dismiss, leaving, shown;
+        private boolean inBatch;
 
         CountingHost(Pages pages) { this.pages = pages; }
 
-        @Override public void dismissControls() { dismiss++; }
-        @Override public void leaving() { leaving++; }
-        @Override public void shown() { shown++; }
-        @Override public boolean widgetBack() { return false; }
-        @Override public boolean lowerFloatKeyboard() { return false; }
+        @Nullable @Override public WidgetPaneController widgets() {
+            // No controller in a unit test: a read outside the batch is the shown work.
+            if (!inBatch) shown++;
+            return null;
+        }
+        @Nullable @Override public WidgetPaneFrame frame() { dismiss++; return null; }
+        @Override public void batchBarRefresh(@NonNull Runnable work) {
+            inBatch = true;
+            work.run();
+            inBatch = false;
+        }
+        @Override public void releaseHomeFloatFocus() { leaving++; }
+        @Override public boolean homeFloatFocused() { return false; }
+        @Override public boolean homeHoldsKeyboardUp() { return false; }
+        @Override public boolean lowerKeyboard() { return false; }
         @Nullable @Override public PageKind committedKind() { return pages.committedKind(); }
         @NonNull @Override public View view() { throw new UnsupportedOperationException(); }
     }

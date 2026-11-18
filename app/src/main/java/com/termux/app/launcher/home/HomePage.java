@@ -6,6 +6,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.glass.GlassEntry;
+import com.termux.app.launcher.widget.WidgetPaneController;
+import com.termux.app.wall.WidgetPaneFrame;
 
 import com.termux.app.page.Page;
 import com.termux.app.page.PageKind;
@@ -58,17 +60,31 @@ public final class HomePage implements Page {
 
     @Override
     public void onFront() {
-        mHost.shown();
+        WidgetPaneController widgets = mHost.widgets();
+        if (widgets != null) widgets.onWallPageShown(true);
     }
 
     @Override
     public void offFront() {
-        mHost.dismissControls();
-        if (mHost.committedKind() != PageKind.HOME) mHost.leaving();
+        WidgetPaneFrame frame = mHost.frame();
+        if (frame != null) frame.dismissControls();
+        if (mHost.committedKind() == PageKind.HOME) return;
+        // Leaving Home, its widgets go to rest and a focused Home float gives the keyboard back.
+        mHost.batchBarRefresh(() -> {
+            WidgetPaneController widgets = mHost.widgets();
+            if (widgets != null) widgets.onWallPageLeaving();
+            mHost.releaseHomeFloatFocus();
+        });
     }
 
+    /**
+     * Back over a widget edit commits it, else over the picker closes it; else over a focused
+     * float with the keyboard up (and not held up by Home) lowers the keyboard.
+     */
     @Override
     public boolean onBack() {
-        return mHost.widgetBack() || mHost.lowerFloatKeyboard();
+        WidgetPaneController widgets = mHost.widgets();
+        if (widgets != null && widgets.onBackPressed()) return true;
+        return mHost.homeFloatFocused() && !mHost.homeHoldsKeyboardUp() && mHost.lowerKeyboard();
     }
 }

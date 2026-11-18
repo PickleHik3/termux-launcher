@@ -9,6 +9,7 @@ import com.termux.app.chrome.LivePicture;
 import com.termux.app.glass.GlassEntry;
 import com.termux.app.glass.GlassKind;
 import com.termux.app.glass.GlassService;
+import com.termux.app.wall.WidgetPaneFrame;
 import com.termux.app.window.WindowLayer;
 
 import java.util.LinkedHashMap;
@@ -22,7 +23,7 @@ import java.util.function.IntSupplier;
  * {@link #wearWidget} or {@link #wearFloat} and gives it back with {@link #drop}; each change asks
  * the page registry to declare again, so the service's set follows the slabs.
  */
-public final class HomeGlass {
+public final class HomeGlass implements WidgetPaneFrame.Glass {
 
     /** One slab's entry: its element, its place in the budget and the redress the service calls. */
     private static final class Surface {
@@ -62,6 +63,13 @@ public final class HomeGlass {
         return wear("widget", GlassEntry.PRIORITY_WIDGET, slab, blurDp, redress);
     }
 
+    /** {@link WidgetPaneFrame.Glass}: a widget slab's picture, as {@link #wearWidget}. */
+    @Nullable
+    @Override
+    public LivePicture wear(@NonNull View slab, int blurDp, @Nullable Runnable redress) {
+        return wearWidget(slab, blurDp, redress);
+    }
+
     /** A Home float's slab, at the terminal glass's blur; as {@link #wearWidget}. */
     @Nullable
     public LivePicture wearFloat(@NonNull View slab, @Nullable Runnable redress) {
@@ -84,6 +92,7 @@ public final class HomeGlass {
     }
 
     /** The slab gave its glass back: the next declaration leaves it out and the service lets go. */
+    @Override
     public void drop(@NonNull View slab) {
         if (mSurfaces.remove(slab) != null) mRedeclare.run();
     }

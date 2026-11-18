@@ -994,8 +994,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The facts a page's rest is computed from, as the activity reads them now. */
     @NonNull
     private com.termux.app.page.Rest.Inputs restInputs() {
+        return restInputsFor(mLastWallPage);
+    }
+
+    /** The same facts, with the keyboard memory of a page of {@code place}. */
+    @NonNull
+    private com.termux.app.page.Rest.Inputs restInputsFor(@Nullable com.termux.app.page.PageKind place) {
         PlaceLayoutStore store = placeLayoutStore();
-        com.termux.app.page.PageKind place = mLastWallPage;
         boolean home = place == com.termux.app.page.PageKind.HOME;
         return new com.termux.app.page.Rest.Inputs.Builder()
             .keyboardRemembered(store != null && place != null && store.wasKeyboardOpen(place))
@@ -1022,6 +1027,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    /**
+     * The rest of a page of {@code kind} from {@code in}: a registered page's, else the kind's
+     * static rest, so the answer never depends on registration.
+     */
+    @NonNull
+    private com.termux.app.page.Rest restOf(@NonNull com.termux.app.page.PageKind kind,
+                                            @NonNull com.termux.app.page.Rest.Inputs in) {
+        com.termux.app.page.Page page = mPages.anyOf(kind);
+        if (page != null) return page.rest(in);
+        switch (kind) {
+            case HOME: return com.termux.app.launcher.home.HomeRest.of(in);
+            case TERMINAL: return com.termux.app.terminal.TerminalRest.of(in);
+            case DISPLAY: return com.termux.app.x11.DisplayRest.of(in);
+            default: return com.termux.app.assistant.AssistantRest.of(in);
+        }
+    }
+
+    /**
+     * Whether a page of {@code kind} wants its keyboard up as the wall lands on it, read from its
+     * rest ({@link com.termux.app.place.RestAnswers}).
+     */
+    private boolean restWantsKeyboard(@NonNull com.termux.app.page.PageKind kind) {
+        com.termux.app.page.Rest.Inputs in = restInputsFor(kind);
+        return com.termux.app.place.RestAnswers.keyboardOnEnter(kind, in, restOf(kind, in));
     }
 
     /** The room the panes are laid out in: the geometry pass's inputs and the pane host's size. */
@@ -1732,33 +1763,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.launcher.home.HomeGlass mHomeGlass =
         new com.termux.app.launcher.home.HomeGlass(mGlass, mPages::declareGlass,
             () -> mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0);
-    /** What every Home page asks of this window: its leave and shown work and its one view. */
+    /** What every Home page asks of this window: facts and narrow requests; the page does the work. */
     private final com.termux.app.launcher.home.HomePageHost mHomePageHost =
         new com.termux.app.launcher.home.HomePageHost() {
-            @Override public void dismissControls() {
-                if (mPaneWallController != null && mPaneWallController.widgetsPage() != null) {
-                    mPaneWallController.widgetsPage().dismissControls();
-                }
+            @Nullable @Override public com.termux.app.launcher.widget.WidgetPaneController widgets() {
+                return mWidgetPaneController;
             }
-            @Override public void leaving() {
-                batchWindowBarRefresh(() -> {
-                    if (mWidgetPaneController != null) mWidgetPaneController.onWallPageLeaving();
-                    // Leaving Home, a focused Home float gives the keyboard back to the window.
-                    if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
-                });
+            @Nullable @Override public com.termux.app.wall.WidgetPaneFrame frame() {
+                return mPaneWallController == null ? null : mPaneWallController.widgetsPage();
             }
-            @Override public void shown() {
-                if (mWidgetPaneController != null) mWidgetPaneController.onWallPageShown(true);
+            @Override public void batchBarRefresh(@NonNull Runnable work) {
+                batchWindowBarRefresh(work);
             }
-            @Override public boolean widgetBack() {
-                return mWidgetPaneController != null && mWidgetPaneController.onBackPressed();
+            @Override public void releaseHomeFloatFocus() {
+                if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
             }
-            @Override public boolean lowerFloatKeyboard() {
-                // The float keeps focus and the next press falls through as before. Home's
-                // always-on keyboard is not the float's to close.
-                if (mPaneController == null || mPaneController.focusedHomeFloat() == null
-                    || mInAppKeyboard == null || !mInAppKeyboard.isVisible()
-                    || homeHoldsKeyboardUp()) return false;
+            @Override public boolean homeFloatFocused() {
+                return mPaneController != null && mPaneController.focusedHomeFloat() != null;
+            }
+            @Override public boolean homeHoldsKeyboardUp() {
+                return TermuxActivity.this.homeHoldsKeyboardUp();
+            }
+            @Override public boolean lowerKeyboard() {
+                if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return false;
                 mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                     .HideReason.USER_EVENT);
                 return true;
@@ -1823,7 +1850,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public boolean isDisplayShowing() { return isDisplayWindowInFront(); }
             @Override public boolean isLayerOpen() { return TermuxActivity.this.isLayerOpen(); }
             @Override public boolean wantsKeyboardOnEnter() {
-                return TermuxActivity.this.wantsKeyboardOnEnter(
+                return TermuxActivity.this.restWantsKeyboard(
                     com.termux.app.page.PageKind.DISPLAY);
             }
             @Override public void refreshEmptyState() { refreshDisplayEmptyStateReadiness(); }
@@ -5064,7 +5091,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             page = pages.terminal();
         } else {
             // The Home frame wears the Home page it shows, not the home page (ADR 0015 §6).
-            page = pages.page(homePageInFront());
+            page = pages.page(mHomeSeam.pageInFront());
         }
         return com.termux.app.terminal.TerminalSurfacePolicy.pageGround(terminal, mGroundGlassPane,
             mGroundCanvasTint, pageDimColor(page));
@@ -6378,7 +6405,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int displayId = window == com.termux.app.page.PageKind.DISPLAY ? mDisplayPageBinding.boundPage()
             : window == com.termux.app.page.PageKind.ASSISTANT ? assistantPageId() : -1;
         return com.termux.app.place.SeamDress.lookPageId(kind,
-            kind == com.termux.app.page.PageKind.HOME ? homePageInFront() : -1, displayId,
+            kind == com.termux.app.page.PageKind.HOME ? mHomeSeam.pageInFront() : -1, displayId,
             terminalLookPageId());
     }
 
@@ -6386,7 +6413,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int lookIdOf(@NonNull com.termux.app.wall.PageRef page) {
         if (page.isHome())
             return com.termux.app.place.SeamDress.lookPageId(
-                com.termux.app.page.PageKind.HOME, page.id >= 0 ? page.id : homePageInFront(),
+                com.termux.app.page.PageKind.HOME, page.id >= 0 ? page.id : mHomeSeam.pageInFront(),
                 -1, terminalLookPageId());
         return com.termux.app.place.SeamDress.lookPageId(page.kind, -1,
             page.kind == com.termux.app.page.PageKind.DISPLAY ? mDisplayPageBinding.boundPage()
@@ -14063,7 +14090,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The page in front: the Home page shown, the bound Display page, or the Terminal's.
             com.termux.app.page.PageKind place = currentWallPlace();
             if (place == com.termux.app.page.PageKind.HOME)
-                return homePageInFront();
+                return mHomeSeam.pageInFront();
             if (place == com.termux.app.page.PageKind.DISPLAY && mDisplayPageBinding.boundPage() >= 0)
                 return mDisplayPageBinding.boundPage();
             com.termux.app.wall.WallPages.Page terminal = TermuxActivity.this.wallPages().terminal();
@@ -15591,19 +15618,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Tells the store which pages are on screen, so a page's own layout is the one it wears: the
      * Home page in front (the pane's index into the wall's Home pages) and the Terminal page.
      */
-    /** The id of the Home page the widget grid shows; -1 when there is none. */
-    private int homePageInFront() {
-        refreshShownPageIds();
-        java.util.List<Integer> ids = mShownHomePageIds;
-        if (ids.isEmpty()) return -1;
-        int index = mWidgetPaneController != null ? mWidgetPaneController.homePageIndex() : 0;
-        return ids.get(Math.max(0, Math.min(index, ids.size() - 1)));
-    }
-
     private void bindShownPages(@NonNull PlaceLayoutStore store) {
         store.setShownPages(new PlaceLayoutStore.ShownPages() {
             @Override public int homePageInFront() {
-                return TermuxActivity.this.homePageInFront();
+                return mHomeSeam.pageInFront();
             }
 
             @Override public int terminalPage() {
@@ -16156,8 +16174,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Display place does too while it is typed into with the phone's keyboard — and it
         // keeps the IME even with the launcher's keyboard up, because there that keyboard is only
         // the frame mouse mode's touchpad stands in.
-        boolean display = displayTakesSystemKeyboard();
-        mInAppKeyboard.setPlaceOwnsSystemIme(mPages.isCommitted(com.termux.app.page.PageKind.HOME) || display, display);
+        com.termux.app.page.PageKind home = com.termux.app.page.PageKind.HOME;
+        boolean displayFront = isDisplayWindowInFront();
+        boolean committedHome = mPages.isCommitted(home);
+        com.termux.app.page.Rest.Inputs in = restInputsFor(committedHome ? home
+            : com.termux.app.page.PageKind.DISPLAY);
+        boolean display = com.termux.app.place.RestAnswers.displayTypesWithSystemIme(displayFront,
+            restOf(com.termux.app.page.PageKind.DISPLAY, in));
+        mInAppKeyboard.setPlaceOwnsSystemIme(com.termux.app.place.RestAnswers.systemImeOwner(
+            committedHome, restOf(home, in), display), display);
     }
 
     // ---------------------------------------------------------------- the edge stacks
@@ -22568,7 +22593,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // editor did with the one it raised, and the notice the editor held back follows on
             // the arrangement after the close.
             if (mLastWallPage == com.termux.app.page.PageKind.HOME
-                && wantsKeyboardOnEnter(mLastWallPage))
+                && restWantsKeyboard(mLastWallPage))
                 applyPlaceKeyboard(mLastWallPage);
             String notice = mSheets.alwaysOnNotice().onEditorClosed();
             if (notice != null) {
@@ -23461,7 +23486,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, getCurrentFocus());
         }
         if (mInAppKeyboard == null) return;
-        boolean wanted = wantsKeyboardOnEnter(page);
+        boolean wanted = restWantsKeyboard(page);
         if (mInAppKeyboard.isVisible() == wanted) return;
         if (wanted) {
             mInAppKeyboard.show(page == com.termux.app.page.PageKind.TERMINAL
@@ -23631,7 +23656,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(
             @NonNull com.termux.app.page.PageKind place) {
         boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
-            : wantsKeyboardOnEnter(place);
+            : restWantsKeyboard(place);
         // A Home page wears the bar too (#90); only one whose layout puts it away has none, and
         // the window's then fades on the way there.
         if (place == com.termux.app.page.PageKind.HOME && !homeWearsBarAtRest())
@@ -24411,7 +24436,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public @NonNull com.termux.app.page.PageKind currentWallPlace() { return TermuxActivity.this.currentWallPlace(); }
         @Override public @Nullable com.termux.app.wall.PaneWallController paneWallController() { return mPaneWallController; }
         @Override public com.termux.app.wall.WallPages wallPages() { return TermuxActivity.this.wallPages(); }
-        @Override public int homePageInFront() { return TermuxActivity.this.homePageInFront(); }
+        @Override public int homePageInFront() { return mHomeSeam.pageInFront(); }
         @Override public int homeRunFirst() { return mHomeSeam.runFirst(); }
         @Override public int homeRunLast() { return mHomeSeam.runLast(); }
         @Override public boolean hasWidgetPaneController() { return mWidgetPaneController != null; }
@@ -24452,7 +24477,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isInAppKeyboardShown() { return TermuxActivity.this.isInAppKeyboardShown(); }
         @Override public boolean isKeyboardFloating() { return TermuxActivity.this.isKeyboardFloating(); }
         @Override public boolean committedKeyboardVisible() { return TermuxActivity.this.committedKeyboardVisible(); }
-        @Override public boolean wantsKeyboardOnEnter(@NonNull com.termux.app.page.PageKind place) { return TermuxActivity.this.wantsKeyboardOnEnter(place); }
+        @Override public boolean wantsKeyboardOnEnter(@NonNull com.termux.app.page.PageKind place) { return TermuxActivity.this.restWantsKeyboard(place); }
         @Override public int keyboardMeasureHeightPx() {
             return inAppKeyboardKeysPx(mKeyboardGeometry.measureHeightPx());
         }
@@ -24633,7 +24658,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // came: the place under it never had it up. One the arriving place wants is already
             // where it belongs, and the place's own sync below finds nothing to do.
             if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()
-                && (page == left || !wantsKeyboardOnEnter(page))) {
+                && (page == left || !restWantsKeyboard(page))) {
                 mQuietKeyboardChange = true;
                 try {
                     mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
@@ -24663,7 +24688,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // movement. One the place does not want stays laid out down.
             boolean quietShow = !keyboardPreRolled && !leavingKeyboardUp && page != left
                 && mKeyboardDownLaidOutPx > 0 && mInAppKeyboard != null
-                && !mInAppKeyboard.isVisible() && wantsKeyboardOnEnter(page);
+                && !mInAppKeyboard.isVisible() && restWantsKeyboard(page);
             Trace.beginSection("Settle.placeState");
             if (quietShow) {
                 mQuietKeyboardChange = true;
@@ -24907,17 +24932,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isHomeKeyboardAlwaysOn();
     }
-
-    /** Whether the place wants its keyboard up as the wall lands on it. */
-    private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.page.PageKind place) {
-        if (mOverviewPreviewing) return false;
-        if (mKeyboardForRestoredFloat && place == com.termux.app.page.PageKind.HOME)
-            return true;
-        PlaceLayoutStore store = placeLayoutStore();
-        return store != null && com.termux.app.place.PlaceKeyboard.keyboardOnEnter(place,
-            store.wasKeyboardOpen(place), store.isMinimal(), store.isHomeKeyboardAlwaysOn());
-    }
-
 
     /**
      * Tell the session client the terminal place can be seen again. While another place rests in
@@ -26096,14 +26110,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Home pages register only now that their one view exists.
         mPaneWallController.setHomePageFactory(
             id -> new com.termux.app.launcher.home.HomePage(id, mHomePageHost, mHomeGlass));
-        page.setGlass(new com.termux.app.wall.WidgetPaneFrame.Glass() {
-            @Nullable @Override
-            public com.termux.app.chrome.LivePicture wear(@NonNull View slab, int blurDp,
-                    @Nullable Runnable redress) {
-                return mHomeGlass.wearWidget(slab, blurDp, redress);
-            }
-            @Override public void drop(@NonNull View slab) { mHomeGlass.drop(slab); }
-        });
+        page.setGlass(mHomeGlass);
         mPaneWallController.setDisplayPageFactory(mDisplayPages::page);
         mPaneWallController.setTerminalStops(mTerminalPages);
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
@@ -27229,7 +27236,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The wall's way into Home; it also keeps the Home run the wall last bound (ADR 0015, A2a). */
     private final com.termux.app.launcher.home.HomeWallSeam mHomeSeam =
         new com.termux.app.launcher.home.HomeWallSeam(() -> mWidgetPaneController,
-            () -> TermuxActivity.this.wallPages());
+            () -> TermuxActivity.this.wallPages(),
+            () -> { refreshShownPageIds(); return mShownHomePageIds; });
     @Nullable private com.termux.app.wall.WallPagesStore.Listener mWallPagesListener;
     /** Prunes and drops page looks; no other work (readers build their own PageLook). */
     @Nullable private com.termux.app.look.PageLook mPageLookPruner;
@@ -27574,7 +27582,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mWidgetPaneController == null) return;
                     // One look per page kind: the page added wears the Home page in front's own
                     // look from the start (its overrides copied; none there, it follows global).
-                    int front = homePageInFront();
+                    int front = mHomeSeam.pageInFront();
                     java.util.List<Integer> before = wallPages().homePageIdsForRepository();
                     mWidgetPaneController.addPage();
                     java.util.List<Integer> added = wallPages().homePageIdsForRepository();
@@ -28080,7 +28088,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int linuxRouteFromPageId() {
         if (mPaneWallController == null) return -1;
         if (mPaneWallController.currentPage() == com.termux.app.page.PageKind.HOME) {
-            int home = homePageInFront();
+            int home = mHomeSeam.pageInFront();
             if (home >= 0) return home;
         }
         return mPaneWallController.currentPageId();

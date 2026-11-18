@@ -424,6 +424,22 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void homeDoesItsPageEventsInTheHomePageNotTheHost() throws IOException {
+        List<String> problems = new ArrayList<>();
+        String host = sources().get("app/launcher/home/HomePageHost.java");
+        for (String banned : new String[]{"leaving(", "shown(", "dismissControls(", "widgetBack(",
+                "lowerFloatKeyboard("}) {
+            if (host.contains(banned)) problems.add("HomePageHost declares " + banned);
+        }
+        String activity = sources().get("app/TermuxActivity.java");
+        for (String banned : new String[]{"private int homePageInFront(",
+                "private boolean wantsKeyboardOnEnter(", "new com.termux.app.wall.WidgetPaneFrame.Glass()"}) {
+            if (activity.contains(banned)) problems.add("TermuxActivity has " + banned);
+        }
+        assertNone(problems);
+    }
+
+    @Test
     public void homeWidgetsAndFloatsReachGlassOnlyThroughTheHomePage() throws IOException {
         List<String> problems = new ArrayList<>();
         for (Map.Entry<String, String> source : sources().entrySet()) {

@@ -7,6 +7,7 @@ import com.termux.app.launcher.widget.WidgetPaneController;
 import com.termux.app.wall.WallHome;
 import com.termux.app.wall.WallPages;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -18,13 +19,16 @@ public final class HomeWallSeam implements WallHome {
 
     @NonNull private final Supplier<WidgetPaneController> mWidgets;
     @NonNull private final Supplier<WallPages> mPages;
+    @NonNull private final Supplier<List<Integer>> mShownIds;
     private int mRunFirst = 0;
     private int mRunLast = -1;
 
     public HomeWallSeam(@NonNull Supplier<WidgetPaneController> widgets,
-                        @NonNull Supplier<WallPages> pages) {
+                        @NonNull Supplier<WallPages> pages,
+                        @NonNull Supplier<List<Integer>> shownIds) {
         mWidgets = widgets;
         mPages = pages;
+        mShownIds = shownIds;
     }
 
     @Override
@@ -65,6 +69,13 @@ public final class HomeWallSeam implements WallHome {
     public float shiftFraction() {
         WidgetPaneController widgets = mWidgets.get();
         return widgets == null ? 0f : widgets.homePageShiftFraction();
+    }
+
+    /** The id of the Home page the widget grid shows; -1 when there is none. */
+    public int pageInFront() {
+        List<Integer> ids = mShownIds.get();
+        if (ids.isEmpty()) return -1;
+        return ids.get(Math.max(0, Math.min(index(), ids.size() - 1)));
     }
 
     /** The first global Home-page index of the run last bound. */
