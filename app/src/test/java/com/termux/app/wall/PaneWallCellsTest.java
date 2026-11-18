@@ -35,7 +35,7 @@ public class PaneWallCellsTest {
 
     private static final int WIDTH = 1080;
 
-    private static final class Host implements PaneWallController.Host, WallHome, WallDisplay {
+    private static final class Host implements PaneWallController.Host, WallFacts, WallHome, WallDisplay {
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -124,7 +124,7 @@ public class PaneWallCellsTest {
         layout.addView(terminal);
         layout.addView(display);
         host.constructed = false;
-        controller = new PaneWallController(layout, host);
+        controller = new PaneWallController(layout, host, host);
         controller.setHome(host);
         controller.setDisplay(host);
         host.constructed = true;

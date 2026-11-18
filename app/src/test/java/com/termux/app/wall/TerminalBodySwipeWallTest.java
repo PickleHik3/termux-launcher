@@ -34,7 +34,7 @@ import android.app.Application;
 public class TerminalBodySwipeWallTest {
 
     /** A row of three Home pages and some windows, whose terminal gives the swipe away or not. */
-    private static final class Host implements PaneWallController.Host, WallHome {
+    private static final class Host implements PaneWallController.Host, WallFacts, WallHome {
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -103,7 +103,7 @@ public class TerminalBodySwipeWallTest {
         page.addView(terminal, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         wall.addView(page);
-        row = new PaneWallController(wall, host);
+        row = new PaneWallController(wall, host, host);
         row.setHome(host);
         row.attachTerminalPage(page);
         row.attachWidgetsPage(LayoutInflater.from(activity));

@@ -344,9 +344,7 @@ public class WindowSourceRulesTest {
         // over 15 methods: shrinks as its step moves needs into the pipeline state or the new modules
         "app/terminal/io/HomePillController.java#Host:1",
         // over 15 methods: shrinks as its step moves needs into the pipeline state or the new modules
-        "app/wall/PageOverviewView.java#Host:1",
-        // over 15 methods: shrinks as its step moves needs into the pipeline state or the new modules
-        "app/wall/PaneWallController.java#Host:1"
+        "app/wall/PageOverviewView.java#Host:1"
     );
 
     private static Map<String, String> sources;

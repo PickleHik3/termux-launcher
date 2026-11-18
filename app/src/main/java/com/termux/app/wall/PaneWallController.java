@@ -18,28 +18,14 @@ import com.termux.app.terminal.PaneSurfaceStyle;
  */
 public final class PaneWallController implements PaneWallLayout.Listener {
 
-    /** What the wall asks the activity. */
+    /** What the wall asks the activity: the page callbacks. Its inputs are the seams ({@link WallFacts},
+     *  {@link WallKeyboardSwipe}, {@link WallStatusFold}) and its pose is {@link WallPose}. */
     public interface Host {
-        /** Honour the system's reduce-motion setting for the page slide. */
-        boolean reducedMotion();
-        /**
-         * Whether the current session's row has a terminal window, so the Workspace is on the
-         * row (a Display page is a page of its own, not one of the row's windows). Home is on it unless {@link #useAs} is
-         * Terminal only.
-         */
-        default boolean hasWindow() { return true; }
-        /** Whether a terminal window is open, known for sure (the service is bound). */
-        default boolean terminalWindowOpen() { return false; }
         /**
          * The Terminal page goes back on the wall ({@link TerminalPageReturn#restore}); false when
          * it could not.
          */
         default boolean restoreTerminalPage() { return false; }
-        /**
-         * Use as, read fresh on every ask: under Terminal only the row is the Workspace alone,
-         * and the home press, the last window closing and a cold start all land there.
-         */
-        @NonNull default UseAs useAs() { return UseAs.HOME; }
         /**
          * Whether the empty Terminal page's first shell can be made now. Asked only while the
          * Terminal page has no window; without one the page still stands as a stop, showing its
@@ -59,18 +45,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         default int innerCount(@NonNull PaneWallPage page) { return 1; }
         /** Which of them is in front, counting from 0. */
         default int innerIndex(@NonNull PaneWallPage page) { return 0; }
-        /**
-         * The wall's pages (ADR 0015), read fresh on every ask, or null for the kind-keyed row
-         * alone ({@link UseAs#rowPages}). The wall lays out in their order.
-         */
-        @Nullable default WallPages wallPages() { return null; }
-        /**
-         * What builds the Assistant page's view (ADR 0022), asked when the wall first holds an
-         * Assistant page. The wall owns the view; the host only says how it is made.
-         */
-        @NonNull default com.termux.app.assistant.AssistantPageHost assistantPageHost() {
-            return com.termux.app.assistant.AssistantPageHost.DEFAULT;
-        }
         /** Turn {@code page} to its {@code index}-th page at once (Home page n). */
         default void showInnerPage(@NonNull PaneWallPage page, int index) { }
         /**
@@ -87,95 +61,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         default void onWallPageSettled(@NonNull PaneWallPage page) { }
         /** The wall committed to a different page, before the slide finishes. */
         default void onWallPageChanged(@NonNull PaneWallPage page) { }
-        /** The wall moved: signed distance from the current page's rest, for the place switch. */
-        default void onWallOffsetChanged(float offsetPx) { }
-        /** The Terminal page just went fully off screen, or just came back; see
-         *  {@link PaneWallLayout.Listener#onTerminalOffScreenChanged}. */
-        default void onTerminalOffScreenChanged(boolean offScreen) { }
-        /**
-         * How much of the terminal's rims the slide leaves showing changed
-         * ({@link PaneWallPolicy#terminalRimAlpha}): the wall's outline fade, or all of them while
-         * the transition fades the terminal's page. The wall's own pages take the outline fade
-         * themselves; the terminal's panes draw their rims through their controller, which the
-         * host owns.
-         */
-        default void onWallOutlineAlphaChanged(float alpha) { }
-        /**
-         * Whether the pages a border drag pulls tip like planks ({@link PlankTilt}): Fancier
-         * Glass on, with the phone animating. Asked as the drag claims the finger.
-         */
-        default boolean isPlankTiltEnabled() { return false; }
-        /**
-         * A vertical swipe off the page's bottom border asked for the keyboard: {@code open} up,
-         * closed down. On every place and in every mode, and it turns a keyboard switched off
-         * back on, as the keyboard key does: it is the one way back that is always there. Only
-         * for a swipe the keyboard could not follow ({@link #onKeyboardRevealBegin}).
-         */
-        default void onBorderKeyboardSwipe(boolean open) { }
-        /**
-         * Whether the keyboard swipe is armed on the page in view. Always on the Workspace; on a
-         * Home page it is the palette gesture, which Settings can turn off.
-         */
-        default boolean isBorderKeyboardSwipeEnabled() { return true; }
-        /**
-         * Whether a sideways swipe that starts at this screen point, on a terminal window's text,
-         * pages the row ({@link PaneWallLayout.Listener#isBodySwipePaging}): Settings lets it,
-         * and the pane under the finger gives the swipe away. Asked as a finger lands.
-         */
-        default boolean bodySwipePagesWall(float rawX, float rawY) { return false; }
-        /**
-         * Whether a clearly sideways swipe that starts at this screen point, in a terminal
-         * window's last row on the seam band, pages the row ({@link
-         * PaneWallLayout.Listener#isSeamSwipePaging}): the pane under the finger gives the swipe
-         * away. The body swipe's setting is not asked; the band is the bottom border's.
-         */
-        default boolean seamSwipePagesWall(float rawX, float rawY) {
-            return bodySwipePagesWall(rawX, rawY);
-        }
-        /**
-         * The keyboard swipe was claimed, going up ({@code opening}) or down, and the keyboard is
-         * to follow the finger: the keyboard's height in px the finger drives it over, or 0 where
-         * it cannot follow, and the swipe then asks through {@link #onBorderKeyboardSwipe} on
-         * release. See {@link PaneWallLayout.Listener#onKeyboardRevealBegin}.
-         */
-        default int onKeyboardRevealBegin(boolean opening) { return 0; }
-        /** How much of the keyboard a swipe it follows shows this frame, 0 down to 1 up. */
-        default void onKeyboardRevealProgress(float reveal) { }
-        /** The keyboard a swipe carried came to rest, up ({@code open}) or down. */
-        default void onKeyboardRevealEnd(boolean open) { }
-        /**
-         * Whether a vertical swipe off the page's top border drives the status bar's fold: where
-         * the bar stands along the top, can unfold, and is not put away. Asked on every frame the
-         * wall draws its grabbers; see {@link PaneWallLayout.Listener#isBorderStatusSwipeEnabled}.
-         */
-        default boolean isBorderStatusSwipeEnabled() { return false; }
-        /**
-         * A swipe off the top border asked for the bar unfolded ({@code expand}) or folded, for a
-         * swipe the fold did not follow ({@link #onStatusFoldBegin} answered 0, or reduced motion).
-         */
-        default void onBorderStatusSwipe(boolean expand) { }
-        /**
-         * The status bar swipe was claimed, going down ({@code expanding}) or up: the fold's whole
-         * way in px for the finger to drive, or 0 where it cannot follow. See
-         * {@link PaneWallLayout.Listener#onStatusFoldBegin}.
-         */
-        default int onStatusFoldBegin(boolean expanding) { return 0; }
-        /** The finger has the bar {@code towardOpenPx} from the form it had, positive opening. */
-        default void onStatusFoldProgress(float towardOpenPx) { }
-        /** The fold's finger let go or lost it: land the bar unfolded ({@code expanded}) or folded. */
-        default void onStatusFoldEnd(boolean expanded, float towardOpenVelocityPxPerSec) { }
-        /**
-         * A page sunk under a held border ({@link PageSink}) is drawn at {@code scale} about its
-         * centre; 1 once it is back up. The terminal's frame line is drawn outside its page and
-         * has to follow by hand.
-         */
-        default void onPageSinkChanged(@NonNull PaneWallPage page, float scale) { }
-        /**
-         * A page tipped, or its dim changed, on a frame the wall did not otherwise report; see
-         * {@link PaneWallLayout.Listener#onPagePoseChanged}. The wall's own pages have re-aimed
-         * their glass already; the terminal's slabs are the host's.
-         */
-        default void onPagePoseChanged() { }
     }
 
     /** Saved-instance-state key for the half the wall rested in ({@link WallRow#HALF_HOME}…). */
@@ -185,6 +70,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     @NonNull private final PaneWallLayout mWall;
     @NonNull private final Host mHost;
+    /** The wall's needs-only reads; {@link WallFacts#NONE} until the constructor or {@link #setFacts}. */
+    @NonNull private WallFacts mFacts = WallFacts.NONE;
+    @NonNull private WallKeyboardSwipe mKeyboardSwipe = WallKeyboardSwipe.NONE;
+    @NonNull private WallStatusFold mStatusFold = WallStatusFold.NONE;
+    /** The wall's pose, written only here. */
+    @NonNull private final WallPose mPose = new WallPose();
+    /** Copy-on-write, so telling them allocates nothing. */
+    @NonNull private WallPose.Reader[] mPoseReaders = new WallPose.Reader[0];
     @Nullable private WidgetPaneFrame mWidgetsPage;
     @Nullable private com.termux.app.x11.X11PaneFrame mDisplayWindow;
     /** The Assistant page's one view while the wall holds the page. */
@@ -255,11 +148,51 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private boolean mHasDisplayPage;
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
+        this(wall, host, WallFacts.NONE);
+    }
+
+    /**
+     * The facts come with the constructor: it reads them on the way up, before a setter could
+     * hand them over.
+     */
+    public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host,
+                              @NonNull WallFacts facts) {
         mWall = wall;
         mHost = host;
+        mFacts = facts;
         mWall.setListener(this);
-        mWall.setReducedMotion(host.reducedMotion());
+        mWall.setReducedMotion(facts.reducedMotion());
         refreshPages();
+    }
+
+    /** Replace the needs-only reads the constructor was given. */
+    public void setFacts(@Nullable WallFacts facts) {
+        mFacts = facts == null ? WallFacts.NONE : facts;
+    }
+
+    /** The keyboard swipe's seam. */
+    public void setKeyboardSwipe(@Nullable WallKeyboardSwipe swipe) {
+        mKeyboardSwipe = swipe == null ? WallKeyboardSwipe.NONE : swipe;
+    }
+
+    /** The status bar fold's seam. */
+    public void setStatusFold(@Nullable WallStatusFold fold) {
+        mStatusFold = fold == null ? WallStatusFold.NONE : fold;
+    }
+
+    /** The wall's pose; written only by this controller. */
+    @NonNull public WallPose pose() { return mPose; }
+
+    /** Hear every change of the pose, on the same call the wall made it. */
+    public void addPoseReader(@NonNull WallPose.Reader reader) {
+        WallPose.Reader[] grown = java.util.Arrays.copyOf(mPoseReaders, mPoseReaders.length + 1);
+        grown[grown.length - 1] = reader;
+        mPoseReaders = grown;
+    }
+
+    private void tellPoseReaders(int changed) {
+        WallPose.Reader[] readers = mPoseReaders;
+        for (int i = 0; i < readers.length; i++) readers[i].onWallPose(mPose, changed);
     }
 
     /**
@@ -334,7 +267,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             for (WallPages.Page page : mKnownPages.pages()) {
                 if (page.kind == WallPages.PageKind.TERMINAL) { id = page.id; break; }
             }
-        } else if (mHost.useAs().rowPages().contains(PaneWallPage.TERMINAL)) {
+        } else if (mFacts.useAs().rowPages().contains(PaneWallPage.TERMINAL)) {
             id = PaneWallLayout.kindPageId(PaneWallPage.TERMINAL);
         }
         if (mPages == null || mTerminalStops == null) id = NO_ID;
@@ -352,7 +285,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             for (WallPages.Page page : mKnownPages.pages()) {
                 if (page.kind == WallPages.PageKind.DISPLAY) ids.add(page.id);
             }
-        } else if (mHost.useAs().rowPages().contains(PaneWallPage.DISPLAY)) {
+        } else if (mFacts.useAs().rowPages().contains(PaneWallPage.DISPLAY)) {
             // A row laid out from the kinds alone holds one Display cell under the kind's own id.
             ids.add(PaneWallLayout.kindPageId(PaneWallPage.DISPLAY));
         }
@@ -398,7 +331,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         java.util.List<Integer> homes = new java.util.ArrayList<>();
         if (mKnownPages != null) {
             for (WallPages.Page home : mKnownPages.homePages()) homes.add(home.id);
-        } else if (mHost.useAs().rowPages().contains(PaneWallPage.WIDGETS)) {
+        } else if (mFacts.useAs().rowPages().contains(PaneWallPage.WIDGETS)) {
             homes.add(PaneWallLayout.kindPageId(PaneWallPage.WIDGETS));
         }
         java.util.Iterator<java.util.Map.Entry<Integer, com.termux.app.page.Page>> it =
@@ -450,12 +383,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * on it hands the wall to the page on its left, which is bound and shown where it stands.
      */
     public void refreshPages() {
-        mWall.setReducedMotion(mHost.reducedMotion());
-        boolean hasWindow = mHost.hasWindow();
+        mWall.setReducedMotion(mFacts.reducedMotion());
+        boolean hasWindow = mFacts.hasWindow();
         // A window opened on a wall whose Terminal page was removed: the page comes back after
         // Home and the wall lands on it. Every way a terminal opens reaches here, as the row
         // changes; the store's change reads the pages again.
-        if (TerminalPageReturn.needed(mHost.wallPages(), mHost.terminalWindowOpen())) {
+        if (TerminalPageReturn.needed(mFacts.wallPages(), mFacts.terminalWindowOpen())) {
             mWorkspacePending = true;
             if (!mHost.restoreTerminalPage()) mWorkspacePending = false;
         }
@@ -504,8 +437,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     @NonNull
     private java.util.List<PaneWallLayout.Cell> cells(boolean hasWindow) {
-        boolean homeShown = mHost.useAs() == UseAs.HOME;
-        WallPages pages = mHost.wallPages();
+        boolean homeShown = mFacts.useAs() == UseAs.HOME;
+        WallPages pages = mFacts.wallPages();
         java.util.List<PaneWallLayout.Cell> out = new java.util.ArrayList<>();
         boolean hasHome = false;
         boolean hasTerminal = false;
@@ -531,7 +464,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             mHasDisplayPage = false;
             out.clear();
             // The Terminal page is on the row whether or not it has a window.
-            for (PaneWallPage kind : mHost.useAs().rowPages()) {
+            for (PaneWallPage kind : mFacts.useAs().rowPages()) {
                 out.add(new PaneWallLayout.Cell(PaneWallLayout.kindPageId(kind), kind, null));
             }
             return out;
@@ -566,7 +499,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
             return;
         }
         if (mAssistantView == null) {
-            com.termux.app.page.Page assistant = mHost.assistantPageHost().createPage(mWall.getContext(),
+            com.termux.app.page.Page assistant = mFacts.assistantPageHost().createPage(mWall.getContext(),
                 mPages == null ? com.termux.app.page.PageHost.NONE : mPages.host());
             View view = assistant.view();
             mAssistantPage = assistant;
@@ -885,7 +818,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * The Back chain's tail (ADR 0030 section 3).
      */
     public boolean goToHomePageOne(boolean animate) {
-        if (!mHost.useAs().showsHomePage()) return false;
+        if (!mFacts.useAs().showsHomePage()) return false;
         int index = homeIndexOf(mWall.currentPageId());
         if (index < 0 && mWall.currentPage() == PaneWallPage.WIDGETS) {
             index = innerIndex(PaneWallPage.WIDGETS);
@@ -1302,7 +1235,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * landing. A cold start or a restored state waiting for its windows starts none.
      */
     private void startShellOnLanding() {
-        if (mLandingShellStarted || mWorkspacePending || mHost.hasWindow()
+        if (mLandingShellStarted || mWorkspacePending || mFacts.hasWindow()
             || !mHost.canStartWorkspace()) {
             return;
         }
@@ -1328,11 +1261,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public void goHome(boolean animate) {
         // Edit pages set a Display page as home: the press lands there (A3b), and the landing
         // starts the display.
-        int displayHome = DisplayPagePolicy.homeDisplayPage(mHost.wallPages());
+        int displayHome = DisplayPagePolicy.homeDisplayPage(mFacts.wallPages());
         if (displayHome >= 0 && goToDisplayPage(displayHome, animate)) return;
         // Edit pages set the Assistant page as home: the press and the cold start land on it.
         if (homeIsAssistantPage() && goToAssistantPage(animate)) return;
-        if (!mHost.useAs().showsHomePage()) {
+        if (!mFacts.useAs().showsHomePage()) {
             // Terminal only: the home press lands on the Workspace.
             goToWorkspace(animate);
             return;
@@ -1349,13 +1282,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     private boolean homeIsAssistantPage() {
-        WallPages pages = mHost.wallPages();
+        WallPages pages = mFacts.wallPages();
         WallPages.Page home = pages == null ? null : pages.home();
         return home != null && home.kind == WallPages.PageKind.ASSISTANT;
     }
 
     private boolean homeIsTerminalPage() {
-        WallPages pages = mHost.wallPages();
+        WallPages pages = mFacts.wallPages();
         WallPages.Page home = pages == null ? null : pages.home();
         return home != null && home.kind == WallPages.PageKind.TERMINAL;
     }
@@ -1365,7 +1298,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * where the wall goes when the last window closes under it.
      */
     public void goToLastHomePage(boolean animate) {
-        if (!mHost.useAs().showsHomePage()) {
+        if (!mFacts.useAs().showsHomePage()) {
             goTo(PaneWallPage.TERMINAL, animate);
             return;
         }
@@ -1396,7 +1329,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      * press's page.
      */
     public void landOnColdStart(@Nullable String startIn) {
-        if (WallRow.coldStart(mHost.useAs().startIn(startIn)) == PaneWallPage.TERMINAL) {
+        if (WallRow.coldStart(mFacts.useAs().startIn(startIn)) == PaneWallPage.TERMINAL) {
             landInWorkspace();
         } else {
             goHome(false);
@@ -1406,7 +1339,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     private void landInWorkspace() {
         // A cold start or a restored state is not a landing: with no window yet the wall waits on
         // the Terminal page's card for its windows, and starts no shell of its own.
-        if (!mHost.hasWindow()) mWorkspacePending = true;
+        if (!mFacts.hasWindow()) mWorkspacePending = true;
         if (has(PaneWallPage.TERMINAL)) mWall.goTo(PaneWallPage.TERMINAL, false);
     }
 
@@ -1574,7 +1507,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     public boolean isBodySwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
         // Each side asked only for its own page, so a terminal is never asked about a touch
         // on the Assistant page.
-        boolean terminal = page == PaneWallPage.TERMINAL && mHost.bodySwipePagesWall(rawX, rawY);
+        boolean terminal = page == PaneWallPage.TERMINAL && mFacts.bodySwipePagesWall(rawX, rawY);
         boolean assistant = page == PaneWallPage.ASSISTANT
             && mAssistantView instanceof com.termux.app.assistant.AssistantPageView
             && ((com.termux.app.assistant.AssistantPageView) mAssistantView)
@@ -1599,7 +1532,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     @Override
     public boolean isSeamSwipePaging(@NonNull PaneWallPage page, float rawX, float rawY) {
-        return page == PaneWallPage.TERMINAL && mHost.seamSwipePagesWall(rawX, rawY);
+        return page == PaneWallPage.TERMINAL && mFacts.seamSwipePagesWall(rawX, rawY);
     }
 
     @Override
@@ -1610,7 +1543,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         }
         reaimPages();
         syncOutlineAlpha(offsetPx);
-        mHost.onWallOffsetChanged(offsetPx);
+        mPose.setOffsetPx(offsetPx);
+        tellPoseReaders(WallPose.OFFSET);
     }
 
     /**
@@ -1635,74 +1569,77 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         float rims = PaneWallPolicy.terminalRimAlpha(alpha, mWall.terminalPageAlpha());
         if (rims == mTerminalRimAlpha) return;
         mTerminalRimAlpha = rims;
-        mHost.onWallOutlineAlphaChanged(rims);
+        mPose.setTerminalRimAlpha(rims);
+        tellPoseReaders(WallPose.RIMS);
     }
 
     @Override
     public void onTerminalOffScreenChanged(boolean offScreen) {
-        mHost.onTerminalOffScreenChanged(offScreen);
+        mPose.setTerminalOffScreen(offScreen);
+        tellPoseReaders(WallPose.OFF_SCREEN);
     }
 
     @Override
     public boolean isBorderKeyboardSwipeEnabled() {
-        return mHost.isBorderKeyboardSwipeEnabled();
+        return mKeyboardSwipe.isEnabled();
     }
 
     @Override
     public void onBorderKeyboardSwipe(boolean open) {
-        mHost.onBorderKeyboardSwipe(open);
+        mKeyboardSwipe.onSwipe(open);
     }
 
     @Override
     public int onKeyboardRevealBegin(boolean opening) {
-        return mHost.onKeyboardRevealBegin(opening);
+        return mKeyboardSwipe.onRevealBegin(opening);
     }
 
     @Override
     public void onKeyboardRevealProgress(float reveal) {
-        mHost.onKeyboardRevealProgress(reveal);
+        mKeyboardSwipe.onRevealProgress(reveal);
     }
 
     @Override
     public void onKeyboardRevealEnd(boolean open) {
-        mHost.onKeyboardRevealEnd(open);
+        mKeyboardSwipe.onRevealEnd(open);
     }
 
     @Override
     public boolean isBorderStatusSwipeEnabled() {
-        return mHost.isBorderStatusSwipeEnabled();
+        return mStatusFold.isEnabled();
     }
 
     @Override
     public void onBorderStatusSwipe(boolean expand) {
-        mHost.onBorderStatusSwipe(expand);
+        mStatusFold.onSwipe(expand);
     }
 
     @Override
     public int onStatusFoldBegin(boolean expanding) {
-        return mHost.onStatusFoldBegin(expanding);
+        return mStatusFold.onFoldBegin(expanding);
     }
 
     @Override
     public void onStatusFoldProgress(float towardOpenPx) {
-        mHost.onStatusFoldProgress(towardOpenPx);
+        mStatusFold.onFoldProgress(towardOpenPx);
     }
 
     @Override
     public void onStatusFoldEnd(boolean expanded, float towardOpenVelocityPxPerSec) {
-        mHost.onStatusFoldEnd(expanded, towardOpenVelocityPxPerSec);
+        mStatusFold.onFoldEnd(expanded, towardOpenVelocityPxPerSec);
     }
 
     @Override
     public void onPageSinkChanged(@NonNull PaneWallPage page, float scale) {
         reaimPages();
-        mHost.onPageSinkChanged(page, scale);
+        if (page != PaneWallPage.TERMINAL) return;
+        mPose.setTerminalSinkScale(scale);
+        tellPoseReaders(WallPose.SINK);
     }
 
     @Override
     public void onPagePoseChanged() {
         reaimPages();
-        mHost.onPagePoseChanged();
     }
 
     /**
@@ -1719,6 +1656,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // Every page, the display window too: its picture is a SurfaceView a rotation leaves flat,
         // so the wall tips it only while a still copy stands in for the surface (SurfacePage), and
         // slides it flat until then.
-        return mHost.isPlankTiltEnabled();
+        return mFacts.isPlankTiltEnabled();
     }
 }

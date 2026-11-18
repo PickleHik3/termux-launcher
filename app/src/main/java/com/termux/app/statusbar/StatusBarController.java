@@ -609,6 +609,37 @@ public final class StatusBarController {
         return mStatusBarFoldDragging;
     }
 
+    /**
+     * The top border's swipe drives the bar's own fold: the drag the bar takes across itself, and
+     * the landing its release runs, from the other side of the line.
+     */
+    private final com.termux.app.wall.WallStatusFold mWallStatusFold =
+        new com.termux.app.wall.WallStatusFold() {
+            @Override public boolean isEnabled() {
+                return isBorderStatusSwipeAvailable();
+            }
+            @Override public void onSwipe(boolean expand) {
+                if (isBorderStatusSwipeAvailable()) setTopStatusBarCollapsed(!expand, true);
+            }
+            @Override public int onFoldBegin(boolean expanding) {
+                return beginBorderStatusFold(expanding);
+            }
+            @Override public void onFoldProgress(float towardOpenPx) {
+                if (isStatusBarFoldDragging()) dragTopStatusBar(towardOpenPx);
+            }
+            @Override public void onFoldEnd(boolean expanded, float towardOpenVelocityPxPerSec) {
+                // Whoever took the fold over since has landed it; otherwise the landing is
+                // this release's, and it returns the lease the drag took.
+                if (!isStatusBarFoldDragging()) return;
+                setTopStatusBarCollapsed(!expanded, true, towardOpenVelocityPxPerSec);
+            }
+        };
+
+    /** The status bar as the wall's fold seam. */
+    @NonNull public com.termux.app.wall.WallStatusFold wallStatusFold() {
+        return mWallStatusFold;
+    }
+
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mStatusBarSurfaceOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
 

@@ -36,7 +36,8 @@ import android.app.Application;
 public class PaneWallControllerTest {
 
     /** A host with a number of Home pages and windows, each with one in front. */
-    private static final class Host implements PaneWallController.Host, WallHome, WallDisplay {
+    private static final class Host implements PaneWallController.Host, WallFacts, WallHome, WallDisplay,
+            WallPose.Reader {
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -101,8 +102,8 @@ public class PaneWallControllerTest {
             steppedFrom = fromPx;
             current += steps;
         }
-        @Override public void onTerminalOffScreenChanged(boolean offScreen) {
-            terminalOffScreen = offScreen;
+        @Override public void onWallPose(WallPose pose, int changed) {
+            if ((changed & WallPose.OFF_SCREEN) != 0) terminalOffScreen = pose.terminalOffScreen();
         }
     }
 
@@ -126,8 +127,9 @@ public class PaneWallControllerTest {
         View widgets = new FrameLayout(activity);
         layout.addView(widgets);
         layout.addView(terminal);
-        PaneWallController made = new PaneWallController(layout, withHost);
+        PaneWallController made = new PaneWallController(layout, withHost, withHost);
         made.setHome(withHost);
+        made.addPoseReader(withHost);
         made.setDisplay(withHost);
         made.attachTerminalPage(terminal);
         layout.setPageView(PaneWallPage.WIDGETS, widgets);
@@ -450,7 +452,7 @@ public class PaneWallControllerTest {
         PaneWallLayout bare = new PaneWallLayout(activity);
         View terminal = new FrameLayout(activity);
         bare.addView(terminal);
-        PaneWallController built = new PaneWallController(bare, new Host());
+        PaneWallController built = new PaneWallController(bare, new Host(), new Host());
         built.attachTerminalPage(terminal);
         assertFalse(built.hasWidgetsPage());
         assertNull(built.displayWindow());
@@ -583,8 +585,9 @@ public class PaneWallControllerTest {
         PaneWallLayout layout = new PaneWallLayout(activity);
         View terminal = new FrameLayout(activity);
         layout.addView(terminal);
-        PaneWallController made = new PaneWallController(layout, withHost);
+        PaneWallController made = new PaneWallController(layout, withHost, withHost);
         made.setHome(withHost);
+        made.addPoseReader(withHost);
         made.setDisplay(withHost);
         made.attachTerminalPage(terminal);
         made.attachWidgetsPage(LayoutInflater.from(activity));

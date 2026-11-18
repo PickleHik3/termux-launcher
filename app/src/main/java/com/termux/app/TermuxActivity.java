@@ -25851,6 +25851,78 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         finishKeyboardSwipeTravel(mKeyboardSwipeFromOpen);
     }
 
+    /** The wall moved ({@link com.termux.app.wall.WallPose#OFFSET}): the chrome travels with it. */
+    private void onWallOffsetChanged(float offsetPx) {
+        // The wall moving again reads the settled state: a landing still waiting
+        // for its post lands first. The offset coming back to rest on the frame the
+        // wall settled is not that: its landed frame draws the chrome at the end of
+        // its travel (progress 1, written by the travel below), and the landing
+        // follows its post (LandedFrameSettle), outside this layout pass.
+        // Called while the wall controller is still being built: null until then.
+        com.termux.app.wall.PaneWallLayout movingWall =
+            mPaneWallController != null ? mPaneWallController.wall() : null;
+        if (offsetPx != 0f || (movingWall != null && movingWall.isMoving())) {
+            flushLandedFrameSettle();
+        }
+        Trace.beginSection("Wall.offsetChanged");
+        try {
+            onWallOffsetChangedTraced(offsetPx);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void onWallOffsetChangedTraced(float offsetPx) {
+        // A perfetto counter beside the stack's (applyAccessoryStackTranslation), so
+        // a trace shows whether the chrome lands with the wall or after it.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+            Trace.setCounter("Wall.offsetPx", Math.round(offsetPx));
+        Trace.beginSection("Wall.barOffset");
+        syncPlaceBarOffset(offsetPx);
+        syncGroundStrip(offsetPx);
+        Trace.endSection();
+        // Off its rest on the Workspace, the canvas reaches up under the bar so Home's
+        // page stands at its own top from this frame on (PageTopInsets).
+        syncCanvasTopReach();
+        // The terminal's own frame line stays put while its page leaves: it fades.
+        syncTerminalFrameLineTravel();
+        // The dock, the keyboard and the status bar's content travel with the wall
+        // between the two places' states, as transforms only.
+        mCrossingController.syncChromeTravel(offsetPx);
+        // The wallpaper pans with the wall, and every glass surface follows it. The
+        // slabs, on the terminal's page or any other, re-aim in the frame the wall
+        // moved in whether or not the wallpaper panned: the glass service asks each
+        // of them at the commit (SlabAim), so nothing is pushed to them here.
+        Trace.beginSection("Wall.parallax");
+        syncWallpaperParallax(true);
+        Trace.endSection();
+        // The wall moved at all, so the terminal may be sliding back into the frame:
+        // any pane whose screen changed while it was away is drawn now, before the
+        // first frame of the slide, rather than one stale frame later. The panes'
+        // borders are re-dressed when the page comes on screen
+        // (onTerminalOffScreenChanged), not per frame; per frame only the
+        // acknowledgement is taken, which repaints them itself when it lands.
+        Trace.beginSection("Wall.terminalVisible");
+        noteTerminalPlaceMayBeVisibleWhileMoving();
+        Trace.endSection();
+    }
+
+    /** The Terminal page sank or rose under a held border ({@link com.termux.app.wall.WallPose#SINK}). */
+    private void onTerminalSinkChanged(float scale) {
+        // The terminal's frame line is laid over the wall, not carried by the page
+        // (syncTerminalFrameLineTravel): it sinks with the page by hand. Its margins
+        // are the pane host's less the stroke's air on every side, so the two share
+        // a centre and one scale about it keeps the line where it frames the page.
+        // The slabs' wallpaper stays on the screen while their page sinks under it:
+        // the glass service re-aims them in the frame the sink draws in.
+        View borderView = hotView(R.id.terminal_border_overlay);
+        if (borderView == null) return;
+        borderView.setPivotX(borderView.getWidth() / 2f);
+        borderView.setPivotY(borderView.getHeight() / 2f);
+        borderView.setScaleX(scale);
+        borderView.setScaleY(scale);
+    }
+
     /**
      * Wire the pane wall around the terminal's pane host. The terminal is its middle page and is
      * handed over untouched; the other places register themselves as the install gains them.
@@ -25864,24 +25936,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? null : mPaneWallController.displayWindow();
             if (frame != null) frame.forgetPagePicture(picture);
         });
+        com.termux.app.wall.WallFacts wallFacts = new com.termux.app.wall.WallFacts() {
+            @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+            // Home is always on the row; the Workspace while there is a window to show.
+            @Override public boolean hasWindow() { return isWorkspaceOnRow(); }
+            @Override public boolean terminalWindowOpen() {
+                return mTermuxService != null && terminalWindowTotal() > 0;
+            }
+            @NonNull @Override public com.termux.app.wall.UseAs useAs() {
+                return TermuxActivity.this.useAs();
+            }
+            // The wall lays out in the pages' order (ADR 0015, A2a).
+            @Override public com.termux.app.wall.WallPages wallPages() {
+                return TermuxActivity.this.wallPages();
+            }
+            // The plank (PlankTilt) is a Fancier Glass motion: the look as the last apply
+            // resolved it, with nothing telling the phone to hold still.
+            @Override public boolean isPlankTiltEnabled() {
+                return mFancierGlassLook != null
+                    && !isReducedMotionEnabled() && !isLazyModeEnabled();
+            }
+            // Settings › Terminal › Windows & panes, then the pane under the finger.
+            @Override public boolean bodySwipePagesWall(float rawX, float rawY) {
+                return mPreferences != null && mPreferences.isTerminalBodySwipeEnabled()
+                    && mPaneController != null
+                    && mPaneController.bodySwipePagesWall(rawX, rawY);
+            }
+            // The seam band's last row is the bottom border's, so only the pane is asked.
+            @Override public boolean seamSwipePagesWall(float rawX, float rawY) {
+                return mPaneController != null
+                    && mPaneController.bodySwipePagesWall(rawX, rawY);
+            }
+        };
         mPaneWallController = new com.termux.app.wall.PaneWallController(
             (com.termux.app.wall.PaneWallLayout) wall,
             new com.termux.app.wall.PaneWallController.Host() {
-                @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
-                // Home is always on the row; the Workspace while there is a window to show.
-                @Override public boolean hasWindow() { return isWorkspaceOnRow(); }
-                @Override public boolean terminalWindowOpen() {
-                    return mTermuxService != null && terminalWindowTotal() > 0;
-                }
                 @Override public boolean restoreTerminalPage() {
                     com.termux.app.wall.WallPages.Result back = wallPagesStore().edit(
                         com.termux.app.wall.TerminalPageReturn::restore);
                     if (!back.ok() || back.page == null) return false;
                     noteTerminalPageId(back.page.id);
                     return true;
-                }
-                @NonNull @Override public com.termux.app.wall.UseAs useAs() {
-                    return TermuxActivity.this.useAs();
                 }
                 // Home's swipe past its last page into an empty Workspace (ADR 0008, amended
                 // 2026-10-19): the same fresh shell the Terminal entry starts there.
@@ -25899,10 +25994,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public int innerIndex(@NonNull com.termux.app.wall.PaneWallPage page) {
                     return wallInnerIndex(page);
-                }
-                // The wall lays out in the pages' order (ADR 0015, A2a).
-                @Override public com.termux.app.wall.WallPages wallPages() {
-                    return TermuxActivity.this.wallPages();
                 }
                 @Override public void showInnerPage(@NonNull com.termux.app.wall.PaneWallPage page,
                                                     int index) {
@@ -25934,89 +26025,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         dropTerminalDepartureSnapshot();
                     }
                 }
-                // The plank (PlankTilt) is a Fancier Glass motion: the look as the last apply
-                // resolved it, with nothing telling the phone to hold still.
-                @Override public boolean isPlankTiltEnabled() {
-                    return mFancierGlassLook != null
-                        && !isReducedMotionEnabled() && !isLazyModeEnabled();
-                }
-                @Override public void onBorderKeyboardSwipe(boolean open) {
-                    applyBorderKeyboardSwipe(open);
-                }
-                // On Home the swipe is the palette gesture: off in Settings, it is armed only
-                // to put away a keyboard that is up.
-                @Override public boolean isBorderKeyboardSwipeEnabled() {
-                    return !isWidgetsPageShowing() || mSheets.isHomePaletteGestureEnabled()
-                        || committedKeyboardVisible();
-                }
-                // Settings › Terminal › Windows & panes, then the pane under the finger.
-                @Override public boolean bodySwipePagesWall(float rawX, float rawY) {
-                    return mPreferences != null && mPreferences.isTerminalBodySwipeEnabled()
-                        && mPaneController != null
-                        && mPaneController.bodySwipePagesWall(rawX, rawY);
-                }
-                // The seam band's last row is the bottom border's, so only the pane is asked.
-                @Override public boolean seamSwipePagesWall(float rawX, float rawY) {
-                    return mPaneController != null
-                        && mPaneController.bodySwipePagesWall(rawX, rawY);
-                }
-                // The keyboard swipe tied to the finger: the reveal the wall's slide already
-                // draws the keyboard through, driven by the finger instead of the wall.
-                @Override public int onKeyboardRevealBegin(boolean opening) {
-                    return beginKeyboardSwipeTravel(opening);
-                }
-                @Override public void onKeyboardRevealProgress(float reveal) {
-                    setKeyboardSwipeTravel(reveal);
-                    // The Home pill rides the same reveal (draw-only, allocation-free).
-                    com.termux.app.terminal.extrakeys.HomePillLayer pillLayer = mHomePillLayer;
-                    if (pillLayer != null && mKeyboardSwipeTravel) {
-                        pillLayer.keyboardDock().onProgress(reveal);
-                    }
-                }
-                @Override public void onKeyboardRevealEnd(boolean open) {
-                    finishKeyboardSwipeTravel(open);
-                }
-                // The top border's swipe drives the bar's own fold: the drag the bar takes
-                // across itself, and the landing its release runs, from the other side of the line.
-                @Override public boolean isBorderStatusSwipeEnabled() {
-                    return mStatusBar.isBorderStatusSwipeAvailable();
-                }
-                @Override public void onBorderStatusSwipe(boolean expand) {
-                    if (mStatusBar.isBorderStatusSwipeAvailable()) mStatusBar.setTopStatusBarCollapsed(!expand, true);
-                }
-                @Override public int onStatusFoldBegin(boolean expanding) {
-                    return mStatusBar.beginBorderStatusFold(expanding);
-                }
-                @Override public void onStatusFoldProgress(float towardOpenPx) {
-                    if (mStatusBar.isStatusBarFoldDragging()) mStatusBar.dragTopStatusBar(towardOpenPx);
-                }
-                @Override public void onStatusFoldEnd(boolean expanded,
-                                                      float towardOpenVelocityPxPerSec) {
-                    // Whoever took the fold over since has landed it; otherwise the landing is
-                    // this release's, and it returns the lease the drag took.
-                    if (!mStatusBar.isStatusBarFoldDragging()) return;
-                    mStatusBar.setTopStatusBarCollapsed(!expanded, true, towardOpenVelocityPxPerSec);
-                }
-                @Override public void onPageSinkChanged(
-                        @NonNull com.termux.app.wall.PaneWallPage page, float scale) {
-                    // The terminal's frame line is laid over the wall, not carried by the page
-                    // (syncTerminalFrameLineTravel): it sinks with the page by hand. Its margins
-                    // are the pane host's less the stroke's air on every side, so the two share
-                    // a centre and one scale about it keeps the line where it frames the page.
-                    if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
-                    // The slabs' wallpaper stays on the screen while their page sinks under it:
-                    // the glass service re-aims them in the frame the sink draws in.
-                    View borderView = hotView(R.id.terminal_border_overlay);
-                    if (borderView == null) return;
-                    borderView.setPivotX(borderView.getWidth() / 2f);
-                    borderView.setPivotY(borderView.getHeight() / 2f);
-                    borderView.setScaleX(scale);
-                    borderView.setScaleY(scale);
-                }
-                @Override public void onPagePoseChanged() {
-                    // Nothing to push: the slabs follow their page's pose through the glass
-                    // service's commit (SlabAim).
-                }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
                     if (MotionLog.enabled) {
@@ -26046,80 +26054,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     flushLandedFrameSettle();
                     runWallPageSettle(page);
-                }
-                @Override public void onWallOffsetChanged(float offsetPx) {
-                    // The wall moving again reads the settled state: a landing still waiting
-                    // for its post lands first. The offset coming back to rest on the frame the
-                    // wall settled is not that: its landed frame draws the chrome at the end of
-                    // its travel (progress 1, written by the travel below), and the landing
-                    // follows its post (LandedFrameSettle), outside this layout pass.
-                    // Called while the wall controller is still being built: null until then.
-                    com.termux.app.wall.PaneWallLayout movingWall =
-                        mPaneWallController != null ? mPaneWallController.wall() : null;
-                    if (offsetPx != 0f || (movingWall != null && movingWall.isMoving())) {
-                        flushLandedFrameSettle();
-                    }
-                    Trace.beginSection("Wall.offsetChanged");
-                    try {
-                        onWallOffsetChangedTraced(offsetPx);
-                    } finally {
-                        Trace.endSection();
-                    }
-                }
-                private void onWallOffsetChangedTraced(float offsetPx) {
-                    // A perfetto counter beside the stack's (applyAccessoryStackTranslation), so
-                    // a trace shows whether the chrome lands with the wall or after it.
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                        Trace.setCounter("Wall.offsetPx", Math.round(offsetPx));
-                    Trace.beginSection("Wall.barOffset");
-                    syncPlaceBarOffset(offsetPx);
-                    syncGroundStrip(offsetPx);
-                    Trace.endSection();
-                    // Off its rest on the Workspace, the canvas reaches up under the bar so Home's
-                    // page stands at its own top from this frame on (PageTopInsets).
-                    syncCanvasTopReach();
-                    // The terminal's own frame line stays put while its page leaves: it fades.
-                    syncTerminalFrameLineTravel();
-                    // The dock, the keyboard and the status bar's content travel with the wall
-                    // between the two places' states, as transforms only.
-                    mCrossingController.syncChromeTravel(offsetPx);
-                    // The wallpaper pans with the wall, and every glass surface follows it. The
-                    // slabs, on the terminal's page or any other, re-aim in the frame the wall
-                    // moved in whether or not the wallpaper panned: the glass service asks each
-                    // of them at the commit (SlabAim), so nothing is pushed to them here.
-                    Trace.beginSection("Wall.parallax");
-                    syncWallpaperParallax(true);
-                    Trace.endSection();
-                    // The wall moved at all, so the terminal may be sliding back into the frame:
-                    // any pane whose screen changed while it was away is drawn now, before the
-                    // first frame of the slide, rather than one stale frame later. The panes'
-                    // borders are re-dressed when the page comes on screen
-                    // (onTerminalOffScreenChanged), not per frame; per frame only the
-                    // acknowledgement is taken, which repaints them itself when it lands.
-                    Trace.beginSection("Wall.terminalVisible");
-                    noteTerminalPlaceMayBeVisibleWhileMoving();
-                    Trace.endSection();
-                }
-                @Override public void onTerminalOffScreenChanged(boolean offScreen) {
-                    // Every pane the terminal place holds, tiled and floating alike, has to hear
-                    // this: none of them go INVISIBLE with their page any more (PaneWallLayout,
-                    // 707920f7 and the alpha-based fix after it), so each one is told by hand to
-                    // pause what INVISIBLE used to pause for free.
-                    if (mPaneController == null) return;
-                    // The attention glow's endless pulse is one of those: held while away.
-                    mPaneController.setTerminalOffScreen(offScreen);
-                    for (com.termux.view.TerminalView view : mPaneController.getVisiblePaneViews()) {
-                        view.setWallPageOffScreen(offScreen);
-                    }
-                    // The one frame of a slide the borders are re-dressed in: the page's first
-                    // frame back on screen.
-                    if (!offScreen) mPaneController.onTerminalPlaceShown();
-                }
-                @Override public void onWallOutlineAlphaChanged(float alpha) {
-                    // The terminal page's outline is its panes' rims; they fade with the other
-                    // pages' so one edge shows while the wall moves, or with their own page while
-                    // the transition fades it (PaneWallPolicy.terminalRimAlpha).
-                    if (mPaneController != null) mPaneController.setRimTravelAlpha(alpha);
                 }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
@@ -26155,7 +26089,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
                     });
                 }
-            });
+            }, wallFacts);
+        mPaneWallController.setKeyboardSwipe(new com.termux.app.wall.WallKeyboardSwipe() {
+            @Override public void onSwipe(boolean open) {
+                applyBorderKeyboardSwipe(open);
+            }
+            // On Home the swipe is the palette gesture: off in Settings, it is armed only
+            // to put away a keyboard that is up.
+            @Override public boolean isEnabled() {
+                return !isWidgetsPageShowing() || mSheets.isHomePaletteGestureEnabled()
+                    || committedKeyboardVisible();
+            }
+            // The keyboard swipe tied to the finger: the reveal the wall's slide already
+            // draws the keyboard through, driven by the finger instead of the wall.
+            @Override public int onRevealBegin(boolean opening) {
+                return beginKeyboardSwipeTravel(opening);
+            }
+            @Override public void onRevealProgress(float reveal) {
+                setKeyboardSwipeTravel(reveal);
+                // The Home pill rides the same reveal (draw-only, allocation-free).
+                com.termux.app.terminal.extrakeys.HomePillLayer pillLayer = mHomePillLayer;
+                if (pillLayer != null && mKeyboardSwipeTravel) {
+                    pillLayer.keyboardDock().onProgress(reveal);
+                }
+            }
+            @Override public void onRevealEnd(boolean open) {
+                finishKeyboardSwipeTravel(open);
+            }
+        });
+        mPaneWallController.setStatusFold(mStatusBar.wallStatusFold());
+        // The wall's pose: the travel reads the offset and the sink, the terminal's panes the
+        // rims and whether their page is off screen.
+        mPaneWallController.addPoseReader((pose, changed) -> {
+            if ((changed & com.termux.app.wall.WallPose.OFFSET) != 0) {
+                onWallOffsetChanged(pose.offsetPx());
+            }
+            if ((changed & com.termux.app.wall.WallPose.SINK) != 0) {
+                onTerminalSinkChanged(pose.terminalSinkScale());
+            }
+            if ((changed & (com.termux.app.wall.WallPose.RIMS
+                | com.termux.app.wall.WallPose.OFF_SCREEN)) != 0 && mPaneController != null) {
+                mPaneController.onWallPose(pose, changed);
+            }
+        });
         // The chips rest a wall's width off on Home: a wall laid out at another width stands the
         // top stack's rest again (an offset change alone is not told of it).
         mPaneWallController.wall().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {

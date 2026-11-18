@@ -43,7 +43,7 @@ public class PageStillsTest {
     private static final int WIDTH = 1080;
     private static final int HEIGHT = 1800;
 
-    private static final class Host implements PaneWallController.Host, WallHome, WallDisplay {
+    private static final class Host implements PaneWallController.Host, WallFacts, WallHome, WallDisplay {
         @Override public int count() { return innerCount(PaneWallPage.WIDGETS); }
         @Override public int index() { return innerIndex(PaneWallPage.WIDGETS); }
         @Override public void show(int index) { showInnerPage(PaneWallPage.WIDGETS, index); }
@@ -109,7 +109,7 @@ public class PageStillsTest {
         layout.addView(widgets);
         layout.addView(terminal);
         layout.addView(display);
-        controller = new PaneWallController(layout, host);
+        controller = new PaneWallController(layout, host, host);
         controller.setHome(host);
         controller.setDisplay(host);
         controller.attachTerminalPage(terminal);

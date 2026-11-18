@@ -6314,6 +6314,29 @@ public class TerminalPaneController {
         applyAttentionHold();
     }
 
+    /**
+     * The wall's pose moved ({@link com.termux.app.wall.WallPose.Reader}): the terminal's rims
+     * fade with the slide, or with their own page while the transition fades it; and when the page
+     * parks off screen or returns, every pane it holds, tiled and floating alike, is told by hand
+     * (none go INVISIBLE with their page any more) to pause what INVISIBLE used to pause for free.
+     */
+    public void onWallPose(@NonNull com.termux.app.wall.WallPose pose, int changed) {
+        if ((changed & com.termux.app.wall.WallPose.RIMS) != 0) {
+            setRimTravelAlpha(pose.terminalRimAlpha());
+        }
+        if ((changed & com.termux.app.wall.WallPose.OFF_SCREEN) != 0) {
+            boolean offScreen = pose.terminalOffScreen();
+            // The attention glow's endless pulse is held while away.
+            setTerminalOffScreen(offScreen);
+            for (TerminalView view : getVisiblePaneViews()) {
+                view.setWallPageOffScreen(offScreen);
+            }
+            // The one frame of a slide the borders are re-dressed in: the page's first frame
+            // back on screen.
+            if (!offScreen) onTerminalPlaceShown();
+        }
+    }
+
     private void applyAttentionHold() {
         for (PaneContentFrame frame : mPaneFrames.values()) {
             android.graphics.drawable.Drawable foreground = frame.getForeground();
