@@ -1724,6 +1724,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mPaneWallController.widgetsPage();
             }
         };
+    /** The Display pages' one display view, and what they ask of this window. */
+    private final com.termux.app.x11.DisplayPages mDisplayPages =
+        new com.termux.app.x11.DisplayPages(new com.termux.app.x11.DisplayPageHost() {
+            @Nullable @Override public View displayView() {
+                com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+                    ? null : mPaneWallController.displayWindow();
+                if (frame == null) return null;
+                try {
+                    return frame.display();
+                } catch (IllegalStateException notInflated) {
+                    return null;
+                }
+            }
+            @Nullable @Override public com.termux.app.x11.DisplayPages.Link link() {
+                com.termux.app.x11.X11DisplayHostController controller = mDisplayServer.controller();
+                return controller == null ? null
+                    : com.termux.app.x11.DisplayPages.linkOf(controller);
+            }
+            @Override public boolean isRunning() { return mDisplayServer.isRunning(); }
+            @Nullable @Override public com.termux.app.page.PageKind committedKind() {
+                return mPages.committedKind();
+            }
+            @Override public boolean wallAtRest() {
+                return mPaneWallController == null || (!mPaneWallController.wall().isMoving()
+                    && mPaneWallController.wall().offsetPx() == 0f);
+            }
+            @Override public boolean isDisplayShowing() { return isDisplayWindowShowing(); }
+            @Override public boolean isLayerOpen() { return TermuxActivity.this.isLayerOpen(); }
+            @Override public boolean wantsKeyboardOnEnter() {
+                return TermuxActivity.this.wantsKeyboardOnEnter(
+                    com.termux.app.wall.PaneWallPage.DISPLAY);
+            }
+            @Override public void refreshEmptyState() { refreshDisplayEmptyStateReadiness(); }
+            @Override public void restoreTypingClaim() { restoreInAppKeyboardTypingClaim(); }
+            @Override public void syncKeyboardRoute() { syncDisplayKeyboardRoute(); }
+            @Override public void hideSystemKeyboard() { hideDisplaySystemKeyboard(); }
+            @Override public boolean handKeysToTerminal() { return returnKeysToTerminal(); }
+            @NonNull @Override public com.termux.app.x11.DisplayFrameContentPolicy.Content frameContent() {
+                return mFrameContent.content();
+            }
+            @Override public void lowerKeyboard() { lowerDisplayKeyboard(); }
+        });
     /** The dock's element in the glass registry. */
     private static final String DOCK_GLASS = "dock";
     /** The dock's glass kind moved: its backdrop is dressed again. */
@@ -2444,7 +2486,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // already rests on the Display place, and a display whose surface is not attached takes
         // no touch and misses every setting changed while we were away.
         if (mDisplayServer.controller() != null && isDisplayWindowShowing() && !mPaneWallController.wall().isMoving()) {
-            syncDisplayAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
+            mDisplayPages.attach();
         }
         // The default home can have been changed while we were stopped.
         mDefaultHomeApp = null;
@@ -15130,7 +15172,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mDisplayTouchpad != null) {
                 mDisplayTouchpad = null;
                 releaseDisplayTouchpadWait();
-                mDisplayTouchpadWaitRound = 0;
                 host.post(TermuxActivity.this::syncDisplayTouchpad);
             }
         }
@@ -15144,7 +15185,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAttachedInAppKeyboardView = null;
             mDisplayTouchpad = null;
             releaseDisplayTouchpadWait();
-            mDisplayTouchpadWaitRound = 0;
             mKeyboardGeometry.discardMeasuredHeight();
         }
 
@@ -26480,6 +26520,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Home pages register only now that their one view exists.
         mPaneWallController.setHomePageFactory(
             id -> new com.termux.app.launcher.home.HomePage(id, mHomePageHost));
+        mPaneWallController.setDisplayPageFactory(mDisplayPages::page);
         page.setHost(new com.termux.app.wall.WidgetPaneFrame.Host() {
             @Override public void showHelpOverlay() { TermuxActivity.this.showHelpOverlay(); }
             // Widgets take what the dock and the floats leave of Live blur's budget.
@@ -26620,18 +26661,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, animate);
     }
 
-    /** {@link #syncDisplayAttachment} is to leave the X view attached until the travel ends. */
-    private boolean mDeferDisplayDetach;
-    /** It did: the X view is still attached to a display window that is no longer in front. */
-    private boolean mDisplayDetachOwed;
-
-    /** The display's slide out is over: its X view lets go now, unless it came back in front. */
-    private void detachOwedDisplayView() {
-        if (!mDisplayDetachOwed) return;
-        mDisplayDetachOwed = false;
-        if (mDisplayServer.controller() != null && !isDisplayWindowShowing()) mDisplayServer.controller().detachView();
-    }
-
     /**
      * The window in front of the Workspace changed kind without the wall moving — the display
      * window came in front, or a terminal window took its place — so the place changed: what a
@@ -26650,6 +26679,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.PaneWallPage place = currentWallPlace();
         settlePlaceChrome(place);
         syncDisplayAttachment(place);
+        // No landing follows a change of window under a wall at rest: the view goes with it now.
+        if (place == com.termux.app.wall.PaneWallPage.DISPLAY) mDisplayPages.attach();
+        else mDisplayPages.leave();
         if (place == com.termux.app.wall.PaneWallPage.TERMINAL) noteTerminalPlaceMayBeVisible();
         // A display window left before its display came up goes, once the window that took its
         // place has arrived.
@@ -27281,7 +27313,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Whoever owns typing now — an open palette or sheet keeps its claim — not nobody.
         restoreInAppKeyboardTypingClaim();
         hideDisplaySystemKeyboard();
-        releaseDisplayFocus(mPaneWallController.displayWindow());
+        mDisplayPages.releaseFocus();
         mPaneWallController.detachDisplayWindow();
         syncDisplayEnvironment();
         syncDisplayKeyboardRoute();
@@ -27469,92 +27501,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The display's surface follows the page: attached while the display window is the one at
-     * rest, detached otherwise — a hidden page holds no screen-sized buffer, and the server keeps
-     * its clients either way. Called when the wall settles, and when a controller is built while
-     * the wall already rests on the page (the page's own "Turn on"), which no settle follows.
+     * The settle's part of the Display: the keys' row follows the place, and a display view kept
+     * attached through a slide off the Display pages lets go now. Attaching and letting go
+     * otherwise belong to the Display pages' front and leave ({@link com.termux.app.x11.DisplayPages}).
      */
     private void syncDisplayAttachment(@NonNull com.termux.app.wall.PaneWallPage page) {
         mSettledWallPage = page;
         refreshExtraKeySet(true);
-        com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
-            ? null : mPaneWallController.displayWindow();
-        // Off its window the display's view must neither keep the keys nor take them back.
-        if (page != com.termux.app.wall.PaneWallPage.DISPLAY) releaseDisplayFocus(display);
-        if (mDisplayServer.controller() == null || display == null) return;
-        if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
-            // The arrival itself: nothing about starting or stopping a display happened, but the
-            // message may be stale if a package landed in the prefix while the wall rested
-            // elsewhere.
-            refreshDisplayEmptyStateReadiness();
-            mDisplayDetachOwed = false;
-            com.termux.app.x11.DisplayViewFocus.admit(display.display());
-            mDisplayServer.controller().attachView(display.display());
-            display.display().requestFocus();
-            // A place that asked for the keyboard as it arrived asked for it itself, so the
-            // text-focus policy leaves that keyboard alone until it is put down again.
-            mDisplayServer.controller().onDisplayPlaceEntered(
-                wantsKeyboardOnEnter(com.termux.app.wall.PaneWallPage.DISPLAY));
-            // The in-app keyboard and the extra-keys row type into X while the page is showing;
-            // the terminal never sees those values, unless a layer open over it holds them.
-            restoreInAppKeyboardTypingClaim();
-            syncDisplayKeyboardRoute();
-        } else {
-            if (mDeferDisplayDetach) mDisplayDetachOwed = true;
-            else mDisplayServer.controller().detachView();
-            mDisplayServer.controller().onDisplayPlaceLeft();
-            restoreInAppKeyboardTypingClaim();
-            // The phone's keyboard belongs to the place it was raised on; it goes down with it,
-            // and the launcher's keyboard takes its suppression back for the terminal.
-            hideDisplaySystemKeyboard();
-            syncDisplayKeyboardRoute();
-        }
+        if (page != com.termux.app.wall.PaneWallPage.DISPLAY) mDisplayPages.detachIfOwed();
     }
 
     /**
-     * The display window left the screen or is going: the keys go back to the active terminal
-     * pane — quietly, so no system keyboard comes up for it — and the display's view stops being
-     * able to take them (DisplayViewFocus). Without it the palette and the terminal stay deaf
-     * after a display session until the app restarts.
+     * The keys go back to the active terminal pane, quietly, once: no retry. A key that then
+     * finds nothing holding the keys is delivered by the per-key safety net, which asks again.
+     * Nothing to do while an external text field takes input. True when the pane holds them.
      */
-    private void releaseDisplayFocus(@Nullable com.termux.app.x11.X11PaneFrame frame) {
-        if (frame == null) return;
-        com.termux.x11.LorieView view;
-        try {
-            view = frame.display();
-        } catch (IllegalStateException notInflated) {
-            return;
-        }
-        com.termux.app.x11.DisplayViewFocus.release(view,
-            focused -> focused instanceof TerminalView, this::returnKeysToTerminal);
+    private boolean returnKeysToTerminal() {
+        if (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive()) return false;
+        return handKeysToActivePane();
     }
-
-    /**
-     * The keys go back to the active terminal pane, quietly, and are checked to have landed: a
-     * focus request made while the display goes can come to nothing (the pane out of the window,
-     * or its page changing under it), and then nothing in the window holds the keys at all. Tried
-     * again after each of the next layouts until it lands, or until something that types — a
-     * terminal, a text field taking input — holds them.
-     */
-    private void returnKeysToTerminal() {
-        if (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive()) return;
-        if (handKeysToActivePane() || getWindow() == null || mKeysReturnPending) return;
-        mKeysReturnPending = true;
-        com.termux.app.x11.DisplayViewFocus.retryAfterLayout(getWindow().getDecorView(), 3,
-            () -> {
-                boolean done = (mInAppKeyboard != null && mInAppKeyboard.isExternalTextInputActive())
-                    || getCurrentFocus() instanceof TerminalView
-                    || isDisplayKeyHolderShowing()
-                    || handKeysToActivePane();
-                if (done) mKeysReturnPending = false;
-                return done;
-            },
-            // Out of tries: the safety net delivers each key and asks again with the next one.
-            () -> mKeysReturnPending = false);
-    }
-
-    /** A {@link #returnKeysToTerminal} retry waits for a layout; one at a time. */
-    private boolean mKeysReturnPending;
 
     /** One quiet focus request on the active pane; true when the pane really holds the keys. */
     private boolean handKeysToActivePane() {
@@ -28892,7 +28857,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Built while the display window is already in front at rest (its own "Turn on") — there
         // is no settle coming to attach the surface, so do it now.
         if (isDisplayWindowShowing() && !mPaneWallController.wall().isMoving()) {
-            syncDisplayAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
+            mDisplayPages.attach();
         }
     }
 
@@ -29366,9 +29331,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The keyboard layout the pad follows, held so a second attach does not stack another. */
     @Nullable private View.OnLayoutChangeListener mDisplayTouchpadFollower;
     /** Set while the pad is waiting out a keyboard layout before it is attached. */
-    @Nullable private DisplayTouchpadWait mDisplayTouchpadWait;
-    /** Layouts waited out in a row; the pad is attached anyway once it reaches the cap. */
-    private int mDisplayTouchpadWaitRound;
+    @Nullable private com.termux.app.window.FirstLayout.Handle mDisplayTouchpadWait;
+    /** The pad waited out one layout already: it is attached at the next ask, whatever it finds. */
+    private boolean mDisplayTouchpadWaited;
 
     /** Flip mouse mode; returns the new state. The mark at the end of the stats is the announcement. */
     boolean toggleMouseMode() {
@@ -29639,7 +29604,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!wanted) {
             releaseDisplayTouchpadWait();
-            mDisplayTouchpadWaitRound = 0;
             if (pad == null) return;
             final com.termux.app.x11.DisplayTouchpadView leaving = pad;
             mDisplayTouchpad = null;
@@ -29698,16 +29662,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // been asked to part wider has not reported the new one yet. Wait that layout out rather
         // than standing the pad over the whole frame, and putting the keys out, for a frame.
         if (keyboardView != null && (parting || !keyboardView.isLaidOut())
-            && mDisplayTouchpadWaitRound < MAX_DISPLAY_TOUCHPAD_WAITS) {
-            if (mDisplayTouchpadWait == null || !mDisplayTouchpadWait.follows(keyboardView)) {
-                releaseDisplayTouchpadWait();
-                mDisplayTouchpadWaitRound++;
-                mDisplayTouchpadWait = new DisplayTouchpadWait(keyboardView);
+            && !mDisplayTouchpadWaited) {
+            // One layout, once: the 160 ms backstop is the keyboard reveal gate's, for the same
+            // reason — a layout that never comes must not swallow the pad.
+            if (mDisplayTouchpadWait == null) {
+                mDisplayTouchpadWait = com.termux.app.window.FirstLayout.afterNextLayout(
+                    keyboardView, 160L, () -> {
+                        mDisplayTouchpadWait = null;
+                        mDisplayTouchpadWaited = true;
+                        syncDisplayTouchpad();
+                    });
             }
             return;
         }
         releaseDisplayTouchpadWait();
-        mDisplayTouchpadWaitRound = 0;
         if (pad.getParent() instanceof ViewGroup) ((ViewGroup) pad.getParent()).removeView(pad);
         Rect gap = splitKeyboardTouchpadGap(keyboardView);
         host.addView(pad, seatDisplayTouchpad(pad, keyboardView, gap));
@@ -29788,46 +29756,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /**
-     * How many keyboard layouts the pad waits out before it is attached anyway. The wait exists
-     * so the pad is never sized to a frame the keyboard is about to leave; a wait that never
-     * ends would be mouse mode with nothing to point on, which is worse than one wrong frame.
-     */
-    private static final int MAX_DISPLAY_TOUCHPAD_WAITS = 3;
-
-    /**
-     * One keyboard layout waited out before the touchpad is attached: the keyboard's first, or
-     * the one a widened parting has just asked for. The 160 ms backstop is the keyboard reveal
-     * gate's, for the same reason — a layout that never comes must not swallow the pad.
-     */
-    private final class DisplayTouchpadWait {
-
-        @NonNull private final View mKeyboardView;
-        @NonNull private final com.termux.app.window.FirstLayout.Handle mLayoutWait;
-
-        DisplayTouchpadWait(@NonNull View keyboardView) {
-            mKeyboardView = keyboardView;
-            mLayoutWait = com.termux.app.window.FirstLayout.afterNextLayout(keyboardView, 160L, this::onLaidOut);
-        }
-
-        boolean follows(@NonNull View keyboardView) {
-            return mKeyboardView == keyboardView;
-        }
-
-        private void onLaidOut() {
-            if (mDisplayTouchpadWait != this) return;
-            release();
-            syncDisplayTouchpad();
-        }
-
-        void release() {
-            if (mDisplayTouchpadWait == this) mDisplayTouchpadWait = null;
-            mLayoutWait.cancel();
-        }
-    }
-
+    /** Ends the pad's layout wait, if one is on, and lets the next attach wait once again. */
     private void releaseDisplayTouchpadWait() {
-        if (mDisplayTouchpadWait != null) mDisplayTouchpadWait.release();
+        if (mDisplayTouchpadWait != null) mDisplayTouchpadWait.cancel();
+        mDisplayTouchpadWait = null;
+        mDisplayTouchpadWaited = false;
     }
 
     /** The parting of a split keyboard in the keyboard view's pixels; null when it has none. */

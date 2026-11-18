@@ -210,6 +210,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** The Home pages registered in {@link #mPages}, by page id. */
     @NonNull private final java.util.Map<Integer, com.termux.app.page.Page> mHomePages =
         new java.util.HashMap<>();
+    /** Makes the Display page for a Display page id; null until the host has set it. */
+    @Nullable private java.util.function.IntFunction<com.termux.app.page.Page> mDisplayPageFactory;
+    /** The Display pages registered in {@link #mPages}, by page id. */
+    @NonNull private final java.util.Map<Integer, com.termux.app.page.Page> mDisplayPages =
+        new java.util.HashMap<>();
     @Nullable private PaneSurfaceStyle mStyle;
     /** How much of the pages' outlines the last frame left showing; 1 at rest. */
     private float mOutlineAlpha = 1f;
@@ -271,10 +276,13 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (mPages != null && mAssistantPageId >= 0) mPages.remove(mAssistantPageId);
         if (mPages != null) for (Integer id : mHomePages.keySet()) mPages.remove(id);
         mHomePages.clear();
+        if (mPages != null) for (Integer id : mDisplayPages.keySet()) mPages.remove(id);
+        mDisplayPages.clear();
         mAssistantPageId = -1;
         mAssistantPage = null;
         mPages = pages;
         syncHomePages();
+        syncDisplayPages();
         syncAssistantPage();
         recordFront();
     }
@@ -288,6 +296,59 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHomePageFactory = factory;
         syncHomePages();
         recordFront();
+    }
+
+    /**
+     * The seam that makes one Display page per Display page id, all sharing the one display view;
+     * the wall controller never names the display's classes. Registers them at once and on every
+     * later page-list change.
+     */
+    public void setDisplayPageFactory(
+            @Nullable java.util.function.IntFunction<com.termux.app.page.Page> factory) {
+        mDisplayPageFactory = factory;
+        syncDisplayPages();
+        recordFront();
+    }
+
+    /** Keeps one Display page registered per Display page id the wall holds. */
+    private void syncDisplayPages() {
+        java.util.List<Integer> ids = new java.util.ArrayList<>();
+        if (mKnownPages != null) {
+            for (WallPages.Page page : mKnownPages.pages()) {
+                if (page.kind == WallPages.PageKind.DISPLAY) ids.add(page.id);
+            }
+        } else if (mHost.useAs().rowPages().contains(PaneWallPage.DISPLAY)) {
+            // A row laid out from the kinds alone holds one Display cell under the kind's own id.
+            ids.add(PaneWallLayout.kindPageId(PaneWallPage.DISPLAY));
+        }
+        syncRegistered(mDisplayPageFactory, mDisplayPages, ids);
+    }
+
+    /** Registers one page per id from {@code factory} in {@link #mPages}; drops ids that left. */
+    private void syncRegistered(
+            @Nullable java.util.function.IntFunction<com.termux.app.page.Page> factory,
+            @NonNull java.util.Map<Integer, com.termux.app.page.Page> registered,
+            @NonNull java.util.List<Integer> ids) {
+        if (mPages == null || factory == null) {
+            if (mPages != null) for (Integer id : registered.keySet()) mPages.remove(id);
+            registered.clear();
+            return;
+        }
+        java.util.Iterator<java.util.Map.Entry<Integer, com.termux.app.page.Page>> it =
+            registered.entrySet().iterator();
+        while (it.hasNext()) {
+            java.util.Map.Entry<Integer, com.termux.app.page.Page> entry = it.next();
+            if (ids.contains(entry.getKey())) continue;
+            mPages.remove(entry.getKey());
+            it.remove();
+        }
+        for (int i = 0; i < ids.size(); i++) {
+            int id = ids.get(i);
+            if (registered.containsKey(id)) continue;
+            com.termux.app.page.Page page = factory.apply(id);
+            registered.put(id, page);
+            mPages.put(id, page);
+        }
     }
 
     /** Keeps one Home page registered per Home page id the wall holds; drops those that left. */
@@ -383,6 +444,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         int display = mWall.boundPageId(PaneWallPage.DISPLAY);
         bindDisplay(display >= 0 ? display : -1);
         syncHomePages();
+        syncDisplayPages();
         syncAssistantPage();
         recordFront();
         // The last window closed under the wall: the empty Terminal page keeps its cell, and the

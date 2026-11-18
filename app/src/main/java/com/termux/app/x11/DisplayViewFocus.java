@@ -2,12 +2,10 @@ package com.termux.app.x11;
 
 import android.view.KeyEvent;
 import android.view.View;
-import android.view.ViewTreeObserver;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 /**
@@ -72,31 +70,6 @@ public final class DisplayViewFocus {
         if (holdsKeys(terminal)) return true;
         request.run();
         return holdsKeys(terminal);
-    }
-
-    /**
-     * Runs {@code attempt} after {@code anchor}'s next layout pass, and after the one after that
-     * while it answers false, {@code attempts} times at most; {@code exhausted} runs when the last
-     * one answered false too. A layout is asked for each time, so a retry does not wait for
-     * something else to move.
-     */
-    public static void retryAfterLayout(@NonNull View anchor, int attempts,
-                                        @NonNull BooleanSupplier attempt,
-                                        @NonNull Runnable exhausted) {
-        if (attempts <= 0) {
-            exhausted.run();
-            return;
-        }
-        anchor.getViewTreeObserver().addOnGlobalLayoutListener(
-            new ViewTreeObserver.OnGlobalLayoutListener() {
-                @Override public void onGlobalLayout() {
-                    ViewTreeObserver live = anchor.getViewTreeObserver();
-                    if (live.isAlive()) live.removeOnGlobalLayoutListener(this);
-                    if (!attempt.getAsBoolean())
-                        retryAfterLayout(anchor, attempts - 1, attempt, exhausted);
-                }
-            });
-        anchor.requestLayout();
     }
 
     /** Who holds the window's focus when a key arrives. */
