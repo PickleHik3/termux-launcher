@@ -164,17 +164,23 @@ public class StackRendererLandingTest {
      */
     @Test public void theBodyCutHoldsWhileTheCanvasReachIsAwaitingLayout() {
         int reach = 84;
-        for (boolean comingDown : new boolean[] {true, false}) {
-            String at = comingDown ? "reach 84->0" : "reach 0->84";
+        for (boolean gone : new boolean[] {false, true}) for (boolean comingDown : new boolean[] {
+            true, false}) {
+            String at = (comingDown ? "reach 84->0" : "reach 0->84") + (gone ? " gone" : "");
             build(0, 0, false);
+            mFrames.flush("test"); // the renderer watches the body from its first frame
             mFrontHome = false;
             View parent = (View) mBody.getParent();
             int before = comingDown ? reach : 0;
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) mBody.getLayoutParams();
             params.topMargin = before;
             mBody.setLayoutParams(params);
-            parent.layout(0, 0, WIDTH, 2000 + before);
-            mBody.layout(0, before, WIDTH, 1900 + before);
+            // A GONE body is never laid out by its parent: it keeps a 0x0 frame (seen on tl16).
+            if (gone) {
+                mBody.setVisibility(View.GONE);
+                mBody.layout(0, 0, 0, 0);
+            }
+            layOut(parent, 2000 + before);
             lastCrossingFrame(true);
             String last = clip(mBody);
             // The reach changes: the margin now, the parent's height on the next layout.
@@ -183,11 +189,17 @@ public class StackRendererLandingTest {
             mRenderer.onLanding();
             mFrames.flush("test");
             assertEquals(at + " landing frame, layout pending", last, clip(mBody));
-            parent.layout(0, 0, WIDTH, 2000 + reach - before);
-            mBody.layout(0, reach - before, WIDTH, 1900 + reach - before);
+            layOut(parent, 2000 + reach - before);
             mRenderer.applyAtRest();
             mFrames.flush("test");
             assertEquals(at + " rest, laid out", last, clip(mBody));
         }
+    }
+
+    /** A traversal of {@code parent} at {@code heightPx}: measured, then laid out. */
+    private static void layOut(View parent, int heightPx) {
+        parent.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.EXACTLY));
+        parent.layout(0, 0, WIDTH, heightPx);
     }
 }
