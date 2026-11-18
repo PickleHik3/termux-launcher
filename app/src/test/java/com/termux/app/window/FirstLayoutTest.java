@@ -178,4 +178,50 @@ public class FirstLayoutTest {
         assertEquals("once, by the layout, and the backstop never runs it again",
             java.util.Collections.singletonList(Boolean.FALSE), byLayout);
     }
+
+    private static final java.time.Duration FRAME = java.time.Duration.ofMillis(20);
+
+    /** Runs at most 10 frames (20 ms each, short of the backstop) until {@code done}; fails if never. */
+    private static void framesUntil(String what, java.util.function.BooleanSupplier done) {
+        for (int i = 0; i < 10 && !done.getAsBoolean(); i++) {
+            Shadows.shadowOf(RuntimeEnvironment.getApplication().getMainLooper()).idleFor(FRAME);
+        }
+        assertTrue("never happened within 10 frames: " + what, done.getAsBoolean());
+    }
+
+    /** An attached view whose window has focus and has drawn its first frame. */
+    private static View newFocusedSettledView() {
+        View view = newAttachedView();
+        Shadows.shadowOf(RuntimeEnvironment.getApplication().getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(60));
+        setWindowFocus(view, true);
+        assertTrue("the test window has focus", view.hasWindowFocus());
+        return view;
+    }
+
+    /** Robolectric windows start unfocused; this is the framework's own focus dispatch. */
+    private static void setWindowFocus(View view, boolean focused) {
+        try {
+            Object root = View.class.getMethod("getViewRootImpl").invoke(view);
+            java.lang.reflect.Method m = root.getClass()
+                .getDeclaredMethod("windowFocusChanged", boolean.class, boolean.class);
+            m.setAccessible(true);
+            m.invoke(root, focused, false);
+            Shadows.shadowOf(RuntimeEnvironment.getApplication().getMainLooper()).idle();
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("cannot give the test window focus", e);
+        }
+    }
+
+    @Test
+    public void aReturnWaitIsReleasedBySignalOnAFrameWithNoLayout() {
+        View view = newFocusedSettledView();
+        java.util.List<Boolean> ways = new java.util.ArrayList<>();
+        FirstLayout.afterNextLayout(view, 160L, ways::add);
+
+        view.invalidate();
+        framesUntil("the wait was released", () -> !ways.isEmpty());
+
+        assertEquals(java.util.Collections.singletonList(Boolean.FALSE), ways);
+    }
 }
