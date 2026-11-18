@@ -229,6 +229,22 @@ public class WallParallaxTest {
     }
 
     @Test
+    public void pageFractionRunsZeroToOneAcrossTheRow() {
+        assertEquals(0f, WallParallax.pageFraction(0f, 5), EPS);
+        assertEquals(0.25f, WallParallax.pageFraction(1f, 5), EPS);
+        assertEquals(0.375f, WallParallax.pageFraction(1.5f, 5), EPS);
+        assertEquals(1f, WallParallax.pageFraction(4f, 5), EPS);
+    }
+
+    @Test
+    public void pageFractionIsZeroForOnePageAndClampedPastTheEnds() {
+        assertEquals(0f, WallParallax.pageFraction(0.7f, 1), EPS);
+        assertEquals(0f, WallParallax.pageFraction(2f, 0), EPS);
+        assertEquals(0f, WallParallax.pageFraction(-1f, 3), EPS);
+        assertEquals(1f, WallParallax.pageFraction(9f, 3), EPS);
+    }
+
+    @Test
     public void aSettleStaysInsideThePicture() {
         assertEquals(SPARE, WallParallax.settlingOffsetPx(500f, 270f, 1f, SPARE), EPS);
         assertEquals(0f, WallParallax.settlingOffsetPx(10f, -270f, 1f, SPARE), EPS);

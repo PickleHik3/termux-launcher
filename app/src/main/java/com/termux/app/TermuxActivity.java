@@ -4509,6 +4509,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWallpaperParallaxRowCount = rowCount;
         // Held by Edit pages: every surface keeps sampling the one offset until it lets go.
         if (mWallpaperParallaxHeld) return;
+        if (mScene != null && mPaneWallController != null) {
+            mScene.setPageOffset(com.termux.app.wall.WallParallax.pageFraction(
+                mPaneWallController.rowPosition(), rowCount));
+        }
         if (recounted) {
             settleWallpaperParallax();
             return;
