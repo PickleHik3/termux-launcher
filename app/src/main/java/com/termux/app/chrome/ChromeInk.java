@@ -2121,27 +2121,6 @@ public final class ChromeInk {
         return resolveBand(band, contract);
     }
 
-    /**
-     * Says whether Home is the side in front at rest, so a rest vote is remembered for its own
-     * side. Asked only when a vote is cast, never in a crossing.
-     */
-    public void setFrontHome(@Nullable java.util.function.BooleanSupplier frontHome) {
-        mFrontHome = frontHome;
-    }
-
-    @Nullable private java.util.function.BooleanSupplier mFrontHome;
-    /** The polarity Home's last rest vote settled on; null until Home has voted at rest. */
-    @Nullable private Polarity mHomePolarity;
-
-    /**
-     * The polarity Home's widget cards wear: Home's remembered one once known, so the cards never
-     * change palette because the Workspace's chrome voted or a crossing landed. Else the chrome's.
-     */
-    @NonNull
-    public Polarity widgetPolarity() {
-        return mHomePolarity != null ? mHomePolarity : polarity();
-    }
-
     /** The polarity the whole chrome is drawing in; for a caller that tints an icon to match. */
     @NonNull
     public Polarity polarity() {
@@ -2650,7 +2629,6 @@ public final class ChromeInk {
         }
         mCache.invalidate();
         mVotes.clear();
-        mHomePolarity = null;
         mPanes.clear();
         mWidgets.clear();
         for (Contract contract : mContracts.values()) {
@@ -2741,7 +2719,6 @@ public final class ChromeInk {
         if (mLegibility != null && mLegibility.crossing()) return;
         Integer previous = mVotes.put(band, flatGlass);
         if (previous != null && previous == flatGlass) return;
-        if (mFrontHome != null && mFrontHome.getAsBoolean()) mHomePolarity = polarity();
         // A new or moved vote can move the mean past the hysteresis band. Nothing is recomputed
         // here — polarity() reads the votes — but the chrome drawn before the change has to be
         // redrawn, and that is the same pass a veil change asks for.
