@@ -102,6 +102,8 @@ public final class FirstLayout {
     public static Handle afterSettledFrame(@NonNull View view, long backstopMs,
                                            @NonNull LayoutAction action) {
         Handle handle = new Handle(view, Handle.SETTLED, null, null);
+        android.util.Log.d("TermGeom", "diag-rw arm t=" + android.os.SystemClock.uptimeMillis() // diag-rw
+            + " focus=" + view.hasWindowFocus() + " attached=" + view.isAttachedToWindow());
         handle.mLayoutAction = action;
         handle.listenPreDraw();
         handle.mObserver.addOnWindowFocusChangeListener(handle);
@@ -172,6 +174,9 @@ public final class FirstLayout {
         public boolean onPreDraw() {
             if (mFinished) return true;
             if (mKind == SETTLED) {
+                android.util.Log.d("TermGeom", "diag-rw predraw t=" + android.os.SystemClock.uptimeMillis() // diag-rw
+                    + " focus=" + mView.hasWindowFocus() + " layoutReq=" + mView.isLayoutRequested()
+                    + " attached=" + mView.isAttachedToWindow());
                 if (mView.hasWindowFocus() && !mView.isLayoutRequested()) {
                     mFinished = true;
                     mAction = null;
@@ -196,6 +201,7 @@ public final class FirstLayout {
         @Override
         public void onWindowFocusChanged(boolean hasFocus) {
             // Focus alone draws nothing: ask for the frame that can settle the wait.
+            android.util.Log.d("TermGeom", "diag-rw focus=" + hasFocus + " t=" + android.os.SystemClock.uptimeMillis()); // diag-rw
             if (hasFocus && !mFinished) mView.invalidate();
         }
 
