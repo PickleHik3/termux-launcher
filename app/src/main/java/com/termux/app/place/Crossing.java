@@ -5,7 +5,6 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.MotionLog;
 import com.termux.app.dock.DockLayout;
-import com.termux.app.dock.DockMorph;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.terminal.GeometryScheduler;
 import com.termux.app.wall.PageRef;
@@ -22,9 +21,7 @@ import com.termux.app.wall.PaneWallPage;
  *       taken at {@link #begin}, so every reader asks {@link #arrangement} or
  *       {@link #heldArrangement} and no one reads a changing layout mid-slide; a store that moved
  *       under the slide is the landing's to apply ({@link Landing#storeMoved});</li>
- *   <li>both halves' docks at rest, worked out once at {@link #begin}, and the dock's dress as a
- *       {@link DockMorph} between them at the chrome's progress into the other half each frame,
- *       handed to the {@link Dock} to draw, so the last frame already is the arriving dress;</li>
+ *   <li>both halves' docks at rest, worked out once at {@link #begin};</li>
  *   <li>the hold the slide keeps on the content: the room it was committed with, the band the
  *       chrome's live edge rises through, the keyboard and the content pre-rolled for it, the
  *       grid's paused resize, and the travel cover the pane controller applies to the window in
@@ -36,8 +33,7 @@ import com.termux.app.wall.PaneWallPage;
  * answers and the dock's dress, {@link #stack} once the frame's pre-rolls and the seam's layout
  * pass have run (the stack's sink and its translation), and {@link #rideBar} and
  * {@link #fade} once the bar's host is laid out. A reversal, or a window chip tapped mid-slide,
- * needs nothing of its own: the rests stay and the morph reads the wall's position, so no
- * measurement jumps. {@link #land} clears everything the crossing held in one step; the stack's
+ * needs nothing of its own: the rests stay, so no measurement jumps. {@link #land} clears everything the crossing held in one step; the stack's
  * dress, which the page's commit still reads, goes at {@link #end}.
  *
  * <p>Its adapter is only what moves: the {@link Stack}, the {@link Bar}, the {@link Cover}, the
@@ -82,14 +78,8 @@ public final class Crossing {
         void preRoll(@NonNull PaneWallPage target);
     }
 
-    /** The dock's pinned row, which draws the morph rather than laying it out. */
+    /** The dock's pinned row. Rows travel with their side, so a crossing asks nothing of it. */
     public interface Dock {
-        /** The crossing begins between these rests: once, before the first frame's dress. */
-        void beginMorph(@NonNull DockLayout leaving, @NonNull DockLayout arriving);
-        /** One frame's dress, drawn without a layout. The same object every frame. */
-        void dress(@NonNull DockMorph morph);
-        /** The crossing landed on {@code landed}'s rest: the row lays it out, once. */
-        void endMorph(@NonNull DockLayout landed);
     }
 
     /** What a landing has left to do, read before the next crossing. The same object each time. */
@@ -134,7 +124,6 @@ public final class Crossing {
     @NonNull private final Dock mDock;
 
     private final SeamCrossing mSeam = new SeamCrossing();
-    private final DockMorph mMorph = new DockMorph();
 
     // ---- What a crossing holds from begin ----
     @Nullable private PaneWallPage mCommitted;
@@ -181,8 +170,7 @@ public final class Crossing {
     /**
      * The crossing begins on the first frame that reaches {@code there}: both ends' arrangements
      * ({@link SeamCrossing.Endpoint#arrangement}, which a crossing's ends must carry) and their
-     * docks at rest are held from here to the landing, and the row is told both rests once, the
-     * Drawer tile each end's arrangement carries with them. Called again for a frame that reaches
+     * docks at rest are held from here to the landing. Called again for a frame that reaches
      * another page of the other half, the seam reads the ends again and everything else stays as
      * it is held (the rests passed are then not read: {@link #heldRest} answers them).
      *
@@ -208,9 +196,6 @@ public final class Crossing {
         mHereRest = hereRest;
         mThereRest = thereRest;
         mRevision = revision;
-        mMorph.between(hereRest, here.arrangement.drawerTile(), thereRest,
-            there.arrangement.drawerTile());
-        mDock.beginMorph(hereRest, thereRest);
     }
 
     /**
@@ -238,11 +223,6 @@ public final class Crossing {
         if (here != null && there != null) {
             mStack.sides(here.page.isHome(), there.page.isHome(),
                 SeamTravel.otherEndFraction(wallFrame, here.page));
-        }
-        if (mCommitted != null && here != null && mMorph.active()) {
-            // Read by end, so a frame of Home's pager morphs between two Home pages' rests.
-            mMorph.at(SeamTravel.otherEndProgress(frame, here.page));
-            mDock.dress(mMorph);
         }
         return answers;
     }
@@ -497,7 +477,7 @@ public final class Crossing {
     /**
      * The wall landed on {@code landed}: everything the crossing held is cleared in one step (the
      * content hold, the keyboard and content pre-rolls, the cover, the stack's translation, sink and
-     * alphas, the bar's ride, the morph, the rests and the held arrangements), the row lays out the
+     * alphas, the bar's ride, the rests and the held arrangements), the row lays out the
      * landed half's rest, which its last frame already drew, and the seam's crossing lands.
      * Answers what the settle has left to do; {@code revision} is the store's now, and a store
      * that moved under the slide is the landing's to lay out ({@link Landing#storeMoved}).
@@ -513,10 +493,6 @@ public final class Crossing {
         mBar.rideX(0f);
         mStack.sink(0f);
         mStack.alpha(1f, 1f);
-        DockLayout landedRest = heldRest(landed);
-        boolean morphed = mMorph.active();
-        mMorph.clear();
-        if (morphed && landedRest != null) mDock.endMorph(landedRest);
         mCommitted = null;
         mHere = null;
         mThere = null;
@@ -575,14 +551,14 @@ public final class Crossing {
     }
 
     /**
-     * Whether nothing of a crossing is held: no hold, no pre-roll, no cover, no ease, no morph, no
+     * Whether nothing of a crossing is held: no hold, no pre-roll, no cover, no ease, no
      * rest, no arrangement, and the seam standing nothing. True between crossings.
      */
     public boolean idle() {
         return !mHoldsContent && mHeldReservationPx == 0 && mHeldOverlapPx == 0
             && !mKeyboardPreRolled && mKeyboardPlace == null && !mContentPreRolled
             && mGridHold == null && mRoomArriving == null && mRoomChangePx == 0 && mCoverPx == 0
-            && Float.isNaN(mBeadShare) && !mMorph.active()
+            && Float.isNaN(mBeadShare)
             && mCommitted == null && mHere == null && mThere == null
             && mHereRest == null && mThereRest == null && mRevision == 0
             && mSeam.layout() == null && mSeam.other() == null && mSeam.stackDressPage() == null;

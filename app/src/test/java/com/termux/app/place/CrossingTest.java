@@ -16,7 +16,6 @@ import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockGeometry;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
-import com.termux.app.dock.DockMorph;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
@@ -43,7 +42,6 @@ public class CrossingTest {
     static final int WIDTH = 1000;
     static final float STEP = 0.02f;
     /** The steepest the look's curve climbs per unit of the wall's way (a smoothstep over SeamFade's stretch). */
-    private static final float MAX_CURVE_SLOPE = 1.5f / (SeamFade.END - SeamFade.START);
 
     private static final float DENSITY = 2.625f;
     static final List<PaneWallPage> ROW =
@@ -131,10 +129,6 @@ public class CrossingTest {
         int coverPx = -1;
         int covers;
         final List<PaneWallPage> preRolls = new ArrayList<>();
-        // The row: told both rests once, dressed every frame, laid out once at the landing.
-        int morphBegins, dresses, morphEnds;
-        DockLayout leaving, arriving, landed;
-        DockMorph dressed;
 
         @Override public void translate(float dock, float keyboard) {
             dockPx = dock;
@@ -151,20 +145,6 @@ public class CrossingTest {
             covers++;
         }
         @Override public void preRoll(@NonNull PaneWallPage target) { preRolls.add(target); }
-        @Override public void beginMorph(@NonNull DockLayout from, @NonNull DockLayout to) {
-            morphBegins++;
-            leaving = from;
-            arriving = to;
-        }
-        @Override public void dress(@NonNull DockMorph morph) {
-            dresses++;
-            assertTrue("the same morph every frame", dressed == null || dressed == morph);
-            dressed = morph;
-        }
-        @Override public void endMorph(@NonNull DockLayout rest) {
-            morphEnds++;
-            landed = rest;
-        }
     }
 
     static final int REVISION = 7;
@@ -213,17 +193,11 @@ public class CrossingTest {
             return answers;
         }
 
-        /** The dress the row was handed for the last frame. */
-        int[] dress() {
-            DockMorph m = moves.dressed;
-            return new int[] {m.slotIconPx(), m.appsRowUsableWidthPx(), m.appsBarHeightPx(),
-                m.promptFieldBandPx(), m.rowsPx()};
-        }
     }
 
-    private static int[] dressOf(DockLayout l) {
-        return new int[] {l.slotIconPx, l.appsRowUsableWidthPx, l.appsBarHeightPx,
-            l.promptFieldBandPx, DockMorph.rowsPx(l)};
+    /** The dock rows' height a rest stands, less the extra keys row. */
+    private static int rowsPx(DockLayout l) {
+        return l.combinedHeight(0, false);
     }
 
     static final PaneWallPage[] BOTH = {PaneWallPage.TERMINAL, PaneWallPage.WIDGETS};
@@ -238,100 +212,9 @@ public class CrossingTest {
 
     @Test
     public void theTwoHalvesWearDifferentDresses() {
-        assertNotEquals(DockMorph.rowsPx(HOME_REST), DockMorph.rowsPx(WORKSPACE_REST));
+        assertNotEquals(rowsPx(HOME_REST), rowsPx(WORKSPACE_REST));
         assertTrue(HOME_REST.promptFieldBandPx > 0);
         assertEquals(0, WORKSPACE_REST.promptFieldBandPx);
-    }
-
-    @Test
-    public void theDressIsTheLeavingRestAtTheStartAndTheArrivingRestAtTheEnd() {
-        for (PaneWallPage from : BOTH) {
-            Drive drive = new Drive(from, false, false);
-            drive.step(STEP);
-            assertTrue(from + ": the crossing began", drive.crossing.crossing());
-            assertArrayEquals(from + ": first frame", dressOf(restOf(from)), drive.dress());
-            drive.step(SeamFade.END);
-            assertArrayEquals(from + ": where the chrome lands", dressOf(restOf(across(from))),
-                drive.dress());
-            drive.step(1f);
-            assertArrayEquals(from + ": the wall's last frame", dressOf(restOf(across(from))),
-                drive.dress());
-        }
-    }
-
-    @Test
-    public void theDressIsMonotonicOverASlowDrag() {
-        for (PaneWallPage from : BOTH) {
-            Drive drive = new Drive(from, false, false);
-            int[] start = dressOf(restOf(from));
-            int[] end = dressOf(restOf(across(from)));
-            drive.step(STEP);
-            int[] last = drive.dress();
-            for (float f = 2 * STEP; f <= 1f + 1e-6f; f += STEP) {
-                drive.step(Math.min(1f, f));
-                int[] now = drive.dress();
-                for (int i = 0; i < now.length; i++) {
-                    int moved = Integer.signum(now[i] - last[i]);
-                    assertTrue(from + " measurement " + i + " at " + f,
-                        moved == 0 || moved == Integer.signum(end[i] - start[i]));
-                }
-                last = now;
-            }
-        }
-    }
-
-    @Test
-    public void aReversalReversesTheDress() {
-        for (PaneWallPage from : BOTH) {
-            Drive drive = new Drive(from, false, false);
-            int frames = 30;
-            int[][] out = new int[frames + 1][];
-            for (int i = 1; i <= frames; i++) {
-                drive.step(i * STEP);
-                out[i] = drive.dress();
-            }
-            for (int i = frames; i >= 1; i--) {
-                drive.step(i * STEP);
-                assertArrayEquals(from + " frame " + i + " back", out[i], drive.dress());
-            }
-        }
-    }
-
-    @Test
-    public void aRetargetMidSlideNeverMovesAMeasurementByMoreThanAFrame() {
-        for (PaneWallPage from : BOTH) {
-            Drive drive = new Drive(from, false, false);
-            int[] start = dressOf(restOf(from));
-            int[] end = dressOf(restOf(across(from)));
-            // The most one frame of STEP may move a measurement: its share of the chrome's way.
-            int[] bound = new int[start.length];
-            for (int i = 0; i < bound.length; i++)
-                bound[i] = (int) Math.ceil(Math.abs(end[i] - start[i]) * STEP
-                    * MAX_CURVE_SLOPE) + 1;
-            List<Float> way = new ArrayList<>();
-            for (int i = 1; i <= 25; i++) way.add(i * STEP);
-            // A chip tapped mid-slide: the wall turns back toward the page it left...
-            int turn = way.size();
-            for (int i = 24; i >= 10; i--) way.add(i * STEP);
-            // ...and the person changes their mind again, through to the other half.
-            int again = way.size();
-            for (int i = 11; i <= 50; i++) way.add(i * STEP);
-            drive.step(way.get(0));
-            int[] last = drive.dress();
-            for (int n = 1; n < way.size(); n++) {
-                drive.step(way.get(n));
-                int[] now = drive.dress();
-                for (int i = 0; i < now.length; i++)
-                    assertTrue(from + " measurement " + i + " frame " + n
-                            + (n >= again ? " after the second turn" : n >= turn ? " after the turn" : ""),
-                        Math.abs(now[i] - last[i]) <= bound[i]);
-                assertTrue("a turn keeps the crossing", drive.crossing.crossing());
-                last = now;
-            }
-            // The rows were told the rests once; every turn was only the wall's position.
-            assertEquals(1, drive.moves.morphBegins);
-            assertArrayEquals(from + ": it lands on the arriving rest", end, drive.dress());
-        }
     }
 
     @Test
@@ -402,35 +285,6 @@ public class CrossingTest {
     }
 
     @Test
-    public void theRowIsToldBothRestsOnceDressedEveryFrameAndLaidOutOnceAtTheLanding() {
-        for (PaneWallPage from : BOTH) {
-            Drive drive = new Drive(from, false, false);
-            int frames = 0;
-            for (float f = STEP; f <= 1f + 1e-6f; f += STEP) {
-                drive.step(Math.min(1f, f));
-                frames++;
-            }
-            Moves moves = drive.moves;
-            assertEquals(1, moves.morphBegins);
-            assertSame(restOf(from), moves.leaving);
-            assertSame(restOf(across(from)), moves.arriving);
-            assertEquals("one dress a frame", frames, moves.dresses);
-            assertEquals("nothing is laid out before the landing", 0, moves.morphEnds);
-            drive.crossing.land(PageRef.of(across(from)), REVISION);
-            assertEquals(1, moves.morphEnds);
-            assertSame("the rest the last frame drew", restOf(across(from)), moves.landed);
-            // A slide that came back lands on the rest it left.
-            Drive back = new Drive(from, false, false);
-            for (int i = 1; i <= 20; i++) back.step(i * STEP);
-            for (int i = 20; i >= 0; i--) back.step(i * STEP);
-            assertArrayEquals("its last frame drew the rest it left", dressOf(restOf(from)),
-                back.dress());
-            back.crossing.land(PageRef.of(from), REVISION);
-            assertSame(restOf(from), back.moves.landed);
-        }
-    }
-
-    @Test
     public void landLeavesNoCrossingState() {
         for (PaneWallPage from : BOTH) {
             Drive drive = new Drive(from, from == PaneWallPage.TERMINAL, false);
@@ -460,9 +314,7 @@ public class CrossingTest {
             assertTrue(landing.beadsMelted());
             assertFalse(landing.storeMoved());
             // In the one step: the cover off the window in front, the stack, its rows and the bar
-            // back at rest, and no dress of the leaving half left to draw for a frame: the row
-            // lays out the arriving rest, which its frames ended on, so the Tray's card and the
-            // frame band of the half it left are gone at the landing (the Beads border line).
+            // back at rest.
             assertEquals(0, moves.coverPx);
             assertEquals(0f, moves.dockPx, 0f);
             assertEquals(0f, moves.keyboardPx, 0f);
@@ -470,8 +322,6 @@ public class CrossingTest {
             assertEquals(1f, moves.statusAlpha, 0f);
             assertEquals(1f, moves.sideAlpha, 0f);
             assertEquals(0f, moves.barX, 0f);
-            assertEquals(1, moves.morphEnds);
-            assertSame(restOf(across(from)), moves.landed);
             assertNull(crossing.heldRest(PageRef.HOME));
             assertNull(crossing.heldRest(PageRef.TERMINAL));
             assertNull(crossing.heldArrangement(PageRef.HOME));
@@ -505,7 +355,6 @@ public class CrossingTest {
         assertTrue(landing.keyboardPreRolled());
         assertEquals(0, moves.coverPx);
         assertEquals(0f, moves.dockPx, 0f);
-        assertEquals("no row was morphed", 0, moves.morphEnds);
         assertTrue(crossing.idle());
     }
 
@@ -593,18 +442,17 @@ public class CrossingTest {
         assertSame(WORKSPACE_ARRANGED, rests.half(PageRef.TERMINAL).arrangement);
         // Without a second half, every Home page reads the one Home half, as before.
         assertSame(HOME_ARRANGED, snapshot().half(HOME_3).arrangement);
-        assertNotEquals(dressOf(DockGeometry.compute(rests.restOf(HOME_2)))[4],
-            dressOf(DockGeometry.compute(rests.restOf(HOME_3)))[4]);
+        assertNotEquals(rowsPx(DockGeometry.compute(rests.restOf(HOME_2))),
+            rowsPx(DockGeometry.compute(rests.restOf(HOME_3))));
     }
 
     /**
      * A slide on Home's pager between page 2 and page 3, whose own layout adds the index: the
-     * crossing holds both pages' arrangements and rests, the row morphs from page 2's rest to
-     * page 3's on the pager's way, a reader asking for Home by kind reads the committed page, and
-     * the landing lays out page 3's rest.
+     * crossing holds both pages' arrangements and rests, a reader asking for Home by kind reads
+     * the committed page, and the landing lets them go.
      */
     @Test
-    public void aSlideBetweenTwoHomePagesMorphsTheRowFromOnePagesRestToTheOthers() {
+    public void aSlideBetweenTwoHomePagesHoldsBothPagesRests() {
         DockGeometry.Snapshot rests = twoHomes();
         DockLayout rest2 = DockGeometry.compute(rests.restOf(HOME_2));
         DockLayout rest3 = DockGeometry.compute(rests.restOf(HOME_3));
@@ -615,7 +463,7 @@ public class CrossingTest {
         SeamCrossing.Endpoint there = SeamCrossing.Endpoint.of(HOME_3, dress, null,
             HOME_3_ARRANGED, HOME_WITH_INDEX, stack, false);
         // Pages whose bottom rows differ and both stand rows plan no slide (nothing is laid out
-        // on the way), yet they still cross: the row's morph runs and the rows swap at the landing.
+        // on the way), yet they still cross: the rows swap at the landing.
         assertNotEquals(EdgeStackPolicy.stack(HOME, Edge.BOTTOM),
             EdgeStackPolicy.stack(HOME_WITH_INDEX, Edge.BOTTOM));
         assertSame(SeamTravel.DockPlan.NONE, SeamTravel.dockPlan(HOME, HOME_WITH_INDEX));
@@ -625,20 +473,13 @@ public class CrossingTest {
         Rest home = new Rest(false, false, true);
         crossing.begin(here, there, SeamCrossing.Stage.of(false, () -> false, true), rest2,
             rest3, REVISION);
-        assertEquals(1, moves.morphBegins);
-        assertSame(rest2, moves.leaving);
-        assertSame(rest3, moves.arriving);
         for (float fraction = STEP; fraction < 1f; fraction += STEP) {
             Frame frame = PlaceChromeTravel.homePages(home, 2, 3, -fraction * WIDTH, WIDTH);
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
             assertFalse("the rows swap at the landing, not at " + fraction, answers.relayout());
             assertFalse(answers.restyle());
             assertEquals("the rows stay whole at " + fraction, 1f, answers.dockReveal(), 1e-4f);
-            assertEquals("the row on the pager's way at " + fraction,
-                SeamTravel.otherEndProgress(frame, HOME_2), moves.dressed.fraction(), 1e-4f);
         }
-        assertTrue("the morph reaches the arriving page",
-            moves.dressed.fraction() > 0.99f);
         assertSame(HOME_2_ARRANGED, crossing.heldArrangement(HOME_2));
         assertSame(HOME_3_ARRANGED, crossing.heldArrangement(HOME_3));
         assertSame("Home asked by kind alone is the committed page", HOME_2_ARRANGED,
@@ -656,8 +497,6 @@ public class CrossingTest {
         assertFalse("the arriving page's rows are laid out by the landing's own pass",
             landed.seam().laidOut());
         assertNull("landed, the store answers", crossing.heldCommittedPage(PaneWallPage.WIDGETS));
-        assertEquals(1, moves.morphEnds);
-        assertSame(rest3, moves.landed);
         crossing.end();
         assertTrue(crossing.idle());
     }

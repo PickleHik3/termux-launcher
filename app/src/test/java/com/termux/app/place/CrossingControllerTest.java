@@ -26,7 +26,6 @@ import com.termux.app.chrome.TestChromeRenderers;
 import com.termux.app.dock.DockGeometry;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
-import com.termux.app.dock.DockMorph;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.RowPlacement;
@@ -122,10 +121,8 @@ public class CrossingControllerTest {
         float dockPx = Float.NaN, keyboardPx = Float.NaN, sinkPx = Float.NaN;
         float statusAlpha = Float.NaN, sideAlpha = Float.NaN, barX = Float.NaN, slide = Float.NaN;
         int coverPx = -1;
-        int morphBegins, dresses, morphEnds, folds, covers;
+        int folds, covers;
         final List<PaneWallPage> preRolls = new ArrayList<>();
-        DockLayout leaving, arriving, landed;
-        DockMorph dressed;
         /** Every write the adapter took, so a frame that moves nothing can be told. */
         int writes;
 
@@ -146,25 +143,6 @@ public class CrossingControllerTest {
             preRolls.add(target);
             writes++;
         }
-        @Override public void beginMorph(@NonNull DockLayout from, @NonNull DockLayout to) {
-            morphBegins++;
-            leaving = from;
-            arriving = to;
-            writes++;
-        }
-        @Override public void dress(@NonNull DockMorph morph) {
-            dresses++;
-            assertTrue("the same morph every frame", dressed == null || dressed == morph);
-            dressed = morph;
-            writes++;
-        }
-        @Override public void endMorph(@NonNull DockLayout rest) {
-            morphEnds++;
-            landed = rest;
-            writes++;
-        }
-
-        int rowsPx() { return dressed.rowsPx(); }
     }
 
     // ---- The Host, recorded ----
@@ -410,7 +388,7 @@ public class CrossingControllerTest {
 
     /** The two ends' dock rows, in px, of the rest the row is dressed to. */
     private int restRowsPx(DockLayout rest) {
-        return DockMorph.rowsPx(rest);
+        return rest.combinedHeight(0, false);
     }
 
     private void goTo(PaneWallPage page) {
@@ -447,28 +425,15 @@ public class CrossingControllerTest {
         assertEquals(to, crossing.seam().other());
         assertEquals(1, host.count("flushLandingRestyle"));
         assertEquals(1, host.count("beginTopBandFade"));
-        assertEquals(1, moves.morphBegins);
-        DockLayout fromRest = moves.leaving;
-        DockLayout toRest = moves.arriving;
-        assertEquals(restRowsPx(CrossingTest.restOf(from)), restRowsPx(fromRest));
-        assertEquals(restRowsPx(CrossingTest.restOf(to)), restRowsPx(toRest));
-        int start = restRowsPx(fromRest);
-        int end = restRowsPx(toRest);
-        assertTrue("the two halves' docks differ", start != end);
+        assertTrue("the two halves' docks differ", restRowsPx(CrossingTest.restOf(from))
+            != restRowsPx(CrossingTest.restOf(to)));
 
-        // A few frames: the dock's dress, the stack's sink and the status alpha only go one way.
-        int last = moves.rowsPx();
+        // A few frames: the stack's sink and the status alpha only go one way.
         float lastTranslation = moves.dockPx;
         for (float f = 0.1f; f <= 0.91f; f += 0.1f) {
             drag(sign * f * WIDTH);
             assertTrue(crossing.crossing());
-            assertEquals("nothing begins again", 1, moves.morphBegins);
             assertEquals(1, host.count("beginTopBandFade"));
-            int rows = moves.rowsPx();
-            int dir = Integer.signum(rows - last);
-            assertTrue("dress rows move toward " + to + " at " + f + ": " + last + " -> " + rows,
-                dir == 0 || dir == Integer.signum(end - start));
-            last = rows;
             // The stack is only ever taken down or faded out on the way, never back up.
             assertTrue("stack translation grows or holds at " + f + ": " + lastTranslation
                 + " -> " + moves.dockPx, moves.dockPx >= lastTranslation - 0.001f);
@@ -479,7 +444,6 @@ public class CrossingControllerTest {
                 moves.sideAlpha >= 0f && moves.sideAlpha <= 1f);
         }
         drag(sign * WIDTH);
-        assertEquals("at the far end the row wears the arriving rest", end, moves.rowsPx());
 
         // The finger lets go past the middle: the wall lands on the other page, the settle lands
         // the crossing.
@@ -489,8 +453,6 @@ public class CrossingControllerTest {
         host.settle(to, ref(to));
         assertFalse(crossing.crossing());
         assertTrue("nothing of the crossing is held", crossing.idle());
-        assertEquals(1, moves.morphEnds);
-        assertEquals(restRowsPx(toRest), restRowsPx(moves.landed));
         assertEquals(0f, moves.dockPx, 0f);
         assertEquals(1f, moves.statusAlpha, 0f);
 
@@ -501,7 +463,6 @@ public class CrossingControllerTest {
         assertEquals("no host effect at rest after the landing", effects, host.effects.size());
         assertEquals("no adapter write at rest after the landing", writes, moves.writes);
         assertFalse(crossing.crossing());
-        assertEquals(1, moves.morphBegins);
     }
 
     @Test
@@ -555,14 +516,12 @@ public class CrossingControllerTest {
         drag(-500f);
         drag(-300f);
         drag(-100f);
-        assertEquals("nothing begins twice", 1, moves.morphBegins);
         assertEquals(1, host.count("beginTopBandFade"));
         assertEquals(1, host.count("flushLandingRestyle"));
         // Back at the start, the finger still down: the row stands the committed rest.
         drag(0f);
         assertTrue(wall.isMoving());
-        assertEquals(restRowsPx(moves.leaving), moves.rowsPx());
-        assertEquals("still one crossing", 1, moves.morphBegins);
+        assertTrue("still one crossing", crossing.crossing());
 
         // Let go with no speed: the wall stays on Home and the settle lands the committed page.
         release(0f);
@@ -571,16 +530,12 @@ public class CrossingControllerTest {
         host.settle(PaneWallPage.WIDGETS, ref(PaneWallPage.WIDGETS));
         assertEquals(PageRef.HOME, host.landedOn.get(host.landedOn.size() - 1));
         assertTrue(crossing.idle());
-        assertEquals(1, moves.morphEnds);
-        assertEquals("the landed rest is the committed one", restRowsPx(moves.leaving),
-            restRowsPx(moves.landed));
 
         int effects = host.effects.size();
         int writes = moves.writes;
         controller.syncChromeTravel(wall.offsetPx());
         assertEquals(effects, host.effects.size());
         assertEquals(writes, moves.writes);
-        assertEquals("nothing began again at rest", 1, moves.morphBegins);
     }
 
     // ---- 3. The same offset twice ----
@@ -599,12 +554,9 @@ public class CrossingControllerTest {
         int begins = host.count("beginTopBandFade")
             + host.count("beginTravelHold") + host.count("flushLandingRestyle");
         int geometry = host.count("geometryRequestNow");
-        int morphBegins = moves.morphBegins;
         int writes = moves.writes;
-        int dresses = moves.dresses;
         float dock = moves.dockPx, sink = moves.sinkPx, status = moves.statusAlpha,
             side = moves.sideAlpha, slide = moves.slide;
-        int rows = moves.rowsPx();
 
         controller.syncChromeTravel(offset);
 
@@ -615,19 +567,15 @@ public class CrossingControllerTest {
             + host.count("beginTravelHold") + host.count("flushLandingRestyle"));
         assertEquals("no geometry pass requested again", geometry,
             host.count("geometryRequestNow"));
-        assertEquals(morphBegins, moves.morphBegins);
         assertTrue(moves.preRolls.isEmpty());
         // Observed: the repeat is not skipped. The crossing's answers are written again, to the
-        // same values: the dock's dress (the same morph), the stack's translation, sink, slide
-        // and the alphas. Nothing is laid out and nothing is begun.
+        // same values: the stack's translation, sink, slide and the alphas. Nothing is laid out and nothing is begun.
         assertTrue("the adapter is written again, to the same values", moves.writes > writes);
-        assertEquals(dresses + 1, moves.dresses);
         assertEquals(dock, moves.dockPx, 0f);
         assertEquals(sink, moves.sinkPx, 0f);
         assertEquals(status, moves.statusAlpha, 0f);
         assertEquals(side, moves.sideAlpha, 0f);
         assertEquals(slide, moves.slide, 0f);
-        assertEquals(rows, moves.rowsPx());
     }
 
     // ---- 4. Home to Home ----
@@ -656,23 +604,11 @@ public class CrossingControllerTest {
         pager(-0.05f, false);
         assertTrue("begun on the pager's first shifted frame", crossing.crossing());
         assertTrue(crossing.seam().oneKind());
-        assertEquals(1, moves.morphBegins);
-        int start = restRowsPx(moves.leaving);
-        int end = restRowsPx(moves.arriving);
-        assertTrue("the two pages' docks differ", start != end);
-
-        int last = moves.rowsPx();
         for (float f = 0.1f; f <= 0.91f; f += 0.1f) {
             pager(-f, false);
-            assertEquals(1, moves.morphBegins);
-            int rows = moves.rowsPx();
-            int dir = Integer.signum(rows - last);
-            assertTrue("rows move toward the other page at " + f,
-                dir == 0 || dir == Integer.signum(end - start));
-            last = rows;
+            assertTrue(crossing.crossing());
         }
         pager(-1f, false);
-        assertEquals("the dock rows morphed to the other page's", end, moves.rowsPx());
         assertEquals("nothing landed while the finger is down", 0, host.landedOn.size());
 
         // The pager lets go and settles on the next page: the landing waits for the settle.
@@ -696,8 +632,6 @@ public class CrossingControllerTest {
             host.variantReset.size());
         assertTrue(host.variantReset.get(0));
         assertEquals(1, host.count("syncChromeArrangement"));
-        assertEquals(1, moves.morphEnds);
-        assertEquals(end, restRowsPx(moves.landed));
 
         // A rest frame after it writes nothing.
         int effects = host.effects.size();
@@ -721,14 +655,12 @@ public class CrossingControllerTest {
         host.settling = false;
         host.settleQueue.get(0).run();
         assertFalse(crossing.crossing());
-        assertEquals(1, moves.morphBegins);
         assertEquals(1, host.landedOn.size());
         assertEquals(PageRef.of(PaneWallPage.WIDGETS, homeIds.get(0)), host.landedOn.get(0));
         assertEquals(1, host.count("settlePlaceChrome"));
         assertEquals("landed on the committed page: no variant reset", 0,
             host.variantReset.size());
         assertEquals(0, host.count("syncChromeArrangement"));
-        assertEquals(restRowsPx(moves.leaving), restRowsPx(moves.landed));
     }
 
     @Test

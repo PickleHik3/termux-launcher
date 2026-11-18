@@ -117,6 +117,7 @@ import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzBarHostGeometry;
+import com.termux.app.launcher.az.AzFocusWriter;
 import com.termux.app.launcher.az.AzFloatingStripPolicy;
 import com.termux.app.launcher.az.AzPreviewTargetPolicy;
 import com.termux.app.launcher.az.AzScrubGesture;
@@ -11397,6 +11398,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         // An icon lifted out of the dock goes to Home the way one from the drawer does, and the
         // drop targets come up where Home's own drag puts them.
+        wirePageTicks();
+        mSuggestionBarView.setAzFocusSink(new SuggestionBarView.AzFocusSink() {
+            private final AzFocusWriter writer = new AzFocusWriter();
+            @Override public void focus(@NonNull View target, boolean bounce) {
+                writer.focus(target, bounce);
+            }
+            @Override public void clear() { writer.clear(); }
+        });
         mSuggestionBarView.setLiftHost(new SuggestionBarView.LiftHost() {
             @Override @Nullable
             public com.termux.app.launcher.widget.HomeAppDrop.Target homeAppDropTarget() {
@@ -11409,6 +11418,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return terminalDressSource();
             }
             @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+            @Override @NonNull public com.termux.app.dock.LiftSourceSlot.Shade<View> liftSourceShade() {
+                return com.termux.app.dock.LiftSourceShade.ALPHA;
+            }
         });
         mSuggestionBarView.setFolderRenameHost(new SuggestionBarView.FolderRenameHost() {
             @Override public void beginFolderRename(long revision, @NonNull String folderId,
@@ -12901,7 +12913,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             );
         }
         // The matches' own pages are the row's ticks, drawn by the strip that rides with the row.
-        if (mSuggestionBarView != null) mSuggestionBarView.publishPageIndicator();
+        if (mSuggestionBarView != null) mSuggestionBarView.publishPageTicks();
 
         applyAzFxDrag(
             mAzGesture.isActive(),
@@ -12951,7 +12963,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAzFxRowBounds(isAzIndexStandalone());
         // The page ticks are the row's own strip now, on whichever edge it stands; nothing here
         // draws them. What is left is where the FX layers position themselves.
-        if (mSuggestionBarView != null) mSuggestionBarView.publishPageIndicator();
+        if (mSuggestionBarView != null) mSuggestionBarView.publishPageTicks();
     }
 
     /**
@@ -15691,6 +15703,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return syncPinnedAppsHost(arrangement().layout());
     }
 
+    /** The row tells the page ticks' writer its ticks; the writer owns the strip. */
+    void wirePageTicks() {
+        if (mSuggestionBarView != null) mSuggestionBarView.setPageTicksListener(mPageTicks::write);
+    }
+
+    /** The strip the apps row's ticks are written to, or null while none is bound. */
+    @Nullable
+    PageTickStripView boundPageTickStrip() {
+        return mPageTicks.bound();
+    }
+
     /** As {@link #syncPinnedAppsHost()}, for a layout the caller already has. */
     boolean syncPinnedAppsHost(@NonNull PlaceLayout layout) {
         // A relaunch hands this activity's DecorView to its successor, so once destroyed the
@@ -15739,7 +15762,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // One indicator, handed to the row by whichever host the row is standing in: the dock's own
         // band on the bottom edge, the portable host's band everywhere else. The dock used to paint
         // its own ticks from the FX layer over the glass, which is what made two of them.
-        mSuggestionBarView.setPageIndicator(wantHost ? indicator : dockIndicator);
+        mPageTicks.bind(wantHost ? indicator : dockIndicator);
         if (!wantHost && dockIndicator != null) {
             dockIndicator.setVerticalForm(false);
             // The dock's own pair follows the same rule as the portable host's: the ticks stand
@@ -18411,6 +18434,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mDock.applyDockLayout(layout);
     }
 
+    /** The one writer of the page tick strip: the apps row's ticks land on the strip it is bound to. */
+    private final com.termux.app.launcher.paging.PageTicksWriter mPageTicks =
+        new com.termux.app.launcher.paging.PageTicksWriter();
+
     /**
      * Dock rows (ADR 0011): the one writer of the dock's accessory views, and the one answer to
      * whether a row is on screen and which design the rows shown wear. The views are its
@@ -18418,7 +18445,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final com.termux.app.dock.DockRows mDockRows = new com.termux.app.dock.DockRows(
         new com.termux.app.dock.DockRowViews(this::findViewById,
-            band -> mSuggestionBarView != null && mSuggestionBarView.boundPageIndicator() == band));
+            band -> mPageTicks.bound() == band));
 
     {
         mDockRows.addListener(mDock::onDockRowsChanged);
@@ -24344,11 +24371,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public void syncDockBeadsWithMorph() {
-            mDock.syncDockBeadsWithMorph();
-        }
-
-        @Override
         public void onDockRowContentChanged() {
             TermuxActivity.this.onDockRowContentChanged();
         }
@@ -24555,8 +24577,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // content's hold and the cover the pane controller kept on the window in front (the
             // geometry pass below lays the panes out at the size the cover stood in for, in the
             // same traversal), the keyboard's and the content's pre-rolls, the stack's
-            // translation, sink and alphas, the bar's ride, a fold's and a melt's shares, and the
-            // dock's morph, the row laying out the landed rest its last frame already drew. From
+            // translation, sink and alphas, the bar's ride, and a fold's and a melt's shares. From
             // here the chrome reads the store's arrangements again.
             Trace.beginSection("Settle.land");
             com.termux.app.place.Crossing.Landing crossingLanding =

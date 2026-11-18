@@ -1,0 +1,55 @@
+package com.termux.app.launcher.paging;
+
+import android.view.View;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+/**
+ * The one writer of the page tick strip. The host the apps row stands in binds the strip that
+ * belongs to it (the dock's own band, or the portable host's), and the row's ticks are written to
+ * whichever strip is bound. The row never holds the strip.
+ */
+public final class PageTicksWriter {
+    @Nullable private PageTickStripView strip;
+    @Nullable private PageTicks last;
+
+    /**
+     * Points the writer at {@code next}. The strip being put down is reset first, so a band that
+     * is on screen but no longer bound cannot be left holding the last row's pages; the new one is
+     * written the last ticks at once.
+     */
+    public void bind(@Nullable PageTickStripView next) {
+        if (strip == next) return;
+        PageTickStripView previous = strip;
+        strip = next;
+        if (previous != null) {
+            previous.setPages(1, 0f, -1);
+            previous.setVisibility(View.INVISIBLE);
+        }
+        if (last != null) writeTo(strip, last);
+    }
+
+    /** Remembers {@code ticks} and writes them to the bound strip. */
+    public void write(@NonNull PageTicks ticks) {
+        last = ticks;
+        writeTo(strip, ticks);
+    }
+
+    /** The strip being written, or null while there is none. */
+    @Nullable
+    public PageTickStripView bound() {
+        return strip;
+    }
+
+    private static void writeTo(@Nullable PageTickStripView target, @NonNull PageTicks ticks) {
+        if (target == null) return;
+        target.setVerticalForm(ticks.vertical);
+        target.setGlassInk(ticks.glassBackdrop, ticks.glassInk);
+        target.setAccentColor(ticks.accentColor);
+        target.setPages(ticks.pages, ticks.position, ticks.warmIndex);
+        // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
+        // gained a page would otherwise grow by it and shove the terminal.
+        target.setVisibility(ticks.shown ? View.VISIBLE : View.INVISIBLE);
+    }
+}

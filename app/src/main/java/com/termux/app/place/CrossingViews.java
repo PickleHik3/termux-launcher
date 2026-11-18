@@ -8,8 +8,6 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
-import com.termux.app.dock.DockLayout;
-import com.termux.app.dock.DockMorph;
 import com.termux.app.wall.PaneWallPage;
 
 /**
@@ -41,10 +39,8 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
         void coverWindowInFront(int px);
         /** The in-app keyboard brought up below the screen for {@code target}'s half, quietly. */
         void preRollKeyboard(@NonNull PaneWallPage target);
-        /** The dock's pinned row, which draws the morph; null before it is inflated. */
+        /** The dock's pinned row; null before it is inflated. */
         @Nullable SuggestionBarView dockRow();
-        /** The beads under the dock's icons where the row's morph draws them now. */
-        void syncDockBeadsWithMorph();
         /** One of the row's icons was drawn again: the reflection shows it as the icon does. */
         void onDockRowContentChanged();
         /** The stack's one writer of transforms: the sink, the cut and the slide go through it. */
@@ -81,37 +77,6 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
     @Override
     public void preRoll(@NonNull PaneWallPage target) {
         mHost.preRollKeyboard(target);
-    }
-
-    // ---- The dock's pinned row, which draws the morph (SuggestionBarView) ----
-
-    @Override
-    public void beginMorph(@NonNull DockLayout leaving, @NonNull DockLayout arriving) {
-        SuggestionBarView row = mHost.dockRow();
-        if (row != null) row.beginDockMorph(leaving, arriving);
-    }
-
-    @Override
-    public void dress(@NonNull DockMorph morph) {
-        SuggestionBarView row = mHost.dockRow();
-        if (row == null || !morph.rowMorphs()) return;
-        row.dockMorphFrame(morph.slotIconPx(), morph.appsRowUsableWidthPx(),
-            morph.appsRowEdgeInsetPx(), morph.drawerTileAlpha());
-        // The beads under the icons where this frame draws them.
-        mHost.syncDockBeadsWithMorph();
-        // And the icons' reflection: the morph moves them by drawing alone, which the
-        // reflection, a recording of the row, does not hear of otherwise.
-        mHost.onDockRowContentChanged();
-    }
-
-    @Override
-    public void endMorph(@NonNull DockLayout landed) {
-        SuggestionBarView row = mHost.dockRow();
-        if (row == null) return;
-        row.endDockMorph(landed);
-        // The row draws the landed rest from here, exactly as its last frame did: so do the
-        // beads, until the row is laid out in it.
-        mHost.syncDockBeadsWithMorph();
     }
 
     /**

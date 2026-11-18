@@ -543,7 +543,7 @@ final class DockDress {
         if (!shown.apps && bar != null) bar.cancelActiveDockDrag();
         // Back on the dock, the row's ticks say again whether anything shows in their band.
         if (shown.pageBand == com.termux.app.dock.DockRows.PageBand.TICKS && bar != null)
-            bar.publishPageIndicator();
+            bar.publishPageTicks();
     }
 
     /** True when this layout moved the dock. Package-visible for the arrangement tests. */
