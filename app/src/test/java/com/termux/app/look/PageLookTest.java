@@ -101,7 +101,6 @@ public class PageLookTest {
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY, s.statusBarOpacity());
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_MATERIAL, s.surfaceMaterial());
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY, s.surfaceMaterialIntensity());
-        assertEquals(TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM, s.wallpaperDim());
         assertEquals(100, s.inAppKeyboardBackdropOpacity());
     }
 
@@ -181,25 +180,14 @@ public class PageLookTest {
     }
 
     @Test
-    public void groundInputsAreDetachable() {
-        put(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, 20);
-        assertTrue(look.write(PageLook.Scope.page(3), TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, 55));
-        assertEquals(55, look.of(HOME_B).wallpaperDim());
-        assertEquals(20, look.of(HOME).wallpaperDim());
+    public void keyboardBackdropIsNotAPagesOwn() {
+        // The per-page wallpaper dim is no longer read: the Terminal card's one dim replaces it
+        // (ADR 0031 §4, #287), and the reset deletes the stored keys.
         // The keyboard's backdrop is the chrome's: no page holds its own (ADR 0031).
         assertFalse(look.write(PageLook.Scope.page(3),
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, 60));
         assertEquals(look.of(HOME).inAppKeyboardBackdropOpacity(),
             look.of(HOME_B).inAppKeyboardBackdropOpacity());
-    }
-
-    @Test
-    public void canvasTintOnTheTerminalPageFollowsBaseUnlessDetached() {
-        put(TERMUX_APP.KEY_SURFACE_BASE_TINT, 25);
-        assertEquals(25, look.of(TERMINAL).canvasTint());
-        detach(SurfaceSlot.CANVAS, SurfaceProperty.TINT);
-        put(TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, 60);
-        assertEquals(60, look.of(TERMINAL).canvasTint());
     }
 
     // ---- caching and invalidation

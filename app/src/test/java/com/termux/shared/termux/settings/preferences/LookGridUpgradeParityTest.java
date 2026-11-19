@@ -90,8 +90,7 @@ public class LookGridUpgradeParityTest {
             assertEquals(at, 20, preferences.getDockTintStrength(page));
             assertEquals(at, 20, preferences.getStatusBarTintStrength(page));
         }
-        // The terminal's own blur 25 is Mist's stop; its grain still follows Base's 4.
-        assertEquals(25, preferences.getTerminalGlassBlurRadius());
+        // The terminal's grain still follows Base's 4 (its Blur is its Background's own, #287).
         assertEquals(4, preferences.getTerminalGlassGrain());
         assertEquals(20, preferences.getTerminalTintStrength());
         assertEquals(120, preferences.getSurfaceGlassVibrancy());

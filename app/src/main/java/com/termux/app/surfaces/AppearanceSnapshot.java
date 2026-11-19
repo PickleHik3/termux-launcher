@@ -82,6 +82,15 @@ final class AppearanceSnapshot {
     /** How many app buttons the dock shows. */
     private final int mDockButtonCount;
     private final int mDim;
+    /**
+     * The Terminal's Background keys ({@link #TERMINAL_BACKGROUND_KEYS}) as stored, null where
+     * absent: an unset value reads the shipped one, so it is put back absent, not as a number.
+     */
+    private final Integer[] mTerminalBackground;
+
+    /** The Terminal's Background: the panes' Opacity and Blur and its Wallpaper dim. */
+    static final String[] TERMINAL_BACKGROUND_KEYS = {TERMUX_APP.KEY_TERMINAL_BG_OPACITY,
+        TERMUX_APP.KEY_TERMINAL_BG_BLUR, TERMUX_APP.KEY_TERMINAL_WALLPAPER_DIM};
     private final boolean mSoft;
     private final String mContrast;
     private final String mTrailStyle;
@@ -167,6 +176,9 @@ final class AppearanceSnapshot {
         mKeySpacingRaw = rawFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
         mDockButtonCount = prefs.getAppLauncherButtonCount();
         mDim = prefs.getWallpaperBackdropDim();
+        mTerminalBackground = new Integer[TERMINAL_BACKGROUND_KEYS.length];
+        for (int i = 0; i < TERMINAL_BACKGROUND_KEYS.length; i++)
+            mTerminalBackground[i] = rawInt(prefs, TERMINAL_BACKGROUND_KEYS[i]);
         mSoft = SoftWallpaper.isOn(prefs);
         mContrast = prefs.getTerminalContrastLevel().value;
         mTrailStyle = prefs.getTerminalCursorTrailStyle();
@@ -275,6 +287,8 @@ final class AppearanceSnapshot {
         restoreFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE, mKeySpacingRaw);
         prefs.setAppLauncherButtonCount(mDockButtonCount);
         prefs.setWallpaperBackdropDim(mDim);
+        for (int i = 0; i < TERMINAL_BACKGROUND_KEYS.length; i++)
+            restoreInt(prefs, TERMINAL_BACKGROUND_KEYS[i], mTerminalBackground[i]);
         SoftWallpaper.set(prefs, mSoft);
         prefs.setTerminalContrastLevel(mContrast);
         prefs.setTerminalCursorTrailStyle(mTrailStyle);
@@ -321,6 +335,7 @@ final class AppearanceSnapshot {
             .append('|').append(mOpacityLinked)
             .append('|').append(mKeyRadiusRaw).append('|').append(mKeySpacingRaw)
             .append('|').append(mDockButtonCount).append('|').append(mDim).append('|').append(mSoft)
+            .append('|').append(java.util.Arrays.toString(mTerminalBackground))
             .append('|').append(mContrast).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mFontSize).append('|').append(mScreenEvents)
@@ -519,6 +534,32 @@ final class AppearanceSnapshot {
 
     private static void restoreKeyRadius(@NonNull TermuxAppSharedPreferences prefs, float raw) {
         restoreFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, raw);
+    }
+
+    /** An int key as stored, or null where it is absent. */
+    @Nullable
+    private static Integer rawInt(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key) {
+        // What the getters read: a Look previewed over the store, while one is.
+        SharedPreferences store = SharedPreferencesPreview.readsFor(prefs.getSharedPreferences());
+        if (store == null || !store.contains(key))
+            return null;
+        try {
+            return store.getInt(key, 0);
+        } catch (ClassCastException e) {
+            return null;
+        }
+    }
+
+    /** Puts an int key back: written as it was, or removed when it was absent. */
+    private static void restoreInt(@NonNull TermuxAppSharedPreferences prefs,
+                                   @NonNull String key, @Nullable Integer raw) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null)
+            return;
+        if (raw == null)
+            store.edit().remove(key).apply();
+        else
+            store.edit().putInt(key, raw).apply();
     }
 
     /** Puts a float key back: written as it was, or removed when it was absent. */

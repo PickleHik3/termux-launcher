@@ -110,8 +110,7 @@ public class EditorCardSectionsTest {
                 Row.FOLDERS, Row.WALLPAPER_SCROLL),
             "SECTION_WIDGETS", Arrays.asList(Row.GLASS_WIDGETS, Row.NUMERALS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
-            // No glass: the chrome wears one look on every page (ADR 0031).
-            "SECTION_APPEARANCE", Arrays.asList(Row.WALLPAPER_DIM),
+            // No glass (ADR 0031) and no dim: Wallpaper dim is the Terminal's (#287).
             "SECTION_LINKS", Arrays.asList(Row.LINK_GESTURES, Row.LINK_PAGES)));
     }
 
@@ -145,7 +144,8 @@ public class EditorCardSectionsTest {
     public void terminal() {
         check(EditorCard.TERMINAL, expect(
             "SECTION_TEXT", Arrays.asList(Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT),
-            "SECTION_APPEARANCE", block(),
+            "SECTION_BACKGROUND", Arrays.asList(Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
+                Row.WALLPAPER_DIM),
             "SECTION_PANES", Arrays.asList(Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
                 Row.FOCUS_GROWS, Row.PANE_BORDERS),
             "SECTION_EFFECTS", Arrays.asList(Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,

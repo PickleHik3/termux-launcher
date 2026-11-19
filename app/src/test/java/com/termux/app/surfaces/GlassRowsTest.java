@@ -28,14 +28,16 @@ public class GlassRowsTest {
 
     /** The terminal's glass card wears the whole Appearance block until #287 turns it into Background. */
     @Test
-    public void theTerminalCardWearsTheAppearanceBlock() {
+    public void theTerminalCardWearsItsBackgroundAndNoGlassBlock() {
+        // ADR 0031 §4 (#287): Opacity, Blur and Wallpaper dim, its own; the glass block is gone.
         java.util.List<Row> rows = rowsOf(EditorCard.TERMINAL, ALL);
-        int at = rows.indexOf(Row.SECTION_APPEARANCE);
+        int at = rows.indexOf(Row.SECTION_BACKGROUND);
         assertTrue(at >= 0);
-        java.util.List<Row> block = new java.util.ArrayList<>();
-        for (Row row : rows.subList(at, rows.size()))
-            if (BLOCK.contains(row) && block.size() < BLOCK.size()) block.add(row);
-        assertEquals(BLOCK, block);
+        assertEquals(java.util.Arrays.asList(Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY,
+            Row.TERMINAL_BLUR, Row.WALLPAPER_DIM), rows.subList(at, at + 4));
+        for (Row row : BLOCK)
+            assertFalse(row.name(), rows.contains(row));
+        assertFalse(rows.contains(Row.SECTION_APPEARANCE));
     }
 
     /**

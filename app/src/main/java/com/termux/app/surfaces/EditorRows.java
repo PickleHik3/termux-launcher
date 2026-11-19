@@ -129,8 +129,16 @@ public final class EditorRows {
             R.drawable.ic_ed_transition_slide),
         NUMERALS(Kind.SEGMENTS, R.string.appearance_row_numerals, R.drawable.ic_editor_text_size),
         PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
+        /**
+         * The black dim over the wallpaper on the Terminal's pages, Display and Assistant pages
+         * included (the Terminal card's Background); Home's pages have none.
+         */
         WALLPAPER_DIM(Kind.SLIDER, R.string.appearance_row_wallpaper_dim,
             R.drawable.ic_symbol_wallpaper),
+        /** The terminal panes' Opacity, its own key, never Global's (the Terminal's Background). */
+        TERMINAL_OPACITY(Kind.SLIDER, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
+        /** The terminal panes' Blur in dp, its own key, never Global's (the Terminal's Background). */
+        TERMINAL_BLUR(Kind.SLIDER, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,
             R.drawable.ic_symbol_wallpaper),
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),
@@ -259,6 +267,7 @@ public final class EditorRows {
         SECTION_TEXT(Kind.MENU, R.string.editor_section_text, 0),
         SECTION_PANES(Kind.MENU, R.string.editor_section_panes, 0),
         SECTION_EFFECTS(Kind.MENU, R.string.editor_section_effects, 0),
+        SECTION_BACKGROUND(Kind.MENU, R.string.editor_section_background, 0),
         SECTION_BARS(Kind.MENU, R.string.editor_section_bars, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
         HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),

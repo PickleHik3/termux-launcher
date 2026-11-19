@@ -4407,8 +4407,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mFancierGlassLook != null && frameStandsDown())
                     return new com.termux.app.chrome.GlassRefraction.Look(0,
                         mFancierGlassLook.edgeWidthDp, mFancierGlassLook.edgeLightPercent);
-                // The Terminal element's own Depth and Edge where it holds them (ADR 0017).
-                return com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.TERMINAL, terminalLookPageId(), mFancierGlassLook);
+                // Depth and Edge are Global's alone (ADR 0031 §2): the terminal holds none.
+                return mFancierGlassLook;
             }
 
             @Override @Nullable public Bitmap paneGlassClearFrame() {
@@ -5186,42 +5186,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mGroundLook;
     }
 
-    /** A page's wallpaper dim: black at its own Look's alpha. */
-    private int pageDimColor(@Nullable com.termux.app.wall.WallPages.Page page) {
-        com.termux.app.look.PageLook look = groundLook();
-        if (page == null || look == null) return resolveWallpaperBackdropDimColor();
-        int dim = look.of(page).wallpaperDim();
-        return Math.round(Math.max(0, Math.min(100, dim)) / 100f * 255f) << 24;
-    }
-
     /**
-     * One wall page's ground in wallpaper mode: Home's is its dim alone (never the terminal's
-     * tint); the Terminal page's (and a display window's) folds the canvas tint in when the panes
-     * are not glass. Opaque mode has the one ground it always had.
+     * One wall page's ground in wallpaper mode: Home's is the wallpaper as it is (Home's pages
+     * have no dim, ADR 0031 §4); every page of the Workspace wears the Terminal's one Wallpaper
+     * dim, and the Terminal page's (and a display window's) folds the canvas tint in when the
+     * panes are not glass. Opaque mode has the one ground it always had.
      */
     private int groundOfWallPage(@NonNull com.termux.app.page.PageKind wallPage) {
         if (!shouldUseWallpaperPassthroughMode()) return mWallGroundColor;
-        com.termux.app.wall.WallPages pages = wallPages();
         // The Assistant page is of the Workspace (ADR 0025) but its pane is its own glass, never
         // the terminal's tint (ADR 0022): its ground is its dim alone.
         boolean terminal = com.termux.app.wall.PaneWallPolicy.isWorkspacePlace(wallPage)
             && wallPage != com.termux.app.page.PageKind.ASSISTANT;
-        com.termux.app.wall.WallPages.Page page = null;
-        if (wallPage == com.termux.app.page.PageKind.ASSISTANT) {
-            // Its dim is the Workspace's look, read through its own page.
-            page = pages.assistant();
-        } else if (wallPage == com.termux.app.page.PageKind.DISPLAY && mDisplayPageBinding.boundPage() >= 0) {
-            // A Display page wears its own dim (W6).
-            page = pages.page(mDisplayPageBinding.boundPage());
-            if (page == null) page = pages.terminal();
-        } else if (terminal) {
-            page = pages.terminal();
-        } else {
-            // The Home frame wears the Home page it shows, not the home page (ADR 0015 §6).
-            page = pages.page(mHomeSeam.pageInFront());
-        }
+        int dim = com.termux.app.terminal.TerminalSurfacePolicy.dimColor(
+            com.termux.app.terminal.TerminalSurfacePolicy.pageDimPercent(wallPage,
+                terminalWallpaperDimPercent()));
         return com.termux.app.terminal.TerminalSurfacePolicy.pageGround(terminal, mGroundGlassPane,
-            mGroundCanvasTint, pageDimColor(page));
+            mGroundCanvasTint, dim);
     }
 
     /** Dresses the strip's grounds, position and visibility; hides it in opaque mode. */
@@ -5271,12 +5252,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return resolveWallpaperBackdropDimColor();
     }
 
-    /** Black dim over the wallpaper, behind every surface: 0% shows the wallpaper untouched. */
+    /**
+     * The Terminal's Wallpaper dim, black over the wallpaper behind everything else on its pages
+     * (Display and Assistant pages included): 0% shows the wallpaper untouched. Home's pages have
+     * none ({@link #groundOfWallPage}).
+     */
     private int resolveWallpaperBackdropDimColor() {
-        int dim = mPreferences != null ? mPreferences.getWallpaperBackdropDim()
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM;
-        int alpha = Math.round(Math.max(0, Math.min(100, dim)) / 100f * 255f);
-        return alpha << 24;   // black at the slider's own alpha
+        return com.termux.app.terminal.TerminalSurfacePolicy.dimColor(terminalWallpaperDimPercent());
+    }
+
+    /** The Terminal card's Wallpaper dim, percent; read at rest, never per frame. */
+    private int terminalWallpaperDimPercent() {
+        return mPreferences != null ? mPreferences.getTerminalWallpaperDim()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_WALLPAPER_DIM;
     }
 
     /**

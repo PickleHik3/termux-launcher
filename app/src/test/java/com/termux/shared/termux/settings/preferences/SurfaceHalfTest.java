@@ -73,8 +73,8 @@ public class SurfaceHalfTest {
         // The no-half reads are today's callers: they answer the Workspace.
         assertEquals(12, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        // The terminal is only on the Workspace, and reads Base.
-        assertEquals(12, preferences.getTerminalBackgroundOpacity());
+        // The terminal's Background never follows Base (ADR 0031 §4, #287).
+        assertEquals(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY, preferences.getTerminalBackgroundOpacity());
     }
 
     @Test
@@ -86,7 +86,8 @@ public class SurfaceHalfTest {
         // One wall value under the plain key, never a page override.
         assertTrue(store.contains(canvasKey));
         assertFalse(store.contains(canvasKey + "@" + TerminalPageIdFixture.TERMINAL_PAGE_ID));
-        assertEquals(70, preferences.getTerminalBackgroundOpacity());
+        assertEquals(70, preferences.getSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
+            TermuxAppSharedPreferences.terminalPageId()));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.terminalPageId()));
     }

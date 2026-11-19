@@ -33,7 +33,8 @@ import java.util.List;
 /**
  * The Terminal card (appearance-one-look spec §3, Terminal; the Workspace card merged into it; no
  * eye, the terminal cannot be hidden): Text (the terminal's Font size, Contrast as words, the
- * Font link), the terminal's glass, Panes, Effects (Cursor trail and Screen effect as
+ * Font link), Background (the panes' Opacity and Blur and the Wallpaper dim of the Terminal's
+ * pages, none of which follows Global), Panes, Effects (Cursor trail and Screen effect as
  * preview tiles, Screen effect only where its shader runs), and Layout, the rows the Terminal's
  * pages show with Minimal layout.
  *
@@ -48,8 +49,10 @@ public final class TerminalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT);
-        com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
+            .tier(1, Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT)
+            // The Terminal's Background (ADR 0031 §4): never Global's, no preset, no reset arrow.
+            .tier(3, Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
+                Row.WALLPAPER_DIM)
             .tier(3, Row.SECTION_PANES, Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER,
                 Row.AUTO_TILING, Row.FOCUS_GROWS)
             .tier(3, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL);
@@ -131,7 +134,6 @@ public final class TerminalCard {
     public static CardRowView view(@NonNull Context context, @NonNull Row row, int widthPx,
                                    @NonNull Host host) {
         switch (row) {
-            case GLASS_SECTION: return StatusBarCard.glassHeader(context, false);
             case CONTRAST: return contrast(context, widthPx, host);
             case CURSOR_TRAIL: return trails(context, host);
             case EFFECT: return effects(context, host);

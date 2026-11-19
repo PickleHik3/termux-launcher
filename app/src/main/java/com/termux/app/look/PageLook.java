@@ -67,7 +67,6 @@ public final class PageLook {
 
         private final int[][] values;
         private final int keyboardBackdropOpacity;
-        private final int wallpaperDim;
         private final String material;
         private final int materialIntensity;
 
@@ -82,7 +81,6 @@ public final class PageLook {
             keyboardBackdropOpacity = LookKeys.normalizeBackdrop(store.getInt(
                 TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
                 TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY));
-            wallpaperDim = LookKeys.wallpaperDim(store, pageId);
             material = store.getString(TERMUX_APP.KEY_SURFACE_MATERIAL,
                 TERMUX_APP.DEFAULT_SURFACE_MATERIAL);
             materialIntensity = Math.max(0, Math.min(100, store.getInt(
@@ -125,15 +123,6 @@ public final class PageLook {
         /** Where on the family's curve the Base triple was set, 0..100. */
         public int surfaceMaterialIntensity() { return materialIntensity; }
 
-        // Ground inputs.
-
-        /** The wallpaper's dim, 0..100: the page's own, else the wall's. */
-        public int wallpaperDim() { return wallpaperDim; }
-
-        /** The terminal canvas's tint, 0..100, on the Terminal page; 0 on any other page. */
-        public int canvasTint() {
-            return kind == PageKind.TERMINAL ? value(SurfaceSlot.CANVAS, SurfaceProperty.TINT) : 0;
-        }
     }
 
     private final LookStore store;

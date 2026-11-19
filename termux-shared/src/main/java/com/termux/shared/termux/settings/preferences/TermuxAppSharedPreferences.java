@@ -599,19 +599,33 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             DataUtils.clamp(value, 0, TERMUX_APP.MAX_TERMINAL_CORNER_RADIUS), false);
     }
 
+    /** The panes' Blur, dp (the Terminal's Background): its own key, else the shipped value. */
     public int getTerminalGlassBlurRadius() {
-        // The 48dp ceiling is the terminal's own; a larger inherited Base narrows here rather than
-        // leaking a value the pane cannot render.
-        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS, sTerminalPageId), 0, 48);
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_BG_BLUR, TERMUX_APP.DEFAULT_TERMINAL_BG_BLUR), 0,
+            TERMUX_APP.MAX_TERMINAL_BG_BLUR);
     }
 
     public void setTerminalGlassBlurRadius(int value) {
-        writeSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, DataUtils.clamp(value, 0, 48));
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BG_BLUR,
+            DataUtils.clamp(value, 0, TERMUX_APP.MAX_TERMINAL_BG_BLUR), false);
     }
 
-    /** Film-grain strength (percent) of the terminal's bordered glass pane; 0 disables. */
+    /**
+     * The black dim over the wallpaper on the Terminal's pages (Display and Assistant pages
+     * included), percent; Home's pages have none. Its own key, else the shipped value.
+     */
+    public int getTerminalWallpaperDim() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_WALLPAPER_DIM, TERMUX_APP.DEFAULT_TERMINAL_WALLPAPER_DIM),
+            0, 100);
+    }
+
+    public void setTerminalWallpaperDim(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_WALLPAPER_DIM,
+            DataUtils.clamp(value, 0, 100), false);
+    }
+
     public int getTerminalGlassGrain() {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.GRAIN,
             TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN, TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN, sTerminalPageId), 0, 100);
@@ -3162,15 +3176,20 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FIRST_RUN_PERMISSIONS_CARD_SEEN, value, false);
     }
 
+    /**
+     * The panes' Opacity, percent (the Terminal's Background): its own key, else the Terminal's
+     * shipped value, never Global's.
+     */
     public int getTerminalBackgroundOpacity() {
-        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
-            TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY, sTerminalPageId), 0, 100);
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_BG_OPACITY, TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY), 0, 100);
     }
 
+    /** Writes the panes' Opacity, and in wallpaper mode the copy that mode restores from. */
     public void setTerminalBackgroundOpacity(int value) {
         int clamped = DataUtils.clamp(value, 0, 100);
-        writeSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
-            TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, clamped);
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BG_OPACITY,
+            clamped, false);
         if (isUseSystemWallpaperEnabled()) {
             setWallpaperEnabledTerminalBackgroundOpacity(clamped);
         }
@@ -3296,7 +3315,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             // Applying a wallpaper restores the glass it remembers for wallpaper mode; it has to
             // remember Clear's, or the first wallpaper would put the old look back.
             setWallpaperEnabledAppBarOpacity(FRESH_INSTALL_BASE_OPACITY);
-            setWallpaperEnabledTerminalBackgroundOpacity(FRESH_INSTALL_BASE_OPACITY);
+            // The terminal's copy is its own Background's shipped Opacity, never Global's.
+            setWallpaperEnabledTerminalBackgroundOpacity(TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY);
             setWallpaperEnabledExtraKeysBlurRadius(FRESH_INSTALL_BASE_BLUR);
             // Nothing to fold either, and folding would do harm: the fold seeds Base from the
             // dock's numbers, which here means the dock's own denser opacity rather than the

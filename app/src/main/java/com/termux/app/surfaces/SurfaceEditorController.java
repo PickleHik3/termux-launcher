@@ -3054,7 +3054,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case PAGE_DOTS:
                     return "off".equals(AppearanceSettingsStore.getString(context,
                         HomeSettings.KEY_PAGE_INDICATOR, null)) ? 0 : 1;
-                case WALLPAPER_DIM: return wallpaperDimValue(prefs);
+                case WALLPAPER_DIM: return prefs.getTerminalWallpaperDim();
+                case TERMINAL_OPACITY: return prefs.getTerminalBackgroundOpacity();
+                case TERMINAL_BLUR: return prefs.getTerminalGlassBlurRadius();
                 case WALLPAPER_SCROLL:
                     return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
                         ? 1 : 0;
@@ -3114,6 +3116,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             switch (row) {
                 case FROST: return Control.GLASS.max;
                 case OPACITY: return AppearanceLooks.OPACITY_MAX;
+                case TERMINAL_OPACITY: return 100;
+                case TERMINAL_BLUR: return TermuxPreferenceConstants.TERMUX_APP.MAX_TERMINAL_BG_BLUR;
                 case TINT: return AppearanceLooks.TINT_MAX;
                 case HEIGHT:
                     if (mCard == EditorCard.KEYBOARD)
@@ -3161,7 +3165,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case REFLECTION:
                 case GRAIN:
                 case WALLPAPER_DIM:
+                case TERMINAL_OPACITY:
                     return getString(R.string.appearance_readout_percent, value);
+                case TERMINAL_BLUR:
+                    return getString(R.string.appearance_readout_dp, value);
                 case HEIGHT:
                     return mCard == EditorCard.KEYBOARD
                         ? getString(R.string.appearance_readout_percent, value)
@@ -3802,7 +3809,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case PAGE_DOTS:
                 writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, value != 0 ? "dots" : "off");
                 break;
-            case WALLPAPER_DIM: writeWallpaperDim(value); break;
+            case WALLPAPER_DIM:
+            case TERMINAL_OPACITY:
+            case TERMINAL_BLUR:
+                writeTerminalBackground(row, value);
+                break;
             case WALLPAPER_SCROLL:
                 AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax", value != 0);
                 settingsWritten();
@@ -3966,12 +3977,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         if (!writeOnPage(card, card.slot, property, written))
             prefs.detachSurfaceValue(card.slot, property, SurfacePresets.pageOf(writeScreen(row)), written);
-        // The system-wallpaper opacity the chrome restores from rides along. Not
-        // setTerminalBackgroundOpacity: with no terminal cell of its own everywhere, it writes
-        // Base, and the Terminal card's Opacity moved every surface on every page.
-        if (card == EditorCard.TERMINAL && property == SurfaceProperty.OPACITY
-                && prefs.isUseSystemWallpaperEnabled())
-            prefs.setWallpaperEnabledTerminalBackgroundOpacity(written);
         requestPreview(scopes);
         EditorCardSheet sheet = mSheet;
         if (sheet != null && !mSliderDragActive) {
@@ -4656,37 +4661,39 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
-    /** The Home tab's dim of the editor's page: its own override, else the wall-wide dim. */
-    private com.termux.app.look.PageLook.Scope wallpaperDimScope() {
-        return mScopePageId < 0 ? com.termux.app.look.PageLook.Scope.GLOBAL
-            : com.termux.app.look.PageLook.Scope.page(mScopePageId);
-    }
-
-    private int wallpaperDimValue(@NonNull TermuxAppSharedPreferences prefs) {
-        com.termux.app.look.PageLook look = pageLook();
-        int own = look == null ? -1
-            : look.read(wallpaperDimScope(), TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, -1);
-        return own >= 0 ? Math.min(100, own) : prefs.getWallpaperBackdropDim();
-    }
-
     /**
-     * The Home tab dims every Home page alike (one look per page kind, ADR 0020), each under its
-     * own key so the Terminal page keeps the wall-wide dim; with no pages to name, the wall-wide one.
+     * The Terminal's Background (ADR 0031 §4): the panes' Opacity and Blur and the Wallpaper dim
+     * of the Terminal's pages, each in its own key. Never Global's: no other surface moves, and
+     * nothing here writes the look grid.
      */
-    private void writeWallpaperDim(int value) {
-        com.termux.app.look.PageLook look = pageLook();
-        if (look == null)
+    private void writeTerminalBackground(@NonNull Row row, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
             return;
-        int dim = clamp(value, 0, 100);
-        String key = TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM;
-        boolean written = false;
-        for (com.termux.app.wall.WallPages.Page page : scopePages()) {
-            if (page.kind != com.termux.app.page.PageKind.HOME) continue;
-            look.write(com.termux.app.look.PageLook.Scope.page(page.id), key, dim);
-            written = true;
+        int scopes = SurfaceEditorProperties.PREVIEW_SURFACES;
+        switch (row) {
+            case TERMINAL_OPACITY:
+                // Each value re-bakes the blurred frames: a drag holds that for its release.
+                holdFrameBakesForDrag();
+                // The setter keeps wallpaper mode's copy in step.
+                prefs.setTerminalBackgroundOpacity(value);
+                break;
+            case TERMINAL_BLUR:
+                holdFrameBakesForDrag();
+                prefs.setTerminalGlassBlurRadius(value);
+                scopes |= SurfaceEditorProperties.PREVIEW_BLUR;
+                break;
+            case WALLPAPER_DIM:
+                prefs.setTerminalWallpaperDim(value);
+                break;
+            default:
+                return;
         }
-        if (!written) look.write(wallpaperDimScope(), key, dim);
+        requestPreview(scopes);
         syncDirty();
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && !mSliderDragActive)
+            sheet.restate(row);
     }
 
     /** Corners: one radius for every surface and the terminal, on both halves. */

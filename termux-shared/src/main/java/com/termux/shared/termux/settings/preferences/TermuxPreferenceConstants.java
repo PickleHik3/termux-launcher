@@ -611,6 +611,28 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_TERMINAL_GLASS_GRAIN = 18;
 
         /**
+         * The Terminal's Background (ADR 0031 §4): the panes' Opacity and Blur and the Wallpaper
+         * dim of the Terminal's pages (Display and Assistant pages included). Keys of their own,
+         * outside the look grid: nothing set on Global or by a preset reaches them, and an unset
+         * key reads the Terminal's shipped value below, never Global's.
+         */
+        public static final String KEY_TERMINAL_BG_OPACITY = "terminal_bg_opacity";
+        /**
+         * The Terminal's shipped pane Opacity, percent. Provisional (#287): clearly darker than
+         * Global's shipped glass (10% on a fresh install), so a fresh terminal reads darker than
+         * the bars; the developer picks the real number on pong.
+         */
+        public static final int DEFAULT_TERMINAL_BG_OPACITY = 40;
+        public static final String KEY_TERMINAL_BG_BLUR = "terminal_bg_blur";
+        /** The Terminal's shipped pane Blur, dp. */
+        public static final int DEFAULT_TERMINAL_BG_BLUR = DEFAULT_TERMINAL_GLASS_BLUR_RADIUS;
+        /** The pane Blur's ceiling, dp: what a pane can render. */
+        public static final int MAX_TERMINAL_BG_BLUR = 48;
+        public static final String KEY_TERMINAL_WALLPAPER_DIM = "terminal_wallpaper_dim";
+        /** The Terminal's shipped Wallpaper dim, percent: the wallpaper as it is. */
+        public static final int DEFAULT_TERMINAL_WALLPAPER_DIM = 0;
+
+        /**
          * Legacy key for the wallpaper backdrop, counted as the wallpaper's own visibility: 100
          * showed the wallpaper as-is and lower values dimmed it. Read only to migrate; every
          * reader now uses {@link #KEY_WALLPAPER_BACKDROP_DIM}, which counts the way the slider
@@ -1913,7 +1935,8 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY =
             "wallpaper_enabled_terminal_background_opacity";
 
-        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY = 34;
+        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY =
+            DEFAULT_TERMINAL_BG_OPACITY;
 
         /**
          * Stores the user's preferred dock opacity while wallpaper mode is enabled so it can be

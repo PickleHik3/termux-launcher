@@ -188,8 +188,8 @@ public final class ChromePolicy {
                 FrostStops.nearestStopByBlur(blur));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, appBar);
-            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
-                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, terminal);
+            // The terminal's Opacity is its own key, outside the grid (ADR 0031 §4).
+            preferences.setTerminalBackgroundOpacity(terminal);
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, blur);
         } else {
@@ -204,8 +204,7 @@ public final class ChromePolicy {
                 FrostStops.nearestStopByBlur(0));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
-            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
-                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
+            preferences.setTerminalBackgroundOpacity(100);
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, 0);
         }
