@@ -30110,8 +30110,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the bar and the Wall strip both show the chips as they come out of that.
         com.termux.app.chrome.WindowChips<com.termux.app.terminal.TerminalPaneController.Window>
             chips = windowChips();
-        // One bar across the wall (#90): the same chips in the same order on Home as on every
-        // window, the display window's at its place and the Home floats after the row's.
+        // The Workspace's windows on the bar; the Wall strip's tiles also carry the Home floats.
         java.util.Map<com.termux.app.terminal.TerminalPaneController.Window,
             com.termux.app.terminal.TerminalWindowBar.WindowItem> floatItems =
                 new java.util.HashMap<>();
@@ -30124,6 +30123,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPages.isCommitted(com.termux.app.page.PageKind.HOME) || wallStripFed() && wallStripOn(mLastWallPage))
             syncWallStrip(chips, items);
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
+        // The bar lists the Workspace's own windows; the floats are Home's chips (#295).
+        items = new java.util.ArrayList<>(
+            items.subList(0, chips.count(com.termux.app.chrome.WindowChips.Surface.BAR)));
         // On a Display page the bar shows no terminal window chips (A3c2): the status widgets
         // beside them stay; the terminal chips come back with the wall's return to the Terminal page.
         // #192: the Display page's chips are the display's apps, one each; none when empty.
@@ -32794,16 +32796,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Asked as the float is minimised: it folds into its own chip in the bar (#91), which
             // stands for it minimised or not, on the bar's row or in its window column. A bar off
             // screen, or the chip scrolled out of sight, leaves the flight to go down and away.
-            // On Home the float folds into Home's own chip for it.
+            // The float folds into Home's own chip for it; the Workspace's bar has none.
             int own = homeFloatChips().chipOf(window);
-            if (own >= 0 && homeFloatChipBar().chipBoundsOnScreen(own, out)) return true;
-            int at = windowChips().barChipOf(window);
-            if (at < 0) return false;
-            com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
-            if (bar != null && bar.chipBoundsOnScreen(at, out)) return true;
-            com.termux.app.statusbar.StatusBarWindowColumn column =
-                findViewById(R.id.terminal_status_window_column);
-            return column != null && column.chipBoundsOnScreen(at, out);
+            return own >= 0 && homeFloatChipBar().chipBoundsOnScreen(own, out);
         }
 
         @Override public void onHostedFloatEnded(int widgetId) {
