@@ -174,11 +174,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         /**
          * The drawer's glass handoff, once per frame of its motion: 0 shut, 1 once the plane's own
-         * glass has taken over (the dock's glass is gone by then), and the plane's corner radius in
-         * px. The built-in keyboard under an open drawer wears the sheet's glass and corners at
+         * glass has taken over (the dock's glass is gone by then), the plane's corner radius in
+         * px, and the drawer's progress (which sets its dim). The built-in keyboard under an open drawer wears the sheet's glass and corners at
          * this fraction ({@code KeyboardSheetLook}); it asks no animator of its own.
          */
-        default void onDrawerSheetFraction(float fraction, float radiusPx) {}
+        default void onDrawerSheetFraction(float fraction, float radiusPx, float progress) {}
 
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
@@ -2169,7 +2169,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerDockChoreographyTarget target = mDockTarget;
         if (target != null) target.setDrawerTransitionProgress(p);
         // Not the settled-scene capture's p = 1: that is a picture of the open drawer, not a frame.
-        if (!mCapturingSettledScene) mHost.onDrawerSheetFraction(handoff, mOpenRadiusPx);
+        if (!mCapturingSettledScene) mHost.onDrawerSheetFraction(handoff, mOpenRadiusPx, p);
     }
 
     /**
@@ -2393,7 +2393,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHost.setHomeContentAlpha(1f);
             AppDrawerDockChoreographyTarget target = mDockTarget;
             if (target != null) target.setDrawerTransitionProgress(0f);
-            mHost.onDrawerSheetFraction(0f, mOpenRadiusPx);
+            mHost.onDrawerSheetFraction(0f, mOpenRadiusPx, 0f);
             if (mHostLayout != null) {
                 mHostLayout.setAlpha(1f);
                 mHostLayout.setVisibility(View.INVISIBLE);

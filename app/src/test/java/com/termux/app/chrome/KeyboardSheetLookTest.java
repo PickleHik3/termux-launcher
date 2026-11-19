@@ -76,4 +76,15 @@ public class KeyboardSheetLookTest {
         LiveChromeShape.Clip r = KeyboardSheetSkin.withTopRadius(card, 12f);
         assertSame(card, r);
     }
+
+    @Test
+    public void dimFollowsTheDrawersDimAtTheGlassFraction() {
+        // The drawer's own dim at full progress (0x54), none while the glass is not worn.
+        assertEquals(0x54, KeyboardSheetLook.dimAlpha(1f, 1f));
+        assertEquals(0, KeyboardSheetLook.dimAlpha(0f, 1f));
+        assertEquals(0, KeyboardSheetLook.dimAlpha(1f, 0f));
+        assertEquals(Math.round(0x54 * 0.5f), KeyboardSheetLook.dimAlpha(0.5f, 1f));
+        assertEquals(0x54 / 2, KeyboardSheetLook.dimAlpha(1f, 0.5f), 1);
+        assertEquals(0, KeyboardSheetLook.dimAlpha(Float.NaN, 1f));
+    }
 }

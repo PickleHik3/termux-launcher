@@ -8592,7 +8592,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * compare per frame at rest; the glass is built when the drawer first reaches the keyboard and
      * let go when it leaves, and the outline is touched only when the radius moves.
      */
-    private void onKeyboardSheetFraction(float drawerFraction, float radiusPx) {
+    private void onKeyboardSheetFraction(float drawerFraction, float radiusPx, float progress) {
         View host = findViewById(R.id.inapp_keyboard_view_host);
         float f = host == null ? 0f : com.termux.app.chrome.KeyboardSheetLook.glassFraction(
             isInAppKeyboardShown(), drawerFraction);
@@ -8603,6 +8603,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (int) Math.ceil(radiusPx));
         }
         mKeyboardSheet.setFraction(f);
+        mKeyboardSheet.setDim(com.termux.app.chrome.KeyboardSheetLook.dimAlpha(f, progress));
         if (mKeyboardSheet.engaged() != wasEngaged && host != null)
             host.setBackground(mKeyboardSheet.dress(mKeyboardHostInner));
         if (f <= 0f && mKeyboardSheet.sheet() != null) mKeyboardSheet.setSheet(null, 0);
@@ -19867,8 +19868,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mSheets.bottomBandPx();
         }
 
-        @Override public void onDrawerSheetFraction(float fraction, float radiusPx) {
-            onKeyboardSheetFraction(fraction, radiusPx);
+        @Override public void onDrawerSheetFraction(float fraction, float radiusPx, float progress) {
+            onKeyboardSheetFraction(fraction, radiusPx, progress);
         }
 
         @Override public boolean inAppKeyboardShown() {

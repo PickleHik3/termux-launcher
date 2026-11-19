@@ -40,4 +40,16 @@ public final class KeyboardSheetLook {
         float target = Math.max(own, Math.max(0f, drawerRadiusPx));
         return own + (target - own) * Math.min(1f, fraction);
     }
+
+    /**
+     * The black alpha (0..255) the keyboard lays under the sheet's glass: the drawer's own dim
+     * over the scene ({@code GlassBackdropTint}) at its progress, in step with the glass. The
+     * drawer's glass sits over that dim; the keyboard, drawn over the unified dock glass and not
+     * under the drawer's host, would otherwise sit over the undimmed wallpaper and read lighter.
+     */
+    public static int dimAlpha(float fraction, float drawerProgress) {
+        if (!(fraction > 0f)) return 0;
+        int full = com.termux.app.GlassBackdropTint.colorFor(drawerProgress) >>> 24;
+        return Math.round(full * Math.min(1f, fraction));
+    }
 }
