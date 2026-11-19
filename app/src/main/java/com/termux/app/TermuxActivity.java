@@ -10690,6 +10690,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean othersOwnStack() {
             return mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive();
         }
+        @Override public boolean arrivalKeyboardUp() {
+            return chromeRestOf(com.termux.app.page.PageKind.TERMINAL).keyboardReveal() > 0f;
+        }
         @Override public void homeShare(float share) {
             onPeekShare(share);
         }
@@ -18027,12 +18030,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                   int measuredToolbarPx) {
         boolean frontHome = mLastWallPage == com.termux.app.page.PageKind.HOME;
         int front = dockGlassTopInsetPx();
-        int other = otherRestHostTopPx(snapshot, measuredToolbarPx, frontHome);
-        mStackRenderer.setRestHostTops(frontHome ? front : other, frontHome ? other : front);
+        if (frontHome) {
+            mStackRenderer.setRestHostTops(front,
+                otherRestHostTopPx(snapshot, measuredToolbarPx, true, true),
+                otherRestHostTopPx(snapshot, measuredToolbarPx, true, false));
+        } else {
+            int home = otherRestHostTopPx(snapshot, measuredToolbarPx, false, false);
+            mStackRenderer.setRestHostTops(home, front, front);
+        }
     }
 
+    /**
+     * @param otherStandsFlush whether the other side's rest stands the Terminal's flush padding:
+     *     the Workspace's with its keyboard down
+     */
     private int otherRestHostTopPx(@NonNull com.termux.app.dock.DockGeometry.Snapshot snapshot,
-                                   int measuredToolbarPx, boolean frontHome) {
+                                   int measuredToolbarPx, boolean frontHome,
+                                   boolean otherStandsFlush) {
         com.termux.app.wall.PageRef frontPage = frontHome
             ? com.termux.app.wall.PageRef.HOME : com.termux.app.wall.PageRef.TERMINAL;
         com.termux.app.wall.PageRef otherPage = frontHome
@@ -18051,8 +18065,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             slack = com.termux.app.place.StackLanes.slackPx(otherRows, frontRows);
         }
         // The Terminal stands its flush padding only at a rest with the keyboard down.
-        boolean otherStandsFlush = frontHome
-            && !restWantsKeyboard(com.termux.app.page.PageKind.TERMINAL);
         slack += com.termux.app.place.StackLanes.flushSlackPx(mTerminalRestFlushPaddingPx,
             otherStandsFlush ? mTerminalRestFlushPaddingPx : 0);
         int slabInset = com.termux.app.dock.DockGeometry.compute(snapshot.restOf(otherPage))

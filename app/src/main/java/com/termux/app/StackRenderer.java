@@ -81,6 +81,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         default boolean othersOwnStack() {
             return false;
         }
+        /** Whether the Workspace's rest a crossing arrives at has its keyboard up. */
+        default boolean arrivalKeyboardUp() {
+            return false;
+        }
         /**
          * Home's share of the stack on this frame ({@link StackScene#homeShare}): 1 at Home's
          * rest, 0 at the Workspace's, the material blend across a crossing. What only Home's rest
@@ -150,6 +154,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * on since the start, or last rested on with the keyboard the other way, lands where it rests.
      */
     private final float[] mPredictedHostTop = {Float.NaN, Float.NaN};
+    /** The Workspace's rest top with its keyboard down and up; which it lands at is the crossing's. */
+    private float mWorkspaceTopKeyboardDown = Float.NaN;
+    private float mWorkspaceTopKeyboardUp = Float.NaN;
     /** The arriving rest's top the last crossing aimed at, held after its landing. */
     private float mHeldTop = Float.NaN;
     /** How far the host is moved off its layout on this frame; 0 at rest. */
@@ -315,6 +322,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     public void setEnds(boolean fromHome, boolean toHome, float progress) {
         if (mHasEnds && mFromHome == fromHome && mToHome == toHome && mEndsProgress == progress
             && mApplied) return;
+        if (!mHasEnds || mToHome != toHome) {
+            // Which of the Workspace's rests the crossing lands at, asked once as it begins:
+            // whether its keyboard is up there is the page's answer, known only now.
+            mPredictedHostTop[1] = !toHome && mViews.arrivalKeyboardUp()
+                ? mWorkspaceTopKeyboardUp : mWorkspaceTopKeyboardDown;
+        }
         mHasEnds = true;
         mFromHome = fromHome;
         mToHome = toHome;
@@ -323,9 +336,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     }
 
     /** Each side's host top at its own rest, written by the pass at rest ({@link #mPredictedHostTop}). */
-    public void setRestHostTops(int homePx, int workspacePx) {
+    public void setRestHostTops(int homePx, int workspaceKeyboardDownPx,
+                                int workspaceKeyboardUpPx) {
         mPredictedHostTop[0] = homePx;
-        mPredictedHostTop[1] = workspacePx;
+        mWorkspaceTopKeyboardDown = workspaceKeyboardDownPx;
+        mWorkspaceTopKeyboardUp = workspaceKeyboardUpPx;
+        if (!mHasEnds) mPredictedHostTop[1] = workspaceKeyboardDownPx;
     }
 
     /**
