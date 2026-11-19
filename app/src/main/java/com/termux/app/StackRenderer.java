@@ -120,7 +120,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     /** The motion the scene is asked for: the crossing's with the resting keyboard's share added. */
     private final StackScene.Motion mEffective = new StackScene.Motion();
     private final StackGeometry mGeometry = new StackGeometry();
-    private String mDiagKbClip = "?"; // diag-kbclip
     private final StackScene.Frame mFrame = new StackScene.Frame();
     /**
      * The crossing's two ends by side and its progress between them, set by the wall's frames and
@@ -386,25 +385,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         }
         View keyboard = mViews.view(R.id.inapp_keyboard_container);
         if (keyboard != null) {
-            // diag-kbclip
-            if (com.termux.app.window.Counters.enabled) {
-                int kv = StackScene.V_KEYBOARD;
-                String now = (mFrame.clipped[kv] ? mFrame.clipBottom[kv] : -1) + "";
-                if (landing || !now.equals(mDiagKbClip)) {
-                    StackGeometry dg = mGeometry;
-                    com.termux.app.window.Counters.ring("diag-kbclip", "clipB=" + now + " was=" + mDiagKbClip
-                        + " landing=" + landing + " hasEnds=" + mHasEnds + " p=" + mEndsProgress
-                        + " gH=" + dg.keyboardHeightPx + " desired=" + mViews.keyboardDesiredHeightPx()
-                        + " viewH=" + keyboard.getHeight() + " foot=" + dg.keyboardFootPx
-                        + " downLaidOut=" + mViews.keyboardDownLaidOutPx()
-                        + " mShare=" + mMotion.keyboardSharePx + " eShare=" + mEffective.keyboardSharePx
-                        + " eTravel=" + mEffective.dockTravelPx + " below=" + dg.belowKeyboardInColumnPx
-                        + " pad=" + dg.stackPaddingBottomPx + " inCol=" + dg.keyboardInColumn
-                        + " under=" + dg.underShown + " vis=" + keyboard.getVisibility()
-                        + " frontHome=" + mViews.frontIsHome());
-                    mDiagKbClip = now;
-                }
-            }
             writeClip(StackScene.V_KEYBOARD, keyboard);
             // A down keyboard takes no touch: its translation leaves a strip of it on the screen.
             if (keyboard instanceof com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout) {
