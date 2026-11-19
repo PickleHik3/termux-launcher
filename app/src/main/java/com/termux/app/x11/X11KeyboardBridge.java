@@ -105,7 +105,11 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
                                      boolean shift) {
         if (isLauncherSide(value)) return false;
         Sink view = sinks.sink();
-        if (view == null || !view.connected()) return false;
+        if (view == null || !view.connected()) {
+            if (com.termux.x11.X11KeysDiag.on()) com.termux.x11.X11KeysDiag.log("bridge.dropped", "kind=" + value.getKind() + " sink=" + (view != null)); // DIAG(x11-keys)
+            return false;
+        }
+        if (com.termux.x11.X11KeysDiag.on()) com.termux.x11.X11KeysDiag.log("bridge.value", "kind=" + value.getKind() + " v=" + value + " ctrl=" + ctrl + " alt=" + alt + " shift=" + shift); // DIAG(x11-keys)
         switch (value.getKind()) {
             case Event:
                 // Only the action key is something X should see; the keyboard's other events
@@ -241,6 +245,7 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
                 return true;
         }
         int count = Math.abs(repeat);
+        if (com.termux.x11.X11KeysDiag.on()) com.termux.x11.X11KeysDiag.log("bridge.slider", "key=" + keyCode + " count=" + count + " selecting=" + selecting); // DIAG(x11-keys)
         for (int i = 0; i < count; i++)
             sendModified(view, keyCode, ctrl, alt, shift || selecting);
         return true;

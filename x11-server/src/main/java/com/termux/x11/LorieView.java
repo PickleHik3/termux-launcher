@@ -177,12 +177,16 @@ public class LorieView extends SurfaceView implements InputStub {
 
         void sendKey(int k) {
             // A launcher layer open over the display types first, as over a terminal.
-            if (activity != null && activity.offerKeyToLauncher(k)) return;
+            if (activity != null && activity.offerKeyToLauncher(k)) {
+                if (X11KeysDiag.on()) X11KeysDiag.log("ic.sendKey.takenByLauncher", "key=" + k); // DIAG(x11-keys)
+                return;
+            }
             LorieView.this.sendKeyEvent(0, k, true);
             LorieView.this.sendKeyEvent(0, k, false);
         }
 
         @Override public boolean deleteSurroundingText(int beforeLength, int afterLength) {
+            if (X11KeysDiag.on()) X11KeysDiag.log("ic.deleteSurroundingText", "before=" + beforeLength + " after=" + afterLength + " batch=" + mBatchEditNesting + " reqPos=" + requestedPos + " curPos=" + currentPos); // DIAG(x11-keys)
             if (requestedPos != -1 && requestedPos > currentPos && beforeLength > 0) {
                 // sometimes gboard sees following whitespace and wants to remove it.
                 // but we do not want to send backspace key events
@@ -196,6 +200,7 @@ public class LorieView extends SurfaceView implements InputStub {
                 // most likely it was triggered by backspace key.
                 // In the case of physical backspace we should cancel pending physical release
                 keyReleaseHandler.removeMessages(KeyEvent.KEYCODE_DEL);
+                if (X11KeysDiag.on()) X11KeysDiag.log("keyReleaseHandler.cancelDelRelease", "batch=" + mBatchEditNesting); // DIAG(x11-keys)
             }
 
             for (int i=0; i<beforeLength; i++)
@@ -218,10 +223,12 @@ public class LorieView extends SurfaceView implements InputStub {
         /** Text for X, less whatever a launcher layer open over the display takes. */
         void sendText(CharSequence text) {
             String rest = activity == null ? text.toString() : activity.textLeftForX(text.toString());
+            if (X11KeysDiag.on()) X11KeysDiag.log("ic.sendText", "in='" + text + "' toX='" + rest + "'"); // DIAG(x11-keys)
             if (!rest.isEmpty()) sendTextEvent(rest.getBytes(UTF_8));
         }
 
         boolean replaceText(CharSequence newText, boolean reuse) {
+            if (X11KeysDiag.on()) X11KeysDiag.log("ic.replaceText", "new='" + newText + "' old='" + currentComposingText + "' reuse=" + reuse); // DIAG(x11-keys)
             int oldLen = currentComposingText != null ? currentComposingText.length() : 0;
             int newLen = newText != null ? newText.length() : 0;
             if (oldLen > 0 && newLen > 0 && (currentComposingText.toString().startsWith(newText.toString())
@@ -246,6 +253,7 @@ public class LorieView extends SurfaceView implements InputStub {
         }
 
         public boolean setSelection(int start, int end) {
+            if (X11KeysDiag.on()) X11KeysDiag.log("ic.setSelection", start + "," + end + " batch=" + mBatchEditNesting); // DIAG(x11-keys)
             // Samsung keyboard moves cursor by sending DPAD directional key events.
             // Gboard invokes `setSelection`. We should handle both ways.
             if (mBatchEditNesting == 0) { // outside of batchedit so most likely cursor control
@@ -268,11 +276,13 @@ public class LorieView extends SurfaceView implements InputStub {
         }
 
         @Override public boolean setComposingText(CharSequence text, int newCursorPosition) {
+            if (X11KeysDiag.on()) X11KeysDiag.log("ic.setComposingText", "'" + text + "' newPos=" + newCursorPosition); // DIAG(x11-keys)
             return replaceText(text, true);
         }
 
         @Override
         public boolean commitText(CharSequence text, int newPos) {
+            if (X11KeysDiag.on()) X11KeysDiag.log("ic.commitText", "'" + text + "' newPos=" + newPos); // DIAG(x11-keys)
             if (newPos > 0)
                 currentPos = Math.max(1, newPos - 1 + currentPos + text.length());
             else
@@ -286,6 +296,7 @@ public class LorieView extends SurfaceView implements InputStub {
 
         @Override
         public boolean finishComposingText() {
+            if (X11KeysDiag.on()) X11KeysDiag.log("ic.finishComposingText", "old='" + currentComposingText + "'"); // DIAG(x11-keys)
             // We do not implement real composing, so no need to finish it.
             currentComposingText = null;
             return true;
@@ -293,6 +304,7 @@ public class LorieView extends SurfaceView implements InputStub {
 
         @Override
         public boolean sendKeyEvent(KeyEvent event) {
+            if (X11KeysDiag.on()) X11KeysDiag.log("ic.sendKeyEvent", event.toString()); // DIAG(x11-keys)
             return LorieView.this.dispatchKeyEvent(event);
         }
 
@@ -591,6 +603,7 @@ public class LorieView extends SurfaceView implements InputStub {
 
     Handler keyReleaseHandler = new Handler(Looper.getMainLooper()) {
         @Override public void handleMessage(Message msg) {
+            if (X11KeysDiag.on()) X11KeysDiag.log("keyReleaseHandler.release", "key=" + msg.what); // DIAG(x11-keys)
             if (msg.what != 0)
                 sendKeyEvent(0, msg.what, false);
         }
@@ -983,10 +996,16 @@ public class LorieView extends SurfaceView implements InputStub {
     public void sendLockKeysState(int state) { sendLockKeysState(mNativeContext, state); }
     @FastNative private native void sendLockKeysState(long ptr, int state);
 
-    public boolean sendKeyEvent(int scanCode, int keyCode, boolean keyDown) { return sendKeyEvent(mNativeContext, scanCode, keyCode, keyDown); }
+    public boolean sendKeyEvent(int scanCode, int keyCode, boolean keyDown) {
+        if (X11KeysDiag.on()) X11KeysDiag.log("key", (keyDown ? "down " : "up ") + keyCode + " sc=" + scanCode + " " + KeyEvent.keyCodeToString(keyCode)); // DIAG(x11-keys)
+        return sendKeyEvent(mNativeContext, scanCode, keyCode, keyDown);
+    }
     @FastNative private native boolean sendKeyEvent(long ptr, int scanCode, int keyCode, boolean keyDown);
 
-    public void sendTextEvent(byte[] text) { sendTextEvent(mNativeContext, text); }
+    public void sendTextEvent(byte[] text) {
+        if (X11KeysDiag.on()) X11KeysDiag.log("text", "len=" + text.length + " '" + new String(text, UTF_8) + "'"); // DIAG(x11-keys)
+        sendTextEvent(mNativeContext, text);
+    }
     @FastNative private native void sendTextEvent(long ptr, byte[] text);
 
     public boolean requestConnection() { return requestConnection(mNativeContext); }
