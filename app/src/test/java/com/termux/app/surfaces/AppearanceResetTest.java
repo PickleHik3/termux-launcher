@@ -334,6 +334,30 @@ public class AppearanceResetTest {
         assertEquals(layouts, LayoutStore.shared(app).current());
     }
 
+    /**
+     * The one-look build (appearance-one-look spec §5): nothing of the old model is converted.
+     * Per-kind and per-page look keys, the sheets' and widgets' looks, a surface's own values
+     * beyond Opacity and Blur, and the per-page wallpaper dim all go with the reset.
+     */
+    @Test
+    public void theOldModelsLookKeysGoWithTheReset() {
+        TermuxAppSharedPreferences[] prefs = new TermuxAppSharedPreferences[1];
+        SharedPreferences store = upgradedAndCustomised(prefs);
+        String[] old = {"look.opacity.dock@kind:home", "look.frost.keyboard@kind:terminal",
+            "look.opacity@3", "look.tint.status@2", "look.tint.dock", "look.corners.keyboard",
+            "look.opacity.sheets", "look.frost.widgets", "wallpaper_backdrop_dim@2",
+            "wallpaper_backdrop_dim@5"};
+        SharedPreferences.Editor editor = store.edit();
+        for (String key : old) editor.putInt(key, 7);
+        editor.commit();
+
+        startUp(store, prefs[0], true);
+
+        for (String key : old)
+            assertFalse(key + " is gone", store.contains(key));
+        assertTrue(AppearanceReset.isCardDue(store));
+    }
+
     @Test
     public void aNewInstallIsNotResetAndGetsNoCard() {
         SharedPreferences store = store("appearance-reset-new");

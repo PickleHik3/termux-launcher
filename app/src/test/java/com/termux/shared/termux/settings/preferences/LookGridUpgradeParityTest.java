@@ -99,7 +99,9 @@ public class LookGridUpgradeParityTest {
         assertEquals(40, preferences.getFancierGlassDispersionPercent());
         assertEquals(TERMUX_APP.GLASS_TINT_HUE_SECONDARY, preferences.getSurfaceGlassTintHue());
         assertEquals(TERMUX_APP.GLASS_RIM_GRADIENT, preferences.getSurfaceGlassRim());
-        assertEquals(16, preferences.getAppLauncherDrawerCornerRadius());
+        // The drawer is a sheet: it wears Global's corners, not its old own 16 (#288).
+        assertEquals(preferences.lookGrid().value(LookGrid.Property.CORNERS, null),
+            preferences.getAppLauncherDrawerCornerRadius());
         assertFalse(preferences.isWidgetsOnGlassEnabled());
         assertFalse(store.contains(TERMUX_APP.KEY_APP_BAR_OPACITY));
         assertFalse(store.contains("surface_inherit_dock_opacity"));
