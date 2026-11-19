@@ -50,6 +50,11 @@ public final class PageTicksWriter {
         target.setPages(ticks.pages, ticks.position, ticks.warmIndex);
         // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
         // gained a page would otherwise grow by it and shove the terminal.
-        target.setVisibility(ticks.shown ? View.VISIBLE : View.INVISIBLE);
+        int visibility = ticks.shown ? View.VISIBLE : View.INVISIBLE;
+        // DIAG(ticks-shown): a change of the strip's shown state; reverted before merge.
+        if (com.termux.app.chrome.MotionLog.enabled && target.getVisibility() != visibility)
+            com.termux.app.chrome.MotionLog.log("ticks-shown", "shown=" + ticks.shown
+                + " pages=" + ticks.pages + " pos=" + ticks.position);
+        target.setVisibility(visibility);
     }
 }

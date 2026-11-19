@@ -1039,6 +1039,42 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         canvas.drawRect(0f, 0f, width, height, mSoftPaint);
     }
 
+    // DIAG(slab-route): the route each slab draws, logged once per change; reverted before merge.
+    private int mDiagRoute = -1;
+
+    private void diagRoute(boolean live, @NonNull Canvas canvas) {
+        LivePicture picture = mLivePicture;
+        int pageLayer = -1;
+        android.view.View current = this;
+        while (current.getParent() instanceof android.view.View) {
+            android.view.View parent = (android.view.View) current.getParent();
+            if (parent instanceof com.termux.app.wall.PaneWallLayout) {
+                pageLayer = current.getLayerType();
+                break;
+            }
+            current = parent;
+        }
+        int route = (live ? 1 : 0) | (drawsLive() ? 2 : 0) | (picture != null ? 4 : 0)
+            | (picture != null && picture.released() ? 8 : 0)
+            | (picture != null && picture.ready() ? 16 : 0)
+            | (mFrame != null && !mFrame.isRecycled() ? 32 : 0)
+            | (canvas.isHardwareAccelerated() ? 64 : 0)
+            | (canvas instanceof android.graphics.RecordingCanvas ? 128 : 0)
+            | ((pageLayer + 1) << 8)
+            | (LiveSceneFrame.current() != null ? 1 << 12 : 0)
+            | (mLook != null ? 1 << 13 : 0);
+        if (route == mDiagRoute) return;
+        mDiagRoute = route;
+        com.termux.app.chrome.MotionLog.log("slab-route", "id=" + Integer.toHexString(
+            System.identityHashCode(this)) + " w=" + getWidth() + " live=" + live
+            + " drawsLive=" + drawsLive() + " pic=" + (picture != null) + " released="
+            + (picture != null && picture.released()) + " ready="
+            + (picture != null && picture.ready()) + " frame=" + (mFrame != null)
+            + " hw=" + canvas.isHardwareAccelerated() + " recording="
+            + (canvas instanceof android.graphics.RecordingCanvas) + " pageLayer=" + pageLayer
+            + " scene=" + (LiveSceneFrame.current() != null) + " look=" + (mLook != null));
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         int width = getWidth();
@@ -1066,6 +1102,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
         // Live blur: what is beneath, bent, in place of the frame; the layers below go on top.
         boolean live = mCornerMaskRadiusPx <= 0f && drawLive(canvas, width, height);
+        if (com.termux.app.chrome.MotionLog.enabled) diagRoute(live, canvas); // DIAG(slab-route)
         if (!live) retireLiveNode(canvas);
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated())) {
