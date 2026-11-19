@@ -116,20 +116,23 @@ public class PresetApplyTest {
     }
 
     @Test
-    public void customizationLookShowsAfterAnElementCardHeldItsOwn() {
-        List<String> wrong = new ArrayList<>();
+    public void aGlobalLookLeavesTheDocksOwnOpacity() {
         TermuxAppSharedPreferences prefs = install();
         dockOpacity(prefs, 23);
         int stop = looks()[3];
         tap(open(prefs, EditorCard.APPEARANCE, PageKind.HOME, HOME_PAGE), stop);
-        expectEverywhere(prefs, stop, PAGES, "Customization after Dock", wrong);
-        assertTrue(String.join("\n", wrong), wrong.isEmpty());
+        // Own stays (appearance-one-look spec §1); the rest of the dock wears the Look.
+        LookGrid grid = prefs.lookGrid();
+        assertEquals(23, grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals(grid.value(LookGrid.Property.FROST, null),
+            grid.value(LookGrid.Property.FROST, LookGrid.Element.DOCK));
     }
 
     // ------------------------------------------------- a slider on Global or a page card
 
+    /** Own stays (appearance-one-look spec §1): a Global slider leaves a surface's own value. */
     @Test
-    public void aGlobalSliderResetsTheDetachedValuesOfItsPropertyOnly() {
+    public void aGlobalSliderLeavesASurfacesOwnValue() {
         TermuxAppSharedPreferences prefs = install();
         dockOpacity(prefs, 23);
         LookGrid grid = prefs.lookGrid();
@@ -138,28 +141,10 @@ public class PresetApplyTest {
         slide(open(prefs, EditorCard.APPEARANCE, PageKind.HOME, HOME_PAGE), Row.OPACITY,
             61);
 
-        List<String> wrong = new ArrayList<>();
-        for (int page : PAGES) {
-            int dock = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK);
-            int status = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS);
-            if (dock != status)
-                wrong.add("dock opacity on page " + page + " = " + dock + ", status " + status);
-        }
-        assertTrue(String.join("\n", wrong), wrong.isEmpty());
-        assertTrue("Frost was not moved: the dock keeps its own",
-            grid.has(LookGrid.Property.FROST, LookGrid.Element.DOCK));
-    }
-
-    @Test
-    public void aGlobalCornersMoveResetsADetachedCornerRadius() {
-        TermuxAppSharedPreferences prefs = install();
-        LookGrid grid = prefs.lookGrid();
-        grid.write(LookGrid.Property.CORNERS, LookGrid.Element.DOCK, 30);
-        slide(open(prefs, EditorCard.APPEARANCE, PageKind.HOME, HOME_PAGE), Row.CORNERS,
-            12);
-        for (int page : PAGES)
-            assertEquals("dock corners on page " + page, 12,
-                grid.value(LookGrid.Property.CORNERS, LookGrid.Element.DOCK));
+        assertEquals(23, grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals("the status bar follows Global", 61,
+            grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS));
+        assertTrue(grid.has(LookGrid.Property.FROST, LookGrid.Element.DOCK));
     }
 
     @Test
@@ -215,22 +200,22 @@ public class PresetApplyTest {
             com.termux.app.place.WallShape.read(prefs, false).marginDp);
     }
 
+    /** The row arrow's reset is undone by Discard like any change. */
     @Test
-    public void discardPutsTheResetValuesBack() {
+    public void discardPutsAResetOwnValueBack() {
         TermuxAppSharedPreferences prefs = install();
         dockOpacity(prefs, 23);
         LookGrid grid = prefs.lookGrid();
-        SurfaceEditorController editor = open(prefs, EditorCard.APPEARANCE, PageKind.HOME,
+        SurfaceEditorController editor = open(prefs, EditorCard.DOCK, PageKind.HOME,
             HOME_PAGE);
-        slide(editor, Row.OPACITY, 61);
+        EditorCardSheet.Model model = ReflectionHelpers.getField(editor, "mModel");
+        model.resetRow(Row.OPACITY);
         assertFalse(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
 
         ReflectionHelpers.callInstanceMethod(editor, "revertToEntry");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
-        for (int page : PAGES)
-            assertEquals("dock on page " + page, 23,
-                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals(23, grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
     }
 
     /** A slider moved by a drag of two steps, then let go. */

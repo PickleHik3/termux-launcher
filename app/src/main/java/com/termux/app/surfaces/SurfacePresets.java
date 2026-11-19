@@ -1176,7 +1176,7 @@ public final class SurfacePresets {
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
         forgetSurfaceExtras(into);
-        applyAtHalf(into, halfOf(custom, half), half);
+        applyHalf(into, halfOf(custom, half), half, false, true);
         keyboardBlurFollowsWhereLinked(into);
         if (batch != null)
             batch.applyToStore();
@@ -1249,84 +1249,25 @@ public final class SurfacePresets {
     }
 
     /**
-     * A Look picked on the Global (Customization) card: {@link #applyLook(TermuxAppSharedPreferences,
-     * Preset, PageKind)} after clearing the cells read before Base ({@link #clearBeneathLook}),
-     * in the same one editor, so every surface on every page wears it (developer, 2026-11-03).
+     * A Look picked on the Global card: {@link #applyLook(TermuxAppSharedPreferences, Preset,
+     * PageKind)} in one editor. A surface's own Opacity and Blur stay (own stays, appearance-one-
+     * look spec §1): every surface that follows Global wears the Look.
      */
     public static void applyGlobalLook(@NonNull TermuxAppSharedPreferences prefs,
                                        @NonNull Preset preset, @NonNull PageKind half) {
         SharedPreferences store = prefs.getSharedPreferences();
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
-        clearBeneathLook(into.lookGrid());
-        applyAtHalf(into, halfOf(preset, half), half);
+        applyHalf(into, halfOf(preset, half), half, false, true);
         resetSurfaceExtras(into);
         if (batch != null)
             batch.applyToStore();
     }
 
-    /** The glass numbers a Look stands for, which a Look resets beneath it. */
-    private static final LookGrid.Property[] LOOK_PROPERTIES = {LookGrid.Property.FROST,
-        LookGrid.Property.OPACITY, LookGrid.Property.GRAIN, LookGrid.Property.TINT};
-
-    /**
-     * Whether a Global Look would clear anything ({@link #clearBeneathLook}): an element's own
-     * value of one of a Look's numbers.
-     */
-    static boolean holdsCellsBeneathLook(@NonNull LookGrid grid) {
-        for (LookGrid.Property property : LOOK_PROPERTIES) {
-            if (!property.perElement) continue;
-            for (LookGrid.Element element : LookGrid.Element.values())
-                if (grid.has(property, element)) return true;
-        }
-        return false;
-    }
-
-    private static final LookGrid.Element[] ELEMENTS = LookGrid.Element.values();
-
-    /** Before a Global Look: every element's own value of each of a Look's numbers goes. */
-    static void clearBeneathLook(@NonNull LookGrid grid) {
-        for (LookGrid.Property property : LOOK_PROPERTIES)
-            clearBeneathGlobal(grid, property);
-    }
-
-    /**
-     * Before a Global value of {@code property} (a Look's number, or a slider on the Global card):
-     * every element's own value goes, so every surface follows Base again. Vibrancy and Margin
-     * have nothing beneath Base.
-     */
-    static void clearBeneathGlobal(@NonNull LookGrid grid, @NonNull LookGrid.Property property) {
-        if (!property.perElement) return;
-        for (LookGrid.Element element : ELEMENTS)
-            if (grid.has(property, element)) grid.clear(property, element);
-    }
-
-    /**
-     * Last change wins (developer, 2026-11-04): a slider on the Global card resets the elements'
-     * own values of its one property, so they follow it ({@link #clearBeneathGlobal}). An element
-     * card's slider resets nothing: it holds its own value. For a property with no element column
-     * (Margin) an element card edits Global, so it resets as the Global card does.
-     */
-    static void clearBeneathSlider(@NonNull LookGrid grid, @NonNull EditorChips chips,
-                                   @NonNull LookGrid.Property property) {
-        if (!slidersResetBeneath(chips, property)) return;
-        clearBeneathGlobal(grid, property);
-    }
-
-    /**
-     * Whether a slider of {@code property} moved at {@code chips} resets what is beneath it
-     * ({@link #clearBeneathSlider}): Global, which an element card edits for a property with no
-     * element column.
-     */
-    static boolean slidersResetBeneath(@NonNull EditorChips chips,
-                                       @NonNull LookGrid.Property property) {
-        return chips.element == null || !property.perElement;
-    }
-
     /** A look, the same on every page (ADR 0031): {@link #applyHalf} for the wall. */
     private static void applyAtHalf(@NonNull TermuxAppSharedPreferences prefs,
                                     @NonNull Preset look, @NonNull PageKind half) {
-        applyHalf(prefs, look, half, false);
+        applyHalf(prefs, look, half, false, false);
     }
 
     /** The material point and its intensity: held per page as strings and numbers of their own. */
@@ -1358,9 +1299,22 @@ public final class SurfacePresets {
     private static void applyHalf(@NonNull TermuxAppSharedPreferences prefs,
                                   @NonNull Preset preset, @Nullable PageKind half,
                                   boolean cellsOnly) {
+        applyHalf(prefs, preset, half, cellsOnly, false);
+    }
+
+    /**
+     * {@link #applyHalf(TermuxAppSharedPreferences, Preset, PageKind, boolean)}; with
+     * {@code keepOwn} (a Look picked on Global) the status bar's, the dock's and the keyboard's
+     * own Opacity and Blur stay (own stays, appearance-one-look spec §1).
+     */
+    private static void applyHalf(@NonNull TermuxAppSharedPreferences prefs,
+                                  @NonNull Preset preset, @Nullable PageKind half,
+                                  boolean cellsOnly, boolean keepOwn) {
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (isLayoutOwned(property) || !touchesCell(slot, property, half, cellsOnly))
+                    continue;
+                if (keepOwn && GlobalGlass.ownsStay(slot) && ownable(property))
                     continue;
                 clearCell(prefs, slot, property, pageOf(half));
             }
@@ -1371,6 +1325,12 @@ public final class SurfacePresets {
                 continue;
             applyOne(prefs, key, entry.getValue(), half);
         }
+    }
+
+    /** The properties a surface may own: Opacity, and Blur with the grain it brings. */
+    private static boolean ownable(@NonNull SurfaceProperty property) {
+        return property == SurfaceProperty.OPACITY || property == SurfaceProperty.BLUR
+            || property == SurfaceProperty.GRAIN;
     }
 
     /** Whether a write for {@code half} touches a surface cell; see {@link #applyHalf}. */

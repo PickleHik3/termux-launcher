@@ -306,18 +306,14 @@ public class EditorRowsTest {
         }
     }
 
+    /** Only the status bar, the dock and the keyboard own values (ADR 0031 §2): the arrow's cards. */
     @Test
-    public void theDotIsOnlyForASurfacesOwnGlass() {
-        assertTrue(EditorRows.marksOwnValue(EditorCard.DOCK, Row.OPACITY));
-        assertTrue(EditorRows.marksOwnValue(EditorCard.TERMINAL, Row.TINT));
-        assertTrue(EditorRows.marksOwnValue(EditorCard.STATUS, Row.FROST));
-        assertFalse("the shared glass has no dot",
-            EditorRows.marksOwnValue(EditorCard.APPEARANCE, Row.FROST));
-        assertFalse(EditorRows.marksOwnValue(EditorCard.DOCK, Row.CORNERS));
-        assertFalse(EditorRows.marksOwnValue(EditorCard.APPEARANCE, Row.TEXT_SIZE));
-        assertFalse(EditorRows.marksOwnValue(EditorCard.HOME, Row.HOME_ICON_SIZE));
-        assertFalse("Home's glass is the Base itself", EditorRows.marksOwnValue(EditorCard.HOME,
-            Row.FROST));
+    public void onlyTheChromeCardsShowAnArrow() {
+        for (EditorCard card : EditorCard.values()) {
+            boolean own = card == EditorCard.STATUS || card == EditorCard.DOCK
+                || card == EditorCard.KEYBOARD;
+            assertEquals(card.toString(), own, SurfaceEditorController.ownColumn(card) != null);
+        }
     }
 
     @Test

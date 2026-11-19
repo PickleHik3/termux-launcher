@@ -11,14 +11,24 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 /**
  * The shared glass (layout editor v2, DECISIONS items 13 and 14; the Appearance card's All
  * surfaces strip): Blur, Opacity, Grain and Tint written as the base values, Frost writing blur
- * and grain together. Writing one re-attaches every surface to the base, so the number is what
- * every surface wears afterwards; a surface's own value on its card detaches it again.
+ * and grain together. Own stays (appearance-one-look spec §1): the status bar's, the dock's and
+ * the keyboard's own values are left as they are, and only their reset arrows put them back on
+ * Global.
  *
  * <p>No views and no {@code Context}: the rule is held by a test against real preferences.</p>
  */
 final class GlobalGlass {
 
     private GlobalGlass() {}
+
+    /**
+     * The surfaces whose own Opacity and Blur (with its Grain) a Global write leaves (ADR 0031
+     * §2). Their Tint is no longer theirs to own, so a Global Tint still puts them back on it.
+     */
+    static boolean ownsStay(@NonNull SurfaceSlot slot) {
+        return slot == SurfaceSlot.STATUS || slot == SurfaceSlot.DOCK
+            || slot == SurfaceSlot.KEYBOARD;
+    }
 
     /**
      * Writes {@code value} as the base for {@code property} and puts every surface back on it.
@@ -59,13 +69,10 @@ final class GlobalGlass {
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             if (slot == SurfaceSlot.CANVAS && !workspace)
                 continue;
+            if (ownsStay(slot) && property != SurfaceProperty.TINT)
+                continue;
             prefs.setSurfaceInheriting(slot, property, pageId, true);
         }
-        // The keyboard's blur is the one cell whose raw key holds "follow" as -1 outside the
-        // link (the rule Blur has always written); a stale number there must not come back. A
-        // one-half write leaves it: the other half may still read its own number there.
-        if (property == SurfaceProperty.BLUR && pageId == TermuxAppSharedPreferences.PAGE_ALL)
-            prefs.setInAppKeyboardBlurRadiusRaw(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
         prefs.setSurfaceBaseValue(property, pageId, clamped);
         if (property == SurfaceProperty.OPACITY && pageId == TermuxAppSharedPreferences.PAGE_ALL) {
             // The terminal follows the base now; the setter also keeps the copy the wallpaper

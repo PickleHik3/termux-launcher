@@ -41,16 +41,18 @@ public class GlobalGlassTest {
     }
 
     @Test
-    public void globalOpacityReattachesEverySurfaceTerminalIncluded() {
+    public void globalOpacityReattachesTheTerminalAndLeavesTheChromesOwn() {
         preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 81);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, 70);
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
 
         assertEquals(42, GlobalGlass.write(preferences, SurfaceProperty.OPACITY, 42));
 
+        // Own stays (appearance-one-look spec §1): the dock keeps its own; the rest follow.
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             if (TermuxAppSharedPreferences.hasSurfaceProperty(slot, SurfaceProperty.OPACITY))
-                assertTrue(slot.key, preferences.isSurfaceInheriting(slot, SurfaceProperty.OPACITY));
+                assertEquals(slot.key, slot != SurfaceSlot.DOCK,
+                    preferences.isSurfaceInheriting(slot, SurfaceProperty.OPACITY));
         }
         assertEquals(42, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
         assertEquals("the terminal wears the base now", 42,
@@ -58,7 +60,7 @@ public class GlobalGlassTest {
     }
 
     @Test
-    public void globalGrainReattachesEverySurface() {
+    public void globalGrainLeavesTheKeyboardsOwn() {
         preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.GRAIN, 30);
         preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN, 50);
 
@@ -66,10 +68,10 @@ public class GlobalGlassTest {
 
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             if (TermuxAppSharedPreferences.hasSurfaceProperty(slot, SurfaceProperty.GRAIN))
-                assertTrue(slot.key, preferences.isSurfaceInheriting(slot, SurfaceProperty.GRAIN));
+                assertEquals(slot.key, slot != SurfaceSlot.KEYBOARD,
+                    preferences.isSurfaceInheriting(slot, SurfaceProperty.GRAIN));
         }
         assertEquals(9, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
-        assertEquals(9, preferences.getInAppKeyboardGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -77,7 +79,8 @@ public class GlobalGlassTest {
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR, 3);
         assertEquals(AppearanceLooks.BLUR_MAX_DP,
             GlobalGlass.write(preferences, SurfaceProperty.BLUR, 99));
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
+        assertFalse("the status bar keeps its own",
+            preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
     }
 
     @Test

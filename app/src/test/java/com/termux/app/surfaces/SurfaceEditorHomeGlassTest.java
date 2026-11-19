@@ -71,16 +71,16 @@ public class SurfaceEditorHomeGlassTest {
     }
 
     @Test
-    public void customizationWritesBaseAndResetsTheDocksOwn() {
+    public void customizationWritesBaseAndLeavesTheDocksOwn() {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_WALL, 30);
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.HOME);
         model(editor).onValue(Row.OPACITY, 61, false);
         assertEquals(61, grid().value(LookGrid.Property.OPACITY, null));
-        // Last change wins (developer, 2026-11-04): the dock follows Base again.
-        assertFalse("the dock's own value went",
+        // Own stays (appearance-one-look spec §1): only the dock's arrow puts it back.
+        assertTrue("the dock's own value stays",
             grid().has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
-        assertEquals(61, grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals(30, grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
     }
 
     // ------------------------------------------------------------------------------- the drive

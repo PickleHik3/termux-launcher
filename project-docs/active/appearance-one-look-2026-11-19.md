@@ -154,6 +154,9 @@ card (`appearance_search_index.xml` grows to cover them).
 - The Home float wears Global's glass like everything else on Home, with no opacity floor
   (developer, 2026-11-19).
 
+- Global's Presets row reflects Global's own values alone; a surface's own Opacity or Blur does
+  not turn it Custom (developer, 2026-11-19).
+
 ## 8. Still open
 
 - The floor on opacity for Menus and dialogs: the number.

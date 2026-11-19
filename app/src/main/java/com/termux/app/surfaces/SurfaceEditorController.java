@@ -518,22 +518,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return card != null && card.slot != null;
     }
 
-    /**
-     * After a glass row's write on the Global card: last change wins (developer, 2026-11-04), the
-     * elements' own values of that property go too ({@link SurfacePresets#clearBeneathSlider}),
-     * once per drag. An element card's write needs nothing: nothing reads before its cell.
-     */
-    private void releaseShadowingCells(@NonNull Row row) {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (mCard == null || prefs == null || row.kind != EditorRows.Kind.SLIDER) return;
-        com.termux.shared.termux.settings.preferences.LookGrid.Property property =
-            GlassRows.gridProperty(row);
-        if (property == null || !SurfacePresets.slidersResetBeneath(mChips, property)) return;
-        if (mSliderDragActive && mBeneathClearedFor == row) return;
-        SurfacePresets.clearBeneathSlider(prefs.lookGrid(), mChips, property);
-        mBeneathClearedFor = mSliderDragActive ? row : null;
-    }
-
     /** Why Depth and Edge are out, if they are. */
     @NonNull
     private com.termux.app.chrome.FancierGlassPolicy.Off refractionOff() {
@@ -606,16 +590,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (card.slot != null)
             return false;
         return writeOnPage(card, SurfaceSlot.STATUS, property, value);
-    }
-
-    /** Whether the level {@code card}'s scope edits holds its own value of a surface's property. */
-    private boolean scopedOwnValue(@NonNull TermuxAppSharedPreferences prefs,
-                                   @NonNull EditorCard card, @NonNull SurfaceSlot slot,
-                                   @NonNull SurfaceProperty property) {
-        if (chipsPlain(card))
-            return !prefs.isSurfaceInheriting(slot, property, SurfacePresets.pageOf(PageKind.HOME));
-        com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property.grid);
-        return prefs.lookGrid().has(cell);
     }
 
     /** Reset under a page: every value the page holds of the card's surface goes back to Base. */
@@ -2922,6 +2896,83 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** Every card's values and writes, row by row. */
+    // ------------------------------------------------------------- own values (spec §1, §2)
+
+    /** The cards whose surface may hold its own Opacity and Blur (ADR 0031 §2). */
+    static final EditorCard[] OWN_CARDS = {EditorCard.STATUS, EditorCard.DOCK,
+        EditorCard.KEYBOARD};
+
+    /** The rows a surface may own: Opacity and Blur. */
+    private static final Row[] OWN_ROWS = {Row.OPACITY, Row.FROST};
+
+    /**
+     * The look grid's column {@code card} owns values in: the status bar's, the dock's or the
+     * keyboard's; null for every other card. The Terminal's Background never follows Global, so
+     * it shows no arrow (spec §3, Terminal).
+     */
+    @Nullable
+    static com.termux.shared.termux.settings.preferences.LookGrid.Element ownColumn(
+            @Nullable EditorCard card) {
+        for (EditorCard own : OWN_CARDS)
+            if (own == card) return EditorChips.elementOf(card);
+        return null;
+    }
+
+    /** Whether {@code row} on {@code card} holds the surface's own value: the arrow shows. */
+    private boolean holdsOwnValue(@Nullable EditorCard card, @NonNull Row row) {
+        TermuxAppSharedPreferences prefs = prefs();
+        com.termux.shared.termux.settings.preferences.LookGrid.Element element = ownColumn(card);
+        com.termux.shared.termux.settings.preferences.LookGrid.Property property =
+            GlassRows.gridProperty(row);
+        if (prefs == null || element == null || property == null || !property.perElement)
+            return false;
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        if (grid.holdsOwn(property, element))
+            return true;
+        // Blur brings its grain: an own Grain alone still reads as the Blur row's own.
+        return row == Row.FROST && grid.holdsOwn(
+            com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN, element);
+    }
+
+    /** Clears {@code row}'s own value on {@code card}'s surface; false when it held none. */
+    private boolean clearOwnValue(@Nullable EditorCard card, @NonNull Row row) {
+        TermuxAppSharedPreferences prefs = prefs();
+        com.termux.shared.termux.settings.preferences.LookGrid.Element element = ownColumn(card);
+        com.termux.shared.termux.settings.preferences.LookGrid.Property property =
+            GlassRows.gridProperty(row);
+        if (prefs == null || element == null || property == null || !holdsOwnValue(card, row))
+            return false;
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        grid.clear(property, element);
+        if (row == Row.FROST)
+            grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN,
+                element);
+        return true;
+    }
+
+    private boolean surfaceOwnsAny(@Nullable EditorCard card) {
+        for (Row row : OWN_ROWS)
+            if (holdsOwnValue(card, row)) return true;
+        return false;
+    }
+
+    private boolean clearSurface(@Nullable EditorCard card) {
+        boolean any = false;
+        for (Row row : OWN_ROWS)
+            any |= clearOwnValue(card, row);
+        return any;
+    }
+
+    /** After own values went back on Global: the surfaces redraw and the card reads again. */
+    private void ownValuesCleared() {
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+        syncDirty();
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && sheet.isShown())
+            sheet.restate();
+    }
+
     private final class CardModel implements EditorCardSheet.Model, CardBody.Looks {
 
         @Override public boolean offersCard(@NonNull EditorCard card) {
@@ -3135,20 +3186,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean ownValue(@NonNull Row row) {
-            TermuxAppSharedPreferences prefs = prefs();
-            EditorCard card = mCard;
-            if (prefs == null || card == null || card.slot == null
-                || !EditorRows.marksOwnValue(card, row))
-                return false;
-            SurfaceProperty property = row.property();
-            if (property == null)
-                return false;
-            // The dot marks the level the chip edits: the page's own value under the page, the
-            // surface's own (not Base) under Global. Frost is set while either of its pair is.
-            if (row == Row.FROST)
-                return scopedOwnValue(prefs, card, card.slot, SurfaceProperty.BLUR)
-                    || scopedOwnValue(prefs, card, card.slot, SurfaceProperty.GRAIN);
-            return scopedOwnValue(prefs, card, card.slot, property);
+            return holdsOwnValue(mCard, row);
         }
 
         @Nullable @Override public CharSequence resetLabel() {
@@ -3159,42 +3197,52 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return mCard == EditorCard.APPEARANCE;
         }
 
-        @NonNull @Override public RowSource source(@NonNull Row row) {
-            com.termux.shared.termux.settings.preferences.LookGrid.Resolved resolved = rowResolved(row);
-            return resolved == null ? RowSource.NONE : RowSource.of(resolved.cell);
-        }
-
-        @Nullable @Override public CharSequence sourceName(@NonNull Row row) {
-            if (source(row) != RowSource.ELEMENT)
+        @Nullable @Override public CharSequence rowState(@NonNull Row row) {
+            EditorCard card = mCard;
+            com.termux.shared.termux.settings.preferences.LookGrid.Element element =
+                ownColumn(card);
+            if (element == null || GlassRows.gridProperty(row) == null)
                 return null;
-            return getString(R.string.editor_source_element,
-                elementName(EditorChips.elementOf(mCard)));
-        }
-
-        @Override public boolean resettable(@NonNull Row row) {
-            TermuxAppSharedPreferences prefs = prefs();
-            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
-            if (prefs == null || property == null)
-                return false;
-            com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
-            return prefs.lookGrid().has(cell);
+            CharSequence name = rowLabel(row) != null ? rowLabel(row) : getString(row.labelRes);
+            return getString(holdsOwnValue(card, row) ? R.string.editor_row_state_own
+                : R.string.editor_row_state_global, name);
         }
 
         @Override public void resetRow(@NonNull Row row) {
-            TermuxAppSharedPreferences prefs = prefs();
-            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
-            if (prefs == null || property == null)
-                return;
-            prefs.lookGrid().clear(mChips.cell(property));
-            mHeldCustomCells.remove(mChips);
-            requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
-                | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+            if (clearOwnValue(mCard, row))
+                ownValuesCleared();
         }
 
-        @Override public void openRowMenu(@NonNull View anchor, @NonNull Row row) {
-            EditorCardSheet sheet = mSheet;
-            if (sheet != null)
-                sheet.openRowMenu(anchor, row);
+        @Override public boolean cardOwnsAny() {
+            EditorCard card = mCard;
+            if (card == EditorCard.APPEARANCE) {
+                for (EditorCard surface : OWN_CARDS)
+                    if (surfaceOwnsAny(surface)) return true;
+                return false;
+            }
+            return surfaceOwnsAny(card);
+        }
+
+        @Override public void resetCard() {
+            EditorCard card = mCard;
+            if (card != EditorCard.APPEARANCE) {
+                if (clearSurface(card))
+                    ownValuesCleared();
+                return;
+            }
+            // Global's arrow asks once; Undo (the editor's revert) brings them back.
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(mHost.context())
+                .setTitle(R.string.editor_global_reset_all_title)
+                .setMessage(R.string.editor_global_reset_all_line)
+                .setNegativeButton(R.string.editor_layout_cancel, null)
+                .setPositiveButton(R.string.editor_global_reset_all_confirm, (d, w) -> {
+                    boolean any = false;
+                    for (EditorCard surface : OWN_CARDS)
+                        any |= clearSurface(surface);
+                    if (any)
+                        ownValuesCleared();
+                })
+                .show();
         }
 
         @Override public boolean enabled(@NonNull Row row) {
@@ -3312,7 +3360,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onValue(@NonNull Row row, int value, boolean dragging) {
             beginDrag(dragging);
             writeRow(row, value, dragging);
-            releaseShadowingCells(row);
         }
 
         @Override public void onReleased(@NonNull Row row) {
@@ -3471,17 +3518,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         for (int i = 0; i < values.length && i < entries.length; i++)
             if (values[i].equals(id)) return entries[i];
         return entries.length > 0 ? entries[0] : id;
-    }
-
-    /** The cell a grid row's value comes from at the chips (for its dot), or null. */
-    @Nullable
-    private com.termux.shared.termux.settings.preferences.LookGrid.Resolved rowResolved(@NonNull Row row) {
-        TermuxAppSharedPreferences prefs = prefs();
-        com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
-        if (prefs == null || mCard == null || property == null)
-            return null;
-        com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
-        return prefs.lookGrid().resolve(cell);
     }
 
     /** The Rim row the card up shows, read again on restate. */
@@ -4140,10 +4176,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int current = wornStop(into, half);
         SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(into),
             stop);
-        // The wall may wear the Look while an element's own value hides it: picking it again
-        // still resets what is beneath.
-        if (stop == current
-                && (look == null || !SurfacePresets.holdsCellsBeneathLook(into.lookGrid())))
+        if (stop == current)
             return false;
         if (look != null) {
             if (AppearanceLooks.isCustomStop(current))
@@ -5659,9 +5692,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** A light tick ran this drag; the release owes the full pass it left out. */
     private boolean mDragRanLightPass;
 
-    /** The slider whose drag already reset the values beneath it ({@link #releaseShadowingCells}). */
-    @Nullable private Row mBeneathClearedFor;
-
     private void beginDrag(boolean dragging) {
         mSliderDragActive = dragging;
     }
@@ -5676,7 +5706,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private void endDrag() {
         mSliderDragActive = false;
-        mBeneathClearedFor = null;
         setGlassDragPreview(false);
         if (mDragRanLightPass) {
             // The full pass the ticks left out, once, with the values the drag settled on.

@@ -84,6 +84,15 @@
     <string name="appearance_row_search_field">Search field</string>
     <string name="appearance_row_text_size">Text size</string>
     <string name="appearance_row_terminal_font_size">Font size</string>
+    <!-- The reset arrow (appearance-one-look spec §2). -->
+    <string name="editor_row_reset_to_global">Put %1$s back on Global</string>
+    <string name="editor_row_state_own">%1$s, its own</string>
+    <string name="editor_row_state_global">%1$s, following Global</string>
+    <string name="editor_card_reset_to_global">Put %1$s back on Global</string>
+    <string name="editor_global_reset_all">Put every surface back on Global</string>
+    <string name="editor_global_reset_all_title">Put every surface back on Global?</string>
+    <string name="editor_global_reset_all_line">The status bar, the dock and the keyboard lose their own Opacity and Blur and wear Global\'s.</string>
+    <string name="editor_global_reset_all_confirm">Put back</string>
     <string name="appearance_row_keyboard_width">Width</string>
     <string name="appearance_row_keyboard_float_height">Floating height</string>
     <string name="appearance_row_keyboard_split_gap">Split gap</string>

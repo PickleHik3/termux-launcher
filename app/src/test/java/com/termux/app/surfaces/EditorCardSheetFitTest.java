@@ -665,20 +665,25 @@ public class EditorCardSheetFitTest {
         return out;
     }
 
+    /** The reset arrow stands at the own row's end and nowhere else; no dot marks a row. */
     @Test
-    public void theSetHereDotRidesOnTheRotatedLegend() {
+    public void theResetArrowStandsOnTheOwnRowOnly() {
         Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
         fixture.layOut();
-        int marked = 0;
+        String opacity = fixture.themed.getString(R.string.editor_row_reset_to_global,
+            fixture.themed.getString(R.string.appearance_row_opacity));
+        int shown = 0;
         for (LegendSlider slider : legends(fixture.sheet.rows())) {
-            boolean opacity = slider.getContentDescription().toString().equals(
-                fixture.themed.getString(R.string.appearance_row_opacity));
-            assertEquals(String.valueOf(slider.getContentDescription()), opacity,
-                slider.isMarked());
-            if (slider.isMarked())
-                marked++;
+            assertFalse("no dot", slider.isMarked());
+            android.widget.ImageButton reset = (android.widget.ImageButton)
+                ((ViewGroup) slider.getParent()).getChildAt(4);
+            boolean own = opacity.contentEquals(reset.getContentDescription());
+            assertEquals(String.valueOf(reset.getContentDescription()),
+                own ? View.VISIBLE : View.INVISIBLE, reset.getVisibility());
+            if (reset.getVisibility() == View.VISIBLE)
+                shown++;
         }
-        assertEquals(1, marked);
+        assertEquals(1, shown);
     }
 
     @NonNull

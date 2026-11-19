@@ -566,12 +566,4 @@ public final class EditorRows {
             ? TermuxAppSharedPreferences.PAGE_WALL : none;
     }
 
-    /**
-     * Whether a slider row carries the "set here" dot: the surface's own value for one of its
-     * glass numbers, where Reset would take it back to the Look.
-     */
-    public static boolean marksOwnValue(@NonNull EditorCard card, @NonNull Row row) {
-        return card.slot != null && row.property() != null
-            && TermuxAppSharedPreferences.hasSurfaceProperty(card.slot, row.property());
-    }
 }

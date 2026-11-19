@@ -85,7 +85,7 @@ final class EditorCardSheet {
         int step(@NonNull Row row);
         /** The value as the row prints and announces it ("72%", "56 dp"). */
         @NonNull String readout(@NonNull Row row, int value);
-        /** Whether the value is the surface's own (the dot after the label). */
+        /** Whether the value is the surface's own: the reset arrow stands in its row's end slot. */
         boolean ownValue(@NonNull Row row);
         boolean enabled(@NonNull Row row);
         /** A second line: a disabled row's reason, a menu's current choice, an expander's state. */
@@ -151,27 +151,21 @@ final class EditorCardSheet {
         /** Whether ⋮ also offers Reset everything (the Customization card, overhaul §1). */
         default boolean offersResetEverything() { return false; }
 
-        /** Where a row's value comes from, for its dot; a model with no grid says own or not. */
-        @NonNull
-        default RowSource source(@NonNull Row row) {
-            return ownValue(row) ? RowSource.ELEMENT : RowSource.NONE;
-        }
-
-        /** Where a row's value comes from, in words ("Dock on Home"), or null for none. */
+        /** The row's state as a screen reader says it ("Opacity, its own"), or null for none. */
         @Nullable
-        default CharSequence sourceName(@NonNull Row row) { return null; }
+        default CharSequence rowState(@NonNull Row row) { return null; }
 
-        /** Whether the chips' cell holds the row's value itself: Reset this row is offered. */
-        default boolean resettable(@NonNull Row row) { return false; }
-
-        /** Reset this row: the chips' cell gives its value up and follows again. */
+        /** The row's reset arrow: the surface's own value goes and the row follows Global. */
         default void resetRow(@NonNull Row row) {}
 
         /**
-         * A long press on the name of a row the card drew itself ({@link #rowView}): the card
-         * opens the sheet's row menu for it ({@link EditorCardSheet#openRowMenu}).
+         * Whether the header's reset arrow stands: on a surface card while it owns anything, on
+         * Global while any surface does.
          */
-        default void openRowMenu(@NonNull View anchor, @NonNull Row row) {}
+        default boolean cardOwnsAny() { return false; }
+
+        /** The header's reset arrow: the surface, or on Global every surface, back on Global. */
+        default void resetCard() {}
 
         /** Whether the Where chip stands on a page: the card's rows read and write the page. */
         default boolean scopeOnPage() { return false; }
@@ -249,6 +243,8 @@ final class EditorCardSheet {
     @NonNull private final TextView mTitle;
     /** Shows or hides the card's object; gone on a card whose object cannot be hidden. */
     @NonNull private final MaterialSwitch mEye;
+    /** The header's reset arrow: shown while the card (Global: any surface) owns a value. */
+    @NonNull private final MaterialButton mOwnReset;
     /** The ⋮ button: a menu holding the card's Reset. */
     @NonNull private final MaterialButton mReset;
     /** The Reset item's words, as the controller names them ("Reset dock"). */
@@ -462,6 +458,17 @@ final class EditorCardSheet {
         line.addView(mPhone, phoneParams);
 
         // ⋮ holds the card's Reset (the bare reset button it replaces did the same, no question).
+        // The reset arrow (spec §2): the card's own values back on Global, before ⋮.
+        mOwnReset = headerButton(R.drawable.ic_ms_restart_alt, R.string.editor_global_reset_all);
+        mOwnReset.setVisibility(View.GONE);
+        mOwnReset.setOnClickListener(v -> {
+            ResetMotion motion = beginReset(new ArrayList<>(mRowViews.keySet()));
+            mModel.resetCard();
+            restate();
+            endReset(motion, RESET_STAGGER_MS);
+        });
+        line.addView(mOwnReset, new LinearLayout.LayoutParams(dp(HEADER_BUTTON_DP),
+            dp(HEADER_BUTTON_DP)));
         mReset = headerButton(R.drawable.ic_editor_more_vert, R.string.appearance_header_more);
         androidx.appcompat.widget.TooltipCompat.setTooltipText(mReset,
             context.getString(R.string.appearance_header_more));
@@ -1349,7 +1356,6 @@ final class EditorCardSheet {
         @Nullable TextView label;
         @Nullable TextView value;
         @Nullable TextView summary;
-        @Nullable View dot;
         @Nullable Slider slider;
         @Nullable LegendSlider legend;
         /** A slider row's own row: its name, value, source dot. */
@@ -1798,7 +1804,12 @@ final class EditorCardSheet {
                     built[0].tracking = false;
                     mModel.onReleased(row);
                 }
-            }, -1, "", false, null, (index, anchor) -> openRowMenu(anchor, row));
+
+
+                @Override public void onReset(int index) {
+                    resetRowToGlobal(row);
+                }
+            }, -1, "", false, null, null);
         SliderRow.Item item = slider.items.get(0);
         RowViews views = new RowViews(row, slider.root);
         built[0] = views;
@@ -2255,8 +2266,33 @@ final class EditorCardSheet {
      * The eye read again: open while the object shows, struck through while it is hidden. Its
      * long-press names it, or says why it reads as it does (the other orientation's note).
      */
+    /** The header's reset arrow read again: shown while the model says the card owns a value. */
+    private void restateOwnReset(@Nullable EditorCard card) {
+        boolean shown = card != null && mModel.cardOwnsAny();
+        EditorViews.setVisible(mOwnReset, shown);
+        if (!shown)
+            return;
+        CharSequence said = card == EditorCard.APPEARANCE
+            ? mContext.getString(R.string.editor_global_reset_all)
+            : mContext.getString(R.string.editor_card_reset_to_global,
+                mContext.getString(card.titleRes));
+        if (!TextUtils.equals(mOwnReset.getContentDescription(), said)) {
+            mOwnReset.setContentDescription(said);
+            androidx.appcompat.widget.TooltipCompat.setTooltipText(mOwnReset, said);
+        }
+    }
+
+    /** A row's reset arrow: its value goes back to Global, springing to the new value. */
+    void resetRowToGlobal(@NonNull Row row) {
+        ResetMotion motion = beginReset(java.util.Collections.singletonList(row));
+        mModel.resetRow(row);
+        restate();
+        endReset(motion, 0L);
+    }
+
     private void restateEye() {
         EditorCard card = mCard;
+        restateOwnReset(card);
         if (card == null || !card.hasEye())
             return;
         boolean shown = mModel.value(Row.VISIBLE) != 0;
@@ -2321,8 +2357,6 @@ final class EditorCardSheet {
             if (views.root.isEnabled() != enabled)
                 views.root.setEnabled(enabled);
             views.root.setAlpha(enabled ? 1f : 0.5f);
-            if (views.dot != null)
-                markDot(views.dot, row);
             if (row.kind == Kind.ACTION && views.value != null)
                 EditorViews.setText(views.value, mModel.readout(row, value));
             if (views.summary != null) {
@@ -2364,10 +2398,7 @@ final class EditorCardSheet {
                     EditorViews.setText(views.value,
                         mModel.readout(row, Math.round(legend.getValue())));
                 if (views.sliderRow != null)
-                    views.sliderRow.setSource(0, mModel.source(row).ink(mContext),
-                        spokenSource(row));
-                else
-                    legend.setMark(mModel.source(row).ink(mContext), spokenSource(row));
+                    views.sliderRow.setOwn(0, mModel.ownValue(row), mModel.rowState(row));
             }
             if (views.toggle != null) {
                 boolean on = value != 0;
@@ -2457,10 +2488,6 @@ final class EditorCardSheet {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         line.addView(label, labelParams);
         views.label = label;
-        bindRowMenu(label, row);
-        View dot = ownDot();
-        line.addView(dot);
-        views.dot = dot;
         View spring = new View(mContext);
         line.addView(spring, new LinearLayout.LayoutParams(0, 1, 1f));
         if (withValue) {
@@ -2488,9 +2515,6 @@ final class EditorCardSheet {
         TextView label = label(row.labelRes);
         top.addView(label, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
-        bindRowMenu(label, row);
-        View dot = ownDot();
-        top.addView(dot);
         column.addView(top);
         TextView summary = new TextView(mContext);
         EditorViews.textAppearance(summary, com.google.android.material.R.attr.textAppearanceBodyMedium);
@@ -2501,7 +2525,6 @@ final class EditorCardSheet {
         summary.setVisibility(View.GONE);
         column.addView(summary);
         views.label = label;
-        views.dot = dot;
         views.summary = summary;
         return column;
     }
@@ -2516,57 +2539,6 @@ final class EditorCardSheet {
         label.setSingleLine(true);
         label.setEllipsize(TextUtils.TruncateAt.END);
         return label;
-    }
-
-    /** The dot after a row's name, coloured by where its value comes from, and its words. */
-    private void markDot(@NonNull View dot, @NonNull Row row) {
-        RowSource source = mModel.source(row);
-        EditorViews.setVisible(dot, source.marked());
-        if (!source.marked())
-            return;
-        if (dot.getBackground() instanceof GradientDrawable)
-            ((GradientDrawable) dot.getBackground()).setColor(source.ink(mContext));
-        CharSequence spoken = spokenSource(row);
-        if (!TextUtils.equals(dot.getContentDescription(), spoken))
-            dot.setContentDescription(spoken);
-    }
-
-    /** "<Row>, from <where>", or null where the row's value is shared. */
-    @Nullable
-    private CharSequence spokenSource(@NonNull Row row) {
-        CharSequence from = mModel.source(row).marked() ? mModel.sourceName(row) : null;
-        return from == null ? null
-            : mContext.getString(R.string.editor_source_from, mContext.getString(row.labelRes), from);
-    }
-
-    /**
-     * A long press on a row's name (the system's long-press time, cancelled past the touch slop)
-     * opens its menu: where the value comes from, and Reset this row.
-     */
-    private void bindRowMenu(@NonNull TextView label, @NonNull Row row) {
-        label.setOnLongClickListener(v -> {
-            openRowMenu(v, row);
-            return true;
-        });
-    }
-
-    void openRowMenu(@NonNull View anchor, @NonNull Row row) {
-        android.widget.PopupMenu menu = new android.widget.PopupMenu(mContext, anchor);
-        CharSequence name = mContext.getString(row.labelRes);
-        CharSequence from = mModel.source(row).marked() ? mModel.sourceName(row) : null;
-        menu.getMenu().add(0, -1, 0, from == null ? name
-            : mContext.getString(R.string.editor_source_caption, name, from)).setEnabled(false);
-        menu.getMenu().add(0, 1, 1, R.string.editor_row_reset).setEnabled(mModel.resettable(row));
-        menu.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() != 1)
-                return false;
-            ResetMotion motion = beginReset(java.util.Collections.singletonList(row));
-            mModel.resetRow(row);
-            restate();
-            endReset(motion, 0L);
-            return true;
-        });
-        menu.show();
     }
 
     // ------------------------------------------------------------------ rule g, Reset motion
@@ -2596,7 +2568,7 @@ final class EditorCardSheet {
     }
 
     /**
-     * Before a reset: notes each row's value and fades its dot out as it stands (DOT_OUT), so
+     * Before a reset: notes each row's value as it stands, so
      * {@link #endReset} can spring the values from there and bring the dots back.
      */
     @NonNull
@@ -2611,32 +2583,22 @@ final class EditorCardSheet {
             LegendSlider legend = legendOf(views);
             motion.before.add(views.slider != null ? views.slider.getValue()
                 : legend != null ? legend.getValue() : Float.NaN);
-            if (views.dot != null)
-                ghost(views.dot, EditorMotion.Use.DOT_OUT.durationMs(reduced));
         }
         return motion;
     }
 
     /**
      * After a reset and its restate: each row's value springs from where it stood to its new one
-     * (VALUE_SPRING; a jump under reduced motion) and its dot fades in (DOT_IN) in its new colour
+     * (VALUE_SPRING; a jump under reduced motion)
      * or stays off, {@code staggerMs} apart in touch order.
      */
     void endReset(@NonNull ResetMotion motion, long staggerMs) {
         boolean reduced = ReducedMotion.isEnabled(mContext);
-        long dotAfter = EditorMotion.Use.DOT_OUT.durationMs(reduced);
         for (int i = 0; i < motion.rows.size(); i++) {
             RowViews views = mRowViews.get(motion.rows.get(i));
             if (views == null)
                 continue;
             long delay = i * staggerMs;
-            if (views.dot != null && views.dot.getVisibility() == View.VISIBLE) {
-                views.dot.animate().cancel();
-                views.dot.setAlpha(0f);
-                views.dot.animate().alpha(1f).setStartDelay(delay + dotAfter)
-                    .setDuration(EditorMotion.Use.DOT_IN.durationMs(reduced))
-                    .setInterpolator(EditorMotion.Use.DOT_IN.curve(reduced)).start();
-            }
             float from = motion.before.get(i);
             if (Float.isNaN(from) || reduced)
                 continue;
@@ -2706,22 +2668,6 @@ final class EditorCardSheet {
         if (step > 0f)
             clamped = Math.max(lo, Math.min(hi, lo + Math.round((clamped - lo) / step) * step));
         return clamped;
-    }
-
-    /** The small dot after a label: where the row's value comes from ({@link #markDot}). */
-    @NonNull
-    private View ownDot() {
-        View dot = new View(mContext);
-        GradientDrawable shape = new GradientDrawable();
-        shape.setShape(GradientDrawable.OVAL);
-        shape.setColor(EditorViews.color(mContext, androidx.appcompat.R.attr.colorPrimary));
-        dot.setBackground(shape);
-        dot.setContentDescription(mContext.getString(R.string.appearance_row_own_value));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(6), dp(6));
-        params.setMarginStart(dp(6));
-        dot.setLayoutParams(params);
-        dot.setVisibility(View.GONE);
-        return dot;
     }
 
     @NonNull
