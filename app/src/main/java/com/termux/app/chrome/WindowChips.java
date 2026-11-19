@@ -31,9 +31,8 @@ public final class WindowChips<W> {
     /** A surface that shows the chips, each counting its own index. */
     public enum Surface {
         /**
-         * The status bar and its window column: every chip, the same on both halves of the wall
-         * (#90), a minimised float's among them (#91); a window's tap on Home slides the
-         * Workspace in, a float's in the Workspace travels Home.
+         * The status bar and its window column: the Workspace's own windows only. Floats are
+         * Home's content and have chips of their own there ({@link HomeFloatChips}).
          */
         BAR,
         /** The Wall strip's tiles: every chip; a window's tap slides the Workspace in. */
@@ -165,22 +164,19 @@ public final class WindowChips<W> {
         return Collections.unmodifiableList(mChips);
     }
 
+    /**
+     * How many chips {@code surface} shows: the bar the row's windows only, the Wall strip every
+     * chip, the floats after the windows.
+     */
+    public int count(@NonNull Surface surface) {
+        return surface == Surface.BAR ? mRowCount : mChips.size();
+    }
+
     /** How many chips are the row's windows; the floats follow. */
     public int rowCount() {
         return mRowCount;
     }
 
-    /**
-     * The bar's chip for the float {@code window}, minimised or not, or -1 when it is no float's:
-     * where minimise's flight lands.
-     */
-    public int barChipOf(@NonNull W window) {
-        for (int i = mRowCount; i < mChips.size(); i++) {
-            Chip<W> chip = mChips.get(i);
-            if (chip.kind == Kind.HOME_FLOAT && window.equals(chip.window)) return i;
-        }
-        return -1;
-    }
 
     /**
      * The chip {@code surface} selects, or -1: on the bar the row's window in front, held to the
@@ -248,9 +244,8 @@ public final class WindowChips<W> {
 
     @Nullable
     private Chip<W> chipAt(@NonNull Surface surface, int index) {
-        if (index < 0) return null;
-        List<Chip<W>> chips = chips();
-        return index < chips.size() ? chips.get(index) : null;
+        if (index < 0 || index >= count(surface)) return null;
+        return mChips.get(index);
     }
 
     @SuppressWarnings("unchecked")

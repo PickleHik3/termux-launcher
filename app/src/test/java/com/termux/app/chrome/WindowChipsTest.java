@@ -90,25 +90,20 @@ public class WindowChipsTest {
         assertEquals(4, home().chips().size());
     }
 
-    /**
-     * A minimised Home float is a window chip in the bar on both halves (#91), marked minimised,
-     * where minimise's flight lands: no row of its own above the dock.
-     */
+    /** The bar shows the Workspace's own windows only: floats are Home's chips (#295). */
     @Test
-    public void aMinimisedFloat_isABarChipOnBothHalves() {
+    public void theBarShowsOnlyTheRowsWindows_floatsAreHomes() {
         for (WindowChips<String> chips : Arrays.asList(workspace(), home())) {
-            assertEquals(2, chips.barChipOf("f"));
-            WindowChips.Chip<String> f = chips.chips().get(chips.barChipOf("f"));
-            assertEquals(Kind.HOME_FLOAT, f.kind);
-            assertTrue(f.minimised);
-            assertEquals(3, chips.barChipOf("g"));
-            assertFalse(chips.chips().get(3).minimised);
+            assertEquals(2, chips.count(Surface.BAR));
+            assertEquals("the Wall strip still shows every chip", 4,
+                chips.count(Surface.WALL_STRIP));
+            assertEquals(Meaning.Action.NONE, chips.tap(Surface.BAR, 2).action);
+            assertEquals(Meaning.Action.NONE, chips.tap(Surface.BAR, 3).action);
+            assertEquals(Meaning.Action.NONE, chips.close(Surface.BAR, 2).action);
         }
-        assertEquals("a float on no page is still a chip", 0,
+        assertEquals("without a row the bar has no chip", 0,
             new WindowChips<String>(PageKind.HOME, false, AB, 0).addFloat("h", true, false)
-                .barChipOf("h"));
-        assertEquals("a row window is not a float's chip", -1, workspace().barChipOf("a"));
-        assertEquals(-1, workspace().barChipOf("nobody"));
+                .count(Surface.BAR));
     }
 
     /** One bar across the wall (#90): the same chips in the same order on both halves. */
@@ -189,25 +184,11 @@ public class WindowChipsTest {
     }
 
     @Test
-    public void aTapOnAFloatsChip_restoresThatFloat_fromEverySurface() {
-        Meaning<String> bar = workspace().tap(Surface.BAR, 3);
-        assertEquals(Meaning.Action.RESTORE_FLOAT, bar.action);
-        assertEquals("g", bar.window);
+    public void aTapOnAFloatsTile_restoresThatFloat() {
         Meaning<String> strip = home().tap(Surface.WALL_STRIP, 2);
         assertEquals(Meaning.Action.RESTORE_FLOAT, strip.action);
         assertEquals("f", strip.window);
         assertEquals("g", home().tap(Surface.WALL_STRIP, 3).window);
-    }
-
-    /** A float's chip tapped in the Workspace (#91): the wall travels Home and the float comes back. */
-    @Test
-    public void aFloatsChipTappedInTheWorkspace_meansTravelHomeAndRestore() {
-        for (int chip = 2; chip < 4; chip++) {
-            Meaning<String> meaning = workspace().tap(Surface.BAR, chip);
-            assertEquals(Meaning.Action.RESTORE_FLOAT, meaning.action);
-            assertEquals(chip == 2 ? "f" : "g", meaning.window);
-            assertTrue("Home is not where the bar is", meaning.travel);
-        }
     }
 
     /** The strips stand on Home: a float's tile restores it where it is. */
@@ -239,20 +220,14 @@ public class WindowChipsTest {
     }
 
     @Test
-    public void aFloatsChipTappedOnHome_restoresThatFloat() {
-        Meaning<String> meaning = home().tap(Surface.BAR, 2);
-        assertEquals(Meaning.Action.RESTORE_FLOAT, meaning.action);
-        assertEquals("f", meaning.window);
-        assertFalse(meaning.travel);
-    }
-
-    @Test
     public void chipsPastTheEndAndNegative_meanNothing() {
         for (Surface surface : Surface.values()) {
             assertEquals(Meaning.Action.NONE, workspace().tap(surface, -1).action);
-            assertEquals(Meaning.Action.NONE, workspace().tap(surface, 4).action);
+            assertEquals(Meaning.Action.NONE,
+                workspace().tap(surface, workspace().count(surface)).action);
             assertEquals(Meaning.Action.NONE, workspace().close(surface, -1).action);
-            assertEquals(Meaning.Action.NONE, workspace().close(surface, 4).action);
+            assertEquals(Meaning.Action.NONE,
+                workspace().close(surface, workspace().count(surface)).action);
         }
     }
 
@@ -272,7 +247,7 @@ public class WindowChipsTest {
 
     @Test
     public void aCloseOnAFloatsChip_closesThatFloat() {
-        Meaning<String> meaning = workspace().close(Surface.BAR, 2);
+        Meaning<String> meaning = home().close(Surface.WALL_STRIP, 2);
         assertEquals(Meaning.Action.CLOSE_FLOAT, meaning.action);
         assertEquals("f", meaning.window);
     }
@@ -280,7 +255,7 @@ public class WindowChipsTest {
     /** The chip's close means on Home what it means in the Workspace. */
     @Test
     public void aCloseOnTheBarOnHome_meansWhatItMeansInTheWorkspace() {
-        for (int chip = 0; chip < 4; chip++) {
+        for (int chip = 0; chip < 2; chip++) {
             Meaning<String> onHome = home().close(Surface.BAR, chip);
             Meaning<String> onWorkspace = workspace().close(Surface.BAR, chip);
             assertEquals("chip " + chip, onWorkspace.action, onHome.action);
@@ -289,7 +264,7 @@ public class WindowChipsTest {
             assertFalse(onHome.travel);
         }
         assertEquals(Meaning.Action.CLOSE_WINDOW, home().close(Surface.BAR, 0).action);
-        assertEquals(Meaning.Action.CLOSE_FLOAT, home().close(Surface.BAR, 3).action);
+        assertEquals(Meaning.Action.NONE, home().close(Surface.BAR, 3).action);
     }
 
     @Test
@@ -314,7 +289,7 @@ public class WindowChipsTest {
             WindowChips<String> chips = new WindowChips<>(place, true, AB, 1)
                 .addFloat("f", false, false);
             assertEquals(place.name(), place != PageKind.HOME,
-                chips.tap(Surface.BAR, 2).travel);
+                chips.tap(Surface.WALL_STRIP, 2).travel);
         }
     }
 
