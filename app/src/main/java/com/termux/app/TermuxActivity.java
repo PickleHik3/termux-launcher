@@ -2076,6 +2076,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return groundUnderRect(screenRect);
         }
 
+        @Override public boolean paneGlassSlabs() {
+            return isTerminalPaneGlassActive();
+        }
+
         @Override public int wallpaperHintColor() {
             return resolveWallpaperHintColor();
         }

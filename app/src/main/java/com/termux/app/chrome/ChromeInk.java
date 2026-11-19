@@ -833,7 +833,7 @@ public final class ChromeInk {
                                        @ColorInt int veilColor, @ColorInt int ink,
                                        @ColorInt int dimInk) {
         readMode();
-        int dim = dimUnder(rootRect);
+        int dim = paneDim(rootRect);
         double target = mLevel.target(OnGlass.TARGET_BODY_TEXT);
         PaneAnswer answer = mPanes.get(key);
         if (answer != null && !answer.rect.equals(rootRect)) {
@@ -1199,7 +1199,7 @@ public final class ChromeInk {
         long red = 0, green = 0, blue = 0;
         int count = 0;
         for (PaneAnswer pane : mPanes.values()) {
-            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != paneDim(pane.rect)) continue;
             int flat = plainMean ? pane.meanFlat : pane.flat;
             red += Color.red(flat);
             green += Color.green(flat);
@@ -1220,7 +1220,7 @@ public final class ChromeInk {
         int worst = Color.TRANSPARENT;
         double worstLuma = 0d;
         for (PaneAnswer pane : mPanes.values()) {
-            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != paneDim(pane.rect)) continue;
             if (pane.evenOutPolarity != polarity) continue;
             double luma = com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(pane.flat);
             if (Color.alpha(worst) == 0 || (pale ? luma > worstLuma : luma < worstLuma)) {
@@ -1719,7 +1719,7 @@ public final class ChromeInk {
         int n = 0;
         for (PaneAnswer pane : mPanes.values()) {
             Rect rect = pane.rect;
-            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(rect)) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != paneDim(rect)) continue;
             long area = (long) Math.max(0, rect.width()) * Math.max(0, rect.height());
             if (area == 0) continue;
             surfaces[n] = pane.resolution.surface;
@@ -2825,6 +2825,24 @@ public final class ChromeInk {
      * or both with a seam between, the rect stands on. {@link ChromeRenderer.Surfaces#groundUnder}
      * answers it; {@link #mDimColor} stays the wall-wide dim for answers that have no rect.
      */
+    /**
+     * The dim a terminal pane's text stands on ({@link #paneStandsOnDim}): none while the panes
+     * are glass slabs, whose frame covers the ground strip (ADR 0031 section 4: the Wallpaper dim
+     * is everything around the panes, their Opacity is their own); the page's ground under the
+     * pane while they have no slab and the strip shows through. One rule at rest and in a
+     * crossing, so a pane's even-out does not jump at the landing.
+     */
+    @ColorInt
+    private int paneDim(@NonNull Rect rootRect) {
+        return paneStandsOnDim(mSurfaces.paneGlassSlabs(), dimUnder(rootRect));
+    }
+
+    /** {@link #paneDim}'s rule: a slab's frame hides the page's ground; without one it shows. */
+    @ColorInt
+    static int paneStandsOnDim(boolean glassSlabs, @ColorInt int pageGround) {
+        return groundDim(glassSlabs, pageGround);
+    }
+
     @ColorInt
     private int dimUnder(@NonNull Rect rootRect) {
         return mSurfaces.groundUnder(rootRect);

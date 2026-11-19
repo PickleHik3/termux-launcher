@@ -132,6 +132,14 @@ public final class ChromeRenderer {
         }
 
         /**
+         * Whether the terminal's panes are glass slabs, each drawing its own frame over the
+         * ground strip, so their text stands on no page dim (ADR 0031 section 4).
+         */
+        default boolean paneGlassSlabs() {
+            return false;
+        }
+
+        /**
          * The wallpaper as the system describes it ({@link WallpaperInk#hintColor}), for the ink
          * to assume until a sample is read; transparent when the launcher shows its own picture
          * or the system says nothing. Read, never changed.
