@@ -179,19 +179,6 @@ public class DockRowsSeamTest {
     }
 
     @Test
-    public void thePageBandStaysWithThePinnedAppsOnTheirOwnSide() {
-        // The Workspace in front shows no pinned apps of its own, but Home's row stays laid out
-        // and dressed in Home's lane: its page band stays with it, so a crossing back to Home
-        // finds the ticks already standing rather than the band coming back at the landing.
-        FakeViews views = new FakeViews();
-        DockRows rows = new DockRows(views);
-        rows.apply(chrome(WINDOW_BARE, false), false, new DockRows.Union(true, false, false));
-
-        assertTrue("Home's row stays laid out", views.row(Element.APPS));
-        assertEquals("its ticks keep the band", DockRows.PageBand.TICKS, views.pageBand);
-    }
-
-    @Test
     public void aWindowShowsThePinnedAppsAndTheExtraKeys() {
         Snapshot.Builder device = device(half(HOME, DockStyle.GLASS_TRAY),
             half(WINDOW, DockStyle.GLASS_TRAY));

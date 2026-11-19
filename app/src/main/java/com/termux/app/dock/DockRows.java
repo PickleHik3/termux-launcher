@@ -213,22 +213,9 @@ public final class DockRows {
     public static Shown presence(@NonNull ChromeSpec chrome, boolean bottomStatusBar,
                                  boolean underKeyboard,
                                  boolean ticksAreTheDocks, @Nullable DockSurfaceSpec surface) {
-        return presence(chrome, bottomStatusBar, underKeyboard, ticksAreTheDocks, surface, false);
-    }
-
-    /**
-     * {@link #presence(ChromeSpec, boolean, boolean, boolean, DockSurfaceSpec)} with the pinned
-     * apps' row standing in a side's lane ({@code laneApps}): the row stays laid out and dressed
-     * whichever side is in front, and its page band stays with it.
-     */
-    @NonNull
-    public static Shown presence(@NonNull ChromeSpec chrome, boolean bottomStatusBar,
-                                 boolean underKeyboard, boolean ticksAreTheDocks,
-                                 @Nullable DockSurfaceSpec surface, boolean laneApps) {
         boolean dock = chrome.toolbarShown;
         boolean apps = dock && chrome.appsRowEnabled;
-        PageBand band = !(apps || laneApps) ? PageBand.GONE
-            : ticksAreTheDocks ? PageBand.TICKS : PageBand.HELD;
+        PageBand band = !apps ? PageBand.GONE : ticksAreTheDocks ? PageBand.TICKS : PageBand.HELD;
         return new Shown(
             stackShown(dock, chrome.keyboardShown, bottomStatusBar),
             dock,
@@ -271,8 +258,7 @@ public final class DockRows {
     public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge,
                       @Nullable Union union) {
         Shown shown = presence(chrome, mStatusBarShown && statusBarOnBottomEdge,
-            mShown.underKeyboard, mViews.pageTicksAreTheDocks(), surfaceOf(mLayout),
-            union != null && union.apps);
+            mShown.underKeyboard, mViews.pageTicksAreTheDocks(), surfaceOf(mLayout));
         announce(shown);
         // The in-app keyboard stays laid out while down: the container it stands in stays
         // laid out with it, though no row or status bar keeps the stack "shown" for readers.
