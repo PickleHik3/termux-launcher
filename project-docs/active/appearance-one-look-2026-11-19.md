@@ -144,7 +144,17 @@ card (`appearance_search_index.xml` grows to cover them).
 7. **Words and docs**: Base to Global, Workspace to Terminal; `launcherctl look` without `--kind`
    and `--page`; the user guides.
 
-## 7. Still open
+## 7. Settled since
+
+- A surface holding its own Blur wears that stop's grain; following Global's Blur, it wears
+  Global's Grain (developer, 2026-11-19).
+- Nothing ships per surface: a fresh install's keyboard wears Global's glass, as the dock and
+  the status bar do; the keyboard's Mist on Home and Clear on Display are gone (developer,
+  2026-11-19).
+- The Home float wears Global's glass like everything else on Home, with no opacity floor
+  (developer, 2026-11-19).
+
+## 8. Still open
 
 - The floor on opacity for Menus and dialogs: the number.
 - The Terminal's shipped Opacity: the number.

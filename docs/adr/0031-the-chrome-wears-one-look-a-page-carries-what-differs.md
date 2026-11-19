@@ -36,7 +36,10 @@ key.
 ## 2. What a surface may own
 
 The status bar, the dock and the keyboard may each hold their own **Opacity** and **Blur** (the
-Frost stop; grain follows it). The keyboard keeps its keys' opacity. Tint and its colour, Grain,
+Frost stop). A surface holding its own Blur wears that stop's grain; one following Global's Blur
+wears Global's Grain (developer, 2026-11-19). The keyboard keeps its keys' opacity. Nothing ships
+per surface: on a fresh install the keyboard wears Global's glass like the dock and the status bar
+(developer, 2026-11-19). Tint and its colour, Grain,
 Rim, Edge, Depth, Corners, Vibrancy and Margin are Global's alone. Widgets hold nothing: they wear
 Global's glass while Glass widgets is on, and each widget still chooses for itself. Sheets (the
 drawer, folders, menus, the command palette, notices) hold nothing either and wear Global with a
