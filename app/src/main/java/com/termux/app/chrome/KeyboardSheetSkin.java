@@ -88,10 +88,11 @@ public final class KeyboardSheetSkin {
         }
 
         private void placeSheet(Rect bounds) {
-            // Taller than the host by the sheet's corner radius: the glass is rounded all round,
-            // and the host's outline cuts the part below, so the bottom corners stay square.
+            // Taller than the host by the sheet's corner radius, above and below: the glass is
+            // rounded all round, and the host's outline cuts both extensions, so no corner of the
+            // glass shows and no pocket of the scene behind it appears at the keyboard's top.
             if (mSheet != null)
-                mSheet.setBounds(bounds.left, bounds.top, bounds.right,
+                mSheet.setBounds(bounds.left, bounds.top - mExtendBelowPx, bounds.right,
                     bounds.bottom + mExtendBelowPx);
         }
 
@@ -112,7 +113,8 @@ public final class KeyboardSheetSkin {
             }
             // Mid-handoff only: a few frames, as long as the drawer's own glass takes to arrive.
             Rect b = getBounds();
-            int saved = canvas.saveLayerAlpha(b.left, b.top, b.right, b.bottom + mExtendBelowPx,
+            int saved = canvas.saveLayerAlpha(b.left, b.top - mExtendBelowPx, b.right,
+                b.bottom + mExtendBelowPx,
                 Math.round(255f * mFraction));
             sheet.draw(canvas);
             canvas.restoreToCount(saved);
