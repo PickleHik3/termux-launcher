@@ -18,12 +18,14 @@ package com.termux.view;
  * <p>
  * Every method here mirrors a function of the same shape in kitty's source, kept close enough to
  * read side by side with it: {@link #update} is {@code update_cursor_trail}, the corner law in
- * {@link #updateCorners} is {@code update_cursor_trail_corners}, and so on. The one deliberate
+ * {@link #updateCorners} is {@code update_cursor_trail_corners}, and so on. One deliberate
  * addition is {@link #requestSnapOnNextUpdate()}, which stands in for kitty's own
  * {@code live_resize.in_progress} skip test: kitty snaps its trail during a live resize because the
  * geometry underneath it is changing for a reason that has nothing to do with the cursor, and a
  * pane-to-pane focus jump driven by a window switch is the same kind of discontinuity — the caller
- * asks for one snap instead of turning the whole update off.
+ * asks for one snap instead of turning the whole update off. The other is
+ * {@link #carriesSmallMove}: a move inside the start threshold never smears, even while an earlier
+ * trail is still settling, so typing after a newline does not draw each key a cell behind.
  */
 public final class KittyCursorTrail {
 
@@ -268,6 +270,32 @@ public final class KittyCursorTrail {
         return false;
     }
 
+    /**
+     * A move inside the start threshold that lands while the trail is still settling: shift every
+     * corner by the move, so the move itself draws no smear and what was left of the trail keeps
+     * easing. kitty tests the threshold only on a settled trail, and a one-cell smear outlasts the
+     * gap between two keys, so typing after a long move used to smear every key a cell behind the
+     * cursor. On a settled trail this is the same as kitty's skip. Measured target to target, with
+     * kitty's edges (right and top); a move into another pane still trails.
+     */
+    private boolean carriesSmallMove(float cellWidthPx, float cellHeightPx, Config config) {
+        if ((config.thresholdXCells <= 0 && config.thresholdYCells <= 0) || mWindowChanged
+            || cellWidthPx <= 0f || cellHeightPx <= 0f) return false;
+        int dx = roundHalfAway((mEdgeRight - mReplacedFrom[2]) / cellWidthPx);
+        int dy = roundHalfAway((mEdgeTop - mReplacedFrom[1]) / cellHeightPx);
+        if (Math.abs(dx) > config.thresholdXCells || Math.abs(dy) > config.thresholdYCells) return false;
+        for (int i = 0; i < CORNERS; i++) {
+            int xEdge = CORNER_X_EDGE[i], yEdge = CORNER_Y_EDGE[i];
+            float shiftX = edgeX(xEdge) - mReplacedFrom[xEdge == 0 ? 0 : 2];
+            float shiftY = edgeY(yEdge) - mReplacedFrom[yEdge == 0 ? 1 : 3];
+            mCornerX[i] += shiftX;
+            mCornerY[i] += shiftY;
+            mPrevCornerX[i] += shiftX;
+            mPrevCornerY[i] += shiftY;
+        }
+        return true;
+    }
+
     /** {@code update_cursor_trail_corners}, which ends by clearing {@code window_changed}. */
     private void updateCorners(float dt, boolean dectcemOn, float cellWidthPx, float cellHeightPx,
                                Config config, boolean forceSnap) {
@@ -290,7 +318,11 @@ public final class KittyCursorTrail {
             System.arraycopy(mCornerY, 0, mPrevCornerY, 0, CORNERS);
             return;
         }
-        if (mTargetReplaced) mMoveStarted = true;
+        if (mTargetReplaced && carriesSmallMove(cellWidthPx, cellHeightPx, config)) {
+            // The corners move with the target and the rest of the trail eases on from there.
+        } else if (mTargetReplaced) {
+            mMoveStarted = true;
+        }
         if (dt <= 0f) return;
 
         float centerX = (mEdgeLeft + mEdgeRight) * 0.5f;
