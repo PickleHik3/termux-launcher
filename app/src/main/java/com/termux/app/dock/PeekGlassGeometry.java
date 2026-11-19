@@ -259,6 +259,18 @@ public final class PeekGlassGeometry {
     }
 
     /** One card, in the glass host's coordinates. */
+    /**
+     * {@code card}'s cut ({@link com.termux.app.chrome.RoundCut}) with the rows moved
+     * {@code rowsMovedPx} over the host since it was cut: the top, the icons' centre line, moves
+     * with them; the sides and the radius stay; the bottom stays past the screen's edge, never
+     * nearer the top than the radius.
+     */
+    public static void cut(@NonNull Card card, float rowsMovedPx, @NonNull float[] out) {
+        float top = card.top + rowsMovedPx;
+        com.termux.app.chrome.RoundCut.set(out, card.left, top, card.right,
+            Math.max(card.bottom, top + card.radiusPx), card.radiusPx);
+    }
+
     public static final class Card {
         public final float left;
         /** The card's top edge: the icons' centre line. */
