@@ -59,6 +59,7 @@ public class EditorDoorTest {
         assertEquals(EditorCard.HOME, EditorDoor.SETTINGS_HOME.cardFor(null, null));
         assertEquals(EditorCard.TERMINAL, EditorDoor.SETTINGS_TERMINAL.cardFor(null, null));
         assertEquals(EditorCard.KEYBOARD, EditorDoor.SETTINGS_KEYBOARD.cardFor(null, null));
+        assertEquals(EditorCard.STATUS, EditorDoor.SETTINGS_STATUS.cardFor(null, null));
     }
 
     @Test

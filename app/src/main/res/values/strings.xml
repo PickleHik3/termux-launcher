@@ -86,8 +86,6 @@
     <string name="settings_layout_miniature_keys">Extra keys</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
-    <string name="settings_appearance_surface_title">Wallpaper, look and layout</string>
-    <string name="settings_appearance_surface_summary">Edit them live on your home screen</string>
     <string name="settings_destination_terminal">Terminal</string>
     <string name="settings_destination_status_bar">Status bar</string>
     <string name="settings_destination_notifications">Notifications</string>
@@ -98,7 +96,6 @@
     <string name="settings_destination_advanced_diagnostics_summary">Logs and troubleshooting</string>
     <string name="settings_destination_about_support">About &amp; help</string>
     <string name="settings_destination_about_support_summary">Guides and app information</string>
-    <string name="settings_terminal_display_header">Terminal display</string>
     <string name="settings_full_screen_title">Full screen</string>
     <string name="settings_adjust_keyboard_title">Keyboard resize workaround</string>
     <string name="settings_adjust_keyboard_summary">Try if the Android keyboard covers terminal content. Turn off if it causes gaps or jumpy resizing.</string>
@@ -127,13 +124,10 @@
     <string name="settings_clipboard_cleanup_summary">Trim trailing spaces and single-line paste newlines.</string>
     <string name="settings_sessions_panes_header">Sessions and panes</string>
     <string name="settings_split_pane_controls_title">Split-pane controls</string>
-    <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>
     <string name="settings_show_key_hints_title">Shortcut hints</string>
     <string name="settings_show_key_hints_summary">Show pane shortcuts while holding Ctrl+Alt. Off lights the ? key instead.</string>
     <string name="settings_pane_dwindle_default_title">Automatic tiling</string>
-    <string name="settings_pane_dwindle_default_summary">Split the current pane when opening a new one.</string>
     <string name="settings_pane_focus_grows_title">Focus active pane</string>
-    <string name="settings_pane_focus_grows_summary">Enlarge the active pane and shrink the others.</string>
     <string name="settings_pane_agent_api_title">Let programs and agents control panes</string>
     <string name="settings_pane_agent_api_summary">Programs you run can open, switch and close panes on their own.</string>
     <string name="settings_terminal_body_swipe_title">Swipe on the terminal to switch windows</string>
@@ -144,18 +138,12 @@
     <string name="settings_clock_alignment_center">Center</string>
     <string name="settings_clock_alignment_right">Right</string>
     <string name="settings_use_12_hour_title">12-hour time</string>
-    <string name="settings_use_12_hour_summary">Show AM and PM.</string>
     <string name="settings_cpu_usage_title">CPU usage</string>
     <string name="settings_memory_usage_title">Memory usage</string>
-    <string name="settings_memory_usage_summary"></string>
     <string name="settings_battery_title">Battery</string>
-    <string name="settings_battery_summary">Show how much charge is left.</string>
     <string name="settings_status_media_title">Media</string>
-    <string name="settings_status_media_summary">Show what\'s playing in the status bar.</string>
     <string name="settings_weather_title">Weather</string>
-    <string name="settings_weather_summary">Uses your device location, which needs location permission, or the location set below.</string>
     <string name="settings_weather_fahrenheit_title">Fahrenheit</string>
-    <string name="settings_weather_fahrenheit_summary">Show °F instead of °C.</string>
     <string name="settings_weather_location_title">Location</string>
     <string name="settings_weather_location_summary_device">Uses your device location</string>
     <string name="settings_status_cutout_header">Camera cutout</string>
@@ -176,17 +164,13 @@
     <string name="settings_weather_location_no_results">No locations found</string>
     <string name="settings_weather_location_network_error">Can\'t reach the location search. Check your connection.</string>
     <string name="settings_weather_location_use_device">Use device location</string>
-    <string name="settings_theme_header">Theme</string>
     <string name="settings_color_mode_title">App theme</string>
     <string name="settings_widgets_on_glass_title">Widgets on glass</string>
     <string name="settings_widgets_on_glass_summary">Widgets wear the Look\'s glass. A widget\'s own Glass setting overrides it.</string>
     <string name="settings_wallpaper_colors_title">Wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Match the launcher and terminal to the wallpaper.</string>
-    <string name="settings_wallpaper_colors_hint">Overrides manual terminal colors. Turn off, or apply a Termux:Styling scheme, to use your own. Single tokens in ~/.termux/launcher-theme.properties still apply on top.</string>
-    <string name="settings_wallpaper_colors_hint_chrome_unsupported">Overrides manual terminal colors. Applying a Termux:Styling scheme turns it off. Launcher chrome needs Android 11 or newer to follow a scheme.</string>
     <string name="settings_terminal_contrast_title">Terminal contrast</string>
     <string name="settings_terminal_contrast_summary">%1$s</string>
-    <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
     <string name="settings_theme_templates_title">Tools that follow the terminal colours</string>
     <string name="settings_theme_templates_summary_none">Starship, Helix and other tools can pick up the terminal palette.</string>
     <string name="settings_theme_templates_setup_message">To finish, copy the command, paste it in the terminal and press Enter.</string>
@@ -200,20 +184,8 @@
         <item quantity="one">%1$s and %2$d more</item>
         <item quantity="other">%1$s and %2$d more</item>
     </plurals>
-    <string-array name="terminal_contrast_entries">
-        <item>Softer · pastel</item>
-        <item>Default · system</item>
-        <item>Harder · punchy</item>
-    </string-array>
-    <string-array name="terminal_contrast_values">
-        <item>softer</item>
-        <item>default</item>
-        <item>harder</item>
-    </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_wallpaper_parallax_title">Wallpaper scrolls with pages</string>
-    <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the pages and windows of the wall slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off</string>
-    <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Monochrome icons</string>
     <string name="settings_icon_pack_title">Icon pack</string>
     <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
@@ -1301,7 +1273,6 @@
                     <item quantity="one">AI model unloads in %d minute</item>
                     <item quantity="other">AI model unloads in %d minutes</item>
                 </plurals>
-                <string name="termux_status_widget_cpu_summary">Tap the widget for cores, load and top processes.</string>
                 <string name="termux_top_pane_clock_style_flip">Flip</string>
                 <string name="termux_top_pane_clock_style_lcd">LCD</string>
                 <string name="termux_top_pane_clock_style_minimal">Minimal</string>
@@ -2372,15 +2343,11 @@
     <string name="palette_category_session">Session</string>
     <string name="palette_category_window">Window</string>
     <string name="palette_category_pane">Pane</string>
-    <string name="settings_keyboard_shapes_header">Floating and split</string>
     <string name="settings_keyboard_form_title">Keyboard type</string>
     <string name="settings_keyboard_form_summary">Docked, floating or split, on Home and in the Workspace.</string>
     <string name="settings_keyboard_floating_width_title">Floating keyboard width</string>
-    <string name="settings_keyboard_floating_width_summary">Percent of the screen width. Set separately for portrait and landscape.</string>
     <string name="settings_keyboard_floating_height_title">Floating keyboard height</string>
-    <string name="settings_keyboard_floating_height_summary">Percent of the normal keyboard height. Set separately for portrait and landscape, or drag the bottom-left corner.</string>
     <string name="settings_keyboard_split_gap_title">Split keyboard gap</string>
-    <string name="settings_keyboard_split_gap_summary">Percent of the keyboard width between the two halves. Set separately for portrait and landscape.</string>
     <string name="palette_category_terminal">Terminal</string>
     <string name="palette_category_clipboard">Clipboard</string>
     <string name="palette_category_appearance">Appearance</string>
@@ -2917,13 +2884,6 @@
     <string name="termux_fonts_weight_apply">Apply</string>
     <string name="termux_fonts_weight_reset">Family default</string>
     <string name="termux_fonts_size_title">Font size</string>
-    <string name="termux_fonts_size_summary">%1$d dp</string>
-    <string name="termux_fonts_size_dialog_title">Font size (%1$d–%2$d)</string>
-    <string name="termux_fonts_size_reset">Default</string>
-    <string name="termux_fonts_size_unit">dp</string>
-    <string name="termux_fonts_size_decrease">Decrease font size</string>
-    <string name="termux_fonts_size_increase">Increase font size</string>
-    <string name="termux_fonts_size_out_of_range">Between %1$d and %2$d</string>
     <string name="termux_fonts_families_title">Families</string>
     <string name="termux_fonts_meta_installed">Installed</string>
     <!-- Count of real faces a family ships. A leading space in a resource value is stripped, so the

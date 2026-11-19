@@ -72,7 +72,7 @@ public class SettingsEditorGuardTest {
         SettingsActivity activity = open(DirtyEditorFragment.class).get();
         assertFalse("no search over unsaved edits", activity.showsSearchAction());
         activity.openSearchResult("com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment",
-            "status_widget_cpu");
+            "status_widget_weather_location");
         idle(activity);
         assertTrue(shown(activity) instanceof DirtyEditorFragment);
         assertEquals("its own Back handler asked about the edits", 1, DirtyEditorFragment.sAsked);

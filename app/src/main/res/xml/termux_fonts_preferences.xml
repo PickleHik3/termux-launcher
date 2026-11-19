@@ -15,8 +15,9 @@
         app:key="fonts_tuning_category"
         app:title="@string/termux_fonts_tuning_title">
         <Preference
-            app:key="fonts_size"
-            app:title="@string/termux_fonts_size_title"
+            app:key="fonts_layout_editor"
+            app:title="@string/settings_layout_editor_title"
+            app:summary="@string/settings_appearance_door_summary"
             app:persistent="false"
             app:iconSpaceReserved="false" />
         <SwitchPreferenceCompat

@@ -17,9 +17,9 @@ import com.termux.app.fragments.settings.SliderPreference;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
- * The status bar's own page: the 12-hour choice, the CPU/memory/weather cards and the media row's
- * switch, with the place the weather follows when it should not follow the device, and the gap
- * the row leaves for the camera. Pinned notifications, and the rules that decide which ones stay pinned, live on the Notifications page;
+ * The status bar's own page: the Appearance row (which indicators the bar shows, its clock and
+ * the temperature unit are the editor's Status bar card), the place the weather follows when it
+ * should not follow the device, and the gap the row leaves for the camera. Pinned notifications, and the rules that decide which ones stay pinned, live on the Notifications page;
  * the last row here links to it.
  *
  * <p>Splits the status half out of the old combined Terminal &amp; status page; the terminal half
@@ -37,8 +37,11 @@ public final class StatusBarPreferencesFragment extends MaterialPreferenceFragme
         manager.setPreferenceDataStore(TerminalIOPreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.status_bar_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
-        StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_cpu"));
-        StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
+        Preference appearance = findPreference("status_layout_editor");
+        if (appearance != null) appearance.setOnPreferenceClickListener(row -> {
+            SettingsEditorDoors.openEditor(this, row, com.termux.app.surfaces.EditorDoor.SETTINGS_STATUS);
+            return true;
+        });
         bindWeatherPlace(findPreference("status_widget_weather_location"));
         bindCutoutMode(findPreference("status_bar_cutout_mode"));
         bindCutoutOutline(context);

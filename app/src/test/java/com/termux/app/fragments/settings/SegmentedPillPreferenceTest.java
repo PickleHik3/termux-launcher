@@ -65,13 +65,13 @@ public class SegmentedPillPreferenceTest {
 
     @Test
     public void xmlEntriesAndEntryValuesConfigureAPillWithoutAnyFragmentCode() {
-        // termux_style_preferences.xml's theme_mode row declares app:entries/app:entryValues and
+        // status_bar_preferences.xml's cutout-mode row declares app:entries/app:entryValues and
         // nothing else — the fragment never calls setSegments for it.
         Application app = RuntimeEnvironment.getApplication();
         PreferenceManager manager = new PreferenceManager(app);
         PreferenceScreen screen = manager.inflateFromResource(
-            app, R.xml.termux_style_preferences, null);
-        androidx.preference.Preference found = screen.findPreference("theme_mode");
+            app, R.xml.status_bar_preferences, null);
+        androidx.preference.Preference found = screen.findPreference("status_bar_cutout_mode");
         assertNotNull(found);
         assertTrue(found instanceof SegmentedPillPreference);
         SegmentedPillPreference pill = (SegmentedPillPreference) found;
