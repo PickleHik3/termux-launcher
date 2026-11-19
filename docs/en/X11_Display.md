@@ -83,7 +83,7 @@ edition that package can't be installed beside the launcher's, and isn't needed.
   docked); it switches the orientation the phone is in, and each orientation keeps its own. If an
   older version left the display making room in portrait without you choosing it, the update
   puts it back to floating once; the same button switches it back.
-  Settings → Linux apps → Input → Keyboard over the window switches both orientations
+  Settings → Linux apps → Input → Keyboard behavior (Overlay or Resize display) sets both orientations
   at once.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts or stops the display, and the cog opens its settings. A
