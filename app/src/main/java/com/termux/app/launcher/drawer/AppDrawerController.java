@@ -2092,18 +2092,19 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (k > 0f) {
             float pinTop = pinTopPx() + keyboardExit;
-            // Docked's bottom corners come up above the keyboard as the terminal pane's corners;
-            // the top stays pushed past the bezel by whichever radius is larger.
+            // Docked's plane runs down to the keyboard's sheet, square and with no gap, so the
+            // two read as one sheet; the top stays pushed past the bezel.
             if (mImePinTopPx <= 0f) {
-                mCurrentRadiusPx = AppDrawerKeyboardSeparation.revealRadiusPx(mRoundedStyle,
-                    mCurrentRadiusPx, mHost.searchKeyboardCornerRadiusPx(), k);
+                mCurrentRadiusPx = AppDrawerKeyboardSeparation.dockedSheetRadiusPx(
+                    mRoundedStyle, mCurrentRadiusPx, k);
             }
             frame = new Frame(frame.left,
                 AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
                     mCurrentRadiusPx),
                 frame.right,
                 AppDrawerTransitionGeometry.resolveSearchPlaneBottom(frame.bottom, pinTop,
-                    revealGapPx(), k));
+                    AppDrawerKeyboardSeparation.planeGapPx(mRoundedStyle, mImePinTopPx > 0f,
+                        revealGapPx()), k));
             // The scene dim is the host's background and the host covers the whole screen, keyboard
             // included. Clipped to the edge the reveal is uncovering, so the keyboard comes back at
             // its own brightness rather than under the drawer's shade. Under Floating the dim runs

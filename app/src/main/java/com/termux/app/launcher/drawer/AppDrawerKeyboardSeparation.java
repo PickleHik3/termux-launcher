@@ -31,6 +31,23 @@ final class AppDrawerKeyboardSeparation {
         return paneGapPx >= 0f ? paneGapPx : Math.max(0f, capturedGapPx);
     }
 
+    /**
+     * The gap actually left at the plane's bottom: none under Docked's in-app keyboard, where the
+     * keyboard wears the drawer's sheet glass ({@code KeyboardSheetLook}) and the two are one
+     * sheet, so no strip of bare scene shows between them. Floating and a system IME keep theirs.
+     */
+    static float planeGapPx(boolean rounded, boolean imePinned, float gapPx) {
+        return rounded || imePinned ? gapPx : 0f;
+    }
+
+    /**
+     * The corner radius the Docked plane's bottom takes as the in-app keyboard is revealed: square,
+     * the plane meets the keyboard's sheet with no corner between them.
+     */
+    static float dockedSheetRadiusPx(boolean rounded, float drawerRadiusPx, float reveal) {
+        return revealRadiusPx(rounded, drawerRadiusPx, 0f, reveal);
+    }
+
     /** The plane's bottom edge with the keyboard fully revealed, in host coordinates. */
     static float revealedPlaneBottomPx(float keyboardTopPx, float paneGapPx, float capturedGapPx) {
         return keyboardTopPx - revealGapPx(paneGapPx, capturedGapPx);

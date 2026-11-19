@@ -2,7 +2,9 @@ package com.termux.app.chrome;
 
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
+import android.graphics.Path;
 import android.graphics.PixelFormat;
+import android.graphics.RectF;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 
@@ -40,6 +42,16 @@ public final class KeyboardSheetSkin {
     @Nullable
     public Drawable sheet() {
         return mSheet;
+    }
+
+    /**
+     * The radius of the keyboard card's top corners, whole pixels. The host itself stays a plain
+     * rectangle (its outline is not rounded), so the corners are drawn: the host's own background
+     * is cut to the curve and the sheet's glass runs on beyond it, so what lies outside the curve
+     * is the drawer's tinted glass and never the bare scene.
+     */
+    public void setCardTopRadius(float px) {
+        mLayers.setCardTopRadius(Math.max(0f, Math.round(px)));
     }
 
     /** @return whether the fraction moved */
@@ -84,6 +96,25 @@ public final class KeyboardSheetSkin {
         @Nullable private Drawable mSheet;
         private int mExtendBelowPx;
         private float mFraction;
+        private float mTopRadius;
+        private final Path mCard = new Path();
+        private final RectF mCardRect = new RectF();
+        private final float[] mCardRadii = new float[8];
+
+        void setCardTopRadius(float px) {
+            if (px == mTopRadius) return;
+            mTopRadius = px;
+            buildCard(getBounds());
+            invalidateSelf();
+        }
+
+        private void buildCard(Rect b) {
+            mCard.rewind();
+            if (mTopRadius <= 0f) return;
+            mCardRect.set(b);
+            mCardRadii[0] = mCardRadii[1] = mCardRadii[2] = mCardRadii[3] = mTopRadius;
+            mCard.addRoundRect(mCardRect, mCardRadii, Path.Direction.CW);
+        }
 
         void setInner(@Nullable Drawable inner) {
             if (mInner == inner) return;
@@ -105,10 +136,11 @@ public final class KeyboardSheetSkin {
         }
 
         private void placeSheet(Rect bounds) {
-            // Taller than the host by the sheet's corner radius: the glass is rounded all round,
-            // and the host's outline cuts the part below, so the bottom corners stay square.
+            // Taller than the host by the sheet's corner radius, above and below: the glass is
+            // rounded all round, and the host's outline cuts both extensions, so none of its
+            // corners shows and it fills the host edge to edge.
             if (mSheet != null)
-                mSheet.setBounds(bounds.left, bounds.top, bounds.right,
+                mSheet.setBounds(bounds.left, bounds.top - mExtendBelowPx, bounds.right,
                     bounds.bottom + mExtendBelowPx);
         }
 
@@ -116,11 +148,21 @@ public final class KeyboardSheetSkin {
         protected void onBoundsChange(Rect bounds) {
             if (mInner != null) mInner.setBounds(bounds);
             placeSheet(bounds);
+            buildCard(bounds);
         }
 
         @Override
         public void draw(@NonNull Canvas canvas) {
-            if (mInner != null) mInner.draw(canvas);
+            if (mInner != null) {
+                if (mTopRadius > 0f) {
+                    int clip = canvas.save();
+                    canvas.clipPath(mCard);
+                    mInner.draw(canvas);
+                    canvas.restoreToCount(clip);
+                } else {
+                    mInner.draw(canvas);
+                }
+            }
             Drawable sheet = mSheet;
             if (sheet == null || !(mFraction > 0f)) return;
             if (mFraction >= 1f) {
@@ -129,7 +171,8 @@ public final class KeyboardSheetSkin {
             }
             // Mid-handoff only: a few frames, as long as the drawer's own glass takes to arrive.
             Rect b = getBounds();
-            int saved = canvas.saveLayerAlpha(b.left, b.top, b.right, b.bottom + mExtendBelowPx,
+            int saved = canvas.saveLayerAlpha(b.left, b.top - mExtendBelowPx, b.right,
+                b.bottom + mExtendBelowPx,
                 Math.round(255f * mFraction));
             sheet.draw(canvas);
             canvas.restoreToCount(saved);
