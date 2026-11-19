@@ -272,7 +272,7 @@ One full-screen stop on the **wall**: a **Home page** or a **window**, each with
 every page. One layout dresses both halves, minimal only for windows; a Home page wears its own
 only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
-_ADR 0015 (proposed): a page is a Home page, the Terminal page or a Display page, and each follows **Base** or detaches its own look values._
+_ADR 0015 (proposed): a page is a Home page, the Terminal page or a Display page, and each follows **Global** or detaches its own look values._
 _ADR 0030 (accepted, not yet built): every Home page and every window (terminal, display, Assistant) is a page of one contract and names its **side**; a window is a page of the Workspace._
 
 **Page switcher**:
@@ -394,11 +394,12 @@ One piece of glass whose look can be set, also called an **element** in the look
 bar, the dock, the keyboard, the terminal (the canvas), the **Widgets** (the Card-form widgets'
 glass on a Home page) and the **Sheets** (the app drawer, folders, anchored menus, the command
 palette, notices and the Home float, which share one set of cells). In code it is a
-`SurfaceSlot`. Every element carries every look property it has a shape for (Frost, Grain,
-opacity, tint, tint colour, Depth, Edge, corners, rim); each either follows **Base** or holds a
-**Cell** of its own (ADR 0017). AGENTS.md's "Hit every surface" uses the word more broadly, for
-every path a change has to cover.
+`SurfaceSlot`. The status bar, the dock and the keyboard may each hold an **own value** for
+Opacity and Blur and otherwise follow **Global**; the Widgets and the Sheets hold nothing of their
+own; the terminal has its own background (ADR 0031). AGENTS.md's "Hit every surface" uses the word
+more broadly, for every path a change has to cover.
 _Avoid_: panel, layer, widget (for the Widgets element say "the Widgets surface")
+_ADR 0031 (accepted, not yet built): as built every element holds every look property, per kind of page._
 
 **Terminal** (the entry):
 The launcher's own app entry, pinned to the dock at migration and listed in the drawer: a tap goes
@@ -448,7 +449,7 @@ the Workspace alive. A home press on it goes to Home page 1; a home press from a
 to the window that was left. The drawer, the corner tab and the border drag also lead back to Home.
 _Avoid_: usage mode, Terminal place, terminal environment, saved workspace (that is **Saved
 sessions**)
-_ADR 0015 (proposed): renamed the **Terminal page**, one page placed anywhere on the wall; Workspace moves to Avoid._
+_ADR 0031 (accepted, not yet built): renamed **Terminal** everywhere, for the side, its card and its rows; Workspace moves to Avoid._
 
 ### Pages (ADR 0015, proposed)
 
@@ -506,15 +507,23 @@ gives one stop per window of the current session, or one when it has none.
 _Avoid_: page index, position
 
 **Widgets** (the surface):
-The look surface for widget cards on a Home page, following **Base** or detached per page; each
-widget only chooses Card or **Bare**.
+The glass of the widget cards on a Home page. It holds no look of its own: it wears **Global**'s
+while Glass widgets is on, and each widget only chooses Card or **Bare**.
 _Avoid_: widget glass (in prose)
+_ADR 0031 (accepted, not yet built): as built it is a surface with look values of its own._
 
 **Ground**:
 What is painted between the wallpaper and a page: its wallpaper dim, plus the canvas tint on the
 **Terminal page** when the canvas is not glass. One per page; neighbouring grounds meet in a soft
 seam that travels with the pages. The ink solver reads the ground under a rect.
 _Avoid_: wall ground (the retired single colour), unified background dim
+
+**Wallpaper dim**:
+A black dim over the wallpaper behind the Terminal's pages, set on the Terminal card. It darkens
+everything around the panes, the chrome's glass included; the panes' own darkness is their
+Opacity. Home's pages have none.
+_Avoid_: background dim, wallpaper opacity
+_ADR 0031 (accepted, not yet built): as built the Home card sets a dim for Home's pages, the Terminal's pages read a wall-wide one that no card sets, and chrome glass does not show it._
 
 **Cell**:
 The stretch of the **wall** one page takes, in the order Edit pages arranged: every page has one,
@@ -547,20 +556,20 @@ A look value one page holds instead of the wall's: a **Cell** in the page's row 
 (`look.<property>@<page id>`, or `look.<property>.<element>@<page id>` for one element). Reset at
 that cell deletes it (ADR 0017).
 _Avoid_: half value, per-page setting
+_ADR 0031 (accepted, not yet built): goes; no look value is held for a page or a kind of page._
 
 **Page transition**:
 How pages move past each other on the wall: Slide, Depth, Fade, Carousel or Stack, one setting for
 every page move (Home ⇄ Home, a **Crossing**, window ⇄ window). A live Display page always slides.
 _Avoid_: page effect, swipe animation
 
-**Cell**:
-One slot of the look grid (ADR 0017, ADR 0018 §3): a property at one *Where* (everywhere, a kind
-of page, or a page) and one *What* (all glass or one element), keyed
-`look.<property>[.<element>][@<page>|@kind:<home|terminal|display>]`. A present key is the cell's
-value; an absent key follows. Read order: the element on this page, all glass on this page, the
-element on the page's kind, all glass on that kind, the element everywhere, **Base**, the Look
-shipped for that kind. Vibrancy and Margin have no element column; Vibrancy has no kind row either.
-_Avoid_: layer, level, override slot
+**Own value**:
+A look value a surface holds for itself in place of **Global**'s: the Opacity or the Blur of the
+status bar, the dock or the keyboard. A surface without one **follows** Global. Nothing set on
+Global clears it; the **reset arrow** does.
+_Avoid_: cell (the look grid's earlier word; a **Cell** is a page's stretch of the wall), override,
+detached value
+_ADR 0031 (accepted, not yet built): as built a value is a cell of the look grid, keyed `look.<property>[.<element>][@kind:<kind>]`, read element on the kind, element everywhere, all glass on the kind, then Global; every element has a cell for every property._
 
 **Scope chip**:
 The two chips at the top of every Appearance card: **Where it applies** (Everywhere | Home pages,
@@ -569,6 +578,7 @@ Terminal or Display pages, the kind of the page in front | <page name>) and **Wh
 rows read and write. Before ADR 0017 there was one chip, **Global | <page name>**, on four cards.
 _Avoid_: Global as the scope chip's label (the old chip; in prose and code say Base). **Global** is
 the Appearance editor's card for the Base look (developer, 2026-11-03).
+_ADR 0031 (accepted, not yet built): goes, with the Applies to row that replaced it; no card chooses a page._
 
 ### Look and motion
 
@@ -589,16 +599,13 @@ unless chosen, is labelled as a battery cost, and stops drawing under **Lazy mod
 pane is not visible, and after about ten seconds without input, resuming on the next touch.
 _Avoid_: animated background, live wallpaper (removed), animation
 
-**Base**:
-The everywhere-and-all-glass **Cell** of a look property (`look.<property>`): the value every
-page and every element shows until a more specific cell holds one. The Appearance card writes it
-with both chips on Everywhere and All glass; Settings rows, presets, the wallpaper policy and
-launcherctl write it unless they name another cell. There are no inherit flags: a surface
-**follows** when its cells are absent and holds its own value when one is present (ADR 0017).
-The resolution happens in `LookGrid` under `TermuxAppSharedPreferences`, so every named getter
-returns the resolved value.
-_Avoid_: global, default (the shipped value is the default; Base is what the user set), inherited
-and detached (the old flag words)
+**Global**:
+The look every glass surface wears until it holds an **own value**: one value for each look
+property, set on the Global card. A surface **follows** Global where it holds none. Settings rows,
+presets, the wallpaper policy and launcherctl write Global unless they name a surface.
+_Avoid_: Base (the earlier word), default (the shipped value is the default; Global is what the
+user set), inherited and detached (the old flag words)
+_ADR 0031 (accepted, not yet built): as built the code and launcherctl still say Base, and a value held for a kind of page is read before it._
 
 **Backstop**:
 The time or frame count after which a **Hold** releases on its own because its signal has not
@@ -656,12 +663,13 @@ the glass samples, never into the bare wallpaper. 1.0x in every Look.
 _Avoid_: saturation of the wallpaper
 
 **Text size**:
-Look › Custom's last global slider, 80% to 150%: one size for the type the launcher draws itself,
+A **Global** slider, 80% to 150%: one size for the type the launcher draws itself,
 the terminal font, the keyboard's key legends and the chrome labels (status bar figures, window
 chips, the dock strip's titles, Home's app labels). Each is drawn at its own size times it, so a
 surface's own size stays an offset: pane zoom and the terminal font setting, Home's label size.
 100% is every install's sizes as they were (`text_size_percent`, unset until moved).
 _Avoid_: font scale (Android's own, which still applies on top), zoom (the terminal's pinch)
+_ADR 0031 (accepted, not yet built): as built the slider sits on the Terminal card under the name Font size._
 
 **Frame pipeline**:
 The window's one frame order: inputs only record that they have work and ask for a frame, and the pipeline then runs the **frame steps** in a fixed order, only on frames something asked for.
@@ -721,12 +729,11 @@ less often. It is meant to become the default. See `docs/en/Launcher_Settings.md
 _Avoid_: battery saver (Android's own), low-power mode
 
 **Look**:
-The appearance of one half of the wall, set by the Appearance editor's slider. The slider has five
+The glass every surface wears, set on the Global card. Its slider has five
 stops: Clear, Mist, Tint, Solid and Custom. A surface's own slider moves the Look to Custom by
-itself; Custom is never a gate. Home and the Workspace each hold their own Look and own surface
-values, equal until one is edited (ADR 0013); one look covers both orientations.
+itself; Custom is never a gate. One Look covers every page and both orientations (ADR 0031).
 _Avoid_: theme (the light, dark and black scheme is separate), preset, skin
-_ADR 0015 (proposed): looks are held per page, not per half: Base, then each page inherits or detaches (supersedes ADR 0013)._
+_ADR 0031 (accepted, not yet built): as built Home and the Workspace each hold a Look of their own (ADR 0013)._
 
 **Material palette**:
 The colours the launcher takes from the system's Material roles, from the wallpaper or from a colour
@@ -771,13 +778,20 @@ bar, Terminal, Dock, Keyboard) and its **card** rises with everything about it, 
 often it is touched, rare controls under **More**; drag a surface to move it; tap the **pill** for
 what has no surface (the Look slider, wallpaper, theme, icon pack, text size, full screen, minimal,
 orientation, Undo, Done; that bar is the **editor bar**, never the Pill, which is the dictation
-card). It edits the half the frame shows. Users never meet Base, inherit or
-follow: a moved slider is the surface's own value, marked by a dot, and **Reset** in the card menu
-puts it back on the Look. Every edit goes into one **draft** shown over the saved values: Undo and
+card). A moved Opacity or Blur slider on a surface's card is that surface's **own value**, marked
+by the **reset arrow**. Every edit goes into one **draft** shown over the saved values: Undo and
 Discard drop the draft, Done saves it once, and a look set from outside while the editor is open
 (`launcherctl look`) shows at once and survives both. Every door to it is named Appearance and
 opens on that door's object.
 _Avoid_: surface editor, look editor, Look page, Layout page (the 2026-10-24 merge removed the pages), style editor
+_ADR 0031 (accepted, not yet built): as built the editor edits the half the frame shows, marks an own value with a coloured dot and resets it from the card's menu._
+
+**Reset arrow**:
+The mark of an **own value** and the way back to **Global**: at a row's end it resets that value,
+in a surface card's header that surface, and in the Global card's header every surface, after
+asking once.
+_Avoid_: source dot (the earlier coloured mark), Reset this row
+_ADR 0031 (accepted, not yet built)._
 
 **Corner tab**:
 The small control strip revealed by holding a page's corner. On a Home page it carries Appearance,
@@ -806,7 +820,7 @@ stay **linked** to the shared layout either way: the apps row's height, the #3 S
 the keyboard's height and chin, and **Style**, Corners and Margin are one value on both halves,
 edited from either, so nothing resizes on the swipe (decided 2026-10-21, #84). The keyboard's form
 stays Home's own. It is the Layout editor's "Layout: One layout | Home's own" line; the row's house
-segment previews Home. It is to the layout what a surface's override is to **Base**.
+segment previews Home. It is to the layout what a surface's **own value** is to **Global**.
 _Avoid_: Home variant, Home place
 
 **Layout editor**:
@@ -864,7 +878,7 @@ The widget that shows a markdown file from the home folder, opening it in the ed
 _Avoid_: Scratchpad (as the widget's name; the scratchpad is the toggled floating terminal), memo
 
 **Widgets on glass**:
-The **Look**'s one switch for whether the launcher's widgets wear its glass, following **Base**. A
+The **Look**'s one switch for whether the launcher's widgets wear its glass, following **Global**. A
 widget's own Glass switch can still set it apart.
 _Avoid_: widget glass (for the per-widget switch alone), glass mode
 
