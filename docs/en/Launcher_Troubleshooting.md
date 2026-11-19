@@ -69,7 +69,7 @@ More in [Keyboard](Keyboard.md).
 
 ## Pane or window actions are unavailable
 
-Open **Settings → Terminal → Windows & panes → Split-pane controls**. Native pane and window actions are
+Open **Appearance → Terminal → Multiplexer**. Native pane and window actions are
 disabled in single-pane compatibility behaviour.
 
 Remember that some actions have structural safeguards:
@@ -156,7 +156,7 @@ Open **Settings → Appearance** and test against the real home screen.
 - Live wallpapers can limit or disable dock blur.
 - GPU blur requires Android 12 or later; older Android versions use a simpler surface.
 - Without **Wallpaper access** (Settings → General → Permissions & services) the glass bars render flat.
-- **Wallpaper colors**, in the Appearance editor, changes the generated palette, while the
+- **Wallpaper colours**, on the Global card, changes the generated palette, while the
   opacity controls decide how much wallpaper remains visible.
 - Full-screen TUIs may need a resize after font or surface geometry changes.
 

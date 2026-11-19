@@ -185,7 +185,7 @@ extra-keys = [[ \
 
 Names and values are trimmed and separated by commas; there is no quoting inside a `tool:` string,
 so prefer a package name for `app.launch`. Pane and window actions do nothing while
-**Settings → Terminal → Windows & panes → Split-pane controls** is off. Every action id and its
+**Multiplexer** on the Terminal card is off. Every action id and its
 arguments are listed in [Command palette and actions](Command_Palette_And_Actions.md).
 
 ### Macros for shell programs

@@ -78,15 +78,15 @@ it had.
 
 Every widget's settings have a **Glass** row:
 
-- **Page** follows **Widgets on glass**, which is on unless you turn it off, so one switch changes
+- **Page** follows **Glass widgets** on the Home card, which is on unless you turn it off, so one switch changes
   every widget at once.
 - **On** and **Off** set this widget apart from the page.
 - **Bare** draws no card at all, only the content on the wallpaper. It is offered on Clock and
   Weather; Glance is always Bare.
 
-Widgets follow the Base Look for their glass and corners, not the terminal or keyboard overrides.
+Widgets wear Global's glass and corners, not the status bar's, dock's or keyboard's own values.
 
-**Settings → Home → Widget numerals** chooses the face their numbers are set in: **Sans** or **Mono**.
+**Numerals** on the Home card chooses the face their numbers are set in: **Sans** or **Mono**.
 
 ## Move, resize and remove
 
