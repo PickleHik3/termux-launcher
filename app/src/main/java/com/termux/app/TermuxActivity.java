@@ -19927,7 +19927,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The page tail of the Back chain (ADR 0030 section 3): everything above is raised over
         // the page; then the front page's Back, then Home page 1. Reads mPages when asked, never
         // when registered, because this runs at field initialisation.
-        registry.register(() -> mPages != null && mPages.onBack());
+        registry.register(() -> {
+            boolean took = mPages != null && mPages.onBack();
+            // DIAG(back-path): revert before merge.
+            if (MotionLog.enabled) MotionLog.log("back-page", "front=" + (mPages == null ? "?"
+                : mPages.front() == null ? "none" : mPages.front().kind()) + " took=" + took);
+            return took;
+        });
         return registry;
     }
 
@@ -20314,7 +20320,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
-        mOverlays.onBackPressed();
+        boolean took = mOverlays.onBackPressed();
+        // DIAG(back-path): revert before merge.
+        if (MotionLog.enabled) MotionLog.log("back-pressed", "took=" + took);
     }
 
     void finishActivityIfNotFinishing() {
@@ -27105,8 +27113,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (routeKeyNobodyHolds(event)) return true;
-        return super.dispatchKeyEvent(event);
+        if (routeKeyNobodyHolds(event)) {
+            // DIAG(back-path): revert before merge.
+            if (MotionLog.enabled && event.getKeyCode() == KeyEvent.KEYCODE_BACK)
+                MotionLog.log("back-key", "action=" + event.getAction() + " took=router");
+            return true;
+        }
+        boolean took = super.dispatchKeyEvent(event);
+        // DIAG(back-path): who held the focus and whether the view tree spent Back; revert before merge.
+        if (MotionLog.enabled && event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+            View focus = getCurrentFocus();
+            MotionLog.log("back-key", "action=" + event.getAction() + " took=" + took
+                + " focus=" + (focus == null ? "none" : focus.getClass().getSimpleName()
+                + (focus.isShown() ? "" : "(hidden)")) + " front=" + (mPages == null ? "?"
+                : String.valueOf(mPages.committedKind())));
+        }
+        return took;
     }
 
     private boolean routeKeyNobodyHolds(@NonNull KeyEvent event) {
