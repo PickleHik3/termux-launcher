@@ -12,7 +12,7 @@ import java.util.List;
  * The bottom stack's side lanes (ADR 0030 section 4), as pure functions. The stack's
  * band over the keyboard is laid out once for both sides' rests: a row both sides show in the same
  * place is the stack's ({@link #STACK}), a row only Home's layout has stands in Home's lane and a
- * row only the Workspace's has in the Workspace's ({@link SideRows#carrier}). The lanes overlap in
+ * row only the Terminal's has in the Terminal's ({@link SideRows#carrier}). The lanes overlap in
  * one band, so the band is the shared rows plus the taller lane ({@link #layoutBand}), and each
  * row has one parent for both sides' layouts ({@link #resolve}) so no landing re-parents it.
  */
@@ -20,10 +20,10 @@ public final class StackLanes {
 
     private StackLanes() {}
 
-    /** A row child's lane in the band: the shared stack's, Home's or the Workspace's. */
+    /** A row child's lane in the band: the shared stack's, Home's or the Terminal's. */
     public static final int STACK = 0;
     public static final int HOME = 1;
-    public static final int WORKSPACE = 2;
+    public static final int TERMINAL = 2;
 
     /** The dock's rows, the elements whose hosts stand in the band. */
     public static final Element[] ROWS = {Element.APPS, Element.AZ, Element.EXTRA_KEYS};
@@ -37,20 +37,20 @@ public final class StackLanes {
     public static int laneOf(@NonNull SideRows.Carrier carrier) {
         switch (carrier) {
             case HOME: return HOME;
-            case WORKSPACE: return WORKSPACE;
+            case TERMINAL: return TERMINAL;
             default: return STACK;
         }
     }
 
     /** The lane of a side's own rows. */
     public static int laneOf(@NonNull Side side) {
-        return side == Side.HOME ? HOME : WORKSPACE;
+        return side == Side.HOME ? HOME : TERMINAL;
     }
 
-    /** {@code element}'s lane from Home's layout and the Workspace's, both read at once. */
+    /** {@code element}'s lane from Home's layout and the Terminal's, both read at once. */
     public static int laneOf(@NonNull Element element, @NonNull PlaceLayout home,
-                             @NonNull PlaceLayout workspace) {
-        return laneOf(SideRows.carrier(element, Side.HOME, home, Side.WORKSPACE, workspace));
+                             @NonNull PlaceLayout terminal) {
+        return laneOf(SideRows.carrier(element, Side.HOME, home, Side.TERMINAL, terminal));
     }
 
     /** Where {@code layout} stands {@code element}: the edge, and for the bottom which side of the keyboard. */
@@ -145,9 +145,9 @@ public final class StackLanes {
     public static boolean hasLanes(@NonNull PlaceLayout front, @NonNull PlaceLayout other,
                                    @NonNull Side frontSide) {
         PlaceLayout home = frontSide == Side.HOME ? front : other;
-        PlaceLayout workspace = frontSide == Side.HOME ? other : front;
+        PlaceLayout terminal = frontSide == Side.HOME ? other : front;
         for (Element element : ROWS) {
-            if (laneOf(element, home, workspace) == STACK) continue;
+            if (laneOf(element, home, terminal) == STACK) continue;
             if (resolve(element, front, other) == Where.BOTTOM_OVER) return true;
         }
         return false;
@@ -155,18 +155,18 @@ public final class StackLanes {
 
     /**
      * The side whose lane {@code element} stands in over the keyboard, read from Home's layout and
-     * the Workspace's alone, so it is the same from either front and whatever layout a crossing
+     * the Terminal's alone, so it is the same from either front and whatever layout a crossing
      * composes; null for a row of the shared stack, one the two layouts stand in two places, or
      * one not in the band over the keyboard.
      */
     @androidx.annotation.Nullable
     public static Side laneSide(@NonNull Element element, @NonNull PlaceLayout home,
-                                @NonNull PlaceLayout workspace) {
-        if (resolve(element, home, workspace) != Where.BOTTOM_OVER
-            || conflicts(element, home, workspace)) return null;
-        switch (laneOf(element, home, workspace)) {
+                                @NonNull PlaceLayout terminal) {
+        if (resolve(element, home, terminal) != Where.BOTTOM_OVER
+            || conflicts(element, home, terminal)) return null;
+        switch (laneOf(element, home, terminal)) {
             case HOME: return Side.HOME;
-            case WORKSPACE: return Side.WORKSPACE;
+            case TERMINAL: return Side.TERMINAL;
             default: return null;
         }
     }
@@ -235,15 +235,15 @@ public final class StackLanes {
     public static int layoutBand(@NonNull int[] heightPx, @NonNull int[] lane, int count,
                                  int frontLane, @NonNull int[] topOut) {
         int band = Math.max(sideTotal(heightPx, lane, count, HOME),
-            sideTotal(heightPx, lane, count, WORKSPACE));
+            sideTotal(heightPx, lane, count, TERMINAL));
         int homeBelow = 0;
-        int workspaceBelow = 0;
+        int terminalBelow = 0;
         for (int i = count - 1; i >= 0; i--) {
             int own = lane[i] == STACK ? frontLane : lane[i];
-            int under = own == HOME ? homeBelow : workspaceBelow;
+            int under = own == HOME ? homeBelow : terminalBelow;
             topOut[i] = band - under - heightPx[i];
-            if (lane[i] != WORKSPACE) homeBelow += heightPx[i];
-            if (lane[i] != HOME) workspaceBelow += heightPx[i];
+            if (lane[i] != TERMINAL) homeBelow += heightPx[i];
+            if (lane[i] != HOME) terminalBelow += heightPx[i];
         }
         return band;
     }

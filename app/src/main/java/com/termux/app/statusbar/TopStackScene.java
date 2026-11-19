@@ -14,7 +14,7 @@ import java.util.Arrays;
 /**
  * The top stack's scene (ADR 0030 section 6): the status bar as one shared slab that stays put
  * across a crossing and blends its look and ink on {@link SeamFade}'s curve, with the window chips
- * riding the Workspace's side across it and Home's float chips riding Home's
+ * riding the Terminal's side across it and Home's float chips riding Home's
  * ({@link StackScene#sideSlide}, so each moves with the bottom stack's rows of its side). A bar that cannot be one slab across both ends (only one end
  * shows it, or the two draw it in different outlines) rides with a page as before, wearing one
  * end's look. Pure: the renderer fills two {@link End}s, asks {@link #at} for a {@link Frame}
@@ -132,7 +132,7 @@ public final class TopStackScene {
         out.shared = true;
         out.slabTx = 0f;
         out.stripTx = 0f;
-        out.chipsTx = StackScene.sideSlide(Side.WORKSPACE, end.side, end.side, 0f, widthPx);
+        out.chipsTx = StackScene.sideSlide(Side.TERMINAL, end.side, end.side, 0f, widthPx);
         out.homeChipsTx = StackScene.sideSlide(Side.HOME, end.side, end.side, 0f, widthPx);
         out.chipsShown = end.chipsShown;
         out.fromLookId = end.lookId;
@@ -152,7 +152,7 @@ public final class TopStackScene {
     public static void at(@NonNull End from, @NonNull End to, float p, float slide, int widthPx,
                           float rideXPx, boolean rideWearsTo, @NonNull Frame out) {
         boolean one = shared(from, to);
-        float chipsTx = StackScene.sideSlide(Side.WORKSPACE, from.side, to.side, slide, widthPx);
+        float chipsTx = StackScene.sideSlide(Side.TERMINAL, from.side, to.side, slide, widthPx);
         float homeChipsTx = StackScene.sideSlide(Side.HOME, from.side, to.side, slide, widthPx);
         if (!one && !Float.isNaN(rideXPx)) {
             End wearer = rideWearsTo ? to : from;

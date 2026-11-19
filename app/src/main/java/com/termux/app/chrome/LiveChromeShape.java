@@ -38,7 +38,7 @@ public final class LiveChromeShape {
     /** The most air between split panes: the top of the Inner gap slider. */
     public static final float PANE_GAP_CAP_DP = TERMUX_APP.MAX_TERMINAL_PANE_GAP;
     /**
-     * The air the Workspace's terminal keeps from what stands above and below it, in place of
+     * The air the Terminal's terminal keeps from what stands above and below it, in place of
      * Margin (never more than Margin): rows are what a terminal is short of, so it stands close to
      * the status bar and the dock or keyboard while its sides keep Margin.
      */
@@ -81,7 +81,7 @@ public final class LiveChromeShape {
     }
 
     /**
-     * {@link #of}, for the Workspace when {@code terminalGap}: the opening (the terminal's pane
+     * {@link #of}, for the Terminal when {@code terminalGap}: the opening (the terminal's pane
      * area, the Docked insert) stands {@link #TERMINAL_VERTICAL_GAP_DP} off the bars above and
      * below it instead of Margin, so the insert's glass and the terminal's own margins
      * ({@link #terminalOpeningInsetPx}) are one number.
@@ -286,9 +286,9 @@ public final class LiveChromeShape {
     }
 
     /**
-     * How far the Workspace's terminal stands in from the opening's neighbour across
+     * How far the Terminal's terminal stands in from the opening's neighbour across
      * {@code edge}: {@link #openingInsetPx} at the sides, and along the top and bottom no more
-     * than {@link #TERMINAL_VERTICAL_GAP_DP}. Whichever shape the frame wears (a Workspace's,
+     * than {@link #TERMINAL_VERTICAL_GAP_DP}. Whichever shape the frame wears (a Terminal's,
      * already built with that gap, or Home's own while a slide or Home holds the chrome) the
      * terminal is told the same number, so it never resizes at a settle. Its page and every view
      * framed off it (the border line, the side stacks' ends, the display window's frame) read

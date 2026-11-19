@@ -445,7 +445,7 @@ public class LensBeadGeometryTest {
     /**
      * The beads are the slab, with no shadow or glow of their own left, on every frame where the
      * stack has started to sink below its bottom edge (pass 6: beads cut flat by it, and a pale
-     * line of their glow left behind). Home to a Workspace with no dock rows: a slide out.
+     * line of their glow left behind). Home to a Terminal with no dock rows: a slide out.
      */
     @Test
     public void leavingBeadsAreTheSlabBeforeTheStackSinks() {

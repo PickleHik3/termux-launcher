@@ -11,7 +11,7 @@ import java.util.Objects;
 
 /**
  * The Style, Corners and Margin the wall wears (ADR 0008): one value for every page, the
- * Workspace's keys (linked since #84, and wall-wide since the page model, #171). Corners and Margin
+ * Terminal's keys (linked since #84, and wall-wide since the page model, #171). Corners and Margin
  * are in dp as stored, Corners' -1 being the auto token. A value, so the chrome can compare the
  * shape two pages wear ({@link com.termux.app.chrome.Dress#shape}).
  */
@@ -45,7 +45,7 @@ public final class WallShape {
         return read(prefs, false);
     }
 
-    /** {@link #read} for Home pages ({@code home}) or the Workspace's: Margin is per kind. */
+    /** {@link #read} for Home pages ({@code home}) or the Terminal's: Margin is per kind. */
     @NonNull
     public static WallShape read(@Nullable TermuxAppSharedPreferences prefs, boolean home) {
         if (prefs == null) return DEFAULT;

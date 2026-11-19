@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * Home's float chips on the status bar (ADR 0030 section 2): the window chips' own views, a row of
  * pills and a column for a bar standing on a side, in a strip of their own beside the
- * Workspace's. This only dresses them and hands them their chips; which chips they are is
+ * Terminal's. This only dresses them and hands them their chips; which chips they are is
  * {@link com.termux.app.chrome.HomeFloatChips}'s answer, and where the strip stands each frame is
  * the top stack's ({@link TopStackRenderer}). A tap is handed to the listener by its index.
  */

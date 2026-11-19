@@ -20,7 +20,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
  * can draw its own child for Live blur ({@link LiveBackdrop.Container}); one that cannot would
  * leave out everything beneath the float at its level. Home float: slab, PaneContentFrame, the
  * float's content wrapper, FloatingPaneContainer, HomeFloatLayer, WidgetPaneView,
- * WidgetPaneFrame (wall), the wall; Workspace float: the same up to FloatingPaneContainer, then the pane
+ * WidgetPaneFrame (wall), the wall; Terminal float: the same up to FloatingPaneContainer, then the pane
  * host and the wall. From the wall up both follow activity_termux.xml.
  */
 public class LiveFloatPathTest {

@@ -121,7 +121,7 @@ public class TermuxApplication extends Application {
                     .pageCount(),
                 com.termux.app.wall.WallPagesStore.open(context));
             // The look's halves became pages (ADR 0015 §6): tell the preferences which page the
-            // Workspace is, then fold the old half keys into wall values and Terminal-page
+            // Terminal is, then fold the old half keys into wall values and Terminal-page
             // overrides, once, before any look migration or activity reads a look.
             com.termux.app.wall.WallPages.Page terminalPage =
                 com.termux.app.wall.WallPagesStore.open(context).current().terminal();
@@ -130,7 +130,7 @@ public class TermuxApplication extends Application {
                 com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID,
                 terminalId).apply();
             TermuxAppSharedPreferences.setTerminalPageId(terminalId);
-            // With no Terminal page the Workspace's differing values have nowhere to go; the
+            // With no Terminal page the Terminal's differing values have nowhere to go; the
             // upgrade still runs and records its version.
             com.termux.app.look.HalfLookUpgrade.run(
                 new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),

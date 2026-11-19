@@ -58,12 +58,12 @@ public class EdgeStackView extends LinearLayout {
 
 
     /**
-     * The rows that stand in one side's lane ({@link StackLanes#HOME} or {@link StackLanes#WORKSPACE});
+     * The rows that stand in one side's lane ({@link StackLanes#HOME} or {@link StackLanes#TERMINAL});
      * a row not here is the shared stack's. Set by the activity's edge walk, read by the layout.
      */
     @NonNull private final IdentityHashMap<View, Integer> mLanes = new IdentityHashMap<>(4);
     /** The side standing in front: the shared rows stand as that side's rest has them. */
-    private int mFrontLane = StackLanes.WORKSPACE;
+    private int mFrontLane = StackLanes.TERMINAL;
     /** Whether the last measure laid the rows out by lane (a visible row of a lane stands here). */
     private boolean mLaned;
     @NonNull private int[] mLaneHeight = new int[4];
@@ -164,7 +164,7 @@ public class EdgeStackView extends LinearLayout {
     }
 
     /**
-     * The side standing in front ({@link StackLanes#HOME} or {@link StackLanes#WORKSPACE}): the
+     * The side standing in front ({@link StackLanes#HOME} or {@link StackLanes#TERMINAL}): the
      * shared rows stand on the rows that side shows. Changes only when the front page does.
      */
     public void setFrontLane(int lane) {

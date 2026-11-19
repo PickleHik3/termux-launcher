@@ -13,11 +13,11 @@ All of it is in **Appearance**, on the card of the thing you tap (see
 
 Each opens on that page's own card: Home's on Home, the terminal's over a window.
 
-Home and the Workspace share one layout, so whatever you arrange lands on both; Home just leaves
+Home and the Terminal share one layout, so whatever you arrange lands on both; Home just leaves
 out the extra keys. To give Home a layout of its own, turn on **Own layout** under More on the Home
 card. Home's own layout decides which rows Home shows, in what order and on which edge, and its dock
 design and Search field. The sizes stay shared: the apps row's height, the Strip row's height, the
-keyboard's height and chin, and Style, Corners and Margin are the same on Home and the Workspace,
+keyboard's height and chin, and Style, Corners and Margin are the same on Home and the Terminal,
 whichever one you change them from, so nothing resizes as you swipe. Portrait and landscape each
 have their own layout.
 

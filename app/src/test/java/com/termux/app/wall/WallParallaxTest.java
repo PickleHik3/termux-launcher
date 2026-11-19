@@ -8,7 +8,7 @@ import com.termux.app.page.PageKind;
 /**
  * Where the wallpaper sits under the wall. The spare width is spread over the whole row — Home
  * pages, then windows, then the Display page — the pan follows the row's live position
- * continuously, through the seam between Home and the Workspace as through any other step, and a
+ * continuously, through the seam between Home and the Terminal as through any other step, and a
  * picture that is only one screen wide never moves at all.
  */
 public class WallParallaxTest {
@@ -147,7 +147,7 @@ public class WallParallaxTest {
         int firstWindow = WallParallax.rowIndex(PageKind.TERMINAL, 0, 2, 3);
         // A drag of 0.4 widths off the last Home page towards window 1...
         float dragging = WallParallax.slidePosition(lastHome, firstWindow, -432f, WIDTH);
-        // ...commits: the wall re-bases the offset against the Workspace (offset += 1 width), and
+        // ...commits: the wall re-bases the offset against the Terminal (offset += 1 width), and
         // the page it came from is now the one on the left.
         float sliding = WallParallax.slidePosition(firstWindow, lastHome, -432f + WIDTH, WIDTH);
         assertEquals(dragging, sliding, EPS);

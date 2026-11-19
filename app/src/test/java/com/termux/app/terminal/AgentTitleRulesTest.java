@@ -44,7 +44,7 @@ public class AgentTitleRulesTest {
     }
 
     @Test
-    public void amp_namesItsWorkspaceBetweenDashesWhenResting() {
+    public void amp_namesItsTerminalBetweenDashesWhenResting() {
         assertEquals(AgentStatus.State.BLOCKED,
             classify(AgentStatus.AGENT_AMP, "Plugin confirmation needed"));
         assertEquals(AgentStatus.State.WORKING, classify(AgentStatus.AGENT_AMP, "⠙ editing Foo.java"));

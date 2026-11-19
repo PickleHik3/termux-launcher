@@ -13,7 +13,7 @@ import org.junit.Test;
 import java.util.Collections;
 import java.util.List;
 
-/** Window names: the policy caps, the tab label, and the workspace round trip. */
+/** Window names: the policy caps, the tab label, and the Terminal round trip. */
 public class TerminalWindowNameTest {
 
     @Test

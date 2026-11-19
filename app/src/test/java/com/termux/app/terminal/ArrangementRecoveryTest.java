@@ -14,7 +14,7 @@ import org.junit.Test;
 public class ArrangementRecoveryTest {
 
     private static final String HOME = WallRow.START_IN_HOME;
-    private static final String WORKSPACE = WallRow.START_IN_WORKSPACE;
+    private static final String WORKSPACE = WallRow.START_IN_TERMINAL;
 
     @Test
     public void liveShellsWithALayoutComeBackAroundTheSameShells() {
@@ -72,7 +72,7 @@ public class ArrangementRecoveryTest {
     }
 
     @Test
-    public void anEmptyServiceInASettledProcessIsTheUsersEmptyWorkspace() {
+    public void anEmptyServiceInASettledProcessIsTheUsersEmptyTerminal() {
         for (Saved saved : Saved.values())
             for (String startIn : new String[]{HOME, WORKSPACE})
                 assertEquals(Start.EMPTY,
@@ -105,7 +105,7 @@ public class ArrangementRecoveryTest {
     }
 
     @Test
-    public void aRebuildOfFloatsOnlyOpensAWindowOnlyForStartInWorkspace() {
+    public void aRebuildOfFloatsOnlyOpensAWindowOnlyForStartInTerminal() {
         assertTrue(ArrangementRecovery.rebuildWantsFreshWindow(0, WORKSPACE));
         assertFalse(ArrangementRecovery.rebuildWantsFreshWindow(0, HOME));
         assertFalse(ArrangementRecovery.rebuildWantsFreshWindow(2, WORKSPACE));

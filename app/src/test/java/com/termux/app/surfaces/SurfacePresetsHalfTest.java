@@ -65,7 +65,7 @@ public class SurfacePresetsHalfTest {
 
     @Test
     public void oneHalfsLook_appliesToBoth() {
-        // Global is wall-wide: the Workspace's 2 is replaced by Home's 40 on the one wall value.
+        // Global is wall-wide: the Terminal's 2 is replaced by Home's 40 on the one wall value.
         preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(), 2);
         preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 40);
         SurfacePresets.Preset home = saved(SurfacePresets.captureLook(preferences, PageKind.HOME));

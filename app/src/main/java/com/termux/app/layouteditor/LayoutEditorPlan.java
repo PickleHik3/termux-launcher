@@ -159,7 +159,7 @@ public final class LayoutEditorPlan {
 
     /**
      * Opens a session over one page, showing the orientation the phone is in, on the layout that
-     * page is arranged by: the Home layout on a Home page, and on a window the Workspace layout
+     * page is arranged by: the Home layout on a Home page, and on a window the Terminal layout
      * the launcher is standing in, the minimal one while minimal mode is on.
      */
     @NonNull
@@ -515,7 +515,7 @@ public final class LayoutEditorPlan {
     /**
      * The Home filter, beside the Portrait / Landscape toggle: on, the canvas shows a Home page and
      * every write lands on the Home layout; off, it shows the window the editor was opened over
-     * (the terminal when that was Home) and writes the Workspace's layout, the normal one or the
+     * (the terminal when that was Home) and writes the Terminal's layout, the normal one or the
      * minimal one as minimal mode says. The orientation stays as it was. Both layouts' writes are
      * in the session's draft, so Undo and the unsaved question cover both.
      *

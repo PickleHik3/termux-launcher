@@ -106,8 +106,8 @@ public class BottomInsetsTest {
     }
 
     /**
-     * The tail of a Workspace -> Home crossing on pong: Home's rows stand, so the stack takes the
-     * foot (margin 0, the column one inset up) while the Workspace's 654 px keyboard is still laid
+     * The tail of a Terminal -> Home crossing on pong: Home's rows stand, so the stack takes the
+     * foot (margin 0, the column one inset up) while the Terminal's 654 px keyboard is still laid
      * out in the column and the travel holds the stack 654 px down. The stack's clip cuts at its
      * own bottom, the screen's edge, which left the keyboard's top 63 px (its number row) showing
      * under the gesture pill; the keyboard's own cut hides all of it.

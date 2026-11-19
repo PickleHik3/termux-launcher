@@ -31,10 +31,10 @@ import java.util.List;
 import android.app.Application;
 
 /**
- * A Look picked on the Look slider shows: what the Home page, the Workspace page and a Display
+ * A Look picked on the Look slider shows: what the Home page, the Terminal page and a Display
  * page resolve to for every glass element, as the renderers read it ({@link ElementGlass}), on a
  * store shaped like a real install after the kind seed (509b634db). A Look resets the cells read
- * before its own (developer, 2026-11-03): the Global card's clears the Home and Workspace looks
+ * before its own (developer, 2026-11-03): the Global card's clears the Home and Terminal looks
  * and every element value; a page card's clears the element values reaching its kinds.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -174,7 +174,7 @@ public class PresetApplyTest {
         // Where standing on a page still writes Global: no page holds a Margin of its own.
         slide(open(prefs, EditorCard.APPEARANCE, PageKind.TERMINAL, TERMINAL_PAGE),
             Row.MARGIN, 20);
-        assertMargins(prefs, 20, "Customization on the Workspace");
+        assertMargins(prefs, 20, "Customization on the Terminal");
     }
 
     @Test
@@ -192,11 +192,11 @@ public class PresetApplyTest {
 
     private static void assertMargins(TermuxAppSharedPreferences prefs, int margin, String what) {
         assertEquals(what + ": Home pages", margin, prefs.getLayoutMarginDp(true));
-        assertEquals(what + ": Workspace pages", margin, prefs.getLayoutMarginDp(false));
+        assertEquals(what + ": Terminal pages", margin, prefs.getLayoutMarginDp(false));
         // What the dress shapes each kind's pages by.
         assertEquals(what + ": Home's shape", margin,
             com.termux.app.place.WallShape.read(prefs, true).marginDp);
-        assertEquals(what + ": the Workspace's shape", margin,
+        assertEquals(what + ": the Terminal's shape", margin,
             com.termux.app.place.WallShape.read(prefs, false).marginDp);
     }
 

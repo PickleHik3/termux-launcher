@@ -37,7 +37,7 @@ import android.app.Application;
 
 /**
  * A Look by card (appearance-cards-overhaul §1): Customization's reaches every page; Home's lands
- * in Home pages' all-glass cells alone, the Workspace's in Terminal and Display pages' together,
+ * in Home pages' all-glass cells alone, the Terminal's in Terminal and Display pages' together,
  * and their Reset returns those pages to Global.
  */
 @RunWith(RobolectricTestRunner.class)

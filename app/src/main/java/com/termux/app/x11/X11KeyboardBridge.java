@@ -94,7 +94,7 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
         this.paste = paste;
     }
 
-    /** X owns every ordinary chord; the Workspace's own Ctrl+Alt route stays as it is. */
+    /** X owns every ordinary chord; the Terminal's own Ctrl+Alt route stays as it is. */
     @Override
     public boolean yieldsToBindings() {
         return false;

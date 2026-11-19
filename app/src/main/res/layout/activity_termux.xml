@@ -248,7 +248,7 @@
                     android:clipToPadding="true">
 
                     <!-- The two sides' row content share one slot, which clips them: the
-                         Workspace's badge and window chips, and Home's float chips (ADR 0030
+                         Terminal's badge and window chips, and Home's float chips (ADR 0030
                          section 2). Each strip slides with its side (TopStackRenderer), one wall
                          apart, so only the front side's shows at rest. -->
                     <FrameLayout
@@ -297,7 +297,7 @@
                     </com.termux.app.statusbar.PlaceContentStrip>
 
                     <!-- Home's own chips: one per float on the Home page shown, the window
-                         chips' own views and look, never the Workspace's list. -->
+                         chips' own views and look, never the Terminal's list. -->
                     <com.termux.app.statusbar.PlaceContentStrip
                         android:id="@+id/terminal_status_home_chips"
                         android:layout_width="match_parent"

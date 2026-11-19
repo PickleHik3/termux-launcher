@@ -25,7 +25,7 @@ import org.robolectric.annotation.ConscryptMode;
 
 /**
  * Version 14 of the migration (editor-redesign §9): the Own layout switch is gone, so every
- * install holds a Home layout. A Home that wore the shared layout gets a copy of the Workspace's,
+ * install holds a Home layout. A Home that wore the shared layout gets a copy of the Terminal's,
  * hidden stack and Dock design included, and reads the keyboard's chin (Bottom padding) linked,
  * so nothing on screen moves.
  */

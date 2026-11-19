@@ -35,8 +35,8 @@ import java.util.List;
 import android.app.Application;
 
 /**
- * The frame shows the half its half line names: sliding to the Workspace brings the live wall to
- * the Workspace (the Terminal card is then the terminal's tap), sliding back brings Home; and a
+ * The frame shows the half its half line names: sliding to the Terminal brings the live wall to
+ * the Terminal (the Terminal card is then the terminal's tap), sliding back brings Home; and a
  * card's Visible switch reads the state the frame draws.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -67,14 +67,14 @@ public class SurfaceEditorHalvesTest {
 
         switchHalf(editor, PageKind.TERMINAL);
         assertEquals(PageKind.TERMINAL, editor.screen());
-        assertEquals("the wall slides to the Workspace", PageKind.TERMINAL, last());
+        assertEquals("the wall slides to the Terminal", PageKind.TERMINAL, last());
 
         switchHalf(editor, PageKind.HOME);
         assertEquals(PageKind.HOME, last());
     }
 
     @Test
-    public void theTerminalCardStandsOnTheWorkspace() {
+    public void theTerminalCardStandsOnTheTerminal() {
         SurfaceEditorController editor = open(PageKind.HOME);
         switchHalf(editor, PageKind.TERMINAL);
         editor.present(EditorCard.TERMINAL, null, null);

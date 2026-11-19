@@ -27,7 +27,7 @@ import android.app.Application;
 
 /**
  * The Global card's glass strips write Global, the one look every page wears (ADR 0031); the Home
- * and Workspace cards have no glass of their own.
+ * and Terminal cards have no glass of their own.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -44,8 +44,8 @@ public class SurfaceEditorHomeGlassTest {
         preferences = new TermuxAppSharedPreferences(context, store, null);
         com.termux.app.look.TerminalPageIdFixture.give(preferences);
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(1));
-        // Pong's Home half, and a Workspace that looks otherwise.
-        // Global is wall-wide since the halves became pages: the Workspace's numbers first, then
+        // Pong's Home half, and a Terminal that looks otherwise.
+        // Global is wall-wide since the halves became pages: the Terminal's numbers first, then
         // Home's, which are the wall's.
         preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 40);
         preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId(),
@@ -56,7 +56,7 @@ public class SurfaceEditorHomeGlassTest {
         preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL, 0);
         preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 0);
         preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, TermuxAppSharedPreferences.PAGE_WALL, 0);
-        // The Workspace's Frost was left at 60: Home's pair is not that position's.
+        // The Terminal's Frost was left at 60: Home's pair is not that position's.
         preferences.setSurfaceGlassPosition(null, 60);
         for (SurfaceSlot slot : new SurfaceSlot[] {SurfaceSlot.DOCK, SurfaceSlot.STATUS}) {
             for (SurfaceProperty property : SurfaceProperty.values())

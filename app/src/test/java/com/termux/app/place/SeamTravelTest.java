@@ -21,16 +21,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The chrome across the seam between Home and the Workspace as functions of the wall's frame:
+ * The chrome across the seam between Home and the Terminal as functions of the wall's frame:
  * which way the dock's rows cross, how much of them shows at every step, where they are swapped,
- * and where the status bar stands while it travels with the Workspace's page.
+ * and where the status bar stands while it travels with the Terminal's page.
  */
 public class SeamTravelTest {
 
     private static final float EPSILON = 1e-4f;
     private static final int WIDTH = 1000;
 
-    /** The row as it stands: Home pages on the left, the Workspace's windows on the right. */
+    /** The row as it stands: Home pages on the left, the Terminal's windows on the right. */
     private static final List<PageKind> ROW =
         Arrays.asList(PageKind.HOME, PageKind.TERMINAL, PageKind.DISPLAY);
 
@@ -65,15 +65,15 @@ public class SeamTravelTest {
         return layout(slots);
     }
 
-    /** The Workspace as pong has it: the status bar along the top, no dock rows at all. */
-    private static PlaceLayout workspaceWithoutDock() {
+    /** The Terminal as pong has it: the status bar along the top, no dock rows at all. */
+    private static PlaceLayout terminalWithoutDock() {
         Map<Element, Slot> slots = new EnumMap<>(Element.class);
         slots.put(Element.STATUS, Slot.on(Edge.TOP, Element.STATUS));
         return layout(slots);
     }
 
-    /** The shipped Workspace: the status bar on top, apps, index and extra keys on the bottom. */
-    private static PlaceLayout workspaceWithDock() {
+    /** The shipped Terminal: the status bar on top, apps, index and extra keys on the bottom. */
+    private static PlaceLayout terminalWithDock() {
         Map<Element, Slot> slots = new EnumMap<>(Element.class);
         slots.put(Element.STATUS, Slot.on(Edge.TOP, Element.STATUS));
         slots.put(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
@@ -118,12 +118,12 @@ public class SeamTravelTest {
     // ---- the dock -----------------------------------------------------------------------------
 
     @Test
-    public void aWorkspaceWithoutADockLetsHomesSlideOutAndIn() {
+    public void aTerminalWithoutADockLetsHomesSlideOutAndIn() {
         // Leaving Home: Home's rows go down with the whole way; arriving there, they rise.
         assertSame(DockPlan.SLIDE_OUT,
-            SeamTravel.dockPlan(homeWithDock(), workspaceWithoutDock()));
+            SeamTravel.dockPlan(homeWithDock(), terminalWithoutDock()));
         assertSame(DockPlan.SLIDE_IN,
-            SeamTravel.dockPlan(workspaceWithoutDock(), homeWithDock()));
+            SeamTravel.dockPlan(terminalWithoutDock(), homeWithDock()));
     }
 
     /** A Home layout of its own that keeps only the pinned apps. */
@@ -170,10 +170,10 @@ public class SeamTravelTest {
     public void homesRowsRestTallerThanTheWindowsLessTheExtraKeysByTheAzChin() {
         // The shipped order: the extra keys outermost, under the letters. On Home the letters are
         // the rim and carry their chin, so Home's rows are not the window's less the keys.
-        List<Element> window = EdgeStackPolicy.stack(workspaceWithDock(), Edge.BOTTOM);
+        List<Element> window = EdgeStackPolicy.stack(terminalWithDock(), Edge.BOTTOM);
         assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ, Element.APPS), window);
         int chin = Math.round(DENSITY * 10f);
-        assertEquals(chin, restRowsPx(homeWithDock()) - restRowsPx(workspaceWithDock()));
+        assertEquals(chin, restRowsPx(homeWithDock()) - restRowsPx(terminalWithDock()));
     }
 
     @Test
@@ -182,8 +182,8 @@ public class SeamTravelTest {
         // stay whole, and the stack's lanes stand both sides' rows.
         PlaceLayout window = windowStacking(Element.APPS, Element.EXTRA_KEYS, Element.AZ);
         PlaceLayout[][] pairs = {
-            {homeAppsOnly(), workspaceWithDock()}, {workspaceWithDock(), homeAppsOnly()},
-            {workspaceWithDock(), homeWithDock()}, {homeWithDock(), workspaceWithDock()},
+            {homeAppsOnly(), terminalWithDock()}, {terminalWithDock(), homeAppsOnly()},
+            {terminalWithDock(), homeWithDock()}, {homeWithDock(), terminalWithDock()},
             {window, homeWithDock()}};
         for (PlaceLayout[] pair : pairs) {
             assertSame(DockPlan.NONE, SeamTravel.dockPlan(pair[0], pair[1]));
@@ -212,7 +212,7 @@ public class SeamTravelTest {
         Map<Element, Slot> rail = new EnumMap<>(Element.class);
         rail.put(Element.APPS, Slot.on(Edge.LEFT, Element.APPS));
         assertFalse(SeamTravel.dockExchangeable(layout(rail)));
-        assertSame(DockPlan.NONE, SeamTravel.dockPlan(layout(rail), workspaceWithoutDock()));
+        assertSame(DockPlan.NONE, SeamTravel.dockPlan(layout(rail), terminalWithoutDock()));
 
         Map<Element, Slot> bottomBar = new EnumMap<>(Element.class);
         bottomBar.put(Element.STATUS, Slot.on(Edge.BOTTOM, Element.STATUS));
@@ -240,15 +240,15 @@ public class SeamTravelTest {
 
     @Test
     public void theExchangedLayoutTakesOnlyTheDockRows() {
-        PlaceLayout exchanged = SeamTravel.withDockOf(workspaceWithoutDock(), homeWithDock());
+        PlaceLayout exchanged = SeamTravel.withDockOf(terminalWithoutDock(), homeWithDock());
         assertFalse(exchanged.slot(Element.APPS).hidden);
         assertFalse(exchanged.slot(Element.AZ).hidden);
         assertTrue(exchanged.slot(Element.EXTRA_KEYS).hidden);
         // The status bar is still the base's.
-        assertEquals(workspaceWithoutDock().slot(Element.STATUS),
+        assertEquals(terminalWithoutDock().slot(Element.STATUS),
             exchanged.slot(Element.STATUS));
 
-        PlaceLayout withBar = SeamTravel.withStatusOf(homeWithDock(), workspaceWithoutDock());
+        PlaceLayout withBar = SeamTravel.withStatusOf(homeWithDock(), terminalWithoutDock());
         assertFalse(withBar.slot(Element.STATUS).hidden);
         assertSame(Edge.TOP, withBar.slot(Element.STATUS).edge);
         assertEquals(homeWithDock().slot(Element.APPS), withBar.slot(Element.APPS));
@@ -258,7 +258,7 @@ public class SeamTravelTest {
 
     @Test
     public void onlyABarAlongTheTopRides() {
-        assertTrue(SeamTravel.statusRides(workspaceWithoutDock()));
+        assertTrue(SeamTravel.statusRides(terminalWithoutDock()));
         assertFalse(SeamTravel.statusRides(homeWithDock()));
         Map<Element, Slot> side = new EnumMap<>(Element.class);
         side.put(Element.STATUS, Slot.on(Edge.LEFT, Element.STATUS));
@@ -278,24 +278,24 @@ public class SeamTravelTest {
     }
 
     @Test
-    public void theBarStandsWhereTheWorkspacePageStands() {
+    public void theBarStandsWhereTheTerminalPageStands() {
         for (float fraction : new float[] {0f, 0.1f, 0.5f, 0.9f, 1f}) {
             // The terminal page comes in from the right: it is (1 - f) widths off its rest.
             assertEquals((1f - fraction) * WIDTH,
-                SeamTravel.workspaceScreenXPx(homeToTerminal(fraction), WIDTH), 0.5f);
+                SeamTravel.terminalScreenXPx(homeToTerminal(fraction), WIDTH), 0.5f);
             // Read from the terminal's side the frame is the same, and so is the bar.
             assertEquals((1f - fraction) * WIDTH,
-                SeamTravel.workspaceScreenXPx(terminalToHome(fraction), WIDTH), 0.5f);
+                SeamTravel.terminalScreenXPx(terminalToHome(fraction), WIDTH), 0.5f);
         }
         // Between two windows the bar stays put; past Home it is off to the right.
         Frame windows = PlaceChromeTravel.at(ROW, PageKind.TERMINAL, -0.4f * WIDTH, WIDTH,
             STATES);
-        assertEquals(0f, SeamTravel.workspaceScreenXPx(windows, WIDTH), EPSILON);
+        assertEquals(0f, SeamTravel.terminalScreenXPx(windows, WIDTH), EPSILON);
         Frame home = PlaceChromeTravel.rest(PageKind.HOME, STATES.restOf(PageKind.HOME));
-        assertEquals(WIDTH, SeamTravel.workspaceScreenXPx(home, WIDTH), EPSILON);
+        assertEquals(WIDTH, SeamTravel.terminalScreenXPx(home, WIDTH), EPSILON);
         Frame terminal = PlaceChromeTravel.rest(PageKind.TERMINAL,
             STATES.restOf(PageKind.TERMINAL));
-        assertEquals(0f, SeamTravel.workspaceScreenXPx(terminal, WIDTH), EPSILON);
+        assertEquals(0f, SeamTravel.terminalScreenXPx(terminal, WIDTH), EPSILON);
     }
 
     // ---- Between two Home pages (#173 slice E) ----

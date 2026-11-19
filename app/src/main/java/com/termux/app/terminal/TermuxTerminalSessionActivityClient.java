@@ -1139,11 +1139,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     /**
      * Whether the service keeps running once it holds no shell: Home stays on screen after the
-     * Workspace's last shell, so the activity must outlive it, and the activity finishes when its
-     * service stops. See {@link TerminalHost#staysWhenWorkspaceEmpty()}.
+     * Terminal's last shell, so the activity must outlive it, and the activity finishes when its
+     * service stops. See {@link TerminalHost#staysWhenTerminalEmpty()}.
      */
     public boolean keepsServiceWhenEmpty() {
-        return mHost.staysWhenWorkspaceEmpty();
+        return mHost.staysWhenTerminalEmpty();
     }
 
     public void removeFinishedSession(TerminalSession finishedSession) {
@@ -1157,7 +1157,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         int index = service.killTermuxSession(finishedSession);
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
-            // The home screen does not close with its last shell: the Workspace is simply empty.
+            // The home screen does not close with its last shell: the Terminal is simply empty.
             mHost.rebuildDrawerSessions();
         } else {
             if (index >= size) {

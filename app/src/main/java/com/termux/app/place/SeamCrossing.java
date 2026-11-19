@@ -15,13 +15,13 @@ import com.termux.app.place.SeamTravel.DockPlan;
 import com.termux.app.wall.PageRef;
 
 /**
- * One crossing of the seam between the wall's halves, Home and the Workspace's window beside it,
+ * One crossing of the seam between the wall's halves, Home and the Terminal's window beside it,
  * from the first frame of a slide that reaches the other half to the settle (#94). It is fed the
  * two halves' {@link Dress}es and layouts once, as it begins, and answers every frame from what
  * it read then: how much of the dock shows, whether the rows sink into a keyboard, how much of the
  * keyboard shows, how far the stack's look has blended, which half's dress the stack wears and
  * whether it is dressed again on this frame (a slide in only, where none of the stack shows), whether the seam stands another arrangement, how the halves' own
- * bands and beads ease, and whether the status bar rides with the Workspace's page and for which
+ * bands and beads ease, and whether the status bar rides with the Terminal's page and for which
  * page it is dressed. The activity only begins a crossing, applies the answers to its views, and
  * lands and ends it at settle; how each answer is worked out is {@link SeamTravel}'s and
  * {@link SeamDress}'s arithmetic, which this composes.
@@ -45,7 +45,7 @@ public final class SeamCrossing {
     /**
      * One end of a crossing, as it reads it once, as it begins: the page (#173, spec #167 E), what
      * it wears there (its dress, its look and its resolved arrangement) and how its stack stands.
-     * Home and the Workspace's window are the two ends every crossing runs between today; an end
+     * Home and the Terminal's window are the two ends every crossing runs between today; an end
      * names any page, so a crossing between two others is fed the same way.
      */
     public static final class Endpoint {
@@ -125,7 +125,7 @@ public final class SeamCrossing {
     /**
      * Whether a joined Docked frame's glass is the one sheet the stack's sheets stand down on, as
      * the chrome reads it live. Asked during {@link #begin}, once the crossing has noted the other
-     * half (the status bar then wears the Workspace's dress), and only where the other half's dock
+     * half (the status bar then wears the Terminal's dress), and only where the other half's dock
      * could draw beads.
      */
     public interface FrameGlass {
@@ -157,7 +157,7 @@ public final class SeamCrossing {
         /**
          * @param beadsDrawn whether the dock draws Lens beads as the committed half lies now
          * @param frameGlass whether the stack's sheets stand down on a joined Docked frame
-         * @param splitPanes whether the Workspace splits its panes, which a bar laid out over Home
+         * @param splitPanes whether the Terminal splits its panes, which a bar laid out over Home
          *                   for the slide needs
          */
         @NonNull
@@ -387,8 +387,8 @@ public final class SeamCrossing {
         boolean committedKeyboardUp, otherKeyboardUp;
         /**
          * Whether both halves stand the bar alike, in one shape, so it stands still (#90); otherwise
-         * whether the Workspace's bar rides with its page; and whether a slide from Home may lay the
-         * Workspace's bar out over Home.
+         * whether the Terminal's bar rides with its page; and whether a slide from Home may lay the
+         * Terminal's bar out over Home.
          */
         boolean barStill, barRides, statusMayShow;
         /**
@@ -474,7 +474,7 @@ public final class SeamCrossing {
         // The chrome wears one look on every page (ADR 0031): only the structure can be apart.
         boolean structureApart = !committed.stack.structureEquals(other.stack);
         // One bar across the wall (#90): where both halves stand it alike, in one outline, it
-        // stands still on the crossing instead of riding with the Workspace's page. A Margin
+        // stands still on the crossing instead of riding with the Terminal's page. A Margin
         // apart only insets it, and the bar eases from one inset to the other with the wall
         // (Answers#barMarginShare), so the landing's re-dress finds it already drawn there;
         // riding for it took the bar off a crossing toward Home, with nothing to bring Home's in.
@@ -485,14 +485,14 @@ public final class SeamCrossing {
         mRun.otherMarginDp = other.stack.shape.marginDp;
         mRun.barMarginEases = mRun.barStill && !here.slot(Element.STATUS).hidden
             && mRun.committedMarginDp != mRun.otherMarginDp;
-        PlaceLayout workspaceSide = committed.page.isHome() ? there : here;
-        mRun.barRides = !mRun.barStill && !workspaceSide.slot(Element.STATUS).hidden;
+        PlaceLayout terminalSide = committed.page.isHome() ? there : here;
+        mRun.barRides = !mRun.barStill && !terminalSide.slot(Element.STATUS).hidden;
         mRun.barEnd = null;
         mRun.barFades = false;
         if (mRun.barRides && !stage.pagesSlide && SeamTravel.crosses(committed.page.kind,
                 other.page.kind)) {
-            // The pages turn: the Workspace's bar, which a turned page would not carry flat, fades
-            // in place by the way toward the Workspace's page instead of riding with it.
+            // The pages turn: the Terminal's bar, which a turned page would not carry flat, fades
+            // in place by the way toward the Terminal's page instead of riding with it.
             mRun.barRides = false;
             mRun.barFades = true;
             mRun.barEnd = committed.page.isHome() ? other.page : committed.page;
@@ -506,7 +506,7 @@ public final class SeamCrossing {
             && there.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
         // Beads melt only where one half's dock draws them and the other's does not: the
         // committed half's as they lie now, the other's as its layout lays its row out (the
-        // Workspace's extra keys, or a keyboard in the stack, keep the slab there). The Search
+        // Terminal's extra keys, or a keyboard in the stack, keep the slab there). The Search
         // field keeps the beads, in a capsule of its own under them (#84).
         boolean otherBeads = mRun.otherDesign == DockStyle.LENS_BEADS
             && LensBeadGeometry.rowWearsBeadsCuttingFrame(there,
@@ -524,7 +524,7 @@ public final class SeamCrossing {
         // What differs by page and not by look crosses with the wall on every crossing between
         // two kinds of page (Answers#endShare).
         mRun.endsBlend = !mRun.oneKind;
-        // Only from Home: the Workspace's bar is the one that travels with its page, unless the
+        // Only from Home: the Terminal's bar is the one that travels with its page, unless the
         // bar is one across the wall and stands still.
         mRun.statusMayShow = !mRun.barStill && committed.page.isHome()
             && !other.page.isHome() && SeamTravel.statusRides(there)
@@ -548,12 +548,12 @@ public final class SeamCrossing {
     }
 
     /**
-     * Whether the status bar takes off Home's dress for the Workspace's as a crossing begins,
+     * Whether the status bar takes off Home's dress for the Terminal's as a crossing begins,
      * while it is still hidden, before any pass lays it out over Home: from Home, toward a half
      * that shapes the stack otherwise, unless the bar stands still on screen. Asked once, right
      * after the {@link #begin} that started the crossing.
      */
-    public boolean barTakesWorkspaceDressFirst() {
+    public boolean barTakesTerminalDressFirst() {
         return mRun.shapeDiffers && mRun.committed == PageKind.HOME && !mRun.oneKind
             && !mRun.barStill;
     }
@@ -636,7 +636,7 @@ public final class SeamCrossing {
             answers.moved = true;
         }
         // The stack stands the other half's rows, dressed for that half, from the frame the plan
-        // says; from Home the Workspace's bar is laid out as the slide starts.
+        // says; from Home the Terminal's bar is laid out as the slide starts.
         boolean dockShown = SeamTravel.showsOtherDock(mRun.plan, dressProgress);
         boolean statusShown = progress > 0f && mRun.statusMayShow;
         // A bar only one end wears, or wears apart, fades with the way toward that end while the
@@ -675,7 +675,7 @@ public final class SeamCrossing {
     }
 
     /**
-     * Whether the status bar rides with the Workspace's page on this frame, which crosses the seam
+     * Whether the status bar rides with the Terminal's page on this frame, which crosses the seam
      * to a Home page while the halves wear the bar apart (a Home layout that places or shapes it
      * otherwise): a bar both halves wear alike stands still (#90), and so does every bar on a
      * slide between Home's own pages. Notes the page it is dressed for, so its chips do not
@@ -707,13 +707,13 @@ public final class SeamCrossing {
 
     /**
      * Where the bar is drawn on this frame while it rides ({@link #rideBar}), as an x offset from
-     * its rest: with the Workspace's page across the seam ({@link SeamTravel#workspaceScreenXPx}),
+     * its rest: with the Terminal's page across the seam ({@link SeamTravel#terminalScreenXPx}),
      * with the Home page that wears it between two Home pages ({@link SeamTravel#endScreenXPx}).
      */
     public float barScreenXPx(@NonNull Frame frame, int widthPx) {
         PageRef barEnd = mRun.barEnd;
         if (mRun.oneKind && barEnd != null) return SeamTravel.endScreenXPx(frame, barEnd, widthPx);
-        return SeamTravel.workspaceScreenXPx(frame, widthPx);
+        return SeamTravel.terminalScreenXPx(frame, widthPx);
     }
 
     /**
@@ -796,7 +796,7 @@ public final class SeamCrossing {
 
     /**
      * Whether the riding bar wears the other end's look ({@link #rideBar}): across the seam the
-     * Workspace's, which is the other end when the crossing began on Home; between two Home pages
+     * Terminal's, which is the other end when the crossing began on Home; between two Home pages
      * the page that wears the bar, when that is the other one.
      */
     public boolean barRideWearsOther() {
@@ -807,7 +807,7 @@ public final class SeamCrossing {
 
     /**
      * Whether the status bar wears the other half's dress on this frame, the {@code seamTravel}
-     * the bar's dress reads ({@link SeamDress#wearsHome}): the Workspace's while a bar that rides
+     * the bar's dress reads ({@link SeamDress#wearsHome}): the Terminal's while a bar that rides
      * with its page slides across the seam ({@link #sliding}). Never on a slide between two Home
      * pages, where the bar is Home's on both ends, and never for a bar both ends stand alike
      * ({@link #barStill}): that one stays put in the committed page's look and its glass blends
@@ -884,7 +884,7 @@ public final class SeamCrossing {
         Run run = mRun;
         if (run.other != null && !run.landed && rowsHoldFoot(run)) return run.otherKeyboardUp;
         // Landed where the other half's rows stood: the settle's first passes run before the
-        // live keyboard has caught up with the landed page (the Workspace's still reads up for a
+        // live keyboard has caught up with the landed page (the Terminal's still reads up for a
         // pass on Home), so the travelled answer holds until it agrees, for a few passes at most.
         Boolean held = mLandedFootKeyboard;
         if (held == null) return liveKeyboardUp;
@@ -922,7 +922,7 @@ public final class SeamCrossing {
 
     /**
      * Whether the wall is sliding across the seam: a crossing has begun and has not landed. This
-     * is what the status bar's dress reads ({@link SeamDress#wearsHome}): the Workspace's while
+     * is what the status bar's dress reads ({@link SeamDress#wearsHome}): the Terminal's while
      * the wall slides, its own half's from the moment it lands. A landed crossing still names its
      * {@link #other} page through the page's commit, but only for the stack, which keeps the dress
      * it travelled in; the status bar does not, so the commit dresses it for the page it lands on
@@ -940,7 +940,7 @@ public final class SeamCrossing {
 
     /**
      * The arrangement the chrome stands in while the seam stands the other half's dock rows or the
-     * Workspace's bar: the committed layout with those slots taken from the other half's. Null
+     * Terminal's bar: the committed layout with those slots taken from the other half's. Null
      * whenever the chrome stands in the committed layout itself.
      */
     @Nullable

@@ -152,7 +152,7 @@ public class LayoutUpgradeMatrixTest {
         Layouts layouts = layouts();
         JSONObject expected = load(name + "-expected.json");
         for (LayoutKind kind : LayoutKind.values()) {
-            // A retired document (ADR 0025) is never written or read: the Workspace's is worn.
+            // A retired document (ADR 0025) is never written or read: the Terminal's is worn.
             if (kind.retired()) continue;
             JSONObject doc = expected.optJSONObject(kind.key);
             if (doc != null) compare(name + " " + kind.key, layouts.kind(kind), doc);

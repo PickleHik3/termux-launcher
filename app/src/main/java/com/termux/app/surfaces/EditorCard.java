@@ -24,7 +24,7 @@ public enum EditorCard {
         R.drawable.ic_editor_status_bar),
     /**
      * The Terminal's pages (Terminal, Display, Assistant): the terminal's own rows and the page's
-     * (its Layout, Minimal layout). The Workspace card merged into it (spec §3).
+     * (its Layout, Minimal layout). The old Workspace card merged into it (spec §3).
      */
     TERMINAL("terminal", SurfaceSlot.CANVAS, R.string.appearance_card_terminal,
         R.drawable.ic_symbol_terminal),

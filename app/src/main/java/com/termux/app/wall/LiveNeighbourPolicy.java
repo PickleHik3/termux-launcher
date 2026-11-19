@@ -4,9 +4,9 @@ package com.termux.app.wall;
  * Live neighbour windows (project-docs/active/live-neighbour-windows-2026-11-01.md): which
  * windows of the row stand ready beside the one in front, when they are shown, and where.
  *
- * <p>Only the two adjacent windows are ready. They are built at the Workspace page's size but
+ * <p>Only the two adjacent windows are ready. They are built at the Terminal page's size but
  * kept {@code GONE} at rest, shown from the moment a drag takes the wall until it settles, and
- * stand one page width either side of the Workspace page, so they move exactly as it does.
+ * stand one page width either side of the Terminal page, so they move exactly as it does.
  * {@link PaneWallLayout} places them and the pane controller fills them; both read this.
  */
 public final class LiveNeighbourPolicy {
@@ -28,19 +28,19 @@ public final class LiveNeighbourPolicy {
     }
 
     /**
-     * Whether the neighbours stand beside the Workspace page now: only while it is the page in
+     * Whether the neighbours stand beside the Terminal page now: only while it is the page in
      * front and the wall is moving it — a drag, the slide that settles it (forward or back), the
      * nudge that carries an arriving window in, or the step between a release and that nudge.
      * At rest they draw nothing.
      */
-    public static boolean shown(boolean workspaceInFront, boolean dragging, boolean sliding,
-                                boolean nudgingWorkspace, boolean stepping) {
-        return workspaceInFront && (dragging || sliding || nudgingWorkspace || stepping);
+    public static boolean shown(boolean terminalInFront, boolean dragging, boolean sliding,
+                                boolean nudgingTerminal, boolean stepping) {
+        return terminalInFront && (dragging || sliding || nudgingTerminal || stepping);
     }
 
-    /** Where the neighbour on {@code side} stands: one page width beyond the Workspace page. */
-    public static float slidePx(int side, float workspaceSlidePx, int widthPx) {
-        return side * (float) widthPx + workspaceSlidePx;
+    /** Where the neighbour on {@code side} stands: one page width beyond the Terminal page. */
+    public static float slidePx(int side, float terminalSlidePx, int widthPx) {
+        return side * (float) widthPx + terminalSlidePx;
     }
 
     /** Whether a neighbour standing at {@code slidePx} shows any of itself on screen. */

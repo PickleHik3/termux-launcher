@@ -60,7 +60,7 @@ public class CrossingTest {
     private static final ResolvedArrangement HOME_ARRANGED = ResolvedArrangement.of(HOME,
         LayoutStyle.DOCKED, DockStyle.LENS_BEADS, true, true, PlaceOrientation.PORTRAIT,
         LayoutVariant.HOME, PageRef.HOME);
-    private static final ResolvedArrangement WORKSPACE_ARRANGED = ResolvedArrangement.of(WINDOW,
+    private static final ResolvedArrangement TERMINAL_ARRANGED = ResolvedArrangement.of(WINDOW,
         LayoutStyle.DOCKED, DockStyle.GLASS_TRAY, false, false, PlaceOrientation.PORTRAIT,
         LayoutVariant.NORMAL, PageRef.TERMINAL);
 
@@ -68,8 +68,8 @@ public class CrossingTest {
 
     private static DockGeometry.Snapshot snapshot() {
         DockGeometry.Half home = DockGeometry.Half.builder(HOME_ARRANGED).build();
-        DockGeometry.Half workspace = DockGeometry.Half.builder(WORKSPACE_ARRANGED).build();
-        return DockGeometry.Snapshot.builder(home, workspace)
+        DockGeometry.Half terminal = DockGeometry.Half.builder(TERMINAL_ARRANGED).build();
+        return DockGeometry.Snapshot.builder(home, terminal)
             .density(DENSITY)
             .widthPx(Math.round(411 * DENSITY))
             .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(DENSITY))
@@ -79,7 +79,7 @@ public class CrossingTest {
 
     static final DockLayout HOME_REST =
         DockGeometry.compute(snapshot().restOf(PageRef.HOME));
-    static final DockLayout WORKSPACE_REST =
+    static final DockLayout TERMINAL_REST =
         DockGeometry.compute(snapshot().restOf(PageRef.TERMINAL));
 
     // ---- Dresses ----
@@ -115,7 +115,7 @@ public class CrossingTest {
         PlaceLayout layout = page == PageKind.HOME ? HOME : WINDOW;
         float dock = apart && page != PageKind.HOME ? 0.8f : 1f;
         ResolvedArrangement arranged = page == PageKind.HOME ? HOME_ARRANGED
-            : WORKSPACE_ARRANGED;
+            : TERMINAL_ARRANGED;
         return SeamCrossing.Endpoint.of(PageRef.of(page), dress, null, arranged, layout,
             SeamDress.StackDress.of(dress.shape(), dock, 1f, 0), keyboardUp);
     }
@@ -183,7 +183,7 @@ public class CrossingTest {
             if (other != null && other != crossing.seam().other()) {
                 boolean fromHome = committed == PageKind.HOME;
                 crossing.begin(here, there, SeamCrossing.Stage.of(false, () -> false, true),
-                    fromHome ? HOME_REST : WORKSPACE_REST, fromHome ? WORKSPACE_REST : HOME_REST,
+                    fromHome ? HOME_REST : TERMINAL_REST, fromHome ? TERMINAL_REST : HOME_REST,
                     REVISION);
             }
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
@@ -203,7 +203,7 @@ public class CrossingTest {
     static final PageKind[] BOTH = {PageKind.TERMINAL, PageKind.HOME};
 
     static DockLayout restOf(PageKind page) {
-        return page == PageKind.HOME ? HOME_REST : WORKSPACE_REST;
+        return page == PageKind.HOME ? HOME_REST : TERMINAL_REST;
     }
 
     static PageKind across(PageKind page) {
@@ -212,9 +212,9 @@ public class CrossingTest {
 
     @Test
     public void theTwoHalvesWearDifferentDresses() {
-        assertNotEquals(rowsPx(HOME_REST), rowsPx(WORKSPACE_REST));
+        assertNotEquals(rowsPx(HOME_REST), rowsPx(TERMINAL_REST));
         assertTrue(HOME_REST.promptFieldBandPx > 0);
-        assertEquals(0, WORKSPACE_REST.promptFieldBandPx);
+        assertEquals(0, TERMINAL_REST.promptFieldBandPx);
     }
 
     @Test
@@ -252,7 +252,7 @@ public class CrossingTest {
         assertSame("one value for every reader of a frame", standing,
             drive.crossing.arrangement(changed));
         assertSame(HOME_ARRANGED, drive.crossing.heldArrangement(PageRef.HOME));
-        assertSame(WORKSPACE_ARRANGED, drive.crossing.heldArrangement(PageRef.TERMINAL));
+        assertSame(TERMINAL_ARRANGED, drive.crossing.heldArrangement(PageRef.TERMINAL));
         // At rest the committed arrangement is the answer, and nothing is held for any reader.
         drive.crossing.land(PageRef.of(PageKind.HOME), REVISION);
         drive.crossing.end();
@@ -271,7 +271,7 @@ public class CrossingTest {
             for (float f = 0.5f; f <= 1f + 1e-6f; f += STEP) {
                 drive.step(Math.min(1f, f));
                 assertSame(HOME_ARRANGED, drive.crossing.heldArrangement(PageRef.HOME));
-                assertSame(WORKSPACE_ARRANGED, drive.crossing.heldArrangement(PageRef.TERMINAL));
+                assertSame(TERMINAL_ARRANGED, drive.crossing.heldArrangement(PageRef.TERMINAL));
             }
             Crossing.Landing moved = drive.crossing.land(PageRef.of(across(from)), REVISION + 1);
             assertTrue(from + ": the landing applies it", moved.storeMoved());
@@ -423,7 +423,7 @@ public class CrossingTest {
     /** One snapshot holding both Home pages' halves, the other in {@code otherHome}. */
     private static DockGeometry.Snapshot twoHomes() {
         return DockGeometry.Snapshot.builder(DockGeometry.Half.builder(HOME_2_ARRANGED).build(),
-                DockGeometry.Half.builder(WORKSPACE_ARRANGED).build())
+                DockGeometry.Half.builder(TERMINAL_ARRANGED).build())
             .otherHome(DockGeometry.Half.builder(HOME_3_ARRANGED).build())
             .density(DENSITY)
             .widthPx(Math.round(411 * DENSITY))
@@ -439,7 +439,7 @@ public class CrossingTest {
         assertSame(HOME_3_ARRANGED, rests.half(HOME_3).arrangement);
         assertSame("a Home page with no id said reads the one in front", HOME_2_ARRANGED,
             rests.half(PageRef.HOME).arrangement);
-        assertSame(WORKSPACE_ARRANGED, rests.half(PageRef.TERMINAL).arrangement);
+        assertSame(TERMINAL_ARRANGED, rests.half(PageRef.TERMINAL).arrangement);
         // Without a second half, every Home page reads the one Home half, as before.
         assertSame(HOME_ARRANGED, snapshot().half(HOME_3).arrangement);
         assertNotEquals(rowsPx(DockGeometry.compute(rests.restOf(HOME_2))),
@@ -492,7 +492,7 @@ public class CrossingTest {
         assertNull(crossing.heldArrangement(PageRef.of(PageKind.DISPLAY, 7)));
         assertEquals("a Home reader by kind is the committed page, whatever the pager committed to",
             HOME_2, crossing.heldCommittedPage(PageKind.HOME));
-        assertNull("no Workspace end is held", crossing.heldCommittedPage(PageKind.TERMINAL));
+        assertNull("no Terminal end is held", crossing.heldCommittedPage(PageKind.TERMINAL));
         Crossing.Landing landed = crossing.land(HOME_3, REVISION);
         assertFalse("the arriving page's rows are laid out by the landing's own pass",
             landed.seam().laidOut());

@@ -287,7 +287,7 @@ public class AppearanceSnapshotTest {
 
     /**
      * #84: Style, Corners and Margin are one across the wall, so an edit made from Home's side
-     * is the Workspace's value, undone as it is, and no key of Home's own is ever written back.
+     * is the Terminal's value, undone as it is, and no key of Home's own is ever written back.
      */
     @Test
     public void undoPutsTheLinkedShapeBackAndWritesNoHomeKeys() {

@@ -20,7 +20,7 @@ public class StackSceneMaterialTest {
 
     private static final int STEPS = 128;
 
-    /** pong's looks: Home's keyboard 60 / 5, the Workspace's 10 / 2. */
+    /** pong's looks: Home's keyboard 60 / 5, the Terminal's 10 / 2. */
     private static StackEnd end(@NonNull PageRef page, boolean keyboardUp) {
         StackEnd end = new StackEnd(page);
         boolean home = page.isHome();
@@ -70,31 +70,31 @@ public class StackSceneMaterialTest {
     }
 
     @Test public void aKeyboardOnlyOneEndHasWearsThatEndsLookAtEveryP() {
-        // Home -> Workspace with the keyboard down at Home: the rising keyboard is the
-        // Workspace's from the first frame, blur included; and the reverse keeps it all the way.
+        // Home -> Terminal with the keyboard down at Home: the rising keyboard is the
+        // Terminal's from the first frame, blur included; and the reverse keeps it all the way.
         StackEnd home = end(PageRef.HOME, false);
-        StackEnd workspace = end(PageRef.TERMINAL, true);
+        StackEnd terminal = end(PageRef.TERMINAL, true);
         for (int i = 0; i <= STEPS; i++) {
             float p = i / (float) STEPS;
-            StackScene.Frame rising = at(home, workspace, p);
-            assertTrue("p=" + p, rising.look[StackEnd.KEYBOARD].sameAs(workspace.looks[StackEnd.KEYBOARD]));
+            StackScene.Frame rising = at(home, terminal, p);
+            assertTrue("p=" + p, rising.look[StackEnd.KEYBOARD].sameAs(terminal.looks[StackEnd.KEYBOARD]));
             assertEquals(2f, rising.look[StackEnd.KEYBOARD].blurDp, 0f);
             assertEquals(0f, rising.look[StackEnd.KEYBOARD].blurMix, 0f);
             assertEquals(1f, rising.share[StackEnd.KEYBOARD], 0f);
-            StackScene.Frame leaving = at(workspace, home, p);
-            assertTrue("p=" + p, leaving.look[StackEnd.KEYBOARD].sameAs(workspace.looks[StackEnd.KEYBOARD]));
+            StackScene.Frame leaving = at(terminal, home, p);
+            assertTrue("p=" + p, leaving.look[StackEnd.KEYBOARD].sameAs(terminal.looks[StackEnd.KEYBOARD]));
             assertEquals(0f, leaving.share[StackEnd.KEYBOARD], 0f);
         }
     }
 
     @Test public void aRegionBothEndsHaveBlendsContinuously() {
         StackEnd home = end(PageRef.HOME, true);
-        StackEnd workspace = end(PageRef.TERMINAL, true);
-        StackScene.Frame previous = at(home, workspace, 0f);
+        StackEnd terminal = end(PageRef.TERMINAL, true);
+        StackScene.Frame previous = at(home, terminal, 0f);
         float maxStep = 0f;
         for (int i = 1; i <= STEPS; i++) {
             float p = i / (float) STEPS;
-            StackScene.Frame frame = at(home, workspace, p);
+            StackScene.Frame frame = at(home, terminal, p);
             for (int region : new int[] {StackEnd.ROWS, StackEnd.KEYBOARD}) {
                 float step = Math.abs(frame.share[region] - previous.share[region]);
                 maxStep = Math.max(maxStep, step);
@@ -124,13 +124,13 @@ public class StackSceneMaterialTest {
 
     @Test public void aReversalReturnsToTheSameFrame() {
         StackEnd home = end(PageRef.HOME, true);
-        StackEnd workspace = end(PageRef.TERMINAL, false);
+        StackEnd terminal = end(PageRef.TERMINAL, false);
         float[] there = {0.1f, 0.3f, 0.45f, 0.62f, 0.75f};
         StackScene.Frame[] forward = new StackScene.Frame[there.length];
-        for (int i = 0; i < there.length; i++) forward[i] = at(home, workspace, there[i]);
+        for (int i = 0; i < there.length; i++) forward[i] = at(home, terminal, there[i]);
         // Up to 0.9 and back down: every frame on the way down is the one on the way up.
-        at(home, workspace, 0.9f);
+        at(home, terminal, 0.9f);
         for (int i = there.length - 1; i >= 0; i--)
-            assertTrue("p=" + there[i], at(home, workspace, there[i]).sameAs(forward[i]));
+            assertTrue("p=" + there[i], at(home, terminal, there[i]).sameAs(forward[i]));
     }
 }

@@ -649,7 +649,7 @@ public final class StatusBarController {
     }
 
     /**
-     * Whether the status bar wears anything different on Home than on the Workspace: the shape
+     * Whether the status bar wears anything different on Home than on the Terminal: the shape
      * (Style, Corners, Margin) or the look values (ADR 0013).
      */
     public boolean statusDressDiffersAcrossHalves() {
@@ -852,7 +852,7 @@ public final class StatusBarController {
                 }
             }
 
-            // The Workspace's window chips and Home's float chips wear one style.
+            // The Terminal's window chips and Home's float chips wear one style.
             for (int id : new int[] {R.id.terminal_window_bar, R.id.terminal_home_float_bar}) {
                 com.termux.app.terminal.TerminalWindowBar windows = mHost.findViewById(id);
                 if (windows != null) {
@@ -1229,7 +1229,7 @@ public final class StatusBarController {
     /**
      * The status bar's travel for this frame: whether the crossing rides it (SeamCrossing.rideBar)
      * and, handed to the top stack's writer with the wall's progress, where it stands
-     * (SeamTravel.workspaceScreenXPx) with the strip behind the system bar when that continues the
+     * (SeamTravel.terminalScreenXPx) with the strip behind the system bar when that continues the
      * bar's glass; the bar is dressed for that page rather than the one the wall has committed to,
      * so its chips do not change while it is on screen. Whether it rides.
      */
@@ -1251,7 +1251,7 @@ public final class StatusBarController {
             }
         }
         if (seam.barRedressed()) mHost.syncPlaceBar();
-        // The top stack's writer takes the frame's share: the bar rides at the Workspace's page,
+        // The top stack's writer takes the frame's share: the bar rides at the Terminal's page,
         // with the strip behind the system bar and the chips standing where the scene puts them.
         com.termux.app.place.SeamCrossing crossing = mHost.crossing().seam();
         com.termux.app.wall.PageRef committed = crossing.committedEnd();
@@ -1346,7 +1346,7 @@ public final class StatusBarController {
         return mWidgets.resolvedBand();
     }
 
-    /** {@link StatusBarWidgets#applySessionsBand}: the Workspace end's band, for a crossing. */
+    /** {@link StatusBarWidgets#applySessionsBand}: the Terminal end's band, for a crossing. */
     public void applySessionsBand(@Nullable com.termux.app.chrome.OnGlass.Resolution band) {
         mWidgets.applySessionsBand(band);
     }

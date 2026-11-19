@@ -70,7 +70,7 @@ public class SurfaceHalfTest {
         assertEquals(12, preferences.getInAppKeyboardBackgroundOpacity(TermuxAppSharedPreferences.PAGE_WALL));
         // Global is wall-wide since the halves became pages: Home's write is the wall's.
         assertEquals(12, preferences.getAppBarOpacity(TermuxAppSharedPreferences.terminalPageId()));
-        // The no-half reads are today's callers: they answer the Workspace.
+        // The no-half reads are today's callers: they answer the Terminal.
         assertEquals(12, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(12, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         // The terminal's Background never follows Global (ADR 0031 §4, #287).
@@ -121,7 +121,7 @@ public class SurfaceHalfTest {
     @Test
     public void settingsSlider_landsOnBothHalves_whateverEachHalfsLink() {
         preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 30);
-        // Home's status bar holds its own number; the link is wall-wide, so the Workspace's does
+        // Home's status bar holds its own number; the link is wall-wide, so the Terminal's does
         // too.
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_WALL, 90);

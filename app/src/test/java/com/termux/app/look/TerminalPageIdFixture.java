@@ -6,8 +6,8 @@ import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
- * Gives test preferences a Terminal page, so the Workspace half maps to its page overrides the
- * way it does in the app (the halves became pages, ADR 0015 6). Without one the Workspace reads
+ * Gives test preferences a Terminal page, so the Terminal half maps to its page overrides the
+ * way it does in the app (the halves became pages, ADR 0015 6). Without one the Terminal reads
  * the wall's keys.
  */
 public final class TerminalPageIdFixture {

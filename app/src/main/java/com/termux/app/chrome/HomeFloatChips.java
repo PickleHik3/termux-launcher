@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * Home's own chips on the status bar (ADR 0030 section 2: floats are content of the Home page they
  * sit on): one per float on the Home page shown, in the order they were opened, each minimised
- * or not. The Workspace's window chips ({@link WindowChips}) are a different list on a different
+ * or not. The Terminal's window chips ({@link WindowChips}) are a different list on a different
  * strip; nothing here is shared with them. Also says which chip is selected (the float in focus)
  * and what a tap means (that float comes forward, or back from its chip).
  *

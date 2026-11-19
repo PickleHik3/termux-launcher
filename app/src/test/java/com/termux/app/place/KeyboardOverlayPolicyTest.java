@@ -103,7 +103,7 @@ public class KeyboardOverlayPolicyTest {
     @Test
     public void leavingTheDisplayForATerminalWindowChangesTheContentsRoom() {
         PlaceLayout layout = layout(KeyboardMode.OVERLAY);
-        // The display window going off the Workspace without a slide: the terminal must get
+        // The display window going off the Terminal without a slide: the terminal must get
         // its room back from the floating keyboard, and the way back must float it again.
         assertTrue(KeyboardOverlayPolicy.changesBetween(PageKind.DISPLAY,
             PageKind.TERMINAL, layout));

@@ -182,10 +182,10 @@ final class SetupState {
         mDetectedListener = listener;
     }
 
-    /** The Start in Finish will leave: the workspace for Terminal, the stored one for Home. */
+    /** The Start in Finish will leave: the Terminal for Terminal, the stored one for Home. */
     @NonNull
     String startIn() {
-        return mUseAs == UseAs.TERMINAL ? TERMUX_APP.LAUNCHER_START_IN_WORKSPACE
+        return mUseAs == UseAs.TERMINAL ? TERMUX_APP.LAUNCHER_START_IN_TERMINAL
             : mSnapshot.startIn;
     }
 
@@ -207,7 +207,7 @@ final class SetupState {
         if (mUseAs == UseAs.TERMINAL) {
             TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(mContext);
             if (prefs != null)
-                prefs.setLauncherStartIn(TERMUX_APP.LAUNCHER_START_IN_WORKSPACE);
+                prefs.setLauncherStartIn(TERMUX_APP.LAUNCHER_START_IN_TERMINAL);
         }
         writeValues(mContext, mValues, true);
     }

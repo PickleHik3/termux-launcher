@@ -33,7 +33,7 @@ public class LookGridMarginMigrationTest {
     }
 
     @Test
-    public void homeFollowingGlobalKeepsGlobalAndDropsTheWorkspaces() {
+    public void homeFollowingGlobalKeepsGlobalAndDropsTheTerminals() {
         LookGrid.MemoryStore store = new LookGrid.MemoryStore();
         LookGrid grid = grid(store);
         grid.write(Property.MARGIN, null, 8);

@@ -350,7 +350,7 @@ final class EditorCardSheet {
         mGrab.addView(handle, new FrameLayout.LayoutParams(dp(32), dp(4), Gravity.CENTER));
 
         // The header row (appearance-cards overhaul §1). Main cards: the Customization | Home |
-        // Workspace pill, the phone glyph and ⋮. Element cards: ← · name · Show · ⋮.
+        // Terminal pill, the phone glyph and ⋮. Element cards: ← · name · Show · ⋮.
         LinearLayout line = new LinearLayout(context);
         line.setOrientation(LinearLayout.HORIZONTAL);
         line.setGravity(Gravity.CENTER_VERTICAL);

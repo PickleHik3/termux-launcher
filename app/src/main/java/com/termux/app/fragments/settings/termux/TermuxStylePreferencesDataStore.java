@@ -365,7 +365,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "use_as":
                 return mPreferences.getUseAs();
             case "app_launcher_start_in":
-                // As the launcher reads it: Home is the Workspace under Terminal only.
+                // As the launcher reads it: Home is the Terminal under Terminal only.
                 return com.termux.app.wall.UseAs.read(mPreferences.getUseAs())
                     .startIn(com.termux.app.wall.WallPagesStore.open(mContext)
                         .current().startIn());

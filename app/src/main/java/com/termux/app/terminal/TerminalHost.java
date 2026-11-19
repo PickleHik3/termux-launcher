@@ -89,12 +89,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     void finishActivityIfNotFinishing();
 
     /**
-     * Whether Home stays on screen once the Workspace's last shell has closed, and so whether the
+     * Whether Home stays on screen once the Terminal's last shell has closed, and so whether the
      * terminal service keeps running with no shell
      * ({@link com.termux.app.wall.WallRow#lastShellClosedShowsHome}). False, plain Termux's end,
      * for a host with no Home.
      */
-    default boolean staysWhenWorkspaceEmpty() {
+    default boolean staysWhenTerminalEmpty() {
         return false;
     }
 

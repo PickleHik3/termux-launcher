@@ -47,7 +47,7 @@ public final class PaneWallPolicy {
     /**
      * The places of the old three-place wall, for the callers that still ask by usage mode (the
      * extra keys' place switches). The wall itself is built from {@link #rowPages}, and the
-     * display is a window of the Workspace there, never a page.
+     * display is a window of the Terminal there, never a page.
      *
      * @param terminalOnly   the terminal-only usage mode: no home surfaces at all
      * @param widgetsEnabled the widget pane is switched on
@@ -65,10 +65,10 @@ public final class PaneWallPolicy {
 
     /**
      * The wall's row, by the kind of page that stands in each stretch of it (ADR 0008): the Home
-     * pages first, always there; then the Workspace's windows, only while the current session's
+     * pages first, always there; then the Terminal's windows, only while the current session's
      * row has one — a terminal window, or the display window (before ADR 0015 A3b). A Home page and
      * a window are each one entry here however many of them there are: the Home pages page inside
-     * the widget grid and the windows inside the Workspace's view ({@link WallRow}), and the wall
+     * the widget grid and the windows inside the Terminal's view ({@link WallRow}), and the wall
      * only slides between the stretches.
      *
      * @param hasWindow the current session's row has at least one window, the display's included
@@ -82,12 +82,12 @@ public final class PaneWallPolicy {
     }
 
     /**
-     * Whether {@code page} is a place of the Workspace: a terminal window, the display window in
-     * front, or the Assistant page. The three are one Workspace (ADR 0025): one layout, one look,
+     * Whether {@code page} is a place of the Terminal: a terminal window, the display window in
+     * front, or the Assistant page. The three are one Terminal (ADR 0025): one layout, one look,
      * one dress, and a slide between two of them is no crossing of the seam. The one test every
      * chrome decision that used to read "not Home" asks.
      */
-    public static boolean isWorkspacePlace(@Nullable PageKind page) {
+    public static boolean isTerminalPlace(@Nullable PageKind page) {
         return page == PageKind.TERMINAL || page == PageKind.DISPLAY
             || page == PageKind.ASSISTANT;
     }
@@ -156,7 +156,7 @@ public final class PaneWallPolicy {
     /**
      * {@link #pageInsetPx(PageKind, int, int)} with the Assistant page's own pane: it stands
      * {@link #ASSISTANT_SIDE_INSET_DP} in on the sides and {@link #ASSISTANT_END_INSET_DP} at the
-     * top and bottom, whatever the Workspace's Margin (sheet 01: x 12..400, bottom gap 8). The one
+     * top and bottom, whatever the Terminal's Margin (sheet 01: x 12..400, bottom gap 8). The one
      * owner of that geometry; the page's view adds no margins of its own.
      *
      * @param side true for the left and right edges, false for the top and bottom
@@ -171,7 +171,7 @@ public final class PaneWallPolicy {
 
     /**
      * Whether the wall wraps. It used to, with three places; the row is a line now, Home pages on
-     * the left and the Workspace on the right, so it never does. Kept so the arithmetic below
+     * the left and the Terminal on the right, so it never does. Kept so the arithmetic below
      * reads the same for a line of any length.
      */
     public static boolean isRing(@NonNull List<PageKind> pages) {

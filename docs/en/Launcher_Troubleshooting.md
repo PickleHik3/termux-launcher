@@ -352,7 +352,7 @@ Android 12 and later stop an app's background programs once all apps together ru
 of them (Android calls them phantom processes). A desktop session with its helpers is enough: the
 display closes, the desktop quits, and terminal panes end with `[Process completed (signal 9)]`.
 The launcher notices such a stop and shows **Android stopped your Linux apps** at the top of
-Settings and on the long-press sheets of Home and the Workspace, until the limit is lifted or you
+Settings and on the long-press sheets of Home and the Terminal, until the limit is lifted or you
 dismiss it. Lift the limit one of these ways, then start your shells and apps again:
 
 - **Android 14 or later:** open **Developer options** and turn on **Disable child process

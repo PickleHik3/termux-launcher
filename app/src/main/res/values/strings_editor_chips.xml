@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- The Applies to row of the status bar, dock, keyboard and menus cards
-         (appearance-cards-overhaul §1): Global · Home · Workspace. -->
+         (appearance-cards-overhaul §1): Global · Home · Terminal. -->
     <string name="editor_applies_to">Applies to</string>
     <string name="editor_applies_global">Global</string>
     <!-- ⋮'s Reset on a card with the Applies to row, e.g. "Reset dock for Home". -->
     <string name="editor_reset_for">%1$s for %2$s</string>
     <!-- A kind of page, in a row's source: every page of that kind. -->
     <string name="editor_chip_kind_home">Home pages</string>
-    <string name="editor_chip_kind_terminal">Workspace pages</string>
+    <string name="editor_chip_kind_terminal">Terminal pages</string>
     <string name="editor_chip_kind_display">Display pages</string>
     <string name="editor_chip_kind_assistant">Assistant page</string>
     <string name="editor_chip_all_glass">All glass</string>

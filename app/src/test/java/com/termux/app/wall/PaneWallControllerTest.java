@@ -31,7 +31,7 @@ import com.termux.app.page.PageKind;
  * The controller's jobs on the wall's row (ADR 0008): which pages exist (Home always, the
  * Terminal page with or without a window, ADR 0016 section 6), the seam both ways,
  * where the home press and a cold start land, keeping the row position across an activity
- * recreate, and the display window standing as the Workspace's page while it is in front.
+ * recreate, and the display window standing as the Terminal's page while it is in front.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -44,8 +44,8 @@ public class PaneWallControllerTest {
             @Override public int count() { return innerCount(PageKind.TERMINAL); }
             @Override public int index() { return innerIndex(PageKind.TERMINAL); }
             @Override public void show(int index) { showInnerPage(PageKind.TERMINAL, index); }
-            @Override public boolean canStartShell() { return canStartWorkspace(); }
-            @Override public boolean startShell() { return startWorkspaceShell(); }
+            @Override public boolean canStartShell() { return canStartTerminal(); }
+            @Override public boolean startShell() { return startTerminalShell(); }
             @Override public void stepBegin(int steps) { onInnerStepBegin(PageKind.TERMINAL, steps); }
             @Override public void step(int steps, float fromPx) { onInnerStep(PageKind.TERMINAL, steps, fromPx); }
         };
@@ -89,8 +89,8 @@ public class PaneWallControllerTest {
         public void onWallPageChanged(PageKind page) { changes.add(page); }
         public void onWallPageSettled(PageKind page) { settled.add(page); }
         @Override public UseAs useAs() { return useAs; }
-        public boolean canStartWorkspace() { return canStart; }
-        public boolean startWorkspaceShell() {
+        public boolean canStartTerminal() { return canStart; }
+        public boolean startTerminalShell() {
             shellsStarted++;
             if (!windowArrives) return true;
             // The shell's window arrives with it, as the session client adds it.
@@ -158,21 +158,21 @@ public class PaneWallControllerTest {
         return made;
     }
 
-    @Test public void theEditorsSlideToAnEmptyWorkspaceStartsItsFirstShellAndLandsThere() {
+    @Test public void theEditorsSlideToAnEmptyTerminalStartsItsFirstShellAndLandsThere() {
         host.hasWindow = false;
         host.canStart = true;
         controller.refreshPages();
         controller.goHome(false);
         assertEquals(PageKind.HOME, wall.currentPage());
 
-        assertTrue(controller.goToWorkspace(false));
+        assertTrue(controller.goToTerminal(false));
 
         assertEquals(1, host.shellsStarted);
         assertEquals("the wall stands on the new window", PageKind.TERMINAL,
             wall.currentPage());
     }
 
-    @Test public void theHomePressFromTheWorkspaceLandsOnTheDefaultHomePage() {
+    @Test public void theHomePressFromTheTerminalLandsOnTheDefaultHomePage() {
         host.homePage = 2;
         controller.goTo(PageKind.TERMINAL, false);
 
@@ -182,9 +182,9 @@ public class PaneWallControllerTest {
         assertEquals(0, host.homePage);
     }
 
-    @Test public void theEditorsSlideToAWorkspaceWithAWindowStartsNothing() {
+    @Test public void theEditorsSlideToATerminalWithAWindowStartsNothing() {
         controller.goHome(false);
-        assertTrue(controller.goToWorkspace(false));
+        assertTrue(controller.goToTerminal(false));
         assertEquals(0, host.shellsStarted);
         assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
@@ -194,7 +194,7 @@ public class PaneWallControllerTest {
         host.canStart = false;
         controller.refreshPages();
         controller.goHome(false);
-        assertTrue(controller.goToWorkspace(false));
+        assertTrue(controller.goToTerminal(false));
         assertEquals(0, host.shellsStarted);
         assertEquals("the empty Terminal page is a stop all the same", PageKind.TERMINAL,
             wall.currentPage());
@@ -209,7 +209,7 @@ public class PaneWallControllerTest {
         assertEquals(Boolean.FALSE, host.terminalOffScreen);
     }
 
-    @Test public void theRowIsHomeThenTheWorkspace() {
+    @Test public void theRowIsHomeThenTheTerminal() {
         assertEquals(Arrays.asList(PageKind.HOME, PageKind.TERMINAL), controller.cellKinds());
 
         // No window: the Terminal page stays on the row, a stop that starts its first shell.
@@ -235,7 +235,7 @@ public class PaneWallControllerTest {
         assertFalse(controller.goTo("widgets"));
     }
 
-    @Test public void terminalOnlyLandsTheHomePressAndAColdStartOnTheWorkspace() {
+    @Test public void terminalOnlyLandsTheHomePressAndAColdStartOnTheTerminal() {
         host.useAs = UseAs.TERMINAL;
         controller.refreshPages();
         controller.goHome(false);
@@ -246,7 +246,7 @@ public class PaneWallControllerTest {
         assertEquals(PageKind.TERMINAL, controller.currentPage());
     }
 
-    @Test public void terminalOnlyKeepsAnEmptyWorkspaceOnTheRowAndTheHomePressStartsAShell() {
+    @Test public void terminalOnlyKeepsAnEmptyTerminalOnTheRowAndTheHomePressStartsAShell() {
         host.useAs = UseAs.TERMINAL;
         host.hasWindow = false;
         host.canStart = true;
@@ -298,7 +298,7 @@ public class PaneWallControllerTest {
         assertFalse("display names a window, not a page", controller.goTo("display"));
         assertTrue(controller.goTo("right"));
         assertTrue(controller.goTo("right"));
-        assertEquals("nothing is right of the Workspace", PageKind.TERMINAL,
+        assertEquals("nothing is right of the Terminal", PageKind.TERMINAL,
             controller.currentPage());
         assertTrue(controller.goTo("home"));
         assertEquals(PageKind.HOME, controller.currentPage());
@@ -341,19 +341,19 @@ public class PaneWallControllerTest {
         controller.goTo(PageKind.HOME, false);
         host.current = 2;
         controller.homeSeam().begin();
-        assertEquals("the Workspace turns to window 1 before it slides in", 0, host.current);
+        assertEquals("the Terminal turns to window 1 before it slides in", 0, host.current);
         controller.homeSeam().drag(-900f);
         controller.homeSeam().end(-3000f);
         assertEquals(PageKind.TERMINAL, controller.currentPage());
     }
 
-    @Test public void aBorderDragBetweenWindowsStepsInsideTheWorkspace() {
+    @Test public void aBorderDragBetweenWindowsStepsInsideTheTerminal() {
         controller.goTo(PageKind.TERMINAL, false);
         host.current = 1;
         wall.beginPlainDrag();
         wall.dragTo(-600f);
         wall.endDrag(-3000f);
-        assertEquals("the wall stays on the Workspace", PageKind.TERMINAL,
+        assertEquals("the wall stays on the Terminal", PageKind.TERMINAL,
             controller.currentPage());
         assertEquals(1, host.stepBegun);
         assertEquals(1, host.stepped);
@@ -403,19 +403,19 @@ public class PaneWallControllerTest {
         assertEquals(PageKind.HOME, controller.currentPage());
         assertEquals(0, host.homePage);
 
-        controller.landOnColdStart(WallRow.START_IN_WORKSPACE);
+        controller.landOnColdStart(WallRow.START_IN_TERMINAL);
         assertEquals(PageKind.TERMINAL, controller.currentPage());
 
         controller.landOnColdStart("nonsense");
         assertEquals(PageKind.HOME, controller.currentPage());
     }
 
-    @Test public void aWorkspaceStartWaitsForItsWindow() {
+    @Test public void aTerminalStartWaitsForItsWindow() {
         Host empty = new Host();
         empty.hasWindow = false;
         PaneWallController cold = newController(empty);
         empty.canStart = true;
-        cold.landOnColdStart(WallRow.START_IN_WORKSPACE);
+        cold.landOnColdStart(WallRow.START_IN_TERMINAL);
         assertEquals("the wall waits on the Terminal page's card", PageKind.TERMINAL,
             cold.currentPage());
         assertEquals("a cold start is not a landing: no shell of its own", 0, empty.shellsStarted);
@@ -443,12 +443,12 @@ public class PaneWallControllerTest {
 
         controller.goTo(PageKind.TERMINAL, false);
         host.current = 2;
-        Bundle workspace = new Bundle();
-        controller.onSaveInstanceState(workspace);
-        assertEquals(WallRow.HALF_WORKSPACE, workspace.getString(PaneWallController.ARG_HALF));
-        assertEquals(2, workspace.getInt(PaneWallController.ARG_INDEX));
+        Bundle terminal = new Bundle();
+        controller.onSaveInstanceState(terminal);
+        assertEquals(WallRow.HALF_TERMINAL, terminal.getString(PaneWallController.ARG_HALF));
+        assertEquals(2, terminal.getInt(PaneWallController.ARG_INDEX));
         recreated.goTo(PageKind.HOME, false);
-        assertTrue(recreated.restoreInstanceState(workspace));
+        assertTrue(recreated.restoreInstanceState(terminal));
         assertEquals(PageKind.TERMINAL, recreated.currentPage());
     }
 
@@ -564,7 +564,7 @@ public class PaneWallControllerTest {
         layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 906f, 700f, 1360L));
         idle();
         assertEquals(PageKind.HOME, row.currentPage());
-        assertEquals("no step inside the Workspace", 0, moving.stepped);
+        assertEquals("no step inside the Terminal", 0, moving.stepped);
         assertEquals(2, moving.homePage);
     }
 
@@ -591,7 +591,7 @@ public class PaneWallControllerTest {
         layout.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 906f, 700f, 1400L));
         idle();
         assertEquals(PageKind.HOME, row.currentPage());
-        assertEquals("no step inside the Workspace", 0, moving.stepped);
+        assertEquals("no step inside the Terminal", 0, moving.stepped);
         assertEquals("Home arrives on its last page, the one beside the seam", 2,
             moving.homePage);
     }
@@ -668,7 +668,7 @@ public class PaneWallControllerTest {
         assertEquals("the Home pages and the Terminal page's card", 4, controller.rowCount());
     }
 
-    @Test public void aWorkspaceWhoseWindowsAreNotKnownYetIsOnePage() {
+    @Test public void aTerminalWhoseWindowsAreNotKnownYetIsOnePage() {
         host.windows = 0;
         controller.refreshPages();
         assertEquals(4, controller.rowCount());
@@ -774,7 +774,7 @@ public class PaneWallControllerTest {
 
     @Test public void aColdStartOnTheEmptyTerminalPageStartsNone() {
         emptyTerminalBetweenHomeAndDisplay(true);
-        controller.landOnColdStart(WallRow.START_IN_WORKSPACE);
+        controller.landOnColdStart(WallRow.START_IN_TERMINAL);
         assertEquals("a cold start is not a landing", 0, host.shellsStarted);
     }
 
@@ -910,7 +910,7 @@ public class PaneWallControllerTest {
         controller.goHome(false);
         assertEquals(PageKind.DISPLAY, controller.currentPage());
         assertEquals(5, controller.boundDisplayPage());
-        assertEquals("no Workspace shell starts on the way", 0, host.shellsStarted);
+        assertEquals("no Terminal shell starts on the way", 0, host.shellsStarted);
         assertFalse("the wall is never handed to the Terminal page",
             host.changes.contains(PageKind.TERMINAL));
     }
@@ -973,7 +973,7 @@ public class PaneWallControllerTest {
 
     @Test public void theHomePressSlidesTheLiveFrameInNotTheHomePagesCard() {
         // [Home1][Home8][T4]; the frame paged from Home 1 to Home 8 by its own swipe (no picture
-        // of Home 1 kept), then the wall went to the Workspace.
+        // of Home 1 kept), then the wall went to the Terminal.
         host.pages = new WallPages(Arrays.asList(
             new WallPages.Page(1, PageKind.HOME, null, null),
             new WallPages.Page(8, PageKind.HOME, null, null),
@@ -1032,8 +1032,8 @@ public class PaneWallControllerTest {
         assertEquals(1, controller.currentCellIndex());
     }
 
-    @Test public void theHomeKeyFromTheWorkspaceBindsTheFrameToTheHomePageBeforeTheSlide() {
-        // The user swiped Home 1 -> Home 8, then went to the Workspace: the frame stays on Home 8.
+    @Test public void theHomeKeyFromTheTerminalBindsTheFrameToTheHomePageBeforeTheSlide() {
+        // The user swiped Home 1 -> Home 8, then went to the Terminal: the frame stays on Home 8.
         twoHomePagesAndTheTerminal();
         controller.goHome(false);
         host.homePage = 1;
@@ -1078,7 +1078,7 @@ public class PaneWallControllerTest {
         assertEquals(0f, wall.offsetPx(), 0f);
     }
 
-    @Test public void terminalOnlyKeepsTheDisplayPagesBesideTheWorkspace() {
+    @Test public void terminalOnlyKeepsTheDisplayPagesBesideTheTerminal() {
         displayPages();
         host.useAs = UseAs.TERMINAL;
         controller.refreshPages();

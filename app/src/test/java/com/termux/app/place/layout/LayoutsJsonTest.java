@@ -85,7 +85,7 @@ public class LayoutsJsonTest {
         assertEquals(LayoutsJson.shippedDefault(LayoutKind.HOME), layouts.kind(LayoutKind.HOME));
         assertEquals(LayoutsJson.shippedDefault(LayoutKind.TERMINAL_MINIMAL),
             layouts.kind(LayoutKind.TERMINAL_MINIMAL));
-        assertEquals("the Display wears the Workspace's", layouts.kind(LayoutKind.TERMINAL),
+        assertEquals("the Display wears the Terminal's", layouts.kind(LayoutKind.TERMINAL),
             layouts.kind(LayoutKind.DISPLAY));
         assertEquals("taskbar",
             layouts.kind(LayoutKind.TERMINAL).wide().string(LayoutsJson.DOCK_DESIGN));

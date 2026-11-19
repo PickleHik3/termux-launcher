@@ -82,7 +82,7 @@ import java.util.Locale;
  * live, scaled into a frame, on one rule: <b>tap the thing</b>. A tap on a surface in the frame
  * (Home, the status bar, the terminal, the dock, the keyboard) raises its card; the editor bar's
  * palette raises the Appearance card for what has no surface. A plain horizontal swipe slides
- * the frame between Home and the Workspace, and a card writes the half the frame shows. Where a
+ * the frame between Home and the Terminal, and a card writes the half the frame shows. Where a
  * surface sits is its card's Position row (editor-redesign §1: the shrunken Layout mode, its
  * canvas and its drags, is retired); the editor edits the orientation the phone is in, and turning
  * the phone turns the editor with it.
@@ -586,7 +586,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private boolean writeAllOnPage(@NonNull EditorCard card, @NonNull SurfaceProperty property,
                                    int value) {
         // The three main cards write their chips' all-glass cells (Global, Home's, or the
-        // Workspace's two kinds); an element's card never comes here.
+        // Terminal's two kinds); an element's card never comes here.
         if (card.slot != null)
             return false;
         return writeOnPage(card, SurfaceSlot.STATUS, property, value);
@@ -869,7 +869,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             android.util.Log.i(EditorDoor.LOG_TAG, useAs.doorLine(card.key + "-card"));
             card = null;
         }
-        // A card that stands on one screen opens on it: Home's card over a Workspace left on
+        // A card that stands on one screen opens on it: Home's card over a Terminal left on
         // screen would be refused by cardRefusal, leaving the editor with no card.
         place = useAs.editorPlace(EditorDoor.placeFor(card, place, mHost.pageOnScreen()));
         if (mOpen) {
@@ -1048,7 +1048,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (name != null && !name.isEmpty())
             return name;
         return getString(mScreen == PageKind.HOME ? R.string.appearance_half_home
-            : R.string.appearance_half_workspace);
+            : R.string.appearance_half_terminal);
     }
 
     // ---------------------------------------------------------------------- the halves and the bar
@@ -1140,7 +1140,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * An element card's ←: back to the card the user came from, or, opened directly, to the
-     * main card of the page shown (Home on a Home page, Workspace otherwise).
+     * main card of the page shown (Home on a Home page, Terminal otherwise).
      */
     private void goBack() {
         EditorCard previous = mCardTrail.pollLast();
@@ -1222,7 +1222,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * The page the wall slides to when the pill chooses {@code card} over {@code screen}: Home
-     * from the Workspace, the Workspace from Home; null where the card stands on the screen shown
+     * from the Terminal, the Terminal from Home; null where the card stands on the screen shown
      * (Customization stands on both).
      */
     @Nullable
@@ -1665,7 +1665,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         }
         if (!chipsPlain(card) && card.slot != null) {
-            // An element on Home or the Workspace: Reset clears those cells and leaves the rest.
+            // An element on Home or the Terminal: Reset clears those cells and leaves the rest.
             resetOnPage(card);
             requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
                 | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -1673,7 +1673,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         }
         if (card.slot == null) {
-            // Customization, Home and Workspace: their cells (Global, Home's, the Workspace's two
+            // Customization, Home and Terminal: their cells (Global, Home's, the Terminal's two
             // kinds) follow again, then the card's other values below.
             resetOnPage(card);
             prefs.setSurfaceGlassPosition(null, -1);
@@ -2837,7 +2837,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ? null : PageKind.HOME;
     }
 
-    /** The half a row of the card up reads: its write half, or the Workspace's for a shared one. */
+    /** The half a row of the card up reads: its write half, or the Terminal's for a shared one. */
     @NonNull
     private PageKind readScreen(@NonNull Row row) {
         PageKind half = writeScreen(row);
@@ -2997,7 +2997,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     if (property == null)
                         return 0;
                     // The Appearance card's are the shared glass of the half the frame shows.
-                    // The main cards read their chips' cells (Global, Home's, the Workspace's).
+                    // The main cards read their chips' cells (Global, Home's, the Terminal's).
                     int stored = scopedSurfaceValue(prefs, card,
                         card.slot != null ? card.slot : SurfaceSlot.STATUS, property);
                     return row == Row.OPACITY ? AppearanceLooks.opacityPercent(stored)
@@ -3992,7 +3992,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private int frostValue(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card) {
         if (isScreenCard(card)) {
-            // Each screen card holds its own position: Home's and the Workspace's cells differ.
+            // Each screen card holds its own position: Home's and the Terminal's cells differ.
             Integer held = mScreenFrostPosition.get(screenOf(card));
             return GlassControls.readBack(held == null ? -1 : held,
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.BLUR),
@@ -4101,7 +4101,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * The half the Look row of the card up reads and writes, as {@link EditorRows#pageFor} says:
-     * a screen card's own half (Home's, the Workspace's), else the half the frame shows.
+     * a screen card's own half (Home's, the Terminal's), else the half the frame shows.
      */
     @NonNull
     private PageKind lookScreen() {
@@ -4244,7 +4244,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
          * The slider returns to Custom on {@code half}, the half the frame shows: that half's kept
          * values come back, else its part of the saved Custom, else nothing is written. The other
          * half is never written: a saved Custom that names Home's own look once brought it back
-         * on Home from the Workspace's slider (pong, 2026-10-25: Home stood on Solid's numbers
+         * on Home from the Terminal's slider (pong, 2026-10-25: Home stood on Solid's numbers
          * nobody chose there).
          */
         void enter(@NonNull TermuxAppSharedPreferences into, @NonNull PageKind half) {
@@ -4918,7 +4918,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private String describeGroup(int index) {
         EditorCard card = cardOfGroup(index);
         if (card == null)
-            return getString(R.string.appearance_half_workspace);
+            return getString(R.string.appearance_half_terminal);
         return getString(R.string.appearance_target_description, getString(card.titleRes));
     }
 
@@ -5205,7 +5205,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return card == EditorCard.HOME ? PageKind.HOME : PageKind.TERMINAL;
     }
 
-    /** Whether {@code card} is a screen's own (Home's or the Workspace's): the whole frame. */
+    /** Whether {@code card} is a screen's own (Home's or the Terminal's): the whole frame. */
     private static boolean isScreenCard(@Nullable EditorCard card) {
         return card != null && card.isPageCard();
     }
@@ -5883,7 +5883,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The Keyboard, Home, Global or Workspace card's rows ({@link CardBody}), for the card being
+     * The Keyboard, Home, Global or Terminal card's rows ({@link CardBody}), for the card being
      * built. Asked only while the sheet builds a card (through {@link EditorCardSheet.Model#rowView}),
      * so a restatement keeps reading the views it built; a card whose rows changed (the glass edge
      * came or went) gets a body of its own.
@@ -6651,12 +6651,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case SECTION_LOOK:
                 if (card == EditorCard.HOME) return getString(R.string.editor_note_home_only);
                 if (card == EditorCard.TERMINAL)
-                    return getString(R.string.editor_note_workspace_only);
+                    return getString(R.string.editor_note_terminal_only);
                 return null;
             case SECTION_GLASS:
                 if (card == EditorCard.HOME) return getString(R.string.editor_note_home_glass);
                 if (card == EditorCard.TERMINAL)
-                    return getString(R.string.editor_note_workspace_glass);
+                    return getString(R.string.editor_note_terminal_glass);
                 return null;
             case SECTION_GLASS_MATERIAL:
                 return getString(R.string.editor_note_both_screens);

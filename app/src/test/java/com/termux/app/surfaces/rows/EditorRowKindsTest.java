@@ -539,7 +539,7 @@ public class EditorRowKindsTest {
             Fixture f = new Fixture(scale);
             int[] taps = {0};
             ActionRow row = ActionRow.build(f.themed, R.drawable.ic_ms_swap_horiz,
-                "Match Workspace styling", "Copy", v -> taps[0]++);
+                "Match Terminal styling", "Copy", v -> taps[0]++);
             f.layOut(row.root);
             String at = "at " + scale;
             assertTitleIsSixteenSp(f, row.title);

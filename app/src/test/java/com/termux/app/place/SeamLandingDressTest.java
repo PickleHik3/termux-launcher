@@ -25,7 +25,7 @@ public class SeamLandingDressTest {
     public void aStackAlreadyInTheLandedHalfsDressDefersTheReDress() {
         assertTrue(landing(true, PageKind.TERMINAL).stackDressedFor(PageKind.TERMINAL));
         assertTrue(landing(true, PageKind.HOME).stackDressedFor(PageKind.HOME));
-        assertTrue("the display shares the Workspace's half",
+        assertTrue("the display shares the Terminal's half",
             landing(true, PageKind.TERMINAL).stackDressedFor(PageKind.DISPLAY));
     }
 

@@ -46,14 +46,14 @@ public class LaneDressTest {
 
     @Test
     public void aRowsAnswerIsTheSameWhicheverSideIsInFront() {
-        // Home's rest and Workspace's rest, each played as "front" once and "other" once.
+        // Home's rest and Terminal's rest, each played as "front" once and "other" once.
         DockLayout home = front;
-        DockLayout workspace = other;
+        DockLayout terminal = other;
         for (Side row : Side.values()) {
-            DockLayout whenHomeFront = LaneDress.layoutFor(row, Side.HOME, home, workspace);
-            DockLayout whenWorkspaceFront = LaneDress.layoutFor(row, Side.WORKSPACE, workspace, home);
-            assertSame(row.name(), row == Side.HOME ? home : workspace, whenHomeFront);
-            assertSame(row.name(), whenHomeFront, whenWorkspaceFront);
+            DockLayout whenHomeFront = LaneDress.layoutFor(row, Side.HOME, home, terminal);
+            DockLayout whenTerminalFront = LaneDress.layoutFor(row, Side.TERMINAL, terminal, home);
+            assertSame(row.name(), row == Side.HOME ? home : terminal, whenHomeFront);
+            assertSame(row.name(), whenHomeFront, whenTerminalFront);
         }
     }
 }

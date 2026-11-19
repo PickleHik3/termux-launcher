@@ -10,7 +10,7 @@ import java.util.List;
 import com.termux.app.page.PageKind;
 
 /**
- * The window chips (ADR 0009, "The window chips"): one ordered list of the Workspace's row in row
+ * The window chips (ADR 0009, "The window chips"): one ordered list of the Terminal's row in row
  * order, the display window's chip at its place among the terminal windows' like any window's
  * (ADR 0008, amended 2026-10-19), then the Home floats in the order they were opened, each marked
  * minimised or not. Every surface that shows window chips adapts this list ({@link Surface}): the
@@ -31,11 +31,11 @@ public final class WindowChips<W> {
     /** A surface that shows the chips, each counting its own index. */
     public enum Surface {
         /**
-         * The status bar and its window column: the Workspace's own windows only. Floats are
+         * The status bar and its window column: the Terminal's own windows only. Floats are
          * Home's content and have chips of their own there ({@link HomeFloatChips}).
          */
         BAR,
-        /** The Wall strip's tiles: every chip; a window's tap slides the Workspace in. */
+        /** The Wall strip's tiles: every chip; a window's tap slides the Terminal in. */
         WALL_STRIP
     }
 
@@ -76,7 +76,7 @@ public final class WindowChips<W> {
             SHOW_WINDOW,
             /**
              * Bring the float {@link #window} back on its Home page, focused: the wall travels
-             * Home first when the chip was tapped in the Workspace ({@link #travel}).
+             * Home first when the chip was tapped in the Terminal ({@link #travel}).
              */
             RESTORE_FLOAT,
             /** Close the row's window at {@link #row}: the display window's stops the display. */
@@ -91,8 +91,8 @@ public final class WindowChips<W> {
         /** The float, for a float's meaning; null otherwise. */
         @Nullable public final W window;
         /**
-         * Whether the wall travels first: to the Workspace for a window's chip tapped on Home,
-         * Home for a float's chip tapped in the Workspace.
+         * Whether the wall travels first: to the Terminal for a window's chip tapped on Home,
+         * Home for a float's chip tapped in the Terminal.
          */
         public final boolean travel;
 
@@ -195,7 +195,7 @@ public final class WindowChips<W> {
 
     /**
      * Whether a window's chip tapped on the bar from {@code place} first travels the wall to the
-     * Workspace's window row: from every place but the row itself (Home pages, Assistant, the
+     * Terminal's window row: from every place but the row itself (Home pages, Assistant, the
      * display), however far. Only a terminal window in front switches in place.
      */
     public static boolean barWindowTravels(@Nullable PageKind place) {
@@ -212,9 +212,9 @@ public final class WindowChips<W> {
 
     /**
      * What a tap on {@code surface}'s chip at {@code index} means: a window's brings it in front,
-     * the Workspace sliding in when the chip is on Home's dock or on the bar seen from any place but the window row; a
+     * the Terminal sliding in when the chip is on Home's dock or on the bar seen from any place but the window row; a
      * float's brings it back on its Home page, the wall travelling Home first when the chip was
-     * tapped in the Workspace.
+     * tapped in the Terminal.
      */
     @NonNull
     public Meaning<W> tap(@NonNull Surface surface, int index) {

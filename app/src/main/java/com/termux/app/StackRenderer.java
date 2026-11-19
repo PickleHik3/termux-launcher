@@ -64,7 +64,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             return 0;
         }
         /**
-         * Whether Home's side stands in front, else the Workspace's: the kind the wall committed
+         * Whether Home's side stands in front, else the Terminal's: the kind the wall committed
          * to ({@code Pages#committedKind}), which is the arrival from the commit on, so the landing
          * frame's rest is the side the crossing arrived at.
          */
@@ -81,13 +81,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         default boolean othersOwnStack() {
             return false;
         }
-        /** Whether the Workspace's rest a crossing arrives at has its keyboard up. */
+        /** Whether the Terminal's rest a crossing arrives at has its keyboard up. */
         default boolean arrivalKeyboardUp() {
             return false;
         }
         /**
          * Home's share of the stack on this frame ({@link StackScene#homeShare}): 1 at Home's
-         * rest, 0 at the Workspace's, the material blend across a crossing. What only Home's rest
+         * rest, 0 at the Terminal's, the material blend across a crossing. What only Home's rest
          * draws on the shared slab (the Peek card) blends by it.
          */
         default void homeShare(float share) {
@@ -138,10 +138,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * once: a frame allocates nothing.
      */
     private final StackEnd mEndHome = new StackEnd(PageRef.HOME);
-    private final StackEnd mEndWorkspace = new StackEnd(PageRef.TERMINAL);
+    private final StackEnd mEndTerminal = new StackEnd(PageRef.TERMINAL);
     private boolean mHasEnds;
     /**
-     * The glass host's laid-out top in the stack at each side's rest (Home, the Workspace), NaN
+     * The glass host's laid-out top in the stack at each side's rest (Home, the Terminal), NaN
      * until that side has been seen at rest. The host is laid out for the front side's rest, so a
      * crossing moves it from where the leaving rest has it toward where the arriving rest does by
      * the material share ({@link #hostShiftPx}): the slab never slides, its top blends, and the
@@ -149,14 +149,14 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      */
     private final float[] mRestHostTop = {Float.NaN, Float.NaN};
     /**
-     * Each side's host top at its own rest as the pass works it out at rest (Home, the Workspace),
+     * Each side's host top at its own rest as the pass works it out at rest (Home, the Terminal),
      * NaN before it has; the arriving end of a crossing is aimed at this, so a side never rested
      * on since the start, or last rested on with the keyboard the other way, lands where it rests.
      */
     private final float[] mPredictedHostTop = {Float.NaN, Float.NaN};
-    /** The Workspace's rest top with its keyboard down and up; which it lands at is the crossing's. */
-    private float mWorkspaceTopKeyboardDown = Float.NaN;
-    private float mWorkspaceTopKeyboardUp = Float.NaN;
+    /** The Terminal's rest top with its keyboard down and up; which it lands at is the crossing's. */
+    private float mTerminalTopKeyboardDown = Float.NaN;
+    private float mTerminalTopKeyboardUp = Float.NaN;
     /** The arriving rest's top the last crossing aimed at, held after its landing. */
     private float mHeldTop = Float.NaN;
     /** How far the host is moved off its layout on this frame; 0 at rest. */
@@ -323,13 +323,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         if (mHasEnds && mFromHome == fromHome && mToHome == toHome && mEndsProgress == progress
             && mApplied) return;
         if (!mHasEnds || mToHome != toHome) {
-            // Which of the Workspace's rests the crossing lands at, asked once as it begins:
+            // Which of the Terminal's rests the crossing lands at, asked once as it begins:
             // whether its keyboard is up there is the page's answer, known only now.
             boolean up = !toHome && mViews.arrivalKeyboardUp();
-            mPredictedHostTop[1] = up ? mWorkspaceTopKeyboardUp : mWorkspaceTopKeyboardDown;
+            mPredictedHostTop[1] = up ? mTerminalTopKeyboardUp : mTerminalTopKeyboardDown;
             if (com.termux.app.chrome.MotionLog.enabled)
                 com.termux.app.chrome.MotionLog.log("host-aim", "toHome=" + toHome + " kbUp=" + up
-                    + " down=" + mWorkspaceTopKeyboardDown + " up=" + mWorkspaceTopKeyboardUp
+                    + " down=" + mTerminalTopKeyboardDown + " up=" + mTerminalTopKeyboardUp
                     + " home=" + mPredictedHostTop[0]); // DIAG(host-shift)
         }
         mHasEnds = true;
@@ -340,12 +340,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     }
 
     /** Each side's host top at its own rest, written by the pass at rest ({@link #mPredictedHostTop}). */
-    public void setRestHostTops(int homePx, int workspaceKeyboardDownPx,
-                                int workspaceKeyboardUpPx) {
+    public void setRestHostTops(int homePx, int terminalKeyboardDownPx,
+                                int terminalKeyboardUpPx) {
         mPredictedHostTop[0] = homePx;
-        mWorkspaceTopKeyboardDown = workspaceKeyboardDownPx;
-        mWorkspaceTopKeyboardUp = workspaceKeyboardUpPx;
-        if (!mHasEnds) mPredictedHostTop[1] = workspaceKeyboardDownPx;
+        mTerminalTopKeyboardDown = terminalKeyboardDownPx;
+        mTerminalTopKeyboardUp = terminalKeyboardUpPx;
+        if (!mHasEnds) mPredictedHostTop[1] = terminalKeyboardDownPx;
     }
 
     /**
@@ -354,10 +354,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * that side's rest ({@link StackScene#bodyCutPx}). Written at rest, once the rests are known;
      * a crossing blends the two and its landing finds the arriving one in place.
      */
-    public void setRooms(int homePx, int workspacePx) {
-        if (mApplied && mEndHome.roomPx == homePx && mEndWorkspace.roomPx == workspacePx) return;
+    public void setRooms(int homePx, int terminalPx) {
+        if (mApplied && mEndHome.roomPx == homePx && mEndTerminal.roomPx == terminalPx) return;
         mEndHome.roomPx = homePx;
-        mEndWorkspace.roomPx = workspacePx;
+        mEndTerminal.roomPx = terminalPx;
         requestApply();
     }
 
@@ -467,10 +467,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         StackScene.withKeyboardRest(mMotion, mHasEnds ? 0f
             : StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx()), mEffective);
         if (mHasEnds) {
-            StackScene.at(mFromHome ? mEndHome : mEndWorkspace, mToHome ? mEndHome : mEndWorkspace,
+            StackScene.at(mFromHome ? mEndHome : mEndTerminal, mToHome ? mEndHome : mEndTerminal,
                 mEndsProgress, mEffective, mGeometry, mFrame);
         } else {
-            StackEnd front = mViews.frontIsHome() ? mEndHome : mEndWorkspace;
+            StackEnd front = mViews.frontIsHome() ? mEndHome : mEndTerminal;
             StackScene.at(front, front, 0f, mEffective, mGeometry, mFrame);
         }
         mPlankTarget = plankTarget();
@@ -566,7 +566,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             if (host.getParent() == stack) {
                 int lane = stack.getLane(host);
                 if (lane != StackLanes.STACK) {
-                    want = mFrame.sideTx[(lane == StackLanes.HOME ? Side.HOME : Side.WORKSPACE)
+                    want = mFrame.sideTx[(lane == StackLanes.HOME ? Side.HOME : Side.TERMINAL)
                         .ordinal()];
                 }
             }

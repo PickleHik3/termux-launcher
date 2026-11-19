@@ -46,12 +46,12 @@ public class LiveNeighbourPolicyTest {
     }
 
     @Test
-    public void neverShownAwayFromTheWorkspace() {
+    public void neverShownAwayFromTheTerminal() {
         assertFalse(LiveNeighbourPolicy.shown(false, true, true, true, true));
     }
 
     @Test
-    public void neighboursStandOneWidthBesideTheWorkspacePage() {
+    public void neighboursStandOneWidthBesideTheTerminalPage() {
         assertEquals(-1080f, LiveNeighbourPolicy.slidePx(-1, 0f, 1080), 0f);
         assertEquals(1080f, LiveNeighbourPolicy.slidePx(1, 0f, 1080), 0f);
         // A drag 400 px to the left brings the next window 400 px onto the screen.
@@ -64,7 +64,7 @@ public class LiveNeighbourPolicyTest {
     public void promotedWindowStandsWhereTheDragLeftIt() {
         // Released 400 px into a step right: the wall settles and the arriving window is nudged
         // in from fromPx = offset + width (PaneWallLayout.stepInside). Where it stood as the next
-        // neighbour is where it now stands as the Workspace page, and the window that left stands
+        // neighbour is where it now stands as the Terminal page, and the window that left stands
         // as the previous neighbour exactly where it was.
         int width = 1080;
         float offset = -400f;

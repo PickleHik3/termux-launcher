@@ -23,9 +23,9 @@ import org.robolectric.annotation.Config;
 import android.app.Application;
 
 /**
- * Across the seam between Home and the Workspace the pages move by the page transition, as Home's
+ * Across the seam between Home and the Terminal the pages move by the page transition, as Home's
  * own pages do (ADR 0015 §4, amendment 2026-11-04, reversing 2026-11-02's flat slide): under Slide
- * Home's page leaves by the finger's distance with the Workspace's beside it, flat; under any
+ * Home's page leaves by the finger's distance with the Terminal's beside it, flat; under any
  * other effect they are turned, scaled or faded on a layer for those frames. The wall still says
  * it is moving across the seam, which the chrome eases on.
  */
@@ -109,7 +109,7 @@ public class SeamPageTurnTest {
     }
 
     @Test
-    public void theWorkspaceTurnsTowardHomeUnderCarousel() {
+    public void theTerminalTurnsTowardHomeUnderCarousel() {
         build(HomePageTransition.CAROUSEL);
         wall.goTo(PageKind.TERMINAL, false);
         wall.beginDrag();
@@ -119,7 +119,7 @@ public class SeamPageTurnTest {
     }
 
     @Test
-    public void betweenTheWorkspacesOwnPagesTheEffectStillTurnsThem() {
+    public void betweenTheTerminalsOwnPagesTheEffectStillTurnsThem() {
         build(HomePageTransition.DEPTH);
         wall.goTo(PageKind.TERMINAL, false);
         wall.beginDrag();

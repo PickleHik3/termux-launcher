@@ -53,7 +53,7 @@ import java.util.List;
 
 /**
  * The Wall strip's first row (spec "Wall strip"): a large clock with the date, then the
- * Workspace's terminals as tiles and a {@code +} tile, laid out by {@link WallStripRowPolicy}.
+ * Terminal's terminals as tiles and a {@code +} tile, laid out by {@link WallStripRowPolicy}.
  *
  * <p>The clock is the unfolded status bar's own, a {@link TerminalClockWidget} in its full form
  * in the face the user picked for the bar ({@link #setClockFace}), with the bar's typography,

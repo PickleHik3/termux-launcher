@@ -927,7 +927,7 @@ public final class InAppKeyboardPaletteFactory {
 
     /**
      * The last few glass palettes built, by their {@link GlassInputs}: a swipe between Home and
-     * Workspace alternates the faces under the keyboard, so more than one entry is kept. Palettes
+     * Terminal alternates the faces under the keyboard, so more than one entry is kept. Palettes
      * hold no pixels; a handful of them is a few hundred bytes. Main thread only.
      */
     static final class GlassMemo {

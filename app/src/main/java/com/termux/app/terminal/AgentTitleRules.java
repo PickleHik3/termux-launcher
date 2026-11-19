@@ -74,7 +74,7 @@ public final class AgentTitleRules {
             "(?:^| )[\\u280B\\u2819\\u2839\\u2838\\u283C\\u2834\\u2826\\u2827\\u2807\\u280F](?: |$)"));
         rules.add(regex(AgentStatus.AGENT_CODEX, AgentStatus.State.IDLE, "\\S"));
 
-        // --- Amp: its resting title names the workspace between dashes.
+        // --- Amp: its resting title names the Terminal between dashes.
         rules.add(contains(AgentStatus.AGENT_AMP, AgentStatus.State.BLOCKED,
             "Plugin confirmation needed"));
         rules.add(regex(AgentStatus.AGENT_AMP, AgentStatus.State.WORKING, "^[\\u2800-\\u28FF] "));

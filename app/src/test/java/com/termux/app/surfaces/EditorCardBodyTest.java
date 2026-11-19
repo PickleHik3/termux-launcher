@@ -39,7 +39,7 @@ import java.util.List;
 import android.app.Application;
 
 /**
- * The Keyboard, Home, Global and Workspace cards drawn with the redesigned rows (editor-redesign
+ * The Keyboard, Home, Global and Terminal cards drawn with the redesigned rows (editor-redesign
  * §2) on pong's width, at the default text size and at Large (1.3): every row of the card is
  * there, every control stands inside the 16dp gutter with a 48dp target and no word cut, the
  * sections carry their notes, and the keyboard's opacity link stands between its two strips and
@@ -392,7 +392,7 @@ public class EditorCardBodyTest {
         @Nullable @Override public CharSequence summary(@NonNull Row row) {
             switch (row) {
                 case SECTION_LOOK: return mContext.getString(mCard == EditorCard.HOME
-                    ? R.string.editor_note_home_only : R.string.editor_note_workspace_only);
+                    ? R.string.editor_note_home_only : R.string.editor_note_terminal_only);
                 case SECTION_GLASS: return mCard == EditorCard.HOME
                     ? mContext.getString(R.string.editor_note_home_glass) : null;
                 case SECTION_GLASS_MATERIAL:

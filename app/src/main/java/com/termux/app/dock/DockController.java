@@ -251,7 +251,7 @@ public final class DockController {
         boolean updateAppLauncherBarHeight();
         /** The dock and geometry pass; whether the dock moved. */
         boolean setTerminalToolbarHeight(boolean requestTerminalResize);
-        /** The Wall strip's row takes the Workspace's windows. */
+        /** The Wall strip's row takes the Terminal's windows. */
         void syncWallStripFeed();
         /** {@code viewId}'s bottom margin set; whether it moved. */
         boolean updateViewBottomMargin(int viewId, int marginBottom);
@@ -608,7 +608,7 @@ public final class DockController {
     // ------------------------------------------------------------------ Lens beads
     //
     // Lens beads (DockSurfaceSpec.LENS_BEADS), on whichever half's dock wears the design (#93;
-    // under the Workspace's extra keys or a keyboard sharing the glass the row keeps the slab,
+    // under the Terminal's extra keys or a keyboard sharing the glass the row keeps the slab,
     // LensBeadGeometry.rowWearsBeads): the dock's one glass host draws a round
     // bead under each icon instead of its slab. The host clips everything in it to the beads
     // (DockSurfaceHostLayout), the dock's one glass program draws every bead's rim, shelf and
@@ -789,7 +789,7 @@ public final class DockController {
 
     /**
      * Watches the host and the row for layout while the dock's style draws beads, and lets go
-     * of them otherwise, so the Glass tray and the Workspace's dock carry no listener of this.
+     * of them otherwise, so the Glass tray and the Terminal's dock carry no listener of this.
      */
     public void syncDockBeadsListeners() {
         boolean beads = dockBeadsWanted();

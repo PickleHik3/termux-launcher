@@ -215,7 +215,7 @@ public final class EditorRows {
         /** The dock's Monochrome icons, a switch row of its own (was a Show/hide tile). */
         DOCK_MONOCHROME(Kind.SWITCH, R.string.editor_dock_option_monochrome,
             R.drawable.ic_ed_monochrome),
-        // The Keyboard, Home, Global and Workspace cards' own rows (editor-redesign §2), drawn by
+        // The Keyboard, Home, Global and Terminal cards' own rows (editor-redesign §2), drawn by
         // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
         // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
         /** The air under the keyboard's last key row (the layout's chin), in dp. */

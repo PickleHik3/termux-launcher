@@ -110,7 +110,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          */
         int sheetsBandPx();
 
-        /** The half of the wall the drawer opens over: Home's or the Workspace's look. */
+        /** The half of the wall the drawer opens over: Home's or the Terminal's look. */
         int restingPage();
 
         /** The one dock-geometry snapshot the seed rect, radius and inset all come off. */
@@ -139,7 +139,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         default void setHomeContentAlpha(float alpha) {}
 
         /**
-         * The gap the terminal pane leaves above the keyboard on the Workspace, in px: the plane
+         * The gap the terminal pane leaves above the keyboard on the Terminal, in px: the plane
          * ends this far above the built-in keyboard the search raised. Negative keeps the gap
          * measured at the pull. See {@link AppDrawerKeyboardSeparation}.
          */
@@ -2196,7 +2196,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /**
      * The air between the plane and the keyboard. The built-in keyboard's is the terminal pane's
-     * gap, so the drawer stands off the keyboard as the pane does on the Workspace; the system
+     * gap, so the drawer stands off the keyboard as the pane does on the Terminal; the system
      * keyboard keeps its own.
      */
     private float revealGapPx() {

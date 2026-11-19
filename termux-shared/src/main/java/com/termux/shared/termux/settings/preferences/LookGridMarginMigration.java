@@ -10,8 +10,8 @@ import com.termux.shared.termux.settings.preferences.LookGrid.Property;
  * The one-way step that makes Margin one number for every page (developer, 2026-11-08), run once
  * per install behind {@link #KEY_MIGRATED}, after the other look-grid steps.
  *
- * <p>Margin was held per kind of page (Home, Workspace) and could be set apart on a page, so a
- * swipe between Home and the Workspace laid the chrome out at a second Margin mid-slide. Now only
+ * <p>Margin was held per kind of page (Home, Terminal) and could be set apart on a page, so a
+ * swipe between Home and the Terminal laid the chrome out at a second Margin mid-slide. Now only
  * Global holds it: the Margin Home pages wore becomes Global, and every kind and page Margin cell is
  * dropped. An install whose pages all wore Global's Margin sees nothing change.</p>
  */
@@ -23,7 +23,7 @@ public final class LookGridMarginMigration {
 
     /**
      * Writes Home's Margin into Global and drops every other Margin cell, once. Returns whether the
-     * Margin any page wore changed (the Workspace's, a page's own, or Global's).
+     * Margin any page wore changed (the Terminal's, a page's own, or Global's).
      */
     public static boolean run(@NonNull LookGrid.Store store) {
         if (store.getBoolean(KEY_MIGRATED, false)) return false;

@@ -345,12 +345,12 @@
     <string name="settings_use_as_custom">Custom</string>
     <string name="settings_start_in_title">Start in</string>
     <string name="settings_start_in_home">Home</string>
-    <string name="settings_start_in_workspace">Terminal</string>
+    <string name="settings_start_in_terminal">Terminal</string>
     <string name="settings_start_in_display">Display</string>
     <string name="settings_start_in_assistant">Assistant</string>
     <string-array name="settings_start_in_entries" translatable="false">
         <item>@string/settings_start_in_home</item>
-        <item>@string/settings_start_in_workspace</item>
+        <item>@string/settings_start_in_terminal</item>
         <item>@string/settings_start_in_display</item>
     </string-array>
     <string-array name="settings_start_in_values" translatable="false">
@@ -2345,7 +2345,7 @@
     <string name="palette_category_window">Window</string>
     <string name="palette_category_pane">Pane</string>
     <string name="settings_keyboard_form_title">Keyboard type</string>
-    <string name="settings_keyboard_form_summary">Docked, floating or split, on Home and in the Workspace.</string>
+    <string name="settings_keyboard_form_summary">Docked, floating or split, on Home and in the Terminal.</string>
     <string name="settings_keyboard_floating_width_title">Floating keyboard width</string>
     <string name="settings_keyboard_floating_height_title">Floating keyboard height</string>
     <string name="settings_keyboard_split_gap_title">Split keyboard gap</string>
@@ -2387,8 +2387,8 @@
     <string name="palette_category_windows">Windows</string>
     <string name="palette_home_open_terminal">Open terminal here</string>
     <string name="palette_home_open_terminal_hint">A terminal floating over this page</string>
-    <string name="palette_home_go_to_workspace">Go to Workspace</string>
-    <string name="palette_home_go_to_workspace_hint">Slide over to your windows</string>
+    <string name="palette_home_go_to_terminal">Go to Terminal</string>
+    <string name="palette_home_go_to_terminal_hint">Slide over to your windows</string>
     <string name="palette_home_new_window">New window</string>
     <!-- The dock's Search field and the Wall strip's tiles. -->
     <string name="dock_prompt_line_hint">Search apps, commands, settings</string>
@@ -2621,7 +2621,7 @@
     <string name="tool_desc_appearance_surface_editor">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
     <string name="tool_desc_app_open_settings">Open the launcher settings screen.</string>
     <string name="tool_app_open_help">Help</string>
-    <string name="tool_desc_app_open_help">Open help for where you are: Home or the Workspace.</string>
+    <string name="tool_desc_app_open_help">Open help for where you are: Home or the Terminal.</string>
     <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
     <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
     <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
@@ -3006,7 +3006,7 @@
     <string name="help_topic_az_purpose">The A–Z index picks an app by its first letter.</string>
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>
     <string name="help_topic_az_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
-    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows whether you are on Home or in the Workspace.</string>
+    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows whether you are on Home or in the Terminal.</string>
     <string name="help_topic_status_action">Swipe down from the page\'s top border, or drag the bar down, to expand it.</string>
     <string name="help_topic_status_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_stats_purpose">The status widgets show how the phone is doing.</string>
@@ -3052,7 +3052,7 @@
     <string name="help_show_gesture">Show gesture</string>
     <string name="help_try_it">Try it</string>
     <string name="help_settings_title">Help</string>
-    <string name="help_settings_summary">Open help for where you are: Home or the Workspace.</string>
+    <string name="help_settings_summary">Open help for where you are: Home or the Terminal.</string>
     <string name="help_topic_stats_title">Status widgets</string>
     <string name="help_topic_corners_title">Pane corners</string>
     <string name="help_topic_keys_title">Extra keys</string>
@@ -3261,7 +3261,7 @@
     <string name="help_topic_pinned_reveal">A card appears when a notification matches one of your rules.</string>
     <string name="help_topic_pinned_aliases">pinned notification, essential notifications, notification card, card, mute, dismiss, rule</string>
     <string name="help_topic_kswipe_title">Keyboard swipe</string>
-    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on Home and in the Workspace.</string>
+    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on Home and in the Terminal.</string>
     <string name="help_topic_kswipe_action">Swipe up from the bottom border to open the keyboard, and down to put it away.</string>
     <string name="help_topic_kswipe_step1">It turns a keyboard that was switched off back on.</string>
     <string name="help_topic_kswipe_step2">The small pill on the border marks where to start.</string>
@@ -3431,7 +3431,7 @@
     <string name="help_practice_start">Start</string>
     <string name="help_lesson_find_help_title">Find help</string>
     <string name="help_lesson_find_help_summary">Open help from a page\'s corner tab.</string>
-    <string name="help_lesson_border_drag_title">Reach the Workspace</string>
+    <string name="help_lesson_border_drag_title">Reach the Terminal</string>
     <string name="help_lesson_border_drag_summary">Swipe left on an empty spot of Home to reach your first window, then swipe right along its bottom border to come back.</string>
     <string name="help_lesson_status_swipe_title">Open the status bar</string>
     <string name="help_lesson_status_swipe_summary">Swipe down from the top border to open the status bar.</string>
@@ -3566,7 +3566,7 @@
     <string name="setup_home_choice">Home screen</string>
     <string name="setup_home_choice_summary">Apps, widgets and the terminal.</string>
     <string name="setup_terminal_choice">Terminal only</string>
-    <string name="setup_terminal_choice_summary">Starts in the workspace. No Home page.</string>
+    <string name="setup_terminal_choice_summary">Starts in the Terminal. No Home page.</string>
     <string name="setup_review_title">Review setup</string>
     <string name="setup_review_note">You can change these settings later.</string>
     <string name="setup_group_use">Use</string>
@@ -3575,13 +3575,12 @@
     <string name="setup_value_home_screen">Home screen</string>
     <string name="setup_value_terminal">Terminal</string>
     <string name="setup_value_unchanged">Unchanged</string>
-    <string name="setup_value_workspace">Workspace</string>
     <string name="setup_section_panes">Multiplexer</string>
     <string name="setup_section_desktop">Linux apps</string>
     <string name="setup_section_ai">On-device AI</string>
     <string name="setup_section_power">Power</string>
     <string name="setup_panes_title">Panes</string>
-    <string name="setup_panes_description">Several terminals in one workspace.</string>
+    <string name="setup_panes_description">Several terminals on one page.</string>
     <string name="setup_panes_multiplexer">Multiplexer</string>
     <string name="setup_panes_status">Status strip shown</string>
     <string name="setup_panes_status_help">The strip above the panes with the clock and status.</string>

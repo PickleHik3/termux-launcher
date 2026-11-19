@@ -47,7 +47,7 @@ public final class LookGlassSpec {
             clamp(tintPercent, 0, 100), cornerRadiusDp(storedCornersDp));
     }
 
-    /** The Workspace's Look as stored now; the shipped Global when there is no store to read. */
+    /** The Terminal's Look as stored now; the shipped Global when there is no store to read. */
     public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences) {
         return read(preferences, TermuxAppSharedPreferences.terminalPageId());
     }

@@ -25,7 +25,7 @@ public class PlaceKeyboardTest {
         assertTrue("minimal mode leaves Home's memory alone",
             PlaceKeyboard.keyboardOnEnter(HOME, true, true, false));
         assertTrue(PlaceKeyboard.keyboardOnEnter(HOME, false, false, true));
-        assertTrue("minimal mode is the Workspace's",
+        assertTrue("minimal mode is the Terminal's",
             PlaceKeyboard.keyboardOnEnter(HOME, false, true, true));
         // A window keeps its memory, and minimal mode still puts it away.
         assertTrue(PlaceKeyboard.keyboardOnEnter(WINDOW, true, false, false));

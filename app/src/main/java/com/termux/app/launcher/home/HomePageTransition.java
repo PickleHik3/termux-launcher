@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 
 /**
  * How a page moves while a swipe turns it (Settings › General › Page transition): Home's pages,
- * and the wall's — the seam between Home and the Workspace and the Workspace's windows
+ * and the wall's — the seam between Home and the Terminal and the Terminal's windows
  * ({@code WallPageTransition}). Both pages travel together: the swipe carries the page on
  * screen away while the page the finger is heading for comes in from the side in step with it,
  * each posed by the same effect at its own place, and on release the pair settles on the target

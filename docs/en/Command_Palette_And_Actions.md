@@ -48,10 +48,10 @@ Besides the actions, the palette has three sections of its own:
 ### On Home
 
 On Home the palette leads with a **Home** section: **Open terminal here** (a
-[Home float](Panes_Windows_And_Sessions.md#home-floats) on this page), **Go to Workspace**, **New
+[Home float](Panes_Windows_And_Sessions.md#home-floats) on this page), **Go to Terminal**, **New
 window**, **Minimise all floats**, **Restore floats**, **Add widget**, **Wallpaper**,
 **Appearance** and **Settings**. Apps, **Linux apps** and contacts follow, and **Windows** lists the
-current session's windows and Home floats by name: a window takes you to it in the Workspace, a float
+current session's windows and Home floats by name: a window takes you to it in the Terminal, a float
 goes to its Home page and comes back to the front. Actions that work on a terminal pane (its text,
 splits, clipboard and mouse mode, and moving between windows) are left out on Home, and
 **Enter** runs the top match.
@@ -67,7 +67,7 @@ Every action below can be bound in `~/.termux/termux-launcher-bindings.conf`, pu
 `tool:<id>` (with arguments as `tool:<id>:name=value`), or put on a keyboard swipe as
 `tool:<id>` (no arguments). The title is what the palette shows. Shortcuts marked "on" or "off"
 apply only with **Multiplexer** on or off; see [Keyboard shortcuts](Keyboard_Shortcuts.md).
-Pane, window, session-browser and workspace actions need **Multiplexer** on, except
+Pane, window, session-browser and terminal actions need **Multiplexer** on, except
 **Kill focused pane** and **Rename pane**, which need only a running session.
 
 ### Pane
@@ -114,7 +114,7 @@ takes. `window.close` on the display window stops the display, as its chip's × 
 actions and `window.rename` refuse it, since it has no panes.
 `window.next` and `window.previous` step through the row, the display window included.
 `window.move`, `window.move_left` and `window.move_right` move the current window along the
-Workspace's row and keep it current; dragging a window's chip in the window bar does the same.
+Terminal's row and keep it current; dragging a window's chip in the window bar does the same.
 `pane.consume` pulls the neighbouring window of the row (on the right unless `from=left`) into the
 current window as panes beside the focused one, and `pane.expel` pushes the focused pane out into
 a new window right after the current one (before it with `to=left`), which becomes current. Neither

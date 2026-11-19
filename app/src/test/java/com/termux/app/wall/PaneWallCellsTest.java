@@ -42,8 +42,8 @@ public class PaneWallCellsTest {
             @Override public int count() { return innerCount(PageKind.TERMINAL); }
             @Override public int index() { return innerIndex(PageKind.TERMINAL); }
             @Override public void show(int index) { showInnerPage(PageKind.TERMINAL, index); }
-            @Override public boolean canStartShell() { return canStartWorkspace(); }
-            @Override public boolean startShell() { return startWorkspaceShell(); }
+            @Override public boolean canStartShell() { return canStartTerminal(); }
+            @Override public boolean startShell() { return startTerminalShell(); }
         };
         final WallLanding landing = new WallLanding() {
             @Override public void committed(PageKind page) { onWallPageChanged(page); }
@@ -71,8 +71,8 @@ public class PaneWallCellsTest {
         int callsWhileConstructing;
 
         @Override public boolean reducedMotion() { return reduced; }
-        public boolean canStartWorkspace() { return canStart; }
-        public boolean startWorkspaceShell() {
+        public boolean canStartTerminal() { return canStart; }
+        public boolean startTerminalShell() {
             shellsStarted++;
             hasWindow = true;
             windows = 1;
@@ -187,7 +187,7 @@ public class PaneWallCellsTest {
 
     @Test public void aColdStartOnTheTerminalLandsThere() {
         start(homeTerminalDisplay());
-        controller.landOnColdStart(WallRow.START_IN_WORKSPACE);
+        controller.landOnColdStart(WallRow.START_IN_TERMINAL);
         assertEquals(2, on());
         assertTrue(wall.isLive(2));
     }
@@ -429,7 +429,7 @@ public class PaneWallCellsTest {
         // jump to Home 1 slides the Terminal page away beside it, over Home 3.
         start(homeTerminal().add(PageKind.HOME, 1, null).pages);
         assertEquals(Arrays.asList(1, 3, 2), cellIds());
-        controller.landOnColdStart(WallRow.START_IN_WORKSPACE);
+        controller.landOnColdStart(WallRow.START_IN_TERMINAL);
         assertEquals(2, on());
         assertEquals(controller.cellKinds(), controller.slideCellKinds());
         wall.setReducedMotion(false);

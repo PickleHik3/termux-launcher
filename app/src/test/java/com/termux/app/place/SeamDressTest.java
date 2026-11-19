@@ -47,13 +47,13 @@ public class SeamDressTest {
     // ---- the stack's dress follows its rows
 
     @Test
-    public void homesRowsRisingFromAWorkspaceWithoutADockWearHomesDressFromTheFirstFrame() {
-        // pong: the Workspace has no dock, Home's rows slide in over the whole way.
+    public void homesRowsRisingFromATerminalWithoutADockWearHomesDressFromTheFirstFrame() {
+        // pong: the Terminal has no dock, Home's rows slide in over the whole way.
         assertSame(TERMINAL, SeamDress.stackPage(TERMINAL, HOME, DockPlan.SLIDE_IN, 0f));
         for (float fraction = 0.01f; fraction <= 1f; fraction += 0.01f) {
             float progress = SeamTravel.otherHalfProgress(terminalToHome(fraction), TERMINAL);
             float reveal = SeamTravel.dockReveal(DockPlan.SLIDE_IN, progress);
-            // Wherever any of the rows shows, they wear Home's dress, never the Workspace's.
+            // Wherever any of the rows shows, they wear Home's dress, never the Terminal's.
             if (reveal > 0f) {
                 assertSame("fraction " + fraction, HOME,
                     SeamDress.stackPage(TERMINAL, HOME, DockPlan.SLIDE_IN, progress));
@@ -83,8 +83,8 @@ public class SeamDressTest {
     // ---- each surface wears the half it belongs to
 
     @Test
-    public void theStatusBarWearsTheWorkspacesDressThroughAnySlideAcrossTheSeam() {
-        // From Home toward a window: the bar arrives with its page in the Workspace's dress.
+    public void theStatusBarWearsTheTerminalsDressThroughAnySlideAcrossTheSeam() {
+        // From Home toward a window: the bar arrives with its page in the Terminal's dress.
         assertFalse(SeamDress.wearsHome(Surface.STATUS, HOME, HOME, true));
         assertFalse(SeamDress.wearsHome(Surface.STATUS, TERMINAL, HOME, true));
         // At rest it is the committed half's, as everything is.

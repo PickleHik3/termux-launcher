@@ -23,7 +23,7 @@ final class EditorCardReset {
     /** The glass rows' stored values back as they ship, then the card's other store keys. */
     static void resetStore(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card,
                            int pageId) {
-        // Customization, Home and Workspace reset their grid cells in the controller.
+        // Customization, Home and Terminal reset their grid cells in the controller.
         if (card.slot != null) {
             prefs.resetSurfaceToLook(card.slot, pageId);
             prefs.setSurfaceGlassPosition(card.slot, -1);

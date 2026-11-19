@@ -13,7 +13,7 @@ import com.termux.app.window.FrameGuards;
  * may move rows to their new edges ({@link SideRows#landingMayMoveRows}). Each row's visibility
  * and parent are owned by the writer {@code rows} on the pipeline's guards; the landing's chrome
  * commit is that writer's write, and with the motion log on a change it makes on a Home and
- * Workspace landing counts {@code landing-wrote rows ...}. The status bar is not a row: standing
+ * Terminal landing counts {@code landing-wrote rows ...}. The status bar is not a row: standing
  * among the bottom rows it keeps the landing of the shared stack.
  */
 public final class RowsLandingGuard {

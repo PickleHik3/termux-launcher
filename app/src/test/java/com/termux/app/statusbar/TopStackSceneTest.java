@@ -18,7 +18,7 @@ public class TopStackSceneTest {
 
     private static final int W = 1000;
     private static final float[] PS = {0f, 0.1f, 0.5f, 0.9f, 1f};
-    private static final Side[] SIDES = {Side.HOME, Side.WORKSPACE};
+    private static final Side[] SIDES = {Side.HOME, Side.TERMINAL};
     private static final PlaceLayout.Edge[] EDGES = {PlaceLayout.Edge.TOP, PlaceLayout.Edge.BOTTOM};
     private static final boolean[] BOOLS = {false, true};
     private static final int PALE = 0xFFF0F0F0;
@@ -51,7 +51,7 @@ public class TopStackSceneTest {
             TopStackScene.rest(end(Side.HOME, edge, 1, true, PALE, 1), W, f);
             assertEquals(W, f.chipsTx, 0f);
             assertEquals(0f, f.slabTx, 0f);
-            TopStackScene.rest(end(Side.WORKSPACE, edge, 1, true, PALE, 1), W, f);
+            TopStackScene.rest(end(Side.TERMINAL, edge, 1, true, PALE, 1), W, f);
             assertEquals(0f, f.chipsTx, 0f);
             assertTrue(f.chipsShown);
         }
@@ -62,9 +62,9 @@ public class TopStackSceneTest {
         TopStackScene.Frame f = new TopStackScene.Frame();
         TopStackScene.Frame r = new TopStackScene.Frame();
         TopStackScene.End from = end(Side.HOME, PlaceLayout.Edge.TOP, 7, true, PALE, 1);
-        TopStackScene.End to = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 7, true, DARK, 2);
+        TopStackScene.End to = end(Side.TERMINAL, PlaceLayout.Edge.TOP, 7, true, DARK, 2);
         TopStackScene.at(from, to, 0.2f, 0.6f, W, Float.NaN, false, f);
-        assertEquals(StackScene.sideSlide(Side.WORKSPACE, Side.HOME, Side.WORKSPACE, 0.6f, W),
+        assertEquals(StackScene.sideSlide(Side.TERMINAL, Side.HOME, Side.TERMINAL, 0.6f, W),
             f.chipsTx, 0f);
         assertEquals(com.termux.app.place.SeamFade.share(0.2f), f.lookShare, 0f);
         TopStackScene.at(from, to, 0f, 0f, W, Float.NaN, false, f);
@@ -75,9 +75,9 @@ public class TopStackSceneTest {
         assertSame(r, f);
         // a riding bar's chips slide at the fraction too
         TopStackScene.End a = end(Side.HOME, PlaceLayout.Edge.TOP, 1, true, PALE, 1);
-        TopStackScene.End b = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 2, true, DARK, 2);
+        TopStackScene.End b = end(Side.TERMINAL, PlaceLayout.Edge.TOP, 2, true, DARK, 2);
         TopStackScene.at(a, b, 0.2f, 0.6f, W, 100f, true, f);
-        assertEquals(StackScene.sideSlide(Side.WORKSPACE, Side.HOME, Side.WORKSPACE, 0.6f, W) - 100f,
+        assertEquals(StackScene.sideSlide(Side.TERMINAL, Side.HOME, Side.TERMINAL, 0.6f, W) - 100f,
             f.chipsTx, 0f);
     }
 
@@ -98,7 +98,7 @@ public class TopStackSceneTest {
                         assertTrue(f.shared);
                         assertEquals(0f, f.slabTx, 0f);
                         assertEquals(0f, f.stripTx, 0f);
-                        assertEquals(StackScene.sideSlide(Side.WORKSPACE, a, b, p, W), f.chipsTx, 0f);
+                        assertEquals(StackScene.sideSlide(Side.TERMINAL, a, b, p, W), f.chipsTx, 0f);
                         assertTrue(f.lookShare >= prevShare);
                         prevShare = f.lookShare;
                         if (p > 0f && p < 1f) {
@@ -141,7 +141,7 @@ public class TopStackSceneTest {
     @Test
     public void inksEndsExactAndLookShareFollowsSeamFade() {
         TopStackScene.End a = end(Side.HOME, PlaceLayout.Edge.TOP, 1, true, PALE, 1);
-        TopStackScene.End b = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 1, true, DARK, 2);
+        TopStackScene.End b = end(Side.TERMINAL, PlaceLayout.Edge.TOP, 1, true, DARK, 2);
         TopStackScene.Frame f = new TopStackScene.Frame();
         TopStackScene.at(a, b, 0f, W, Float.NaN, false, f);
         assertEquals(PALE, f.inks[0]);
@@ -163,14 +163,14 @@ public class TopStackSceneTest {
         TopStackScene.Frame f = new TopStackScene.Frame();
         for (PlaceLayout.Edge edge : EDGES) {
             TopStackScene.End docked = end(Side.HOME, edge, 1, true, PALE, 1);
-            TopStackScene.End floating = end(Side.WORKSPACE, edge, 2, false, DARK, 2);
+            TopStackScene.End floating = end(Side.TERMINAL, edge, 2, false, DARK, 2);
             assertFalse(TopStackScene.shared(docked, floating));
             for (float p : new float[]{0.1f, 0.5f, 0.9f}) {
                 TopStackScene.at(docked, floating, p, W, 300f, true, f);
                 assertFalse(f.shared);
                 assertEquals(300f, f.slabTx, 0f);
                 assertEquals(300f, f.stripTx, 0f);
-                assertEquals(StackScene.sideSlide(Side.WORKSPACE, Side.HOME, Side.WORKSPACE, p, W) - 300f,
+                assertEquals(StackScene.sideSlide(Side.TERMINAL, Side.HOME, Side.TERMINAL, p, W) - 300f,
                     f.chipsTx, 0f);
                 assertEquals(2, f.wornLookId());
                 assertEquals(0f, f.lookShare, 0f);
@@ -190,7 +190,7 @@ public class TopStackSceneTest {
     @Test
     public void barOnlyOneEndShowsRides() {
         TopStackScene.End a = end(Side.HOME, PlaceLayout.Edge.TOP, 1, true, PALE, 1);
-        TopStackScene.End b = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 1, true, DARK, 2);
+        TopStackScene.End b = end(Side.TERMINAL, PlaceLayout.Edge.TOP, 1, true, DARK, 2);
         b.barShown = false;
         assertFalse(TopStackScene.shared(a, b));
         TopStackScene.Frame f = new TopStackScene.Frame();
@@ -204,7 +204,7 @@ public class TopStackSceneTest {
         TopStackScene.Frame r = new TopStackScene.Frame();
         for (PlaceLayout.Edge edge : EDGES) {
             TopStackScene.End a = end(Side.HOME, edge, 1, true, PALE, 1);
-            TopStackScene.End b = end(Side.WORKSPACE, PlaceLayout.Edge.LEFT, 2, true, DARK, 2);
+            TopStackScene.End b = end(Side.TERMINAL, PlaceLayout.Edge.LEFT, 2, true, DARK, 2);
             assertFalse(TopStackScene.shared(a, b));
             for (float p : PS) {
                 TopStackScene.at(a, b, p, W, Float.NaN, false, f);
@@ -241,12 +241,12 @@ public class TopStackSceneTest {
     }
 
     @Test
-    public void homeChipsRestInPlaceOnHomeAndAWallLeftInTheWorkspace() {
+    public void homeChipsRestInPlaceOnHomeAndAWallLeftInTheTerminal() {
         TopStackScene.Frame f = new TopStackScene.Frame();
         for (PlaceLayout.Edge edge : EDGES) {
             TopStackScene.rest(end(Side.HOME, edge, 1, true, PALE, 1), W, f);
             assertEquals(0f, f.homeChipsTx, 0f);
-            TopStackScene.rest(end(Side.WORKSPACE, edge, 1, true, PALE, 1), W, f);
+            TopStackScene.rest(end(Side.TERMINAL, edge, 1, true, PALE, 1), W, f);
             assertEquals(-W, f.homeChipsTx, 0f);
         }
     }
@@ -264,15 +264,15 @@ public class TopStackSceneTest {
             assertEquals(W, f.chipsTx - f.homeChipsTx, 0f);
         }
         TopStackScene.End home = end(Side.HOME, PlaceLayout.Edge.TOP, 7, true, PALE, 1);
-        TopStackScene.End work = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 7, true, DARK, 2);
+        TopStackScene.End work = end(Side.TERMINAL, PlaceLayout.Edge.TOP, 7, true, DARK, 2);
         TopStackScene.at(home, work, 1f, 1f, W, Float.NaN, false, f);
         TopStackScene.rest(work, W, r);
         assertEquals(r.homeChipsTx, f.homeChipsTx, 0f);
         // a riding bar carries them, so they are drawn back by the ride
         TopStackScene.End docked = end(Side.HOME, PlaceLayout.Edge.TOP, 1, true, PALE, 1);
-        TopStackScene.End floating = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 2, true, DARK, 2);
+        TopStackScene.End floating = end(Side.TERMINAL, PlaceLayout.Edge.TOP, 2, true, DARK, 2);
         TopStackScene.at(docked, floating, 0.4f, 0.4f, W, 250f, true, f);
-        assertEquals(StackScene.sideSlide(Side.HOME, Side.HOME, Side.WORKSPACE, 0.4f, W) - 250f,
+        assertEquals(StackScene.sideSlide(Side.HOME, Side.HOME, Side.TERMINAL, 0.4f, W) - 250f,
             f.homeChipsTx, 0f);
     }
 }

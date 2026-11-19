@@ -7,10 +7,10 @@ This page covers what it shows, how to open it, and its settings under **Setting
 
 ## What it shows
 
-- **The clock.** The same on Home and in the Workspace, with no marks for the place you are on.
-- **The row of windows.** The same on Home and in the Workspace: the session number, then a window
-  chip for each Workspace window, the display window and each Home float, in that order, then `+`
-  for a new window. On Home, `+` opens a new Workspace window and slides you to it.
+- **The clock.** The same on Home and in the Terminal, with no marks for the place you are on.
+- **The row of windows.** The same on Home and in the Terminal: the session number, then a window
+  chip for each Terminal window, the display window and each Home float, in that order, then `+`
+  for a new window. On Home, `+` opens a new Terminal window and slides you to it.
 - **Readings.** CPU, memory and weather, as switched on in the Status bar card, on Home and in the Terminal.
 - **Mouse mode.** A small mouse at the end of the readings means mouse mode is on.
 
@@ -22,7 +22,7 @@ The bar has a slim form and an open form with a larger clock and room for cards.
   of the border. Let go past about a third of the way, or flick, and it finishes on its own.
 - Or drag across the bar itself.
 
-The top-border swipe works on Home and in the Workspace, minimal mode included, while the bar stands along the
+The top-border swipe works on Home and in the Terminal, minimal mode included, while the bar stands along the
 top. A swipe that starts in Android's own strip at the very top of the screen still pulls the
 notification shade. A sideways swipe along the window chips scrolls the chips and never changes
 place.

@@ -132,7 +132,7 @@ public final class LauncherAppLauncher {
      * by the activity that owns the wall, with the same lifecycle rules as {@link #linuxAppRunner}.
      */
     public interface EntryRunner {
-        /** A tap: Terminal goes to the Workspace, Display opens the display window. */
+        /** A tap: Terminal goes to the Terminal, Display opens the display window. */
         boolean open(@NonNull String entryId);
         /** The entry's long-press action: Terminal opens a new window. */
         boolean openAlternate(@NonNull String entryId);

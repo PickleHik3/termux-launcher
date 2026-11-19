@@ -328,13 +328,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     // ---- Style, Corners and Margin per half of the wall (ADR 0008) ----
     //
-    // Linked across the wall since #84: both halves wear the Workspace's values, the keys every
+    // Linked across the wall since #84: both halves wear the Terminal's values, the keys every
     // surface always read, a Home layout of its own included, so crossing between the halves
     // never changes the chrome's shape. A half is still named so callers that ask for one keep
     // reading and writing the right value; Home's old keys beside them (TERMUX_APP.KEY_HOME_*)
     // are dropped by the layout store's migration and never read.
 
-    /** The Style a half wears: the Workspace's {@link #getLayoutStyle()} on either half. */
+    /** The Style a half wears: the Terminal's {@link #getLayoutStyle()} on either half. */
     @NonNull
     public LayoutStyle getLayoutStyle(boolean home) {
         return getLayoutStyle();
@@ -357,7 +357,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /**
      * The Margin the surfaces wear, in dp as stored: Global's on every page, Home's and the
-     * Workspace's alike (one Margin since 2026-11-08, {@link LookGridMarginMigration}). The half
+     * Terminal's alike (one Margin since 2026-11-08, {@link LookGridMarginMigration}). The half
      * is still named so callers that ask for one keep compiling against one answer.
      */
     public int getLayoutMarginDp(boolean home) {
@@ -1753,8 +1753,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     @NonNull
     private static String normalizeLauncherStartIn(@Nullable String value) {
-        if (TERMUX_APP.LAUNCHER_START_IN_WORKSPACE.equals(value))
-            return TERMUX_APP.LAUNCHER_START_IN_WORKSPACE;
+        if (TERMUX_APP.LAUNCHER_START_IN_TERMINAL.equals(value))
+            return TERMUX_APP.LAUNCHER_START_IN_TERMINAL;
         if (TERMUX_APP.LAUNCHER_START_IN_DISPLAY.equals(value))
             return TERMUX_APP.LAUNCHER_START_IN_DISPLAY;
         return TERMUX_APP.LAUNCHER_START_IN_HOME;
@@ -3478,7 +3478,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
-     * The key of the Workspace's (the Terminal page's) own value of a surface's property, or null
+     * The key of the Terminal's (the Terminal page's) own value of a surface's property, or null
      * for any other half, a value a page may not hold, or when no Terminal page is known.
      */
     @Nullable
@@ -3617,7 +3617,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /**
      * Whether a surface's own value for a property is held per half. The canvas is the terminal's,
-     * which only the Workspace has, so it holds one value and reads the Workspace's Global.
+     * which only the Terminal has, so it holds one value and reads the Terminal's Global.
      */
     public static boolean isPerPage(@NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
         return slot != SurfaceSlot.CANVAS && isPerPageProperty(property)
@@ -3742,7 +3742,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
 
 
-    /** True while this surface still follows the Workspace's Global for this property. */
+    /** True while this surface still follows the Terminal's Global for this property. */
     public boolean isSurfaceInheriting(SurfaceSlot slot, SurfaceProperty property) {
         return isSurfaceInheriting(slot, property, sTerminalPageId);
     }
@@ -3808,7 +3808,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             setSurfaceInheriting(slot, property, pageId, true);
     }
 
-    /** The Workspace's Global value for a property, before any surface's clamp is applied to it. */
+    /** The Terminal's Global value for a property, before any surface's clamp is applied to it. */
     public int getSurfaceGlobalValue(SurfaceProperty property) {
         return getSurfaceGlobalValue(property, sTerminalPageId);
     }

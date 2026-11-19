@@ -418,7 +418,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
                 getContext().getString(R.string.pane_controls_add_page)),
             PaneControlsView.Action.glyph(ACTION_APPEARANCE, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.pane_controls_wallpaper_style)),
-            // No minimal button: minimal mode is the Workspace's, and a Home page never enters it.
+            // No minimal button: minimal mode is the Terminal's, and a Home page never enters it.
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
     }

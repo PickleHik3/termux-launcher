@@ -54,9 +54,9 @@
     <!-- Layout rows: the card a row opens, where it is not the element's own. -->
     <string name="editor_elements_opens_card">%1$s card</string>
     <string name="editor_note_home_only">Home only</string>
-    <string name="editor_note_workspace_only">Workspace only</string>
+    <string name="editor_note_terminal_only">Terminal only</string>
     <string name="editor_note_home_glass">Widgets, status bar, dock</string>
-    <string name="editor_note_workspace_glass">Status bar, dock, keyboard, terminal</string>
+    <string name="editor_note_terminal_glass">Status bar, dock, keyboard, terminal</string>
     <string name="editor_note_both_screens">Both screens</string>
     <string name="editor_hint_glass_material">Edge and Depth show on phones that draw the glass edge.</string>
 

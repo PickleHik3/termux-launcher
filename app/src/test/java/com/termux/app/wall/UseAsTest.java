@@ -53,28 +53,28 @@ public class UseAsTest {
         assertSame(PageKind.TERMINAL, terminal.homePage());
     }
 
-    @Test public void terminalOnlyRowIsTheWorkspaceAloneWindowOrNot() {
+    @Test public void terminalOnlyRowIsTheTerminalAloneWindowOrNot() {
         assertEquals(Collections.singletonList(PageKind.TERMINAL), UseAs.TERMINAL.rowPages());
         assertEquals(PaneWallPolicy.rowPages(true), UseAs.HOME.rowPages());
     }
 
-    @Test public void terminalOnlyReadsStartInHomeAsTheWorkspace() {
-        assertEquals(WallRow.START_IN_WORKSPACE, UseAs.TERMINAL.startIn(WallRow.START_IN_HOME));
-        assertEquals(WallRow.START_IN_WORKSPACE, UseAs.TERMINAL.startIn(null));
-        assertEquals(WallRow.START_IN_WORKSPACE, UseAs.TERMINAL.startIn(WallRow.START_IN_WORKSPACE));
+    @Test public void terminalOnlyReadsStartInHomeAsTheTerminal() {
+        assertEquals(WallRow.START_IN_TERMINAL, UseAs.TERMINAL.startIn(WallRow.START_IN_HOME));
+        assertEquals(WallRow.START_IN_TERMINAL, UseAs.TERMINAL.startIn(null));
+        assertEquals(WallRow.START_IN_TERMINAL, UseAs.TERMINAL.startIn(WallRow.START_IN_TERMINAL));
         assertEquals(WallRow.START_IN_DISPLAY, UseAs.TERMINAL.startIn(WallRow.START_IN_DISPLAY));
         assertEquals(WallRow.START_IN_HOME, UseAs.HOME.startIn(WallRow.START_IN_HOME));
         assertEquals(WallRow.START_IN_HOME, UseAs.HOME.startIn("nonsense"));
     }
 
     @Test public void startInDropsHomeOnlyUnderTerminalOnly() {
-        List<String> values = Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_WORKSPACE,
+        List<String> values = Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_TERMINAL,
             WallRow.START_IN_DISPLAY);
         assertEquals(Arrays.asList(0, 1, 2), UseAs.HOME.startInChoices(values));
         assertEquals("Terminal · Display", Arrays.asList(1, 2),
             UseAs.TERMINAL.startInChoices(values));
         assertEquals(Collections.singletonList(1), UseAs.TERMINAL.startInChoices(
-            Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_WORKSPACE)));
+            Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_TERMINAL)));
     }
 
     @Test public void terminalOnlyHasNoHomeCard() {

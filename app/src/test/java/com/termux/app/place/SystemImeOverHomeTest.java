@@ -46,7 +46,7 @@ public class SystemImeOverHomeTest {
     }
 
     @Test
-    public void theWorkspaceStillGivesTheSystemKeyboardItsRoom() {
+    public void theTerminalStillGivesTheSystemKeyboardItsRoom() {
         int up = contentBottom(false, IME);
         assertEquals("the terminal ends on the dock, above the keyboard",
             WINDOW_BOTTOM - IME - STACK_MARGIN - DOCK, up);

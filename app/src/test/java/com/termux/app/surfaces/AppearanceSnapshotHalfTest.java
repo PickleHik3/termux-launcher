@@ -26,7 +26,7 @@ import java.util.Map;
 /**
  * The editor's Undo and dirty state across the two halves of the wall (ADR 0013): a card writes
  * the half the frame shows, so what the editor puts back and what it calls unsaved has to see
- * Home's own values and the Workspace's, and which half followed the shared value at open.
+ * Home's own values and the Terminal's, and which half followed the shared value at open.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -48,14 +48,14 @@ public class AppearanceSnapshotHalfTest {
     @Test
     public void aHomeOnlyWriteIsUnsaved() {
         String atOpen = AppearanceSnapshot.signatureOf(preferences);
-        int workspace = preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
+        int terminal = preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.terminalPageId());
 
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL,
             23);
 
-        // Home's detach is the wall's: the Workspace's dock wears the same number.
-        assertEquals("the Workspace's dock follows the wall", 23,
+        // Home's detach is the wall's: the Terminal's dock wears the same number.
+        assertEquals("the Terminal's dock follows the wall", 23,
             preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
                 TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(23, preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
@@ -84,12 +84,12 @@ public class AppearanceSnapshotHalfTest {
     private boolean hasHalfKeys() {
         for (Map.Entry<String, ?> entry : store.getAll().entrySet()) {
             String key = entry.getKey();
-            // The Workspace's own grid values are the Terminal kind's cells (ADR 0020 §2).
+            // The Terminal's own grid values are the Terminal kind's cells (ADR 0020 §2).
             if (key.endsWith("@" + com.termux.shared.termux.settings.preferences.LookGrid.KIND_PREFIX
                     + com.termux.shared.termux.settings.preferences.LookGrid.Kind.TERMINAL.key)
                     && com.termux.shared.termux.settings.preferences.LookGrid.parse(key) != null)
                 return true;
-            // The halves are pages: the Workspace's own values are the Terminal page's overrides.
+            // The halves are pages: the Terminal's own values are the Terminal page's overrides.
             String page = "@" + com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID;
             if (key.endsWith(page)) {
                 // A grid cell on the Terminal page is one of its own values.

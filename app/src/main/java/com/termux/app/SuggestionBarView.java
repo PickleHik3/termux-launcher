@@ -374,7 +374,7 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private FolderEntryDragState activeFolderEntryDragState;
     /** Identifies a folder-member drag in windows the drag's local state does not reach. */
     static final String FOLDER_ENTRY_CLIP_LABEL = "folder-entry";
-    /** The half of the wall whose dock glass the menus wear; the Workspace until the host says. */
+    /** The half of the wall whose dock glass the menus wear; the Terminal until the host says. */
     @NonNull private java.util.function.Supplier<Integer> lookPageSupplier = () -> com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId();
 
     public void setLookPageSupplier(@NonNull java.util.function.Supplier<Integer> supplier) {

@@ -39,11 +39,11 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * The pane wall: fixed, full-size places side by side — Home and the Workspace — of which
- * exactly one is on screen at rest. It wraps the terminal's pane host as the Workspace's page, so
+ * The pane wall: fixed, full-size places side by side — Home and the Terminal — of which
+ * exactly one is on screen at rest. It wraps the terminal's pane host as the Terminal's page, so
  * the terminal never resizes for the wall and {@code TerminalPaneController} never learns the wall
  * exists. The display's frame is the Display page's view ({@link PageKind#DISPLAY}, ADR 0015
- * A3b), a page of its own beside the others; the Workspace's page is the pane host alone.
+ * A3b), a page of its own beside the others; the Terminal's page is the pane host alone.
  *
  * <p>Not a {@code ViewPager2}: its pages must never be recycled (a recreated terminal or X
  * surface is a lost session), and its centre page runs its own
@@ -200,7 +200,7 @@ public final class PaneWallLayout extends ViewGroup
         default void onPagePoseChanged() { }
         /**
          * Whether {@code page} holds another page of its own kind {@code steps} away on the row:
-         * the next or previous window inside the Workspace's view ({@link WallRow}). A border
+         * the next or previous window inside the Terminal's view ({@link WallRow}). A border
          * drag toward it moves the wall as toward any page, and its commit is a step inside
          * {@code page} ({@link #onInnerStep}) rather than a slide to another view.
          */
@@ -326,7 +326,7 @@ public final class PaneWallLayout extends ViewGroup
     @Nullable private View mNudgeLeaving;
     /** A swap and its nudge are being set up: their positions are applied once, together. */
     private boolean mDeferPositions;
-    /** The Workspace's pane host: its page's view while a terminal window is in front. */
+    /** The Terminal's pane host: its page's view while a terminal window is in front. */
     @Nullable private View mTerminalHost;
     private boolean mReducedMotion;
     private boolean mGesturesEnabled = true;
@@ -512,7 +512,7 @@ public final class PaneWallLayout extends ViewGroup
     private final List<View> mPosedPages = new ArrayList<>(3);
     /** Whether a page or window waits on the side the wall is moving toward, this frame. */
     private boolean mTurning;
-    /** Whether the wall is moving across the seam between Home and the Workspace, this frame. */
+    /** Whether the wall is moving across the seam between Home and the Terminal, this frame. */
     private boolean mSeamSlide;
     /**
      * Two children whose drawing is swapped while they share the screen, so the page the effect
@@ -540,7 +540,7 @@ public final class PaneWallLayout extends ViewGroup
 
     /**
      * Settings' Page transition: how the pages turn as the wall slides between Home and the
-     * Workspace and between windows. Read as the launcher comes to the front.
+     * Terminal and between windows. Read as the launcher comes to the front.
      */
     public void setPageTransition(@NonNull HomePageTransition effect) {
         if (effect == mTransition) return;
@@ -571,7 +571,7 @@ public final class PaneWallLayout extends ViewGroup
     }
 
     /**
-     * A window is about to be pictured as it leaves ({@code DepartureCard}): the Workspace's page
+     * A window is about to be pictured as it leaves ({@code DepartureCard}): the Terminal's page
      * drops its pose for the capture and stands flat at
      * {@link WallPageTransition#departureCaptureSlidePx}, so the card can be posed from there and
      * begin where the page stood. Nothing changes under the slide. The next placement poses the
@@ -606,11 +606,11 @@ public final class PaneWallLayout extends ViewGroup
     /**
      * The live neighbour windows' views, previous then next ({@link LiveNeighbourPolicy}):
      * containers the pane controller fills with the adjacent windows' pane trees. The wall adds
-     * them as its children, lays them out as the Workspace page and stands them one width either
-     * side of it while it moves; at rest they are {@code GONE} but still laid out at the Workspace
+     * them as its children, lays them out as the Terminal page and stands them one width either
+     * side of it while it moves; at rest they are {@code GONE} but still laid out at the Terminal
      * page's size, so a resize reaches their shells at rest. An empty container is never shown.
      *
-     * @param prepare run as a drag takes the wall from the Workspace, before anything moves, so
+     * @param prepare run as a drag takes the wall from the Terminal, before anything moves, so
      *                the containers hold the windows beside the one in front now
      */
     public void setInnerNeighbourViews(@Nullable View previous, @Nullable View next,
@@ -625,7 +625,7 @@ public final class PaneWallLayout extends ViewGroup
             if (view == null) continue;
             if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
             view.setVisibility(GONE);
-            // Right after the Workspace page, so it draws as the page beside it would.
+            // Right after the Terminal page, so it draws as the page beside it would.
             int at = mTerminalHost == null ? -1 : indexOfChild(mTerminalHost);
             addView(view, at < 0 ? getChildCount() : at + 1);
         }
@@ -645,9 +645,9 @@ public final class PaneWallLayout extends ViewGroup
 
     /**
      * Whether this pass measures and lays out {@code child}: a page on screen, and a live
-     * neighbour beside the Workspace page even while it is off screen (INVISIBLE) or put away
-     * (GONE, once filled and while the Workspace page is there). A neighbour is so sized for the
-     * Workspace page's rest: a keyboard or chrome change resizes its shells then, and a crossing
+     * neighbour beside the Terminal page even while it is off screen (INVISIBLE) or put away
+     * (GONE, once filled and while the Terminal page is there). A neighbour is so sized for the
+     * Terminal page's rest: a keyboard or chrome change resizes its shells then, and a crossing
      * lays it out at the size it already has.
      */
     private boolean isLaidOutNow(@NonNull View child) {
@@ -664,15 +664,15 @@ public final class PaneWallLayout extends ViewGroup
     }
 
     /**
-     * Stands each live neighbour one width beside the Workspace page while the wall moves it,
+     * Stands each live neighbour one width beside the Terminal page while the wall moves it,
      * as the page beside it would stand, and puts it away ({@code GONE}) otherwise.
      */
     private void placeInnerNeighbours(int width) {
-        boolean workspaceInFront = mCurrent == PageKind.TERMINAL && mTerminalHost != null
+        boolean terminalInFront = mCurrent == PageKind.TERMINAL && mTerminalHost != null
             && mPageViews.get(PageKind.TERMINAL) == mTerminalHost;
-        boolean shown = LiveNeighbourPolicy.shown(workspaceInFront, mDragging, mSliding,
+        boolean shown = LiveNeighbourPolicy.shown(terminalInFront, mDragging, mSliding,
             mNudgePage == PageKind.TERMINAL && mNudgeCarriesNeighbours, mInnerStepping);
-        float workspaceSlide = workspaceInFront ? slideOf(mTerminalHost)[0] : 0f;
+        float terminalSlide = terminalInFront ? slideOf(mTerminalHost)[0] : 0f;
         for (int slot = 0; slot < 2; slot++) {
             View view = mInnerNeighbours[slot];
             if (view == null) continue;
@@ -685,7 +685,7 @@ public final class PaneWallLayout extends ViewGroup
                 }
                 continue;
             }
-            float x = LiveNeighbourPolicy.slidePx(side, workspaceSlide, width);
+            float x = LiveNeighbourPolicy.slidePx(side, terminalSlide, width);
             poseOnWall(view, x, width);
             view.setAlpha(mPose.alpha);
             // No layout is asked for coming on screen: an INVISIBLE neighbour is laid out with
@@ -873,7 +873,7 @@ public final class PaneWallLayout extends ViewGroup
 
     /**
      * Whether a wall {@code offsetPx} from its rest is moving across the seam: toward a page, not
-     * a window inside this one, of the other half (Home on one side, the Workspace or the
+     * a window inside this one, of the other half (Home on one side, the Terminal or the
      * display on the other).
      */
     boolean seamAhead(float offsetPx) {
@@ -1310,7 +1310,7 @@ public final class PaneWallLayout extends ViewGroup
     }
 
     /**
-     * Whether the terminal's pane host has pixels on screen: the Workspace's page while a terminal
+     * Whether the terminal's pane host has pixels on screen: the Terminal's page while a terminal
      * window is in front, or the window a nudge is carrying off.
      */
     public boolean isTerminalHostOnScreen() {
@@ -1352,7 +1352,7 @@ public final class PaneWallLayout extends ViewGroup
 
     /**
      * {@link #nudgePage}, carrying {@code leaving} off beside the page coming in when it is the
-     * Workspace's other view. False when no nudge could start; {@code onEnd} has run then.
+     * Terminal's other view. False when no nudge could start; {@code onEnd} has run then.
      */
     private boolean startNudge(@NonNull PageKind page, float fromPx, long durationMs,
                                @Nullable android.view.animation.Interpolator interpolator,
@@ -3427,7 +3427,7 @@ public final class PaneWallLayout extends ViewGroup
         // A turn has a page to turn to: a window arriving, or a place or window on the side the
         // wall is moving toward. A pull into either end of the row only slides. The slide asks
         // nothing, so its frames cost what they always did.
-        // Across the seam between Home and the Workspace the pages turn by the page transition
+        // Across the seam between Home and the Terminal the pages turn by the page transition
         // too, as Home's pages do (ADR 0015 §4, amendment 2026-11-04); the chrome stays flat
         // and eases on the wall's offset, which the seam flag tells it.
         mSeamSlide = seamAhead(mOffsetPx);
@@ -3541,9 +3541,9 @@ public final class PaneWallLayout extends ViewGroup
     }
 
     /**
-     * The Workspace's view while the row has no window: off the row, but kept laid out and
+     * The Terminal's view while the row has no window: off the row, but kept laid out and
      * VISIBLE at zero alpha as it is off screen anywhere else, so the terminal keeps its size and
-     * its display lists for the window that brings the Workspace back.
+     * its display lists for the window that brings the Terminal back.
      */
     private void parkTerminalPage(@NonNull View view, int width) {
         parkFlat(view, 2f * Math.max(1, width));
@@ -3744,18 +3744,18 @@ public final class PaneWallLayout extends ViewGroup
     }
 
     /**
-     * How far a Workspace page starts below the wall's top (PageTopInsets.workspaceTopInsetPx):
+     * How far a Terminal page starts below the wall's top (PageTopInsets.terminalTopInsetPx):
      * the status bar's band while the canvas reaches up under the bar, so the terminal and the
      * display window keep their place on screen whichever way the canvas stands; a Home page
      * starts at {@link #mHomeTopInsetPx}. 0 while the canvas stands below the bar.
      */
-    private int mWorkspaceTopInsetPx;
+    private int mTerminalTopInsetPx;
 
-    /** See {@link #mWorkspaceTopInsetPx}. */
-    public void setWorkspaceTopInsetPx(int px) {
+    /** See {@link #mTerminalTopInsetPx}. */
+    public void setTerminalTopInsetPx(int px) {
         int inset = Math.max(0, px);
-        if (inset == mWorkspaceTopInsetPx) return;
-        mWorkspaceTopInsetPx = inset;
+        if (inset == mTerminalTopInsetPx) return;
+        mTerminalTopInsetPx = inset;
         requestLayout();
     }
 
@@ -3797,7 +3797,7 @@ public final class PaneWallLayout extends ViewGroup
 
     /**
      * {@code kind}'s bottom inset as last set, read through its room ({@link PageKind#roomKind}:
-     * a display window's is the Workspace's); 0 for a page never given one.
+     * a display window's is the Terminal's); 0 for a page never given one.
      */
     public int pageBottomInsetPx(@NonNull PageKind kind) {
         return mPageBottomInsetPx[kind.roomKind().ordinal()];
@@ -3805,7 +3805,7 @@ public final class PaneWallLayout extends ViewGroup
 
     /** How far {@code child} ends above the wall's bottom, beyond its frame. */
     private int pageBottomInsetPx(@NonNull View child) {
-        // A live neighbour stands at the size the Workspace page does, so its shells never resize.
+        // A live neighbour stands at the size the Terminal page does, so its shells never resize.
         PageKind kind = pageKindOf(child);
         return kind == null ? 0 : pageBottomInsetPx(kind);
     }
@@ -3823,7 +3823,7 @@ public final class PaneWallLayout extends ViewGroup
 
     /** Where {@code child} starts below the wall's top, beyond its frame (PageTopInsets). */
     private int pageTopInsetPx(@NonNull View child) {
-        return PageTopInset.pageTopInsetPx(pageKindOf(child), mWorkspaceTopInsetPx,
+        return PageTopInset.pageTopInsetPx(pageKindOf(child), mTerminalTopInsetPx,
             mHomeTopInsetPx);
     }
 

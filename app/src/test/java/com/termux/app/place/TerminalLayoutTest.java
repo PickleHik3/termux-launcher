@@ -25,12 +25,12 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * Terminal, Display and Assistant pages are one Workspace (ADR 0025): one layout document, one
+ * Terminal, Display and Assistant pages are one Terminal (ADR 0025): one layout document, one
  * dress, whichever page asks or writes; each place keeps only its remembered keyboard.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
-public class WorkspaceLayoutTest {
+public class TerminalLayoutTest {
 
     private Application app;
     private PlaceLayoutStore store;
@@ -46,7 +46,7 @@ public class WorkspaceLayoutTest {
     }
 
     @Test
-    public void theRetiredScopesRouteToTheWorkspacesDocument() {
+    public void theRetiredScopesRouteToTheTerminalsDocument() {
         for (String scope : new String[]{"", "display.", "assistant."}) {
             LayoutDocumentPrefs.Route route =
                 LayoutDocumentPrefs.route("layout." + scope + "portrait.bar_order");
@@ -77,11 +77,11 @@ public class WorkspaceLayoutTest {
     }
 
     @Test
-    public void everyWorkspacePageWearsTheWorkspacesLayoutAndDress() {
+    public void everyTerminalPageWearsTheTerminalsLayoutAndDress() {
         assertSame(LayoutVariant.NORMAL, store.variantFor(PageKind.TERMINAL));
         assertSame(LayoutVariant.NORMAL, store.variantFor(PageKind.DISPLAY));
         assertSame(LayoutVariant.NORMAL, store.variantFor(PageKind.ASSISTANT));
-        // A change of what the Workspace shows, made from the Assistant page, shows everywhere.
+        // A change of what the Terminal shows, made from the Assistant page, shows everywhere.
         boolean shown = !store.kindShows(PageKind.TERMINAL, PlaceOrientation.PORTRAIT,
             Element.APPS);
         store.setKindShows(PageKind.ASSISTANT, PlaceOrientation.PORTRAIT, Element.APPS, shown);

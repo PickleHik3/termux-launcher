@@ -68,7 +68,7 @@ public class HomePillFlightPlanTest {
     }
 
     @Test
-    public void aWorkspaceToWorkspaceChangeStaysPut() {
+    public void aTerminalToTerminalChangeStaysPut() {
         assertEquals(NONE, plan(PageKind.TERMINAL, PageKind.ASSISTANT, false, true, true,
             true, true, ExtraKeysTarget.ASSISTANT));
     }

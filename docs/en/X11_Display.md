@@ -1,7 +1,7 @@
 # The Linux display
 
 The launcher can show a Linux desktop or any X11 app in a **display window**: a window of the
-Workspace, in the row with your terminal windows, that shows one X display whole. The display's own window
+Terminal, in the row with your terminal windows, that shows one X display whole. The display's own window
 manager arranges the apps inside it. The display server runs in your shell like any other command,
 so everything you know from Termux:X11 (its flags, its preferences, `pkill termux-x11`) works the
 same way. This page is the short route from installing the pieces to running a desktop in a proot.
@@ -47,7 +47,7 @@ edition that package can't be installed beside the launcher's, and isn't needed.
 
 ## Every day
 
-- **Get to it** like any window: drag along the Workspace from a window's border, or tap its chip
+- **Get to it** like any window: drag along the Terminal from a window's border, or tap its chip
   in the status bar. Hold its chip and drag it to move the display window to another place in the
   row, as you would any window. Opening a Linux app or **Display** again brings it in front, and
   moves it into the session you are in if another session's row holds it. In the sessions drawer,

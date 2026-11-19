@@ -13,7 +13,7 @@ public class OverviewFollowTest {
     public void eachCardKindMapsToItsEditorCardOrFolds() {
         assertEquals(EditorCard.HOME, OverviewFollow.of(Kind.HOME_PAGE).card);
         assertEquals(EditorCard.TERMINAL, OverviewFollow.of(Kind.TERMINAL).card);
-        // Every Workspace page's card gets the Workspace's (ADR 0025).
+        // Every Terminal page's card gets the Terminal's (ADR 0025).
         assertEquals(OverviewFollow.TERMINAL, OverviewFollow.of(Kind.DISPLAY));
         assertEquals(OverviewFollow.TERMINAL, OverviewFollow.of(Kind.ASSISTANT));
         assertNull(OverviewFollow.FOLD.card);

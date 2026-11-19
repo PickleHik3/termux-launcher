@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 
 /**
  * The Wall strip's entries (spec "Taskbar" and "Wall strip"): one numbered entry per running window, then {@code +}
- * for a new window, built from the same chips the Workspace's window bar shows.
+ * for a new window, built from the same chips the Terminal's window bar shows.
  *
  * <p>The chips come in the window chips' order ({@link WindowChips}): the row's windows, the
  * then the Home floats (the display is a page of its own, never a chip). An entry

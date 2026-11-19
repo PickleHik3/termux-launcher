@@ -18,15 +18,15 @@ import java.util.Set;
 
 /**
  * The one-time upgrade from the half keys ({@code <key>_home}, {@code <key>_workspace}) to the
- * page model: a wall value (the plain key) and, where the Workspace differs, page overrides on
+ * page model: a wall value (the plain key) and, where the Terminal differs, page overrides on
  * the Terminal page (and on a Display page when one is given).
  *
  * <p>Per key: equal or absent half values become the wall value. Where they differ Home's is the
- * wall value, and the Workspace's goes to {@code <key>@<terminalPageId>} when a page may hold
+ * wall value, and the Terminal's goes to {@code <key>@<terminalPageId>} when a page may hold
  * that key. The surface numbers are settled by what each page <em>shows</em>, not by raw key:
- * after the per-key step the Terminal page's resolved value is compared with what the Workspace
- * showed before, and any surface number that moved gets the Workspace's value as an override. So a
- * Workspace that followed a Global of its own, or a detached value Home never used, still looks the
+ * after the per-key step the Terminal page's resolved value is compared with what the Terminal
+ * showed before, and any surface number that moved gets the Terminal's value as an override. So a
+ * Terminal that followed a Global of its own, or a detached value Home never used, still looks the
  * same. Canvas keys were never per half and stay wall values. The half keys are not deleted
  * (a downgrade still finds them). Gated by {@link #KEY_VERSION}; pure over the store it reads.
  */
@@ -38,7 +38,7 @@ public final class HalfLookUpgrade {
     public static final int VERSION = 1;
 
     private static final String HOME_SUFFIX = "_home";
-    private static final String WORKSPACE_SUFFIX = "_workspace";
+    private static final String TERMINAL_SUFFIX = "_workspace";
 
     /** One store write the upgrade makes. */
     public static final class Write {
@@ -77,7 +77,7 @@ public final class HalfLookUpgrade {
         final String key;
         final Write.Type type;
         final Object defaultValue;
-        /** True when a page may hold its own value, so the Workspace's goes to an override. */
+        /** True when a page may hold its own value, so the Terminal's goes to an override. */
         final boolean overridable;
 
         Entry(String key, Write.Type type, Object defaultValue, boolean overridable) {
@@ -133,7 +133,7 @@ public final class HalfLookUpgrade {
     /**
      * The writes the upgrade makes for this store, in order, version key not included. Reads only;
      * a store with no half keys answers an empty list. {@code terminalPageId} and
-     * {@code displayPageId} (-1 for none) name the pages that receive the Workspace's values.
+     * {@code displayPageId} (-1 for none) name the pages that receive the Terminal's values.
      */
     @NonNull
     public static List<Write> plan(@NonNull LookStore store, int terminalPageId,
@@ -147,23 +147,23 @@ public final class HalfLookUpgrade {
         Overlay after = new Overlay(store);
         for (Entry entry : ENTRIES) {
             boolean hasHome = store.has(entry.key + HOME_SUFFIX);
-            boolean hasWorkspace = store.has(entry.key + WORKSPACE_SUFFIX);
-            if (!hasHome && !hasWorkspace) continue;
+            boolean hasTerminal = store.has(entry.key + TERMINAL_SUFFIX);
+            if (!hasHome && !hasTerminal) continue;
             Object home = read(store, entry, hasHome ? entry.key + HOME_SUFFIX : entry.key);
-            Object workspace = read(store, entry,
-                hasWorkspace ? entry.key + WORKSPACE_SUFFIX : entry.key);
+            Object terminal = read(store, entry,
+                hasTerminal ? entry.key + TERMINAL_SUFFIX : entry.key);
             Object plain = store.has(entry.key) ? read(store, entry, entry.key) : null;
             if (plain == null ? !home.equals(entry.defaultValue) : !plain.equals(home))
                 put(writes, after, entry.key, entry.type, home);
-            if (entry.overridable && !home.equals(workspace))
+            if (entry.overridable && !home.equals(terminal))
                 for (int id : targets)
-                    put(writes, after, LookKeys.pageKey(entry.key, id), entry.type, workspace);
+                    put(writes, after, LookKeys.pageKey(entry.key, id), entry.type, terminal);
         }
 
         // Step 2: what each page shows must not move. Compare the Terminal (and Display) page's
-        // resolved surface numbers with the Workspace's before the upgrade.
+        // resolved surface numbers with the Terminal's before the upgrade.
         PageLook now = new PageLook(after);
-        PageLook before = new PageLook(new WorkspaceView(store));
+        PageLook before = new PageLook(new TerminalView(store));
         try {
             for (int id : targets) {
                 PageKind kind = id == terminalPageId ? PageKind.TERMINAL : PageKind.DISPLAY;
@@ -183,7 +183,7 @@ public final class HalfLookUpgrade {
                 for (SurfaceSlot slot : SurfaceSlot.values()) {
                     for (SurfaceProperty property : SurfaceProperty.values()) {
                         if (!LookKeys.detachable(slot, property, kind)) continue;
-                        int want = legacyValue(new WorkspaceView(store), kind, id, slot, property);
+                        int want = legacyValue(new TerminalView(store), kind, id, slot, property);
                         if (legacyValue(after, kind, id, slot, property) == want) continue;
                         String key = LookKeys.pageKey(LookKeys.surfaceKey(slot, property), id);
                         writes.put(key, new Write(key, Write.Type.INT, want, false, null));
@@ -260,14 +260,14 @@ public final class HalfLookUpgrade {
         @Override public void removeListener(@NonNull Listener listener) { top.removeListener(listener); }
     }
 
-    /** The store as the Workspace half read it: its own key where it had one. Read-only. */
-    private static final class WorkspaceView implements LookStore {
+    /** The store as the Terminal half read it: its own key where it had one. Read-only. */
+    private static final class TerminalView implements LookStore {
         private final LookStore base;
 
-        WorkspaceView(LookStore base) { this.base = base; }
+        TerminalView(LookStore base) { this.base = base; }
 
         private String keyFor(String key) {
-            return base.has(key + WORKSPACE_SUFFIX) ? key + WORKSPACE_SUFFIX : key;
+            return base.has(key + TERMINAL_SUFFIX) ? key + TERMINAL_SUFFIX : key;
         }
 
         @Override public int getInt(@NonNull String key, int d) { return base.getInt(keyFor(key), d); }

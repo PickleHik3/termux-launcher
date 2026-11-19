@@ -333,18 +333,18 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALL_MIGRATION_VERSION = "wall_migration_version";
 
         /**
-         * Start in: the page a cold start shows, Home, the Workspace (ADR 0008) or the display
+         * Start in: the page a cold start shows, Home, the Terminal (ADR 0008) or the display
          * window, which only holds while the display starts with the launcher.
          */
         public static final String KEY_LAUNCHER_START_IN = "app_launcher_start_in";
         public static final String LAUNCHER_START_IN_HOME = "home";
-        public static final String LAUNCHER_START_IN_WORKSPACE = "workspace";
+        public static final String LAUNCHER_START_IN_TERMINAL = "workspace";
         public static final String LAUNCHER_START_IN_DISPLAY = "display";
         public static final String DEFAULT_LAUNCHER_START_IN = LAUNCHER_START_IN_HOME;
 
         /**
          * Use as: the launcher is the phone's Home screen ({@code home}: Home pages, widgets and
-         * the Workspace) or the terminal only ({@code terminal}: no Home page, no Home settings,
+         * the Terminal) or the terminal only ({@code terminal}: no Home page, no Home settings,
          * no Home in Start in). Asked on the welcome sheet's first page; an install that never
          * answered is Home screen. Independent of whether the app is the system's home app.
          */
@@ -489,9 +489,9 @@ public final class TermuxPreferenceConstants {
 
         /**
          * Home's own Style, Corners and Margin (ADR 0008): what the Home pages' chrome wears, apart
-         * from the Workspace's {@link #KEY_APP_LAUNCHER_DOCK_STYLE},
+         * from the Terminal's {@link #KEY_APP_LAUNCHER_DOCK_STYLE},
          * {@link #KEY_SURFACE_GLOBAL_CORNER_RADIUS} and {@link #KEY_SURFACE_GLOBAL_SIDE_GAP}, in the same
-         * stored forms. While one is unset it reads the Workspace's value, so an upgrade changes
+         * stored forms. While one is unset it reads the Terminal's value, so an upgrade changes
          * nothing on screen; the first write to it pins it.
          */
         public static final String KEY_HOME_LAYOUT_STYLE = "home_layout_style";

@@ -169,7 +169,7 @@ public final class WallPages {
     private final int nextId;
     private final boolean homeIsDisplayWindow;
     /** The Home page that was home last (0: none), so a trip through Terminal only or the
-     *  Workspace or the display comes back to it. */
+     *  Terminal or the display comes back to it. */
     private final int lastHomePageId;
     /** Home was moved to the Terminal page by {@link #detachHomes}, to be given back. */
     private final boolean homeParked;
@@ -743,7 +743,7 @@ public final class WallPages {
 
     // ---- Home, Start in and the Home pages as the app's settings speak of them ------------------
 
-    /** Start in as the app's strings name it: where home is (display, workspace or home). */
+    /** Start in as the app's strings name it: where home is (display, terminal or home). */
     @NonNull
     public String startIn() {
         if (homeIsDisplayWindow) return WallRow.START_IN_DISPLAY;
@@ -751,7 +751,7 @@ public final class WallPages {
         if (home != null && home.kind == PageKind.DISPLAY) return WallRow.START_IN_DISPLAY;
         if (home != null && home.kind == PageKind.ASSISTANT) return WallRow.START_IN_ASSISTANT;
         return home != null && home.kind == PageKind.TERMINAL
-            ? WallRow.START_IN_WORKSPACE : WallRow.START_IN_HOME;
+            ? WallRow.START_IN_TERMINAL : WallRow.START_IN_HOME;
     }
 
     /** The Home pages on the wall, in order. */
@@ -770,7 +770,7 @@ public final class WallPages {
     }
 
     /**
-     * Makes home what Start in {@code startIn} names: the Terminal page for the workspace, the
+     * Makes home what Start in {@code startIn} names: the Terminal page for the Terminal, the
      * display window, or a Home page (the one home already is, else the first). A value that
      * cannot be (no Terminal page, no Home page) leaves home as it is.
      */
@@ -782,7 +782,7 @@ public final class WallPages {
             Page a = assistant();
             return a == null ? refuse(Error.UNKNOWN_PAGE) : setHome(a.id);
         }
-        if (WallRow.START_IN_WORKSPACE.equals(value)) {
+        if (WallRow.START_IN_TERMINAL.equals(value)) {
             Page t = terminal();
             return t == null ? refuse(Error.UNKNOWN_PAGE) : setHome(t.id);
         }

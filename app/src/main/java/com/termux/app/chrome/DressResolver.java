@@ -19,14 +19,14 @@ import java.util.Set;
  * asked here rather than as a page check per surface (ADR 0009, "Deepenings").
  *
  * <p>One layout dresses both halves (ADR 0009, build step 1). A <b>window</b> wears the
- * Workspace's layout whole, the minimal one while minimal mode is on (minimal mode is the
- * windows' alone), in the Workspace's Style,
+ * Terminal's layout whole, the minimal one while minimal mode is on (minimal mode is the
+ * windows' alone), in the Terminal's Style,
  * Corners and Margin, its dock in the Dock design that layout holds (#93; the minimal layout
  * holds its own). A <b>Home page</b> wears the normal layout less the extra keys, in the same Style,
  * Corners and Margin, its dock the Dock design that layout holds, unless Home holds a <b>Home
  * layout</b> of its own: then it wears that ({@link LayoutVariant#HOME}), whatever minimal mode
  * says, in Home's half of Style, Corners and Margin and the design picked for it. Home's half is
- * linked to the Workspace's (#84, the preferences' per-half accessors answer one value), and so
+ * linked to the Terminal's (#84, the preferences' per-half accessors answer one value), and so
  * are the layout's sizes (the store's linked keys), so the crossing never re-sizes or re-shapes
  * the chrome; the Source still names the half, so a resolver over any source asks the same
  * question the store answers. Either way a Home
@@ -65,7 +65,7 @@ public final class DressResolver {
         /** Whether one layout turns the Drawer tile on, beside its design (#97). */
         boolean drawerTile(@NonNull LayoutVariant layout);
 
-        /** One half's Style, Corners and Margin as stored: Home's own, or the Workspace's. */
+        /** One half's Style, Corners and Margin as stored: Home's own, or the Terminal's. */
         @NonNull
         WallShape shape();
 
@@ -95,9 +95,9 @@ public final class DressResolver {
     @NonNull private static final Set<Element> HOME_NOT_OFFERED = EnumSet.of(Element.EXTRA_KEYS);
 
     /**
-     * The kind whose dress a wall page wears: Home's on the Home pages' row, the Workspace's
+     * The kind whose dress a wall page wears: Home's on the Home pages' row, the Terminal's
      * ({@link PageKind#TERMINAL}) on every other page. Terminal windows, Display pages and the
-     * Assistant page are one Workspace and wear one dress (ADR 0025).
+     * Assistant page are one Terminal and wear one dress (ADR 0025).
      */
     @NonNull
     public static PageKind dressKindOf(@NonNull PageKind page) {
@@ -274,7 +274,7 @@ public final class DressResolver {
 
     /**
      * Whether the Layout editor offers {@code element} on {@code layout}: the Home layout leaves
-     * out the extra keys, the Workspace's layouts are offered whole. An offer only; whether a
+     * out the extra keys, the Terminal's layouts are offered whole. An offer only; whether a
      * page wears an element is its kind's visibility ({@link #wears}).
      */
     public static boolean wornOn(@NonNull LayoutVariant layout, @NonNull Element element) {

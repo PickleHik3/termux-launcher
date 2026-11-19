@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config;
 /**
  * The Terminal's Background (ADR 0031 §4, #287): the panes' Opacity and Blur and the Wallpaper
  * dim live in keys of their own. Global never reaches them, an unset value reads the Terminal's
- * shipped value, and the dim lies on every page of the Workspace and none of Home's.
+ * shipped value, and the dim lies on every page of the Terminal and none of Home's.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -97,7 +97,7 @@ public class TerminalBackgroundTest {
     }
 
     @Test
-    public void theDimLiesOnTheWorkspacesPagesAndNeverOnHome() {
+    public void theDimLiesOnTheTerminalsPagesAndNeverOnHome() {
         assertEquals(40, TerminalSurfacePolicy.pageDimPercent(PageKind.TERMINAL, 40));
         assertEquals(40, TerminalSurfacePolicy.pageDimPercent(PageKind.DISPLAY, 40));
         assertEquals(40, TerminalSurfacePolicy.pageDimPercent(PageKind.ASSISTANT, 40));

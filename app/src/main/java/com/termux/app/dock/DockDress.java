@@ -161,7 +161,7 @@ final class DockDress {
         // The same facts as last time: the same half, so a pass per frame of a crossing builds
         // no halves (docs/agents/performance.md rule 3) and the memo matches it by identity.
         com.termux.app.dock.DockGeometry.Half last = otherHome ? mDockOtherHomeHalf
-            : home ? mDockHomeHalf : mDockWorkspaceHalf;
+            : home ? mDockHomeHalf : mDockTerminalHalf;
         if (last != null && last.arrangement == arrangement
             && Float.compare(last.dockHeightScale, scale) == 0
             && last.marginDp == shape.marginDp && last.cornersDp == shape.cornersDp
@@ -179,7 +179,7 @@ final class DockDress {
                 .build();
         if (otherHome) mDockOtherHomeHalf = half;
         else if (home) mDockHomeHalf = half;
-        else mDockWorkspaceHalf = half;
+        else mDockTerminalHalf = half;
         return half;
     }
 
@@ -187,7 +187,7 @@ final class DockDress {
     @Nullable private com.termux.app.dock.DockGeometry.Half mDockHomeHalf;
     /** The other Home end's half of a crossing between two Home pages, as last built. */
     @Nullable private com.termux.app.dock.DockGeometry.Half mDockOtherHomeHalf;
-    @Nullable private com.termux.app.dock.DockGeometry.Half mDockWorkspaceHalf;
+    @Nullable private com.termux.app.dock.DockGeometry.Half mDockTerminalHalf;
 
     /**
      * The width the dock's rows span: the content root's, between the display cutouts it pads.
@@ -333,7 +333,7 @@ final class DockDress {
             mHost.chrome().ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
             mHost.updateAppLauncherBarHeight();
             mHost.setTerminalToolbarHeight(true);
-            // The Wall strip's row, laid out by the pass above, takes the Workspace's windows.
+            // The Wall strip's row, laid out by the pass above, takes the Terminal's windows.
             mHost.syncWallStripFeed();
             mHost.chrome().requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -346,7 +346,7 @@ final class DockDress {
 
     /**
      * The store pinned to the layout the committed page's dock is dressed by, where its Drawer
-     * tile is kept: Home's layout on Home, the Workspace's (normal or minimal) on a window.
+     * tile is kept: Home's layout on Home, the Terminal's (normal or minimal) on a window.
      */
     @Nullable
     PlaceLayoutStore committedDockStore() {

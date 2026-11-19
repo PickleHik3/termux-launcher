@@ -20,7 +20,7 @@ public class SelectedChipOnScreenTest {
     }
 
     @Test
-    public void onTheWorkspaceAndDisplayTheSelectedChipOffersItsClose() {
+    public void onTheTerminalAndDisplayTheSelectedChipOffersItsClose() {
         assertTrue(TerminalWindowBar.selectedChipOnScreen(PageKind.TERMINAL));
         assertTrue(TerminalWindowBar.selectedChipOnScreen(PageKind.DISPLAY));
     }

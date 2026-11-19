@@ -270,7 +270,7 @@ public class StatusBarControllerTest {
         }
         e0(from, 0xFFE0E0E0);
         e0(to, 0xFF202020);
-        to.side = com.termux.app.page.Side.WORKSPACE;
+        to.side = com.termux.app.page.Side.TERMINAL;
         mHost.topStack.begin(from, to, true);
         mHost.topStack.setProgress(0.5f);
         int mid = ReflectionHelpers.<Integer>getField(cpu, "mLabelInk");

@@ -159,12 +159,12 @@ public class LookGridMigrationTest {
     }
 
     /**
-     * The half upgrade's output for a Workspace that followed its own Global of 12 while Home's
+     * The half upgrade's output for a Terminal that followed its own Global of 12 while Home's
      * dock was detached at 30: the dock's own 30 everywhere; the Terminal page's 12 is kept
      * under its key, unread.
      */
     @Test
-    public void aWorkspacesOwnGlobalIsKeptUnderTheTerminalPagesKeyAndNotRead() {
+    public void aTerminalsOwnGlobalIsKeptUnderTheTerminalPagesKeyAndNotRead() {
         LookGrid.MemoryStore store = store();
         store.putInt("surface_base_blur", 4);
         store.putBoolean("surface_inherit_dock_blur", false);

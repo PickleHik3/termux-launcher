@@ -73,9 +73,9 @@ public final class AppearanceEditorEntry {
     }
 
     /**
-     * Where the terminal sheet's Appearance opens the editor: on the Workspace half, with the
-     * Workspace card up ({@link EditorDoor#TERMINAL_SHEET_APPEARANCE}). The page on screen is kept
-     * when it stands on the Workspace (a terminal or the display window), so the frame does not
+     * Where the terminal sheet's Appearance opens the editor: on the Terminal half, with the
+     * Terminal card up ({@link EditorDoor#TERMINAL_SHEET_APPEARANCE}). The page on screen is kept
+     * when it stands on the Terminal (a terminal or the display window), so the frame does not
      * slide; anything else lands on the terminal.
      *
      * <pre>

@@ -348,7 +348,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         TerminalView terminalView = mActivity.findViewById(R.id.terminal_view);
         // The terminal's room is its page's own rest, written into the wall.
         preferences.setAppLauncherWidgetPaneEnabled(true);
-        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_WORKSPACE);
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_TERMINAL);
         buildWall().landOnColdStart(preferences.getLauncherStartIn());
 
         ReflectionHelpers.callInstanceMethod(mActivity, "initializeInAppKeyboard",
@@ -551,7 +551,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     public void coldStartOnTheTerminalKeepsTheRestoredKeyboardState() {
         TermuxAppSharedPreferences preferences = prepareActivity(true);
         preferences.setAppLauncherWidgetPaneEnabled(true);
-        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_WORKSPACE);
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_TERMINAL);
 
         PaneWallController wall = buildWall();
         wall.landOnColdStart(preferences.getLauncherStartIn());
@@ -574,7 +574,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     public void liveHeightPreviewInvalidatesCachedKeyboardAndTerminalGeometry() {
         TermuxAppSharedPreferences preferences = prepareActivity(true);
         preferences.setAppLauncherWidgetPaneEnabled(true);
-        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_WORKSPACE);
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_TERMINAL);
         buildWall().landOnColdStart(preferences.getLauncherStartIn());
         hostKeyboard(null);
         float initialMarginScale = mActivity.getPreferences().getInAppKeyboardKeyMarginScale();

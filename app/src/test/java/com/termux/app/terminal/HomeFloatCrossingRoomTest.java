@@ -23,7 +23,7 @@ public class HomeFloatCrossingRoomTest {
         assertFalse(HomeFloatPolicy.obstructionsMayMove(false, true, true));
     }
 
-    @Test public void whatCoversTheWorkspaceIsNotWhatCoversHome() {
+    @Test public void whatCoversTheTerminalIsNotWhatCoversHome() {
         assertFalse(HomeFloatPolicy.obstructionsMayMove(false, false, false));
     }
 

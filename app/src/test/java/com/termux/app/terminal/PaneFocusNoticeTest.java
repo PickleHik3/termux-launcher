@@ -15,7 +15,7 @@ public class PaneFocusNoticeTest {
 
     @Test
     public void fingerOnThePaneAlreadyFocusedTellsNothing() {
-        // Every swipe that starts on the Workspace lands here: the bar shows this pane already.
+        // Every swipe that starts on the Terminal lands here: the bar shows this pane already.
         assertEquals(PaneFocusNotice.Kind.NONE, PaneFocusNotice.of(
             shell1, windowA, view1, shell1, windowA, view1, false));
     }

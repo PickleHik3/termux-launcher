@@ -77,7 +77,7 @@ public class FreshInstallLookTest {
                 preferences.isSurfaceInheriting(slot, SurfaceProperty.TINT));
         assertEquals(Integer.valueOf(GlassControlsMigration.FORMAT),
             store.getAll().get(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT));
-        // What the editor's Look row reads on Home and on the Workspace.
+        // What the editor's Look row reads on Home and on the Terminal.
         for (PageKind half : new PageKind[]{PageKind.HOME, PageKind.TERMINAL}) {
             assertTrue(half + " wears Clear", SurfacePresets.wornOn(preferences, clearFor(), half));
             assertTrue(half + " matches Clear", SurfacePresets.matches(preferences, clearFor(), half));

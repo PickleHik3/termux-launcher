@@ -63,13 +63,13 @@ public final class TerminalSurfacePolicy {
 
     /**
      * A wall page's wallpaper dim, percent (ADR 0031 §4): the Terminal's one dim on every page of
-     * the Workspace (a terminal window, a Display page, the Assistant page), none on Home's.
+     * the Terminal (a terminal window, a Display page, the Assistant page), none on Home's.
      *
      * @param page the page's kind, or null for none (no dim)
      * @param terminalDim the Terminal card's Wallpaper dim, percent
      */
     public static int pageDimPercent(@Nullable PageKind page, int terminalDim) {
-        return com.termux.app.wall.PaneWallPolicy.isWorkspacePlace(page)
+        return com.termux.app.wall.PaneWallPolicy.isTerminalPlace(page)
             ? Math.max(0, Math.min(100, terminalDim)) : 0;
     }
 

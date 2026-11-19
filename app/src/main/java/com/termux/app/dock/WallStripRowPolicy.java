@@ -7,7 +7,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The Wall strip's first row (spec "Wall strip"): the Workspace's terminals as tiles above Home's
+ * The Wall strip's first row (spec "Wall strip"): the Terminal's terminals as tiles above Home's
  * apps row, a large clock beside them while there are few. Home floats are terminals of the same
  * session and stand in the row as tiles too, after the row's own windows; the row counts them
  * like any terminal.

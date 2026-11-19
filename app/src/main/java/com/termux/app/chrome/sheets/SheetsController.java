@@ -863,7 +863,7 @@ public final class SheetsController {
             content.addView(mTerminalActionsSheet, new android.view.ViewGroup.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
         }
-        // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Workspace.
+        // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Terminal.
         // Style stands only when the companion is installed: a row that opens the Appearance
         // settings under the name of a plugin the device does not have is a broken promise.
         mTerminalActionsSheet.openRows(activity.getString(R.string.terminal_actions_title),

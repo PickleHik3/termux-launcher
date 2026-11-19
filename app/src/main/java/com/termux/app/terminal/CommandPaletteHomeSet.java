@@ -40,7 +40,7 @@ final class CommandPaletteHomeSet {
     static final String CATEGORY_WINDOWS = "windows";
 
     static final String TOOL_OPEN_TERMINAL_HERE = "home.open_terminal_here";
-    static final String TOOL_GO_TO_WORKSPACE = "home.go_to_workspace";
+    static final String TOOL_GO_TO_TERMINAL = "home.go_to_workspace";
     static final String TOOL_MINIMISE_FLOATS = "home.minimise_floats";
     static final String TOOL_RESTORE_FLOATS = "home.restore_floats";
     static final String TOOL_ADD_WIDGET = "home.add_widget";
@@ -64,8 +64,8 @@ final class CommandPaletteHomeSet {
     private static final Action[] HOME_ACTIONS = {
         new Action(TOOL_OPEN_TERMINAL_HERE, R.string.palette_home_open_terminal,
             R.string.palette_home_open_terminal_hint),
-        new Action(TOOL_GO_TO_WORKSPACE, R.string.palette_home_go_to_workspace,
-            R.string.palette_home_go_to_workspace_hint),
+        new Action(TOOL_GO_TO_TERMINAL, R.string.palette_home_go_to_terminal,
+            R.string.palette_home_go_to_terminal_hint),
         new Action(LauncherToolRegistry.TOOL_WINDOW_NEW, R.string.palette_home_new_window, 0),
         new Action(TOOL_MINIMISE_FLOATS, R.string.palette_home_minimise_floats,
             R.string.palette_home_minimise_floats_hint),
@@ -217,7 +217,7 @@ final class CommandPaletteHomeSet {
                                  @NonNull CommandPaletteHomeHost host) {
         switch (entry.toolName) {
             case TOOL_OPEN_TERMINAL_HERE: host.openTerminalHere(); return true;
-            case TOOL_GO_TO_WORKSPACE: host.goToWorkspace(); return true;
+            case TOOL_GO_TO_TERMINAL: host.goToTerminal(); return true;
             case TOOL_MINIMISE_FLOATS: host.minimiseAllFloats(); return true;
             case TOOL_RESTORE_FLOATS: host.restoreFloats(); return true;
             case TOOL_ADD_WIDGET: host.addWidget(); return true;

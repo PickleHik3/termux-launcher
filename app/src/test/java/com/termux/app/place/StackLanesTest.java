@@ -24,9 +24,9 @@ public class StackLanesTest {
 
     private static final int S = StackLanes.STACK;
     private static final int H = StackLanes.HOME;
-    private static final int W = StackLanes.WORKSPACE;
+    private static final int W = StackLanes.TERMINAL;
 
-    @Test public void theExtraKeysAreTheWorkspacesLaneAndTheSharedAppsRowIsTheStacks() {
+    @Test public void theExtraKeysAreTheTerminalsLaneAndTheSharedAppsRowIsTheStacks() {
         LayoutFixtures.Fixture f = LayoutFixtures.TL16;
         assertEquals(S, StackLanes.laneOf(Element.APPS, f.home, f.window));
         assertEquals(W, StackLanes.laneOf(Element.EXTRA_KEYS, f.home, f.window));
@@ -42,7 +42,7 @@ public class StackLanesTest {
 
     @Test public void aHostHasOneParentForBothLayouts() {
         LayoutFixtures.Fixture f = LayoutFixtures.TL16;
-        // The extra keys are only the Workspace's: standing in the band over the keyboard for
+        // The extra keys are only the Terminal's: standing in the band over the keyboard for
         // both, whichever layout is in front.
         assertSame(Where.BOTTOM_OVER, StackLanes.resolve(Element.EXTRA_KEYS, f.home, f.window));
         assertSame(Where.BOTTOM_OVER, StackLanes.resolve(Element.EXTRA_KEYS, f.window, f.home));
@@ -55,7 +55,7 @@ public class StackLanesTest {
     @Test public void aRowTheOtherSideStandsOnAnEdgeIsNotPulledOntoTheFrontSide() {
         PlaceLayout home = LayoutFixtures.HOME;
         PlaceLayout rail = home.withSlot(Element.APPS, Slot.on(Edge.LEFT, 0));
-        // Home hides nothing; the Workspace puts the apps on the left rail: front Home keeps its
+        // Home hides nothing; the Terminal puts the apps on the left rail: front Home keeps its
         // own parent, and a front that hides it does not stand the other's rail row.
         assertSame(Where.BOTTOM_OVER, StackLanes.resolve(Element.APPS, home, rail));
         PlaceLayout hidden = home.withSlot(Element.APPS, Slot.hiddenFrom(Edge.BOTTOM, 0));
@@ -76,7 +76,7 @@ public class StackLanesTest {
         LayoutFixtures.Fixture f = LayoutFixtures.TL16;
         assertEquals(EdgeStackPolicy.overKeyboard(f.window),
             StackLanes.hostsOn(f.window, f.home, Where.BOTTOM_OVER));
-        // From Home the Workspace's extra keys join, in the Workspace's order.
+        // From Home the Terminal's extra keys join, in the Terminal's order.
         assertEquals(EdgeStackPolicy.overKeyboard(f.window),
             StackLanes.hostsOn(f.home, f.window, Where.BOTTOM_OVER));
         assertEquals(Collections.emptyList(),
@@ -89,32 +89,32 @@ public class StackLanesTest {
     @Test public void lanesOnlyStandWhereASideHasRowsOfItsOwn() {
         LayoutFixtures.Fixture f = LayoutFixtures.TL16;
         assertTrue(StackLanes.hasLanes(f.home, f.window, Side.HOME));
-        assertTrue(StackLanes.hasLanes(f.window, f.home, Side.WORKSPACE));
+        assertTrue(StackLanes.hasLanes(f.window, f.home, Side.TERMINAL));
         PlaceLayout noKeys = f.window.withSlot(Element.EXTRA_KEYS,
             Slot.hiddenFrom(Edge.BOTTOM, 2));
         assertFalse(StackLanes.hasLanes(f.home, noKeys, Side.HOME));
     }
 
     @Test public void theBandIsTheSharedRowsPlusTheTallerLane() {
-        // Top to bottom: the shared apps row, the Workspace's extra keys under it.
+        // Top to bottom: the shared apps row, the Terminal's extra keys under it.
         int[] height = {100, 98};
         int[] lane = {S, W};
         int[] top = new int[2];
         // Home in front: the apps row stands on the band's floor, the extra keys' room above it.
         assertEquals(198, StackLanes.layoutBand(height, lane, 2, H, top));
         assertArrayEquals(new int[] {98, 100}, top);
-        // The Workspace in front: the apps row stands on the extra keys.
+        // The Terminal in front: the apps row stands on the extra keys.
         assertEquals(198, StackLanes.layoutBand(height, lane, 2, W, top));
         assertArrayEquals(new int[] {0, 100}, top);
     }
 
     @Test public void bothLanesStackBottomUpInOneBand() {
-        // Top to bottom: Home's two rows, the Workspace's one, a shared row under them.
+        // Top to bottom: Home's two rows, the Terminal's one, a shared row under them.
         int[] height = {40, 30, 90, 50};
         int[] lane = {H, H, W, S};
         int[] top = new int[4];
         int band = StackLanes.layoutBand(height, lane, 4, H, top);
-        assertEquals("shared 50 + the taller lane (Home's 70 against the Workspace's 90)", 140, band);
+        assertEquals("shared 50 + the taller lane (Home's 70 against the Terminal's 90)", 140, band);
         assertEquals(0, top[2]);
         assertEquals(90, top[3]);
         assertEquals(20, top[0]);
@@ -161,8 +161,8 @@ public class StackLanesTest {
         LayoutFixtures.Fixture f = LayoutFixtures.TL16;
         PlaceLayout bare = f.window.withSlot(Element.APPS, Slot.hiddenFrom(Edge.BOTTOM, 0));
         assertSame(Side.HOME, StackLanes.laneSide(Element.APPS, f.home, bare));
-        assertSame(Side.WORKSPACE, StackLanes.laneSide(Element.APPS, bare, f.home));
-        assertSame(Side.WORKSPACE, StackLanes.laneSide(Element.EXTRA_KEYS, f.home, f.window));
+        assertSame(Side.TERMINAL, StackLanes.laneSide(Element.APPS, bare, f.home));
+        assertSame(Side.TERMINAL, StackLanes.laneSide(Element.EXTRA_KEYS, f.home, f.window));
         org.junit.Assert.assertNull(StackLanes.laneSide(Element.APPS, f.home, f.window));
         // The seam's composite while Home crosses to the Terminal is Home's layout standing the
         // Terminal's dock: with no apps row on that dock it has no Home lane. Read as the front it
@@ -173,7 +173,7 @@ public class StackLanesTest {
 
     @Test public void theLaneOfASideIsItsOwn() {
         assertEquals(H, StackLanes.laneOf(Side.HOME));
-        assertEquals(W, StackLanes.laneOf(Side.WORKSPACE));
+        assertEquals(W, StackLanes.laneOf(Side.TERMINAL));
         assertEquals(Arrays.asList(Element.APPS, Element.AZ, Element.EXTRA_KEYS),
             Arrays.asList(StackLanes.ROWS));
     }

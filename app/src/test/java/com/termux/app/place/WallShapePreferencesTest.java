@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config;
 
 /**
  * Style, Corners and Margin per half of the wall, linked since #84: either half reads and writes
- * the Workspace's values, the keys every surface reads, and Home's old keys are never read or
+ * the Terminal's values, the keys every surface reads, and Home's old keys are never read or
  * written.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -41,7 +41,7 @@ public class WallShapePreferencesTest {
     }
 
     @Test
-    public void homeReadsTheWorkspacesValues() {
+    public void homeReadsTheTerminalsValues() {
         prefs.setLayoutStyle(LayoutStyle.FLOATING);
         prefs.setSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS, 30);
         prefs.setSurfaceGlobalValue(SurfaceProperty.SIDE_GAP, 18);
@@ -62,11 +62,11 @@ public class WallShapePreferencesTest {
     }
 
     @Test
-    public void aWriteFromEitherHalfIsTheWorkspacesValue() {
+    public void aWriteFromEitherHalfIsTheTerminalsValue() {
         prefs.setLayoutStyle(true, LayoutStyle.FLOATING);
         prefs.setLayoutCornersDp(true, 8);
         prefs.setLayoutMarginDp(true, 20);
-        assertEquals("the Workspace's keys are the ones every surface reads",
+        assertEquals("the Terminal's keys are the ones every surface reads",
             LayoutStyle.FLOATING, prefs.getLayoutStyle());
         assertEquals(8, prefs.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS));
         assertEquals(20, prefs.getSurfaceGlobalValue(SurfaceProperty.SIDE_GAP));

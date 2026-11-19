@@ -57,7 +57,7 @@ public class WallPagesMigrationTest {
     }
 
     @Test
-    public void homeUsersStartingInTheWorkspaceLandOnTheTerminalPage() {
+    public void homeUsersStartingInTheTerminalLandOnTheTerminalPage() {
         WallPages p = WallPagesMigration.seed("workspace", 2, "home", 3);
         assertEquals(PageKind.TERMINAL, p.home().kind);
     }

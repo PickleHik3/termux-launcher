@@ -637,7 +637,7 @@ public final class SurfacePresets {
 
     // ------------------------------------------------------------------ the two halves (ADR 0013)
     //
-    // A look carries the Workspace's values under the plain keys. Where Home's differ it also
+    // A look carries the Terminal's values under the plain keys. Where Home's differ it also
     // carries Home's per-half cells (its material point, Global numbers and detached surface
     // values) under each key's "_home" twin, with KEY_HOME_LOOK marking that Home's cells are all
     // named: a per-half cell without its twin then follows Home's Global. A look without the marker
@@ -647,10 +647,10 @@ public final class SurfacePresets {
     /** The preset format's suffix for Home's twin of a key; the format predates the page keys. */
     static final String HOME_TWIN_SUFFIX = "_home";
 
-    /** Marks a look that names Home's per-half cells apart from the Workspace's. */
+    /** Marks a look that names Home's per-half cells apart from the Terminal's. */
     static final String KEY_HOME_LOOK = "surface_look_home";
 
-    /** Whether a look holds Home's values apart from the Workspace's. */
+    /** Whether a look holds Home's values apart from the Terminal's. */
     public static boolean hasHomeLook(@NonNull Preset preset) {
         return Boolean.TRUE.equals(preset.values.get(KEY_HOME_LOOK));
     }
@@ -707,8 +707,8 @@ public final class SurfacePresets {
 
     /**
      * One half's look out of {@code preset}, under the plain keys: the look itself for the
-     * Workspace or for a look without Home's own; for Home, the shared keys with Home's per-half
-     * cells in place of the Workspace's.
+     * Terminal or for a look without Home's own; for Home, the shared keys with Home's per-half
+     * cells in place of the Terminal's.
      */
     @NonNull
     static Preset halfOf(@NonNull Preset preset, @NonNull PageKind half) {
@@ -1293,8 +1293,8 @@ public final class SurfacePresets {
     /**
      * Every cell back on Global and each named value written, for one half or (null) both. With
      * {@code cellsOnly} only the per-half cells are touched; otherwise a half write still writes
-     * the values with no half for both, and leaves the terminal's cells (the Workspace's alone)
-     * to a Workspace or both-halves write.
+     * the values with no half for both, and leaves the terminal's cells (the Terminal's alone)
+     * to a Terminal or both-halves write.
      */
     private static void applyHalf(@NonNull TermuxAppSharedPreferences prefs,
                                   @NonNull Preset preset, @Nullable PageKind half,
@@ -1455,7 +1455,7 @@ public final class SurfacePresets {
 
     /**
      * Whether one half of the wall wears exactly this preset, as {@link #matches(
-     * TermuxAppSharedPreferences, Preset)} asks it of the Workspace: the stop the Look slider
+     * TermuxAppSharedPreferences, Preset)} asks it of the Terminal: the stop the Look slider
      * shows on that half. Values not held per half are compared as they are for both.
      */
     public static boolean matches(@NonNull TermuxAppSharedPreferences prefs,
@@ -1489,8 +1489,8 @@ public final class SurfacePresets {
     /**
      * Whether one screen wears this preset in what it holds itself: {@link #matches(
      * TermuxAppSharedPreferences, Preset, PageKind)} asked of that half's own values only — its
-     * per-half cells and numbers, and on the Workspace the terminal's cells, which are the
-     * Workspace's alone. The values held once for the wall (the glass ink, rim, motion, hue,
+     * per-half cells and numbers, and on the Terminal the terminal's cells, which are the
+     * Terminal's alone. The values held once for the wall (the glass ink, rim, motion, hue,
      * vibrancy and edge) are left out: a Look picked on the other screen writes them for both,
      * and must not move this screen off its own Look (editor-redesign §1: each screen stores its
      * own Look and glass; the two meet only through the Match rows).

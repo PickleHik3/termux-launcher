@@ -41,7 +41,7 @@ public class AssistantRestTest {
     }
 
     @Test
-    public void theLookIsTheWorkspacesTerminalKind() {
+    public void theLookIsTheTerminalsTerminalKind() {
         assertFalse(AssistantRest.of(new Rest.Inputs(true, false, false, false, true)).systemIme);
     }
 }

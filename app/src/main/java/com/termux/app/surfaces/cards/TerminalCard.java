@@ -31,7 +31,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The Terminal card (appearance-one-look spec §3, Terminal; the Workspace card merged into it; no
+ * The Terminal card (appearance-one-look spec §3, Terminal; the old Workspace card merged into it; no
  * eye, the terminal cannot be hidden): Text (the terminal's Font size, Contrast as words, the
  * Font link), Background (the panes' Opacity and Blur and the Wallpaper dim of the Terminal's
  * pages, none of which follows Global), Panes, Effects (Cursor trail and Screen effect as

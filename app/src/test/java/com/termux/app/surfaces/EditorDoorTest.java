@@ -22,7 +22,7 @@ public class EditorDoorTest {
     public void aScreensDoorOpensThatScreensCard() {
         for (PageKind page : pagesAndNone()) {
             assertEquals(EditorCard.HOME, EditorDoor.HOME_SHEET_APPEARANCE.cardFor(page, null));
-            assertEquals("the terminal's sheet opens the Workspace card, not the editor at rest",
+            assertEquals("the terminal's sheet opens the Terminal card, not the editor at rest",
                 EditorCard.TERMINAL, EditorDoor.TERMINAL_SHEET_APPEARANCE.cardFor(page, null));
         }
     }
@@ -40,7 +40,7 @@ public class EditorDoorTest {
     @Test
     public void everyWallpaperDoorOpensThePicker() {
         // Home long-press › Wallpaper, the palette's Wallpaper (launcherctl set_wallpaper) and
-        // the Workspace's More › Wallpaper: no card holds a Change row, so each opens the picker.
+        // the Terminal's More › Wallpaper: no card holds a Change row, so each opens the picker.
         for (EditorDoor door : new EditorDoor[] {EditorDoor.HOME_SHEET_WALLPAPER,
                 EditorDoor.LAUNCHERCTL_WALLPAPER, EditorDoor.TERMINAL_SHEET_WALLPAPER}) {
             assertTrue(door.doorName, door.opensWallpaperPicker());
@@ -84,7 +84,7 @@ public class EditorDoorTest {
     }
 
     @Test
-    public void paneControlsOpenTheWorkspace() {
+    public void paneControlsOpenTheTerminal() {
         assertEquals(EditorCard.TERMINAL, EditorDoor.PANE_CONTROLS.cardFor(PageKind.HOME, null));
         assertEquals(EditorCard.TERMINAL,
             EditorDoor.PANE_CONTROLS.cardFor(PageKind.TERMINAL, null));
@@ -94,7 +94,7 @@ public class EditorDoorTest {
     }
 
     @Test
-    public void aHomeDoorFromTheWorkspacePageEndsOnHomeWithTheHomeCard() {
+    public void aHomeDoorFromTheTerminalPageEndsOnHomeWithTheHomeCard() {
         EditorCard card = EditorDoor.SETTINGS_HOME.cardFor(null, null);
         assertEquals(EditorCard.HOME, card);
         assertEquals(PageKind.HOME,
@@ -105,7 +105,7 @@ public class EditorDoorTest {
     }
 
     @Test
-    public void aWorkspaceCardFromHomeEndsOnTheWorkspacePage() {
+    public void aTerminalCardFromHomeEndsOnTheTerminalPage() {
         assertEquals(PageKind.TERMINAL,
             EditorDoor.placeFor(EditorCard.TERMINAL, null, PageKind.HOME));
         assertNull("the display stays", EditorDoor.placeFor(EditorCard.TERMINAL, null,
@@ -128,7 +128,7 @@ public class EditorDoorTest {
     }
 
     @Test
-    public void theSectionIntentNamesTheWorkspaceCard() {
+    public void theSectionIntentNamesTheTerminalCard() {
         assertEquals(EditorCard.TERMINAL, EditorDoor.SECTION_INTENT.cardFor(null,
             AppearanceEditorEntry.cardOf("workspace")));
     }

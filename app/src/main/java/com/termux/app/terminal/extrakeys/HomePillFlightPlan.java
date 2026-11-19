@@ -14,9 +14,9 @@ import com.termux.app.terminal.io.ExtraKeysTarget;
 public final class HomePillFlightPlan {
 
     public enum Flight {
-        /** Home to a Workspace page where the bar is docked: the pill becomes the bar. */
+        /** Home to a Terminal page where the bar is docked: the pill becomes the bar. */
         TO_DOCK,
-        /** A Workspace page with its bar docked to Home: the bar becomes the pill. */
+        /** A Terminal page with its bar docked to Home: the bar becomes the pill. */
         TO_PILL,
         /** Everything else, a Home page to another Home page included: the pill stays put. */
         NONE

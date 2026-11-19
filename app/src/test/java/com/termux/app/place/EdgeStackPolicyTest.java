@@ -817,7 +817,7 @@ public class EdgeStackPolicyTest {
      * The Surface (2736x1824 landscape, 320 dpi) at b5b19ef99: the A-Z rail on the right, the dock
      * rows (0,1623)-(2736,1748) with 12px under them, the canvas band down to 1760 under the dock,
      * the side stack's frame inset 16. The rail ran to 1744 behind the dock; with the dock's reach
-     * taken off it ends at 1607, the frame's 16 above the dock's top, as on the Workspace.
+     * taken off it ends at 1607, the frame's 16 above the dock's top, as on the Terminal.
      */
     @Test
     public void aSideRailOnHomeEndsAboveTheDockByTheFrameGap() {
@@ -836,7 +836,7 @@ public class EdgeStackPolicyTest {
     public void onlyASideThatHoldsSomethingAndOnlyWhileTheDockOverlays() {
         PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.RIGHT,
             RowPlacement.BOTTOM);
-        // The Workspace: the dock takes its own row, so the canvas never reaches under it.
+        // The Terminal: the dock takes its own row, so the canvas never reaches under it.
         assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.RIGHT, false, 137));
         // The other side stands empty.
         assertEquals(0, EdgeStackPolicy.sideStackBottomInsetPx(layout, Edge.LEFT, true, 137));
