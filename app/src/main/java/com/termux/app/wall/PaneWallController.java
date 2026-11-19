@@ -171,6 +171,14 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mTerminalStopsId = NO_ID;
         mAssistantPageId = -1;
         mAssistantPage = null;
+        // A view built before this registry wears the old host: it goes, and the sync below
+        // builds the page again on this registry's host and registers it.
+        View assistantView = mAssistantView;
+        if (assistantView != null) {
+            mAssistantView = null;
+            mWall.setPageView(PageKind.ASSISTANT, null);
+            mWall.removeView(assistantView);
+        }
         mPages = pages;
         syncHomePages();
         syncDisplayPages();

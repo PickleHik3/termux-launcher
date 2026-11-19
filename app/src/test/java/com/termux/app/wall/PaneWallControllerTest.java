@@ -830,6 +830,30 @@ public class PaneWallControllerTest {
         controller.refreshPages();
     }
 
+    @Test public void anAssistantPageBuiltBeforeTheRegistryIsRegisteredWithIt() {
+        // The wall builds the Assistant's view as soon as it holds the page, before the activity
+        // hands over its registry: the page must still be registered there, built on the
+        // registry's host, or Back on the Assistant finds no front page and does nothing.
+        WallPages seeded = WallPagesMigration.seed("home", 0, "home", 2, false);
+        WallPages.Result added = seeded.add(PageKind.ASSISTANT, 1, null);
+        assertTrue(added.ok());
+        host.pages = added.pages;
+        controller.refreshPages();
+        assertNotNull("the view is built before the registry", controller.assistantView());
+
+        com.termux.app.page.Pages registry =
+            new com.termux.app.page.Pages(com.termux.app.page.PageHost.NONE, () -> { });
+        controller.setPages(registry);
+
+        com.termux.app.page.Page page = registry.page(added.page.id);
+        assertNotNull("the Assistant page is registered under its id", page);
+        assertEquals(PageKind.ASSISTANT, page.kind());
+        assertSame("the registered page is the one the wall shows", controller.assistantView(),
+            page.view());
+        registry.landed(added.page.id, PageKind.ASSISTANT);
+        assertSame(page, registry.front());
+    }
+
     @Test public void aColdStartWithTheAssistantPageAsHomeLandsOnIt() {
         assistantAsHome();
         controller.goTo(PageKind.HOME, false);
