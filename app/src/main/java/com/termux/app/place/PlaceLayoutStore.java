@@ -2216,10 +2216,7 @@ public final class PlaceLayoutStore {
         LayoutsMigration fold = new LayoutsMigration(mStore.getAll(), wall,
             context.getResources().getConfiguration().smallestScreenWidthDp);
         com.termux.app.place.layout.LayoutStore.shared(context).replaceAll(fold.layouts());
-        SharedPreferences.Editor editor = mStore.edit();
-        for (Map.Entry<String, Object> cell : fold.lookCells().entrySet())
-            put(editor, cell.getKey(), cell.getValue());
-        editor.putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
+        mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
     }
 

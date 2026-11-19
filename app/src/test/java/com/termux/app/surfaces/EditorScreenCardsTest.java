@@ -26,14 +26,11 @@ public class EditorScreenCardsTest {
     private static final EditorRows.Offers ALL = new EditorRows.Offers(true, true);
 
     @Test
-    public void theWorkspaceCardHoldsItsLookItsGlassAndGlobal() {
-        // ADR 0017 (fb44e0fb2): the card wears the shared glass rows without a Glass heading,
-        // Colour and Corners beside Tint, Grain and Rim under More before its Elements list.
-        // Overhaul §2: Appearance (open first) closing on Minimal layout, then Layout.
-        // Rows in group order (2026-11-04): the Look, sliders, toggles, then Tint colour.
-        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
-            Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM,
-            Row.CONTRAST, Row.MINIMAL, Row.TINT_HUE), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
+    public void theWorkspaceCardHoldsNoGlass() {
+        // The chrome wears one look on every page (ADR 0031): Appearance holds Contrast and
+        // Minimal layout, then Layout.
+        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.CONTRAST, Row.MINIMAL),
+            EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_LAYOUT, Row.ELEMENTS),
             EditorRows.tier(EditorCard.WORKSPACE, ALL, 3));
     }

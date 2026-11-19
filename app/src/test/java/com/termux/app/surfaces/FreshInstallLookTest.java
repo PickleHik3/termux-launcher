@@ -61,14 +61,9 @@ public class FreshInstallLookTest {
         com.termux.app.WallReworkMigration.migrateIfNeeded(store);
         store.edit().putInt(com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID, 0).apply();
         preferences.migrateLookGrid(java.util.Collections.emptyList(), fresh);
-        com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore grid =
-            new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(store);
-        com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(grid, fresh);
-        // The glass controls' migration (and its re-adoption of moved Looks), then the kind seed,
-        // as TermuxApplication runs them.
+        // The glass controls' migration (and its re-adoption of moved Looks), as
+        // TermuxApplication runs it.
         GlassControlsMigration.runAtStartUp(preferences, fresh);
-        com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(grid,
-            SurfacePresets.SHIPPED_BY_KIND);
     }
 
     @Test
@@ -110,7 +105,6 @@ public class FreshInstallLookTest {
         // move nothing); every other stored value, the LookGrid cells included, is untouched.
         java.util.Map<String, Object> afterSecond = new java.util.HashMap<>(store.getAll());
         assertEquals(Boolean.TRUE, afterSecond.remove("look_grid_migrated"));
-        assertEquals(Boolean.TRUE, afterSecond.remove("look_grid_kind_migrated"));
         assertEquals("every stored value, the LookGrid cells included", afterFirst, afterSecond);
         assertEquals(90, GlassEdgeControls.depthFor(preferences.getFancierGlassBendDp(),
             preferences.getFancierGlassEdgeWidthDp()));

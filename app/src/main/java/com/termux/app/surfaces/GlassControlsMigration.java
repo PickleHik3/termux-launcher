@@ -138,7 +138,7 @@ public final class GlassControlsMigration {
             int at = key.lastIndexOf(PageLookKeys.PAGE_SEPARATOR);
             com.termux.shared.termux.settings.preferences.LookGrid.Key cell =
                 com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
-            if ((at > 0 && PageLookKeys.DETACHABLE.contains(key.substring(0, at)))
+            if ((at > 0 && PageLookKeys.everHeld().contains(key.substring(0, at)))
                     || (cell != null && cell.page >= 0))
                 values.put(key, entry.getValue());
         }
@@ -223,7 +223,7 @@ public final class GlassControlsMigration {
                                                @NonNull SharedPreferences store) {
         // A surface following Base reads Base's pin; one with its own cell already has a number.
         if (!prefs.lookGrid().has(com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT,
-                null, com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE))
+                null))
             prefs.setSurfaceBaseValue(SurfaceProperty.TINT, SurfacePresets.LEGACY_TINT_STRENGTH);
     }
 

@@ -101,15 +101,6 @@ final class AppearanceSnapshot {
     private final java.util.TreeMap<String, Object> mHalfKeys;
     /** Every look-grid cell the store held (ADR 0017), by key: put back exactly on restore. */
     private final java.util.TreeMap<String, Integer> mGridCells;
-    /**
-     * Which grid cells still hold the kind seed's value ({@link
-     * com.termux.shared.termux.settings.preferences.LookGrid#KEY_SEEDED_CELLS}), or null for none:
-     * put back with the cells, so a seeded cell a reset cleared is the seed's again after Discard.
-     */
-    @Nullable private final String mSeededCells;
-    /** A snapshot saved before the seed list was kept: restore leaves the list as it stands. */
-    private final boolean mKeepSeeded;
-
     private AppearanceSnapshot(@NonNull TermuxAppSharedPreferences prefs) {
         mLinks = linkSignature(prefs);
         SurfaceProperty[] properties = SurfaceProperty.values();
@@ -178,8 +169,6 @@ final class AppearanceSnapshot {
         mStatusSwitches = statusSwitches(prefs);
         mHalfKeys = halfKeys(prefs);
         mGridCells = gridCells(prefs);
-        mSeededCells = prefs.lookGrid().store().getString(com.termux.shared.termux.settings.preferences.LookGrid.KEY_SEEDED_CELLS, null);
-        mKeepSeeded = false;
     }
 
     /** The status bar's switches, as {@link #mStatusSwitches} keeps them. */
@@ -283,21 +272,6 @@ final class AppearanceSnapshot {
         // Last: every shared write above dropped the halves' own keys.
         restoreHalfKeys(prefs, mHalfKeys);
         restoreGridCells(prefs, mGridCells);
-        if (!mKeepSeeded)
-            restoreSeededCells(prefs, mSeededCells);
-    }
-
-    private static void restoreSeededCells(@NonNull TermuxAppSharedPreferences prefs,
-                                           @Nullable String seeded) {
-        com.termux.shared.termux.settings.preferences.LookGrid.Store store =
-            prefs.lookGrid().store();
-        String key = com.termux.shared.termux.settings.preferences.LookGrid.KEY_SEEDED_CELLS;
-        String now = store.getString(key, null);
-        if (seeded == null) {
-            if (now != null) store.remove(key);
-        } else if (!seeded.equals(now)) {
-            store.putString(key, seeded);
-        }
     }
 
     /** The captured state as one string; equal strings mean nothing to save or put back. */
@@ -412,7 +386,7 @@ final class AppearanceSnapshot {
     @NonNull
     private static java.util.Set<String> pageAbleKeys() {
         java.util.Set<String> able = new java.util.HashSet<>(halfAbleKeys());
-        able.addAll(com.termux.shared.termux.settings.preferences.PageLookKeys.DETACHABLE);
+        able.addAll(com.termux.shared.termux.settings.preferences.PageLookKeys.everHeld());
         return able;
     }
 

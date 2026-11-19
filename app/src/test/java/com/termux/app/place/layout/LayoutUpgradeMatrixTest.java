@@ -72,6 +72,7 @@ public class LayoutUpgradeMatrixTest {
 
     @Test public void v2StartingInTheTerminal() throws Exception { check("v16-start-in-terminal"); }
 
+    /** No look is folded into a kind any more (ADR 0031): the page cells stay, unread. */
     @Test public void v2PageLooks() throws Exception { check("v16-page-looks"); }
 
     /** The developer's phone: a dock at 2.994 (about a 55 dp icon) folds to L 54, stored as the

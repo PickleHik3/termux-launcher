@@ -105,7 +105,8 @@ public class EditorCardSectionsTest {
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
                 Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
-            "SECTION_APPEARANCE", blockWithDim(),
+            // No glass: the chrome wears one look on every page (ADR 0031).
+            "SECTION_APPEARANCE", Arrays.asList(Row.WALLPAPER_DIM),
             "SECTION_LINKS", Arrays.asList(Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES,
                 Row.LINK_SHEETS)));
     }
@@ -120,7 +121,7 @@ public class EditorCardSectionsTest {
     @Test
     public void workspace() {
         check(EditorCard.WORKSPACE, expect(
-            "SECTION_APPEARANCE", block(Row.CONTRAST, Row.MINIMAL),
+            "SECTION_APPEARANCE", Arrays.asList(Row.CONTRAST, Row.MINIMAL),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS)));
     }
 

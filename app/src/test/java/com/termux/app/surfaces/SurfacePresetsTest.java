@@ -368,13 +368,13 @@ public class SurfacePresetsTest {
                 String at = ids[i] + " on " + element;
                 assertEquals(at, want[i][0], com.termux.shared.termux.settings.preferences.FrostStops
                     .blurDpFor(grid.value(com.termux.shared.termux.settings.preferences
-                        .LookGrid.Property.FROST, element, -1)));
+                        .LookGrid.Property.FROST, element)));
                 assertEquals(at, want[i][1], grid.value(com.termux.shared.termux.settings.preferences
-                    .LookGrid.Property.OPACITY, element, -1));
+                    .LookGrid.Property.OPACITY, element));
                 assertEquals(at, want[i][2], grid.value(com.termux.shared.termux.settings.preferences
-                    .LookGrid.Property.GRAIN, element, -1));
+                    .LookGrid.Property.GRAIN, element));
                 assertEquals(at, want[i][3], grid.value(com.termux.shared.termux.settings.preferences
-                    .LookGrid.Property.TINT, element, -1));
+                    .LookGrid.Property.TINT, element));
             }
             assertTrue(ids[i], SurfacePresets.matches(preferences, preset(ids[i])));
         }
@@ -395,9 +395,4 @@ public class SurfacePresetsTest {
         assertNull(SurfacePresets.shippedLook(AppearanceLooks.CUSTOM_STOP));
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

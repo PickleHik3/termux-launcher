@@ -441,24 +441,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The chip's page: the page the editor was opened from, -1 where none is known. */
     private int mScopePageId = -1;
     /**
-     * The card's two chips, Where it applies and What it applies to (ADR 0017): the grid cell its
-     * rows read and write. Every card sets them where it opens ({@link EditorChips#openFor}).
+     * The grid cell the card's glass rows read and write (ADR 0017, ADR 0031): its element's own,
+     * or Global's. Every card sets it where it opens ({@link EditorChips#openFor}).
      */
-    @NonNull private EditorChips mChips = EditorChips.openFor(null, null);
-    /**
-     * Each card's Applies to choice this visit (appearance-cards-overhaul §1): Global until the
-     * user picks Home or Workspace on its row.
-     */
-    @NonNull private final java.util.EnumMap<EditorCard, EditorChips.AppliesTo> mAppliesTo =
-        new java.util.EnumMap<>(EditorCard.class);
-    /**
-     * The pages the Look slider was put on Custom this visit while their values still match a
-     * Look, as {@link #mHeldCustom} holds it for the wall.
-     */
-    @NonNull private final java.util.Set<Integer> mHeldCustomPages = new java.util.HashSet<>();
-    /** Each page's Custom as the slider left it this visit, put back by the next move to Custom. */
-    @NonNull private final java.util.Map<Integer, SurfacePresets.Preset> mPageCustoms =
-        new java.util.HashMap<>();
+    @NonNull private EditorChips mChips = EditorChips.openFor(null);
     /** The editor's own PageLook over the preferences, for scoped writes; closed at close. */
     @Nullable private com.termux.app.look.PageLook mPageLook;
 
@@ -529,66 +515,28 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return com.termux.app.look.PageLook.Scope.GLOBAL;
     }
 
-    /** Whether the chips stand on a kind of page (Home or Workspace) rather than Global. */
-    private boolean onPageSide() {
-        return mChips.onKind();
-    }
-
     /**
-     * Whether {@code card}'s glass rows write as they always have: an element's card on Global
-     * (its own everywhere cell). Every other card writes its chips' cells.
+     * Whether {@code card}'s glass rows write as they always have: an element's card (its own
+     * cell). The Global card writes its chips' cell, Global's.
      */
     private boolean chipsPlain(@Nullable EditorCard card) {
-        return card != null && card.slot != null && !mChips.onKind();
+        return card != null && card.slot != null;
     }
 
     /**
-     * After a glass row's write, lets it be seen where a cell below it in the read order would
-     * otherwise hide it. An element card set to Global means everywhere: the element's own
-     * Home, Terminal and Display values of the property go. Customization, Home and the
-     * Workspace take the place of a seeded cell (a kind's shipped look, such as the keyboard's
-     * Mist on Home) on the kinds they write. The Customization, Home and Workspace sliders go further,
-     * last change wins: the values set beneath them for that property go too
-     * ({@link SurfacePresets#clearBeneathSlider}), once per drag.
+     * After a glass row's write on the Global card: last change wins (developer, 2026-11-04), the
+     * elements' own values of that property go too ({@link SurfacePresets#clearBeneathSlider}),
+     * once per drag. An element card's write needs nothing: nothing reads before its cell.
      */
     private void releaseShadowingCells(@NonNull Row row) {
         TermuxAppSharedPreferences prefs = prefs();
-        if (mCard == null || prefs == null) return;
-        com.termux.shared.termux.settings.preferences.LookGrid.Property[] properties;
-        if (row == Row.LOOK) {
-            properties = new com.termux.shared.termux.settings.preferences.LookGrid.Property[] {
-                com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST,
-                com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
-                com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT};
-        } else {
-            com.termux.shared.termux.settings.preferences.LookGrid.Property one =
-                GlassRows.gridProperty(row);
-            if (one == null) return;
-            properties = new com.termux.shared.termux.settings.preferences.LookGrid.Property[] {one};
-        }
-        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
-        EditorChips chips = mChips;
-        for (com.termux.shared.termux.settings.preferences.LookGrid.Property property : properties) {
-            if (!property.perElement && !property.perKind) continue;
-            if (chips.element != null && property.perElement) {
-                if (chips.onKind()) continue;
-                for (com.termux.shared.termux.settings.preferences.LookGrid.Kind kind
-                        : com.termux.shared.termux.settings.preferences.LookGrid.Kind.values())
-                    if (grid.has(property, chips.element, kind))
-                        grid.clear(property, chips.element, kind);
-            } else if (row.kind == EditorRows.Kind.SLIDER
-                    && SurfacePresets.slidersResetBeneath(chips, property)) {
-                if (mSliderDragActive && mBeneathClearedFor == row) continue;
-                SurfacePresets.clearBeneathSlider(grid, chips, property);
-                mBeneathClearedFor = mSliderDragActive ? row : null;
-            } else if (property.perElement) {
-                java.util.List<com.termux.shared.termux.settings.preferences.LookGrid.Kind> kinds =
-                    chips.onKind() ? chips.appliesTo.kinds : java.util.Arrays.asList(
-                        com.termux.shared.termux.settings.preferences.LookGrid.Kind.values());
-                for (com.termux.shared.termux.settings.preferences.LookGrid.Kind kind : kinds)
-                    grid.clearSeeded(property, kind);
-            }
-        }
+        if (mCard == null || prefs == null || row.kind != EditorRows.Kind.SLIDER) return;
+        com.termux.shared.termux.settings.preferences.LookGrid.Property property =
+            GlassRows.gridProperty(row);
+        if (property == null || !SurfacePresets.slidersResetBeneath(mChips, property)) return;
+        if (mSliderDragActive && mBeneathClearedFor == row) return;
+        SurfacePresets.clearBeneathSlider(prefs.lookGrid(), mChips, property);
+        mBeneathClearedFor = mSliderDragActive ? row : null;
     }
 
     /** Why Depth and Edge are out, if they are. */
@@ -609,10 +557,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** {@code card}'s cells this visit: its fixed place, else its Applies to choice. */
+    /** {@code card}'s cell. */
     @NonNull
     private EditorChips chipsFor(@Nullable EditorCard card) {
-        return EditorChips.openFor(card, card == null ? null : mAppliesTo.get(card));
+        return EditorChips.openFor(card);
     }
 
     /** The value of a surface property the chips' cell shows, in the property's old unit. */
@@ -630,16 +578,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int stored = property.grid == com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST
             ? com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(value)
             : value;
-        for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property.grid))
-            prefs.lookGrid().write(cell, stored);
-    }
-
-    /** The key a page may hold its own value of for a surface's property, or null. */
-    @Nullable
-    private static String detachableKey(@NonNull SurfaceSlot slot,
-                                        @NonNull SurfaceProperty property) {
-        String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-        return key != null && com.termux.app.look.PageLook.isDetachable(key) ? key : null;
+        prefs.lookGrid().write(mChips.cell(property.grid), stored);
     }
 
     /** A surface's property as {@code card}'s scope sees it: the page's own, else the wall's. */
@@ -684,44 +623,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return prefs.lookGrid().has(cell);
     }
 
-    /**
-     * The keys a page's Reset drops for a card on {@code slot}: every detachable value of that
-     * surface, the keyboard's backdrop with the keyboard's; a card on no one surface (null) drops
-     * every value the page may hold, the material and its intensity included.
-     */
-    @NonNull
-    static java.util.Set<String> pageResetKeys(@Nullable SurfaceSlot slot) {
-        java.util.Set<String> keys = new java.util.LinkedHashSet<>();
-        if (slot == null) {
-            keys.addAll(com.termux.shared.termux.settings.preferences.PageLookKeys.DETACHABLE);
-            return keys;
-        }
-        for (SurfaceProperty property : SurfaceProperty.values()) {
-            String key = detachableKey(slot, property);
-            if (key != null) keys.add(key);
-        }
-        if (slot == SurfaceSlot.KEYBOARD)
-            keys.add(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
-                .TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
-        return keys;
-    }
-
     /** Reset under a page: every value the page holds of the card's surface goes back to Base. */
     private void resetOnPage(@NonNull EditorCard card) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs != null)
             for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : resetCells(mChips))
                 prefs.lookGrid().clear(cell);
-        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
-        com.termux.app.look.PageLook look = pageLook();
-        if (look == null || scope.isGlobal())
-            return;
-        // All glass on a page also drops what a Look put on that page's elements.
-        if (mChips.element == null)
-            for (String key : pageResetKeys(card.slot))
-                look.reset(scope, key);
-        mHeldCustomPages.remove(scope.pageId());
-        mPageCustoms.remove(scope.pageId());
     }
     /**
      * The cells a card's Reset clears at {@code chips}: every glass property's cells there. A
@@ -738,7 +645,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 : com.termux.shared.termux.settings.preferences.LookGrid.Property.values()) {
             if (chips.elementIgnored(property))
                 continue;
-            out.addAll(chips.cells(property));
+            out.add(chips.cell(property));
         }
         return out;
     }
@@ -1053,10 +960,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int hostPageId = page == null || page == mHost.pageOnScreen() ? mHost.pageIdOnScreen() : -1;
         mScopePageId = hostPageId >= 0 ? hostPageId
             : page == null || scopePlaces == null ? -1 : scopePlaces.shownPageId(page);
-        mAppliesTo.clear();
         mChips = chipsFor(null);
-        mHeldCustomPages.clear();
-        mPageCustoms.clear();
         mCard = null;
         mRaisedKeyboard = false;
 
@@ -1161,27 +1065,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case SHEETS:
             default:
                 return getString(R.string.editor_element_sheets);
-        }
-    }
-
-    /** The kind of the page the editor shows (ADR 0018 §3), or null where it shows none. */
-    @Nullable
-    private com.termux.shared.termux.settings.preferences.LookGrid.Kind scopeKind() {
-        TermuxAppSharedPreferences prefs = prefs();
-        return prefs == null ? null : prefs.lookGrid().kindOf(mScopePageId);
-    }
-
-    /** A kind's name on the Where chip and in a row's source: "Home pages". */
-    @NonNull
-    private CharSequence kindName(
-            @NonNull com.termux.shared.termux.settings.preferences.LookGrid.Kind kind) {
-        switch (kind) {
-            case HOME: return getString(R.string.editor_chip_kind_home);
-            case DISPLAY: return getString(R.string.editor_chip_kind_display);
-            case ASSISTANT: return getString(R.string.editor_chip_kind_assistant);
-            case TERMINAL:
-            default:
-                return getString(R.string.editor_chip_kind_terminal);
         }
     }
 
@@ -1569,22 +1452,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @NonNull
     private String resetLabel(@NonNull EditorCard card) {
-        String label = cardResetLabel(card);
-        // A card with the Applies to row names where its Reset lands: "Reset dock for Home".
-        if (!EditorChips.offersAppliesTo(card) || card != mCard)
-            return label;
-        return getString(R.string.editor_reset_for, label, appliesToName(mChips.appliesTo));
-    }
-
-    /** Where a card's values apply, in words: Global, Home, Workspace. */
-    @NonNull
-    private CharSequence appliesToName(@NonNull EditorChips.AppliesTo where) {
-        switch (where) {
-            case HOME: return getString(R.string.appearance_card_home);
-            case WORKSPACE: return getString(R.string.appearance_card_workspace);
-            case GLOBAL:
-            default: return getString(R.string.editor_applies_global);
-        }
+        return cardResetLabel(card);
     }
 
     @NonNull
@@ -2571,7 +2439,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         GlassReset.reset(mHost.context(), prefs, GlassReset.DEFAULT_STOP);
         mHeldCustom.clear();
-        mHeldCustomPages.clear();
         forgetGlassEdgePositions();
         mHost.refreshTerminalPalette();
         settingsWritten();
@@ -3466,28 +3333,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return scopedOwnValue(prefs, card, card.slot, property);
         }
 
-        @Nullable @Override public EditorCardSheet.Chip appliesToChip() {
-            java.util.List<EditorChips.AppliesTo> options = EditorChips.appliesToOptions(mCard);
-            if (options.isEmpty())
-                return null;
-            CharSequence[] labels = new CharSequence[options.size()];
-            int selected = 0;
-            for (int i = 0; i < labels.length; i++) {
-                labels[i] = appliesToName(options.get(i));
-                if (options.get(i) == mChips.appliesTo) selected = i;
-            }
-            return new EditorCardSheet.Chip(getString(R.string.editor_applies_to), labels,
-                selected);
-        }
-
-        @Override public void pickAppliesTo(int index) {
-            java.util.List<EditorChips.AppliesTo> options = EditorChips.appliesToOptions(mCard);
-            if (mCard == null || index < 0 || index >= options.size())
-                return;
-            mAppliesTo.put(mCard, options.get(index));
-            mChips = chipsFor(mCard);
-        }
-
         @Nullable @Override public CharSequence resetLabel() {
             return mCard == null ? null : SurfaceEditorController.this.resetLabel(mCard);
         }
@@ -3496,42 +3341,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return mCard == EditorCard.APPEARANCE;
         }
 
-        @Override public boolean scopeOnPage() {
-            return onPageSide();
-        }
-
         @NonNull @Override public RowSource source(@NonNull Row row) {
             com.termux.shared.termux.settings.preferences.LookGrid.Resolved resolved = rowResolved(row);
             return resolved == null ? RowSource.NONE : RowSource.of(resolved.cell);
         }
 
         @Nullable @Override public CharSequence sourceName(@NonNull Row row) {
-            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
-            if (property == null)
+            if (source(row) != RowSource.ELEMENT)
                 return null;
-            com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
-            com.termux.shared.termux.settings.preferences.LookGrid.Element element = cell.element != null ? cell.element : EditorChips.elementOf(mCard);
-            switch (source(row)) {
-                case ELEMENT_ON_PAGE:
-                    return getString(R.string.editor_source_element_on_page, elementName(element),
-                        pageName());
-                case PAGE: return pageName();
-                case ELEMENT_ON_KIND: {
-                    com.termux.shared.termux.settings.preferences.LookGrid.Kind kind =
-                        cell.kind != null ? cell.kind : scopeKind();
-                    return kind == null ? null : getString(R.string.editor_source_element_on_page,
-                        elementName(element), kindName(kind));
-                }
-                case KIND: {
-                    com.termux.shared.termux.settings.preferences.LookGrid.Kind kind =
-                        cell.kind != null ? cell.kind : scopeKind();
-                    return kind == null ? null : kindName(kind);
-                }
-                case ELEMENT: return getString(R.string.editor_source_element, elementName(element));
-                case NONE:
-                default:
-                    return null;
-            }
+            return getString(R.string.editor_source_element,
+                elementName(EditorChips.elementOf(mCard)));
         }
 
         @Override public boolean resettable(@NonNull Row row) {
@@ -3548,8 +3367,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
             if (prefs == null || property == null)
                 return;
-            for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property))
-                prefs.lookGrid().clear(cell);
+            prefs.lookGrid().clear(mChips.cell(property));
             mHeldCustomCells.remove(mChips);
             requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
                 | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -3559,18 +3377,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             EditorCardSheet sheet = mSheet;
             if (sheet != null)
                 sheet.openRowMenu(anchor, row);
-        }
-
-        @Override public void setScopeOnPage(boolean onPage) {
-            // Nothing is written here: the cells show what they follow until a value is set.
-            // "On page" is the Applies to choice of the shown page's side, for a card that has
-            // the row.
-            if (!EditorChips.offersAppliesTo(mCard))
-                return;
-            mAppliesTo.put(mCard, !onPage ? EditorChips.AppliesTo.GLOBAL
-                : scopeKind() == com.termux.shared.termux.settings.preferences.LookGrid.Kind.HOME
-                ? EditorChips.AppliesTo.HOME : EditorChips.AppliesTo.WORKSPACE);
-            mChips = chipsFor(mCard);
         }
 
         @Override public boolean enabled(@NonNull Row row) {
@@ -3954,8 +3760,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The card whose chips are up, as {@link CardCustoms} names it. */
     @NonNull
     private String cardKey() {
-        return (mChips.element == null ? "all" : mChips.element.name()) + ":"
-            + mChips.appliesTo.name();
+        return mChips.element == null ? "all" : mChips.element.name();
     }
 
     /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */
@@ -4032,19 +3837,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     CardCustoms.put(prefs.getSharedPreferences(), slot, worn);
             }
             if (look != null) {
-                // One editor: a page card's Look first clears the element values beneath it on
-                // its kinds (developer, 2026-11-03), then lands in its cells.
+                // One editor: the Look lands in the card's cells.
                 SharedPreferences store = prefs.getSharedPreferences();
                 SurfacePresets.Batch batch = store == null ? null : new SurfacePresets.Batch(store);
                 LookGrid into = batch == null ? grid
                     : SurfacePresets.writingInto(prefs, batch).lookGrid();
-                if (mChips.element == null && mChips.onKind())
-                    SurfacePresets.clearBeneathKindLook(into, mChips.appliesTo.kinds);
                 LookGrid.Property[] properties = {LookGrid.Property.FROST,
                     LookGrid.Property.OPACITY, LookGrid.Property.TINT};
                 for (int i = 0; i < properties.length; i++)
-                    for (LookGrid.Key cell : mChips.cells(properties[i]))
-                        into.write(cell, look[i]);
+                    into.write(mChips.cell(properties[i]), look[i]);
                 if (batch != null)
                     batch.applyToStore();
             }
@@ -4052,8 +3853,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.cellProperty(row);
             if (property == null)
                 return false;
-            for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property))
-                grid.write(cell, GlassRows.toCell(row, value));
+            grid.write(mChips.cell(property), GlassRows.toCell(row, value));
         }
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -4475,13 +4275,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * screen, which writes the values one for the wall, never moves it.
      */
     private int lookStop(@NonNull PageKind half) {
-        com.termux.app.look.PageLook.Scope scope = scopeFor(mCard);
-        if (!scope.isGlobal()) {
-            if (mHeldCustomPages.contains(scope.pageId()))
-                return AppearanceLooks.CUSTOM_STOP;
-            TermuxAppSharedPreferences prefs = prefs();
-            return prefs == null ? AppearanceLooks.CUSTOM_STOP : pageStop(prefs, scope.pageId());
-        }
         if (mHeldCustom.contains(half))
             return AppearanceLooks.CUSTOM_STOP;
         TermuxAppSharedPreferences prefs = prefs();
@@ -4493,22 +4286,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                                 @NonNull PageKind half) {
         for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
             if (SurfacePresets.wornOn(prefs, preset, half))
-                return AppearanceLooks.stopForPresetId(preset.id);
-        }
-        return AppearanceLooks.CUSTOM_STOP;
-    }
-
-    /**
-     * The stop a page wears (ADR 0015 §6): the wall's where the page holds none of its own, else
-     * the Look its cells match ({@link SurfacePresets#wornAtPage}), else Custom. Read from the
-     * page's overrides, so the editor opened again on a detached page shows its stop.
-     */
-    @VisibleForTesting
-    static int pageStop(@NonNull TermuxAppSharedPreferences prefs, int pageId) {
-        if (!SurfacePresets.holdsPageLook(prefs, pageId))
-            return wornStop(prefs, PageKind.HOME);
-        for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
-            if (SurfacePresets.wornAtPage(prefs, preset, pageId))
                 return AppearanceLooks.stopForPresetId(preset.id);
         }
         return AppearanceLooks.CUSTOM_STOP;
@@ -4545,11 +4322,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // Leaving Custom for the Look the values still match writes nothing, but the slider
         // and the All surfaces strip follow the stop.
         PageKind half = lookScreen();
-        com.termux.app.look.PageLook.Scope scope = scopeFor(mCard);
-        boolean held = !scope.isGlobal()
-            ? (custom ? mHeldCustomPages.add(scope.pageId())
-                : mHeldCustomPages.remove(scope.pageId()))
-            : custom ? mHeldCustom.add(half) : mHeldCustom.remove(half);
+        boolean held = custom ? mHeldCustom.add(half) : mHeldCustom.remove(half);
         if (prefs != null && moveToStop(prefs, stop, half))
             syncAfterBulkWrite();
         else if (held && mSheet != null)
@@ -4566,35 +4339,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private boolean moveToStop(@NonNull TermuxAppSharedPreferences into, int stop,
                                @NonNull PageKind half) {
-        com.termux.app.look.PageLook.Scope scope = scopeFor(mCard);
-        if (!scope.isGlobal()) {
-            // A Look on one page: its surface cells land as that page's own values; the wall and
-            // every value a page may not hold stay as they are. Custom brings back the page's
-            // Custom of this visit, else the saved Custom's cells, else writes nothing.
-            int page = scope.pageId();
-            int worn = pageStop(into, page);
-            if (stop == worn)
-                return false;
-            SurfacePresets.Preset onPage = AppearanceLooks.presetForStop(
-                SurfacePresets.presets(into), stop);
-            if (onPage != null) {
-                if (AppearanceLooks.isCustomStop(worn))
-                    mPageCustoms.put(page, SurfacePresets.customAtPage(into, page));
-                SurfacePresets.applyLookAtPage(into, onPage, page);
-                return true;
-            }
-            SurfacePresets.Preset kept = mPageCustoms.get(page);
-            if (kept == null)
-                kept = SurfacePresets.custom(into);
-            if (kept == null)
-                return false;
-            SurfacePresets.applyLookAtPage(into, kept, page);
-            return true;
-        }
         int current = wornStop(into, half);
         SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(into),
             stop);
-        // The wall may wear the Look while a page or element look hides it: picking it again
+        // The wall may wear the Look while an element's own value hides it: picking it again
         // still resets what is beneath.
         if (stop == current
                 && (look == null || !SurfacePresets.holdsCellsBeneathLook(into.lookGrid())))

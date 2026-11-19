@@ -58,22 +58,24 @@ public final class ElementGlass {
         this.ownEdgePercent = ownEdgePercent;
     }
 
-    /** {@code element} on {@code pageId} (a negative id: everywhere), read from {@code grid}. */
+    /**
+     * {@code element}, read from {@code grid}. {@code pageId} no longer changes the answer: the
+     * chrome wears one look on every page (ADR 0031).
+     */
     @NonNull
     public static ElementGlass resolve(@NonNull LookGrid grid, @NonNull LookGrid.Element element,
                                        int pageId) {
-        int page = pageId >= 0 ? pageId : LookGrid.NO_PAGE;
-        LookGrid.Resolved hue = grid.resolve(LookGrid.Property.TINT_HUE, element, page);
-        LookGrid.Resolved rim = grid.resolve(LookGrid.Property.RIM, element, page);
-        LookGrid.Resolved depth = grid.resolve(LookGrid.Property.DEPTH, element, page);
-        LookGrid.Resolved edge = grid.resolve(LookGrid.Property.EDGE, element, page);
+        LookGrid.Resolved hue = grid.resolve(LookGrid.Property.TINT_HUE, element);
+        LookGrid.Resolved rim = grid.resolve(LookGrid.Property.RIM, element);
+        LookGrid.Resolved depth = grid.resolve(LookGrid.Property.DEPTH, element);
+        LookGrid.Resolved edge = grid.resolve(LookGrid.Property.EDGE, element);
         return new ElementGlass(element,
-            clamp(FrostStops.blurDpFor(grid.value(LookGrid.Property.FROST, element, page)),
+            clamp(FrostStops.blurDpFor(grid.value(LookGrid.Property.FROST, element)),
                 0, MAX_BLUR_DP),
-            clamp(grid.value(LookGrid.Property.OPACITY, element, page), 0, 100),
-            clamp(grid.value(LookGrid.Property.GRAIN, element, page), 0, 100),
-            clamp(grid.value(LookGrid.Property.TINT, element, page), 0, 100),
-            grid.value(LookGrid.Property.CORNERS, element, page),
+            clamp(grid.value(LookGrid.Property.OPACITY, element), 0, 100),
+            clamp(grid.value(LookGrid.Property.GRAIN, element), 0, 100),
+            clamp(grid.value(LookGrid.Property.TINT, element), 0, 100),
+            grid.value(LookGrid.Property.CORNERS, element),
             ownCell(hue) ? hueOf(hue.value) : null,
             ownCell(rim) ? rim.value : null,
             ownCell(depth) ? depth.value : null,
@@ -90,7 +92,7 @@ public final class ElementGlass {
     }
 
     /**
-     * Whether a value is this element's or this page's own rather than the wall-wide one the
+     * Whether a value is this element's own rather than the Global one the
      * renderer's global look already carries.
      */
     static boolean ownCell(@NonNull LookGrid.Resolved resolved) {
@@ -131,9 +133,8 @@ public final class ElementGlass {
                                                   @Nullable GlassRefraction.Look global) {
         if (global == null || preferences == null) return global;
         LookGrid grid = preferences.lookGrid();
-        int page = pageId >= 0 ? pageId : LookGrid.NO_PAGE;
-        LookGrid.Resolved depth = grid.resolve(LookGrid.Property.DEPTH, element, page);
-        LookGrid.Resolved edge = grid.resolve(LookGrid.Property.EDGE, element, page);
+        LookGrid.Resolved depth = grid.resolve(LookGrid.Property.DEPTH, element);
+        LookGrid.Resolved edge = grid.resolve(LookGrid.Property.EDGE, element);
         return withOwn(global, ownCell(depth) ? depth.value : null,
             ownCell(edge) ? edge.value : null);
     }

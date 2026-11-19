@@ -412,50 +412,6 @@ public final class SurfacePresets {
             intOf(preset.values.get(cellKey(null, SurfaceProperty.TINT))));
     }
 
-    // ------------------------------------------------------------- shipped per kind (ADR 0018 §3)
-
-    /**
-     * The Look stop {@code element} ships with on {@code kind}, where the kind's focus asks for
-     * its own: the keyboard stands off the widgets on Home pages (Mist) and barely covers the
-     * screen on Display pages (Clear). -1 where it ships the property's own values, as on the
-     * Terminal page and for every other element.
-     */
-    static int shippedStop(@Nullable LookGrid.Element element, @Nullable LookGrid.Kind kind) {
-        if (element != LookGrid.Element.KEYBOARD || kind == null) return -1;
-        switch (kind) {
-            case HOME: return AppearanceLooks.stopForPresetId("frost");
-            case DISPLAY: return AppearanceLooks.stopForPresetId("minimal");
-            case TERMINAL:
-            default:
-                return -1;
-        }
-    }
-
-    /** The shipped Look {@code element} wears on {@code kind}, or null where it has none apart. */
-    @Nullable
-    public static ShippedLook shippedLook(@Nullable LookGrid.Element element,
-                                          @Nullable LookGrid.Kind kind) {
-        int stop = shippedStop(element, kind);
-        return stop < 0 ? null : shippedLook(stop);
-    }
-
-    /**
-     * The look grid's shipped step for a kind: the Frost stop, opacity and tint of the Look the
-     * element ships with there ({@link #shippedLook(LookGrid.Element, LookGrid.Kind)}, the one
-     * owner of those numbers); null for everything else, which ships the property's own value.
-     * Grain follows the Frost stop, as the grid's shipped grain always does.
-     */
-    public static final LookGrid.ShippedLooks SHIPPED_BY_KIND = (property, element, kind) -> {
-        ShippedLook look = shippedLook(element, kind);
-        if (look == null) return null;
-        switch (property) {
-            case FROST: return look.frostStop;
-            case OPACITY: return look.opacity;
-            case TINT: return look.tint;
-            default: return null;
-        }
-    };
-
     /** The Looks as they ship on dark glass; {@link #presets(boolean)} for the glass on screen. */
     @NonNull
     public static List<Preset> presets() {
@@ -756,7 +712,9 @@ public final class SurfacePresets {
      */
     @NonNull
     static Preset halfOf(@NonNull Preset preset, @NonNull PageKind half) {
-        boolean home = half == PageKind.HOME && hasHomeLook(preset);
+        // The chrome wears one look on every page (ADR 0031): a stored look's Home twins are
+        // not read, whichever half asks.
+        boolean home = false;
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : preset.values.entrySet()) {
             String key = entry.getKey();
@@ -871,73 +829,42 @@ public final class SurfacePresets {
         return null;
     }
 
-    /** A surface's (null for Base) value as the grid resolves it on a page, in the grid's unit. */
+    /**
+     * A surface's (null for Base) value as the grid resolves it, in the grid's unit; the same on
+     * every page (ADR 0031), whatever {@code pageId}.
+     */
     private static int cellValue(@NonNull TermuxAppSharedPreferences prefs,
                                  @Nullable SurfaceSlot slot, @NonNull SurfaceProperty property,
                                  int pageId) {
-        LookGrid.Element element = elementOf(slot, property);
-        return prefs.lookGrid().value(property.grid, element,
-            element == null ? LookGrid.NO_PAGE : gridPage(pageId));
-    }
-
-    private static int gridPage(int pageId) {
-        return pageId >= 0 ? pageId : LookGrid.NO_PAGE;
+        return prefs.lookGrid().value(property.grid, elementOf(slot, property));
     }
 
     /**
-     * Writes a look's number into a cell: Base for a null surface, else the surface's own cell on
-     * that page; PAGE_ALL (or none) is everywhere and also drops the surface's page values, so the
-     * number shows on every page. A surface without the property is left alone.
+     * Writes a look's number into a cell: Base for a null surface, else the surface's own cell
+     * (the same on every page, ADR 0031). A surface without the property is left alone.
      */
     private static void writeCell(@NonNull TermuxAppSharedPreferences prefs,
                                   @Nullable SurfaceSlot slot, @NonNull SurfaceProperty property,
                                   int pageId, int value) {
         LookGrid grid = prefs.lookGrid();
         if (slot == null) {
-            grid.write(property.grid, null, LookGrid.NO_PAGE, value);
+            grid.write(property.grid, null, value);
             return;
         }
         LookGrid.Element element = elementOf(slot, property);
         if (element == null || !TermuxAppSharedPreferences.hasSurfaceProperty(slot, property))
             return;
-        grid.write(property.grid, element, gridPage(pageId), value);
-        if (pageId == TermuxAppSharedPreferences.PAGE_ALL)
-            clearElementPages(grid, property.grid, element);
+        grid.write(property.grid, element, value);
     }
 
-    /** Puts a surface's cell back on Base on that page; PAGE_ALL also clears every page's own. */
+    /** Puts a surface's cell back on Base. */
     private static void clearCell(@NonNull TermuxAppSharedPreferences prefs,
                                   @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property,
                                   int pageId) {
         LookGrid.Element element = elementOf(slot, property);
         if (element == null || !TermuxAppSharedPreferences.hasSurfaceProperty(slot, property))
             return;
-        LookGrid grid = prefs.lookGrid();
-        grid.clear(property.grid, element, gridPage(pageId));
-        if (pageId == TermuxAppSharedPreferences.PAGE_ALL)
-            clearElementPages(grid, property.grid, element);
-    }
-
-    private static void clearElementPages(@NonNull LookGrid grid,
-                                          @NonNull LookGrid.Property property,
-                                          @NonNull LookGrid.Element element) {
-        for (String stored : grid.gridKeys()) {
-            LookGrid.Key key = LookGrid.parse(stored);
-            if (key != null && key.property == property && key.element == element
-                    && (key.page >= 0 || key.kind != null))
-                grid.store().remove(stored);
-        }
-    }
-
-    /**
-     * Gives the Terminal page (the Workspace) its own number for a surface's cell, which wins over
-     * the wall's; nothing where no Terminal page is known.
-     */
-    private static void writeWorkspaceCell(@NonNull TermuxAppSharedPreferences prefs,
-                                           @NonNull SurfaceSlot slot,
-                                           @NonNull SurfaceProperty property, int value) {
-        if (!TermuxAppSharedPreferences.hasTerminalPage()) return;
-        writeCell(prefs, slot, property, TermuxAppSharedPreferences.terminalPageId(), value);
+        prefs.lookGrid().clear(property.grid, element);
     }
 
     /**
@@ -1298,37 +1225,8 @@ public final class SurfacePresets {
     /** {@link #apply}, one setter and one {@code apply()} at a time: the reference it must match. */
     @VisibleForTesting
     static void applyEach(@NonNull TermuxAppSharedPreferences prefs, @NonNull Preset preset) {
-        // The Workspace's look lands on both halves; Home's own, where the look names it, then
-        // lands on Home's per-half cells alone.
+        // The chrome wears one look on every page (ADR 0031): the look lands once, everywhere.
         applyHalf(prefs, halfOf(preset, PageKind.TERMINAL), null, false);
-        if (!hasHomeLook(preset))
-            return;
-        // The halves are pages now (ADR 0015 6): Home's values are the wall's, and what the
-        // Workspace showed under this look goes to the Terminal page's overrides where a page may
-        // hold it. Note the Workspace's numbers, put Home's on the wall, then override the numbers
-        // that moved.
-        SurfaceSlot[] slots = SurfaceSlot.values();
-        SurfaceProperty[] properties = SurfaceProperty.values();
-        int[][] workspace = new int[slots.length][properties.length];
-        for (SurfaceSlot slot : slots)
-            for (SurfaceProperty property : properties)
-                workspace[slot.ordinal()][property.ordinal()] =
-                    cellValue(prefs, slot, property, pageOf(PageKind.TERMINAL));
-        String workspaceMaterial = prefs.getSurfaceMaterial(pageOf(PageKind.TERMINAL));
-        int workspaceIntensity = prefs.getSurfaceMaterialIntensity(pageOf(PageKind.TERMINAL));
-        applyHalf(prefs, halfOf(preset, PageKind.HOME), PageKind.HOME, true);
-        if (!workspaceMaterial.equals(prefs.getSurfaceMaterial(pageOf(PageKind.TERMINAL))))
-            prefs.setSurfaceMaterial(pageOf(PageKind.TERMINAL), workspaceMaterial);
-        if (workspaceIntensity != prefs.getSurfaceMaterialIntensity(pageOf(PageKind.TERMINAL)))
-            prefs.setSurfaceMaterialIntensity(pageOf(PageKind.TERMINAL), workspaceIntensity);
-        for (SurfaceSlot slot : slots) {
-            for (SurfaceProperty property : properties) {
-                if (!TermuxAppSharedPreferences.isPerPage(slot, property)) continue;
-                int want = workspace[slot.ordinal()][property.ordinal()];
-                if (cellValue(prefs, slot, property, pageOf(PageKind.TERMINAL)) != want)
-                    writeWorkspaceCell(prefs, slot, property, want);
-            }
-        }
     }
 
     /**
@@ -1372,31 +1270,21 @@ public final class SurfacePresets {
         LookGrid.Property.OPACITY, LookGrid.Property.GRAIN, LookGrid.Property.TINT};
 
     /**
-     * Whether a Global Look would clear anything ({@link #clearBeneathLook}): a Home or Workspace
-     * look, or an element's own value, on any of a Look's numbers.
+     * Whether a Global Look would clear anything ({@link #clearBeneathLook}): an element's own
+     * value of one of a Look's numbers.
      */
     static boolean holdsCellsBeneathLook(@NonNull LookGrid grid) {
         for (LookGrid.Property property : LOOK_PROPERTIES) {
             if (!property.perElement) continue;
-            for (LookGrid.Kind kind : LookGrid.Kind.values())
-                if (grid.has(property, null, kind)) return true;
-            for (LookGrid.Element element : LookGrid.Element.values()) {
-                if (grid.has(property, element, (LookGrid.Kind) null)) return true;
-                for (LookGrid.Kind kind : LookGrid.Kind.values())
-                    if (grid.has(property, element, kind)) return true;
-            }
+            for (LookGrid.Element element : LookGrid.Element.values())
+                if (grid.has(property, element)) return true;
         }
         return false;
     }
 
-    /** Every kind and element, held once: the clears below run on each step of a drag. */
-    private static final LookGrid.Kind[] KINDS = LookGrid.Kind.values();
     private static final LookGrid.Element[] ELEMENTS = LookGrid.Element.values();
 
-    /**
-     * Before a Global Look: the Home and Workspace looks (all glass on each kind) and every
-     * element's own value, everywhere and on each kind, go, for each of a Look's numbers.
-     */
+    /** Before a Global Look: every element's own value of each of a Look's numbers goes. */
     static void clearBeneathLook(@NonNull LookGrid grid) {
         for (LookGrid.Property property : LOOK_PROPERTIES)
             clearBeneathGlobal(grid, property);
@@ -1404,215 +1292,41 @@ public final class SurfacePresets {
 
     /**
      * Before a Global value of {@code property} (a Look's number, or a slider on the Global card):
-     * the Home and Workspace values (all glass on each kind) and every element's own value,
-     * everywhere and on each kind, go, so every surface follows Base again. Margin has only the
-     * kind values; Vibrancy nothing beneath Base.
+     * every element's own value goes, so every surface follows Base again. Vibrancy and Margin
+     * have nothing beneath Base.
      */
     static void clearBeneathGlobal(@NonNull LookGrid grid, @NonNull LookGrid.Property property) {
-        if (property.perKind)
-            for (LookGrid.Kind kind : KINDS)
-                clearIfHeld(grid, property, null, kind);
         if (!property.perElement) return;
-        for (LookGrid.Element element : ELEMENTS) {
-            clearIfHeld(grid, property, element, null);
-            for (LookGrid.Kind kind : KINDS)
-                clearIfHeld(grid, property, element, kind);
-        }
+        for (LookGrid.Element element : ELEMENTS)
+            if (grid.has(property, element)) grid.clear(property, element);
     }
 
     /**
-     * Before a Look on a page card (Home, Workspace) for {@code kinds}: each element's own value
-     * on those kinds goes, and an element's everywhere value stops reaching them. That value
-     * moves to the element's cell on every other kind that holds none, so those kinds look as
-     * they did.
-     */
-    static void clearBeneathKindLook(@NonNull LookGrid grid, @NonNull List<LookGrid.Kind> kinds) {
-        for (LookGrid.Property property : LOOK_PROPERTIES)
-            clearBeneathKind(grid, kinds, property);
-    }
-
-    /**
-     * {@link #clearBeneathKindLook} for one property: what a page card's slider of
-     * {@code property} resets on {@code kinds} before its value lands there.
-     */
-    static void clearBeneathKind(@NonNull LookGrid grid, @NonNull List<LookGrid.Kind> kinds,
-                                 @NonNull LookGrid.Property property) {
-        if (!property.perElement) return;
-        for (LookGrid.Element element : ELEMENTS) {
-            for (int i = 0; i < kinds.size(); i++)
-                clearIfHeld(grid, property, element, kinds.get(i));
-            if (!grid.has(property, element, (LookGrid.Kind) null)) continue;
-            int everywhere = grid.store().getInt(
-                LookGrid.key(property, element, (LookGrid.Kind) null), property.shipped);
-            for (LookGrid.Kind other : KINDS)
-                if (!kinds.contains(other) && !grid.has(property, element, other))
-                    grid.write(property, element, other, everywhere);
-            grid.clear(property, element, (LookGrid.Kind) null);
-        }
-    }
-
-    /**
-     * Last change wins (developer, 2026-11-04): a slider on the Global card or a page card (Home,
-     * Workspace) resets the values set beneath it for its one property, at the levels it covers,
-     * so they follow it ({@link #clearBeneathGlobal}, {@link #clearBeneathKind}). An element
+     * Last change wins (developer, 2026-11-04): a slider on the Global card resets the elements'
+     * own values of its one property, so they follow it ({@link #clearBeneathGlobal}). An element
      * card's slider resets nothing: it holds its own value. For a property with no element column
-     * (Margin) an element card edits all glass at its level, so it resets as that level's card.
+     * (Margin) an element card edits Global, so it resets as the Global card does.
      */
     static void clearBeneathSlider(@NonNull LookGrid grid, @NonNull EditorChips chips,
                                    @NonNull LookGrid.Property property) {
         if (!slidersResetBeneath(chips, property)) return;
-        if (chips.onKind()) clearBeneathKind(grid, chips.appliesTo.kinds, property);
-        else clearBeneathGlobal(grid, property);
+        clearBeneathGlobal(grid, property);
     }
 
     /**
      * Whether a slider of {@code property} moved at {@code chips} resets what is beneath it
-     * ({@link #clearBeneathSlider}): all glass at the chips' level, which an element card edits
-     * for a property with no element column.
+     * ({@link #clearBeneathSlider}): Global, which an element card edits for a property with no
+     * element column.
      */
     static boolean slidersResetBeneath(@NonNull EditorChips chips,
                                        @NonNull LookGrid.Property property) {
         return chips.element == null || !property.perElement;
     }
 
-    /** Clears a cell the grid holds; an absent cell is left alone (no write, no seed bookkeeping). */
-    private static void clearIfHeld(@NonNull LookGrid grid, @NonNull LookGrid.Property property,
-                                    @Nullable LookGrid.Element element,
-                                    @Nullable LookGrid.Kind kind) {
-        if (grid.has(property, element, kind)) grid.clear(property, element, kind);
-    }
-
-    /**
-     * A Look put on one page (the editor's scope chip on the page side, ADR 0015 §6): each surface
-     * cell a page may hold (the blur, opacity, grain and tint of the dock, status bar and keyboard)
-     * gets the Look's number as that page's {@code @id} override. Base, the links, the material,
-     * and every value held once for the wall stay as they are, so a Look on one page never
-     * reaches the others. Old half keys read Home's values ({@link #halfOf}).
-     */
-    public static void applyLookAtPage(@NonNull TermuxAppSharedPreferences prefs,
-                                       @NonNull Preset preset, int pageId) {
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null || pageId < 0)
-            return;
-        Preset look = halfOf(preset, PageKind.HOME);
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (isPageCell(slot, property))
-                    writeCell(prefs, slot, property, pageId,
-                        lookCellValue(prefs, look, slot, property));
-            }
-        }
-    }
-
-    /** The keys a page may hold its own value of, as surface cells: what a page-scoped Look writes. */
-    private static boolean isPageCell(@NonNull SurfaceSlot slot,
-                                      @NonNull SurfaceProperty property) {
-        if (isLayoutOwned(property) || !TermuxAppSharedPreferences.isPerPage(slot, property))
-            return false;
-        String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-        return key != null && com.termux.app.look.PageLook.isDetachable(key);
-    }
-
-    /** A page's value of a surface cell: its own {@code @id} override, else the wall's. */
-    private static int pageCellValue(@NonNull TermuxAppSharedPreferences prefs,
-                                     @NonNull SharedPreferences store, int pageId,
-                                     @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
-        if (prefs.lookGrid().has(property.grid, slot.element, pageId))
-            return cellValue(prefs, slot, property, pageId);
-        return cellValue(prefs, slot, property, pageOf(PageKind.HOME));
-    }
-
-    /**
-     * Whether page {@code pageId} holds a value of its own for any surface cell a Look writes: a
-     * page that holds none follows Base, and wears the wall's stop.
-     */
-    public static boolean holdsPageLook(@NonNull TermuxAppSharedPreferences prefs, int pageId) {
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null || pageId < 0)
-            return false;
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (!isPageCell(slot, property))
-                    continue;
-                if (prefs.lookGrid().has(property.grid, slot.element, pageId))
-                    return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether page {@code pageId} wears {@code preset} in the cells a page may hold: each cell, the
-     * page's own value or else the wall's, is the number the Look gives it ({@link
-     * #applyLookAtPage} writes exactly these). The values held once for the wall never decide it.
-     */
-    public static boolean wornAtPage(@NonNull TermuxAppSharedPreferences prefs,
-                                     @NonNull Preset preset, int pageId) {
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null || pageId < 0)
-            return false;
-        Preset look = halfOf(preset, PageKind.HOME);
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (!isPageCell(slot, property))
-                    continue;
-                if (pageCellValue(prefs, store, pageId, slot, property)
-                        != lookCellValue(prefs, look, slot, property))
-                    return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Page {@code pageId}'s look as a Custom: every cell a page may hold, as the page shows it,
-     * under the plain keys. {@link #applyLookAtPage} puts it back on that page (or another).
-     */
-    @NonNull
-    public static Preset customAtPage(@NonNull TermuxAppSharedPreferences prefs, int pageId) {
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store != null && pageId >= 0) {
-            for (SurfaceSlot slot : SurfaceSlot.values()) {
-                for (SurfaceProperty property : SurfaceProperty.values()) {
-                    if (!isPageCell(slot, property))
-                        continue;
-                    values.put(cellKey(slot, property),
-                        pageCellValue(prefs, store, pageId, slot, property));
-                }
-            }
-        }
-        return new Preset(CUSTOM_ID, R.string.termux_surface_preset_custom, values);
-    }
-
-    /**
-     * A look at one half's scope. Home is the wall: {@link #applyHalf}. The Workspace is the
-     * Terminal page, which a Look reaches only through its own surface values: each per-half
-     * cell's resolved number lands as the page's override, and Base, the inherit links, the
-     * material point and the intensity stay the wall's. Values held once for the wall are written
-     * as ever.
-     */
+    /** A look, the same on every page (ADR 0031): {@link #applyHalf} for the wall. */
     private static void applyAtHalf(@NonNull TermuxAppSharedPreferences prefs,
                                     @NonNull Preset look, @NonNull PageKind half) {
-        if (half != PageKind.TERMINAL || !TermuxAppSharedPreferences.hasTerminalPage()) {
-            applyHalf(prefs, look, half, false);
-            return;
-        }
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (isLayoutOwned(property)
-                        || !TermuxAppSharedPreferences.isPerPage(slot, property))
-                    continue;
-                writeWorkspaceCell(prefs, slot, property,
-                    lookCellValue(prefs, look, slot, property));
-            }
-        }
-        for (Map.Entry<String, Object> entry : look.values.entrySet()) {
-            String key = entry.getKey();
-            if (isLayoutOwned(key) || (isHalfKey(key) && !isMaterialKey(key)))
-                continue;
-            applyOne(prefs, key, entry.getValue(), half);
-        }
+        applyHalf(prefs, look, half, false);
     }
 
     /** The material point and its intensity: held per page as strings and numbers of their own. */
@@ -1633,11 +1347,6 @@ public final class SurfacePresets {
         Object base = look.values.get(cellKey(null, property));
         return base != null ? intOf(base)
             : cellValue(prefs, null, property, pageOf(PageKind.HOME));
-    }
-
-    /** Whether the Workspace's worn values are read as the Terminal page's own; see {@link #wornOn}. */
-    private static boolean pageScoped(@NonNull PageKind half) {
-        return half == PageKind.TERMINAL && TermuxAppSharedPreferences.hasTerminalPage();
     }
 
     /**
@@ -1792,7 +1501,7 @@ public final class SurfacePresets {
     public static boolean matches(@NonNull TermuxAppSharedPreferences prefs,
                                   @NonNull Preset preset, @NonNull PageKind half) {
         Preset look = halfOf(preset, half);
-        boolean scoped = pageScoped(half);
+        boolean scoped = false;
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property))
                 continue;
@@ -1829,7 +1538,7 @@ public final class SurfacePresets {
     public static boolean wornOn(@NonNull TermuxAppSharedPreferences prefs,
                                  @NonNull Preset preset, @NonNull PageKind half) {
         Preset look = halfOf(preset, half);
-        boolean scoped = pageScoped(half);
+        boolean scoped = false;
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property) || !touchesCell(row.slot, row.property, half, false))
                 continue;

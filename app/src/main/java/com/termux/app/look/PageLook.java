@@ -23,11 +23,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * The Look of a page (ADR 0015 §6, {@code page-look-2026-10-27.md}): resolved, immutable
  * {@link Snapshot}s cached per page id, writes at a {@link Scope}, and change events.
  *
- * <p>Resolution, per surface and property: the page's override ({@code <key>@<pageId>}) if the
- * property may be detached per page, else the surface's wall-wide value (the plain key) when the
- * surface is detached from Base ({@code surface_inherit_<slot>_<property>}), else Base
- * ({@code surface_base_*}). A page override of a wall-wide-only key (shapes, material, intensity,
- * the inherit flags, Base itself) is ignored.
+ * <p>The chrome wears one look on every page (ADR 0031): a surface's number is its own value,
+ * else Base, whatever the page. A page holds only its wallpaper dim
+ * ({@code <key>@<pageId>}, {@link LookKeys#OVERRIDABLE}); a Look write at a page scope lands
+ * nowhere else.
  */
 public final class PageLook {
 
@@ -79,23 +78,16 @@ public final class PageLook {
             for (SurfaceSlot slot : SurfaceSlot.values())
                 for (SurfaceProperty property : SurfaceProperty.values())
                     values[slot.ordinal()][property.ordinal()] =
-                        LookKeys.resolve(store, kind, pageId, slot, property);
-            String backdropKey = TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY;
-            String pageKey = LookKeys.pageKey(backdropKey, pageId);
-            keyboardBackdropOpacity = LookKeys.normalizeBackdrop(store.has(pageKey)
-                ? store.getInt(pageKey, -1)
-                : store.getInt(backdropKey, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY));
+                        LookKeys.resolve(store, slot, property);
+            keyboardBackdropOpacity = LookKeys.normalizeBackdrop(store.getInt(
+                TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+                TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY));
             wallpaperDim = LookKeys.wallpaperDim(store, pageId);
-            String materialKey = TERMUX_APP.KEY_SURFACE_MATERIAL;
-            String pageMaterial = LookKeys.pageKey(materialKey, pageId);
-            material = store.has(pageMaterial)
-                ? store.getString(pageMaterial, TERMUX_APP.DEFAULT_SURFACE_MATERIAL)
-                : store.getString(materialKey, TERMUX_APP.DEFAULT_SURFACE_MATERIAL);
-            String intensityKey = TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY;
-            String pageIntensity = LookKeys.pageKey(intensityKey, pageId);
-            materialIntensity = Math.max(0, Math.min(100, store.has(pageIntensity)
-                ? store.getInt(pageIntensity, TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY)
-                : store.getInt(intensityKey, TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY)));
+            material = store.getString(TERMUX_APP.KEY_SURFACE_MATERIAL,
+                TERMUX_APP.DEFAULT_SURFACE_MATERIAL);
+            materialIntensity = Math.max(0, Math.min(100, store.getInt(
+                TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY,
+                TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY)));
         }
 
         /**
@@ -127,10 +119,10 @@ public final class PageLook {
         public int appBarOpacity() { return value(SurfaceSlot.DOCK, SurfaceProperty.OPACITY); }
         public int extraKeysBlurRadius() { return value(SurfaceSlot.DOCK, SurfaceProperty.BLUR); }
 
-        /** The material family of the Base triple: the page's own, else the wall's. */
+        /** The material family of the Base triple. */
         @NonNull public String surfaceMaterial() { return material; }
 
-        /** Where on the family's curve the Base triple was set, 0..100: the page's own, else the wall's. */
+        /** Where on the family's curve the Base triple was set, 0..100. */
         public int surfaceMaterialIntensity() { return materialIntensity; }
 
         // Ground inputs.
@@ -161,19 +153,9 @@ public final class PageLook {
         return new LookGrid(LookKeys.gridStore(store));
     }
 
-    /**
-     * Whether a scope may hold this cell: the wall holds every one; a page only an element's
-     * glass number (blur, opacity, grain, tint), as before the grid.
-     */
-    private static boolean holds(@NonNull Scope scope, @NonNull LookGrid.Key cell) {
-        if (scope.isGlobal()) return true;
-        return cell.element != null && (cell.property == LookGrid.Property.FROST
-            || cell.property == LookGrid.Property.OPACITY || cell.property == LookGrid.Property.GRAIN
-            || cell.property == LookGrid.Property.TINT);
-    }
-
-    private static int where(@NonNull Scope scope) {
-        return scope.isGlobal() ? LookGrid.NO_PAGE : scope.pageId();
+    /** Whether a scope may hold a grid cell: only the wall, as the chrome has one look (ADR 0031). */
+    private static boolean holds(@NonNull Scope scope) {
+        return scope.isGlobal();
     }
 
     public void close() {
@@ -202,8 +184,8 @@ public final class PageLook {
     public boolean write(@NonNull Scope scope, @NonNull String key, int value) {
         LookGrid.Key cell = LookKeys.cellOf(key);
         if (cell != null) {
-            if (!holds(scope, cell)) return false;
-            grid().write(cell.property, cell.element, where(scope), LookKeys.toCell(cell.property, value));
+            if (!holds(scope)) return false;
+            grid().write(cell.property, cell.element, LookKeys.toCell(cell.property, value));
             return true;
         }
         if (!LookKeys.KNOWN.contains(key)) return false;
@@ -232,7 +214,7 @@ public final class PageLook {
     public void reset(@NonNull Scope scope, @NonNull String key) {
         LookGrid.Key cell = LookKeys.cellOf(key);
         if (cell != null) {
-            if (holds(scope, cell)) grid().clear(cell.property, cell.element, where(scope));
+            if (holds(scope)) grid().clear(cell.property, cell.element);
             return;
         }
         if (!LookKeys.KNOWN.contains(key)) return;
@@ -246,7 +228,7 @@ public final class PageLook {
     public boolean has(@NonNull Scope scope, @NonNull String key) {
         LookGrid.Key cell = LookKeys.cellOf(key);
         if (cell != null)
-            return holds(scope, cell) && grid().has(cell.property, cell.element, where(scope));
+            return holds(scope) && grid().has(cell.property, cell.element);
         if (!LookKeys.KNOWN.contains(key)) return false;
         if (scope.isGlobal()) return store.has(key);
         return LookKeys.OVERRIDABLE.contains(key)
@@ -259,25 +241,20 @@ public final class PageLook {
         LookGrid.Key cell = LookKeys.cellOf(key);
         if (cell != null)
             return LookKeys.fromCell(cell.property,
-                grid().value(cell.property, cell.element, where(scope)));
+                grid().value(cell.property, cell.element));
         return store.getInt(scope.isGlobal() ? key : LookKeys.pageKey(key, scope.pageId()),
             fallback);
     }
 
     /**
-     * Copies every look override of page {@code fromPageId} to page {@code toPageId} (the
-     * {@code key@id} entries; the target's own are overwritten, other keys are left). Pure on the
-     * store, no listeners: for a page made at upgrade time. Returns how many keys it wrote.
+     * Copies what page {@code fromPageId} holds of its own (its wallpaper dim, the {@code key@id}
+     * entries a page may hold) to page {@code toPageId}; the target's own are overwritten, other
+     * keys are left. Pure on the store, no listeners: for a page made at upgrade time. Returns
+     * how many keys it wrote.
      */
     public static int copyOverrides(@NonNull LookStore store, int fromPageId, int toPageId) {
         if (fromPageId < 0 || toPageId < 0 || fromPageId == toPageId) return 0;
         int copied = 0;
-        for (String stored : new ArrayList<>(store.keys())) {
-            LookGrid.Key cell = LookGrid.parse(stored);
-            if (cell == null || cell.page != fromPageId) continue;
-            store.putInt(LookGrid.key(cell.property, cell.element, toPageId), store.getInt(stored, 0));
-            copied++;
-        }
         for (String plain : LookKeys.OVERRIDABLE) {
             String from = LookKeys.pageKey(plain, fromPageId);
             if (!store.has(from)) continue;
@@ -343,14 +320,9 @@ public final class PageLook {
         if (id >= 0) {
             cache.remove(id);
             touched.add(id);
-        } else if (cell != null && cell.kind != null) {
-            // A kind's cell (ADR 0020 §2) touches only the pages of that kind.
-            for (java.util.Map.Entry<Integer, Snapshot> entry : cache.entrySet()) {
-                if (entry.getValue().kind.name().equals(cell.kind.name())) {
-                    touched.add(entry.getKey());
-                }
-            }
-            for (Integer touchedId : touched) cache.remove(touchedId);
+        } else if (cell != null && (cell.kind != null || cell.page >= 0)) {
+            // A kind's or a page's cell an older build wrote: no page reads it (ADR 0031).
+            return;
         } else {
             touched.addAll(cache.keySet());
             cache.clear();

@@ -19,8 +19,6 @@ import com.termux.app.place.layout.Layouts;
 import com.termux.app.place.layout.LayoutsJson;
 import com.termux.app.setup.AppearanceResetCard;
 import com.termux.shared.termux.settings.preferences.LookGrid;
-import com.termux.shared.termux.settings.preferences.LookGridKindMigration;
-import com.termux.shared.termux.settings.preferences.LookGridKindSeed;
 import com.termux.shared.termux.settings.preferences.LookGridMarginMigration;
 import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -111,9 +109,7 @@ public class AppearanceResetTest {
         boolean lookFresh = (withReset && AppearanceReset.runAtStartUp(app, prefs, fresh)) || fresh;
         prefs.migrateLookGrid(Collections.emptyList(), lookFresh);
         LookGrid.PrefsStore grid = new LookGrid.PrefsStore(store);
-        LookGridKindMigration.run(grid, lookFresh);
         GlassControlsMigration.runAtStartUp(prefs, lookFresh);
-        LookGridKindSeed.run(grid, SurfacePresets.SHIPPED_BY_KIND);
         LookGridMarginMigration.run(grid);
         new PlaceLayoutStore(prefs);
     }
@@ -334,7 +330,6 @@ public class AppearanceResetTest {
         // As on a new install's second start, the two grid migrations mark themselves done.
         Map<String, Object> second = new HashMap<>(store.getAll());
         assertEquals(Boolean.TRUE, second.remove("look_grid_migrated"));
-        assertEquals(Boolean.TRUE, second.remove("look_grid_kind_migrated"));
         assertEquals(first, second);
         assertEquals(layouts, LayoutStore.shared(app).current());
     }

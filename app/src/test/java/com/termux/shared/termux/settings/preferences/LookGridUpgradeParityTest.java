@@ -53,30 +53,6 @@ public class LookGridUpgradeParityTest {
 
     private void upgrade() {
         preferences.migrateLookGrid(Arrays.asList(0, 5));
-        // Then step 17: page 0 is the Start-in Home page, page 5 the Terminal page, and each
-        // page reads its kind's cells from here on.
-        foldPageCellsThroughStep17(store, 0, 5);
-        LookGrid.install(page -> page == 0 ? LookGrid.Kind.HOME
-            : page == 5 ? LookGrid.Kind.TERMINAL : null, null);
-    }
-
-    /**
-     * The layouts upgrade's look fold (step 17, ADR 0020 §2) over the test store: the Start-in
-     * Home page's and the Terminal page's @<page> cells become their kinds' cells.
-     */
-    private static void foldPageCellsThroughStep17(android.content.SharedPreferences store,
-                                                   int homePageId, int terminalPageId) {
-        android.content.SharedPreferences.Editor editor = store.edit();
-        for (java.util.Map.Entry<String, Object> cell : LookGrid.foldedPageCells(store.getAll(),
-                homePageId, terminalPageId).entrySet())
-            editor.putInt(cell.getKey(), ((Number) cell.getValue()).intValue());
-        editor.commit();
-    }
-
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        LookGrid.install(null, null);
     }
 
     @Test
@@ -102,7 +78,8 @@ public class LookGridUpgradeParityTest {
         for (int page : WHERE) {
             String at = "page " + page;
             assertEquals(at, 70, preferences.getAppBarOpacity(page));
-            assertEquals(at, page == 5 ? 12 : 40, preferences.getStatusBarOpacity(page));
+            // The page's own 12 is no page's look any more (ADR 0031).
+            assertEquals(at, 40, preferences.getStatusBarOpacity(page));
             assertEquals(at, TermuxAppSharedPreferences.clampInAppKeyboardBackgroundOpacity(40),
                 preferences.getInAppKeyboardBackgroundOpacity(page));
             // Blur 12 is Tint's stop: exact.

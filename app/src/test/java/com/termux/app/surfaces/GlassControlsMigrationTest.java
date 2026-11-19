@@ -58,10 +58,8 @@ public class GlassControlsMigrationTest {
     private void storeOldLook(String id) {
         SurfacePresets.apply(preferences, preset(id));
         com.termux.shared.termux.settings.preferences.LookGrid grid = preferences.lookGrid();
-        grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT_HUE, null,
-            com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE);
-        grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.VIBRANCY, null,
-            com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE);
+        grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT_HUE, null);
+        grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.VIBRANCY, null);
         preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 100);
         // Clear's face terms came with generation 6; a store this old has none.
         preferences.setFancierGlassFaceClarityPercent(0);
@@ -562,9 +560,4 @@ public class GlassControlsMigrationTest {
         GlassControlsMigration.run(preferences);
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

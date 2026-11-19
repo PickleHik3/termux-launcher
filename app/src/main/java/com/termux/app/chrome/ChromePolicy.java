@@ -183,8 +183,8 @@ public final class ChromePolicy {
             // through the plain setters would have made each one overwrite the last, because while
             // they are linked they all name the same Base value.
             // Base is named outright: all glass, everywhere (the grid's first cell).
-            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE, appBar);
-            preferences.lookGrid().write(LookGrid.Property.FROST, null, LookGrid.NO_PAGE,
+            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, appBar);
+            preferences.lookGrid().write(LookGrid.Property.FROST, null,
                 FrostStops.nearestStopByBlur(blur));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, appBar);
@@ -199,8 +199,8 @@ public final class ChromePolicy {
             preferences.setUseSystemWallpaperEnabled(false);
             // Opaque and unblurred is a uniform state, so it belongs on the shared layer: every
             // surface goes opaque, including the ones this policy never named individually.
-            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE, 100);
-            preferences.lookGrid().write(LookGrid.Property.FROST, null, LookGrid.NO_PAGE,
+            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, 100);
+            preferences.lookGrid().write(LookGrid.Property.FROST, null,
                 FrostStops.nearestStopByBlur(0));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);

@@ -65,88 +65,6 @@ public class AppearanceSnapshotHalfTest {
     }
 
     @Test
-    public void aHalfThatFollowedTheSharedValueFollowsItAgain() {
-        // Both halves equal at open: no half keeps a key of its own.
-        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
-        assertFalse(hasHalfKeys());
-
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 77);
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(), 12);
-        assertTrue(hasHalfKeys());
-
-        entry.restore(preferences);
-
-        assertFalse("every half key written in the session is gone", hasHalfKeys());
-        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId()));
-    }
-
-    @Test
-    public void aHomeOrDisplayKindOverrideWrittenInTheSessionGoesOnRestore() {
-        int home = 7;
-        int display = 9;
-        com.termux.shared.termux.settings.preferences.LookGrid.install(page ->
-            page == home ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.HOME
-                : page == display ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.DISPLAY
-                : page == com.termux.app.look.TerminalPageIdFixture.TERMINAL_PAGE_ID
-                    ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.TERMINAL : null,
-            null);
-        try {
-            preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, display, 31);
-            AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
-            // A page's own dock opacity is the dock's cell on that page's kind (ADR 0020 §2).
-            String homeKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
-                com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
-                com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK,
-                com.termux.shared.termux.settings.preferences.LookGrid.Kind.HOME);
-            String displayKey = com.termux.shared.termux.settings.preferences.LookGrid.key(
-                com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
-                com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK,
-                com.termux.shared.termux.settings.preferences.LookGrid.Kind.DISPLAY);
-            assertEquals("the Display page writes the Display kind's cell", 31,
-                store.getInt(displayKey, -1));
-            boolean homeHeld = store.contains(homeKey);
-            int homeAtOpen = store.getInt(homeKey, -1);
-
-            preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, home, 15);
-            preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, display, 60);
-            assertNotEquals("a Home page's own value is a change", entry.signature(),
-                AppearanceSnapshot.signatureOf(preferences));
-
-            entry.restore(preferences);
-
-            assertEquals("Home's override written in the session is gone", homeHeld,
-                store.contains(homeKey));
-            assertEquals(homeAtOpen, store.getInt(homeKey, -1));
-            assertEquals("the Display kind's override is put back", 31, store.getInt(displayKey, -1));
-            assertEquals(entry.signature(), AppearanceSnapshot.signatureOf(preferences));
-        } finally {
-            com.termux.app.look.TerminalPageIdFixture.installKinds();
-        }
-    }
-
-    @Test
-    public void theTerminalsMaterialIsNotWrittenOntoTheWall() {
-        int terminal = TermuxAppSharedPreferences.terminalPageId();
-        String wallMaterial = preferences.getSurfaceMaterial(TermuxAppSharedPreferences.PAGE_WALL);
-        String own = wallMaterial.equals("frost") ? "clear" : "frost";
-        preferences.setSurfaceMaterial(terminal, own);
-        preferences.setSurfaceMaterialIntensity(terminal, 13);
-        int wallIntensity = preferences.getSurfaceMaterialIntensity(
-            TermuxAppSharedPreferences.PAGE_WALL);
-        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
-
-        entry.restore(preferences);
-
-        assertEquals(wallMaterial, preferences.getSurfaceMaterial(
-            TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(wallIntensity, preferences.getSurfaceMaterialIntensity(
-            TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(own, preferences.getSurfaceMaterial(terminal));
-        assertEquals(13, preferences.getSurfaceMaterialIntensity(terminal));
-    }
-
-    @Test
     public void theHalvesKeysAreEveryPerHalfCell() {
         java.util.List<String> keys = AppearanceSnapshot.halfAbleKeys();
         for (SurfaceSlot slot : SurfaceSlot.values()) {
@@ -186,9 +104,4 @@ public class AppearanceSnapshotHalfTest {
         return false;
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

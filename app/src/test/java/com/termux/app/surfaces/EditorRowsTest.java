@@ -139,8 +139,7 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.HOME, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
             Row.PAGE_DOTS, Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS,
-            Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.WALLPAPER_DIM, Row.RIM, Row.TINT_HUE,
+            Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.WALLPAPER_DIM,
             Row.SECTION_LINKS, Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES, Row.LINK_SHEETS),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PageKind frame : PageKind.values()) {
@@ -174,7 +173,9 @@ public class EditorRowsTest {
     public void frostIsTheOneGlassSliderOnEveryCardWithGlass() {
         for (EditorCard card : EditorCard.values()) {
             List<Row> rows = rowsOf(card, ALL);
-            assertTrue(card + " has Frost", rows.contains(Row.FROST));
+            // The page cards have no glass: the chrome wears one look on every page (ADR 0031).
+            assertEquals(card + " has Frost", !EditorChips.isPageCard(card),
+                rows.contains(Row.FROST));
         }
         // Grain is its own row since the look grid (ADR 0017); Blur stays Frost's.
         for (Row row : Row.values())
@@ -230,7 +231,8 @@ public class EditorRowsTest {
             }
             // The spec's touch order puts Colour between the legend strip and Corners, and
             // Grain under More, so a card may hold several runs; it holds one at least.
-            assertTrue(card + " has a slider", runs >= 1);
+            if (card != EditorCard.WORKSPACE)
+                assertTrue(card + " has a slider", runs >= 1);
             for (int i = 0; i < rows.size(); i++) {
                 if (CardBody.shape(rows.get(i)) != CardBody.Shape.SLIDER_LINK)
                     continue;

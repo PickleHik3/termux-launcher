@@ -9,7 +9,6 @@ import com.termux.app.place.PlaceKeyboard;
 import com.termux.app.terminal.io.ExtraKeySetResolver;
 import com.termux.app.terminal.io.ExtraKeysTarget;
 import com.termux.app.wall.PaneWallPolicy;
-import com.termux.app.wall.WallLookKinds;
 import com.termux.app.wall.WallPages;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 
@@ -54,7 +53,6 @@ public class DisplayRestTest {
 
     @Test
     public void theLookIsTheWorkspacesTerminalKind() {
-        assertEquals(LookGrid.Kind.TERMINAL, WallLookKinds.of(PageKind.DISPLAY));
         assertTrue(DisplayRest.of(new Rest.Inputs.Builder().build()).windowChips);
     }
 }

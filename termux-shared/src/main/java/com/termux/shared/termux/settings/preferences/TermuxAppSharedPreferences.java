@@ -474,9 +474,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getAppLauncherDrawerCornerRadius() {
         LookGrid grid = lookGrid();
-        if (!grid.has(LookGrid.Property.CORNERS, LookGrid.Element.SHEETS, LookGrid.NO_PAGE))
+        if (!grid.has(LookGrid.Property.CORNERS, LookGrid.Element.SHEETS))
             return TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS;
-        int value = grid.value(LookGrid.Property.CORNERS, LookGrid.Element.SHEETS, LookGrid.NO_PAGE);
+        int value = grid.value(LookGrid.Property.CORNERS, LookGrid.Element.SHEETS);
         if (value < 0) return TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS;
         return Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS, value);
     }
@@ -838,11 +838,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_BEND}. Clamped, in dp. */
     public int getFancierGlassBendDp() {
-        return lookGrid().value(LookGrid.Property.DEPTH, null, LookGrid.NO_PAGE);
+        return lookGrid().value(LookGrid.Property.DEPTH, null);
     }
 
     public void setFancierGlassBendDp(int value) {
-        lookGrid().write(LookGrid.Property.DEPTH, null, LookGrid.NO_PAGE, value);
+        lookGrid().write(LookGrid.Property.DEPTH, null, value);
     }
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_EDGE_WIDTH}. Clamped, in dp. */
@@ -886,11 +886,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_DISPERSION}. Clamped, a percentage. */
     public int getFancierGlassDispersionPercent() {
-        return lookGrid().value(LookGrid.Property.EDGE, null, LookGrid.NO_PAGE);
+        return lookGrid().value(LookGrid.Property.EDGE, null);
     }
 
     public void setFancierGlassDispersionPercent(int value) {
-        lookGrid().write(LookGrid.Property.EDGE, null, LookGrid.NO_PAGE, value);
+        lookGrid().write(LookGrid.Property.EDGE, null, value);
     }
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_CLARITY}. Clamped, a percentage. */
@@ -960,10 +960,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_WIDGETS_ON_GLASS}. */
     public boolean isWidgetsOnGlassEnabled() {
         LookGrid grid = lookGrid();
-        return !(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.WIDGETS, LookGrid.NO_PAGE)
-            && grid.has(LookGrid.Property.FROST, LookGrid.Element.WIDGETS, LookGrid.NO_PAGE)
-            && grid.value(LookGrid.Property.OPACITY, LookGrid.Element.WIDGETS, LookGrid.NO_PAGE) == 100
-            && grid.value(LookGrid.Property.FROST, LookGrid.Element.WIDGETS, LookGrid.NO_PAGE)
+        return !(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.WIDGETS)
+            && grid.has(LookGrid.Property.FROST, LookGrid.Element.WIDGETS)
+            && grid.value(LookGrid.Property.OPACITY, LookGrid.Element.WIDGETS) == 100
+            && grid.value(LookGrid.Property.FROST, LookGrid.Element.WIDGETS)
                 == FrostStops.SOLID);
     }
 
@@ -971,11 +971,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setWidgetsOnGlassEnabled(boolean value) {
         LookGrid grid = lookGrid();
         if (value) {
-            grid.clear(LookGrid.Property.OPACITY, LookGrid.Element.WIDGETS, LookGrid.NO_PAGE);
-            grid.clear(LookGrid.Property.FROST, LookGrid.Element.WIDGETS, LookGrid.NO_PAGE);
+            grid.clear(LookGrid.Property.OPACITY, LookGrid.Element.WIDGETS);
+            grid.clear(LookGrid.Property.FROST, LookGrid.Element.WIDGETS);
         } else {
-            grid.write(LookGrid.Property.OPACITY, LookGrid.Element.WIDGETS, LookGrid.NO_PAGE, 100);
-            grid.write(LookGrid.Property.FROST, LookGrid.Element.WIDGETS, LookGrid.NO_PAGE,
+            grid.write(LookGrid.Property.OPACITY, LookGrid.Element.WIDGETS, 100);
+            grid.write(LookGrid.Property.FROST, LookGrid.Element.WIDGETS,
                 FrostStops.SOLID);
         }
     }
@@ -3402,19 +3402,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     // ------------------------------------------------------------------------ the look grid
     //
-    // Every look value lives in one grid (ADR 0017, LookGrid): Base, the element everywhere, all
-    // glass on a page, the element on a page. The surface API below is a thin layer over it: the
-    // named getters answer the resolved number, an unscoped setter writes Base, and a scoped
-    // write names its cell. Blur is held as its Frost stop and answered in dp.
+    // Every look value lives in one grid (ADR 0017, LookGrid): Base and the element's own. The
+    // chrome wears one look on every page (ADR 0031), so a page id handed to the surface API below
+    // no longer changes the answer or the cell written. The named getters answer the resolved
+    // number and a setter writes Base or the element's own cell. Blur is held as its Frost stop
+    // and answered in dp.
 
     /** The look grid over this store. */
     @NonNull
     public LookGrid lookGrid() {
         return new LookGrid(new LookGrid.PrefsStore(mSharedPreferences));
-    }
-
-    private static int gridPage(int pageId) {
-        return pageId >= 0 ? pageId : LookGrid.NO_PAGE;
     }
 
     /** A grid number in the property's old unit: a Frost stop as its blur in dp. */
@@ -3434,17 +3431,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return property.grid.perElement ? slot.element : null;
     }
 
-    /** Drops every page's and every kind's own value of an element's property. */
-    private void clearElementPages(@NonNull LookGrid grid, @NonNull LookGrid.Property property,
-                                   @NonNull LookGrid.Element element) {
-        for (String stored : grid.gridKeys()) {
-            LookGrid.Key key = LookGrid.parse(stored);
-            if (key != null && key.property == property && key.element == element
-                    && (key.page >= 0 || key.kind != null))
-                grid.store().remove(stored);
-        }
-    }
-
     /**
      * A named setter's write: the surface's own cell everywhere when it holds one, else Base, which
      * every surface following it shows. "Make this surface show X" (the Settings sliders, the
@@ -3455,8 +3441,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         LookGrid.Element element = cellElement(slot, property);
         LookGrid grid = lookGrid();
         if (element != null && hasSurfaceProperty(slot, property)
-                && grid.has(property.grid, element, LookGrid.NO_PAGE))
-            grid.write(property.grid, element, LookGrid.NO_PAGE, toGrid(property, value));
+                && grid.has(property.grid, element))
+            grid.write(property.grid, element, toGrid(property, value));
         else
             setSurfaceBaseValue(property, value);
     }
@@ -3489,9 +3475,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (element == null || !hasSurfaceProperty(slot, property))
             return;
         if (getSurfaceBaseValue(property, PAGE_WALL) == value)
-            lookGrid().clear(property.grid, element, LookGrid.NO_PAGE);
+            lookGrid().clear(property.grid, element);
         else
-            lookGrid().write(property.grid, element, LookGrid.NO_PAGE, toGrid(property, value));
+            lookGrid().write(property.grid, element, toGrid(property, value));
     }
 
     /**
@@ -3521,19 +3507,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
-     * Writes the element's cell at a Where: a page's, or everywhere (PAGE_ALL also drops the
-     * element's page values, so the number shows on every page). Margin, which has no element
-     * column, writes the Where's all-glass cell.
+     * Writes the element's own cell (ADR 0031: the same on every page, whatever {@code pageId}).
+     * Margin, which has no element column, writes Base.
      */
     private void writeSurfaceRaw(SurfaceSlot slot, SurfaceProperty property,
                                  int pageId, int value) {
         if (!hasSurfaceProperty(slot, property))
             return;
-        LookGrid grid = lookGrid();
-        LookGrid.Element element = cellElement(slot, property);
-        grid.write(property.grid, element, gridPage(pageId), toGrid(property, value));
-        if (element != null && pageId == PAGE_ALL)
-            clearElementPages(grid, property.grid, element);
+        lookGrid().write(property.grid, cellElement(slot, property), toGrid(property, value));
     }
 
     /**
@@ -3753,8 +3734,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         LookGrid.Element element = cellElement(slot, property);
         if (element == null || !hasSurfaceProperty(slot, property))
             return true;
-        // The element's own cell on the page, on the page's kind (ADR 0018 §3), or everywhere.
-        return !lookGrid().holdsOwn(property.grid, element, pageId);
+        return !lookGrid().holdsOwn(property.grid, element);
     }
 
     /** Links or unlinks the surface on both halves: the shared flag, with either half's dropped. */
@@ -3772,14 +3752,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (element == null || !hasSurfaceProperty(slot, property))
             return;
         LookGrid grid = lookGrid();
-        int page = gridPage(pageId);
         if (inherit) {
-            // The wall (PAGE_WALL) clears the everywhere-cell; PAGE_ALL every page's as well.
-            grid.clear(property.grid, element, page);
-            if (pageId == PAGE_ALL)
-                clearElementPages(grid, property.grid, element);
-        } else if (!grid.has(property.grid, element, page)) {
-            grid.write(property.grid, element, page, grid.value(property.grid, element, page));
+            grid.clear(property.grid, element);
+        } else if (!grid.has(property.grid, element)) {
+            grid.write(property.grid, element, grid.value(property.grid, element));
         }
     }
 
@@ -3822,12 +3798,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public int getSurfaceBaseValue(SurfaceProperty property, int pageId) {
         // Base has no page of its own in this wave (as before the grid: the Base keys were never
         // page keys), so every page reads the wall's.
-        return fromGrid(property, lookGrid().value(property.grid, null, LookGrid.NO_PAGE));
+        return fromGrid(property, lookGrid().value(property.grid, null));
     }
 
     /** Sets Base on both halves: the shared key, with either half's own dropped. */
     public void setSurfaceBaseValue(SurfaceProperty property, int value) {
-        lookGrid().write(property.grid, null, LookGrid.NO_PAGE, toGrid(property, value));
+        lookGrid().write(property.grid, null, toGrid(property, value));
     }
 
     /** Sets one half's Base; PAGE_ALL, or a property not held per half, sets both. */
@@ -3908,7 +3884,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Drops every page's own value of {@code key} (PAGE_ALL: the number shows on all pages). */
     private void removePageKeys(@NonNull SharedPreferences.Editor editor, @NonNull String key) {
-        if (mSharedPreferences == null || !PageLookKeys.DETACHABLE.contains(key)) return;
+        if (mSharedPreferences == null || !PageLookKeys.everHeld().contains(key)) return;
         String prefix = key + PageLookKeys.PAGE_SEPARATOR;
         for (String stored : reads().getAll().keySet()) {
             if (stored.startsWith(prefix) && isPageId(stored, prefix.length()))
@@ -3940,14 +3916,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     /** The glass rim a preset chose; {@code hairline} unless it named another that we know. */
     @NonNull
     public String getSurfaceGlassRim() {
-        switch (lookGrid().value(LookGrid.Property.RIM, null, LookGrid.NO_PAGE)) {
+        switch (lookGrid().value(LookGrid.Property.RIM, null)) {
             case LookGrid.RIM_GRADIENT: return TERMUX_APP.GLASS_RIM_GRADIENT;
             default: return TERMUX_APP.GLASS_RIM_HAIRLINE;
         }
     }
 
     public void setSurfaceGlassRim(@Nullable String rim) {
-        lookGrid().write(LookGrid.Property.RIM, null, LookGrid.NO_PAGE,
+        lookGrid().write(LookGrid.Property.RIM, null,
             LookGridMigration.rimOf(rim == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_RIM : rim));
     }
 
@@ -3967,7 +3943,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     /** The accent the tint amount mixes in; {@code primary} unless another known one is stored. */
     @NonNull
     public String getSurfaceGlassTintHue() {
-        switch (lookGrid().value(LookGrid.Property.TINT_HUE, null, LookGrid.NO_PAGE)) {
+        switch (lookGrid().value(LookGrid.Property.TINT_HUE, null)) {
             case LookGrid.TINT_HUE_SECONDARY: return TERMUX_APP.GLASS_TINT_HUE_SECONDARY;
             case LookGrid.TINT_HUE_TERTIARY: return TERMUX_APP.GLASS_TINT_HUE_TERTIARY;
             default: return TERMUX_APP.GLASS_TINT_HUE_PRIMARY;
@@ -3976,7 +3952,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Writes a known hue; anything else writes the default. */
     public void setSurfaceGlassTintHue(@Nullable String hue) {
-        lookGrid().write(LookGrid.Property.TINT_HUE, null, LookGrid.NO_PAGE,
+        lookGrid().write(LookGrid.Property.TINT_HUE, null,
             LookGridMigration.tintHueOf(hue == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT_HUE : hue));
     }
 
@@ -4011,11 +3987,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_SURFACE_GLASS_VIBRANCY}. Clamped. */
     public int getSurfaceGlassVibrancy() {
-        return lookGrid().value(LookGrid.Property.VIBRANCY, null, LookGrid.NO_PAGE);
+        return lookGrid().value(LookGrid.Property.VIBRANCY, null);
     }
 
     public void setSurfaceGlassVibrancy(int value) {
-        lookGrid().write(LookGrid.Property.VIBRANCY, null, LookGrid.NO_PAGE, value);
+        lookGrid().write(LookGrid.Property.VIBRANCY, null, value);
     }
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TEXT_SIZE_PERCENT}. Clamped. */
@@ -4090,7 +4066,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public int getSurfaceValue(@NonNull SurfaceSlot slot, @NonNull SurfaceProperty property,
                                int pageId) {
         return fromGrid(property,
-            lookGrid().value(property.grid, cellElement(slot, property), gridPage(pageId)));
+            lookGrid().value(property.grid, cellElement(slot, property)));
     }
 
     /**

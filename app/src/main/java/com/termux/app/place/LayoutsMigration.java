@@ -276,15 +276,4 @@ final class LayoutsMigration {
         return com.termux.app.place.layout.IconSize.fold(homeDp, dockDp);
     }
 
-    /**
-     * The page looks that fold into kind looks: {@code look.…@<page>} of the Start-in Home page
-     * into {@code @kind:home}, of the Terminal page into {@code @kind:terminal} and
-     * {@code @kind:display}, each only where the kind's cell is absent. Other pages' cells are
-     * left in the file and no longer read.
-     */
-    @NonNull
-    Map<String, Object> lookCells() {
-        return com.termux.shared.termux.settings.preferences.LookGrid.foldedPageCells(mAll,
-            homePageId, terminalPageId);
-    }
 }

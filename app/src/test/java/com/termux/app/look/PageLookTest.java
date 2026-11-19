@@ -36,17 +36,9 @@ public class PageLookTest {
         store = new MemoryLookStore();
         // A page's look is its kind's (ADR 0020 §2): Home pages 1 and 3 share the Home kind's
         // cells, the Terminal page 2 has the Terminal kind's.
-        com.termux.shared.termux.settings.preferences.LookGrid.install(page -> page == 1 || page == 3 ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.HOME
-            : page == 2 ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.TERMINAL : null, null);
         look = new PageLook(store);
         events = new ArrayList<>();
         look.addListener(events::add);
-    }
-
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
     }
 
     private static Set<Integer> ids(Integer... ids) {
@@ -130,26 +122,6 @@ public class PageLookTest {
     }
 
     @Test
-    public void kindCellBeatsWallValueAndBase() {
-        put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 40);
-        put(dockGrain(), 77);
-        detach(SurfaceSlot.DOCK, SurfaceProperty.GRAIN);
-        assertTrue(look.write(PageLook.Scope.page(2), dockGrain(), 5));
-        assertEquals(5, look.of(TERMINAL).dockGlassGrain());
-        assertEquals(77, look.of(HOME).dockGlassGrain());
-    }
-
-    @Test
-    public void kindCellBeatsBaseWhenSurfaceFollowsBase() {
-        put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 40);
-        assertTrue(look.write(PageLook.Scope.page(3), dockGrain(), 9));
-        // Both Home pages wear the Home kind's cell; the Terminal page still follows Base.
-        assertEquals(9, look.of(HOME_B).dockGlassGrain());
-        assertEquals(9, look.of(HOME).dockGlassGrain());
-        assertEquals(40, look.of(TERMINAL).dockGlassGrain());
-    }
-
-    @Test
     public void valuesAreClampedAsTheGettersClamp() {
         put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, 90);
         put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, -4);
@@ -160,38 +132,6 @@ public class PageLookTest {
     }
 
     // ---- detachable vs wall-wide only
-
-    @Test
-    public void everyLookPropertyOfDockStatusKeyboardIsDetachable() {
-        SurfaceSlot[] slots = {SurfaceSlot.DOCK, SurfaceSlot.STATUS, SurfaceSlot.KEYBOARD};
-        SurfaceProperty[] props = {SurfaceProperty.BLUR, SurfaceProperty.OPACITY,
-            SurfaceProperty.GRAIN, SurfaceProperty.TINT};
-        for (SurfaceSlot slot : slots) {
-            for (SurfaceProperty property : props) {
-                String key = LookKeys.surfaceKey(slot, property);
-                assertTrue(slot + " " + property, PageLook.isDetachable(key));
-                assertTrue(look.write(PageLook.Scope.page(3), key, 11));
-                // Blur 11 wears the nearest Frost stop's 12.
-                assertEquals(slot + " " + property, property == SurfaceProperty.BLUR ? 12 : 11,
-                    look.of(HOME_B).value(slot, property));
-                assertTrue(slot + " " + property,
-                    look.of(TERMINAL).value(slot, property) != 11);
-            }
-        }
-    }
-
-    @Test
-    public void canvasIsDetachableOnTheTerminalPageOnly() {
-        String tint = TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH;
-        assertTrue(PageLook.isDetachable(tint));
-        assertTrue(look.write(PageLook.Scope.page(2), tint, 33));
-        // A leftover @<page> cell of a Home page is no longer read.
-        put(LookKeys.pageKey(tint, 3), 44);
-        assertEquals(33, look.of(TERMINAL).canvasTint());
-        assertEquals(0, look.of(HOME_B).canvasTint());
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_TINT,
-            look.of(HOME_B).value(SurfaceSlot.CANVAS, SurfaceProperty.TINT));
-    }
 
     @Test
     public void shapesAreWallWideAndIgnorePageOverrides() {
@@ -208,28 +148,6 @@ public class PageLookTest {
     }
 
     @Test
-    public void materialAndIntensityAreDetachable() {
-        String material = TERMUX_APP.KEY_SURFACE_MATERIAL;
-        String intensity = TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY;
-        assertTrue(PageLook.isDetachable(material));
-        assertTrue(PageLook.isDetachable(intensity));
-        store.putString(material, "stone");
-        put(intensity, 70);
-        assertEquals("stone", look.of(HOME_B).surfaceMaterial());
-        assertEquals(70, look.of(HOME_B).surfaceMaterialIntensity());
-
-        assertTrue(look.writeString(PageLook.Scope.page(3), material, "frost"));
-        assertTrue(look.write(PageLook.Scope.page(3), intensity, 20));
-        assertEquals("frost", look.of(HOME_B).surfaceMaterial());
-        assertEquals(20, look.of(HOME_B).surfaceMaterialIntensity());
-        assertEquals("stone", look.of(HOME).surfaceMaterial());
-        assertEquals(70, look.of(HOME).surfaceMaterialIntensity());
-
-        look.reset(PageLook.Scope.page(3), material);
-        assertEquals("stone", look.of(HOME_B).surfaceMaterial());
-    }
-
-    @Test
     public void baseAndInheritFlagsAreWallWide() {
         assertFalse(PageLook.isDetachable(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
         assertFalse(PageLook.isDetachable(
@@ -238,15 +156,41 @@ public class PageLookTest {
         assertFalse(has(LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 3)));
     }
 
+    /**
+     * The chrome wears one look on every page (ADR 0031): a page scope takes no surface value,
+     * material or intensity, and every page answers the wall's.
+     */
+    @Test
+    public void noPageHoldsALookOfItsOwn() {
+        for (SurfaceSlot slot : new SurfaceSlot[] {SurfaceSlot.DOCK, SurfaceSlot.STATUS,
+                SurfaceSlot.KEYBOARD, SurfaceSlot.CANVAS}) {
+            for (SurfaceProperty property : new SurfaceProperty[] {SurfaceProperty.BLUR,
+                    SurfaceProperty.OPACITY, SurfaceProperty.GRAIN, SurfaceProperty.TINT}) {
+                String key = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+                    .surfaceOverrideKey(slot, property);
+                if (key == null) continue;
+                assertFalse(slot + " " + property, PageLook.isDetachable(key));
+                assertFalse(slot + " " + property, look.write(PageLook.Scope.page(3), key, 33));
+                assertEquals(slot + " " + property, look.of(HOME).value(slot, property),
+                    look.of(HOME_B).value(slot, property));
+            }
+        }
+        assertFalse(PageLook.isDetachable(TERMUX_APP.KEY_SURFACE_MATERIAL));
+        assertFalse(PageLook.isDetachable(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY));
+        assertTrue(PageLook.isDetachable(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM));
+    }
+
     @Test
     public void groundInputsAreDetachable() {
         put(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, 20);
         assertTrue(look.write(PageLook.Scope.page(3), TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, 55));
         assertEquals(55, look.of(HOME_B).wallpaperDim());
         assertEquals(20, look.of(HOME).wallpaperDim());
-        look.write(PageLook.Scope.page(3), TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, 60);
-        assertEquals(60, look.of(HOME_B).inAppKeyboardBackdropOpacity());
-        assertEquals(100, look.of(HOME).inAppKeyboardBackdropOpacity());
+        // The keyboard's backdrop is the chrome's: no page holds its own (ADR 0031).
+        assertFalse(look.write(PageLook.Scope.page(3),
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, 60));
+        assertEquals(look.of(HOME).inAppKeyboardBackdropOpacity(),
+            look.of(HOME_B).inAppKeyboardBackdropOpacity());
     }
 
     @Test
@@ -265,19 +209,6 @@ public class PageLookTest {
         PageLook.Snapshot a = look.of(HOME);
         assertSame(a, look.of(new Page(1, PageKind.HOME, "renamed", null)));
         assertNotSame(a, look.of(HOME_B));
-    }
-
-    @Test
-    public void kindWriteInvalidatesOnlyThatKindsPages() {
-        PageLook.Snapshot terminal = look.of(TERMINAL);
-        PageLook.Snapshot other = look.of(HOME_B);
-        assertTrue(look.write(PageLook.Scope.page(3), dockGrain(), 12));
-        assertSame(terminal, look.of(TERMINAL));
-        assertNotSame(other, look.of(HOME_B));
-        assertEquals(12, look.of(HOME_B).dockGlassGrain());
-        assertEquals(1, events.size());
-        assertTrue(events.get(0).contains(3));
-        assertFalse(events.get(0).contains(2));
     }
 
     @Test
@@ -319,28 +250,6 @@ public class PageLookTest {
 
     // ---- reset per scope
 
-    @Test
-    public void resetAtPageClearsOnlyTheKindsCell() {
-        detach(SurfaceSlot.DOCK, SurfaceProperty.GRAIN);
-        look.write(PageLook.Scope.GLOBAL, dockGrain(), 70);
-        look.write(PageLook.Scope.page(3), dockGrain(), 10);
-        assertEquals(10, look.of(HOME_B).dockGlassGrain());
-        look.reset(PageLook.Scope.page(3), dockGrain());
-        assertEquals(70, look.of(HOME_B).dockGlassGrain());
-        assertTrue(has(dockGrain()));
-    }
-
-    @Test
-    public void resetAtGlobalClearsTheSurfacesOwnValueAndKeepsTheKindsCell() {
-        detach(SurfaceSlot.DOCK, SurfaceProperty.GRAIN);
-        look.write(PageLook.Scope.GLOBAL, dockGrain(), 70);
-        look.write(PageLook.Scope.page(3), dockGrain(), 10);
-        look.reset(PageLook.Scope.GLOBAL, dockGrain());
-        assertFalse(has(dockGrain()));
-        assertEquals(com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN.shipped, look.of(TERMINAL).dockGlassGrain());
-        assertEquals(10, look.of(HOME_B).dockGlassGrain());
-    }
-
     // ---- prune and drop
 
     @Test
@@ -379,24 +288,6 @@ public class PageLookTest {
     // ---- the editor's scope (B2)
 
     @Test
-    public void pageScopeWriteAndResetNotifyThatKindsPages() {
-        look.of(HOME);
-        look.of(HOME_B);
-        look.of(TERMINAL);
-        events.clear();
-        assertTrue(look.write(PageLook.Scope.page(3), dockGrain(), 12));
-        assertFalse(events.get(events.size() - 1).contains(2));
-        assertTrue(events.get(events.size() - 1).contains(3));
-        assertEquals(12, look.of(HOME_B).dockGlassGrain());
-        assertEquals(12, look.of(HOME).dockGlassGrain());
-        events.clear();
-        look.reset(PageLook.Scope.page(3), dockGrain());
-        assertFalse(events.get(events.size() - 1).contains(2));
-        assertTrue(events.get(events.size() - 1).contains(3));
-        assertEquals(com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN.shipped, look.of(HOME_B).dockGlassGrain());
-    }
-
-    @Test
     public void globalWriteNotifiesEveryCachedPage() {
         look.of(HOME);
         look.of(TERMINAL);
@@ -406,20 +297,4 @@ public class PageLookTest {
         assertEquals(33, look.of(TERMINAL).dockGlassGrain());
     }
 
-    @Test
-    public void hasAndReadAnswerTheLevelOfTheScope() {
-        PageLook.Scope page = PageLook.Scope.page(3);
-        assertFalse(look.has(page, dockGrain()));
-        assertEquals(-1, look.read(page, dockGrain(), -1));
-        look.write(page, dockGrain(), 21);
-        assertTrue(look.has(page, dockGrain()));
-        // Page 1 is a Home page too: one kind, one cell. The Terminal page's is its own.
-        assertTrue(look.has(PageLook.Scope.page(1), dockGrain()));
-        assertFalse(look.has(PageLook.Scope.page(2), dockGrain()));
-        assertFalse(look.has(PageLook.Scope.GLOBAL, dockGrain()));
-        assertEquals(21, look.read(page, dockGrain(), -1));
-        // A wall-wide-only key never holds a page's value.
-        assertFalse(look.write(page, TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 5));
-        assertFalse(look.has(page, TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
-    }
 }

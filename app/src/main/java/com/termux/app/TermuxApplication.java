@@ -153,24 +153,10 @@ public class TermuxApplication extends Application {
             for (com.termux.app.wall.WallPages.Page page : wallStore.current().allPages())
                 lookPageIds.add(page.id);
             surfacePreferences.migrateLookGrid(lookPageIds, lookFresh);
-            // Every grid reads a page's kind from the wall and a kind's shipped look from the
-            // shipped Looks (ADR 0018 §3); then Home's old cells move to the Home kind, once.
-            com.termux.shared.termux.settings.preferences.LookGrid.install(
-                new com.termux.app.wall.WallLookKinds(wallStore),
-                com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
-            com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(
-                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
-                    surfacePreferences.getSharedPreferences()), lookFresh);
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences,
                 lookFresh);
-            // Last: each kind's shipped look becomes its kind cells, once, on fresh and upgraded
-            // installs alike (ADR 0018 §3); after every freshness check above.
-            com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(
-                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
-                    surfacePreferences.getSharedPreferences()),
-                com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
             // Margin is one number for every page: the Margin Home wore becomes Base's, once.
             com.termux.shared.termux.settings.preferences.LookGridMarginMigration.run(
                 new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(

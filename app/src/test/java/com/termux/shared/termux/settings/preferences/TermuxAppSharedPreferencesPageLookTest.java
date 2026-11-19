@@ -20,8 +20,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 /**
- * Page looks as the preferences read and write them (ADR 0015 §6): a write that names no page
- * shows on every page, and the canvas honours the Terminal page's own value.
+ * Looks as the preferences read and write them: the chrome wears one look on every page
+ * (ADR 0031), whatever an older build left under a page's or a kind's key.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -45,15 +45,55 @@ public class TermuxAppSharedPreferencesPageLookTest {
             LookGrid.NO_PAGE);
     }
 
-    /** L5: a write on every page drops every page's own value, a Display page's included. */
+    /**
+     * The status bar, the dock, the keyboard, the widgets and the sheets answer every look number
+     * the same on a Home page as on the Terminal page, with an older build's per-kind and
+     * per-page values for each of them still in the store (ADR 0031 §1).
+     */
     @Test
-    public void aWriteOnAllPagesDropsEveryPagesOverride() {
+    public void everyChromeSurfaceAnswersTheSameOnHomeAndTheTerminal() {
+        int home = 9;
+        SharedPreferences.Editor old = store.edit();
+        for (LookGrid.Property property : LookGrid.Property.values()) {
+            int value = Math.max(property.min, Math.min(property.max, property.min + 1));
+            for (LookGrid.Kind kind : LookGrid.Kind.values()) {
+                if (property != LookGrid.Property.VIBRANCY)
+                    old.putInt(LookGrid.key(property, null, kind), value);
+                if (!property.perElement) continue;
+                for (LookGrid.Element element : LookGrid.Element.values())
+                    old.putInt(LookGrid.key(property, element, kind), value);
+            }
+            old.putInt(LookGrid.key(property, null, home), value);
+            old.putInt(LookGrid.key(property, null, T), value);
+        }
+        old.commit();
+        for (SurfaceSlot slot : new SurfaceSlot[] {SurfaceSlot.STATUS, SurfaceSlot.DOCK,
+                SurfaceSlot.KEYBOARD, SurfaceSlot.WIDGETS, SurfaceSlot.SHEETS}) {
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                if (!TermuxAppSharedPreferences.hasSurfaceProperty(slot, property)) continue;
+                assertEquals(slot + " " + property,
+                    prefs.getSurfaceValue(slot, property, TermuxAppSharedPreferences.PAGE_WALL),
+                    prefs.getSurfaceValue(slot, property, home));
+                assertEquals(slot + " " + property,
+                    prefs.getSurfaceValue(slot, property, home),
+                    prefs.getSurfaceValue(slot, property, T));
+            }
+        }
+        assertEquals(prefs.getAppBarOpacity(home), prefs.getAppBarOpacity(T));
+        assertEquals(prefs.getStatusBarOpacity(home), prefs.getStatusBarOpacity(T));
+        assertEquals(prefs.getInAppKeyboardBackgroundOpacity(home),
+            prefs.getInAppKeyboardBackgroundOpacity(T));
+        assertEquals(prefs.getExtraKeysBlurRadius(home), prefs.getExtraKeysBlurRadius(T));
+        assertEquals(prefs.getDockTintStrength(home), prefs.getDockTintStrength(T));
+    }
+
+    /** One look on every page (ADR 0031): an older build's page values are never read. */
+    @Test
+    public void aPagesOldValueIsNeverRead() {
         store.edit().putInt(PageLookKeys.pageKey(dockOpacity, T), 70)
             .putInt(PageLookKeys.pageKey(dockOpacity, DISPLAY), 70).commit();
         prefs.setSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_ALL, 37);
-        assertFalse(store.contains(PageLookKeys.pageKey(dockOpacity, DISPLAY)));
-        assertFalse(store.contains(PageLookKeys.pageKey(dockOpacity, T)));
         assertEquals(37, prefs.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, DISPLAY));
         assertEquals(37, prefs.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, T));
     }
@@ -69,34 +109,14 @@ public class TermuxAppSharedPreferencesPageLookTest {
             TermuxAppSharedPreferences.PAGE_WALL));
     }
 
-    /** L3: the terminal's ground reads the Terminal page's own value, as PageLook does. */
+    /** The terminal's ground reads the terminal's own value; a page's old one is not read. */
     @Test
-    public void theCanvasHonoursTheTerminalPagesOverride() {
+    public void theCanvasReadsTheTerminalsOwnValue() {
         String key = LookGrid.key(LookGrid.Property.OPACITY, LookGrid.Element.TERMINAL,
             LookGrid.NO_PAGE);
         store.edit().putInt(key, 80).putInt(PageLookKeys.pageKey(key, T), 30).commit();
-        // The Terminal page's own value reaches the Terminal kind's cell through step 17.
-        foldPageCellsThroughStep17(store, -1, T);
-        assertEquals(30, prefs.getTerminalBackgroundOpacity());
-        assertEquals(30, prefs.getSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, T));
+        assertEquals(80, prefs.getTerminalBackgroundOpacity());
+        assertEquals(80, prefs.getSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, T));
     }
 
-    /**
-     * The layouts upgrade's look fold (step 17, ADR 0020 §2) over the test store: the Start-in
-     * Home page's and the Terminal page's @<page> cells become their kinds' cells.
-     */
-    private static void foldPageCellsThroughStep17(android.content.SharedPreferences store,
-                                                   int homePageId, int terminalPageId) {
-        android.content.SharedPreferences.Editor editor = store.edit();
-        for (java.util.Map.Entry<String, Object> cell : LookGrid.foldedPageCells(store.getAll(),
-                homePageId, terminalPageId).entrySet())
-            editor.putInt(cell.getKey(), ((Number) cell.getValue()).intValue());
-        editor.commit();
-    }
-
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        LookGrid.install(null, null);
-    }
 }

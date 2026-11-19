@@ -34,17 +34,20 @@ public final class LookGridMarginMigration {
 
     /** The fold itself, ungated: Home's Margin into Base, every kind and page cell dropped. */
     static boolean fold(@NonNull LookGrid grid) {
-        int home = grid.value(Property.MARGIN, null, Kind.HOME);
+        String homeKey = LookGrid.key(Property.MARGIN, null, Kind.HOME);
+        int home = grid.store().contains(homeKey)
+            ? Property.MARGIN.clamp(grid.store().getInt(homeKey, Property.MARGIN.shipped))
+            : grid.value(Property.MARGIN, null);
         boolean changed = false;
         for (String stored : grid.gridKeys()) {
             Key cell = LookGrid.parse(stored);
             if (cell == null || cell.property != Property.MARGIN) continue;
             if (cell.kind == null && cell.page < 0) continue;
-            grid.clear(cell);
+            grid.store().remove(stored);
             changed = true;
         }
-        if (grid.value(Property.MARGIN, null, LookGrid.NO_PAGE) != home) {
-            grid.write(Property.MARGIN, null, LookGrid.NO_PAGE, home);
+        if (grid.value(Property.MARGIN, null) != home) {
+            grid.write(Property.MARGIN, null, home);
             changed = true;
         }
         return changed;

@@ -144,19 +144,14 @@ final class LookKeys {
     }
 
     /**
-     * One surface number for a page: page override, else the surface's wall-wide value when it is
-     * detached from Base, else Base. Shapes answer Base. A slot without the property answers the
-     * shipped value.
+     * One surface number, the same on every page (ADR 0031): the surface's own value, else Base.
+     * A slot without the property answers the shipped value.
      */
-    static int resolve(@NonNull LookStore store, @NonNull PageKind kind, int pageId,
-                       @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
+    static int resolve(@NonNull LookStore store, @NonNull SurfaceSlot slot,
+                       @NonNull SurfaceProperty property) {
         LookGrid grid = new LookGrid(gridStore(store));
         LookGrid.Element element = property.grid.perElement ? slot.element : null;
-        // A page holds its own glass numbers only; the canvas's only on the Terminal page.
-        boolean pageHolds = pageId >= 0 && isLookProperty(property)
-            && (slot != SurfaceSlot.CANVAS || kind == PageKind.TERMINAL);
-        return fromCell(property.grid, grid.value(property.grid, element,
-            pageHolds ? pageId : LookGrid.NO_PAGE));
+        return fromCell(property.grid, grid.value(property.grid, element));
     }
 
     /** A value in the old unit of the cell's property: a Frost stop as its blur in dp. */

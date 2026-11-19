@@ -10,8 +10,6 @@ import androidx.annotation.VisibleForTesting;
 import com.termux.app.place.LayoutReset;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.LookGrid;
-import com.termux.shared.termux.settings.preferences.LookGridKindMigration;
-import com.termux.shared.termux.settings.preferences.LookGridKindSeed;
 import com.termux.shared.termux.settings.preferences.LookGridMarginMigration;
 import com.termux.shared.termux.settings.preferences.LookGridMigration;
 import com.termux.shared.termux.settings.preferences.PageLookKeys;
@@ -128,9 +126,10 @@ public final class AppearanceReset {
         TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, TERMUX_APP.KEY_SURFACE_TUNING_NORMALIZED,
         TERMUX_APP.KEY_LAYOUT_STYLE_MIGRATED, TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT,
         SurfacePresets.KEY_LOOKS_GENERATION, LookGridMigration.KEY_MIGRATED,
-        LookGridKindMigration.KEY_MIGRATED, LookGridKindSeed.KEY_SEEDED,
-        LookGridKindSeed.KEY_MARKED, LookGrid.KEY_SEEDED_CELLS,
-        LookGridMarginMigration.KEY_MIGRATED);
+        LookGridMarginMigration.KEY_MIGRATED,
+        // The kind steps' markers and seed list (retired with the kind row, ADR 0031).
+        "look_grid_kind_migrated", "look_grid_kind_seeded", "look_grid_kind_seed_marked",
+        "look_grid_seeded_cells");
 
     /**
      * Whether the reset removes {@code key}: a named key, a surface's Base or own value, a look
@@ -239,14 +238,14 @@ public final class AppearanceReset {
             }
         }
         keys.addAll(AppearanceSnapshot.halfAbleKeys());
-        keys.addAll(PageLookKeys.DETACHABLE);
+        keys.addAll(PageLookKeys.everHeld());
         return Collections.unmodifiableSet(keys);
     }
 
     @NonNull
     private static Set<String> pageAble() {
         Set<String> able = new HashSet<>(AppearanceSnapshot.halfAbleKeys());
-        able.addAll(PageLookKeys.DETACHABLE);
+        able.addAll(PageLookKeys.everHeld());
         return Collections.unmodifiableSet(able);
     }
 }

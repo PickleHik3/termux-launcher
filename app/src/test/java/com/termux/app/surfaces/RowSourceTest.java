@@ -15,52 +15,37 @@ import org.junit.Test;
 /** The dot after a row's name, and Reset this row, speak of the cell the value comes from. */
 public class RowSourceTest {
 
-    private static final int PAGE = 3;
-
     @Test
-    public void theDotIsColouredByTheCellAndAbsentForASharedValue() {
-        assertEquals(RowSource.ELEMENT_ON_PAGE, RowSource.of(Cell.ELEMENT_ON_PAGE));
-        assertEquals(RowSource.PAGE, RowSource.of(Cell.PAGE));
+    public void theDotMarksAnElementsOwnValueAndNoSharedOne() {
         assertEquals(RowSource.ELEMENT, RowSource.of(Cell.ELEMENT));
+        assertTrue(RowSource.of(Cell.ELEMENT).marked());
         assertFalse(RowSource.of(Cell.BASE).marked());
         assertFalse(RowSource.of(Cell.SHIPPED).marked());
         assertFalse(RowSource.of(null).marked());
     }
 
     @Test
-    public void aRowsDotFollowsWhereTheChipsReadIt() {
-        LookGrid grid = homeGrid();
-        EditorChips dock = new EditorChips(EditorChips.AppliesTo.GLOBAL, Element.DOCK);
-        EditorChips onHome = dock.withAppliesTo(EditorChips.AppliesTo.HOME);
+    public void aRowsDotFollowsTheElementsOwnCell() {
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
+        EditorChips dock = new EditorChips(Element.DOCK);
         assertFalse(source(grid, dock, Row.OPACITY).marked());
-        grid.write(Property.OPACITY, null, PAGE, 40);
-        assertEquals("a page's value is its kind's (ADR 0020 §2)", RowSource.KIND,
-            source(grid, onHome, Row.OPACITY));
-        grid.write(Property.OPACITY, Element.DOCK, LookGrid.NO_PAGE, 50);
-        assertEquals("the element everywhere beats the kind's all glass (element beats page)",
-            RowSource.ELEMENT, source(grid, onHome, Row.OPACITY));
+        grid.write(Property.OPACITY, null, 40);
+        assertFalse("Global's value is shared", source(grid, dock, Row.OPACITY).marked());
+        grid.write(Property.OPACITY, Element.DOCK, 50);
         assertEquals(RowSource.ELEMENT, source(grid, dock, Row.OPACITY));
-        grid.write(Property.OPACITY, Element.DOCK, PAGE, 60);
-        assertEquals(RowSource.ELEMENT_ON_KIND, source(grid, onHome, Row.OPACITY));
     }
 
     @Test
     public void resetThisRowClearsTheChipsCellAlone() {
-        LookGrid grid = homeGrid();
-        EditorChips chips = new EditorChips(EditorChips.AppliesTo.HOME, Element.DOCK);
-        grid.write(Property.GRAIN, Element.DOCK, PAGE, 30);
-        grid.write(Property.GRAIN, Element.DOCK, LookGrid.NO_PAGE, 20);
+        LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
+        EditorChips chips = new EditorChips(Element.DOCK);
+        grid.write(Property.GRAIN, null, 30);
+        grid.write(Property.GRAIN, Element.DOCK, 20);
         LookGrid.Key cell = chips.cell(GlassRows.gridProperty(Row.GRAIN));
         assertTrue("offered while the cell holds a value", grid.has(cell));
         grid.clear(cell);
-        assertEquals(RowSource.ELEMENT, source(grid, chips, Row.GRAIN));
-        assertEquals(20, grid.value(Property.GRAIN, Element.DOCK, PAGE));
-    }
-
-    /** A grid whose page {@link #PAGE} is a Home page. */
-    private static LookGrid homeGrid() {
-        return new LookGrid(new LookGrid.MemoryStore(),
-            page -> page == PAGE ? LookGrid.Kind.HOME : null, null);
+        assertFalse(source(grid, chips, Row.GRAIN).marked());
+        assertEquals(30, grid.value(Property.GRAIN, Element.DOCK));
     }
 
     private static RowSource source(LookGrid grid, EditorChips chips, Row row) {

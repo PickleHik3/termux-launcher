@@ -26,9 +26,8 @@ import org.robolectric.util.ReflectionHelpers;
 import android.app.Application;
 
 /**
- * The Home and Workspace cards' glass strips (appearance-cards-overhaul §1): Home writes the
- * all-glass cells of Home pages, the Workspace those of Terminal and Display pages together;
- * neither touches Base, which Customization writes. Reset clears the card's cells alone.
+ * The Global card's glass strips write Base, the one look every page wears (ADR 0031); the Home
+ * and Workspace cards have no glass of their own.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -72,86 +71,16 @@ public class SurfaceEditorHomeGlassTest {
     }
 
     @Test
-    public void theStripReadsHomesCellOverBase() {
-        grid().write(LookGrid.Property.OPACITY, null, HOME, 33);
-        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME);
-        assertEquals(33, model(editor).value(Row.OPACITY));
-    }
-
-    @Test
-    public void homeWritesHomePagesAndLeavesBase() {
-        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME);
-        model(editor).onValue(Row.OPACITY, 55, false);
-        assertEquals(55, grid().value(LookGrid.Property.OPACITY, null, HOME));
-        assertEquals("Base is Customization's", 92,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertFalse(grid().has(LookGrid.Property.OPACITY, null, LookGrid.Kind.TERMINAL));
-        assertFalse(grid().has(LookGrid.Property.OPACITY, null, LookGrid.Kind.DISPLAY));
-    }
-
-    @Test
-    public void workspaceWritesTerminalAndDisplayPages() {
-        SurfaceEditorController editor = open(EditorCard.WORKSPACE, PageKind.TERMINAL);
-        model(editor).onValue(Row.OPACITY, 44, false);
-        model(editor).onValue(Row.FROST, 70, false);
-        model(editor).onReleased(Row.FROST);
-        for (LookGrid.Kind kind : new LookGrid.Kind[] {LookGrid.Kind.TERMINAL, LookGrid.Kind.DISPLAY}) {
-            assertEquals(kind.key, 44, grid().value(LookGrid.Property.OPACITY, null, kind));
-            assertTrue(kind.key, grid().has(LookGrid.Property.FROST, null, kind));
-            assertTrue(kind.key, grid().has(LookGrid.Property.GRAIN, null, kind));
-        }
-        assertFalse(grid().has(LookGrid.Property.OPACITY, null, HOME));
-        assertEquals(92,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-    }
-
-    @Test
     public void customizationWritesBaseAndResetsTheDocksOwn() {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_WALL, 30);
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.HOME);
         model(editor).onValue(Row.OPACITY, 61, false);
-        assertEquals(61, grid().value(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE));
+        assertEquals(61, grid().value(LookGrid.Property.OPACITY, null));
         // Last change wins (developer, 2026-11-04): the dock follows Base again.
         assertFalse("the dock's own value went",
-            grid().has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, LookGrid.NO_PAGE));
-        assertEquals(61, grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK,
-            LookGrid.NO_PAGE));
-        for (LookGrid.Kind kind : LookGrid.Kind.values())
-            assertFalse(kind.key, grid().has(LookGrid.Property.OPACITY, null, kind));
-    }
-
-    @Test
-    public void homesWriteResetsTheDocksOwnValueOnHomeAlone() {
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL,
-            30);
-        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME);
-        model(editor).onValue(Row.OPACITY, 70, false);
-        // Last change wins (developer, 2026-11-04): the dock follows Home on Home pages and keeps
-        // its 30 on the Workspace's.
-        assertEquals(grid().value(LookGrid.Property.OPACITY, null, HOME),
-            grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, HOME));
-        assertEquals(30, grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK,
-            LookGrid.Kind.TERMINAL));
-    }
-
-    @Test
-    public void resetHomeClearsHomePagesCellsAlone() {
-        SurfaceEditorController editor = open(EditorCard.HOME, PageKind.HOME);
-        model(editor).onValue(Row.OPACITY, 50, false);
-        model(editor).onValue(Row.FROST, 70, false);
-        model(editor).onReleased(Row.FROST);
-        assertTrue(grid().has(LookGrid.Property.OPACITY, null, HOME));
-
-        ReflectionHelpers.callInstanceMethod(editor, "resetCard");
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-
-        for (LookGrid.Property property : new LookGrid.Property[] {LookGrid.Property.OPACITY,
-                LookGrid.Property.FROST, LookGrid.Property.GRAIN})
-            assertFalse(property.key, grid().has(property, null, HOME));
-        assertEquals("Base stays", 92,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals("Home follows Base again", 92, model(editor).value(Row.OPACITY));
+            grid().has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals(61, grid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
     }
 
     // ------------------------------------------------------------------------------- the drive
@@ -170,9 +99,4 @@ public class SurfaceEditorHomeGlassTest {
         return ReflectionHelpers.getField(editor, "mModel");
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

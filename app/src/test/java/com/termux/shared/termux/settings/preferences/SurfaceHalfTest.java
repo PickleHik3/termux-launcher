@@ -78,43 +78,6 @@ public class SurfaceHalfTest {
     }
 
     @Test
-    public void halfDetach_leavesTheOtherHalfLinked() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 30);
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, TermuxAppSharedPreferences.terminalPageId(),
-            80);
-
-        assertEquals(80, preferences.getDockTintStrength(TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(80, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(30, preferences.getDockTintStrength(TermuxAppSharedPreferences.PAGE_WALL));
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT,
-            TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(1, preferences.surfaceOverrideCount(SurfaceSlot.DOCK, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(0, preferences.surfaceOverrideCount(SurfaceSlot.DOCK, TermuxAppSharedPreferences.PAGE_WALL));
-    }
-
-    @Test
-    public void halfWrite_followsThatHalfsLink() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 5);
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
-            TermuxAppSharedPreferences.PAGE_WALL, 20);
-
-        // Home's keyboard is detached: the write lands on its own value, Base stays.
-        preferences.setSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 33);
-        assertEquals(33, preferences.getInAppKeyboardGrain(TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(5, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
-
-        // The link is wall-wide, so the Workspace's keyboard is detached too; its write lands on
-        // the Terminal page's own value and Base stays.
-        preferences.setSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
-            TermuxAppSharedPreferences.terminalPageId(), 9);
-        assertEquals(9, preferences.getInAppKeyboardGrain(TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(33, preferences.getInAppKeyboardGrain(TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(5, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(5, preferences.getDockGlassGrain(TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(5, preferences.getDockGlassGrain(TermuxAppSharedPreferences.PAGE_WALL));
-    }
-
-    @Test
     public void canvas_holdsOneValue() {
         preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_WALL, 70);
@@ -196,26 +159,6 @@ public class SurfaceHalfTest {
     }
 
     // ------------------------------------------------------------------ the editor's helpers
-
-    @Test
-    public void resetSurface_putsOneHalfBackOnItsLook() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 25);
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.PAGE_WALL, 90);
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.terminalPageId(), 80);
-
-        preferences.resetSurfaceToLook(SurfaceSlot.KEYBOARD, TermuxAppSharedPreferences.PAGE_WALL);
-
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL),
-            preferences.getSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-                TermuxAppSharedPreferences.PAGE_WALL));
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(80, preferences.getInAppKeyboardBackgroundOpacity(TermuxAppSharedPreferences.terminalPageId()));
-    }
 
     @Test
     public void surfaceValue_matchesTheNamedGetters() {

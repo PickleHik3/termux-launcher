@@ -10,39 +10,34 @@ import org.junit.Test;
 public class LookCopyTest {
 
     @Test
-    public void copiesEveryOverrideOfOnePageToAnotherAndLeavesTheRest() {
+    public void copiesThePagesDimAloneAndLeavesTheRest() {
         MemoryLookStore store = new MemoryLookStore();
         String intensity = TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY;
-        String material = TERMUX_APP.KEY_SURFACE_MATERIAL;
         String dim = TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM;
-        store.putInt(intensity, 10);
         store.putInt(intensity + "@3", 42);
-        store.putString(material + "@3", "frost");
+        store.putInt("look.opacity.dock@3", 12);
+        store.putInt(dim + "@3", 30);
         store.putInt(dim + "@5", 9);
-        store.putInt(dim + "@4", 1);
 
-        int n = PageLook.copyOverrides(store, 3, 4);
+        assertEquals(1, PageLook.copyOverrides(store, 3, 4));
 
-        assertEquals(2, n);
-        assertEquals(42, store.getInt(intensity + "@4", -1));
-        assertEquals("frost", store.getString(material + "@4", ""));
-        // The target's own value for a key the source lacks stays; the source and others stay.
-        assertEquals(1, store.getInt(dim + "@4", -1));
-        assertEquals(42, store.getInt(intensity + "@3", -1));
+        assertEquals(30, store.getInt(dim + "@4", -1));
+        // An older build's page looks are no page's any more (ADR 0031): not carried.
+        assertFalse(store.has(intensity + "@4"));
+        assertFalse(store.has("look.opacity.dock@4"));
         assertEquals(9, store.getInt(dim + "@5", -1));
-        assertEquals(10, store.getInt(intensity, -1));
     }
 
     @Test
-    public void overwritesTheTargetsValueAndIgnoresNothingToCopyOrTheSamePage() {
+    public void overwritesTheTargetsDimAndIgnoresNothingToCopyOrTheSamePage() {
         MemoryLookStore store = new MemoryLookStore();
-        String intensity = TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY;
-        store.putInt(intensity + "@3", 42);
-        store.putInt(intensity + "@4", 1);
+        String dim = TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM;
+        store.putInt(dim + "@3", 42);
+        store.putInt(dim + "@4", 1);
         assertEquals(1, PageLook.copyOverrides(store, 3, 4));
-        assertEquals(42, store.getInt(intensity + "@4", -1));
+        assertEquals(42, store.getInt(dim + "@4", -1));
         assertEquals(0, PageLook.copyOverrides(store, 7, 8));
-        assertFalse(store.has(intensity + "@8"));
+        assertFalse(store.has(dim + "@8"));
         assertEquals(0, PageLook.copyOverrides(store, 3, 3));
         assertEquals(0, PageLook.copyOverrides(store, -1, 4));
     }

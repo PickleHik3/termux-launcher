@@ -166,9 +166,9 @@ public final class LookGridMigration {
         int baseBlur = store.getInt(OldProperty.BLUR.baseKey, OldProperty.BLUR.baseDefault);
         int baseGrain = store.getInt(OldProperty.GRAIN.baseKey, OldProperty.GRAIN.baseDefault);
         int baseStop = FrostStops.nearestStopByBlur(baseBlur);
-        grid.write(Property.FROST, null, LookGrid.NO_PAGE, baseStop);
+        grid.write(Property.FROST, null, baseStop);
         if (FrostStops.grainPercentFor(baseStop) != baseGrain)
-            grid.write(Property.GRAIN, null, LookGrid.NO_PAGE, baseGrain);
+            grid.write(Property.GRAIN, null, baseGrain);
         copyInt(store, grid, OldProperty.OPACITY.baseKey, Property.OPACITY, null);
         copyInt(store, grid, OldProperty.TINT.baseKey, Property.TINT, null);
         copyInt(store, grid, "surface_base_corner_radius", Property.CORNERS, null);
@@ -179,12 +179,12 @@ public final class LookGridMigration {
         copyInt(store, grid, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS, Property.CORNERS,
             Element.SHEETS);
         String hue = store.getString(TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE, null);
-        if (hue != null) grid.write(Property.TINT_HUE, null, LookGrid.NO_PAGE, tintHueOf(hue));
+        if (hue != null) grid.write(Property.TINT_HUE, null, tintHueOf(hue));
         String rim = store.getString(TERMUX_APP.KEY_SURFACE_GLASS_RIM, null);
-        if (rim != null) grid.write(Property.RIM, null, LookGrid.NO_PAGE, rimOf(rim));
+        if (rim != null) grid.write(Property.RIM, null, rimOf(rim));
         if (!store.getBoolean(TERMUX_APP.KEY_WIDGETS_ON_GLASS, TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS)) {
-            grid.write(Property.OPACITY, Element.WIDGETS, LookGrid.NO_PAGE, 100);
-            grid.write(Property.FROST, Element.WIDGETS, LookGrid.NO_PAGE, FrostStops.SOLID);
+            grid.write(Property.OPACITY, Element.WIDGETS, 100);
+            grid.write(Property.FROST, Element.WIDGETS, FrostStops.SOLID);
         }
 
         // Each surface: detached on the wall → its element cell; a page's own value → that page's.
@@ -303,14 +303,13 @@ public final class LookGridMigration {
                 return grid.store().getInt(pageCell, Integer.MIN_VALUE) == expected;
             page = LookGrid.NO_PAGE;
         }
-        return grid.value(target, element, page) == expected;
+        return grid.value(target, element) == expected;
     }
 
     /**
      * Writes one old value. A page's own value goes to that page's cell
-     * ({@code look.<p>.<element>@<page>}), never through the grid's kind lookup: the wall's page
-     * kinds are not installed yet when this runs, and the layouts migration (step 17, ADR 0020 §7)
-     * folds the Start-in Home page's and the Terminal page's cells into their kinds' cells later.
+     * ({@code look.<p>.<element>@<page>}), which no build reads any more (ADR 0031): the one-look
+     * reset deletes it.
      */
     private static void writeOld(@NonNull LookGrid grid, @NonNull Element element,
                                  @NonNull OldProperty property, int page, int value) {
@@ -319,7 +318,7 @@ public final class LookGridMigration {
         if (page >= 0)
             grid.store().putInt(LookGrid.key(target, element, page), target.clamp(stored));
         else
-            grid.write(target, element, page, stored);
+            grid.write(target, element, stored);
     }
 
     @NonNull
@@ -336,7 +335,7 @@ public final class LookGridMigration {
                                 @NonNull String oldKey, @NonNull Property property,
                                 @Nullable Element element) {
         if (store.contains(oldKey))
-            grid.write(property, element, LookGrid.NO_PAGE, store.getInt(oldKey, property.shipped));
+            grid.write(property, element, store.getInt(oldKey, property.shipped));
     }
 
     static int tintHueOf(@NonNull String hue) {

@@ -3271,15 +3271,14 @@ public class LauncherCtlApiServer {
             "launcherctl look - the glass look\n" +
             "\n" +
             "Usage:\n" +
-            "  launcherctl look get PROPERTY [--element E] [--page ID | --kind K]\n" +
-            "  launcherctl look set PROPERTY VALUE [--element E] [--page ID | --kind K]\n" +
-            "  launcherctl look reset [PROPERTY] [--element E] [--page ID | --kind K]\n" +
+            "  launcherctl look get PROPERTY [--element E]\n" +
+            "  launcherctl look set PROPERTY VALUE [--element E]\n" +
+            "  launcherctl look reset [PROPERTY] [--element E]\n" +
             "\n" +
             "Properties: frost opacity tint colour corners depth edge grain rim vibrancy margin.\n" +
             "Elements: status dock keyboard terminal widgets sheets. Without --element a value\n" +
-            "applies to all glass; without --page or --kind, everywhere. --kind takes home,\n" +
-            "terminal or display: every page of that kind. Vibrancy and margin are for all glass,\n" +
-            "everywhere.\n" +
+            "is Global's. The look is the same on every page. Vibrancy and margin are Global's\n" +
+            "only.\n" +
             "Values: a number; frost takes a stop 0-7 or a blur such as 12dp; colour takes primary,\n" +
             "secondary or tertiary; rim takes off, hairline or bright; corners takes dp or auto.\n" +
             "get prints the value and where it is set; reset puts back what the cell followed.\n" +
@@ -3287,7 +3286,6 @@ public class LauncherCtlApiServer {
             "Examples:\n" +
             "  launcherctl look set opacity 60 --element dock\n" +
             "  launcherctl look get opacity --element dock\n" +
-            "  launcherctl look set opacity 60 --element keyboard --kind home\n" +
             "  launcherctl look reset --element dock\n" +
             "EOF\n" +
             "      ;;\n" +
