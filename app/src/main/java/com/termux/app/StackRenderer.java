@@ -325,8 +325,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         if (!mHasEnds || mToHome != toHome) {
             // Which of the Workspace's rests the crossing lands at, asked once as it begins:
             // whether its keyboard is up there is the page's answer, known only now.
-            mPredictedHostTop[1] = !toHome && mViews.arrivalKeyboardUp()
-                ? mWorkspaceTopKeyboardUp : mWorkspaceTopKeyboardDown;
+            boolean up = !toHome && mViews.arrivalKeyboardUp();
+            mPredictedHostTop[1] = up ? mWorkspaceTopKeyboardUp : mWorkspaceTopKeyboardDown;
+            if (com.termux.app.chrome.MotionLog.enabled)
+                com.termux.app.chrome.MotionLog.log("host-aim", "toHome=" + toHome + " kbUp=" + up
+                    + " down=" + mWorkspaceTopKeyboardDown + " up=" + mWorkspaceTopKeyboardUp
+                    + " home=" + mPredictedHostTop[0]); // DIAG(host-shift)
         }
         mHasEnds = true;
         mFromHome = fromHome;

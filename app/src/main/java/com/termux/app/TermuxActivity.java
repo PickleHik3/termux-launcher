@@ -9540,6 +9540,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (dockCover == mDockGlassCover && mDockCoverNow != dockCover)
                 rebuildBackdropGlassEffectForLens();
         }
+        // DIAG(dock-cover): the program's cover as each pass finds it; revert before merge.
+        if (MotionLog.enabled && dockCover != mDockGlassCover)
+            MotionLog.log("dock-cover", "pass=" + dockCover + " built=" + mDockGlassCover
+                + " blend=" + mDockCoverBlendOn + " now=" + mDockCoverNow);
         // A Frost drag moves the radius every tick; the bakes are held, so a re-install would put
         // up a stand-in and rebuild the refraction effect for nothing the eye gains. The frame
         // up stays until the release's pass, which re-cuts at the radius the drag settled on.
@@ -18067,6 +18071,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                   int measuredToolbarPx) {
         boolean frontHome = mLastWallPage == com.termux.app.page.PageKind.HOME;
         int front = dockGlassTopInsetPx();
+        // DIAG(host-shift): the parts of the other side's top, on change; revert before merge.
+        if (MotionLog.enabled) {
+            String d = "front=" + mLastWallPage + " top=" + front + " flushRest="
+                + mTerminalRestFlushPaddingPx + " slack=" + mLaneSlackPx;
+            if (!d.equals(mDiagRestTops)) {
+                mDiagRestTops = d;
+                MotionLog.log("rest-tops", d);
+            }
+        }
         if (frontHome) {
             mStackRenderer.setRestHostTops(front,
                 otherRestHostTopPx(snapshot, measuredToolbarPx, true, true),
@@ -27248,6 +27261,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @Nullable private String mDiagDisplayKb; // DIAG(display-kb)
+    @Nullable private String mDiagRestTops; // DIAG(host-shift)
 
     /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
     private boolean isLayerOpen() {
