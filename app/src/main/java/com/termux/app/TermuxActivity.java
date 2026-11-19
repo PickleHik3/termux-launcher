@@ -8571,9 +8571,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The clip the keyboard host's outline takes: {@link #fullScreenKeyboardClip}. Under an open
-     * drawer the keyboard keeps its own corners: rounding its top would clip pockets that show the
-     * layer behind it untinted, and the drawer's sheet above carries the curve ({@link KeyboardSheetLook}).
+     * The clip the keyboard host's outline takes: {@link #fullScreenKeyboardClip}. The curve an
+     * open drawer gives a Docked keyboard's top ({@link KeyboardSheetLook}) is drawn by the host's
+     * background, not cut here, so the glass can run on outside it.
      */
     @Nullable
     private com.termux.app.chrome.LiveChromeShape.Clip keyboardOutlineClip(@NonNull View surfaceHost) {
@@ -8588,9 +8588,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * One frame of the drawer's motion, as the keyboard sees it ({@link KeyboardSheetLook}): the
-     * sheet's glass over its own at the drawer's fraction, A compare per
-     * frame at rest; the glass is built when the drawer first reaches the keyboard and let go when
-     * it leaves.
+     * sheet's glass over its own at the drawer's fraction, and the top corners following. A
+     * compare per frame at rest; the glass is built when the drawer first reaches the keyboard and
+     * let go when it leaves, and the outline is touched only when the radius moves.
      */
     private void onKeyboardSheetFraction(float drawerFraction, float radiusPx) {
         View host = findViewById(R.id.inapp_keyboard_view_host);
@@ -8606,6 +8606,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mKeyboardSheet.engaged() != wasEngaged && host != null)
             host.setBackground(mKeyboardSheet.dress(mKeyboardHostInner));
         if (f <= 0f && mKeyboardSheet.sheet() != null) mKeyboardSheet.setSheet(null, 0);
+        // The curve is drawn by the host's background (KeyboardSheetSkin), not cut by its outline,
+        // so what lies outside it is the sheet's glass; the outline is not touched per frame.
+        com.termux.app.chrome.LiveChromeShape.Clip own = host == null
+            ? null : fullScreenKeyboardClip(host, mKeyboardBaseClip);
+        float ownTop = own == null ? 0f : Math.max(own.topLeft, own.topRight);
+        mKeyboardSheet.setCardTopRadius(com.termux.app.chrome.KeyboardSheetLook.topRadiusPx(
+            mKeyboardSurfaceDressedAsCard, ownTop, radiusPx, mKeyboardSheet.fraction()));
     }
 
     /** The sheet's glass at the keyboard's place: Global's, at the sheets' opacity floor. */
