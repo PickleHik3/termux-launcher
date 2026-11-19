@@ -1209,6 +1209,7 @@
 
             <!-- Split panes Category -->
                 <string name="termux_window_bar_content_description">Terminal windows</string>
+                <string name="termux_home_float_bar_content_description">Terminals on this Home page</string>
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
                 <string name="termux_window_tab_busy_content_description">working</string>
                 <string name="termux_window_tab_attention_content_description">waiting for you</string>

@@ -52,6 +52,7 @@ public class TopStackRendererTest {
     private View mHost;
     private View mStrip;
     private View mChips;
+    private View mHomeChips;
     private View mStripGlass;
     private View mBarGlass;
     private CrossfadeDrawable mStripBlend;
@@ -62,6 +63,7 @@ public class TopStackRendererTest {
         mHost = put(R.id.terminal_window_bar_host, new FrameLayout(context));
         mStrip = put(R.id.terminal_status_bar_background, new FrameLayout(context));
         mChips = put(R.id.terminal_status_place_content, new FrameLayout(context));
+        mHomeChips = put(R.id.terminal_status_home_chips, new FrameLayout(context));
         mStripGlass = put(R.id.terminal_status_bar_glass_surface, new FrameLayout(context));
         mBarGlass = put(R.id.terminal_window_bar_background, new FrameLayout(context));
         mStripBlend = new CrossfadeDrawable(new ColorDrawable(Color.RED),
@@ -135,6 +137,28 @@ public class TopStackRendererTest {
             // The leaving end showed the strip's glass: it stays whole while its glass crosses.
             assertEquals(1f, mStripGlass.getAlpha(), 0f);
         }
+        assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
+    }
+
+    @Test public void homesFloatChipsSlideOutWithHomeAWallFromTheWindowChips() {
+        mRenderer.rest(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true));
+        settle();
+        assertEquals(0f, mHomeChips.getTranslationX(), 0f);
+        mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
+            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+        for (float p = 0f; p <= 1.0001f; p += 0.125f) {
+            float q = Math.min(1f, p);
+            frameAt(q);
+            assertEquals(StackScene.sideSlide(Side.HOME, Side.HOME, Side.WORKSPACE, q, WIDTH),
+                mHomeChips.getTranslationX(), 0f);
+            assertEquals(WIDTH, mChips.getTranslationX() - mHomeChips.getTranslationX(), 0.001f);
+        }
+        int writes = mRenderer.mWriteCount;
+        mRenderer.onLanding();
+        settle();
+        assertEquals(writes, mRenderer.mWriteCount);
+        assertEquals(-WIDTH, mHomeChips.getTranslationX(), 0f);
+        assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
         assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
     }
 

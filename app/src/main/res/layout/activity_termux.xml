@@ -247,15 +247,25 @@
                     android:clipChildren="true"
                     android:clipToPadding="true">
 
+                    <!-- The two sides' row content share one slot, which clips them: the
+                         Workspace's badge and window chips, and Home's float chips (ADR 0030
+                         section 2). Each strip slides with its side (TopStackRenderer), one wall
+                         apart, so only the front side's shows at rest. -->
+                    <FrameLayout
+                        android:id="@+id/terminal_status_sides"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:clipChildren="true">
+
                     <!-- The place's own row content: its badge and its chips. The strip slides
                          with the pane wall and dissolves at the bar's edges, so one place's row
                          leaves through the lens and the next arrives through it, while the
                          stat widgets beside it hold still. -->
                     <com.termux.app.statusbar.PlaceContentStrip
                         android:id="@+id/terminal_status_place_content"
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:layout_weight="1"
                         android:paddingStart="14dp"
                         android:gravity="center_vertical">
 
@@ -285,6 +295,36 @@
                             android:visibility="gone"
                             android:contentDescription="@string/termux_window_bar_content_description" />
                     </com.termux.app.statusbar.PlaceContentStrip>
+
+                    <!-- Home's own chips: one per float on the Home page shown, the window
+                         chips' own views and look, never the Workspace's list. -->
+                    <com.termux.app.statusbar.PlaceContentStrip
+                        android:id="@+id/terminal_status_home_chips"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:paddingStart="14dp"
+                        android:gravity="center_vertical">
+
+                        <com.termux.app.terminal.TerminalWindowBar
+                            android:id="@+id/terminal_home_float_bar"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@android:color/transparent"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_home_float_bar_content_description" />
+
+                        <com.termux.app.statusbar.StatusBarWindowColumn
+                            android:id="@+id/terminal_home_float_column"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:layout_marginTop="6dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_home_float_bar_content_description" />
+                    </com.termux.app.statusbar.PlaceContentStrip>
+
+                    </FrameLayout>
 
                     <!-- The CPU/RAM/weather cluster: CPU · RAM · Weather at the row's end
                          everywhere, except the Widgets place, where TermuxActivity reverses

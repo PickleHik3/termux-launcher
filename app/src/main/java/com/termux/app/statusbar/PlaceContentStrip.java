@@ -28,6 +28,8 @@ public final class PlaceContentStrip extends LinearLayout {
 
     /** Masks the band at the slot's right edge: a 0..fade ramp from opaque to clear, drawn DST_IN. */
     private final Paint fadePaint = new Paint();
+    /** The same at the slot's left edge, which a strip slid left (Home's) leaves through. */
+    private final Paint fadeLeftPaint = new Paint();
     private final float fadeWidthPx;
 
     public PlaceContentStrip(Context context, AttributeSet attrs) {
@@ -36,6 +38,9 @@ public final class PlaceContentStrip extends LinearLayout {
         fadePaint.setShader(new LinearGradient(0f, 0f, fadeWidthPx, 0f, 0xFF000000, 0x00000000,
                 Shader.TileMode.CLAMP));
         fadePaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));
+        fadeLeftPaint.setShader(new LinearGradient(0f, 0f, fadeWidthPx, 0f, 0x00000000,
+                0xFF000000, Shader.TileMode.CLAMP));
+        fadeLeftPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));
         setOrientation(HORIZONTAL);
         setClipChildren(true);
         setClipToPadding(false);
@@ -79,8 +84,9 @@ public final class PlaceContentStrip extends LinearLayout {
     }
 
     /**
-     * While the strip is translated its slot's right edge sits inside it, at the width minus the
-     * translation; the chips feather there ({@link SlotFade}) instead of being cut by the clip.
+     * While the strip is translated right its slot's right edge sits inside it, at the width minus
+     * the translation; translated left, its slot's left edge, at minus the translation. The chips
+     * feather there ({@link SlotFade}) instead of being cut by the clip.
      */
     @Override protected void dispatchDraw(Canvas canvas) {
         float translation = getTranslationX();
@@ -92,6 +98,13 @@ public final class PlaceContentStrip extends LinearLayout {
         int height = getHeight();
         int checkpoint = canvas.saveLayer(0f, 0f, width, height, null);
         super.dispatchDraw(canvas);
+        if (translation < 0f) {
+            // Clear up to the slot's left edge, then the ramp back to opaque past it.
+            canvas.translate(-translation, 0f);
+            canvas.drawRect(translation, 0f, fadeWidthPx, height, fadeLeftPaint);
+            canvas.restoreToCount(checkpoint);
+            return;
+        }
         float bandLeft = width - translation - fadeWidthPx;
         canvas.translate(bandLeft, 0f);
         canvas.drawRect(0f, 0f, width - bandLeft, height, fadePaint);

@@ -235,5 +235,44 @@ public class TopStackSceneTest {
         assertTrue(f.sameAs(g));
         g.chipsTx += 1f;
         assertFalse(f.sameAs(g));
+        g.set(f);
+        g.homeChipsTx += 1f;
+        assertFalse(f.sameAs(g));
+    }
+
+    @Test
+    public void homeChipsRestInPlaceOnHomeAndAWallLeftInTheWorkspace() {
+        TopStackScene.Frame f = new TopStackScene.Frame();
+        for (PlaceLayout.Edge edge : EDGES) {
+            TopStackScene.rest(end(Side.HOME, edge, 1, true, PALE, 1), W, f);
+            assertEquals(0f, f.homeChipsTx, 0f);
+            TopStackScene.rest(end(Side.WORKSPACE, edge, 1, true, PALE, 1), W, f);
+            assertEquals(-W, f.homeChipsTx, 0f);
+        }
+    }
+
+    @Test
+    public void homeChipsSlideWithHomeOneWallFromTheWindowChips() {
+        TopStackScene.Frame f = new TopStackScene.Frame();
+        TopStackScene.Frame r = new TopStackScene.Frame();
+        for (Side a : SIDES) for (Side b : SIDES) for (float p : PS) {
+            TopStackScene.End from = end(a, PlaceLayout.Edge.TOP, 7, true, PALE, 1);
+            TopStackScene.End to = end(b, PlaceLayout.Edge.TOP, 7, true, DARK, 2);
+            TopStackScene.at(from, to, 0.3f, p, W, Float.NaN, false, f);
+            assertEquals(StackScene.sideSlide(Side.HOME, a, b, p, W), f.homeChipsTx, 0f);
+            // the two sides' chips are always one wall apart, so they never stand together
+            assertEquals(W, f.chipsTx - f.homeChipsTx, 0f);
+        }
+        TopStackScene.End home = end(Side.HOME, PlaceLayout.Edge.TOP, 7, true, PALE, 1);
+        TopStackScene.End work = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 7, true, DARK, 2);
+        TopStackScene.at(home, work, 1f, 1f, W, Float.NaN, false, f);
+        TopStackScene.rest(work, W, r);
+        assertEquals(r.homeChipsTx, f.homeChipsTx, 0f);
+        // a riding bar carries them, so they are drawn back by the ride
+        TopStackScene.End docked = end(Side.HOME, PlaceLayout.Edge.TOP, 1, true, PALE, 1);
+        TopStackScene.End floating = end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 2, true, DARK, 2);
+        TopStackScene.at(docked, floating, 0.4f, 0.4f, W, 250f, true, f);
+        assertEquals(StackScene.sideSlide(Side.HOME, Side.HOME, Side.WORKSPACE, 0.4f, W) - 250f,
+            f.homeChipsTx, 0f);
     }
 }

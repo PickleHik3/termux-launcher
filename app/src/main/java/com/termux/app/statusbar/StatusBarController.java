@@ -852,17 +852,21 @@ public final class StatusBarController {
                 }
             }
 
-            com.termux.app.terminal.TerminalWindowBar windows =
-                mHost.findViewById(R.id.terminal_window_bar);
-            if (windows != null) {
-                windows.setSurfaceStyle(capsule,
-                    resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+            // The Workspace's window chips and Home's float chips wear one style.
+            for (int id : new int[] {R.id.terminal_window_bar, R.id.terminal_home_float_bar}) {
+                com.termux.app.terminal.TerminalWindowBar windows = mHost.findViewById(id);
+                if (windows != null) {
+                    windows.setSurfaceStyle(capsule,
+                        resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+                }
             }
-            com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
-                mHost.findViewById(R.id.terminal_status_window_column);
-            if (windowColumn != null) {
-                windowColumn.setChipRadiusPx(
-                    resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+            for (int id : new int[] {R.id.terminal_status_window_column,
+                    R.id.terminal_home_float_column}) {
+                com.termux.app.statusbar.StatusBarWindowColumn windowColumn = mHost.findViewById(id);
+                if (windowColumn != null) {
+                    windowColumn.setChipRadiusPx(
+                        resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+                }
             }
 
             View statusWidgets = mHost.findViewById(R.id.terminal_status_widgets);
