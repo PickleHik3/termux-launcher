@@ -13867,6 +13867,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         endLegendBlend();
         if (mChrome == null) return;
         beginKeyboardLookBlend(there);
+        beginDockFrostBlend(there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);
         long thereKey = legibilityKey(there);
@@ -13929,6 +13930,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTilesInkBlendOn) mDock.tilesInkBlend(share);
         if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.setInkBlend(share);
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.setGlassBlend(share);
+        if (mDockFrostBlendOn) {
+            // The dock's frost crosses too: its live picture's blur at the blended radius, so the
+            // landing's pass finds the arriving radius already drawn (ADR 0029 section 8).
+            float px = (mDockFrostHereDp + (mDockFrostThereDp - mDockFrostHereDp)
+                * Math.max(0f, Math.min(1f, share))) * getResources().getDisplayMetrics().density;
+            mGlass.livePicture(DOCK_GLASS, px, com.termux.app.chrome.LivePicture.class);
+        }
         com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
         if (keyboardBlend != null) {
             // A pass on the way dressed the host again: what it put up is the blend's end on the
@@ -13944,6 +13952,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             keyboardBlend.setShare(share);
         }
+    }
+
+    /** The dock's blur at each end of a look blend, in dp, and whether they differ. */
+    private int mDockFrostHereDp;
+    private int mDockFrostThereDp;
+    private boolean mDockFrostBlendOn;
+
+    private void beginDockFrostBlend(@NonNull com.termux.app.wall.PageRef there) {
+        mDockFrostHereDp = getEffectiveExtraKeysBlurRadius();
+        mLookIdOverride = lookIdOf(there);
+        try {
+            mDockFrostThereDp = getEffectiveExtraKeysBlurRadius();
+        } finally {
+            mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+        }
+        mDockFrostBlendOn = mDockFrostHereDp != mDockFrostThereDp;
     }
 
     /** Whether the keyboard look blend arrives at a keyboard (else the keyboard's material goes). */
@@ -13997,6 +14021,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPromptInkBlendOn = false;
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.endGlassBlend();
         mKeyboardBlendOn = false;
+        mDockFrostBlendOn = false;
         com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
         mKeyboardLookBlend = null;
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);

@@ -159,7 +159,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     @Nullable private View mWatchedHost;
     private final View.OnLayoutChangeListener mHostLayout =
         (v, l, t, r, b, ol, ot, or, ob) -> {
-            if (t != ot || b != ob) requestApply();
+            if (t == ot && b == ob) return;
+            // A landing's layout: the shift that held the arrival's top goes in this same
+            // traversal, before the frame draws, or that frame shows the host moved twice.
+            if (mHeldSide >= 0 && !mHasEnds) apply();
+            else requestApply();
         };
     private boolean mFromHome;
     private boolean mToHome;
