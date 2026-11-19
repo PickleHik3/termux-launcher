@@ -116,6 +116,14 @@ public final class SurfaceLongPress {
 
         /** The status bar folds to its compact form, or unfolds, as the status swipe does. */
         void setStatusBarCompact(boolean compact);
+
+        /**
+         * How far below the stack container's top its rows start: the lane slack, laid out for the
+         * other side's taller rows and empty on this one. A hold there is on the page, not the dock.
+         */
+        default int dockFrameTopSlackPx() {
+            return 0;
+        }
     }
 
     /** The surfaces each target is made of, in the route's priority order. */
@@ -277,7 +285,9 @@ public final class SurfaceLongPress {
                 && view.getParent() instanceof FloatingKeyboardFrame)
                 view = (View) view.getParent();
             Box box = boxOf(view);
-            if (box == null) continue;
+            if (box != null && id == R.id.accessory_stack_container)
+                box = box.belowTop(mHost.dockFrameTopSlackPx());
+            if (box == null || box.isEmpty()) continue;
             Zone zone = new Zone(target, bar, box);
             mZoneViews.put(zone, view);
             out.add(zone);

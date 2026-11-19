@@ -14476,6 +14476,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return root != null ? root : getWindow().getDecorView();
         }
 
+        @Override public int dockFrameTopSlackPx() {
+            return mLaneSlackPx;
+        }
+
         @Nullable @Override public View findView(int id) {
             return findViewById(id);
         }

@@ -263,4 +263,23 @@ public class SurfaceLongPressRouteTest {
         assertTrue(band.opensPopup());
         assertEquals(Target.KEYBOARD, band.target());
     }
+
+    /** The stack's lane slack is air over the page: a hold there opens no Dock card. */
+    @Test
+    public void theDockFramesTopSlackIsNotTheDock() {
+        Box frame = new Box(0f, 1500f, 1080f, 2400f).belowTop(200f);
+        assertEquals(1700f, frame.top, 0f);
+        Zone dock = new Zone(Target.DOCK, null, frame);
+        assertNull(SurfaceLongPressRoute.route(540f, 1600f, Arrays.asList(dock),
+            java.util.Collections.emptyList()).zone);
+        assertSame(dock, SurfaceLongPressRoute.route(540f, 1800f, Arrays.asList(dock),
+            java.util.Collections.emptyList()).zone);
+    }
+
+    @Test
+    public void noSlackKeepsTheBoxAndTooMuchEmptiesIt() {
+        Box box = new Box(0f, 100f, 50f, 300f);
+        assertSame(box, box.belowTop(0f));
+        assertTrue(box.belowTop(500f).isEmpty());
+    }
 }
