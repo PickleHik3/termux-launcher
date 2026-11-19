@@ -1113,14 +1113,17 @@ public final class ChromeInk {
     }
 
     /**
-     * What a widget at {@code rootRect} stands on before its own card: the wallpaper under the
-     * launcher's dim, opaque. Shares the widget's one sample with {@link #widget}; the card's rim
-     * is decided against it ({@link OnGlass#cardShowsEdge}).
+     * What a Home widget at {@code rootRect} stands on before its own card: the wallpaper under
+     * Home's ground, opaque. Shares the widget's one sample with {@link #widget}; the card's rim
+     * is decided against it ({@link OnGlass#cardShowsEdge}) and a Bare widget's ink on it.
+     * Home's ground, never the ground under the rect now: the rect is where the widget is laid
+     * out with the slide left out, so with the Terminal in front it lies on the Terminal's dim,
+     * and a Bare clock dressed there kept a pale ink on Home's bright wallpaper.
      */
     @ColorInt
     public int widgetWallpaper(@NonNull Rect rootRect) {
         readMode();
-        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, dimUnder(rootRect),
+        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, mSurfaces.homeGround(),
             Color.TRANSPARENT);
     }
 

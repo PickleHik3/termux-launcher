@@ -123,6 +123,25 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
         return dim;
     }
 
+    /**
+     * {@link ChromeRenderer.Surfaces#groundUnder}: the ground of the page in front, under every
+     * rect; null leaves it at the wall-wide dim.
+     */
+    Integer frontGround;
+
+    @Override
+    public int groundUnder(@NonNull android.graphics.Rect screenRect) {
+        return frontGround != null ? frontGround : dim;
+    }
+
+    /** {@link ChromeRenderer.Surfaces#homeGround}; null leaves it at the wall-wide dim. */
+    Integer homeGround;
+
+    @Override
+    public int homeGround() {
+        return homeGround != null ? homeGround : dim;
+    }
+
     /** {@link ChromeRenderer.Surfaces#paneGlassSlabs}: the panes are glass slabs. */
     boolean paneSlabs;
 

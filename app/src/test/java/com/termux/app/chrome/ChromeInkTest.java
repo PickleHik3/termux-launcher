@@ -860,4 +860,26 @@ public class ChromeInkTest {
         assertEquals(ChromeInk.Polarity.PALE_INK, ink.polarity());
         assertEquals(ink.polarity(), ink.widgetPolarity());
     }
+
+    // ------------------------------------------------------------------ a widget's ground
+
+    /**
+     * A Home widget asked while the Terminal is in front stands on Home's ground, not the
+     * Terminal's dim under its laid-out rect: a Bare clock dressed then kept a pale ink on Home's
+     * bright wallpaper until the next Look change.
+     */
+    @Test
+    public void aWidgetStandsOnHomesGroundWhicheverPageIsInFront() {
+        int bright = 0xFFF4773A;
+        wallpaper.other = bright;
+        Rect clock = new Rect(200, 250, 1050, 660);
+        surfaces.homeGround = Color.TRANSPARENT;
+        surfaces.frontGround = Color.TRANSPARENT;
+        int onHome = ink.widgetWallpaper(clock);
+        surfaces.frontGround = 0x80000000;
+        assertEquals("the Terminal's dim in front", onHome, ink.widgetWallpaper(clock));
+        assertEquals(bright, onHome);
+        surfaces.homeGround = 0x80000000;
+        assertNotEquals("Home's own ground still counts", bright, ink.widgetWallpaper(clock));
+    }
 }
