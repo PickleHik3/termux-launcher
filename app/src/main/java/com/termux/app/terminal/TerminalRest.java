@@ -16,7 +16,7 @@ public final class TerminalRest {
      * The keyboard is up unless the overview is previewing the page, or its remembered keyboard
      * is down or minimal mode puts it away. With the launcher's keyboard off the phone's is the
      * only one. The bar shows the Terminal's set and the chips show; the page wears the
-     * Workspace's look.
+     * Terminal's look.
      */
     @NonNull
     public static Rest of(@NonNull Rest.Inputs in) {

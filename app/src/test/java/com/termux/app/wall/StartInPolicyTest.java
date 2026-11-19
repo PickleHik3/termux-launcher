@@ -15,13 +15,13 @@ import org.junit.Test;
 public class StartInPolicyTest {
 
     private static final String HOME = WallRow.START_IN_HOME;
-    private static final String WORKSPACE = WallRow.START_IN_WORKSPACE;
+    private static final String TERMINAL = WallRow.START_IN_TERMINAL;
     private static final String DISPLAY = WallRow.START_IN_DISPLAY;
 
     @Test
     public void storedValuesKeepTheirMeaningAndAnythingUnknownIsHome() {
         assertEquals(HOME, StartInPolicy.read("home"));
-        assertEquals(WORKSPACE, StartInPolicy.read("workspace"));
+        assertEquals(TERMINAL, StartInPolicy.read("workspace"));
         assertEquals(DISPLAY, StartInPolicy.read("display"));
         assertEquals(HOME, StartInPolicy.read(null));
         assertEquals(HOME, StartInPolicy.read("TERMINAL"));
@@ -33,7 +33,7 @@ public class StartInPolicyTest {
         assertEquals(HOME, page.startIn);
         assertFalse(page.startsDisplay);
         StartInPolicy.Choice terminal = StartInPolicy.choose(Kind.TERMINAL);
-        assertEquals(WORKSPACE, terminal.startIn);
+        assertEquals(TERMINAL, terminal.startIn);
         assertFalse(terminal.startsDisplay);
         StartInPolicy.Choice display = StartInPolicy.choose(Kind.DISPLAY);
         assertEquals(DISPLAY, display.startIn);
@@ -43,19 +43,19 @@ public class StartInPolicyTest {
     @Test
     public void choosingInSettingsWritesTheSame() {
         assertTrue(StartInPolicy.choose(DISPLAY).startsDisplay);
-        assertFalse(StartInPolicy.choose(WORKSPACE).startsDisplay);
+        assertFalse(StartInPolicy.choose(TERMINAL).startsDisplay);
         assertEquals(HOME, StartInPolicy.choose("bogus").startIn);
     }
 
     @Test
     public void displayHoldsOnlyWhileTheDisplayStartsWithTheLauncher() {
         assertEquals(DISPLAY, StartInPolicy.effective(DISPLAY, true, false));
-        assertEquals("off, with a terminal open", WORKSPACE,
+        assertEquals("off, with a terminal open", TERMINAL,
             StartInPolicy.effective(DISPLAY, false, true));
         assertEquals("off, with none", HOME, StartInPolicy.effective(DISPLAY, false, false));
-        // Home and the Workspace do not depend on the display.
+        // Home and the Terminal do not depend on the display.
         assertEquals(HOME, StartInPolicy.effective(HOME, false, true));
-        assertEquals(WORKSPACE, StartInPolicy.effective(WORKSPACE, false, false));
+        assertEquals(TERMINAL, StartInPolicy.effective(TERMINAL, false, false));
     }
 
     @Test
@@ -64,9 +64,9 @@ public class StartInPolicyTest {
         assertFalse("not the page Home opens on",
             StartInPolicy.isHome(Kind.HOME_PAGE, false, HOME));
         assertFalse("Start in left Home",
-            StartInPolicy.isHome(Kind.HOME_PAGE, true, WORKSPACE));
+            StartInPolicy.isHome(Kind.HOME_PAGE, true, TERMINAL));
         assertTrue("the Terminal card, whatever its windows",
-            StartInPolicy.isHome(Kind.TERMINAL, false, WORKSPACE));
+            StartInPolicy.isHome(Kind.TERMINAL, false, TERMINAL));
         assertFalse(StartInPolicy.isHome(Kind.TERMINAL, false, HOME));
         assertTrue(StartInPolicy.isHome(Kind.DISPLAY, false, DISPLAY));
         assertFalse(StartInPolicy.isHome(Kind.DISPLAY, false, HOME));
@@ -75,7 +75,7 @@ public class StartInPolicyTest {
     @Test
     public void theHomeHalfOpensOnTheChosenPageOnlyWhileHomeIsStartIn() {
         assertEquals(2, StartInPolicy.homePage(2, HOME));
-        assertEquals("a window as Home: page 1", 0, StartInPolicy.homePage(2, WORKSPACE));
+        assertEquals("a window as Home: page 1", 0, StartInPolicy.homePage(2, TERMINAL));
         assertEquals(0, StartInPolicy.homePage(2, DISPLAY));
         assertEquals("unknown reads as Home", 2, StartInPolicy.homePage(2, "elsewhere"));
         assertEquals(0, StartInPolicy.homePage(-1, HOME));
@@ -93,7 +93,7 @@ public class StartInPolicyTest {
 
     @Test
     public void exactlyOneKindWearsTheMarkerForEachValue() {
-        for (String startIn : new String[] {HOME, WORKSPACE, DISPLAY}) {
+        for (String startIn : new String[] {HOME, TERMINAL, DISPLAY}) {
             int marked = 0;
             for (Kind kind : Kind.values()) {
                 if (StartInPolicy.isHome(kind, true, startIn)) marked++;

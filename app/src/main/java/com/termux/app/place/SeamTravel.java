@@ -11,7 +11,7 @@ import com.termux.app.wall.PageRef;
 import java.util.List;
 
 /**
- * The chrome across the seam between the wall's halves: the last Home page and the Workspace's
+ * The chrome across the seam between the wall's halves: the last Home page and the Terminal's
  * window beside it. The two halves are arranged by layouts of their own (ADR 0008), so a slide
  * between them can change which dock rows stand on the bottom edge and whether there is a status
  * bar at all. {@link PlaceChromeTravel} moves the keyboard and the content's room as functions of
@@ -24,9 +24,9 @@ import java.util.List;
  *       once, each in its side's lane ({@link StackLanes}), and nothing is laid out or exchanged
  *       on the way: a crossing never lays the stack out again.</li>
  *   <li><b>The status bar.</b> Where both halves wear it alike it stands still (one bar across
- *       the wall, #90). Where Home's layout places or shapes it otherwise, the Workspace's bar
- *       travels with the Workspace's page: its screen position is that page's
- *       ({@link #workspaceScreenXPx}), sliding out with the window toward Home and in with it
+ *       the wall, #90). Where Home's layout places or shapes it otherwise, the Terminal's bar
+ *       travels with the Terminal's page: its screen position is that page's
+ *       ({@link #terminalScreenXPx}), sliding out with the window toward Home and in with it
  *       from Home, instead of fading in place.</li>
  * </ul>
  *
@@ -236,18 +236,18 @@ public final class SeamTravel {
     }
 
     /**
-     * Whether the Workspace layout's status bar can travel with its page: a bar along the top. A
+     * Whether the Terminal layout's status bar can travel with its page: a bar along the top. A
      * column on a side or a band of the dock takes room the canvas would have to give up mid-slide,
      * and keeps changing at settle.
      */
-    public static boolean statusRides(@NonNull PlaceLayout workspace) {
-        Slot status = workspace.slot(Element.STATUS);
+    public static boolean statusRides(@NonNull PlaceLayout terminal) {
+        Slot status = terminal.slot(Element.STATUS);
         return !status.hidden && status.edge == Edge.TOP;
     }
 
     /**
-     * Whether the Workspace's bar can be laid out over a Home page for a slide toward the
-     * Workspace without moving anything on that page: Home stands nothing on its top or side edges,
+     * Whether the Terminal's bar can be laid out over a Home page for a slide toward the
+     * Terminal without moving anything on that page: Home stands nothing on its top or side edges,
      * whose stacks the bar's band would push in. The bar overlays Home's canvas (a Home page
      * whose layout stands no bar along the top starts at the canvas's top,
      * {@code PageTopInset#pageTopInsetPx}), so with those edges empty nothing on Home moves.
@@ -259,18 +259,18 @@ public final class SeamTravel {
     }
 
     /**
-     * Where the Workspace's page stands on screen in {@code frame}, as an x offset from its rest,
+     * Where the Terminal's page stands on screen in {@code frame}, as an x offset from its rest,
      * which is where the status bar is drawn while it travels with that page: 0 on a frame between
      * two windows, the page's own offset on a frame across the seam, and one width off to the
-     * right on a frame between two Home pages, the side the Workspace stands on in the row.
+     * right on a frame between two Home pages, the side the Terminal stands on in the row.
      */
-    public static float workspaceScreenXPx(@NonNull Frame frame, int widthPx) {
-        boolean fromWorkspace = frame.from != PageKind.HOME;
-        boolean towardWorkspace = frame.toward != PageKind.HOME;
-        if (fromWorkspace && towardWorkspace) return 0f;
-        if (!fromWorkspace && !towardWorkspace) return widthPx;
+    public static float terminalScreenXPx(@NonNull Frame frame, int widthPx) {
+        boolean fromTerminal = frame.from != PageKind.HOME;
+        boolean towardTerminal = frame.toward != PageKind.HOME;
+        if (fromTerminal && towardTerminal) return 0f;
+        if (!fromTerminal && !towardTerminal) return widthPx;
         // The far side of a frame stands one width to the right of the near one.
-        return towardWorkspace ? (1f - frame.fraction) * widthPx : -frame.fraction * widthPx;
+        return towardTerminal ? (1f - frame.fraction) * widthPx : -frame.fraction * widthPx;
     }
 
     private static float clamp01(float value) {

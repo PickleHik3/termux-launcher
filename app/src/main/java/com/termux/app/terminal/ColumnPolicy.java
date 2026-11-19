@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 import java.util.Locale;
 
 /**
- * Consume and expel, Niri's words for moving panes into and out of columns, on the Workspace's
+ * Consume and expel, Niri's words for moving panes into and out of columns, on the Terminal's
  * row: each window of the row is a column. Arithmetic only — the activity takes the window out of
  * or puts it into the row, the pane controller moves the panes; this decides which window and
  * where.

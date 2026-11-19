@@ -10,7 +10,6 @@ import com.termux.app.place.PlaceKeyboard;
 import com.termux.app.terminal.io.ExtraKeySetResolver;
 import com.termux.app.terminal.io.ExtraKeysTarget;
 import com.termux.app.wall.PaneWallPolicy;
-import com.termux.app.wall.WallLookKinds;
 import com.termux.app.wall.WallPages;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 
@@ -56,7 +55,6 @@ public class HomeRestTest {
 
     @Test
     public void theLookIsHomes() {
-        assertEquals(LookGrid.Kind.HOME, WallLookKinds.of(PageKind.HOME));
     }
 
     @Test

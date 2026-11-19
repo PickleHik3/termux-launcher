@@ -448,7 +448,7 @@ public class OnGlassTest {
     /** The same card on the dark side (a pale page by day, or night). */
     private static final int DARK_CARD = 0xFF1D2024;
     private static final int DARK_CARD_TEXT = 0xFFC4C6D0;
-    /** The Look's day glass base at Base's opacity 30: the slab tint under a widget. */
+    /** The Look's day glass base at Global's opacity 30: the slab tint under a widget. */
     private static final int DAY_TINT_30 = 0x4DE1E7F2;
     /** A busy, mid-tone wallpaper: neither ink reads on it bare. */
     private static final int BUSY_GLASS = 0xFF7A6E66;
@@ -523,14 +523,14 @@ public class OnGlassTest {
         assertTrue(answer.toString(), answer.isBare());
     }
 
-    /** The body is Base's opacity plus the fixed lift, whatever Base is; an opaque Base is whole. */
+    /** The body is Global's opacity plus the fixed lift, whatever Global is; an opaque Global is whole. */
     @Test
-    public void theWidgetBodyIsBaseOpacityPlusTheLift() {
+    public void theWidgetBodyIsGlobalOpacityPlusTheLift() {
         for (int base : new int[] {0, 26, 77, 128, 230}) {
             int lift = OnGlass.widgetLiftAlpha255(base);
             float combined = 1f - (1f - base / 255f) * (1f - lift / 255f);
             float wanted = Math.min(1f, base / 255f + OnGlass.WIDGET_BODY_LIFT);
-            assertEquals("Base " + base, wanted, combined, 1.5f / 255f);
+            assertEquals("Global " + base, wanted, combined, 1.5f / 255f);
         }
         assertEquals(0, OnGlass.widgetLiftAlpha255(255));
     }

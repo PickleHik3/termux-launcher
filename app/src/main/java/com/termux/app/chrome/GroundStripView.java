@@ -42,6 +42,13 @@ public final class GroundStripView extends View implements LiveBackdrop.WallGrou
     @NonNull private final int[] mOwn = new int[2];
     @NonNull private final int[] mWallAt = new int[2];
     @Nullable private View mWall;
+    /** Glass that draws these bands over its own frame ({@link GroundUnderGlass}, #283). */
+    private static final int MAX_RIDERS = 8;
+    @NonNull private final GroundUnderGlass[] mRiders = new GroundUnderGlass[MAX_RIDERS];
+    /** The bands the riders last drew, so a frame that moves nothing they show redraws none. */
+    private final GroundBands mRidden = new GroundBands();
+    @NonNull private final Paint mGlassPaint = new Paint();
+    @NonNull private final int[] mGlassAt = new int[2];
 
     public GroundStripView(@NonNull Context context) {
         this(context, null);
@@ -51,6 +58,7 @@ public final class GroundStripView extends View implements LiveBackdrop.WallGrou
         super(context, attrs);
         setWillNotDraw(false);
         mPaint.setStyle(Paint.Style.FILL);
+        mGlassPaint.setStyle(Paint.Style.FILL);
         mFeatherPx = FEATHER_DP * context.getResources().getDisplayMetrics().density;
     }
 
@@ -86,6 +94,84 @@ public final class GroundStripView extends View implements LiveBackdrop.WallGrou
     private void recompute() {
         mBands.set(mGrounds, mStops, mCurrent, mStride, mOffsetPx, mFeatherPx);
         invalidate();
+        // Prototype #283: the glass over the strip draws the bands too, so it redraws when they
+        // move. Equal grounds give one band that never moves: a crossing between them costs none.
+        if (!mBands.sameAs(mRidden)) {
+            mRidden.copyFrom(mBands);
+            for (GroundUnderGlass rider : mRiders) {
+                if (rider != null) rider.redraw();
+            }
+        }
+    }
+
+    /**
+     * {@code glass} draws the ground under it ({@link #drawUnder}) and is redrawn when the bands
+     * move. Idempotent. When every slot is taken, one whose glass left its window (a stack that
+     * was dressed again) gives its place; past that the glass is not redrawn by the strip.
+     */
+    public void addRider(@NonNull GroundUnderGlass glass) {
+        int free = -1;
+        for (int i = 0; i < MAX_RIDERS; i++) {
+            if (mRiders[i] == glass) return;
+            if (free < 0 && mRiders[i] == null) free = i;
+        }
+        // One stack ground per view: a stack built again for the same view takes the old one's
+        // place, which no longer draws.
+        View bound = glass.boundHost();
+        for (int i = 0; i < MAX_RIDERS && bound != null; i++) {
+            if (mRiders[i] != null && mRiders[i].boundHost() == bound) {
+                mRiders[i] = glass;
+                return;
+            }
+        }
+        if (free < 0) {
+            for (int i = 0; i < MAX_RIDERS && free < 0; i++) {
+                if (!mRiders[i].live()) free = i;
+            }
+        }
+        if (free >= 0) mRiders[free] = glass;
+    }
+
+    public void removeRider(@NonNull GroundUnderGlass glass) {
+        for (int i = 0; i < MAX_RIDERS; i++) {
+            if (mRiders[i] == glass) mRiders[i] = null;
+        }
+    }
+
+    /**
+     * Draws the bands into {@code glass}'s canvas over the rect {@code left..bottom} (the glass's
+     * own px), each where it stands on screen, at {@code alpha} of its own, so the glass shows the
+     * ground of the page beneath it. Allocates nothing.
+     *
+     * @return the rect's left edge in the wall's px (for the diagnostic), NaN when nothing drew
+     */
+    public float drawUnder(@NonNull Canvas canvas, @NonNull View glass, float left, float top,
+                           float right, float bottom, int alpha) {
+        int count = mBands.count();
+        if (count == 0 || getVisibility() != View.VISIBLE) return Float.NaN;
+        glass.getLocationOnScreen(mGlassAt);
+        float glassLeftInWall = mGlassAt[0] + left - wallLeftOnScreen();
+        float width = right - left;
+        for (int i = 0; i < count; i++) {
+            int color = GlassGround.faded(mBands.color(i), alpha);
+            if ((color >>> 24) == 0) continue;
+            float x0 = GlassGround.spanLeft(mBands, i, glassLeftInWall, width);
+            float x1 = GlassGround.spanRight(mBands, i, glassLeftInWall, width);
+            if (x1 <= x0) continue;
+            mGlassPaint.setColor(color);
+            canvas.drawRect(left + x0, top, left + x1, bottom, mGlassPaint);
+        }
+        return glassLeftInWall;
+    }
+
+    /** The ground at {@code wallX} in the wall's px, as {@link #drawUnder} draws it there. */
+    public int groundAtWallX(float wallX) {
+        return GlassGround.groundAt(mBands, wallX);
+    }
+
+    /** How many bands the strip holds now: 1 at rest, more while a seam is in view. */
+    public int bandCount() {
+        return mBands.count();
     }
 
     /** Whether any two stops' grounds differ: a seam then travels while the wall moves. */

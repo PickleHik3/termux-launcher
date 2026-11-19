@@ -44,7 +44,7 @@ import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.fragments.settings.termux.KeyboardLayoutsFragment;
 import com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment;
-import com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment;
+import com.termux.app.fragments.settings.termux.TuiAppThemesPreferencesFragment;
 import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.layouteditor.LayoutEditorController;
@@ -82,7 +82,7 @@ import java.util.Locale;
  * live, scaled into a frame, on one rule: <b>tap the thing</b>. A tap on a surface in the frame
  * (Home, the status bar, the terminal, the dock, the keyboard) raises its card; the editor bar's
  * palette raises the Appearance card for what has no surface. A plain horizontal swipe slides
- * the frame between Home and the Workspace, and a card writes the half the frame shows. Where a
+ * the frame between Home and the Terminal, and a card writes the half the frame shows. Where a
  * surface sits is its card's Position row (editor-redesign §1: the shrunken Layout mode, its
  * canvas and its drags, is retired); the editor edits the orientation the phone is in, and turning
  * the phone turns the editor with it.
@@ -212,11 +212,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         /** The terminal's own frame in {@code terminal_root_container}'s unscaled coordinates. */
         @Nullable int[] terminalFrameRectInRoot();
-        /**
-         * The Card-form widget (one wearing glass) under the screen point {@code rawX, rawY}, as
-         * {left, top, right, bottom} in the root container's unscaled space; null where none is.
-         */
-        @Nullable default int[] cardWidgetAt(float rawX, float rawY) { return null; }
         /** The corner that frame actually draws with. */
         float terminalFrameCornerRadiusPx();
         /** The corner the keyboard surface itself is clipped to. */
@@ -441,24 +436,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The chip's page: the page the editor was opened from, -1 where none is known. */
     private int mScopePageId = -1;
     /**
-     * The card's two chips, Where it applies and What it applies to (ADR 0017): the grid cell its
-     * rows read and write. Every card sets them where it opens ({@link EditorChips#openFor}).
+     * The grid cell the card's glass rows read and write (ADR 0017, ADR 0031): its element's own,
+     * or Global's. Every card sets it where it opens ({@link EditorChips#openFor}).
      */
-    @NonNull private EditorChips mChips = EditorChips.openFor(null, null);
-    /**
-     * Each card's Applies to choice this visit (appearance-cards-overhaul §1): Global until the
-     * user picks Home or Workspace on its row.
-     */
-    @NonNull private final java.util.EnumMap<EditorCard, EditorChips.AppliesTo> mAppliesTo =
-        new java.util.EnumMap<>(EditorCard.class);
-    /**
-     * The pages the Look slider was put on Custom this visit while their values still match a
-     * Look, as {@link #mHeldCustom} holds it for the wall.
-     */
-    @NonNull private final java.util.Set<Integer> mHeldCustomPages = new java.util.HashSet<>();
-    /** Each page's Custom as the slider left it this visit, put back by the next move to Custom. */
-    @NonNull private final java.util.Map<Integer, SurfacePresets.Preset> mPageCustoms =
-        new java.util.HashMap<>();
+    @NonNull private EditorChips mChips = EditorChips.openFor(null);
     /** The editor's own PageLook over the preferences, for scoped writes; closed at close. */
     @Nullable private com.termux.app.look.PageLook mPageLook;
 
@@ -529,66 +510,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return com.termux.app.look.PageLook.Scope.GLOBAL;
     }
 
-    /** Whether the chips stand on a kind of page (Home or Workspace) rather than Global. */
-    private boolean onPageSide() {
-        return mChips.onKind();
-    }
-
     /**
-     * Whether {@code card}'s glass rows write as they always have: an element's card on Global
-     * (its own everywhere cell). Every other card writes its chips' cells.
+     * Whether {@code card}'s glass rows write as they always have: an element's card (its own
+     * cell). The Global card writes its chips' cell, Global's.
      */
     private boolean chipsPlain(@Nullable EditorCard card) {
-        return card != null && card.slot != null && !mChips.onKind();
-    }
-
-    /**
-     * After a glass row's write, lets it be seen where a cell below it in the read order would
-     * otherwise hide it. An element card set to Global means everywhere: the element's own
-     * Home, Terminal and Display values of the property go. Customization, Home and the
-     * Workspace take the place of a seeded cell (a kind's shipped look, such as the keyboard's
-     * Mist on Home) on the kinds they write. The Customization, Home and Workspace sliders go further,
-     * last change wins: the values set beneath them for that property go too
-     * ({@link SurfacePresets#clearBeneathSlider}), once per drag.
-     */
-    private void releaseShadowingCells(@NonNull Row row) {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (mCard == null || prefs == null) return;
-        com.termux.shared.termux.settings.preferences.LookGrid.Property[] properties;
-        if (row == Row.LOOK) {
-            properties = new com.termux.shared.termux.settings.preferences.LookGrid.Property[] {
-                com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST,
-                com.termux.shared.termux.settings.preferences.LookGrid.Property.OPACITY,
-                com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT};
-        } else {
-            com.termux.shared.termux.settings.preferences.LookGrid.Property one =
-                GlassRows.gridProperty(row);
-            if (one == null) return;
-            properties = new com.termux.shared.termux.settings.preferences.LookGrid.Property[] {one};
-        }
-        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
-        EditorChips chips = mChips;
-        for (com.termux.shared.termux.settings.preferences.LookGrid.Property property : properties) {
-            if (!property.perElement && !property.perKind) continue;
-            if (chips.element != null && property.perElement) {
-                if (chips.onKind()) continue;
-                for (com.termux.shared.termux.settings.preferences.LookGrid.Kind kind
-                        : com.termux.shared.termux.settings.preferences.LookGrid.Kind.values())
-                    if (grid.has(property, chips.element, kind))
-                        grid.clear(property, chips.element, kind);
-            } else if (row.kind == EditorRows.Kind.SLIDER
-                    && SurfacePresets.slidersResetBeneath(chips, property)) {
-                if (mSliderDragActive && mBeneathClearedFor == row) continue;
-                SurfacePresets.clearBeneathSlider(grid, chips, property);
-                mBeneathClearedFor = mSliderDragActive ? row : null;
-            } else if (property.perElement) {
-                java.util.List<com.termux.shared.termux.settings.preferences.LookGrid.Kind> kinds =
-                    chips.onKind() ? chips.appliesTo.kinds : java.util.Arrays.asList(
-                        com.termux.shared.termux.settings.preferences.LookGrid.Kind.values());
-                for (com.termux.shared.termux.settings.preferences.LookGrid.Kind kind : kinds)
-                    grid.clearSeeded(property, kind);
-            }
-        }
+        return card != null && card.slot != null;
     }
 
     /** Why Depth and Edge are out, if they are. */
@@ -609,10 +536,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** {@code card}'s cells this visit: its fixed place, else its Applies to choice. */
+    /** {@code card}'s cell. */
     @NonNull
     private EditorChips chipsFor(@Nullable EditorCard card) {
-        return EditorChips.openFor(card, card == null ? null : mAppliesTo.get(card));
+        return EditorChips.openFor(card);
     }
 
     /** The value of a surface property the chips' cell shows, in the property's old unit. */
@@ -630,16 +557,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int stored = property.grid == com.termux.shared.termux.settings.preferences.LookGrid.Property.FROST
             ? com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(value)
             : value;
-        for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property.grid))
-            prefs.lookGrid().write(cell, stored);
-    }
-
-    /** The key a page may hold its own value of for a surface's property, or null. */
-    @Nullable
-    private static String detachableKey(@NonNull SurfaceSlot slot,
-                                        @NonNull SurfaceProperty property) {
-        String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-        return key != null && com.termux.app.look.PageLook.isDetachable(key) ? key : null;
+        prefs.lookGrid().write(mChips.cell(property.grid), stored);
     }
 
     /** A surface's property as {@code card}'s scope sees it: the page's own, else the wall's. */
@@ -667,65 +585,23 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The Appearance card on a page: one property of every surface that page shows, as its own. */
     private boolean writeAllOnPage(@NonNull EditorCard card, @NonNull SurfaceProperty property,
                                    int value) {
-        // The three main cards write their chips' all-glass cells (Base, Home's, or the
-        // Workspace's two kinds); an element's card never comes here.
+        // The three main cards write their chips' all-glass cells (Global, Home's, or the
+        // Terminal's two kinds); an element's card never comes here.
         if (card.slot != null)
             return false;
         return writeOnPage(card, SurfaceSlot.STATUS, property, value);
     }
 
-    /** Whether the level {@code card}'s scope edits holds its own value of a surface's property. */
-    private boolean scopedOwnValue(@NonNull TermuxAppSharedPreferences prefs,
-                                   @NonNull EditorCard card, @NonNull SurfaceSlot slot,
-                                   @NonNull SurfaceProperty property) {
-        if (chipsPlain(card))
-            return !prefs.isSurfaceInheriting(slot, property, SurfacePresets.pageOf(PageKind.HOME));
-        com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property.grid);
-        return prefs.lookGrid().has(cell);
-    }
-
-    /**
-     * The keys a page's Reset drops for a card on {@code slot}: every detachable value of that
-     * surface, the keyboard's backdrop with the keyboard's; a card on no one surface (null) drops
-     * every value the page may hold, the material and its intensity included.
-     */
-    @NonNull
-    static java.util.Set<String> pageResetKeys(@Nullable SurfaceSlot slot) {
-        java.util.Set<String> keys = new java.util.LinkedHashSet<>();
-        if (slot == null) {
-            keys.addAll(com.termux.shared.termux.settings.preferences.PageLookKeys.DETACHABLE);
-            return keys;
-        }
-        for (SurfaceProperty property : SurfaceProperty.values()) {
-            String key = detachableKey(slot, property);
-            if (key != null) keys.add(key);
-        }
-        if (slot == SurfaceSlot.KEYBOARD)
-            keys.add(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
-                .TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
-        return keys;
-    }
-
-    /** Reset under a page: every value the page holds of the card's surface goes back to Base. */
+    /** Reset under a page: every value the page holds of the card's surface goes back to Global. */
     private void resetOnPage(@NonNull EditorCard card) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs != null)
             for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : resetCells(mChips))
                 prefs.lookGrid().clear(cell);
-        com.termux.app.look.PageLook.Scope scope = scopeFor(card);
-        com.termux.app.look.PageLook look = pageLook();
-        if (look == null || scope.isGlobal())
-            return;
-        // All glass on a page also drops what a Look put on that page's elements.
-        if (mChips.element == null)
-            for (String key : pageResetKeys(card.slot))
-                look.reset(scope, key);
-        mHeldCustomPages.remove(scope.pageId());
-        mPageCustoms.remove(scope.pageId());
     }
     /**
      * The cells a card's Reset clears at {@code chips}: every glass property's cells there. A
-     * property with no element column or kind row (Vibrancy, Margin) is Base's, cleared only by
+     * property with no element column or kind row (Vibrancy, Margin) is Global's, cleared only by
      * Customization's Reset.
      */
     @VisibleForTesting
@@ -738,7 +614,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 : com.termux.shared.termux.settings.preferences.LookGrid.Property.values()) {
             if (chips.elementIgnored(property))
                 continue;
-            out.addAll(chips.cells(property));
+            out.add(chips.cell(property));
         }
         return out;
     }
@@ -993,7 +869,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             android.util.Log.i(EditorDoor.LOG_TAG, useAs.doorLine(card.key + "-card"));
             card = null;
         }
-        // A card that stands on one screen opens on it: Home's card over a Workspace left on
+        // A card that stands on one screen opens on it: Home's card over a Terminal left on
         // screen would be refused by cardRefusal, leaving the editor with no card.
         place = useAs.editorPlace(EditorDoor.placeFor(card, place, mHost.pageOnScreen()));
         if (mOpen) {
@@ -1053,10 +929,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int hostPageId = page == null || page == mHost.pageOnScreen() ? mHost.pageIdOnScreen() : -1;
         mScopePageId = hostPageId >= 0 ? hostPageId
             : page == null || scopePlaces == null ? -1 : scopePlaces.shownPageId(page);
-        mAppliesTo.clear();
         mChips = chipsFor(null);
-        mHeldCustomPages.clear();
-        mPageCustoms.clear();
         mCard = null;
         mRaisedKeyboard = false;
 
@@ -1157,31 +1030,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case DOCK: return getString(R.string.appearance_card_dock);
             case KEYBOARD: return getString(R.string.appearance_card_keyboard);
             case TERMINAL: return getString(R.string.appearance_card_terminal);
-            case WIDGETS: return getString(R.string.editor_element_widgets);
-            case SHEETS:
+            case WIDGETS:
             default:
-                return getString(R.string.editor_element_sheets);
-        }
-    }
-
-    /** The kind of the page the editor shows (ADR 0018 §3), or null where it shows none. */
-    @Nullable
-    private com.termux.shared.termux.settings.preferences.LookGrid.Kind scopeKind() {
-        TermuxAppSharedPreferences prefs = prefs();
-        return prefs == null ? null : prefs.lookGrid().kindOf(mScopePageId);
-    }
-
-    /** A kind's name on the Where chip and in a row's source: "Home pages". */
-    @NonNull
-    private CharSequence kindName(
-            @NonNull com.termux.shared.termux.settings.preferences.LookGrid.Kind kind) {
-        switch (kind) {
-            case HOME: return getString(R.string.editor_chip_kind_home);
-            case DISPLAY: return getString(R.string.editor_chip_kind_display);
-            case ASSISTANT: return getString(R.string.editor_chip_kind_assistant);
-            case TERMINAL:
-            default:
-                return getString(R.string.editor_chip_kind_terminal);
+                return getString(R.string.editor_element_widgets);
         }
     }
 
@@ -1197,7 +1048,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (name != null && !name.isEmpty())
             return name;
         return getString(mScreen == PageKind.HOME ? R.string.appearance_half_home
-            : R.string.appearance_half_workspace);
+            : R.string.appearance_half_terminal);
     }
 
     // ---------------------------------------------------------------------- the halves and the bar
@@ -1289,7 +1140,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * An element card's ←: back to the card the user came from, or, opened directly, to the
-     * main card of the page shown (Home on a Home page, Workspace otherwise).
+     * main card of the page shown (Home on a Home page, Terminal otherwise).
      */
     private void goBack() {
         EditorCard previous = mCardTrail.pollLast();
@@ -1371,14 +1222,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * The page the wall slides to when the pill chooses {@code card} over {@code screen}: Home
-     * from the Workspace, the Workspace from Home; null where the card stands on the screen shown
+     * from the Terminal, the Terminal from Home; null where the card stands on the screen shown
      * (Customization stands on both).
      */
     @Nullable
     static PageKind pillPlace(@NonNull EditorCard card, @NonNull PageKind screen) {
         if (card == EditorCard.HOME && screen != PageKind.HOME)
             return PageKind.HOME;
-        if (card == EditorCard.WORKSPACE && screen == PageKind.HOME)
+        if (card == EditorCard.TERMINAL && screen == PageKind.HOME)
             return PageKind.TERMINAL;
         return null;
     }
@@ -1420,8 +1271,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mCard = card;
         mSubcardParent = null;
         mSubcardRow = null;
-        mWidgetRing = card == EditorCard.WIDGETS ? mTappedWidget : null;
-        mTappedWidget = null;
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
         sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate, raiseTo);
@@ -1556,8 +1405,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (mBar != null)
                 mBar.setPageName(pageName());
         }
-        if (mCard == null || mCard == EditorCard.HOME || mCard == EditorCard.WORKSPACE
-                || !mCard.standsOn(screen)) {
+        if (mCard == null || mCard.isPageCard() || !mCard.standsOn(screen)) {
             int detent = sheet.isShown() ? sheet.detent() : EditorCardSheet.DETENT_PEEK;
             openCard(follow.card, false, detent);
             if (sheet.isShown() && sheet.detent() != detent)
@@ -1569,29 +1417,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @NonNull
     private String resetLabel(@NonNull EditorCard card) {
-        String label = cardResetLabel(card);
-        // A card with the Applies to row names where its Reset lands: "Reset dock for Home".
-        if (!EditorChips.offersAppliesTo(card) || card != mCard)
-            return label;
-        return getString(R.string.editor_reset_for, label, appliesToName(mChips.appliesTo));
-    }
-
-    /** Where a card's values apply, in words: Global, Home, Workspace. */
-    @NonNull
-    private CharSequence appliesToName(@NonNull EditorChips.AppliesTo where) {
-        switch (where) {
-            case HOME: return getString(R.string.appearance_card_home);
-            case WORKSPACE: return getString(R.string.appearance_card_workspace);
-            case GLOBAL:
-            default: return getString(R.string.editor_applies_global);
-        }
+        return cardResetLabel(card);
     }
 
     @NonNull
     private String cardResetLabel(@NonNull EditorCard card) {
         switch (card) {
             case HOME: return getString(R.string.appearance_reset_home);
-            case WORKSPACE: return getString(R.string.appearance_reset_workspace);
             case STATUS: return getString(R.string.appearance_reset_status);
             case TERMINAL: return getString(R.string.appearance_reset_terminal);
             case DOCK: return getString(R.string.appearance_reset_dock);
@@ -1833,7 +1665,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         }
         if (!chipsPlain(card) && card.slot != null) {
-            // An element on Home or the Workspace: Reset clears those cells and leaves the rest.
+            // An element on Home or the Terminal: Reset clears those cells and leaves the rest.
             resetOnPage(card);
             requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
                 | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -1841,7 +1673,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         }
         if (card.slot == null) {
-            // Customization, Home and Workspace: their cells (Base, Home's, the Workspace's two
+            // Customization, Home and Terminal: their cells (Global, Home's, the Terminal's two
             // kinds) follow again, then the card's other values below.
             resetOnPage(card);
             prefs.setSurfaceGlassPosition(null, -1);
@@ -2364,188 +2196,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    // ------------------------------------------------------- Customization › Layout (§2)
-
-    /** Customization's Layout list: every element, written to Home and the Workspace. */
-    @NonNull
-    private View customizationElementsView() {
-        com.termux.app.surfaces.cards.ElementsList list =
-            com.termux.app.surfaces.cards.ElementsList.build(mHost.context(),
-                new WholeAppElementsHost(),
-                com.termux.app.surfaces.cards.ElementRows.wholeApp(), true);
-        mElements = list;
-        return list.root;
-    }
-
-    /**
-     * What Customization's Layout list reads and writes: each element's show/hide on the Home
-     * layout and on the Workspace's (Terminal and Display), both orientations, through the layout
-     * session as the screen cards' lists write. The dock's own tiles have one value for the app
-     * and go through the screen cards' host.
-     */
-    private final class WholeAppElementsHost
-            implements com.termux.app.surfaces.cards.ElementsList.Host {
-        @NonNull private final ElementsHost mOne = new ElementsHost();
-
-        @Nullable @Override public String layoutTitle() {
-            return null;
-        }
-
-        @Override public boolean offers(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            return true;
-        }
-
-        @Override public boolean shown(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            return reading(item).switchOn();
-        }
-
-        @Nullable @Override public CharSequence summary(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            switch (reading(item)) {
-                case HOME_ONLY: return getString(R.string.editor_layout_home_only);
-                case WORKSPACE_ONLY: return getString(R.string.editor_layout_workspace_only);
-                default: return null;
-            }
-        }
-
-        @NonNull
-        private com.termux.app.surfaces.cards.LayoutOverride.Reading reading(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            return com.termux.app.surfaces.cards.LayoutOverride.read(
-                sideShows(item, com.termux.app.surfaces.cards.LayoutOverride.Side.HOME),
-                sideShows(item, com.termux.app.surfaces.cards.LayoutOverride.Side.WORKSPACE));
-        }
-
-        @Override public void setShown(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item, boolean shown) {
-            if (!byKind(item)) {
-                mOne.setShown(item, shown);
-                return;
-            }
-            Boolean home = sideShows(item, com.termux.app.surfaces.cards.LayoutOverride.Side.HOME);
-            Boolean workspace = sideShows(item,
-                com.termux.app.surfaces.cards.LayoutOverride.Side.WORKSPACE);
-            com.termux.app.surfaces.cards.LayoutOverride.Decision decision =
-                com.termux.app.surfaces.cards.LayoutOverride.decide(home, workspace, shown);
-            if (!decision.ask) {
-                writeSides(item, decision.writes, shown);
-                return;
-            }
-            askOverride(item, decision, home, workspace, shown);
-        }
-
-        @Override public void open(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            mOne.open(item);
-        }
-
-        /** Whether {@code item}'s show/hide is held per page kind (else one app-wide value). */
-        private boolean byKind(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            return item.visibility == com.termux.app.surfaces.cards.ElementRows.Visibility.ELEMENT
-                || item.visibility
-                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD;
-        }
-
-        /** Whether {@code side} shows {@code item}; null where the side does not wear it. */
-        @Nullable
-        private Boolean sideShows(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
-                                  @NonNull com.termux.app.surfaces.cards.LayoutOverride.Side side) {
-            boolean home = side == com.termux.app.surfaces.cards.LayoutOverride.Side.HOME;
-            if (!byKind(item))
-                return item.hasEye() ? mOne.shown(item) : Boolean.TRUE;
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout == null)
-                return null;
-            com.termux.app.place.LayoutVariant variant = home
-                ? com.termux.app.place.LayoutVariant.HOME
-                : com.termux.app.place.LayoutVariant.NORMAL;
-            if (item.visibility
-                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD)
-                return layout.isShownOn(variant, null);
-            Element element = item.element;
-            if (element == null)
-                return null;
-            // Home never wears the extra keys (DressResolver.wornOn).
-            if (!com.termux.app.chrome.DressResolver.wornOn(variant, element))
-                return null;
-            // The session's layouts in the edited orientation: what Home's and the Workspace's
-            // own lists read, unsaved changes included.
-            return layout.isShownOn(variant, element);
-        }
-
-        /** Writes {@code shown} for {@code item} on {@code sides}, then restates the editor. */
-        private void writeSides(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
-                                @NonNull java.util.Set<com.termux.app.surfaces.cards.LayoutOverride.Side> sides,
-                                boolean shown) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout != null) {
-                // Through the layout session, as the Home and Workspace lists write: Undo,
-                // Discard and Done treat it the same.
-                java.util.List<com.termux.app.place.LayoutVariant> variants =
-                    com.termux.app.surfaces.cards.LayoutOverride.variantsOf(sides);
-                boolean keyboard = item.visibility
-                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD;
-                if (keyboard || item.element != null)
-                    layout.setShownOnLayouts(variants, keyboard ? null : item.element, shown);
-            }
-            positionTargets();
-            syncDirty();
-            com.termux.app.surfaces.cards.ElementsList list = mElements;
-            if (list != null)
-                list.restate();
-            EditorCardSheet sheet = mSheet;
-            if (sheet != null && sheet.isShown())
-                sheet.restate();
-        }
-
-        /**
-         * The page kind with a layout of its own would change: ask first (§2). Cancel puts the
-         * switch back; Override writes both kinds.
-         */
-        private void askOverride(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
-                                 @NonNull com.termux.app.surfaces.cards.LayoutOverride.Decision decision,
-                                 @Nullable Boolean home, @Nullable Boolean workspace,
-                                 boolean shown) {
-            Context context = mHost.context();
-            boolean ownHome = decision.own
-                == com.termux.app.surfaces.cards.LayoutOverride.Side.HOME;
-            boolean ownWorkspace = !ownHome;
-            int title = ownHome ? R.string.editor_layout_own_home
-                : R.string.editor_layout_own_workspace;
-            String name = context.getString(item.nameRes);
-            StringBuilder line = new StringBuilder();
-            if (ownHome && home != null)
-                line.append(context.getString(home ? R.string.editor_layout_shown_on
-                    : R.string.editor_layout_hidden_on, name,
-                    context.getString(R.string.appearance_card_home)));
-            if (ownWorkspace && workspace != null) {
-                line.append(context.getString(workspace ? R.string.editor_layout_shown_on
-                    : R.string.editor_layout_hidden_on, name,
-                    context.getString(R.string.appearance_card_workspace)));
-            }
-            boolean[] answered = {false};
-            com.google.android.material.dialog.MaterialAlertDialogBuilder builder =
-                new com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
-                    .setTitle(title)
-                    .setMessage(line.toString())
-                    .setNegativeButton(R.string.editor_layout_cancel, null)
-                    .setPositiveButton(R.string.editor_layout_override, (d, w) -> {
-                        answered[0] = true;
-                        writeSides(item, decision.writes, shown);
-                    });
-            builder.setOnDismissListener(d -> {
-                if (answered[0])
-                    return;
-                // Cancel, back or a tap outside: no change, the switch reads as before.
-                com.termux.app.surfaces.cards.ElementsList list = mElements;
-                if (list != null)
-                    list.restate();
-            });
-            builder.show();
-        }
-    }
-
     // ------------------------------------------------------- Reset everything (§1, §6)
 
     /** ⋮ › Reset everything on Customization: asked first, then {@link #resetEverything}. */
@@ -2571,7 +2221,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         GlassReset.reset(mHost.context(), prefs, GlassReset.DEFAULT_STOP);
         mHeldCustom.clear();
-        mHeldCustomPages.clear();
         forgetGlassEdgePositions();
         mHost.refreshTerminalPalette();
         settingsWritten();
@@ -3188,7 +2837,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             ? null : PageKind.HOME;
     }
 
-    /** The half a row of the card up reads: its write half, or the Workspace's for a shared one. */
+    /** The half a row of the card up reads: its write half, or the Terminal's for a shared one. */
     @NonNull
     private PageKind readScreen(@NonNull Row row) {
         PageKind half = writeScreen(row);
@@ -3204,6 +2853,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         R.drawable.ic_symbol_dock_peek_glass};
 
     /** The keyboard's forms, as the Type segments name them. */
+    /** The keyboard's shapes in percent: Settings › Keyboard › Size's ranges. */
+    static final int KEYBOARD_WIDTH_MIN = 35;
+    static final int KEYBOARD_FLOAT_HEIGHT_MIN = 60;
+    static final int KEYBOARD_FLOAT_HEIGHT_MAX = 160;
+    static final int KEYBOARD_SPLIT_GAP_MAX = 45;
+
     private static final PlaceLayout.KeyboardForm[] FORMS = {PlaceLayout.KeyboardForm.DOCKED,
         PlaceLayout.KeyboardForm.FLOATING, PlaceLayout.KeyboardForm.SPLIT};
 
@@ -3241,7 +2896,88 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /** Every card's values and writes, row by row. */
+    // ------------------------------------------------------------- own values (spec §1, §2)
+
+    /** The cards whose surface may hold its own Opacity and Blur (ADR 0031 §2). */
+    static final EditorCard[] OWN_CARDS = {EditorCard.STATUS, EditorCard.DOCK,
+        EditorCard.KEYBOARD};
+
+    /** The rows a surface may own: Opacity and Blur. */
+    private static final Row[] OWN_ROWS = {Row.OPACITY, Row.FROST};
+
+    /**
+     * The look grid's column {@code card} owns values in: the status bar's, the dock's or the
+     * keyboard's; null for every other card. The Terminal's Background never follows Global, so
+     * it shows no arrow (spec §3, Terminal).
+     */
+    @Nullable
+    static com.termux.shared.termux.settings.preferences.LookGrid.Element ownColumn(
+            @Nullable EditorCard card) {
+        for (EditorCard own : OWN_CARDS)
+            if (own == card) return EditorChips.elementOf(card);
+        return null;
+    }
+
+    /** Whether {@code row} on {@code card} holds the surface's own value: the arrow shows. */
+    private boolean holdsOwnValue(@Nullable EditorCard card, @NonNull Row row) {
+        TermuxAppSharedPreferences prefs = prefs();
+        com.termux.shared.termux.settings.preferences.LookGrid.Element element = ownColumn(card);
+        com.termux.shared.termux.settings.preferences.LookGrid.Property property =
+            GlassRows.gridProperty(row);
+        if (prefs == null || element == null || property == null || !property.perElement)
+            return false;
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        if (grid.holdsOwn(property, element))
+            return true;
+        // Blur brings its grain: an own Grain alone still reads as the Blur row's own.
+        return row == Row.FROST && grid.holdsOwn(
+            com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN, element);
+    }
+
+    /** Clears {@code row}'s own value on {@code card}'s surface; false when it held none. */
+    private boolean clearOwnValue(@Nullable EditorCard card, @NonNull Row row) {
+        TermuxAppSharedPreferences prefs = prefs();
+        com.termux.shared.termux.settings.preferences.LookGrid.Element element = ownColumn(card);
+        com.termux.shared.termux.settings.preferences.LookGrid.Property property =
+            GlassRows.gridProperty(row);
+        if (prefs == null || element == null || property == null || !holdsOwnValue(card, row))
+            return false;
+        com.termux.shared.termux.settings.preferences.LookGrid grid = prefs.lookGrid();
+        grid.clear(property, element);
+        if (row == Row.FROST)
+            grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN,
+                element);
+        return true;
+    }
+
+    private boolean surfaceOwnsAny(@Nullable EditorCard card) {
+        for (Row row : OWN_ROWS)
+            if (holdsOwnValue(card, row)) return true;
+        return false;
+    }
+
+    private boolean clearSurface(@Nullable EditorCard card) {
+        boolean any = false;
+        for (Row row : OWN_ROWS)
+            any |= clearOwnValue(card, row);
+        return any;
+    }
+
+    /** After own values went back on Global: the surfaces redraw and the card reads again. */
+    private void ownValuesCleared() {
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+        syncDirty();
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && sheet.isShown())
+            sheet.restate();
+    }
+
     private final class CardModel implements EditorCardSheet.Model, CardBody.Looks {
+
+        @Override public boolean offersCard(@NonNull EditorCard card) {
+            return UseAsCards.reaches(useAs(), card);
+        }
 
         @Override public int value(@NonNull Row row) {
             TermuxAppSharedPreferences prefs = prefs();
@@ -3261,7 +2997,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     if (property == null)
                         return 0;
                     // The Appearance card's are the shared glass of the half the frame shows.
-                    // The main cards read their chips' cells (Base, Home's, the Workspace's).
+                    // The main cards read their chips' cells (Global, Home's, the Terminal's).
                     int stored = scopedSurfaceValue(prefs, card,
                         card.slot != null ? card.slot : SurfaceSlot.STATUS, property);
                     return row == Row.OPACITY ? AppearanceLooks.opacityPercent(stored)
@@ -3287,7 +3023,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case DESIGN:
                     return layout == null ? 0 : Math.max(0, DockStyle.CHOICES.indexOf(layout.dockStyle()));
                 case CORNERS: return AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
-                case MARGIN: return AppearanceLooks.marginDp(prefs.getBaseMarginDp());
+                case MARGIN: return AppearanceLooks.marginDp(prefs.getGlobalMarginDp());
                 case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
                 case REFLECTION: return PeekGlassPreferences.reflection(prefs.getSharedPreferences());
                 case TEXT_SIZE:
@@ -3318,7 +3054,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case PAGE_DOTS:
                     return "off".equals(AppearanceSettingsStore.getString(context,
                         HomeSettings.KEY_PAGE_INDICATOR, null)) ? 0 : 1;
-                case WALLPAPER_DIM: return wallpaperDimValue(prefs);
+                case WALLPAPER_DIM: return prefs.getTerminalWallpaperDim();
+                case TERMINAL_OPACITY: return prefs.getTerminalBackgroundOpacity();
+                case TERMINAL_BLUR: return prefs.getTerminalGlassBlurRadius();
                 case WALLPAPER_SCROLL:
                     return AppearanceSettingsStore.getBoolean(context, "wallpaper_parallax", true)
                         ? 1 : 0;
@@ -3378,6 +3116,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             switch (row) {
                 case FROST: return Control.GLASS.max;
                 case OPACITY: return AppearanceLooks.OPACITY_MAX;
+                case TERMINAL_OPACITY: return 100;
+                case TERMINAL_BLUR: return TermuxPreferenceConstants.TERMUX_APP.MAX_TERMINAL_BG_BLUR;
                 case TINT: return AppearanceLooks.TINT_MAX;
                 case HEIGHT:
                     if (mCard == EditorCard.KEYBOARD)
@@ -3425,7 +3165,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case REFLECTION:
                 case GRAIN:
                 case WALLPAPER_DIM:
+                case TERMINAL_OPACITY:
                     return getString(R.string.appearance_readout_percent, value);
+                case TERMINAL_BLUR:
+                    return getString(R.string.appearance_readout_dp, value);
                 case HEIGHT:
                     return mCard == EditorCard.KEYBOARD
                         ? getString(R.string.appearance_readout_percent, value)
@@ -3450,42 +3193,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
 
         @Override public boolean ownValue(@NonNull Row row) {
-            TermuxAppSharedPreferences prefs = prefs();
-            EditorCard card = mCard;
-            if (prefs == null || card == null || card.slot == null
-                || !EditorRows.marksOwnValue(card, row))
-                return false;
-            SurfaceProperty property = row.property();
-            if (property == null)
-                return false;
-            // The dot marks the level the chip edits: the page's own value under the page, the
-            // surface's own (not Base) under Global. Frost is set while either of its pair is.
-            if (row == Row.FROST)
-                return scopedOwnValue(prefs, card, card.slot, SurfaceProperty.BLUR)
-                    || scopedOwnValue(prefs, card, card.slot, SurfaceProperty.GRAIN);
-            return scopedOwnValue(prefs, card, card.slot, property);
-        }
-
-        @Nullable @Override public EditorCardSheet.Chip appliesToChip() {
-            java.util.List<EditorChips.AppliesTo> options = EditorChips.appliesToOptions(mCard);
-            if (options.isEmpty())
-                return null;
-            CharSequence[] labels = new CharSequence[options.size()];
-            int selected = 0;
-            for (int i = 0; i < labels.length; i++) {
-                labels[i] = appliesToName(options.get(i));
-                if (options.get(i) == mChips.appliesTo) selected = i;
-            }
-            return new EditorCardSheet.Chip(getString(R.string.editor_applies_to), labels,
-                selected);
-        }
-
-        @Override public void pickAppliesTo(int index) {
-            java.util.List<EditorChips.AppliesTo> options = EditorChips.appliesToOptions(mCard);
-            if (mCard == null || index < 0 || index >= options.size())
-                return;
-            mAppliesTo.put(mCard, options.get(index));
-            mChips = chipsFor(mCard);
+            return holdsOwnValue(mCard, row);
         }
 
         @Nullable @Override public CharSequence resetLabel() {
@@ -3496,81 +3204,52 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return mCard == EditorCard.APPEARANCE;
         }
 
-        @Override public boolean scopeOnPage() {
-            return onPageSide();
-        }
-
-        @NonNull @Override public RowSource source(@NonNull Row row) {
-            com.termux.shared.termux.settings.preferences.LookGrid.Resolved resolved = rowResolved(row);
-            return resolved == null ? RowSource.NONE : RowSource.of(resolved.cell);
-        }
-
-        @Nullable @Override public CharSequence sourceName(@NonNull Row row) {
-            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
-            if (property == null)
+        @Nullable @Override public CharSequence rowState(@NonNull Row row) {
+            EditorCard card = mCard;
+            com.termux.shared.termux.settings.preferences.LookGrid.Element element =
+                ownColumn(card);
+            if (element == null || GlassRows.gridProperty(row) == null)
                 return null;
-            com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
-            com.termux.shared.termux.settings.preferences.LookGrid.Element element = cell.element != null ? cell.element : EditorChips.elementOf(mCard);
-            switch (source(row)) {
-                case ELEMENT_ON_PAGE:
-                    return getString(R.string.editor_source_element_on_page, elementName(element),
-                        pageName());
-                case PAGE: return pageName();
-                case ELEMENT_ON_KIND: {
-                    com.termux.shared.termux.settings.preferences.LookGrid.Kind kind =
-                        cell.kind != null ? cell.kind : scopeKind();
-                    return kind == null ? null : getString(R.string.editor_source_element_on_page,
-                        elementName(element), kindName(kind));
-                }
-                case KIND: {
-                    com.termux.shared.termux.settings.preferences.LookGrid.Kind kind =
-                        cell.kind != null ? cell.kind : scopeKind();
-                    return kind == null ? null : kindName(kind);
-                }
-                case ELEMENT: return getString(R.string.editor_source_element, elementName(element));
-                case NONE:
-                default:
-                    return null;
-            }
-        }
-
-        @Override public boolean resettable(@NonNull Row row) {
-            TermuxAppSharedPreferences prefs = prefs();
-            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
-            if (prefs == null || property == null)
-                return false;
-            com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
-            return prefs.lookGrid().has(cell);
+            CharSequence name = rowLabel(row) != null ? rowLabel(row) : getString(row.labelRes);
+            return getString(holdsOwnValue(card, row) ? R.string.editor_row_state_own
+                : R.string.editor_row_state_global, name);
         }
 
         @Override public void resetRow(@NonNull Row row) {
-            TermuxAppSharedPreferences prefs = prefs();
-            com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
-            if (prefs == null || property == null)
-                return;
-            for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property))
-                prefs.lookGrid().clear(cell);
-            mHeldCustomCells.remove(mChips);
-            requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
-                | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
+            if (clearOwnValue(mCard, row))
+                ownValuesCleared();
         }
 
-        @Override public void openRowMenu(@NonNull View anchor, @NonNull Row row) {
-            EditorCardSheet sheet = mSheet;
-            if (sheet != null)
-                sheet.openRowMenu(anchor, row);
+        @Override public boolean cardOwnsAny() {
+            EditorCard card = mCard;
+            if (card == EditorCard.APPEARANCE) {
+                for (EditorCard surface : OWN_CARDS)
+                    if (surfaceOwnsAny(surface)) return true;
+                return false;
+            }
+            return surfaceOwnsAny(card);
         }
 
-        @Override public void setScopeOnPage(boolean onPage) {
-            // Nothing is written here: the cells show what they follow until a value is set.
-            // "On page" is the Applies to choice of the shown page's side, for a card that has
-            // the row.
-            if (!EditorChips.offersAppliesTo(mCard))
+        @Override public void resetCard() {
+            EditorCard card = mCard;
+            if (card != EditorCard.APPEARANCE) {
+                if (clearSurface(card))
+                    ownValuesCleared();
                 return;
-            mAppliesTo.put(mCard, !onPage ? EditorChips.AppliesTo.GLOBAL
-                : scopeKind() == com.termux.shared.termux.settings.preferences.LookGrid.Kind.HOME
-                ? EditorChips.AppliesTo.HOME : EditorChips.AppliesTo.WORKSPACE);
-            mChips = chipsFor(mCard);
+            }
+            // Global's arrow asks once; Undo (the editor's revert) brings them back.
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(mHost.context())
+                .setTitle(R.string.editor_global_reset_all_title)
+                .setMessage(R.string.editor_global_reset_all_line)
+                .setNegativeButton(R.string.editor_layout_cancel, null)
+                .setPositiveButton(R.string.editor_global_reset_all_confirm, (d, w) -> {
+                    boolean any = false;
+                    for (EditorCard surface : OWN_CARDS)
+                        any |= clearSurface(surface);
+                    if (any)
+                        ownValuesCleared();
+                })
+                .show();
         }
 
         @Override public boolean enabled(@NonNull Row row) {
@@ -3688,7 +3367,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onValue(@NonNull Row row, int value, boolean dragging) {
             beginDrag(dragging);
             writeRow(row, value, dragging);
-            releaseShadowingCells(row);
         }
 
         @Override public void onReleased(@NonNull Row row) {
@@ -3712,6 +3390,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (row == Row.REFLECTION) {
                 LayoutEditorController layout = mHost.layoutEditor();
                 return layout != null && layout.dockStyle() == DockStyle.PEEK_GLASS;
+            }
+            // The Screen effect's two switches stand while an effect is on.
+            if (row == Row.SCREEN_EVENTS || row == Row.COMPOSITE_SIGNAL) {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs != null && !com.termux.app.terminal.PaneRetroStyle.NONE.id()
+                    .equals(prefs.getTerminalRetroEffect());
+            }
+            // The keyboard's floating shape stands while it floats, the gap while it is split.
+            if (row == Row.KEYBOARD_WIDTH || row == Row.KEYBOARD_FLOAT_HEIGHT
+                    || row == Row.KEYBOARD_SPLIT_GAP) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                PlaceLayout.KeyboardForm form = layout == null ? null : layout.keyboardForm();
+                return row == Row.KEYBOARD_SPLIT_GAP ? form == PlaceLayout.KeyboardForm.SPLIT
+                    : form == PlaceLayout.KeyboardForm.FLOATING;
             }
             return true;
         }
@@ -3751,31 +3443,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
                     && row != Row.CAMERA_CUTOUT)
                 return linkRow(row).root;
-            if (row == Row.ELEMENTS && card == EditorCard.APPEARANCE)
-                return customizationElementsView();
             if (row == Row.ELEMENTS && card != null) {
-                // The Terminal card's Layout is the Workspace's list.
-                PageKind screen = card == EditorCard.TERMINAL ? PageKind.TERMINAL
-                    : com.termux.app.surfaces.cards.ElementRows.screenOf(card);
+                // A page card's Layout lists the rows that page shows.
+                PageKind screen = com.termux.app.surfaces.cards.ElementRows.screenOf(card);
                 if (screen != null)
                     return elementsView(screen);
-            }
-            // The status bar's position and the dock's type are every page's (ADR 0023 §1): the
-            // Global card holds them, and so do the Status bar and Dock cards, which say so.
-            if (row == Row.DOCK_TYPE) {
-                View type = dockCard().view(row, widthPx);
-                return card == EditorCard.DOCK ? withAllPagesNote(type) : type;
-            }
-            if (row == Row.STATUS_POSITION) {
-                com.termux.app.surfaces.cards.CardRowView position =
-                    com.termux.app.surfaces.cards.StatusBarCard.view(mHost.context(), row,
-                        widthPx, mStatusCardHost);
-                if (position == null) return null;
-                if (card == EditorCard.STATUS)
-                    position = new com.termux.app.surfaces.cards.CardRowView(
-                        withAllPagesNote(position.view), position::restate);
-                mOwnRows.put(row, position);
-                return position.view;
             }
             if (card == EditorCard.DOCK)
                 return dockCard().view(row, widthPx);
@@ -3806,10 +3478,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 elements.restate();
                 return;
             }
-            if (row == Row.DOCK_TYPE || card == EditorCard.DOCK)
+            if (card == EditorCard.DOCK)
                 dockCard().restate(row);
-            else if (row == Row.STATUS_POSITION)
-                restateStatusTerminalRow(row, view);
             else if (card != null && CardBody.redesigned(card)) {
                 CardBody body = mCardBody;
                 if (body != null) body.restate(row, view);
@@ -3857,17 +3527,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return entries.length > 0 ? entries[0] : id;
     }
 
-    /** The cell a grid row's value comes from at the chips (for its dot), or null. */
-    @Nullable
-    private com.termux.shared.termux.settings.preferences.LookGrid.Resolved rowResolved(@NonNull Row row) {
-        TermuxAppSharedPreferences prefs = prefs();
-        com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.gridProperty(row);
-        if (prefs == null || mCard == null || property == null)
-            return null;
-        com.termux.shared.termux.settings.preferences.LookGrid.Key cell = mChips.cell(property);
-        return prefs.lookGrid().resolve(cell);
-    }
-
     /** The Rim row the card up shows, read again on restate. */
     @Nullable private com.termux.app.surfaces.rows.SegmentRow mRimRow;
     /**
@@ -3882,9 +3541,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean external;
         int summary;
         switch (row) {
-            case LINK_GLOBAL: external = false; summary = R.string.editor_link_global_summary; break;
-            case LINK_SHEETS: external = false; summary = R.string.editor_link_sheets_summary; break;
-            case LINK_WIDGETS: external = false; summary = R.string.editor_link_widgets_summary; break;
             case LINK_PAGES: external = false; summary = R.string.editor_link_pages_summary; break;
             case PANE_BORDERS:
                 external = false; summary = R.string.editor_link_pane_borders_summary; break;
@@ -3954,8 +3610,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The card whose chips are up, as {@link CardCustoms} names it. */
     @NonNull
     private String cardKey() {
-        return (mChips.element == null ? "all" : mChips.element.name()) + ":"
-            + mChips.appliesTo.name();
+        return mChips.element == null ? "all" : mChips.element.name();
     }
 
     /** The chips' cells whose Look was put on Custom this visit while they still match a Look. */
@@ -3973,7 +3628,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return false;
         if (row == Row.GRAIN || row == Row.RIM)
             return true;
-        // Margin is one number for every page, Base's alone: whatever Where says, it keeps its
+        // Margin is one number for every page, Global's alone: whatever Where says, it keeps its
         // own writer (writeMargin), and no page holds a Margin of its own.
         if (row == Row.MARGIN)
             return false;
@@ -4032,19 +3687,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     CardCustoms.put(prefs.getSharedPreferences(), slot, worn);
             }
             if (look != null) {
-                // One editor: a page card's Look first clears the element values beneath it on
-                // its kinds (developer, 2026-11-03), then lands in its cells.
+                // One editor: the Look lands in the card's cells.
                 SharedPreferences store = prefs.getSharedPreferences();
                 SurfacePresets.Batch batch = store == null ? null : new SurfacePresets.Batch(store);
                 LookGrid into = batch == null ? grid
                     : SurfacePresets.writingInto(prefs, batch).lookGrid();
-                if (mChips.element == null && mChips.onKind())
-                    SurfacePresets.clearBeneathKindLook(into, mChips.appliesTo.kinds);
                 LookGrid.Property[] properties = {LookGrid.Property.FROST,
                     LookGrid.Property.OPACITY, LookGrid.Property.TINT};
                 for (int i = 0; i < properties.length; i++)
-                    for (LookGrid.Key cell : mChips.cells(properties[i]))
-                        into.write(cell, look[i]);
+                    into.write(mChips.cell(properties[i]), look[i]);
                 if (batch != null)
                     batch.applyToStore();
             }
@@ -4052,8 +3703,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             com.termux.shared.termux.settings.preferences.LookGrid.Property property = GlassRows.cellProperty(row);
             if (property == null)
                 return false;
-            for (com.termux.shared.termux.settings.preferences.LookGrid.Key cell : mChips.cells(property))
-                grid.write(cell, GlassRows.toCell(row, value));
+            grid.write(mChips.cell(property), GlassRows.toCell(row, value));
         }
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
             | SurfaceEditorProperties.PREVIEW_KEYBOARD | SurfaceEditorProperties.PREVIEW_BLUR);
@@ -4159,7 +3809,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case PAGE_DOTS:
                 writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, value != 0 ? "dots" : "off");
                 break;
-            case WALLPAPER_DIM: writeWallpaperDim(value); break;
+            case WALLPAPER_DIM:
+            case TERMINAL_OPACITY:
+            case TERMINAL_BLUR:
+                writeTerminalBackground(row, value);
+                break;
             case WALLPAPER_SCROLL:
                 AppearanceSettingsStore.putBoolean(context, "wallpaper_parallax", value != 0);
                 settingsWritten();
@@ -4180,6 +3834,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case FORM:
                 if (layout != null && value >= 0 && value < FORMS.length)
                     layout.setKeyboardForm(FORMS[value]);
+                // Width, Floating height and Split gap stand by the type.
+                if (mSheet != null) mSheet.restate();
                 break;
             case LOOK:
                 writeLook(value, dragging);
@@ -4247,8 +3903,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 openIconPackCard();
                 break;
             case TOOL_COLOURS:
-                openSettingsFromEditor(TermuxStylePreferencesFragment.class,
-                    R.string.appearance_row_tool_colours, null, TOOL_COLOURS_KEY);
+                openSettingsFromEditor(TuiAppThemesPreferencesFragment.class,
+                    R.string.appearance_row_tool_colours, null, null);
                 break;
             case LINK_GESTURES:
                 openSettingsFromEditor(HomePreferencesFragment.class,
@@ -4273,17 +3929,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         .EssentialNotificationRulesFragment.class,
                     R.string.settings_essential_notifications_title);
                 break;
-            case LINK_WIDGETS:
-                openCard(EditorCard.WIDGETS, true);
-                break;
-            case LINK_SHEETS:
-                openCard(EditorCard.SHEETS, true);
-                break;
-            case LINK_GLOBAL: {
-                EditorCard global = EditorDoor.EDITOR_GLOBAL_CHIP.route(null, null);
-                if (global != null) openCard(global, true);
-                break;
-            }
             default:
                 break;
         }
@@ -4332,12 +3977,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         if (!writeOnPage(card, card.slot, property, written))
             prefs.detachSurfaceValue(card.slot, property, SurfacePresets.pageOf(writeScreen(row)), written);
-        // The system-wallpaper opacity the chrome restores from rides along. Not
-        // setTerminalBackgroundOpacity: with no terminal cell of its own everywhere, it writes
-        // Base, and the Terminal card's Opacity moved every surface on every page.
-        if (card == EditorCard.TERMINAL && property == SurfaceProperty.OPACITY
-                && prefs.isUseSystemWallpaperEnabled())
-            prefs.setWallpaperEnabledTerminalBackgroundOpacity(written);
         requestPreview(scopes);
         EditorCardSheet sheet = mSheet;
         if (sheet != null && !mSliderDragActive) {
@@ -4353,14 +3992,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private int frostValue(@NonNull TermuxAppSharedPreferences prefs, @NonNull EditorCard card) {
         if (isScreenCard(card)) {
-            // Each screen card holds its own position: Home's and the Workspace's cells differ.
+            // Each screen card holds its own position: Home's and the Terminal's cells differ.
             Integer held = mScreenFrostPosition.get(screenOf(card));
             return GlassControls.readBack(held == null ? -1 : held,
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.BLUR),
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
         }
         if (card.slot == null)
-            // Customization reads its cells, Base.
+            // Customization reads its cells, Global.
             return GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.BLUR),
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
@@ -4462,7 +4101,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * The half the Look row of the card up reads and writes, as {@link EditorRows#pageFor} says:
-     * a screen card's own half (Home's, the Workspace's), else the half the frame shows.
+     * a screen card's own half (Home's, the Terminal's), else the half the frame shows.
      */
     @NonNull
     private PageKind lookScreen() {
@@ -4475,13 +4114,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * screen, which writes the values one for the wall, never moves it.
      */
     private int lookStop(@NonNull PageKind half) {
-        com.termux.app.look.PageLook.Scope scope = scopeFor(mCard);
-        if (!scope.isGlobal()) {
-            if (mHeldCustomPages.contains(scope.pageId()))
-                return AppearanceLooks.CUSTOM_STOP;
-            TermuxAppSharedPreferences prefs = prefs();
-            return prefs == null ? AppearanceLooks.CUSTOM_STOP : pageStop(prefs, scope.pageId());
-        }
         if (mHeldCustom.contains(half))
             return AppearanceLooks.CUSTOM_STOP;
         TermuxAppSharedPreferences prefs = prefs();
@@ -4493,22 +4125,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                                 @NonNull PageKind half) {
         for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
             if (SurfacePresets.wornOn(prefs, preset, half))
-                return AppearanceLooks.stopForPresetId(preset.id);
-        }
-        return AppearanceLooks.CUSTOM_STOP;
-    }
-
-    /**
-     * The stop a page wears (ADR 0015 §6): the wall's where the page holds none of its own, else
-     * the Look its cells match ({@link SurfacePresets#wornAtPage}), else Custom. Read from the
-     * page's overrides, so the editor opened again on a detached page shows its stop.
-     */
-    @VisibleForTesting
-    static int pageStop(@NonNull TermuxAppSharedPreferences prefs, int pageId) {
-        if (!SurfacePresets.holdsPageLook(prefs, pageId))
-            return wornStop(prefs, PageKind.HOME);
-        for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
-            if (SurfacePresets.wornAtPage(prefs, preset, pageId))
                 return AppearanceLooks.stopForPresetId(preset.id);
         }
         return AppearanceLooks.CUSTOM_STOP;
@@ -4545,11 +4161,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // Leaving Custom for the Look the values still match writes nothing, but the slider
         // and the All surfaces strip follow the stop.
         PageKind half = lookScreen();
-        com.termux.app.look.PageLook.Scope scope = scopeFor(mCard);
-        boolean held = !scope.isGlobal()
-            ? (custom ? mHeldCustomPages.add(scope.pageId())
-                : mHeldCustomPages.remove(scope.pageId()))
-            : custom ? mHeldCustom.add(half) : mHeldCustom.remove(half);
+        boolean held = custom ? mHeldCustom.add(half) : mHeldCustom.remove(half);
         if (prefs != null && moveToStop(prefs, stop, half))
             syncAfterBulkWrite();
         else if (held && mSheet != null)
@@ -4566,38 +4178,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     private boolean moveToStop(@NonNull TermuxAppSharedPreferences into, int stop,
                                @NonNull PageKind half) {
-        com.termux.app.look.PageLook.Scope scope = scopeFor(mCard);
-        if (!scope.isGlobal()) {
-            // A Look on one page: its surface cells land as that page's own values; the wall and
-            // every value a page may not hold stay as they are. Custom brings back the page's
-            // Custom of this visit, else the saved Custom's cells, else writes nothing.
-            int page = scope.pageId();
-            int worn = pageStop(into, page);
-            if (stop == worn)
-                return false;
-            SurfacePresets.Preset onPage = AppearanceLooks.presetForStop(
-                SurfacePresets.presets(into), stop);
-            if (onPage != null) {
-                if (AppearanceLooks.isCustomStop(worn))
-                    mPageCustoms.put(page, SurfacePresets.customAtPage(into, page));
-                SurfacePresets.applyLookAtPage(into, onPage, page);
-                return true;
-            }
-            SurfacePresets.Preset kept = mPageCustoms.get(page);
-            if (kept == null)
-                kept = SurfacePresets.custom(into);
-            if (kept == null)
-                return false;
-            SurfacePresets.applyLookAtPage(into, kept, page);
-            return true;
-        }
         int current = wornStop(into, half);
         SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(into),
             stop);
-        // The wall may wear the Look while a page or element look hides it: picking it again
-        // still resets what is beneath.
-        if (stop == current
-                && (look == null || !SurfacePresets.holdsCellsBeneathLook(into.lookGrid())))
+        if (stop == current)
             return false;
         if (look != null) {
             if (AppearanceLooks.isCustomStop(current))
@@ -4660,7 +4244,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
          * The slider returns to Custom on {@code half}, the half the frame shows: that half's kept
          * values come back, else its part of the saved Custom, else nothing is written. The other
          * half is never written: a saved Custom that names Home's own look once brought it back
-         * on Home from the Workspace's slider (pong, 2026-10-25: Home stood on Solid's numbers
+         * on Home from the Terminal's slider (pong, 2026-10-25: Home stood on Solid's numbers
          * nobody chose there).
          */
         void enter(@NonNull TermuxAppSharedPreferences into, @NonNull PageKind half) {
@@ -5038,6 +4622,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         prefs.setTerminalRetroEffect(id);
         mHost.applyTerminalMotionLook();
+        // Screen events and Composite signal stand while an effect is on.
+        if (mSheet != null) mSheet.restate();
         syncDirty();
     }
 
@@ -5075,37 +4661,39 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
-    /** The Home tab's dim of the editor's page: its own override, else the wall-wide dim. */
-    private com.termux.app.look.PageLook.Scope wallpaperDimScope() {
-        return mScopePageId < 0 ? com.termux.app.look.PageLook.Scope.GLOBAL
-            : com.termux.app.look.PageLook.Scope.page(mScopePageId);
-    }
-
-    private int wallpaperDimValue(@NonNull TermuxAppSharedPreferences prefs) {
-        com.termux.app.look.PageLook look = pageLook();
-        int own = look == null ? -1
-            : look.read(wallpaperDimScope(), TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, -1);
-        return own >= 0 ? Math.min(100, own) : prefs.getWallpaperBackdropDim();
-    }
-
     /**
-     * The Home tab dims every Home page alike (one look per page kind, ADR 0020), each under its
-     * own key so the Terminal page keeps the wall-wide dim; with no pages to name, the wall-wide one.
+     * The Terminal's Background (ADR 0031 §4): the panes' Opacity and Blur and the Wallpaper dim
+     * of the Terminal's pages, each in its own key. Never Global's: no other surface moves, and
+     * nothing here writes the look grid.
      */
-    private void writeWallpaperDim(int value) {
-        com.termux.app.look.PageLook look = pageLook();
-        if (look == null)
+    private void writeTerminalBackground(@NonNull Row row, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
             return;
-        int dim = clamp(value, 0, 100);
-        String key = TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM;
-        boolean written = false;
-        for (com.termux.app.wall.WallPages.Page page : scopePages()) {
-            if (page.kind != com.termux.app.page.PageKind.HOME) continue;
-            look.write(com.termux.app.look.PageLook.Scope.page(page.id), key, dim);
-            written = true;
+        int scopes = SurfaceEditorProperties.PREVIEW_SURFACES;
+        switch (row) {
+            case TERMINAL_OPACITY:
+                // Each value re-bakes the blurred frames: a drag holds that for its release.
+                holdFrameBakesForDrag();
+                // The setter keeps wallpaper mode's copy in step.
+                prefs.setTerminalBackgroundOpacity(value);
+                break;
+            case TERMINAL_BLUR:
+                holdFrameBakesForDrag();
+                prefs.setTerminalGlassBlurRadius(value);
+                scopes |= SurfaceEditorProperties.PREVIEW_BLUR;
+                break;
+            case WALLPAPER_DIM:
+                prefs.setTerminalWallpaperDim(value);
+                break;
+            default:
+                return;
         }
-        if (!written) look.write(wallpaperDimScope(), key, dim);
+        requestPreview(scopes);
         syncDirty();
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && !mSliderDragActive)
+            sheet.restate(row);
     }
 
     /** Corners: one radius for every surface and the terminal, on both halves. */
@@ -5185,8 +4773,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 continue;
             final int index = i;
             group.setOnClickListener(view -> {
-                if (openWidgetsAt(index))
-                    return;
                 EditorCard card = cardOfGroup(index);
                 if (card != null) {
                     EditorDoor.EDITOR_OUTLINE.log(card);
@@ -5224,30 +4810,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 }
             });
         }
-    }
-
-    /** The tapped Card-form widget's rect, for the next {@link #openCard} of the Widgets card. */
-    @Nullable private int[] mTappedWidget;
-    /** The widget the Widgets card's ring stands around while that card is up. */
-    @Nullable private int[] mWidgetRing;
-
-    /**
-     * A tap on the bare frame or the canvas that lands on a Card-form widget raises the Widgets
-     * card, ringed around that widget. False when no such widget is under the finger.
-     */
-    private boolean openWidgetsAt(int groupIndex) {
-        EditorCard groupCard = GROUP_CARDS[groupIndex];
-        if (groupCard != null && groupCard != EditorCard.TERMINAL)
-            return false;
-        if (cardRefusal(EditorCard.WIDGETS) != null)
-            return false;
-        int[] widget = mHost.cardWidgetAt(mDownRawX, mDownRawY);
-        if (widget == null)
-            return false;
-        EditorDoor.EDITOR_OUTLINE.log(EditorCard.WIDGETS);
-        mTappedWidget = widget;
-        openCard(EditorCard.WIDGETS, true);
-        return true;
     }
 
     private void setOverlayVisible(boolean visible) {
@@ -5290,10 +4852,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return null;
         if (card == null || isScreenCard(card))
             return new int[] {0, 0, overlay.getWidth(), overlay.getHeight()};
-        int[] widget = mWidgetRing;
-        if (card == EditorCard.WIDGETS && widget != null)
-            return new int[] {widget[0] - overlayOffset[0], widget[1] - overlayOffset[1],
-                widget[2] - overlayOffset[0], widget[3] - overlayOffset[1]};
         if (card == EditorCard.TERMINAL) {
             int[] frame = mHost.terminalFrameRectInRoot();
             if (frame == null || frame[2] - frame[0] < dp(24) || frame[3] - frame[1] < dp(24))
@@ -5360,7 +4918,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private String describeGroup(int index) {
         EditorCard card = cardOfGroup(index);
         if (card == null)
-            return getString(R.string.appearance_half_workspace);
+            return getString(R.string.appearance_half_terminal);
         return getString(R.string.appearance_target_description, getString(card.titleRes));
     }
 
@@ -5647,9 +5205,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return card == EditorCard.HOME ? PageKind.HOME : PageKind.TERMINAL;
     }
 
-    /** Whether {@code card} is a screen's own (Home's or the Workspace's): the whole frame. */
+    /** Whether {@code card} is a screen's own (Home's or the Terminal's): the whole frame. */
     private static boolean isScreenCard(@Nullable EditorCard card) {
-        return card == EditorCard.HOME || card == EditorCard.WORKSPACE;
+        return card != null && card.isPageCard();
     }
 
     /** The radius a surface's outline wears: the surface's own. */
@@ -6141,9 +5699,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** A light tick ran this drag; the release owes the full pass it left out. */
     private boolean mDragRanLightPass;
 
-    /** The slider whose drag already reset the values beneath it ({@link #releaseShadowingCells}). */
-    @Nullable private Row mBeneathClearedFor;
-
     private void beginDrag(boolean dragging) {
         mSliderDragActive = dragging;
     }
@@ -6158,7 +5713,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private void endDrag() {
         mSliderDragActive = false;
-        mBeneathClearedFor = null;
         setGlassDragPreview(false);
         if (mDragRanLightPass) {
             // The full pass the ticks left out, once, with the values the drag settled on.
@@ -6297,22 +5851,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ------------------------------------------------------- Status bar and Terminal cards
 
-    /** {@code row} with the line "All pages" under it: a value the per-page cards share. */
-    @NonNull
-    private View withAllPagesNote(@NonNull View row) {
-        Context context = mHost.context();
-        android.widget.LinearLayout column = new android.widget.LinearLayout(context);
-        column.setOrientation(android.widget.LinearLayout.VERTICAL);
-        column.addView(row);
-        android.widget.TextView note = com.termux.app.surfaces.rows.RowKit.caption(context,
-            context.getString(R.string.editor_row_all_pages));
-        int edge = com.termux.app.surfaces.rows.RowKit.dp(context,
-            com.termux.app.surfaces.rows.RowKit.EDGE_DP);
-        note.setPadding(edge, 0, edge, com.termux.app.surfaces.rows.RowKit.dp(context, 4));
-        column.addView(note);
-        return column;
-    }
-
     /** The rows the Status bar and Terminal cards drew themselves, for their restates. */
     @NonNull private final java.util.Map<Row, com.termux.app.surfaces.cards.CardRowView> mOwnRows =
         new java.util.EnumMap<>(Row.class);
@@ -6345,7 +5883,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The Keyboard, Home, Global or Workspace card's rows ({@link CardBody}), for the card being
+     * The Keyboard, Home, Global or Terminal card's rows ({@link CardBody}), for the card being
      * built. Asked only while the sheet builds a card (through {@link EditorCardSheet.Model#rowView}),
      * so a restatement keeps reading the views it built; a card whose rows changed (the glass edge
      * came or went) gets a body of its own.
@@ -6984,8 +6522,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private static final String HOME_GESTURES_SECTION = "home_gestures";
     /** Settings › Home's Pages section, which the Home card's Edit pages chip scrolls to. */
     private static final String HOME_PAGES_SECTION = "home_pages";
-    /** The tools that follow the terminal's colours, on the page the Tool colours chip opens. */
-    private static final String TOOL_COLOURS_KEY = "theme_templates_enabled";
 
     /** The Tint colour swatches' stored values, in order. */
     private String[] tintHueValues() {
@@ -7030,9 +6566,29 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     ? 1 : 0;
             case TINT_HUE:
                 return indexOf(tintHueValues(), prefs.getSurfaceGlassTintHue(), 0);
+            case FONT_SIZE:
+                return clamp(Math.round(prefs.getFontSize() / density()), cardRowFrom(row),
+                    cardRowTo(row));
+            case SCREEN_EVENTS:
+                return prefs.isTerminalScreenEventsEnabled() ? 1 : 0;
+            case COMPOSITE_SIGNAL:
+                return prefs.isTerminalRetroCompositeEnabled() ? 1 : 0;
+            case KEYBOARD_WIDTH:
+                return Math.round(prefs.getInAppKeyboardFloatingWidthScale() * 100f);
+            case KEYBOARD_FLOAT_HEIGHT:
+                return Math.round(prefs.getInAppKeyboardFloatingHeightScale() * 100f);
+            case KEYBOARD_SPLIT_GAP:
+                return Math.round(prefs.getInAppKeyboardSplitGapFraction() * 100f);
             default:
                 return 0;
         }
+    }
+
+    /** The terminal's font size range in dp: {@code getDefaultFontSizes}' min and max. */
+    private int[] fontSizeRangeDp() {
+        int[] bounds = TermuxAppSharedPreferences.getDefaultFontSizes(mHost.context());
+        int min = Math.max(1, Math.round(bounds[1] / density()));
+        return new int[] {min, Math.max(min, Math.round(bounds[2] / density()))};
     }
 
     private int cardRowFrom(@NonNull Row row) {
@@ -7043,6 +6599,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS;
             case HOME_ROWS:
                 return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS;
+            case FONT_SIZE:
+                return fontSizeRangeDp()[0];
+            // The keyboard's shapes in percent, the ranges Settings › Keyboard › Size had.
+            case KEYBOARD_WIDTH: return KEYBOARD_WIDTH_MIN;
+            case KEYBOARD_FLOAT_HEIGHT: return KEYBOARD_FLOAT_HEIGHT_MIN;
             default:
                 return 0;
         }
@@ -7061,7 +6622,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case TINT_HUE:
                 return 2;
             case WALLPAPER_DIM:
+            case KEYBOARD_WIDTH:
                 return 100;
+            case FONT_SIZE:
+                return fontSizeRangeDp()[1];
+            case KEYBOARD_FLOAT_HEIGHT: return KEYBOARD_FLOAT_HEIGHT_MAX;
+            case KEYBOARD_SPLIT_GAP: return KEYBOARD_SPLIT_GAP_MAX;
             default:
                 return 1;
         }
@@ -7069,8 +6635,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @NonNull
     private String cardRowReadout(@NonNull Row row, int value) {
-        if (row == Row.BOTTOM_PADDING)
+        if (row == Row.BOTTOM_PADDING || row == Row.FONT_SIZE)
             return getString(R.string.appearance_readout_dp, value);
+        if (row == Row.KEYBOARD_WIDTH || row == Row.KEYBOARD_FLOAT_HEIGHT
+                || row == Row.KEYBOARD_SPLIT_GAP)
+            return getString(R.string.appearance_readout_percent, value);
         return String.valueOf(value);
     }
 
@@ -7081,13 +6650,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         switch (row) {
             case SECTION_LOOK:
                 if (card == EditorCard.HOME) return getString(R.string.editor_note_home_only);
-                if (card == EditorCard.WORKSPACE)
-                    return getString(R.string.editor_note_workspace_only);
+                if (card == EditorCard.TERMINAL)
+                    return getString(R.string.editor_note_terminal_only);
                 return null;
             case SECTION_GLASS:
                 if (card == EditorCard.HOME) return getString(R.string.editor_note_home_glass);
-                if (card == EditorCard.WORKSPACE)
-                    return getString(R.string.editor_note_workspace_glass);
+                if (card == EditorCard.TERMINAL)
+                    return getString(R.string.editor_note_terminal_glass);
                 return null;
             case SECTION_GLASS_MATERIAL:
                 return getString(R.string.editor_note_both_screens);
@@ -7271,6 +6840,44 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 AppearanceSettingsStore.putBoolean(context, "use_system_wallpaper", value != 0);
                 settingsWritten();
                 break;
+            case FONT_SIZE: {
+                int px = Math.round(clamp(value, cardRowFrom(row), cardRowTo(row)) * density());
+                if (prefs.getFontSize() != px) {
+                    prefs.setFontSize(px);
+                    requestPreview(SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL);
+                }
+                syncDirty();
+                break;
+            }
+            case SCREEN_EVENTS:
+                prefs.setTerminalScreenEventsEnabled(value != 0);
+                mHost.applyTerminalMotionLook();
+                syncDirty();
+                break;
+            case COMPOSITE_SIGNAL:
+                prefs.setTerminalRetroCompositeEnabled(value != 0);
+                mHost.applyTerminalMotionLook();
+                syncDirty();
+                break;
+            case KEYBOARD_WIDTH:
+            case KEYBOARD_FLOAT_HEIGHT:
+            case KEYBOARD_SPLIT_GAP: {
+                float fraction = clamp(value, cardRowFrom(row), cardRowTo(row)) / 100f;
+                if (row == Row.KEYBOARD_WIDTH)
+                    prefs.setInAppKeyboardFloatingWidthScale(fraction);
+                else if (row == Row.KEYBOARD_FLOAT_HEIGHT)
+                    prefs.setInAppKeyboardFloatingHeightScale(fraction);
+                else
+                    prefs.setInAppKeyboardSplitGapFraction(fraction);
+                // The keyboard reads its shapes again on release, as Settings' page had it on
+                // the way back: a drag would rebuild its rows every step.
+                TermuxInAppKeyboard keyboard = keyboard();
+                if (!dragging && keyboard != null)
+                    keyboard.onPreferencesReloaded();
+                positionTargets();
+                syncDirty();
+                break;
+            }
             case TINT_HUE: {
                 String[] values = tintHueValues();
                 String id = values[clamp(value, 0, values.length - 1)];

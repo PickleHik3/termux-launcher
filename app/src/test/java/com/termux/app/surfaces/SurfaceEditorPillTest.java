@@ -30,7 +30,7 @@ import java.util.List;
 import android.app.Application;
 
 /**
- * The header pill's Home and Workspace slide the live wall to their page inside the mini UI, as a
+ * The header pill's Home and Terminal slide the live wall to their page inside the mini UI, as a
  * swipe would, and Customization wears the same halo as the page cards.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -54,15 +54,15 @@ public class SurfaceEditorPillTest {
     }
 
     @Test
-    public void workspaceOnThePillSlidesTheWallToTheWorkspaceAndHomeBack() {
+    public void terminalOnThePillSlidesTheWallToTheTerminalAndHomeBack() {
         SurfaceEditorController editor = open(PageKind.HOME);
         assertEquals(PageKind.HOME, editor.screen());
         wallMoves.clear();
 
-        pill(editor, EditorCard.WORKSPACE);
-        assertEquals("the wall slides to the Workspace", PageKind.TERMINAL, last());
+        pill(editor, EditorCard.TERMINAL);
+        assertEquals("the wall slides to the Terminal", PageKind.TERMINAL, last());
         assertEquals(PageKind.TERMINAL, editor.screen());
-        assertEquals(EditorCard.WORKSPACE, editor.shownCard());
+        assertEquals(EditorCard.TERMINAL, editor.shownCard());
 
         pill(editor, EditorCard.HOME);
         assertEquals("the wall slides back to Home", PageKind.HOME, last());
@@ -71,7 +71,7 @@ public class SurfaceEditorPillTest {
     }
 
     @Test
-    public void homeOnThePillFromAWorkspaceEntrySlidesToHome() {
+    public void homeOnThePillFromATerminalEntrySlidesToHome() {
         SurfaceEditorController editor = open(PageKind.TERMINAL);
         wallMoves.clear();
         pill(editor, EditorCard.HOME);
@@ -93,11 +93,11 @@ public class SurfaceEditorPillTest {
     @Test
     public void thePillAsksForThePageTheCardStandsOn() {
         assertEquals(PageKind.TERMINAL,
-            SurfaceEditorController.pillPlace(EditorCard.WORKSPACE, PageKind.HOME));
+            SurfaceEditorController.pillPlace(EditorCard.TERMINAL, PageKind.HOME));
         assertEquals(PageKind.HOME,
             SurfaceEditorController.pillPlace(EditorCard.HOME, PageKind.TERMINAL));
         assertNull(SurfaceEditorController.pillPlace(EditorCard.HOME, PageKind.HOME));
-        assertNull(SurfaceEditorController.pillPlace(EditorCard.WORKSPACE, PageKind.TERMINAL));
+        assertNull(SurfaceEditorController.pillPlace(EditorCard.TERMINAL, PageKind.TERMINAL));
         assertNull(SurfaceEditorController.pillPlace(EditorCard.APPEARANCE, PageKind.HOME));
     }
 

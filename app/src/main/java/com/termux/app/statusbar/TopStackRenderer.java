@@ -17,8 +17,8 @@ import com.termux.app.window.FrameStep;
 
 /**
  * The only writer of the top stack's transforms (ADR 0030 section 6), during a crossing and at
- * rest: the bar host's ride, the strip behind the system bar and the window chips' slide, all
- * their {@code translationX}, and the blend of the two glass views' {@link CrossfadeDrawable}s
+ * rest: the bar host's ride, the strip behind the system bar, the window chips' slide and Home's
+ * float chips' slide, all their {@code translationX}, and the blend of the two glass views' {@link CrossfadeDrawable}s
  * with the strip glass's presence. Each owner hands its share in (the crossing's two ends as
  * {@link TopStackScene.End}s, the wall's progress, the ride), which only records it and asks the
  * frame pipeline for its {@link FrameStep#TOP_STACK} step; the step ({@link #apply}) asks
@@ -47,7 +47,7 @@ public final class TopStackRenderer {
 
     private static final String[] OWNED = {"terminal_window_bar_host.translationX",
         "terminal_status_bar_background.translationX", "terminal_status_place_content.translationX",
-        "terminal_status_place_content.clipLeft"};
+        "terminal_status_place_content.clipLeft", "terminal_status_home_chips.translationX"};
 
     @NonNull private final Views mViews;
     @Nullable private FramePipeline mFrames;
@@ -62,6 +62,8 @@ public final class TopStackRenderer {
     private boolean mCrossing;
     private boolean mStripHereShown;
     private float mProgress;
+    /** The inks' own share toward the other end (the crossing's end share); NaN follows the look. */
+    private float mInkShare = Float.NaN;
     /** The page's fraction, which the chips' slide follows (the look follows {@link #mProgress}). */
     private float mSlide;
     /** The chips' clip as last written (never read back from the view: reading allocates). */
@@ -108,6 +110,10 @@ public final class TopStackRenderer {
         guard.own(OWNED[3], () -> {
             View view = mViews.view(R.id.terminal_status_place_content);
             return view == null || !view.getClipBounds(mClipRead) ? 0f : mClipRead.left;
+        });
+        guard.own(OWNED[4], () -> {
+            View view = mViews.view(R.id.terminal_status_home_chips);
+            return view == null ? 0f : view.getTranslationX();
         });
         mGuard = guard;
     }
@@ -157,6 +163,7 @@ public final class TopStackRenderer {
         mLandingPending = false;
         mProgress = 0f;
         mSlide = 0f;
+        mInkShare = Float.NaN;
         mRideX = Float.NaN;
         mRideWearsTo = false;
         requestApply();
@@ -175,6 +182,17 @@ public final class TopStackRenderer {
         if (mProgress == p && mSlide == slide) return;
         mProgress = p;
         mSlide = slide;
+        requestApply();
+    }
+
+    /**
+     * The inks' share toward the other end, the crossing's end share
+     * ({@code SeamCrossing.Answers#endShare}): the bar's inks over each page's ground cross with
+     * the wall, as the dock's legends do. Set only while a crossing runs.
+     */
+    public void setInkShare(float share) {
+        if (!mCrossing || share == mInkShare) return;
+        mInkShare = share;
         requestApply();
     }
 
@@ -242,7 +260,8 @@ public final class TopStackRenderer {
         if (guard != null) guard.check();
         boolean riding = mCrossing && !Float.isNaN(mRideX) && !TopStackScene.shared(mFrom, mTo);
         if (mCrossing) {
-            TopStackScene.at(mFrom, mTo, mProgress, mSlide, mWidth, mRideX, mRideWearsTo, mFrame);
+            TopStackScene.at(mFrom, mTo, mProgress, mSlide, mWidth, mRideX, mRideWearsTo,
+                mInkShare, mFrame);
         } else {
             TopStackScene.rest(mRest, mWidth, mFrame);
         }
@@ -251,6 +270,8 @@ public final class TopStackRenderer {
         View chips = mViews.view(R.id.terminal_status_place_content);
         writeTx(chips, mFrame.chipsTx);
         writeClip(chips, mFrame.chipsTx);
+        // Home's chips need no clip of their own: the frame both sides' strips share clips them.
+        writeTx(mViews.view(R.id.terminal_status_home_chips), mFrame.homeChipsTx);
         writeInks(riding);
         if (mCrossing) {
             mGlassShare = riding ? (mRideWearsTo ? 1f : 0f) : mFrame.lookShare;
@@ -329,14 +350,6 @@ public final class TopStackRenderer {
             }
         }
         shareOf(mViews.view(R.id.terminal_window_bar_background));
-        frostShare(strip);
-        frostShare(mViews.view(R.id.terminal_window_bar_background));
-        frostShare(mViews.view(R.id.terminal_window_bar_background_side));
-    }
-
-    /** The glass share on a bar view's arriving frost, which the frost crosses with. */
-    private void frostShare(@Nullable View view) {
-        if (view instanceof BarGlassView) ((BarGlassView) view).setFrostShare(mGlassShare);
     }
 
     /** Writes the share into {@code view}'s blend; whether it wears one. */

@@ -331,4 +331,57 @@ public class KittyCursorTrailTest {
         assertFalse(trail.moveStartedOnLastUpdate());
         assertEquals(trail.cornerX(0), trail.prevCornerX(0), 1e-6f);
     }
+
+    /**
+     * Typing while a trail is still settling: each keystroke moves the cursor one cell, inside the
+     * start threshold, so it must not smear from the old cell. kitty tests the threshold only while
+     * the trail is settled, and a one-cell smear takes longer to settle (about 0.2 s) than the gap
+     * between keys, so after one long move (a newline) every following key drew the cursor a cell
+     * behind for about 0.15 s. The move carries the corners with it instead.
+     */
+    @Test
+    public void typingDuringALiveTrailDoesNotSmearEachCell() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(10, 2, 2);
+        float top = 5 * CELL_H;
+        trail.update(0L, 40 * CELL_W, top, 41 * CELL_W, top + CELL_H, true, -1000L, false, CELL_W, CELL_H, cfg);
+        // Enter: the cursor drops to the start of the next row, a real trail.
+        top += CELL_H;
+        long moved = 1000L;
+        int col = 0;
+        long now = moved;
+        for (int key = 0; key < 10; key++) {
+            long next = moved + 150L;
+            for (; now < next; now += 8L) {
+                trail.update(now, col * CELL_W, top, (col + 1) * CELL_W, top + CELL_H, true, moved, false,
+                    CELL_W, CELL_H, cfg);
+            }
+            assertTrue("a newline's trail is still settling when the next key lands", key > 0 || trail.needsRender());
+            col++;
+            moved = now;
+            // The frame that picks the move up, past the 10 ms delay.
+            now += 16L;
+            trail.update(now, col * CELL_W, top, (col + 1) * CELL_W, top + CELL_H, true, moved, false,
+                CELL_W, CELL_H, cfg);
+            assertFalse("a one-cell move is not a trail", trail.moveStartedOnLastUpdate());
+            float trailingLag = (col * CELL_W - trail.cornerX(3)) / CELL_W;
+            assertTrue("key " + key + ": the trailing edge is " + trailingLag + " cells behind",
+                trailingLag < 0.25f);
+        }
+    }
+
+    /** A one-cell move during a long move's trail carries it along rather than cutting it short. */
+    @Test
+    public void aSmallMoveDuringALongTrailKeepsTheTrail() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 2, 2);
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        trail.update(16L, 20 * CELL_W, 0f, 21 * CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        float lagBefore = 20 * CELL_W - trail.cornerX(3);
+        assertTrue(lagBefore > 2 * CELL_W);
+        trail.update(16L, 21 * CELL_W, 0f, 22 * CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertTrue(trail.needsRender());
+        assertEquals(lagBefore, 21 * CELL_W - trail.cornerX(3), 1e-3f);
+        assertEquals("no streak across the small move itself", trail.cornerX(3), trail.prevCornerX(3), 1e-3f);
+    }
 }

@@ -319,7 +319,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onSingleTapUp(MotionEvent e) {
-        // The Workspace may be empty (no shell at all); a tap then has nothing to reach.
+        // The Terminal may be empty (no shell at all); a tap then has nothing to reach.
         TerminalSession session = mHost.currentSession();
         TerminalEmulator term = session == null ? null : session.getEmulator();
         if (term == null) return;

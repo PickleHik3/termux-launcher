@@ -110,7 +110,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          */
         int sheetsBandPx();
 
-        /** The half of the wall the drawer opens over: Home's or the Workspace's look. */
+        /** The half of the wall the drawer opens over: Home's or the Terminal's look. */
         int restingPage();
 
         /** The one dock-geometry snapshot the seed rect, radius and inset all come off. */
@@ -139,7 +139,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         default void setHomeContentAlpha(float alpha) {}
 
         /**
-         * The gap the terminal pane leaves above the keyboard on the Workspace, in px: the plane
+         * The gap the terminal pane leaves above the keyboard on the Terminal, in px: the plane
          * ends this far above the built-in keyboard the search raised. Negative keeps the gap
          * measured at the pull. See {@link AppDrawerKeyboardSeparation}.
          */
@@ -171,6 +171,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         default float inAppKeyboardCardRadiusPx() {
             return 0f;
         }
+
+        /**
+         * The drawer's glass handoff, once per frame of its motion: 0 shut, 1 once the plane's own
+         * glass has taken over (the dock's glass is gone by then), the plane's corner radius in
+         * px, and the drawer's progress (which sets its dim). The built-in keyboard under an open drawer wears the sheet's glass and corners at
+         * this fraction ({@code KeyboardSheetLook}); it asks no animator of its own.
+         */
+        default void onDrawerSheetFraction(float fraction, float radiusPx, float progress) {}
 
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
@@ -1797,13 +1805,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerPlaneView plane = mPlane;
         if (host == null || glass == null || plane == null) return;
         TermuxAppSharedPreferences preferences = mHost.preferences();
-        // The Sheets element's glass (ADR 0017): a detached dock no longer drags the drawer.
-        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(
-            preferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS,
-            mHost.restingPage());
-        // Modifier: capped at 0.45 so the drawer glass always stays see-through: the terminal
-        // keeps running visibly behind the open drawer.
-        float opacity = Math.min(0.45f, preferences == null ? 0.5f : sheets.tintAlpha());
+        // Global's glass at the sheets' opacity floor (ADR 0031).
+        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
+        float opacity = preferences == null ? 0.5f : sheets.tintAlpha();
         int grain = preferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN
             : sheets.grainPercent;
@@ -2088,18 +2092,19 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (k > 0f) {
             float pinTop = pinTopPx() + keyboardExit;
-            // Docked's bottom corners come up above the keyboard as the terminal pane's corners;
-            // the top stays pushed past the bezel by whichever radius is larger.
+            // Docked's plane runs down to the keyboard's sheet, square and with no gap, so the
+            // two read as one sheet; the top stays pushed past the bezel.
             if (mImePinTopPx <= 0f) {
-                mCurrentRadiusPx = AppDrawerKeyboardSeparation.revealRadiusPx(mRoundedStyle,
-                    mCurrentRadiusPx, mHost.searchKeyboardCornerRadiusPx(), k);
+                mCurrentRadiusPx = AppDrawerKeyboardSeparation.dockedSheetRadiusPx(
+                    mRoundedStyle, mCurrentRadiusPx, k);
             }
             frame = new Frame(frame.left,
                 AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
                     mCurrentRadiusPx),
                 frame.right,
                 AppDrawerTransitionGeometry.resolveSearchPlaneBottom(frame.bottom, pinTop,
-                    revealGapPx(), k));
+                    AppDrawerKeyboardSeparation.planeGapPx(mRoundedStyle, mImePinTopPx > 0f,
+                        revealGapPx()), k));
             // The scene dim is the host's background and the host covers the whole screen, keyboard
             // included. Clipped to the edge the reveal is uncovering, so the keyboard comes back at
             // its own brightness rather than under the drawer's shade. Under Floating the dim runs
@@ -2163,6 +2168,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         AppDrawerDockChoreographyTarget target = mDockTarget;
         if (target != null) target.setDrawerTransitionProgress(p);
+        // Not the settled-scene capture's p = 1: that is a picture of the open drawer, not a frame.
+        if (!mCapturingSettledScene) mHost.onDrawerSheetFraction(handoff, mOpenRadiusPx, p);
     }
 
     /**
@@ -2190,7 +2197,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /**
      * The air between the plane and the keyboard. The built-in keyboard's is the terminal pane's
-     * gap, so the drawer stands off the keyboard as the pane does on the Workspace; the system
+     * gap, so the drawer stands off the keyboard as the pane does on the Terminal; the system
      * keyboard keeps its own.
      */
     private float revealGapPx() {
@@ -2386,6 +2393,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHost.setHomeContentAlpha(1f);
             AppDrawerDockChoreographyTarget target = mDockTarget;
             if (target != null) target.setDrawerTransitionProgress(0f);
+            mHost.onDrawerSheetFraction(0f, mOpenRadiusPx, 0f);
             if (mHostLayout != null) {
                 mHostLayout.setAlpha(1f);
                 mHostLayout.setVisibility(View.INVISIBLE);

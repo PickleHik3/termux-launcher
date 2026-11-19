@@ -160,7 +160,7 @@ public class StackRendererLandingTest {
 
     /**
      * The canvas reaches up under the status bar while the wall moves and comes back down as it
-     * rests on the Workspace (PageTopInsets): the body's top margin follows the reach at once and
+     * rests on the Terminal (PageTopInsets): the body's top margin follows the reach at once and
      * its parent's height on the next layout, so the body keeps its size. A frame read between
      * the two (the landing's) cuts the body as the last crossing frame did, either way.
      */

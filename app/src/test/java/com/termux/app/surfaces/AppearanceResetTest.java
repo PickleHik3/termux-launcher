@@ -19,8 +19,6 @@ import com.termux.app.place.layout.Layouts;
 import com.termux.app.place.layout.LayoutsJson;
 import com.termux.app.setup.AppearanceResetCard;
 import com.termux.shared.termux.settings.preferences.LookGrid;
-import com.termux.shared.termux.settings.preferences.LookGridKindMigration;
-import com.termux.shared.termux.settings.preferences.LookGridKindSeed;
 import com.termux.shared.termux.settings.preferences.LookGridMarginMigration;
 import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -111,9 +109,7 @@ public class AppearanceResetTest {
         boolean lookFresh = (withReset && AppearanceReset.runAtStartUp(app, prefs, fresh)) || fresh;
         prefs.migrateLookGrid(Collections.emptyList(), lookFresh);
         LookGrid.PrefsStore grid = new LookGrid.PrefsStore(store);
-        LookGridKindMigration.run(grid, lookFresh);
         GlassControlsMigration.runAtStartUp(prefs, lookFresh);
-        LookGridKindSeed.run(grid, SurfacePresets.SHIPPED_BY_KIND);
         LookGridMarginMigration.run(grid);
         new PlaceLayoutStore(prefs);
     }
@@ -334,9 +330,32 @@ public class AppearanceResetTest {
         // As on a new install's second start, the two grid migrations mark themselves done.
         Map<String, Object> second = new HashMap<>(store.getAll());
         assertEquals(Boolean.TRUE, second.remove("look_grid_migrated"));
-        assertEquals(Boolean.TRUE, second.remove("look_grid_kind_migrated"));
         assertEquals(first, second);
         assertEquals(layouts, LayoutStore.shared(app).current());
+    }
+
+    /**
+     * The one-look build (appearance-one-look spec §5): nothing of the old model is converted.
+     * Per-kind and per-page look keys, the sheets' and widgets' looks, a surface's own values
+     * beyond Opacity and Blur, and the per-page wallpaper dim all go with the reset.
+     */
+    @Test
+    public void theOldModelsLookKeysGoWithTheReset() {
+        TermuxAppSharedPreferences[] prefs = new TermuxAppSharedPreferences[1];
+        SharedPreferences store = upgradedAndCustomised(prefs);
+        String[] old = {"look.opacity.dock@kind:home", "look.frost.keyboard@kind:terminal",
+            "look.opacity@3", "look.tint.status@2", "look.tint.dock", "look.corners.keyboard",
+            "look.opacity.sheets", "look.frost.widgets", "wallpaper_backdrop_dim@2",
+            "wallpaper_backdrop_dim@5"};
+        SharedPreferences.Editor editor = store.edit();
+        for (String key : old) editor.putInt(key, 7);
+        editor.commit();
+
+        startUp(store, prefs[0], true);
+
+        for (String key : old)
+            assertFalse(key + " is gone", store.contains(key));
+        assertTrue(AppearanceReset.isCardDue(store));
     }
 
     @Test

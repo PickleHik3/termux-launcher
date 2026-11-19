@@ -58,7 +58,7 @@ public final class HomeActionsSheetPolicy {
 
     /**
      * The sheet's rows for this state. Terminal is always first: a Home float opens on the page
-     * whether or not the Workspace has a session.
+     * whether or not the Terminal has a session.
      *
      * @param isDefaultHome the launcher is the phone's home app, so Set as default home is not
      *                      offered

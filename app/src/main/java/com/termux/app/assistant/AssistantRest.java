@@ -13,7 +13,7 @@ public final class AssistantRest {
     /**
      * The keyboard is up unless the overview is previewing the page, or its remembered keyboard is
      * down or minimal mode puts it away. With the launcher's keyboard off the phone's is the only
-     * one. The bar shows its own set and the chips show; the page wears the Workspace's look.
+     * one. The bar shows its own set and the chips show; the page wears the Terminal's look.
      */
     @NonNull
     public static Rest of(@NonNull Rest.Inputs in) {

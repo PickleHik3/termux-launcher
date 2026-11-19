@@ -50,8 +50,8 @@ import java.nio.ByteOrder;
 @RequiresApi(Build.VERSION_CODES.Q)
 final class SceneLowRes {
 
-    /** The Look's default glass blur ({@code DEFAULT_SURFACE_BASE_BLUR}), used while no glass has asked. */
-    static final int FALLBACK_BLUR_DP = TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
+    /** The Look's default glass blur ({@code DEFAULT_SURFACE_GLOBAL_BLUR}), used while no glass has asked. */
+    static final int FALLBACK_BLUR_DP = TERMUX_APP.DEFAULT_SURFACE_GLOBAL_BLUR;
     /** Images held open at most: the frame on screen and those not yet safe to give back. */
     static final int HELD = 4;
     /** One more than {@link #HELD}, so the producer always has a buffer to draw into. */

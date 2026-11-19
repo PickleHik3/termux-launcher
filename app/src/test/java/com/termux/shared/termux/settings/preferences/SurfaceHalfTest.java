@@ -44,12 +44,12 @@ public class SurfaceHalfTest {
 
     @Test
     public void unsetHalves_readTheSharedValues() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 40);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 40);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR, 22);
 
         for (int half : new int[] {TermuxAppSharedPreferences.PAGE_WALL, TermuxAppSharedPreferences.terminalPageId()}) {
             assertEquals(40, preferences.getAppBarOpacity(half));
-            assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, half));
+            assertEquals(40, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY, half));
             // Blur 22 wears the nearest Frost stop's 25.
             assertEquals(25, preferences.getStatusBarBlurRadius(half));
             assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
@@ -61,57 +61,20 @@ public class SurfaceHalfTest {
     // ------------------------------------------------------------------ a half's own value
 
     @Test
-    public void halfBase_movesOnlyThatHalfsFollowers() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 40);
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 12);
+    public void halfGlobal_movesOnlyThatHalfsFollowers() {
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 40);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 12);
 
         assertEquals(12, preferences.getAppBarOpacity(TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(12, preferences.getStatusBarOpacity(TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(12, preferences.getInAppKeyboardBackgroundOpacity(TermuxAppSharedPreferences.PAGE_WALL));
-        // Base is wall-wide since the halves became pages: Home's write is the wall's.
+        // Global is wall-wide since the halves became pages: Home's write is the wall's.
         assertEquals(12, preferences.getAppBarOpacity(TermuxAppSharedPreferences.terminalPageId()));
-        // The no-half reads are today's callers: they answer the Workspace.
+        // The no-half reads are today's callers: they answer the Terminal.
         assertEquals(12, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        // The terminal is only on the Workspace, and reads Base.
-        assertEquals(12, preferences.getTerminalBackgroundOpacity());
-    }
-
-    @Test
-    public void halfDetach_leavesTheOtherHalfLinked() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 30);
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, TermuxAppSharedPreferences.terminalPageId(),
-            80);
-
-        assertEquals(80, preferences.getDockTintStrength(TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(80, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(30, preferences.getDockTintStrength(TermuxAppSharedPreferences.PAGE_WALL));
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT,
-            TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(1, preferences.surfaceOverrideCount(SurfaceSlot.DOCK, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(0, preferences.surfaceOverrideCount(SurfaceSlot.DOCK, TermuxAppSharedPreferences.PAGE_WALL));
-    }
-
-    @Test
-    public void halfWrite_followsThatHalfsLink() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 5);
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
-            TermuxAppSharedPreferences.PAGE_WALL, 20);
-
-        // Home's keyboard is detached: the write lands on its own value, Base stays.
-        preferences.setSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 33);
-        assertEquals(33, preferences.getInAppKeyboardGrain(TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(5, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
-
-        // The link is wall-wide, so the Workspace's keyboard is detached too; its write lands on
-        // the Terminal page's own value and Base stays.
-        preferences.setSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
-            TermuxAppSharedPreferences.terminalPageId(), 9);
-        assertEquals(9, preferences.getInAppKeyboardGrain(TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(33, preferences.getInAppKeyboardGrain(TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(5, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(5, preferences.getDockGlassGrain(TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(5, preferences.getDockGlassGrain(TermuxAppSharedPreferences.PAGE_WALL));
+        assertEquals(12, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
+        // The terminal's Background never follows Global (ADR 0031 §4, #287).
+        assertEquals(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY, preferences.getTerminalBackgroundOpacity());
     }
 
     @Test
@@ -123,15 +86,16 @@ public class SurfaceHalfTest {
         // One wall value under the plain key, never a page override.
         assertTrue(store.contains(canvasKey));
         assertFalse(store.contains(canvasKey + "@" + TerminalPageIdFixture.TERMINAL_PAGE_ID));
-        assertEquals(70, preferences.getTerminalBackgroundOpacity());
+        assertEquals(70, preferences.getSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
+            TermuxAppSharedPreferences.terminalPageId()));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
     public void cornersAndMargin_stayShared() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, TermuxAppSharedPreferences.PAGE_WALL, 20);
-        assertEquals(20, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP,
+        preferences.setSurfaceGlobalValue(SurfaceProperty.SIDE_GAP, TermuxAppSharedPreferences.PAGE_WALL, 20);
+        assertEquals(20, preferences.getSurfaceGlobalValue(SurfaceProperty.SIDE_GAP,
             TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(20, preferences.getLayoutMarginDp(false));
         assertEquals(20, preferences.getLayoutMarginDp(true));
@@ -141,23 +105,23 @@ public class SurfaceHalfTest {
 
     @Test
     public void sharedWrite_clearsBothHalves() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 12);
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 60);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 12);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 60);
 
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 45);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 45);
 
         assertEquals(45, preferences.getAppBarOpacity(TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(45, preferences.getAppBarOpacity(TermuxAppSharedPreferences.terminalPageId()));
-        // Base is one wall value: no half twins and no page override.
+        // Global is one wall value: no half twins and no page override.
         for (String suffix : new String[]{"_home", "_workspace",
             "@" + TerminalPageIdFixture.TERMINAL_PAGE_ID})
-            assertFalse(store.contains(SurfaceProperty.OPACITY.baseKey + suffix));
+            assertFalse(store.contains(SurfaceProperty.OPACITY.globalKey + suffix));
     }
 
     @Test
     public void settingsSlider_landsOnBothHalves_whateverEachHalfsLink() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 30);
-        // Home's status bar holds its own number; the link is wall-wide, so the Workspace's does
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 30);
+        // Home's status bar holds its own number; the link is wall-wide, so the Terminal's does
         // too.
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_WALL, 90);
@@ -198,28 +162,8 @@ public class SurfaceHalfTest {
     // ------------------------------------------------------------------ the editor's helpers
 
     @Test
-    public void resetSurface_putsOneHalfBackOnItsLook() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 25);
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.PAGE_WALL, 90);
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.terminalPageId(), 80);
-
-        preferences.resetSurfaceToLook(SurfaceSlot.KEYBOARD, TermuxAppSharedPreferences.PAGE_WALL);
-
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL),
-            preferences.getSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-                TermuxAppSharedPreferences.PAGE_WALL));
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(80, preferences.getInAppKeyboardBackgroundOpacity(TermuxAppSharedPreferences.terminalPageId()));
-    }
-
-    @Test
     public void surfaceValue_matchesTheNamedGetters() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL, 9);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL, 9);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN,
             TermuxAppSharedPreferences.terminalPageId(), 44);
         for (int half : new int[] {TermuxAppSharedPreferences.PAGE_WALL, TermuxAppSharedPreferences.terminalPageId()}) {

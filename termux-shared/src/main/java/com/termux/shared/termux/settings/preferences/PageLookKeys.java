@@ -25,12 +25,19 @@ public final class PageLookKeys {
     public static final String KEY_TERMINAL_PAGE_ID = "wall_terminal_page_id";
 
     /**
-     * The keys a page may hold its own value of: blur, opacity, grain and tint of the dock, status
-     * bar, keyboard and canvas, the keyboard backdrop opacity, the wallpaper dim, and the material
-     * (a string) with its intensity. Everything else (Base, the inherit flags, shapes) is
-     * wall-wide only.
+     * The keys a page may hold its own value of: the wallpaper dim, the ground under the page
+     * (ADR 0031 §4). The chrome wears one look on every page, so nothing else is held per page.
      */
-    public static final Set<String> DETACHABLE;
+    public static final Set<String> DETACHABLE =
+        Collections.singleton(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM);
+
+    /**
+     * The keys a page held its own value of before ADR 0031 (blur, opacity, grain and tint of the
+     * dock, status bar, keyboard and canvas, the keyboard backdrop opacity, the material and its
+     * intensity): no build reads them, and only the reset, the editor's snapshot and the
+     * migrations name them.
+     */
+    public static final Set<String> RETIRED;
 
     static {
         Set<String> keys = new HashSet<>();
@@ -42,10 +49,17 @@ public final class PageLookKeys {
             }
         }
         keys.add(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
-        keys.add(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM);
         keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL);
         keys.add(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY);
-        DETACHABLE = Collections.unmodifiableSet(keys);
+        RETIRED = Collections.unmodifiableSet(keys);
+    }
+
+    /** Every key a page holds or once held its own value of: {@link #DETACHABLE} and {@link #RETIRED}. */
+    @NonNull
+    public static Set<String> everHeld() {
+        Set<String> keys = new HashSet<>(RETIRED);
+        keys.addAll(DETACHABLE);
+        return keys;
     }
 
     public static boolean isLookProperty(@NonNull SurfaceProperty property) {

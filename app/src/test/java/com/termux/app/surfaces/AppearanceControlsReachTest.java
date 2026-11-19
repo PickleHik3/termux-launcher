@@ -14,7 +14,6 @@ import com.termux.app.chrome.FancierGlassPolicy;
 import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.shared.termux.settings.preferences.LookGrid;
-import com.termux.shared.termux.settings.preferences.LookGridKindSeed;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.After;
@@ -34,10 +33,9 @@ import android.app.Application;
 
 /**
  * Every glass card's Opacity, Blur, Grain and Depth, moved through the editor's model, reach
- * exactly the surfaces the card and its Applies to name, as the renderers read them
- * ({@link ElementGlass}), on a fresh install after the start-up kind seed. Before the fix the
- * Terminal card's Opacity moved every surface, and the keyboard's seeded Home and Display looks
- * hid Customization, Home, Workspace and Keyboard › Global.
+ * exactly the surfaces the card names, on every page alike (ADR 0031), as the renderers read
+ * them ({@link ElementGlass}), on a fresh install. Before the fix the Terminal card's Opacity
+ * moved every surface.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -53,49 +51,37 @@ public class AppearanceControlsReachTest {
         Context context = RuntimeEnvironment.getApplication();
         mStore = context.getSharedPreferences("appearance-controls-reach", Context.MODE_PRIVATE);
         mStore.edit().clear().commit();
-        LookGrid.install(page -> page == HOME_PAGE ? LookGrid.Kind.HOME
-                : page == TERMINAL_PAGE ? LookGrid.Kind.TERMINAL
-                : page == DISPLAY_PAGE ? LookGrid.Kind.DISPLAY : null,
-            SurfacePresets.SHIPPED_BY_KIND);
         TermuxAppSharedPreferences prefs = new TermuxAppSharedPreferences(context, mStore, null);
-        // A fresh install's start-up: a shipped Look, then the kind seed.
+        // A fresh install's start-up: a shipped Look.
         SurfacePresets.applyLook(prefs, SurfacePresets.presets(prefs).get(1));
-        LookGridKindSeed.run(new LookGrid.PrefsStore(mStore), SurfacePresets.SHIPPED_BY_KIND);
         return prefs;
     }
 
     /**
      * The same fresh install again, in the same store and through the same preferences object:
-     * every key cleared, then the start-up's shipped Look and kind seed. For a cell that walks
+     * every key cleared, then the start-up's shipped Look. For a cell that walks
      * on an editor that was closed first, so the cell starts on what {@link #fresh} gives.
      */
     private void backToFresh(TermuxAppSharedPreferences prefs) {
         mStore.edit().clear().commit();
-        LookGrid.install(page -> page == HOME_PAGE ? LookGrid.Kind.HOME
-                : page == TERMINAL_PAGE ? LookGrid.Kind.TERMINAL
-                : page == DISPLAY_PAGE ? LookGrid.Kind.DISPLAY : null,
-            SurfacePresets.SHIPPED_BY_KIND);
         SurfacePresets.applyLook(prefs, SurfacePresets.presets(prefs).get(1));
-        LookGridKindSeed.run(new LookGrid.PrefsStore(mStore), SurfacePresets.SHIPPED_BY_KIND);
     }
 
-    @After public void resetLookGridPageKinds() { LookGrid.install(null, null); }
 
     // ---------------------------------------------------------------------------- the matrix
 
     @Test
     public void everyGlassRowReachesExactlyItsCardsSurfaces() {
         List<String> wrong = new ArrayList<>();
+        EditorRows.Offers offers = new EditorRows.Offers(false, true, true, false, true);
         for (EditorCard card : EditorCard.values()) {
-            List<EditorChips.AppliesTo> scopes = new ArrayList<>(EditorChips.appliesToOptions(card));
-            if (scopes.isEmpty()) scopes.add(null);
             // One editor per card. Each cell ends its session, puts the install back to a fresh
             // one and opens the card again, so every cell starts as a fresh install with the
             // card just opened, as it did on an editor of its own.
             TermuxAppSharedPreferences prefs = fresh();
             EditorTestHarness harness = null;
-            for (EditorChips.AppliesTo scope : scopes)
-                for (Row row : ROWS) {
+            for (Row row : ROWS) {
+                    if (!has(EditorRows.rows(card, offers), row)) continue;
                     if (harness == null) {
                         harness = new EditorTestHarness(prefs, null);
                     } else {
@@ -105,10 +91,10 @@ public class AppearanceControlsReachTest {
                             harness.editor.isOpen());
                         backToFresh(prefs);
                     }
-                    Set<String> moved = move(harness, prefs, card, scope, row);
-                    Set<String> expected = expected(card, scope);
+                    Set<String> moved = move(harness, prefs, card, row);
+                    Set<String> expected = expected(card);
                     if (!moved.equals(expected))
-                        wrong.add(card + " " + scope + " " + row + ": moved " + moved
+                        wrong.add(card + " " + row + ": moved " + moved
                             + ", expected " + expected);
                 }
         }
@@ -118,7 +104,7 @@ public class AppearanceControlsReachTest {
     @Test
     public void customizationVibrancyIsSetForAllGlass() {
         TermuxAppSharedPreferences prefs = fresh();
-        EditorCardSheet.Model model = open(prefs, EditorCard.APPEARANCE, null);
+        EditorCardSheet.Model model = open(prefs, EditorCard.APPEARANCE);
         int to = prefs.getSurfaceGlassVibrancy() == 120 ? 90 : 120;
         model.onValue(Row.VIBRANCY, to, false);
         model.onReleased(Row.VIBRANCY);
@@ -126,66 +112,6 @@ public class AppearanceControlsReachTest {
     }
 
     // ------------------------------------------------------------------- what stays the user's
-
-    @Test
-    public void customizationResetsAKeyboardHomeValueTheUserSet() {
-        TermuxAppSharedPreferences prefs = fresh();
-        EditorCardSheet.Model keyboard = open(prefs, EditorCard.KEYBOARD, EditorChips.AppliesTo.HOME);
-        keyboard.onValue(Row.OPACITY, 23, false);
-        keyboard.onReleased(Row.OPACITY);
-        int home = read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, HOME_PAGE);
-
-        EditorCardSheet.Model customization = open(prefs, EditorCard.APPEARANCE, null);
-        customization.onValue(Row.OPACITY, 71, false);
-        customization.onReleased(Row.OPACITY);
-
-        // Last change wins (developer, 2026-11-04): the Global move resets the keyboard's own.
-        assertEquals("the user's Home value gave way to Global",
-            read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, TERMINAL_PAGE),
-            read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, HOME_PAGE));
-        org.junit.Assert.assertNotEquals("it was the user's own before", home,
-            read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, HOME_PAGE));
-        assertEquals("the seeded Display value gave way",
-            read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, TERMINAL_PAGE),
-            read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, DISPLAY_PAGE));
-    }
-
-    @Test
-    public void keyboardGlobalReplacesTheKeyboardsOwnPageValues() {
-        TermuxAppSharedPreferences prefs = fresh();
-        EditorCardSheet.Model keyboard = open(prefs, EditorCard.KEYBOARD, EditorChips.AppliesTo.HOME);
-        keyboard.onValue(Row.OPACITY, 23, false);
-        keyboard.onReleased(Row.OPACITY);
-
-        EditorCardSheet.Model global = open(prefs, EditorCard.KEYBOARD, EditorChips.AppliesTo.GLOBAL);
-        global.onValue(Row.OPACITY, 66, false);
-        global.onReleased(Row.OPACITY);
-
-        int expected = read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, TERMINAL_PAGE);
-        for (int page : PAGES)
-            assertEquals("Global is everywhere, page " + page, expected,
-                read(prefs, Row.OPACITY, LookGrid.Element.KEYBOARD, page));
-    }
-
-    @Test
-    public void anInstallSeededEarlierListsItsUntouchedSeededCells() {
-        fresh();
-        LookGrid.PrefsStore store = new LookGrid.PrefsStore(mStore);
-        LookGrid grid = new LookGrid(store, null, null);
-        String home = LookGrid.key(LookGrid.Property.OPACITY, LookGrid.Element.KEYBOARD,
-            LookGrid.Kind.HOME);
-        String display = LookGrid.key(LookGrid.Property.OPACITY, LookGrid.Element.KEYBOARD,
-            LookGrid.Kind.DISPLAY);
-        assertTrue("a fresh seed lists its cells", grid.isSeeded(home));
-
-        // Before the list: the seed ran, no list, and the user moved the Home cell since.
-        mStore.edit().remove(LookGrid.KEY_SEEDED_CELLS).remove(LookGridKindSeed.KEY_MARKED)
-            .putInt(home, mStore.getInt(home, 0) == 11 ? 12 : 11).commit();
-        LookGridKindSeed.run(store, SurfacePresets.SHIPPED_BY_KIND);
-
-        assertFalse("the moved cell is the user's", grid.isSeeded(home));
-        assertTrue("the untouched cell is listed", grid.isSeeded(display));
-    }
 
     // ------------------------------------------------------------- Depth and Edge, when out
 
@@ -228,32 +154,23 @@ public class AppearanceControlsReachTest {
         return false;
     }
 
-    private EditorCardSheet.Model open(TermuxAppSharedPreferences prefs, EditorCard card,
-                                       EditorChips.AppliesTo scope) {
-        return open(new EditorTestHarness(prefs, null), card, scope);
+    private EditorCardSheet.Model open(TermuxAppSharedPreferences prefs, EditorCard card) {
+        return open(new EditorTestHarness(prefs, null), card);
     }
 
-    /** The card opened on {@code harness}'s editor, at {@code scope}; its model. */
-    private EditorCardSheet.Model open(EditorTestHarness harness, EditorCard card,
-                                       EditorChips.AppliesTo scope) {
-        PageKind place = card == EditorCard.WIDGETS || card == EditorCard.HOME
-            ? PageKind.HOME : null;
+    /** The card opened on {@code harness}'s editor; its model. */
+    private EditorCardSheet.Model open(EditorTestHarness harness, EditorCard card) {
+        PageKind place = card == EditorCard.HOME ? PageKind.HOME : null;
         harness.editor.present(card, place, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(card, harness.editor.shownCard());
-        EditorCardSheet.Model model = ReflectionHelpers.getField(harness.editor, "mModel");
-        if (scope != null) {
-            ReflectionHelpers.callInstanceMethod(model, "pickAppliesTo",
-                ReflectionHelpers.ClassParameter.from(int.class,
-                    EditorChips.appliesToOptions(card).indexOf(scope)));
-        }
-        return model;
+        return ReflectionHelpers.getField(harness.editor, "mModel");
     }
 
-    /** Moves {@code row} on the card and answers every element@kind whose renderer read moved. */
+    /** Moves {@code row} on the card and answers every element@page whose renderer read moved. */
     private Set<String> move(EditorTestHarness harness, TermuxAppSharedPreferences prefs,
-                             EditorCard card, EditorChips.AppliesTo scope, Row row) {
-        EditorCardSheet.Model model = open(harness, card, scope);
+                             EditorCard card, Row row) {
+        EditorCardSheet.Model model = open(harness, card);
         LookGrid.Element[] elements = LookGrid.Element.values();
         int[][] before = new int[elements.length][PAGES.length];
         for (int i = 0; i < elements.length; i++)
@@ -269,16 +186,13 @@ public class AppearanceControlsReachTest {
         return moved;
     }
 
-    /** Every element@kind the card at {@code scope} speaks for. */
-    private static Set<String> expected(EditorCard card, EditorChips.AppliesTo scope) {
+    /** Every element@page the card speaks for: its element, or every one, on every page. */
+    private static Set<String> expected(EditorCard card) {
         Set<String> out = new TreeSet<>();
-        EditorChips chips = EditorChips.openFor(card, scope);
-        List<LookGrid.Kind> kinds = chips.appliesTo.kinds.isEmpty()
-            ? java.util.Arrays.asList(LookGrid.Kind.values()) : chips.appliesTo.kinds;
+        EditorChips chips = EditorChips.openFor(card);
         for (LookGrid.Element element : LookGrid.Element.values()) {
             if (chips.element != null && chips.element != element) continue;
-            for (int page : PAGES)
-                if (kinds.contains(kindOf(page))) out.add(name(element, page));
+            for (int page : PAGES) out.add(name(element, page));
         }
         return out;
     }
@@ -301,7 +215,7 @@ public class AppearanceControlsReachTest {
             case OPACITY: return glass.opacityPercent;
             case FROST: return glass.blurDp;
             case GRAIN: return glass.grainPercent;
-            case DEPTH: return grid.value(LookGrid.Property.DEPTH, element, page);
+            case DEPTH: return grid.value(LookGrid.Property.DEPTH, element);
             default: throw new IllegalArgumentException(row.name());
         }
     }

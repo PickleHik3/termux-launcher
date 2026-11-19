@@ -22,8 +22,8 @@ public class EditorDoorTest {
     public void aScreensDoorOpensThatScreensCard() {
         for (PageKind page : pagesAndNone()) {
             assertEquals(EditorCard.HOME, EditorDoor.HOME_SHEET_APPEARANCE.cardFor(page, null));
-            assertEquals("the terminal's sheet opens the Workspace card, not the editor at rest",
-                EditorCard.WORKSPACE, EditorDoor.TERMINAL_SHEET_APPEARANCE.cardFor(page, null));
+            assertEquals("the terminal's sheet opens the Terminal card, not the editor at rest",
+                EditorCard.TERMINAL, EditorDoor.TERMINAL_SHEET_APPEARANCE.cardFor(page, null));
         }
     }
 
@@ -40,7 +40,7 @@ public class EditorDoorTest {
     @Test
     public void everyWallpaperDoorOpensThePicker() {
         // Home long-press › Wallpaper, the palette's Wallpaper (launcherctl set_wallpaper) and
-        // the Workspace's More › Wallpaper: no card holds a Change row, so each opens the picker.
+        // the Terminal's More › Wallpaper: no card holds a Change row, so each opens the picker.
         for (EditorDoor door : new EditorDoor[] {EditorDoor.HOME_SHEET_WALLPAPER,
                 EditorDoor.LAUNCHERCTL_WALLPAPER, EditorDoor.TERMINAL_SHEET_WALLPAPER}) {
             assertTrue(door.doorName, door.opensWallpaperPicker());
@@ -59,15 +59,16 @@ public class EditorDoorTest {
         assertEquals(EditorCard.HOME, EditorDoor.SETTINGS_HOME.cardFor(null, null));
         assertEquals(EditorCard.TERMINAL, EditorDoor.SETTINGS_TERMINAL.cardFor(null, null));
         assertEquals(EditorCard.KEYBOARD, EditorDoor.SETTINGS_KEYBOARD.cardFor(null, null));
+        assertEquals(EditorCard.STATUS, EditorDoor.SETTINGS_STATUS.cardFor(null, null));
     }
 
     @Test
     public void thePageLabelOpensTheCardOfThePageItNames() {
         assertEquals(EditorCard.HOME,
             EditorDoor.EDITOR_PAGE_LABEL.cardFor(PageKind.HOME, null));
-        assertEquals(EditorCard.WORKSPACE,
+        assertEquals(EditorCard.TERMINAL,
             EditorDoor.EDITOR_PAGE_LABEL.cardFor(PageKind.TERMINAL, null));
-        assertEquals(EditorCard.WORKSPACE,
+        assertEquals(EditorCard.TERMINAL,
             EditorDoor.EDITOR_PAGE_LABEL.cardFor(PageKind.DISPLAY, null));
     }
 
@@ -83,17 +84,17 @@ public class EditorDoorTest {
     }
 
     @Test
-    public void paneControlsOpenTheWorkspace() {
-        assertEquals(EditorCard.WORKSPACE, EditorDoor.PANE_CONTROLS.cardFor(PageKind.HOME, null));
-        assertEquals(EditorCard.WORKSPACE,
+    public void paneControlsOpenTheTerminal() {
+        assertEquals(EditorCard.TERMINAL, EditorDoor.PANE_CONTROLS.cardFor(PageKind.HOME, null));
+        assertEquals(EditorCard.TERMINAL,
             EditorDoor.PANE_CONTROLS.cardFor(PageKind.TERMINAL, null));
-        assertEquals(EditorCard.WORKSPACE,
+        assertEquals(EditorCard.TERMINAL,
             EditorDoor.PANE_CONTROLS.cardFor(PageKind.DISPLAY, null));
-        assertEquals(EditorCard.WORKSPACE, EditorDoor.PANE_CONTROLS.cardFor(null, null));
+        assertEquals(EditorCard.TERMINAL, EditorDoor.PANE_CONTROLS.cardFor(null, null));
     }
 
     @Test
-    public void aHomeDoorFromTheWorkspacePageEndsOnHomeWithTheHomeCard() {
+    public void aHomeDoorFromTheTerminalPageEndsOnHomeWithTheHomeCard() {
         EditorCard card = EditorDoor.SETTINGS_HOME.cardFor(null, null);
         assertEquals(EditorCard.HOME, card);
         assertEquals(PageKind.HOME,
@@ -104,10 +105,10 @@ public class EditorDoorTest {
     }
 
     @Test
-    public void aWorkspaceCardFromHomeEndsOnTheWorkspacePage() {
+    public void aTerminalCardFromHomeEndsOnTheTerminalPage() {
         assertEquals(PageKind.TERMINAL,
-            EditorDoor.placeFor(EditorCard.WORKSPACE, null, PageKind.HOME));
-        assertNull("the display stays", EditorDoor.placeFor(EditorCard.WORKSPACE, null,
+            EditorDoor.placeFor(EditorCard.TERMINAL, null, PageKind.HOME));
+        assertNull("the display stays", EditorDoor.placeFor(EditorCard.TERMINAL, null,
             PageKind.DISPLAY));
         assertEquals("an explicit place wins", PageKind.DISPLAY,
             EditorDoor.placeFor(EditorCard.HOME, PageKind.DISPLAY, PageKind.TERMINAL));
@@ -127,8 +128,8 @@ public class EditorDoorTest {
     }
 
     @Test
-    public void theSectionIntentNamesTheWorkspaceCard() {
-        assertEquals(EditorCard.WORKSPACE, EditorDoor.SECTION_INTENT.cardFor(null,
+    public void theSectionIntentNamesTheTerminalCard() {
+        assertEquals(EditorCard.TERMINAL, EditorDoor.SECTION_INTENT.cardFor(null,
             AppearanceEditorEntry.cardOf("workspace")));
     }
 
@@ -136,8 +137,8 @@ public class EditorDoorTest {
     public void eachDoorLogsOneLineNamingItAndItsCard() {
         assertEquals("home-sheet-appearance -> HOME",
             EditorDoor.HOME_SHEET_APPEARANCE.line(EditorCard.HOME));
-        assertEquals("terminal-sheet-appearance -> WORKSPACE",
-            EditorDoor.TERMINAL_SHEET_APPEARANCE.line(EditorCard.WORKSPACE));
+        assertEquals("terminal-sheet-appearance -> TERMINAL",
+            EditorDoor.TERMINAL_SHEET_APPEARANCE.line(EditorCard.TERMINAL));
         assertEquals("pane-controls-appearance -> REST", EditorDoor.PANE_CONTROLS.line(null));
         assertEquals("EditorDoor", EditorDoor.LOG_TAG);
     }

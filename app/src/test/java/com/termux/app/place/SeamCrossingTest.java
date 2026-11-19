@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * One crossing of the seam between Home and the Workspace, read as frame sequences through the
+ * One crossing of the seam between Home and the Terminal, read as frame sequences through the
  * crossing's own interface, the way the activity drives it: begin on the first frame that reaches
  * the other half, one frame call per wall frame (the arrangement stood and the bar ridden where the
  * answers say), land and end at settle. Each case is what the chrome did before the crossing was
@@ -45,7 +45,7 @@ public class SeamCrossingTest {
     private static final float MAX_CURVE_SLOPE = 1.5f / (SeamFade.END - SeamFade.START);
 
 
-    /** Home and the Workspace's window beside it: the two halves of the wall. */
+    /** Home and the Terminal's window beside it: the two halves of the wall. */
     private static final List<PageKind> ROW =
         Arrays.asList(PageKind.HOME, PageKind.TERMINAL);
 
@@ -66,7 +66,7 @@ public class SeamCrossingTest {
             PlaceLayout.KeyboardForm.DOCKED, 4, 4);
     }
 
-    /** The shipped Workspace: the bar on top, apps, index and extra keys on the bottom. */
+    /** The shipped Terminal: the bar on top, apps, index and extra keys on the bottom. */
     private static PlaceLayout window() {
         Map<Element, Slot> slots = new EnumMap<>(Element.class);
         slots.put(Element.STATUS, Slot.on(Edge.TOP, Element.STATUS));
@@ -132,10 +132,10 @@ public class SeamCrossingTest {
                 || element != Element.EXTRA_KEYS;
         }
         @NonNull @Override public WallShape shape() {
-            // Linked: the preferences answer the Workspace's on either half.
+            // Linked: the preferences answer the Terminal's on either half.
             return SHAPE;
         }
-        /** Home's own Margin, held per kind; null: the Workspace's. */
+        /** Home's own Margin, held per kind; null: the Terminal's. */
         @androidx.annotation.Nullable WallShape homeShape;
         @NonNull @Override public WallShape shape(
                 @NonNull com.termux.app.page.PageKind kind) {
@@ -163,7 +163,7 @@ public class SeamCrossingTest {
         float fraction, progress, dockReveal, keyboardReveal, frameKeyboardReveal;
         float beadShare;
         float stripShare, fieldShare;
-        float barMarginShare, barMarginDp, lookShare;
+        float barMarginShare, barMarginDp, endShare;
         DockStyle stackDesign;
         boolean active, rowsSink, relayout, restyle, restyleShape, bandsMoved, rides;
         boolean barRedressed;
@@ -204,7 +204,7 @@ public class SeamCrossingTest {
             if (other != null && other != crossing.other()) {
                 begins++;
                 crossing.begin(here, there, stage);
-                if (begins == 1) barFirst = crossing.barTakesWorkspaceDressFirst();
+                if (begins == 1) barFirst = crossing.barTakesTerminalDressFirst();
             }
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
             if (answers.relayout()) crossing.standLayout();
@@ -219,7 +219,7 @@ public class SeamCrossingTest {
             step.beadShare = answers.beadShare();
             step.barMarginShare = answers.barMarginShare();
             step.barMarginDp = crossing.barMarginDp(answers.barMarginShare());
-            step.lookShare = answers.lookShare();
+            step.endShare = answers.endShare();
             step.stackDesign = crossing.stackDesign();
             step.rowsSink = answers.rowsSink(100);
             step.relayout = answers.relayout();
@@ -263,7 +263,7 @@ public class SeamCrossingTest {
             return steps.get(steps.size() - 1);
         }
 
-        /** The Workspace's end of a crossing that started on Home or not. */
+        /** The Terminal's end of a crossing that started on Home or not. */
         SeamCrossing.Endpoint window(boolean fromHome) {
             return fromHome ? there : here;
         }
@@ -566,7 +566,7 @@ public class SeamCrossingTest {
     }
 
     @Test
-    public void homesOwnWithoutTheBarLaysTheWorkspacesBarOverHomeFromTheFirstFrame() {
+    public void homesOwnWithoutTheBarLaysTheTerminalsBarOverHomeFromTheFirstFrame() {
         Drive drive = drive(homeLayoutOn(), PageKind.HOME, homeWithoutBar(), false,
             PageKind.TERMINAL, window(), false, false).slow(0f, 1f);
         // One shape across the wall: the bar has no dress of Home's to take off first.
@@ -613,9 +613,9 @@ public class SeamCrossingTest {
     }
 
     /**
-     * Home and the Workspace hold different Margins (Margin is per kind) and stand the bar alike:
+     * Home and the Terminal hold different Margins (Margin is per kind) and stand the bar alike:
      * the bar stays on screen through the crossing, either way, rather than riding off with the
-     * Workspace's page and leaving Home without one until the landing. The landing's half re-dress
+     * Terminal's page and leaving Home without one until the landing. The landing's half re-dress
      * insets it for the half it lands on.
      */
     @Test
@@ -713,68 +713,32 @@ public class SeamCrossingTest {
         }
     }
 
-    /** One end of a crossing whose stack wears the dock at {@code dockOpacity}, nothing else apart. */
-    private static SeamCrossing.Endpoint lookEnd(@NonNull DressResolver dresses,
-                                                 @NonNull PageKind page, int dockOpacity) {
-        Dress dress = dresses.dressOf(page);
-        PlaceLayout layout = page == PageKind.HOME ? home() : window();
-        return SeamCrossing.Endpoint.of(PageRef.of(page), dress, layout,
-            SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0, HalfLook.ofDockOpacity(dockOpacity)),
-            false);
-    }
-
     /**
-     * Halves apart only in look (amendment 2026-11-04): the stack moves exactly as between halves
-     * dressed alike (no dip, no re-dress mid-slide), its look blends with the wall in steps to the
-     * landed end, and the landing's re-dress is one the landed frame has nothing to show from, so
-     * it follows that frame instead of holding it (58-88 ms on pong). A slide that came back has
-     * blended back and commits nothing.
+     * The chrome wears one look on every page (ADR 0031): a crossing between Home and the
+     * Terminal carries its end share in steps with the wall, to the landed end, for what differs
+     * by page and not by look (the inks over each page's ground, the keyboard toward a page where
+     * it is down); nothing is dressed again mid-slide for it.
      */
     @Test
-    public void aLookApartAloneBlendsAndItsLandingFollowsTheFrame() {
+    public void aCrossingBetweenKindsCarriesItsEndShareInSteps() {
         for (PageKind from : BOTH) {
             for (boolean comesBack : new boolean[] {false, true}) {
-                PageKind to = from == PageKind.HOME ? PageKind.TERMINAL
-                    : PageKind.HOME;
-                DressResolver dresses = new DressResolver(new Stored());
-                Drive drive = new Drive(lookEnd(dresses, from, 20), lookEnd(dresses, to, 90),
-                    SeamCrossing.Stage.of(false, () -> false, true));
-                Drive alike = oneLayout(from);
+                Drive drive = oneLayout(from);
                 drive.slow(0f, 1f);
-                alike.slow(0f, 1f);
-                if (comesBack) {
-                    drive.slow(1f, 0f);
-                    alike.slow(1f, 0f);
-                }
+                if (comesBack) drive.slow(1f, 0f);
                 String why = "from " + from + (comesBack ? ", back" : "");
                 float last = Float.NaN;
-                for (int i = 0; i < drive.steps.size(); i++) {
-                    Step step = drive.steps.get(i), plain = alike.steps.get(i);
-                    assertEquals(why + ": no dip", plain.dockReveal, step.dockReveal, EPSILON);
-                    assertEquals(why, plain.keyboardReveal, step.keyboardReveal, EPSILON);
+                for (Step step : drive.steps) {
                     assertFalse(why + ": nothing dressed again mid-slide", step.restyle);
                     if (!step.active) continue;
-                    assertFalse(why + ": blends", Float.isNaN(step.lookShare));
+                    assertFalse(why + ": an end share", Float.isNaN(step.endShare));
                     assertEquals(why + ": in steps", 0f,
-                        step.lookShare * SeamCrossing.LOOK_STEPS
-                            - Math.round(step.lookShare * SeamCrossing.LOOK_STEPS), EPSILON);
-                    last = step.lookShare;
+                        step.endShare * SeamCrossing.END_STEPS
+                            - Math.round(step.endShare * SeamCrossing.END_STEPS), EPSILON);
+                    last = step.endShare;
                 }
-                assertEquals(why + ": the last frame shows the landed look", comesBack ? 0f : 1f,
+                assertEquals(why + ": the last frame stands on the landed end", comesBack ? 0f : 1f,
                     last, EPSILON);
-                // The glass the last moving frame drew is the landed end's, which the landing's
-                // re-dress builds: the dock's opacity (20 here, 90 there) and, read the same
-                // way, its tint strength (the sheet's crossfade stands wholly on that end).
-                assertEquals(why + ": opacity", comesBack ? 20 : 90,
-                    SeamCrossing.lookBlendValue(20, 90, last));
-                assertEquals(why + ": tint", comesBack ? 35 : 70,
-                    SeamCrossing.lookBlendValue(35, 70, last));
-                PageKind landed = comesBack ? from : to;
-                SeamCrossing.Landing landing = drive.crossing.land();
-                assertFalse(why, landing.stackDressedFor(landed));
-                assertFalse(why, landing.redressesBack(landed));
-                assertEquals(why + ": the re-dress follows the landed frame", !comesBack,
-                    landing.lookBlendedOnto(landed));
             }
         }
     }
@@ -787,8 +751,8 @@ public class SeamCrossingTest {
     }
 
     /**
-     * Under a page transition that turns the pages, the Workspace's bar of another Style fades in
-     * place by the way toward the Workspace's page instead of riding a turned page (amendment
+     * Under a page transition that turns the pages, the Terminal's bar of another Style fades in
+     * place by the way toward the Terminal's page instead of riding a turned page (amendment
      * 2026-11-04).
      */
     @Test
@@ -806,15 +770,15 @@ public class SeamCrossingTest {
             drive.slow(0f, 1f);
             SeamCrossing.Answers answers = drive.crossing.frame(drive.frameAt(1f), true, false,
                 false);
-            assertEquals("from " + from + ": the Workspace's bar shows there", fromHome ? 1f : 0f,
+            assertEquals("from " + from + ": the Terminal's bar shows there", fromHome ? 1f : 0f,
                 answers.statusFade(), EPSILON);
             assertEquals("from " + from + ": never rides", 0, drive.count(st -> st.rides));
         }
     }
 
-    /** A Style apart still reshapes the bar: it rides with the Workspace's page. */
+    /** A Style apart still reshapes the bar: it rides with the Terminal's page. */
     @Test
-    public void aBarOfAnotherStyleStillRidesWithTheWorkspace() {
+    public void aBarOfAnotherStyleStillRidesWithTheTerminal() {
         Stored stored = new Stored();
         stored.homeShape = WallShape.of(LayoutStyle.FLOATING, SHAPE.cornersDp, SHAPE.marginDp);
         Drive drive = drive(stored, PageKind.TERMINAL, window(), false, PageKind.HOME,
@@ -841,7 +805,7 @@ public class SeamCrossingTest {
 
     // ---- The rows the seam stands wear their own half's design ----
 
-    /** The Workspace with the extra keys alone along the bottom and the bar on top. */
+    /** The Terminal with the extra keys alone along the bottom and the bar on top. */
     private static PlaceLayout keysOnlyWindow() {
         return window()
             .withSlot(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS).withHidden(true))
@@ -851,9 +815,9 @@ public class SeamCrossingTest {
     @Test
     public void theRowsAHalfStandsKeepTheCommittedHalfsDesignToTheLanding() {
         // The developer's phone: Home's own layout with the pinned apps and the index, the
-        // Workspace with the extra keys alone. A half with no apps row wears no
+        // Terminal with the extra keys alone. A half with no apps row wears no
         // design (WornDockDesign), so the halves differ by Home's Lens beads against the
-        // Workspace's tray. The seam stands no other rows on the way (the rows swap at the
+        // Terminal's tray. The seam stands no other rows on the way (the rows swap at the
         // landing), so the rows keep laying out in the committed half's design.
         for (PageKind from : BOTH) {
             Stored stored = homeLayoutOn();
@@ -883,13 +847,13 @@ public class SeamCrossingTest {
     }
 
     /**
-     * Pong, round 9: the Workspace stores Lens beads but shows the extra keys alone, Home wears
+     * Pong, round 9: the Terminal stores Lens beads but shows the extra keys alone, Home wears
      * Peek glass. The crossing's designs are the resolver's for each page at rest, so the
-     * Workspace's is the plain tray in both directions, and what the crossing carries to the
+     * Terminal's is the plain tray in both directions, and what the crossing carries to the
      * landed page is the design the settle resolves there.
      */
     @Test
-    public void aDockOffWorkspaceCrossesWithTheDesignItsSlabWears() {
+    public void aDockOffTerminalCrossesWithTheDesignItsSlabWears() {
         for (PageKind from : BOTH) {
             Stored stored = homeLayoutOn();
             stored.designs.put(HOME_PAGE, DockStyle.PEEK_GLASS);
@@ -948,7 +912,7 @@ public class SeamCrossingTest {
     }
 
     /**
-     * The developer's crossing: the Workspace with its keyboard up and the extra keys alone, Home
+     * The developer's crossing: the Terminal with its keyboard up and the extra keys alone, Home
      * with the pinned apps and the index, keyboard down. Both stand rows, so no other rows are
      * stood on the way and the foot answers the live keyboard throughout.
      */
@@ -962,7 +926,7 @@ public class SeamCrossingTest {
                 home(), false, false);
     }
 
-    /** A Workspace with no dock rows at all, the bar alone: Home's rows slide in over it. */
+    /** A Terminal with no dock rows at all, the bar alone: Home's rows slide in over it. */
     private static PlaceLayout rowlessWindow() {
         return window()
             .withSlot(Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS).withHidden(true))
@@ -1031,7 +995,7 @@ public class SeamCrossingTest {
 
     /**
      * Pong round 12: the crossing landed on Home and ended, and the settle's first geometry pass
-     * still read the Workspace's keyboard up, so the foot dropped for a pass before the keyboard's
+     * still read the Terminal's keyboard up, so the foot dropped for a pass before the keyboard's
      * state caught up. The travelled answer holds through the landing until the live keyboard
      * agrees, for a few passes at most.
      */
@@ -1068,7 +1032,7 @@ public class SeamCrossingTest {
         Drive drive = slideInDrive();
         footKeyboards(drive, slowWay(0f, 0.7f));
         footKeyboards(drive, slowWay(0.7f, 0.6f));
-        // The wall went back to the Workspace without a frame under the swap to undo it.
+        // The wall went back to the Terminal without a frame under the swap to undo it.
         drive.crossing.land(PageKind.TERMINAL);
         drive.crossing.end();
         assertTrue(drive.crossing.footKeyboardUp(true));
@@ -1104,9 +1068,9 @@ public class SeamCrossingTest {
     }
 
     /**
-     * Workspace to Home: the page's commit runs between land and end, and it is where the status
+     * Terminal to Home: the page's commit runs between land and end, and it is where the status
      * bar's glass is built for the landed half. It used to read "a crossing names another page" as
-     * still sliding, so on Home it built the pane in the Workspace's look while the strip behind
+     * still sliding, so on Home it built the pane in the Terminal's look while the strip behind
      * the system bar, glazed again at the next insets pass after end, took Home's: the two parted.
      * The commit now reads the same half every later pass does.
      */
@@ -1122,7 +1086,7 @@ public class SeamCrossingTest {
         assertFalse(drive.crossing.sliding());
         PageKind atCommit = statusHalf(drive, PageKind.HOME);
         assertEquals(PageKind.HOME, atCommit);
-        // The reading the commit used to take, which answered the Workspace on Home.
+        // The reading the commit used to take, which answered the Terminal on Home.
         assertEquals(PageKind.TERMINAL, SeamDress.lookPage(SeamDress.Surface.STATUS,
             PageKind.HOME, PageKind.HOME, drive.crossing.other() != null));
         drive.crossing.end();
@@ -1130,7 +1094,7 @@ public class SeamCrossingTest {
             statusHalf(drive, PageKind.HOME));
     }
 
-    /** Home to the Workspace and back: each landing's commit reads its own half's look. */
+    /** Home to the Terminal and back: each landing's commit reads its own half's look. */
     @Test
     public void statusBarLookHalfFollowsARoundTripAcrossTheSeam() {
         Drive out = oneLayout(PageKind.HOME).slow(0f, 1f);
@@ -1147,7 +1111,7 @@ public class SeamCrossingTest {
 
     /**
      * A slide from Home that springs back commits nothing, so the settle itself must see that
-     * the bar's half changed from the Workspace's it slid in to Home's at rest.
+     * the bar's half changed from the Terminal's it slid in to Home's at rest.
      */
     @Test
     public void statusBarLookHalfReturnsToHomeWhenASlideSpringsBack() {
@@ -1193,7 +1157,7 @@ public class SeamCrossingTest {
                 homePage(beads, HOME_2, layout), homePage(beads, HOME_3, layout)));
         }
         Stored stored = new Stored();
-        // Home and the Workspace still cross.
+        // Home and the Terminal still cross.
         assertTrue(SeamCrossing.crosses(homePage(stored, HOME_2, homeWithoutBar()),
             half(new DressResolver(stored), PageKind.TERMINAL, window(), false)));
     }
@@ -1211,7 +1175,7 @@ public class SeamCrossingTest {
             homePage(stored, HOME_3, home()), SeamCrossing.Stage.of(false, () -> false, true));
         assertTrue(crossing.oneKind());
         assertEquals(HOME_3, crossing.otherEnd());
-        assertFalse(crossing.barTakesWorkspaceDressFirst());
+        assertFalse(crossing.barTakesTerminalDressFirst());
         for (float fraction = SLOW; fraction < 1f; fraction += SLOW) {
             Frame frame = pagerAt(2, 3, fraction);
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
@@ -1277,7 +1241,7 @@ public class SeamCrossingTest {
         }
     }
 
-    /** A bar only the Workspace shows rides with its page, dressed for the Workspace's look. */
+    /** A bar only the Terminal shows rides with its page, dressed for the Terminal's look. */
     @Test
     public void aRidingBarIsDressedAcrossWhileTheWallSlides() {
         Drive drive = drive(new Stored(), PageKind.HOME, homeWithoutBar(), false,
@@ -1288,9 +1252,9 @@ public class SeamCrossingTest {
         assertFalse(drive.crossing.oneKind());
     }
 
-    /** The riding bar wears the Workspace's look: the other end from Home, the committed one from it. */
+    /** The riding bar wears the Terminal's look: the other end from Home, the committed one from it. */
     @Test
-    public void theRidingBarWearsTheOtherEndOnlyWhenThatIsTheWorkspace() {
+    public void theRidingBarWearsTheOtherEndOnlyWhenThatIsTheTerminal() {
         Drive fromHome = drive(new Stored(), PageKind.HOME, homeWithoutBar(), false,
             PageKind.TERMINAL, window(), false, false).slow(0f, 0.6f);
         assertTrue(fromHome.crossing.barRideWearsOther());

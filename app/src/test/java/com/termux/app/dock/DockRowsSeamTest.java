@@ -138,8 +138,8 @@ public class DockRowsSeamTest {
         return Half.builder(layout).floating(true).dockHeightScale(2f).design(design).build();
     }
 
-    private static Snapshot.Builder device(Half home, Half workspace) {
-        return Snapshot.builder(home, workspace)
+    private static Snapshot.Builder device(Half home, Half terminal) {
+        return Snapshot.builder(home, terminal)
             .density(DENSITY)
             .widthPx(Math.round(WIDTH_DP * DENSITY))
             .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(DENSITY))
@@ -457,13 +457,13 @@ public class DockRowsSeamTest {
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);
         DockRows.Union both = new DockRows.Union(true, false, true);
-        // Home in front: the Workspace's extra keys are its lane, laid out and shown.
+        // Home in front: the Terminal's extra keys are its lane, laid out and shown.
         rows.apply(chrome(HOME, false), false, both);
-        assertTrue("the extra keys stand for the Workspace", views.row(Element.EXTRA_KEYS));
+        assertTrue("the extra keys stand for the Terminal", views.row(Element.EXTRA_KEYS));
         assertTrue(views.row(Element.APPS));
         assertFalse("what the readers ask is the front layout's",
             rows.isRowOnScreen(Element.EXTRA_KEYS));
-        // The landing's commit on the Workspace changes no row's visibility.
+        // The landing's commit on the Terminal changes no row's visibility.
         views.log.clear();
         rows.apply(chrome(WINDOW, false), false, both);
         assertTrue(views.row(Element.EXTRA_KEYS));
@@ -505,7 +505,7 @@ public class DockRowsSeamTest {
         DockLayout bare = DockGeometry.compute(
             device(half(HOME, DockStyle.GLASS_TRAY), half(WINDOW_BARE, DockStyle.GLASS_TRAY))
                 .build().restOf(PageRef.TERMINAL));
-        // The bare Workspace shows no apps row of its own: Home's lane sizes the row.
+        // The bare Terminal shows no apps row of its own: Home's lane sizes the row.
         rows.setOtherLayout(home);
         rows.apply(chrome(WINDOW_BARE, false), false,
             new DockRows.Union(true, false, false));
@@ -523,9 +523,9 @@ public class DockRowsSeamTest {
         DockLayout home = rest(device, PageRef.HOME);
         DockLayout window = rest(device, PageRef.TERMINAL);
         com.termux.app.page.Side owner = homeHasTheRows
-            ? com.termux.app.page.Side.HOME : com.termux.app.page.Side.WORKSPACE;
+            ? com.termux.app.page.Side.HOME : com.termux.app.page.Side.TERMINAL;
         com.termux.app.page.Side arriving = homeHasTheRows
-            ? com.termux.app.page.Side.WORKSPACE : com.termux.app.page.Side.HOME;
+            ? com.termux.app.page.Side.TERMINAL : com.termux.app.page.Side.HOME;
         DockLayout leavingLayout = homeHasTheRows ? home : window;
         DockLayout arrivingLayout = homeHasTheRows ? window : home;
         PlaceLayout leavingPlace = homeHasTheRows ? HOME : WINDOW;
@@ -562,13 +562,13 @@ public class DockRowsSeamTest {
     }
 
     @Test
-    public void homesLaneRowsKeepTheirHeightWhenTheLandingIsOnTheWorkspace() {
+    public void homesLaneRowsKeepTheirHeightWhenTheLandingIsOnTheTerminal() {
         assertLaneRowsKeepTheirHeightAtTheLanding(true, DockStyle.GLASS_TRAY);
         assertLaneRowsKeepTheirHeightAtTheLanding(true, DockStyle.LENS_BEADS);
     }
 
     @Test
-    public void theWorkspacesLaneRowsKeepTheirHeightWhenTheLandingIsOnHome() {
+    public void theTerminalsLaneRowsKeepTheirHeightWhenTheLandingIsOnHome() {
         assertLaneRowsKeepTheirHeightAtTheLanding(false, DockStyle.GLASS_TRAY);
         assertLaneRowsKeepTheirHeightAtTheLanding(false, DockStyle.LENS_BEADS);
     }
@@ -584,16 +584,16 @@ public class DockRowsSeamTest {
         assertTrue("the fixture's two sides must differ for this to prove anything",
             home != window);
 
-        // Home in front: the Workspace's extra-keys bar is a lane, the window's rest the other.
+        // Home in front: the Terminal's extra-keys bar is a lane, the window's rest the other.
         DockRows homeFront = new DockRows(new FakeViews());
         homeFront.setOtherLayout(window);
         homeFront.setLanes(com.termux.app.page.Side.HOME, null, null,
-            com.termux.app.page.Side.WORKSPACE);
-        // The Workspace in front: the same bar is the front's own.
+            com.termux.app.page.Side.TERMINAL);
+        // The Terminal in front: the same bar is the front's own.
         DockRows windowFront = new DockRows(new FakeViews());
         windowFront.setOtherLayout(home);
-        windowFront.setLanes(com.termux.app.page.Side.WORKSPACE, null, null,
-            com.termux.app.page.Side.WORKSPACE);
+        windowFront.setLanes(com.termux.app.page.Side.TERMINAL, null, null,
+            com.termux.app.page.Side.TERMINAL);
 
         assertSame(window, homeFront.dressFor(Element.EXTRA_KEYS, home));
         assertSame(window, windowFront.dressFor(Element.EXTRA_KEYS, window));

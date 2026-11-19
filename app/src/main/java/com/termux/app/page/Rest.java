@@ -20,7 +20,7 @@ public final class Rest {
     public final boolean statusBar;
     /** Whether the window chips show. */
     public final boolean windowChips;
-    /** The look kind the page wears; Workspace pages wear TERMINAL's (ADR 0025). */
+    /** The look kind the page wears; Terminal pages wear TERMINAL's (ADR 0025). */
     @NonNull public final PageKind look;
 
     public Rest(boolean keyboardUp, @NonNull PageKind keys, boolean systemIme, boolean statusBar,

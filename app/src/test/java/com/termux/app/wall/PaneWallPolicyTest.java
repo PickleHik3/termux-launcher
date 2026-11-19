@@ -48,14 +48,14 @@ public class PaneWallPolicyTest {
     }
 
     /**
-     * The row is Home, then the Workspace while its row has a window — the display window counts
+     * The row is Home, then the Terminal while its row has a window — the display window counts
      * as one (ADR 0008, amended 2026-10-19). There is no Display page any more.
      */
     @Test
-    public void theRowIsHomeThenTheWorkspaceAndNeverADisplayPage() {
+    public void theRowIsHomeThenTheTerminalAndNeverADisplayPage() {
         assertEquals(List.of(PageKind.HOME, PageKind.TERMINAL),
             PaneWallPolicy.rowPages(true));
-        // No window: the Workspace is not on the row; Home always is.
+        // No window: the Terminal is not on the row; Home always is.
         assertEquals(List.of(PageKind.HOME), PaneWallPolicy.rowPages(false));
         assertFalse(PaneWallPolicy.rowPages(true).contains(PageKind.DISPLAY));
         assertEquals("the home press lands on Home", PageKind.HOME,
@@ -355,12 +355,12 @@ public class PaneWallPolicyTest {
     }
 
     @Test
-    public void wallGoNamesHomeAndTheWorkspace() {
+    public void wallGoNamesHomeAndTheTerminal() {
         List<PageKind> row = PaneWallPolicy.rowPages(true);
         assertEquals(PageKind.HOME, PaneWallPolicy.parsePage(row, PageKind.TERMINAL, "home"));
         assertEquals(PageKind.TERMINAL,
             PaneWallPolicy.parsePage(row, PageKind.HOME, "workspace"));
-        assertNull("no window, no Workspace to go to", PaneWallPolicy.parsePage(
+        assertNull("no window, no Terminal to go to", PaneWallPolicy.parsePage(
             PaneWallPolicy.rowPages(false), PageKind.HOME, "terminal"));
     }
 

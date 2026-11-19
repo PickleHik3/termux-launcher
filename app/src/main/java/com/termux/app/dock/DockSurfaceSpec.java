@@ -13,13 +13,13 @@ import com.termux.app.chrome.GlassRefraction;
  * that is theirs.
  *
  * <p>{@link #PLAIN} is the dock exactly as it was, which a layout pass that names no surface
- * keeps; every page's dock, Home's and the Workspace's alike, wears its Dock design's spec (#93).
+ * keeps; every page's dock, Home's and the Terminal's alike, wears its Dock design's spec (#93).
  * {@link #GLASS_TRAY} is the default design
  * (project-docs/active/home-dock-styles-2026-10-20.md): one slab, equal air above and below the
  * icons, the dashes floating just above the slab, and the shared glass work every later style
  * builds on. {@link #LENS_BEADS} keeps the tray's geometry but draws no slab: each icon sits on
  * a round bead of glass ({@link LensBeadGeometry}). {@link #WALL_STRIP} is the tray made
- * the expanded dock: a first row for the Workspace over the apps row, both on one tall slab.
+ * the expanded dock: a first row for the Terminal over the apps row, both on one tall slab.
  * {@link #PEEK_GLASS} keeps the tray's row but cuts the slab to a card whose top edge runs
  * through the icons' centres and whose bottom runs on past the screen's edge
  * ({@link PeekGlassGeometry}), the icons' reflections fading down it. A later style is one more
@@ -60,7 +60,7 @@ public final class DockSurfaceSpec {
 
     /**
      * Home's Wall strip, the expanded dock: the tray's glass (dashes above, equal air, soft rim,
-     * shelf, shadow) on one tall slab, a first row for the Workspace ({@link WallStripRowView}: a
+     * shelf, shadow) on one tall slab, a first row for the Terminal ({@link WallStripRowView}: a
      * clock and the terminals as tiles, {@link DockLayout#wallStripBandPx}) over the apps row.
      */
     @NonNull public static final DockSurfaceSpec WALL_STRIP =

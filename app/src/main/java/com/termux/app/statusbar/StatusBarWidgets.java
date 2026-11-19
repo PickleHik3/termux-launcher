@@ -138,7 +138,7 @@ final class StatusBarWidgets {
             top.requestApply();
             return;
         }
-        if (!resolveStatusInks(mRestInks, false)) return;
+        if (!resolveStatusInks(mRestInks)) return;
         applyStatusInks(mRestInks);
         top.restInks(mRestInks);
         applySessionsBand(mResolvedBand);
@@ -162,11 +162,21 @@ final class StatusBarWidgets {
      * Measures every ink the bar's content is drawn in into {@code out} ({@link StatusInkSlots}),
      * writing nothing to a view. False, with {@code out} untouched, until the bar has been laid
      * out and a wallpaper sample exists.
-     *
-     * @param wearingLook the band is asked of the glass the status look now answers (the look a
-     *     crossing's arriving end would be dressed in) and not of the glass the pane was told
      */
-    boolean resolveStatusInks(@NonNull int[] out, boolean wearingLook) {
+    boolean resolveStatusInks(@NonNull int[] out) {
+        return resolveStatusInks(out, false, 0);
+    }
+
+    /**
+     * {@link #resolveStatusInks(int[])} over {@code pageGround}, another page's ground, recording
+     * nothing ({@link com.termux.app.chrome.ChromeInk#probeOnGlass}): the inks the bar lands on at
+     * that page, read as a crossing toward it begins (#283).
+     */
+    boolean probeStatusInks(@NonNull int[] out, int pageGround) {
+        return resolveStatusInks(out, true, pageGround);
+    }
+
+    private boolean resolveStatusInks(@NonNull int[] out, boolean probe, int pageGround) {
         com.termux.app.chrome.ChromeInk ink = mHost.chrome().ink();
         if (!ink.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect))
             return false;
@@ -177,16 +187,14 @@ final class StatusBarWidgets {
         double primaryTone = com.termux.app.theme.SchemeTone.tone(primary);
         int darkPrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 30d - primaryTone);
         int palePrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 85d - primaryTone);
-        com.termux.app.chrome.OnGlass.Resolution band = wearingLook
-            ? mHost.chrome().glass().statusBandOnGlassWearingLook(mStatusInkRect, darkPrimary,
-                palePrimary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT)
-            : null;
-        if (band == null) {
-            band = ink.onGlass(
-                com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect,
-                darkPrimary, palePrimary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
-        }
-        mResolvedBand = band;
+        com.termux.app.chrome.OnGlass.Resolution band = probe
+            ? ink.probeOnGlass(com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR,
+                mStatusInkRect, darkPrimary, palePrimary,
+                com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT, pageGround)
+            : ink.onGlass(com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR,
+                mStatusInkRect, darkPrimary, palePrimary,
+                com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        if (!probe) mResolvedBand = band;
 
         // A muted widget is the AI glyph's few seconds of afterlife: the state is said by the
         // neutral role, and the fade is allowed only as far as the backdrop can carry it.
@@ -234,7 +242,7 @@ final class StatusBarWidgets {
     /**
      * Writes {@code inks} ({@link StatusInkSlots}) to the bar's content: each view takes its
      * colour only when it differs from the one it wears (the views compare), so an unchanged
-     * array writes nothing. The sessions chip and the window chips are Workspace content that
+     * array writes nothing. The sessions chip and the window chips are Terminal content that
      * slides with the chips and does not blend ({@link #applySessionsBand}); the media widget and
      * the clock's theme are the scheme's, not the band's.
      */
@@ -264,7 +272,7 @@ final class StatusBarWidgets {
     }
 
     /**
-     * The sessions chip is inked on {@code band}, the Workspace end's: it slides with the window
+     * The sessions chip is inked on {@code band}, the Terminal end's: it slides with the window
      * chips and does not blend across a crossing. Nothing for a null band.
      */
     void applySessionsBand(@Nullable com.termux.app.chrome.OnGlass.Resolution band) {

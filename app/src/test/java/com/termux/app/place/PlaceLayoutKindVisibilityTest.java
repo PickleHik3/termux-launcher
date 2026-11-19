@@ -112,7 +112,7 @@ public class PlaceLayoutKindVisibilityTest {
         store.setKindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS, true);
         assertTrue(store.kindShows(PageKind.HOME, PORTRAIT, Element.EXTRA_KEYS));
         assertTrue(store.resolve(PORTRAIT, PageKind.HOME).slot(Element.EXTRA_KEYS).hidden);
-        assertFalse("the Workspace still docks it",
+        assertFalse("the Terminal still docks it",
             store.resolve(PORTRAIT, PageKind.TERMINAL).slot(Element.EXTRA_KEYS).hidden);
     }
 

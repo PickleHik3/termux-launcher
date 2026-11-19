@@ -10,11 +10,11 @@ import org.junit.Test;
 public class PageKindTest {
 
     @Test
-    public void homeIsHomesSideAndEveryWindowIsTheWorkspaces() {
+    public void homeIsHomesSideAndEveryWindowIsTheTerminals() {
         assertEquals(Side.HOME, PageKind.HOME.side());
-        assertEquals(Side.WORKSPACE, PageKind.TERMINAL.side());
-        assertEquals(Side.WORKSPACE, PageKind.DISPLAY.side());
-        assertEquals(Side.WORKSPACE, PageKind.ASSISTANT.side());
+        assertEquals(Side.TERMINAL, PageKind.TERMINAL.side());
+        assertEquals(Side.TERMINAL, PageKind.DISPLAY.side());
+        assertEquals(Side.TERMINAL, PageKind.ASSISTANT.side());
     }
 
     @Test
@@ -26,7 +26,7 @@ public class PageKindTest {
     }
 
     @Test
-    public void aDisplayWindowStandsInTheWorkspacesRoom() {
+    public void aDisplayWindowStandsInTheTerminalsRoom() {
         assertEquals(PageKind.HOME, PageKind.HOME.roomKind());
         assertEquals(PageKind.TERMINAL, PageKind.TERMINAL.roomKind());
         assertEquals(PageKind.TERMINAL, PageKind.DISPLAY.roomKind());

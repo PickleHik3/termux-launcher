@@ -262,6 +262,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         // page is measured whether or not a display can run on it.
         com.termux.x11.LorieHost.primePrefs(getContext());
         mDisplay = findViewById(R.id.x11_display_view);
+        applyDisplaySurfaceZOrder(mDisplay);
         mGlass = findViewById(R.id.x11_pane_glass);
         mCornerMask = findViewById(R.id.x11_pane_corner_mask);
         mEmptyState = findViewById(R.id.x11_pane_empty);
@@ -909,6 +910,18 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
      */
     private void applyDisplaySurfaceVisibility() {
         if (mDisplay != null) mDisplay.setVisibility(displaySurfaceVisibility());
+    }
+
+    /**
+     * Keeps the display's surface above the wallpaper scene's. Both are plain SurfaceViews, and
+     * two siblings at the same Z have no fixed order in the compositor: when the scene closes and
+     * reopens its low-resolution pass or resizes (its gate refreshes every second), the order can
+     * flip and the desktop vanishes behind the scene for a moment. Media overlay sits above every
+     * plain SurfaceView and still below the window, so the glass, the bars, the dock and the
+     * keyboard (all window content) draw over the display as before. Set before the surface exists.
+     */
+    static void applyDisplaySurfaceZOrder(@Nullable android.view.SurfaceView display) {
+        if (display != null) display.setZOrderMediaOverlay(true);
     }
 
     /**
@@ -1633,7 +1646,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /**
      * Feed the empty state's panel, so the text group stays readable over a busy wallpaper: the
-     * Base Look's blur, grain and radius at the group's rect (while the Look wears a slab), under
+     * Global Look's blur, grain and radius at the group's rect (while the Look wears a slab), under
      * a frosted-card scrim of the surface colour that gives the panel contrast of its own - the
      * slab's tint alone can be all but clear. The scrim shows whenever the page is see-through,
      * slab or no slab; an opaque page has its own ground and wears neither.

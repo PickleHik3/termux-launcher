@@ -162,7 +162,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
 
     /**
      * Where a widget gets the Look's glass: the page it stands on, which hands out the Look as a
-     * pane style ({@code LookGlassStyle}: Base's values, never a detached surface's), re-feeds
+     * pane style ({@code LookGlassStyle}: Global's values, never a detached surface's), re-feeds
      * every registered widget whenever the Look or its blur frame moves ({@link #onGlassStyle})
      * and re-aims them as the wall slides ({@link #onGlassMoved}). Every live widget registers
      * while attached, worn or not, since its corners follow the Look too; the page asks for a

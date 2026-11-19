@@ -80,7 +80,7 @@ public class SelectionRingShapeTest {
     @Test
     public void pageCardsWearTheHaloNotASquare() {
         assertTrue(SelectionRingShape.wearsHalo(EditorCard.HOME));
-        assertTrue(SelectionRingShape.wearsHalo(EditorCard.WORKSPACE));
+        assertTrue(SelectionRingShape.wearsHalo(EditorCard.TERMINAL));
         assertFalse(SelectionRingShape.wearsHalo(EditorCard.STATUS));
         assertFalse(SelectionRingShape.wearsHalo(EditorCard.KEYBOARD));
         assertTrue("Customization wears the page's halo too",

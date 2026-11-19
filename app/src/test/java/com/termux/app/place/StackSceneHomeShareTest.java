@@ -6,7 +6,7 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 /**
- * Home's share of the stack across a crossing: 1 at Home's rest, 0 at the Workspace's, the
+ * Home's share of the stack across a crossing: 1 at Home's rest, 0 at the Terminal's, the
  * material curve between ({@link StackScene#materialShare}), so the Peek card blends with the
  * stack's look and is exactly the arriving rest's on the landing frame.
  */
@@ -19,12 +19,12 @@ public class StackSceneHomeShareTest {
         }
     }
 
-    @Test public void homeToWorkspaceRunsFromOneToZero() {
+    @Test public void homeToTerminalRunsFromOneToZero() {
         assertEquals(1f, StackScene.homeShare(true, false, 0f), 0f);
         assertEquals(0f, StackScene.homeShare(true, false, 1f), 0f);
     }
 
-    @Test public void workspaceToHomeRunsFromZeroToOne() {
+    @Test public void terminalToHomeRunsFromZeroToOne() {
         assertEquals(0f, StackScene.homeShare(false, true, 0f), 0f);
         assertEquals(1f, StackScene.homeShare(false, true, 1f), 0f);
     }

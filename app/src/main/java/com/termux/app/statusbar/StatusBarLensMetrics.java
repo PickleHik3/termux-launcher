@@ -308,7 +308,7 @@ public final class StatusBarLensMetrics {
 
     /**
      * Every mark the bar shows: none. With the status bar on both halves every place mark went
-     * (decided 2026-10-21, #90): the house, the Workspace's prompt beside the clock and the
+     * (decided 2026-10-21, #90): the house, the Terminal's prompt beside the clock and the
      * Display's. The bar is the clock, the readings and the window chips; the swipe and the home
      * press are the ways between the places. Kept as the lens's one question so its view paints
      * and hit-tests nothing without a second rule of its own.

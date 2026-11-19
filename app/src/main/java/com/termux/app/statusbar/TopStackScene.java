@@ -14,8 +14,8 @@ import java.util.Arrays;
 /**
  * The top stack's scene (ADR 0030 section 6): the status bar as one shared slab that stays put
  * across a crossing and blends its look and ink on {@link SeamFade}'s curve, with the window chips
- * riding the Workspace's side across it ({@link StackScene#sideSlide}, so they move with the
- * bottom stack's Workspace rows). A bar that cannot be one slab across both ends (only one end
+ * riding the Terminal's side across it and Home's float chips riding Home's
+ * ({@link StackScene#sideSlide}, so each moves with the bottom stack's rows of its side). A bar that cannot be one slab across both ends (only one end
  * shows it, or the two draw it in different outlines) rides with a page as before, wearing one
  * end's look. Pure: the renderer fills two {@link End}s, asks {@link #at} for a {@link Frame}
  * per frame and writes it to the views. Both reuse their objects; nothing allocates here.
@@ -85,6 +85,8 @@ public final class TopStackScene {
         public float stripTx;
         /** The place content strip's translationX, relative to the bar host. */
         public float chipsTx;
+        /** Home's float chip strip's translationX, relative to the bar host. */
+        public float homeChipsTx;
         public boolean chipsShown;
         public int fromLookId;
         public int toLookId;
@@ -101,6 +103,7 @@ public final class TopStackScene {
         /** Whether the views would draw the same; {@link #shared} alone changes nothing drawn. */
         public boolean sameAs(@NonNull Frame o) {
             return slabTx == o.slabTx && stripTx == o.stripTx && chipsTx == o.chipsTx
+                && homeChipsTx == o.homeChipsTx
                 && chipsShown == o.chipsShown && wornLookId() == o.wornLookId()
                 && Arrays.equals(inks, o.inks);
         }
@@ -110,6 +113,7 @@ public final class TopStackScene {
             slabTx = o.slabTx;
             stripTx = o.stripTx;
             chipsTx = o.chipsTx;
+            homeChipsTx = o.homeChipsTx;
             chipsShown = o.chipsShown;
             fromLookId = o.fromLookId;
             toLookId = o.toLookId;
@@ -128,7 +132,8 @@ public final class TopStackScene {
         out.shared = true;
         out.slabTx = 0f;
         out.stripTx = 0f;
-        out.chipsTx = StackScene.sideSlide(Side.WORKSPACE, end.side, end.side, 0f, widthPx);
+        out.chipsTx = StackScene.sideSlide(Side.TERMINAL, end.side, end.side, 0f, widthPx);
+        out.homeChipsTx = StackScene.sideSlide(Side.HOME, end.side, end.side, 0f, widthPx);
         out.chipsShown = end.chipsShown;
         out.fromLookId = end.lookId;
         out.toLookId = end.lookId;
@@ -146,8 +151,20 @@ public final class TopStackScene {
      */
     public static void at(@NonNull End from, @NonNull End to, float p, float slide, int widthPx,
                           float rideXPx, boolean rideWearsTo, @NonNull Frame out) {
+        at(from, to, p, slide, widthPx, rideXPx, rideWearsTo, Float.NaN, out);
+    }
+
+    /**
+     * {@link #at(End, End, float, float, int, float, boolean, Frame)} with the inks on a share of
+     * their own: {@code inkShare}, 0 to 1 toward {@code to}, the crossing's end share (the inks
+     * over each page's ground cross with the wall, as the dock's legends do); NaN keeps them on
+     * the look's share.
+     */
+    public static void at(@NonNull End from, @NonNull End to, float p, float slide, int widthPx,
+                          float rideXPx, boolean rideWearsTo, float inkShare, @NonNull Frame out) {
         boolean one = shared(from, to);
-        float chipsTx = StackScene.sideSlide(Side.WORKSPACE, from.side, to.side, slide, widthPx);
+        float chipsTx = StackScene.sideSlide(Side.TERMINAL, from.side, to.side, slide, widthPx);
+        float homeChipsTx = StackScene.sideSlide(Side.HOME, from.side, to.side, slide, widthPx);
         if (!one && !Float.isNaN(rideXPx)) {
             End wearer = rideWearsTo ? to : from;
             out.shared = false;
@@ -155,6 +172,7 @@ public final class TopStackScene {
             out.stripTx = StatusStripRide.stripX(rideXPx, wearer.stripShown,
                 wearer.stripDressedForBar);
             out.chipsTx = chipsTx - rideXPx;
+            out.homeChipsTx = homeChipsTx - rideXPx;
             out.chipsShown = wearer.chipsShown;
             out.fromLookId = wearer.lookId;
             out.toLookId = wearer.lookId;
@@ -167,13 +185,15 @@ public final class TopStackScene {
         out.slabTx = 0f;
         out.stripTx = 0f;
         out.chipsTx = chipsTx;
+        out.homeChipsTx = homeChipsTx;
         out.chipsShown = p <= 0f ? from.chipsShown : p >= 1f ? to.chipsShown
             : from.chipsShown || to.chipsShown;
         out.fromLookId = from.lookId;
         out.toLookId = to.lookId;
         out.lookShare = share;
+        float inks = Float.isNaN(inkShare) ? share : Math.max(0f, Math.min(1f, inkShare));
         for (int i = 0; i < INK_COUNT; i++) {
-            out.inks[i] = StackMaterial.mixArgb(from.inks[i], to.inks[i], share);
+            out.inks[i] = StackMaterial.mixArgb(from.inks[i], to.inks[i], inks);
         }
     }
 

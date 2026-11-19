@@ -374,7 +374,7 @@ public class StackSceneParityTest {
         StackScene.Frame previous = new StackScene.Frame();
         StackScene.Frame rest = new StackScene.Frame();
         int home = com.termux.app.page.Side.HOME.ordinal();
-        int work = com.termux.app.page.Side.WORKSPACE.ordinal();
+        int work = com.termux.app.page.Side.TERMINAL.ordinal();
         for (boolean floating : BOOLS) for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
             for (boolean fromHome : BOOLS) {
                 PageRef a = fromHome ? PageRef.HOME : PageRef.TERMINAL;
@@ -385,7 +385,7 @@ public class StackSceneParityTest {
                 float w = laid.g.containerWidthPx;
                 String what = what(floating, fromUp) + " to up=" + toUp + " from home=" + fromHome;
                 // Each rest: its own side's rows on screen, the other side's a wall away, Home's
-                // to the left of the seam and the Workspace's to its right.
+                // to the left of the seam and the Terminal's to its right.
                 StackScene.rest(from, 0f, new StackScene.Motion(), rest);
                 assertEquals(what + " rest from", 0f, rest.sideTx[side(a)], 0f);
                 assertEquals(what + " rest from, other side", fromHome ? w : -w,

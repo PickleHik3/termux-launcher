@@ -18,24 +18,21 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The two screens' cards (editor-redesign §1, §2): the new Workspace card, Home's twin, and the
- * Match rows that replace Home's Own layout switch.
+ * The two page cards (appearance-one-look spec §3): Home's, and the Terminal's, which the
+ * old Workspace card merged into.
  */
 public class EditorScreenCardsTest {
 
     private static final EditorRows.Offers ALL = new EditorRows.Offers(true, true);
 
+    /** The Terminal's rows live on the Terminal card, each once: Contrast, Layout, Minimal. */
     @Test
-    public void theWorkspaceCardHoldsItsLookItsGlassAndGlobal() {
-        // ADR 0017 (fb44e0fb2): the card wears the shared glass rows without a Glass heading,
-        // Colour and Corners beside Tint, Grain and Rim under More before its Elements list.
-        // Overhaul §2: Appearance (open first) closing on Minimal layout, then Layout.
-        // Rows in group order (2026-11-04): the Look, sliders, toggles, then Tint colour.
-        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
-            Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM,
-            Row.CONTRAST, Row.MINIMAL, Row.TINT_HUE), EditorRows.tier(EditorCard.WORKSPACE, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_LAYOUT, Row.ELEMENTS),
-            EditorRows.tier(EditorCard.WORKSPACE, ALL, 3));
+    public void theTerminalCardHoldsTheTerminalsRowsOnce() {
+        List<Row> rows = rowsOf(EditorCard.TERMINAL);
+        for (Row row : new Row[] {Row.CONTRAST, Row.ELEMENTS, Row.MINIMAL})
+            assertEquals(row + " once", 1, java.util.Collections.frequency(rows, row));
+        assertEquals("Minimal layout closes the Layout section",
+            rows.indexOf(Row.ELEMENTS) + 1, rows.indexOf(Row.MINIMAL));
     }
 
     @Test
@@ -48,27 +45,15 @@ public class EditorScreenCardsTest {
     }
 
     @Test
-    public void theWorkspaceCardsLookAndGlassAreTheWorkspaceHalfsWhateverTheFrameShows() {
-        for (PageKind frame : PageKind.values()) {
-            for (Row row : new Row[] {Row.LOOK, Row.FROST, Row.OPACITY, Row.TINT})
-                assertEquals(row + " with the frame on " + frame, TermuxAppSharedPreferences.PAGE_WALL,
-                    EditorRows.pageFor(EditorCard.WORKSPACE, row));
-            assertEquals(TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(EditorCard.WORKSPACE, Row.LINK_GLOBAL));
-        }
-    }
-
-    @Test
-    public void theWorkspaceCardStandsOnTheWorkspaceAndIsNamedByItsKey() {
-        assertTrue(EditorCard.WORKSPACE.standsOn(PageKind.TERMINAL));
-        assertFalse(EditorCard.WORKSPACE.standsOn(PageKind.HOME));
-        assertFalse("the screens meet through Match, not the menu's Copy",
-            EditorCard.WORKSPACE.perHalf());
-        assertNull(EditorCard.WORKSPACE.slot);
-        assertEquals(EditorCard.WORKSPACE, EditorCard.forKey("workspace"));
+    public void theTerminalCardStandsOnTheTerminalsPagesAndIsNamedByItsKeys() {
+        assertTrue(EditorCard.TERMINAL.standsOn(PageKind.TERMINAL));
+        assertTrue(EditorCard.TERMINAL.standsOn(PageKind.DISPLAY));
+        assertFalse(EditorCard.TERMINAL.standsOn(PageKind.HOME));
+        assertEquals(EditorCard.TERMINAL, EditorCard.forKey("terminal"));
+        assertEquals(EditorCard.TERMINAL, EditorCard.forKey("workspace"));
         assertEquals(EditorCard.HOME, EditorCard.forScreen(PageKind.HOME));
-        assertEquals(EditorCard.WORKSPACE, EditorCard.forScreen(PageKind.TERMINAL));
-        assertFalse("its glass is the Base itself",
-            EditorRows.marksOwnValue(EditorCard.WORKSPACE, Row.FROST));
+        assertEquals(EditorCard.TERMINAL, EditorCard.forScreen(PageKind.TERMINAL));
+        assertEquals(EditorCard.TERMINAL, EditorCard.forScreen(PageKind.DISPLAY));
     }
 
     private static List<Row> rowsOf(EditorCard card) {

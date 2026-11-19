@@ -8,7 +8,7 @@ package com.termux.app.wall;
 public interface WallKeyboardSwipe {
 
     /**
-     * Whether the keyboard swipe is armed on the page in view. Always on the Workspace; on a
+     * Whether the keyboard swipe is armed on the page in view. Always on the Terminal; on a
      * Home page it is the palette gesture, which Settings can turn off.
      */
     default boolean isEnabled() { return true; }

@@ -161,7 +161,7 @@ public final class PlaceLayout {
     /**
      * The shape Home's dock is drawn in: the style the dock really draws
      * ({@link DockStyle#effectiveStyle}), so picking a style that is not built yet changes nothing
-     * here. Home's choice alone; a Workspace layout always carries {@link DockStyle#GLASS_TRAY},
+     * here. Home's choice alone; a Terminal layout always carries {@link DockStyle#GLASS_TRAY},
      * the dock as it has always been.
      */
     @NonNull public final DockStyle dockStyle;

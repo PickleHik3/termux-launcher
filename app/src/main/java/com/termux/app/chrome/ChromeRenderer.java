@@ -84,9 +84,9 @@ public final class ChromeRenderer {
         default int glassFrameTint() {
             TermuxAppSharedPreferences preferences = preferences();
             if (preferences == null) return GlassFrameTint.NONE;
-            int amount = preferences.getSurfaceBaseValue(
+            int amount = preferences.getSurfaceGlobalValue(
                 TermuxAppSharedPreferences.SurfaceProperty.TINT);
-            int opacity = preferences.getSurfaceBaseValue(
+            int opacity = preferences.getSurfaceGlobalValue(
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY);
             if (GlassFrameTint.strength(amount, opacity) <= 0f) return GlassFrameTint.NONE;
             return new GlassSurfaceFactory(this).look(amount).frameTint(opacity);
@@ -129,6 +129,25 @@ public final class ChromeRenderer {
          */
         default int groundUnder(@androidx.annotation.NonNull android.graphics.Rect screenRect) {
             return wallpaperDimColor();
+        }
+
+        /**
+         * Home's own ground: what a Home widget stands on wherever the wall is. A widget is
+         * measured where it is laid out on its page, the slide left out, so the ground under that
+         * rect now is whichever page is in front ({@link #groundUnder}): the Terminal's dim, while
+         * the Terminal is. The default is {@link #wallpaperDimColor()}, as for
+         * {@link #groundUnder}.
+         */
+        default int homeGround() {
+            return wallpaperDimColor();
+        }
+
+        /**
+         * Whether the terminal's panes are glass slabs, each drawing its own frame over the
+         * ground strip, so their text stands on no page dim (ADR 0031 section 4).
+         */
+        default boolean paneGlassSlabs() {
+            return false;
         }
 
         /**

@@ -129,11 +129,10 @@ each set separately for portrait and landscape:
 
 - **Height**: in **Appearance → Layout**, drag the keyboard's top edge. The handle on the bottom
   of the keys sets the padding under the last row. Both are kept per orientation.
-- **Surface**: in **Appearance → Look**, tap the keyboard for its glass rows (**Frost**,
-  **Opacity**, **Tint**, **Colour**, **Corners**, **Depth** and **Edge**), **Key opacity**, **Key
-  corners** and **Key spacing**, plus a **Keyboard theme** button. **Frost** moves the blur and
-  the grain together; **Grain** by itself sits under **More**. **Key corners** also sit beside
-  the type chips in **Appearance → Layout**.
+- **Surface**: tap the keyboard in Appearance for its card: **Opacity** and **Blur** (its own, or
+  following Global, with a reset arrow while they are its own), **Key opacity**, **Key corners**
+  and **Key spacing**, plus a **Keyboard theme** button. Its blur brings its grain with it. While
+  the keyboard is Floating or Split, **Width**, **Floating height** and **Split gap** are here too.
 - **Keyboard theme** ("Colors and typeface") holds a live preview, one chip group (**Key fill**,
   **Border**, **Label**, **Corner labels**, **Bottom label**, **Background**), a set of swatches
   you tap or drag across keys to paint them, **Edit colors** / **Save colors**, **Reset to theme**

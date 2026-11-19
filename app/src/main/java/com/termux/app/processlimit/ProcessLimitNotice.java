@@ -28,7 +28,7 @@ import java.util.function.Consumer;
 
 /**
  * The process-limit notice's one state, for the three places that draw it (the Settings root,
- * Home's long-press sheet, the Workspace's More sheet). A kill reported here raises it unless the
+ * Home's long-press sheet, the Terminal's More sheet). A kill reported here raises it unless the
  * limit reads off; it stays, across restarts, until the limit reads off or the user dismisses it.
  * {@link ProcessLimitPolicy} decides; this class only reads, remembers and tells.
  *

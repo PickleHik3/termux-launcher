@@ -55,7 +55,7 @@ public class TerminalWindowBarReorderTest {
             new TerminalWindowBar.WindowItem("two", "two"),
             new TerminalWindowBar.WindowItem("three", "three"),
             new TerminalWindowBar.WindowItem("float", "float")), 0);
-        // The first three are the Workspace's windows; the fourth stands for a Home float.
+        // The first three are the Terminal's windows; the fourth stands for a Home float.
         mBar.setMovableChipCount(3);
         ShadowLooper.idleMainLooper();
         assertTrue(chip(2).getRight() > 0);

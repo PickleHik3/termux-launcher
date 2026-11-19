@@ -15,7 +15,7 @@ import java.util.Set;
 /**
  * The terminal widget's rules, as arithmetic on what its record keeps: which shell a widget
  * coming on screen shows, which running shells belong to widgets (and so are never adopted as
- * Workspace windows), which widgets' shells end because the widget is gone, and when removing one
+ * Terminal windows), which widgets' shells end because the widget is gone, and when removing one
  * asks first. Pure; {@link TerminalWidgetCoordinator} reads the world and applies the answers.
  *
  * <p>A widget keeps its shell in its record's settings, under state keys
@@ -88,7 +88,7 @@ public final class TerminalWidgetPolicy {
 
     /**
      * Whether a running shell belongs to a terminal widget: shown by one now ({@code hosted}),
-     * or named by one's record. Such a shell is never made a window of the Workspace.
+     * or named by one's record. Such a shell is never made a window of the Terminal.
      */
     public static boolean isWidgetShell(boolean hosted, @Nullable String handle,
                                         @NonNull Set<String> claimed) {

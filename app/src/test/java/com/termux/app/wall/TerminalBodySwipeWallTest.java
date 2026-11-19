@@ -178,7 +178,7 @@ public class TerminalBodySwipeWallTest {
         assertTrue(wall.isDragging());
         lift(45f, 0f);
         assertEquals(PageKind.HOME, row.currentPage());
-        assertEquals("no step inside the Workspace", 0, host.stepped);
+        assertEquals("no step inside the Terminal", 0, host.stepped);
         assertEquals("Home arrives on its last page, the one beside the seam", 2, host.homePage);
     }
 

@@ -139,7 +139,7 @@ public class WidgetGridMetricsTest {
      * the grid; the emulator showed row 5 of a 5-row grid behind it. For every dock design (and
      * the plain dock), with the Strip's row fully in, edge to edge and as a capsule, the grid's
      * last row ends at or above the dock's top, as the dock's own layout reports its height. On
-     * the Workspace half the content already ends at the stack's top and nothing is reserved; the
+     * the Terminal half the content already ends at the stack's top and nothing is reserved; the
      * last row stands in the same place on both halves, so a slide across the seam re-cuts nothing.
      */
     @Test public void theLastRowEndsAboveTheDock_forEveryDockDesign_onBothHalves() {
@@ -175,15 +175,15 @@ public class WidgetGridMetricsTest {
                     assertTrue(what + ": Home's last row ends at " + home.bottom
                         + ", the dock's top is " + dockTop, home.bottom <= dockTop);
 
-                    int workspaceReserve = KeyboardOverlayPolicy.homeGridDockReservePx(false,
+                    int terminalReserve = KeyboardOverlayPolicy.homeGridDockReservePx(false,
                         dockPx, edgeGap);
-                    assertEquals(what, 0, workspaceReserve);
-                    Rect workspaceBody = new Rect(0, 0, width,
-                        dockTop - WidgetPaneView.gridBottomInsetPx(workspaceReserve, density));
-                    Rect workspace = new WidgetGridMetrics(workspaceBody, 0, rim, gap, grid,
+                    assertEquals(what, 0, terminalReserve);
+                    Rect terminalBody = new Rect(0, 0, width,
+                        dockTop - WidgetPaneView.gridBottomInsetPx(terminalReserve, density));
+                    Rect terminal = new WidgetGridMetrics(terminalBody, 0, rim, gap, grid,
                         false).boundsFor(lastRow);
-                    assertTrue(what, workspace.bottom <= dockTop);
-                    assertEquals(what + ": the same cell on both halves", home, workspace);
+                    assertTrue(what, terminal.bottom <= dockTop);
+                    assertEquals(what + ": the same cell on both halves", home, terminal);
                 }
             }
         }

@@ -23,8 +23,8 @@ public final class SideRows {
         STACK,
         /** Home's side: the row slides with Home. */
         HOME,
-        /** The Workspace's side: the row slides with the Workspace. */
-        WORKSPACE,
+        /** The Terminal's side: the row slides with the Terminal. */
+        TERMINAL,
         /** Neither end shows it. */
         NONE
     }
@@ -36,15 +36,15 @@ public final class SideRows {
                                   @NonNull PlaceLayout toLayout) {
         if (from == to || element == Element.STATUS) return Carrier.STACK;
         // Home has its own extra-keys bar in the pill layer, so the one in the stack is always the
-        // Workspace's: it slides with the Workspace whether or not Home's layout lists the row.
-        if (element == Element.EXTRA_KEYS) return Carrier.WORKSPACE;
+        // Terminal's: it slides with the Terminal whether or not Home's layout lists the row.
+        if (element == Element.EXTRA_KEYS) return Carrier.TERMINAL;
         Slot a = fromLayout.slot(element);
         Slot b = toLayout.slot(element);
         boolean fromShows = !a.hidden;
         boolean toShows = !b.hidden;
         if (fromShows && toShows) {
             if (samePlace(a, b, element, fromLayout, toLayout)) return Carrier.STACK;
-            return of(Side.HOME.owns(rowOf(element)) ? Side.HOME : Side.WORKSPACE);
+            return of(Side.HOME.owns(rowOf(element)) ? Side.HOME : Side.TERMINAL);
         }
         if (fromShows) return of(from);
         if (toShows) return of(to);
@@ -78,7 +78,7 @@ public final class SideRows {
 
     /**
      * Whether a landing from {@code from}'s side to {@code to}'s may move rows to new edges: only
-     * between pages of one side whose layouts differ. A Home and Workspace landing writes nothing.
+     * between pages of one side whose layouts differ. A Home and Terminal landing writes nothing.
      */
     public static boolean landingMayMoveRows(@NonNull Side from, @NonNull Side to,
                                              boolean layoutsDiffer) {
@@ -89,14 +89,14 @@ public final class SideRows {
     public static float across(@NonNull Carrier carrier, @NonNull float[] sideTx) {
         switch (carrier) {
             case HOME: return sideTx[Side.HOME.ordinal()];
-            case WORKSPACE: return sideTx[Side.WORKSPACE.ordinal()];
+            case TERMINAL: return sideTx[Side.TERMINAL.ordinal()];
             default: return 0f;
         }
     }
 
     @NonNull
     private static Carrier of(@NonNull Side side) {
-        return side == Side.HOME ? Carrier.HOME : Carrier.WORKSPACE;
+        return side == Side.HOME ? Carrier.HOME : Carrier.TERMINAL;
     }
 
     @NonNull

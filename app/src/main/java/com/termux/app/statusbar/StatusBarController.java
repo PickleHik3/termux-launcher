@@ -649,7 +649,7 @@ public final class StatusBarController {
     }
 
     /**
-     * Whether the status bar wears anything different on Home than on the Workspace: the shape
+     * Whether the status bar wears anything different on Home than on the Terminal: the shape
      * (Style, Corners, Margin) or the look values (ADR 0013).
      */
     public boolean statusDressDiffersAcrossHalves() {
@@ -852,17 +852,21 @@ public final class StatusBarController {
                 }
             }
 
-            com.termux.app.terminal.TerminalWindowBar windows =
-                mHost.findViewById(R.id.terminal_window_bar);
-            if (windows != null) {
-                windows.setSurfaceStyle(capsule,
-                    resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+            // The Terminal's window chips and Home's float chips wear one style.
+            for (int id : new int[] {R.id.terminal_window_bar, R.id.terminal_home_float_bar}) {
+                com.termux.app.terminal.TerminalWindowBar windows = mHost.findViewById(id);
+                if (windows != null) {
+                    windows.setSurfaceStyle(capsule,
+                        resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+                }
             }
-            com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
-                mHost.findViewById(R.id.terminal_status_window_column);
-            if (windowColumn != null) {
-                windowColumn.setChipRadiusPx(
-                    resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+            for (int id : new int[] {R.id.terminal_status_window_column,
+                    R.id.terminal_home_float_column}) {
+                com.termux.app.statusbar.StatusBarWindowColumn windowColumn = mHost.findViewById(id);
+                if (windowColumn != null) {
+                    windowColumn.setChipRadiusPx(
+                        resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+                }
             }
 
             View statusWidgets = mHost.findViewById(R.id.terminal_status_widgets);
@@ -1014,7 +1018,7 @@ public final class StatusBarController {
      * The shape the status row's two chips wear: the sessions indicator and the window pills.
      *
      * <p>They are content inside the status surface rather than surfaces of their own, so they are
-     * not part of the Base cascade and have their own knob. Until it is touched they follow the bar
+     * not part of the Global cascade and have their own knob. Until it is touched they follow the bar
      * — square while Docked, the capsule's radius while Floating — which is what they always did.
      * Once it is set, that shape holds in both styles, clamped so a chip can never round past half
      * of its own height.
@@ -1225,7 +1229,7 @@ public final class StatusBarController {
     /**
      * The status bar's travel for this frame: whether the crossing rides it (SeamCrossing.rideBar)
      * and, handed to the top stack's writer with the wall's progress, where it stands
-     * (SeamTravel.workspaceScreenXPx) with the strip behind the system bar when that continues the
+     * (SeamTravel.terminalScreenXPx) with the strip behind the system bar when that continues the
      * bar's glass; the bar is dressed for that page rather than the one the wall has committed to,
      * so its chips do not change while it is on screen. Whether it rides.
      */
@@ -1247,7 +1251,7 @@ public final class StatusBarController {
             }
         }
         if (seam.barRedressed()) mHost.syncPlaceBar();
-        // The top stack's writer takes the frame's share: the bar rides at the Workspace's page,
+        // The top stack's writer takes the frame's share: the bar rides at the Terminal's page,
         // with the strip behind the system bar and the chips standing where the scene puts them.
         com.termux.app.place.SeamCrossing crossing = mHost.crossing().seam();
         com.termux.app.wall.PageRef committed = crossing.committedEnd();
@@ -1331,9 +1335,14 @@ public final class StatusBarController {
         mWidgets.bindTopStackInks();
     }
 
+    /** {@link StatusBarWidgets#probeStatusInks}: the arriving end over its own ground, recording nothing. */
+    public boolean probeStatusInks(@NonNull int[] out, int pageGround) {
+        return mWidgets.probeStatusInks(out, pageGround);
+    }
+
     /** {@link StatusBarWidgets#resolveStatusInks}: a crossing's ends, measured once at begin. */
-    public boolean resolveStatusInks(@NonNull int[] out, boolean wearingLook) {
-        return mWidgets.resolveStatusInks(out, wearingLook);
+    public boolean resolveStatusInks(@NonNull int[] out) {
+        return mWidgets.resolveStatusInks(out);
     }
 
     /** The band the last {@link #resolveStatusInks} measured; null before the first. */
@@ -1342,7 +1351,7 @@ public final class StatusBarController {
         return mWidgets.resolvedBand();
     }
 
-    /** {@link StatusBarWidgets#applySessionsBand}: the Workspace end's band, for a crossing. */
+    /** {@link StatusBarWidgets#applySessionsBand}: the Terminal end's band, for a crossing. */
     public void applySessionsBand(@Nullable com.termux.app.chrome.OnGlass.Resolution band) {
         mWidgets.applySessionsBand(band);
     }

@@ -62,7 +62,7 @@ public class StackLanesParityTest {
         }
     }
 
-    @Test public void theExtraKeysAreTheWorkspacesAndStandTheBandTallerOnHome() {
+    @Test public void theExtraKeysAreTheTerminalsAndStandTheBandTallerOnHome() {
         for (boolean floating : BOOLS) for (boolean up : BOOLS) {
             int home = rowsPx(PageRef.HOME, PageRef.HOME, up, floating);
             int window = rowsPx(PageRef.HOME, PageRef.TERMINAL, up, floating);
@@ -87,7 +87,7 @@ public class StackLanesParityTest {
         }
         assertEquals(f.name + ": lanes by the two own layouts, from either front",
             StackLanes.hasLanes(f.home, f.window, Side.HOME),
-            StackLanes.hasLanes(f.window, f.home, Side.WORKSPACE));
+            StackLanes.hasLanes(f.window, f.home, Side.TERMINAL));
     }
 
     @Test public void theContainerStandsTheUnionAtEveryFrameOfACrossingAndAtBothRests() {
@@ -120,7 +120,7 @@ public class StackLanesParityTest {
     }
 
     private static final int HOME_SIDE = Side.HOME.ordinal();
-    private static final int WORKSPACE_SIDE = Side.WORKSPACE.ordinal();
+    private static final int TERMINAL_SIDE = Side.TERMINAL.ordinal();
 
     @Test public void atRestTheFrontLaneStandsAtZeroAndTheOtherOffItsPagesSide() {
         StackScene.Motion motion = new StackScene.Motion();
@@ -129,10 +129,10 @@ public class StackLanesParityTest {
         StackEnd window = end(PageRef.TERMINAL);
         StackScene.rest(home, 0f, motion, frame);
         assertEquals(0f, frame.sideTx[HOME_SIDE], 0f);
-        assertEquals(f.widthPx, frame.sideTx[WORKSPACE_SIDE], 0f);
+        assertEquals(f.widthPx, frame.sideTx[TERMINAL_SIDE], 0f);
         StackScene.rest(window, 0f, motion, frame);
         assertEquals(-f.widthPx, frame.sideTx[HOME_SIDE], 0f);
-        assertEquals(0f, frame.sideTx[WORKSPACE_SIDE], 0f);
+        assertEquals(0f, frame.sideTx[TERMINAL_SIDE], 0f);
     }
 
     @Test public void aCrossingsFirstAndLastFramesAreEachEndsRestExactly() {
@@ -157,19 +157,19 @@ public class StackLanesParityTest {
         StackEnd home = end(PageRef.HOME);
         StackEnd window = end(PageRef.TERMINAL);
         float lastHome = 0f;
-        float lastWorkspace = f.widthPx;
+        float lastTerminal = f.widthPx;
         for (int i = 1; i <= 16; i++) {
             float p = i / 16f;
             StackScene.at(home, window, p, motion, home.rest, at);
             assertEquals(-p * f.widthPx, at.sideTx[HOME_SIDE], 0.01f);
-            assertEquals((1f - p) * f.widthPx, at.sideTx[WORKSPACE_SIDE], 0.01f);
+            assertEquals((1f - p) * f.widthPx, at.sideTx[TERMINAL_SIDE], 0.01f);
             assertTrue("Home's lane only moves toward its own side", at.sideTx[HOME_SIDE] <= lastHome);
-            assertTrue("the Workspace's only moves toward the front",
-                at.sideTx[WORKSPACE_SIDE] <= lastWorkspace);
+            assertTrue("the Terminal's only moves toward the front",
+                at.sideTx[TERMINAL_SIDE] <= lastTerminal);
             assertEquals("a lane is a wall's width from the other's",
-                f.widthPx, at.sideTx[WORKSPACE_SIDE] - at.sideTx[HOME_SIDE], 0.01f);
+                f.widthPx, at.sideTx[TERMINAL_SIDE] - at.sideTx[HOME_SIDE], 0.01f);
             lastHome = at.sideTx[HOME_SIDE];
-            lastWorkspace = at.sideTx[WORKSPACE_SIDE];
+            lastTerminal = at.sideTx[TERMINAL_SIDE];
         }
     }
 
@@ -180,7 +180,7 @@ public class StackLanesParityTest {
         for (float p : new float[] {0f, 0.3f, 0.7f, 1f}) {
             StackScene.at(home, home, p, motion, home.rest, at);
             assertEquals(0f, at.sideTx[HOME_SIDE], 0f);
-            assertEquals(f.widthPx, at.sideTx[WORKSPACE_SIDE], 0f);
+            assertEquals(f.widthPx, at.sideTx[TERMINAL_SIDE], 0f);
         }
     }
 

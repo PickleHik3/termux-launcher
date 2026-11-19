@@ -56,7 +56,7 @@ public class SurfacePresetsHalfTest {
 
     @Test
     public void equalHalves_saveOneLook() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 33);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 33);
         Map<String, Object> look = SurfacePresets.captureLook(preferences);
         assertFalse(look.containsKey(SurfacePresets.KEY_HOME_LOOK));
         for (String key : look.keySet())
@@ -64,107 +64,29 @@ public class SurfacePresetsHalfTest {
     }
 
     @Test
-    public void oldCustomWithHalfKeys_loadsHomesWallValuesAndTheWorkspacesOverrides() {
-        Map<String, Object> look =
-            new java.util.LinkedHashMap<>(SurfacePresets.captureLook(preferences));
-        look.put(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
-            .TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 70);
-        look.put(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
-            .TERMUX_APP.KEY_SURFACE_BASE_OPACITY + "_home", 15);
-        look.put(SurfacePresets.KEY_HOME_LOOK, Boolean.TRUE);
-        SurfacePresets.apply(preferences, saved(look));
-
-        // Base is wall-wide: Home's value is the wall's, for both halves.
-        assertEquals(15, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(15, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.terminalPageId()));
-        // The dock follows Base: Home shows the wall's 15, the Terminal page keeps its 70.
-        assertEquals(15, preferences.getAppBarOpacity(TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(70, preferences.getAppBarOpacity(TermuxAppSharedPreferences.terminalPageId()));
-        assertTrue(preferences.getSharedPreferences().contains("look.opacity.dock@kind:terminal"));
-    }
-
-    @Test
-    public void differingHalves_saveAndLoadBoth() {
-        // Base is wall-wide, so the halves differ by the Terminal page's own values.
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 15);
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-            TermuxAppSharedPreferences.terminalPageId(), 70);
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, TermuxAppSharedPreferences.PAGE_WALL, 60);
-        preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
-            TermuxAppSharedPreferences.terminalPageId(), 30);
-        SurfacePresets.Preset look = saved(SurfacePresets.captureLook(preferences));
-        assertTrue(SurfacePresets.hasHomeLook(look));
-
-        // Somewhere else entirely, then the saved look back.
-        SurfacePresets.apply(preferences, preset("solid"));
-        SurfacePresets.apply(preferences, look);
-
-        assertEquals(70, preferences.getAppBarOpacity(TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(15, preferences.getAppBarOpacity(TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(60, preferences.getDockTintStrength(TermuxAppSharedPreferences.PAGE_WALL));
-        assertFalse("the detach is wall-wide, so the Terminal page holds it too", preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT,
-            TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(30)), preferences.getStatusBarBlurRadius(TermuxAppSharedPreferences.terminalPageId()));
-        // Home's cells are all named, so the status bar Home never detached follows Home's Base.
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
-            TermuxAppSharedPreferences.PAGE_WALL));
-        assertTrue(SurfacePresets.matches(preferences, look, PageKind.TERMINAL));
-        assertTrue(SurfacePresets.matches(preferences, look, PageKind.HOME));
-    }
-
-    @Test
     public void oneHalfsLook_appliesToBoth() {
-        // Base is wall-wide: the Workspace's 2 is replaced by Home's 40 on the one wall value.
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(), 2);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 40);
+        // Global is wall-wide: the Terminal's 2 is replaced by Home's 40 on the one wall value.
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(), 2);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 40);
         SurfacePresets.Preset home = saved(SurfacePresets.captureLook(preferences, PageKind.HOME));
         assertFalse(SurfacePresets.hasHomeLook(home));
 
         SurfacePresets.apply(preferences, home);
 
-        assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN,
+        assertEquals(40, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
+        assertEquals(40, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN,
             TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
-    public void lookOnOneHalf_leavesTheOtherAlone() {
-        SurfacePresets.Preset clear = preset("minimal");
-        SurfacePresets.Preset solid = preset("solid");
-        SurfacePresets.apply(preferences, clear);
-
-        SurfacePresets.applyLook(preferences, solid, PageKind.TERMINAL);
-
-        assertTrue(SurfacePresets.matches(preferences, solid, PageKind.TERMINAL));
-        assertFalse(SurfacePresets.matches(preferences, solid, PageKind.HOME));
-        // Base is the wall's, so the Look lands on the Workspace as the Terminal page's own
-        // surface values: its dock shows Solid's number, Home's dock keeps Clear's.
-        assertEquals(solid.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
-            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-                TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(clear.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
-            preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-                TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(clear.values.get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        // Today's callers read the Workspace's stop.
-        assertTrue(SurfacePresets.matches(preferences, solid));
-    }
-
-    @Test
     public void lookOnHome_leavesTheTerminalAlone() {
-        preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 88);
+        preferences.setTerminalBackgroundOpacity(88);
 
         SurfacePresets.applyLook(preferences, preset("stock"), PageKind.HOME);
+        SurfacePresets.applyLook(preferences, preset("stock"), PageKind.TERMINAL);
 
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
+        // The terminal's Background takes no preset (ADR 0031 §4, #287).
         assertEquals(88, preferences.getTerminalBackgroundOpacity());
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

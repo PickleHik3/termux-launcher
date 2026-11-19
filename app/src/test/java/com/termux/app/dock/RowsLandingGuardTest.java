@@ -14,7 +14,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 /**
- * A Home and Workspace landing that changes a row's visibility or parent is counted; a landing
+ * A Home and Terminal landing that changes a row's visibility or parent is counted; a landing
  * between pages of one side whose layouts differ may move rows and counts nothing; commits that
  * are not a landing's count nothing.
  */
@@ -44,16 +44,16 @@ public class RowsLandingGuardTest {
         Counters.clear();
     }
 
-    @Test public void aHomeAndWorkspaceLandingThatSwapsRowsIsCounted() {
-        guard.onLanding(Side.HOME, Side.WORKSPACE, true);
+    @Test public void aHomeAndTerminalLandingThatSwapsRowsIsCounted() {
+        guard.onLanding(Side.HOME, Side.TERMINAL, true);
         rows.visibility[1] = 0f;
         guard.afterCommit();
         assertEquals(1, Counters.countOf(FrameGuards.LANDING_WROTE));
         assertTrue(Counters.lines().toString(), Counters.lines().toString().contains("keys.visibility"));
     }
 
-    @Test public void aHomeAndWorkspaceLandingThatWritesNothingIsSilent() {
-        guard.onLanding(Side.WORKSPACE, Side.HOME, false);
+    @Test public void aHomeAndTerminalLandingThatWritesNothingIsSilent() {
+        guard.onLanding(Side.TERMINAL, Side.HOME, false);
         guard.afterCommit();
         assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
     }
@@ -66,7 +66,7 @@ public class RowsLandingGuardTest {
     }
 
     @Test public void aCommitThatIsNoLandingsCountsNothing() {
-        guard.onLanding(Side.HOME, Side.WORKSPACE, false);
+        guard.onLanding(Side.HOME, Side.TERMINAL, false);
         guard.afterCommit();
         rows.visibility[0] = 8f;
         guard.afterCommit();
@@ -75,11 +75,11 @@ public class RowsLandingGuardTest {
 
     /** A crossing's commit that switches rows before the landing is the rows' own write. */
     @Test public void aCommitBeforeTheLandingIsNoForeignWrite() {
-        guard.onLanding(Side.WORKSPACE, Side.HOME, false);
+        guard.onLanding(Side.TERMINAL, Side.HOME, false);
         guard.afterCommit();
         rows.visibility[0] = 8f;
         guard.afterCommit();
-        guard.onLanding(Side.HOME, Side.WORKSPACE, false);
+        guard.onLanding(Side.HOME, Side.TERMINAL, false);
         guard.afterCommit();
         assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
         assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));

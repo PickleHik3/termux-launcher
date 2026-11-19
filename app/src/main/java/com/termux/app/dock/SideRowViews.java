@@ -11,8 +11,8 @@ import com.termux.app.place.Element;
  * Where each side's rows are drawn (ADR 0030 section 2): the one place readers find a row by id,
  * through the side that owns it. A row has its view, the host it stands in along the bottom (in the
  * stack's row stack), and the portable host it is lent to on any other edge. 0 where the side has
- * no such view. Home's own extra-keys bar is the Home pill, a view of its own; the Workspace's is
- * the toolbar pager. The apps row is Home's; a Workspace page that shows it shares Home's view, and
+ * no such view. Home's own extra-keys bar is the Home pill, a view of its own; the Terminal's is
+ * the toolbar pager. The apps row is Home's; a Terminal page that shows it shares Home's view, and
  * the stack keeps it put on such a crossing ({@code SideRows}).
  */
 public final class SideRowViews {
@@ -51,10 +51,10 @@ public final class SideRowViews {
         }
     }
 
-    /** The side whose view the stack's {@code element} is: the Workspace's extra keys, Home's others. */
+    /** The side whose view the stack's {@code element} is: the Terminal's extra keys, Home's others. */
     @NonNull
     public static Side sideOf(@NonNull Element element) {
-        return element == Element.EXTRA_KEYS ? Side.WORKSPACE : Side.HOME;
+        return element == Element.EXTRA_KEYS ? Side.TERMINAL : Side.HOME;
     }
 
     /** The row a stack's {@code element} is; null for the status bar, which no side owns. */

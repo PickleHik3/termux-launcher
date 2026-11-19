@@ -54,7 +54,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
 
     /**
      * The built-in widgets live on this page, fed the Look's glass and Corners
-     * ({@link PaneSurfaceStyle#lookGlass}: Base's values, not the terminal's).
+     * ({@link PaneSurfaceStyle#lookGlass}: Global's values, not the terminal's).
      */
     private final java.util.Set<com.termux.app.launcher.widget.builtin.BuiltinWidgetView>
         mGlassWidgets = new java.util.LinkedHashSet<>();
@@ -75,7 +75,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
         mWidgetsOnGlassListener = (store, key) -> {
             // The Widgets cells (ADR 0017): glass off is Opacity 100 at Frost 0 there. A Widgets
-            // cell redresses the cards; a Base or page cell only when it moves the switch, since
+            // cell redresses the cards; a Global or page cell only when it moves the switch, since
             // the chrome pass already redresses on the Look's own change.
             com.termux.shared.termux.settings.preferences.LookGrid.Key cell = key == null ? null
                 : com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
@@ -418,7 +418,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
                 getContext().getString(R.string.pane_controls_add_page)),
             PaneControlsView.Action.glyph(ACTION_APPEARANCE, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.pane_controls_wallpaper_style)),
-            // No minimal button: minimal mode is the Workspace's, and a Home page never enters it.
+            // No minimal button: minimal mode is the Terminal's, and a Home page never enters it.
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
     }

@@ -2,7 +2,7 @@ package com.termux.app.place;
 
 /**
  * How a surface that stays where it is on the screen while the wall crosses between Home and the
- * Workspace (the navigation strip under the pill) goes from the committed half's dress to the
+ * Terminal (the navigation strip under the pill) goes from the committed half's dress to the
  * other half's: by alpha alone, following the finger, over the middle of the way, so no frame
  * switches it whole. At either end of the way it wears exactly that end's dress, so the settle
  * shows nothing new. Builds nothing.

@@ -11,7 +11,7 @@ import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
- * The shared Text size (Appearance › Base) as the chrome reads it: one factor on the labels the
+ * The shared Text size (Appearance › Global) as the chrome reads it: one factor on the labels the
  * launcher draws itself, the status bar's figures, the window chips, the dock strip's titles and
  * Home's app labels. Each keeps its own size in sp and draws at {@link #sp} of it, so a size a
  * surface has of its own (Home's label size) stays an offset from the shared one.

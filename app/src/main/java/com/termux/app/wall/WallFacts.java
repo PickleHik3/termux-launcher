@@ -14,7 +14,7 @@ public interface WallFacts {
     default boolean reducedMotion() { return false; }
 
     /**
-     * Whether the current session's row has a terminal window, so the Workspace is on the
+     * Whether the current session's row has a terminal window, so the Terminal is on the
      * row (a Display page is a page of its own, not one of the row's windows). Home is on it unless {@link #useAs} is
      * Terminal only.
      */
@@ -24,7 +24,7 @@ public interface WallFacts {
     default boolean terminalWindowOpen() { return false; }
 
     /**
-     * Use as, read fresh on every ask: under Terminal only the row is the Workspace alone,
+     * Use as, read fresh on every ask: under Terminal only the row is the Terminal alone,
      * and the home press, the last window closing and a cold start all land there.
      */
     @NonNull default UseAs useAs() { return UseAs.HOME; }

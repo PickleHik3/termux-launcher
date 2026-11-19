@@ -84,7 +84,10 @@ deleted from the checks file in the same pass. A minor cut first promotes from `
 ("Promoting from `pre` to a stable" below). **For 2.0.0 only:** raise
 `AppearanceReset.NUMBER` by one on `pre` before the promotion, so pre-release testers' looks reset a
 second time and every 2.0 user starts on the default look; never raise it for any other release
-without the developer's say. Then, per edition, as in `Release v1.0.1 (merge dev into io-vaj-package)` followed by `release: vaj-v1.0.1`:
+without the developer's say. Number 1 also covers the one-look model (ADR 0031, #290): the
+first drop that carries it must still carry 1 unreleased, so the same reset deletes the old
+model's per-kind, per-page and per-surface look keys; if a release carrying 1 ships first, raise it
+to 2 with that drop. Then, per edition, as in `Release v1.0.1 (merge dev into io-vaj-package)` followed by `release: vaj-v1.0.1`:
 merge `dev`, then set `versionName` to the plain `X.Y.Z` in a `release:` commit (it **must** equal
 the tag minus its edition prefix and `v`, or CI aborts), push, tag, `gh release create --draft
 --notes-file …` (never `--prerelease` on a stable), then dispatch `attach_debug_apks_to_release.yml`

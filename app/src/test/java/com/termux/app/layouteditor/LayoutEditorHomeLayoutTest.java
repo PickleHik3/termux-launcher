@@ -36,7 +36,7 @@ import java.util.List;
 /**
  * While Home holds a Home layout, the Layout editor opened on a Home page edits it and offers only
  * its elements — the pinned apps, the A–Z index and the keyboard, whose chip is always on — while
- * opened on a window it edits the Workspace layout with the full set (ADR 0008, kept by ADR 0009
+ * opened on a window it edits the Terminal layout with the full set (ADR 0008, kept by ADR 0009
  * as the opt-in Home layout).
  */
 @RunWith(RobolectricTestRunner.class)
@@ -68,7 +68,7 @@ public class LayoutEditorHomeLayoutTest {
         assertEquals(LayoutVariant.NORMAL,
             DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT).variant());
         places.setMinimal(true);
-        assertEquals("minimal mode is the Workspace's", com.termux.app.place.KindFixtures.HOME_PAGE,
+        assertEquals("minimal mode is the Terminal's", com.termux.app.place.KindFixtures.HOME_PAGE,
             DraftedSession.enter(places, PageKind.HOME, PORTRAIT).variant());
         assertEquals(LayoutVariant.MINIMAL,
             DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT).variant());
@@ -134,7 +134,7 @@ public class LayoutEditorHomeLayoutTest {
         assertEquals(LayoutEditorPlan.Drop.LIVE,
             plan.restore(LayoutEditorPlan.TrayItem.KEYBOARD));
         assertTrue(places.isHomeKeyboardAlwaysOn());
-        assertFalse("the Workspace keyboard switch is untouched", launcher.isKeyboardTurnedOff());
+        assertFalse("the Terminal keyboard switch is untouched", launcher.isKeyboardTurnedOff());
         assertTrue(plan.isDirty());
 
         plan.revert();
@@ -164,13 +164,13 @@ public class LayoutEditorHomeLayoutTest {
     }
 
     @Test
-    public void editsOnHomeLeaveTheWorkspaceLayoutAlone() {
+    public void editsOnHomeLeaveTheTerminalLayoutAlone() {
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         plan.drop(Bar.APPS_ROW, Edge.TOP);
         assertEquals(Edge.TOP, plan.shownLayout().slot(Element.APPS).edge);
-        Slot workspace = places.forVariant(LayoutVariant.NORMAL).slot(PORTRAIT, Element.APPS);
-        assertEquals(Edge.BOTTOM, workspace.edge);
+        Slot terminal = places.forVariant(LayoutVariant.NORMAL).slot(PORTRAIT, Element.APPS);
+        assertEquals(Edge.BOTTOM, terminal.edge);
     }
 
     /** An install that never picked one, or holds an id this build cannot read, is the glass tray. */
@@ -209,7 +209,7 @@ public class LayoutEditorHomeLayoutTest {
             places.forVariant(LayoutVariant.HOME).drawerTilePosition());
         assertEquals(com.termux.app.dock.DrawerTilePolicy.Position.END,
             home.drawerTilePosition());
-        assertEquals("the Workspace's dock has it there too (ADR 0023 §1)",
+        assertEquals("the Terminal's dock has it there too (ADR 0023 §1)",
             com.termux.app.dock.DrawerTilePolicy.Position.END, places.drawerTilePosition());
     }
 
@@ -223,14 +223,14 @@ public class LayoutEditorHomeLayoutTest {
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             assertEquals(DockStyle.effectiveStyle(DockStyle.WALL_STRIP),
                 places.resolve(orientation, com.termux.app.place.KindFixtures.HOME_PAGE).dockStyle);
-            assertEquals("the Workspace's layout wears the same design (ADR 0023 §1)",
+            assertEquals("the Terminal's layout wears the same design (ADR 0023 §1)",
                 DockStyle.effectiveStyle(DockStyle.WALL_STRIP),
                 places.resolve(orientation, LayoutVariant.NORMAL).dockStyle);
         }
     }
 
     @Test
-    public void theWorkspaceLayoutOffersItsDockDesign() {
+    public void theTerminalLayoutOffersItsDockDesign() {
         LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.setDockStyle(DockStyle.LENS_BEADS));
         assertEquals(DockStyle.LENS_BEADS, places.forVariant(LayoutVariant.NORMAL).dockStyle());

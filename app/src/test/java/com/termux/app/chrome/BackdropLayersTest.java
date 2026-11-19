@@ -217,7 +217,7 @@ public class BackdropLayersTest {
 
     @Test
     public void theGroundStripRidesWithASurfaceOnAPage() {
-        // Measured on pong (Home2 <-> Workspace, a live scene): the strip's band under a page is
+        // Measured on pong (Home2 <-> Terminal, a live scene): the strip's band under a page is
         // that page's own ground and moves as the page does.
         assertEquals(Holder.LOCAL, BackdropLayers.holder(Place.PAGE, Tier.BENEATH_WALL, false,
             true, false, false, true, true, false));

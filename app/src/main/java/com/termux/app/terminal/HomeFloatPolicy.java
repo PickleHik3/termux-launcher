@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 
 /**
  * The arithmetic of a <b>Home float</b> (docs/GLOSSARY.md): a window of the current session drawn
- * floating over one Home page instead of in the Workspace's row. Pure, so the room it is born into,
+ * floating over one Home page instead of in the Terminal's row. Pure, so the room it is born into,
  * which page shows it, its memory of each orientation and the chip it is tucked into read as
  * arithmetic without a window to float.
  */
@@ -16,7 +16,7 @@ public final class HomeFloatPolicy {
 
     private HomeFloatPolicy() {}
 
-    /** A window's Home page while it is not a Home float: it is in the Workspace's row. */
+    /** A window's Home page while it is not a Home float: it is in the Terminal's row. */
     public static final int NOT_HOME_FLOAT = -1;
 
     /**
@@ -194,7 +194,7 @@ public final class HomeFloatPolicy {
 
     /**
      * The ground a widget's terminal stands on: the terminal palette's background, so its ink
-     * reads as in the Workspace, at {@code alpha} (whole on a plain card, the card's own
+     * reads as in the Terminal, at {@code alpha} (whole on a plain card, the card's own
      * see-through over glass). A palette background left transparent is taken at its colour.
      */
     public static int hostedGround(int paletteBackground, int alpha) {
@@ -279,7 +279,7 @@ public final class HomeFloatPolicy {
      * @param crossing a crossing has begun and not landed
      * @param seamStandsLayout the seam has laid the other half's rows out for its length
      * @param homeFront Home is the committed page: the stack and the keyboard the pass reads are
-     *     Home's. With the Workspace in front they are its (its keyboard, its rows), and a float,
+     *     Home's. With the Terminal in front they are its (its keyboard, its rows), and a float,
      *     hidden there, would take a size from them that its shell is resized to the moment a
      *     crossing shows it again
      */
@@ -302,8 +302,8 @@ public final class HomeFloatPolicy {
     /** What asked for a new terminal, for {@link #launchesAsFloat}. */
     public enum Launch {
         /**
-         * A tap on the Terminal entry (the dock, the drawer): it goes to the Workspace while there
-         * is one, so it launches a terminal only when the Workspace is empty.
+         * A tap on the Terminal entry (the dock, the drawer): it goes to the Terminal while there
+         * is one, so it launches a terminal only when the Terminal is empty.
          */
         ENTRY_TAP,
         /** A new terminal or window: a keybind, the palette, the local API, Home's own Terminal items. */
@@ -314,18 +314,18 @@ public final class HomeFloatPolicy {
 
     /**
      * Whether a new terminal asked for by {@code launch} opens as a Home float on the page in view
-     * instead of as a window of the Workspace's row. Every terminal launched while Home is in front
+     * instead of as a window of the Terminal's row. Every terminal launched while Home is in front
      * ({@code homeInFront}) is a Home float, the first one included and with no window anywhere,
      * so a launch from Home never takes the screen. A tap on the Terminal entry launches only into
-     * an empty Workspace ({@code workspaceOnRow} false); with a Workspace it goes there. New window
+     * an empty Terminal ({@code terminalOnRow} false); with a Terminal it goes there. New window
      * names a window and stays one. Where Home cannot carry a float ({@code canFloat} false:
      * compatibility mode, no Home pages) the row takes it as before.
      */
     public static boolean launchesAsFloat(@NonNull Launch launch, boolean homeInFront,
-                                          boolean workspaceOnRow, boolean canFloat) {
+                                          boolean terminalOnRow, boolean canFloat) {
         if (!canFloat || !homeInFront) return false;
         switch (launch) {
-            case ENTRY_TAP: return !workspaceOnRow;
+            case ENTRY_TAP: return !terminalOnRow;
             case NEW_TERMINAL: return true;
             case NEW_WINDOW:
             default: return false;
@@ -348,7 +348,7 @@ public final class HomeFloatPolicy {
      * Which of a saved session's windows load back as Home floats: every one saved as a float
      * ({@code savedAsFloat}), while there are Home pages to float over ({@code homePages});
      * without them all load into the row. A session saved as floats only loads as floats only,
-     * leaving no window in the row: the Workspace may be empty.
+     * leaving no window in the row: the Terminal may be empty.
      */
     @NonNull
     public static boolean[] restoredAsFloats(@NonNull boolean[] savedAsFloat, boolean homePages) {

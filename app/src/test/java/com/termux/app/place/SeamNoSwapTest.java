@@ -177,7 +177,7 @@ public class SeamNoSwapTest {
     // ---- The drive ----
 
     private static final class Sample {
-        float fraction, keyboardReveal, lookShare, dockReveal;
+        float fraction, keyboardReveal, endShare, dockReveal;
         boolean relayout, restyle, hasLayout;
     }
 
@@ -208,7 +208,7 @@ public class SeamNoSwapTest {
             s.fraction = fraction;
             s.keyboardReveal = answers.keyboardReveal();
             s.dockReveal = answers.dockReveal();
-            s.lookShare = answers.lookShare();
+            s.endShare = answers.endShare();
             // The frame that begins the crossing is the first the seam answers; every one after
             // it, and that one, must stand the stack as it is.
             s.relayout = begun && answers.relayout();
@@ -218,10 +218,6 @@ public class SeamNoSwapTest {
             samples[i] = s;
         }
         return samples;
-    }
-
-    private static boolean lookApart(Dressing d) {
-        return !d.homeLook.stackEquals(d.windowLook);
     }
 
     private interface Each {
@@ -276,20 +272,19 @@ public class SeamNoSwapTest {
     }
 
     @Test
-    public void theLookBlendsFromTheLeavingEndToTheArrivingOne() {
+    public void theEndShareRunsFromTheLeavingEndToTheArrivingOne() {
         forEveryCase((what, d, pair, from, fromKb, toKb) -> {
             Sample[] samples = run(d, pair, from, fromKb, toKb);
-            if (!lookApart(d)) return;
             float last = 0f;
             for (Sample s : samples) {
                 if (s.fraction == 0f) continue;
-                assertFalse(what + " no look share at " + s.fraction, Float.isNaN(s.lookShare));
-                assertTrue(what + " look share goes back at " + s.fraction,
-                    s.lookShare >= last - EPSILON);
-                last = s.lookShare;
+                assertFalse(what + " no end share at " + s.fraction, Float.isNaN(s.endShare));
+                assertTrue(what + " end share goes back at " + s.fraction,
+                    s.endShare >= last - EPSILON);
+                last = s.endShare;
             }
-            assertEquals(what + " arrives on the arriving look", 1f,
-                samples[samples.length - 1].lookShare, EPSILON);
+            assertEquals(what + " arrives on the arriving end", 1f,
+                samples[samples.length - 1].endShare, EPSILON);
         });
     }
 

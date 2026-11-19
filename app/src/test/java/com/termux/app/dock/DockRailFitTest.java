@@ -137,7 +137,7 @@ public class DockRailFitTest {
     /**
      * The audit's cell (e4): the rail on the left, the letters on the dock's bottom row with the
      * extra keys. The dock keeps the whole width, so the two never share the side's length while
-     * the rail ends where its side stack ends: above the canvas band's own end on the Workspace,
+     * the rail ends where its side stack ends: above the canvas band's own end on the Terminal,
      * where the dock stands below the band, and above the dock's whole reach on Home, where the
      * canvas runs on under it. In Docked and in Floating, for short and tall sides.
      */
@@ -162,7 +162,7 @@ public class DockRailFitTest {
                     DockLayoutPolicy.RailFit fit = DockLayoutPolicy.railFit(band,
                         DockLayoutPolicy.railContentLengthPx(7, 0, SLOT), SLOT);
                     int railEnd = top + Math.min(scrollPx, air + fit.viewportLengthPx + air);
-                    // Where the A–Z card can begin: the band's own end on the Workspace, the
+                    // Where the A–Z card can begin: the band's own end on the Terminal, the
                     // dock's reach above it on Home, the frame's inset kept either way.
                     int cardStart = side - bottomInset;
                     String at = "frame=" + frame + " home=" + home + " side=" + side;

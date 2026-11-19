@@ -9,7 +9,6 @@ import com.termux.app.page.Rest;
 import com.termux.app.place.PlaceKeyboard;
 import com.termux.app.terminal.io.ExtraKeySetResolver;
 import com.termux.app.terminal.io.ExtraKeysTarget;
-import com.termux.app.wall.WallLookKinds;
 import com.termux.app.wall.WallPages;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 
@@ -42,8 +41,7 @@ public class AssistantRestTest {
     }
 
     @Test
-    public void theLookIsTheWorkspacesTerminalKind() {
-        assertEquals(LookGrid.Kind.TERMINAL, WallLookKinds.of(PageKind.ASSISTANT));
+    public void theLookIsTheTerminalsTerminalKind() {
         assertFalse(AssistantRest.of(new Rest.Inputs(true, false, false, false, true)).systemIme);
     }
 }

@@ -80,7 +80,7 @@ public class SurfaceEditorControllerSeedTest {
         session.enter(preferences);
 
         assertEquals(tweaked, AppearanceSnapshot.signatureOf(preferences));
-        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TWEAKED_BLUR)), preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TWEAKED_BLUR)), preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
     }
 
     @Test
@@ -168,18 +168,13 @@ public class SurfaceEditorControllerSeedTest {
         SurfacePresets.apply(preferences, mist);
         session.enter(preferences);
 
-        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TWEAKED_BLUR)), preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(TWEAKED_BLUR)), preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
     }
 
     private void tweak() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, TWEAKED_BLUR);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, TWEAKED_BLUR);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TWEAKED_DOCK_OPACITY);
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

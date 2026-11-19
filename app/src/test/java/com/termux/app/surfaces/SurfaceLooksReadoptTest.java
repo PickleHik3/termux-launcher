@@ -181,14 +181,14 @@ public class SurfaceLooksReadoptTest {
     @Test
     public void anUntouchedGenerationFiveClearMovesToTheNewClear() {
         storeGenerationFiveClear();
-        assertEquals(3, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(3, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         assertEquals(0, preferences.getFancierGlassFaceClarityPercent());
         assertFalse(SurfacePresets.matches(preferences, preset("minimal")));
 
         SurfacePresets.readoptMovedLooks(preferences);
 
         assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
-        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(0, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         assertEquals(100, preferences.getFancierGlassFaceClarityPercent());
         assertEquals("Clear ships its dim at 0", 0, preferences.getFancierGlassDimPercent());
         assertEquals(100, preferences.getFancierGlassSizeLensPercent());
@@ -207,7 +207,7 @@ public class SurfaceLooksReadoptTest {
         // A grain the user changed is an edit too.
         store.edit().clear().commit();
         storeGenerationFiveClear();
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 5);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 5);
         before = looks();
         SurfacePresets.readoptMovedLooks(preferences);
         assertEquals(before, looks());
@@ -281,9 +281,4 @@ public class SurfaceLooksReadoptTest {
         assertEquals(before, looks());
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

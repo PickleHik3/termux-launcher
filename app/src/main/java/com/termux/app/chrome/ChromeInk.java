@@ -366,6 +366,35 @@ public final class ChromeInk {
          * #noteBandFrame}): it is drawn over the page's dim, so its content stands on no dim.
          */
         boolean framed;
+        /**
+         * Prototype #283: the band's glass draws the page's ground over its frame
+         * ({@link GlassGround#drawsGround}), so its content stands on the page's dim framed or not.
+         */
+        boolean groundDrawn;
+    }
+
+    /**
+     * The dim under a band's rows ({@link #bandFaces}, the keyboard's tone): the wall-wide dim, or
+     * a probe's page ground ({@link #probeEitherToneUnderGlass} with one), none under a frame that
+     * draws no ground.
+     */
+    @ColorInt
+    private int rowDim(@NonNull BandGlass glass) {
+        if (dimHidden(glass)) return Color.TRANSPARENT;
+        if (mProbing) return mProbeGround;
+        // A glass that draws the page's ground stands on the ground under its own rect.
+        return glass.groundDrawn ? mRowGround : mDimColor;
+    }
+
+    /**
+     * The page's ground under the rect a fixed-ink band's rows are being measured on, set where
+     * that measure begins ({@link #resolveFixedAt}, {@link #bandFaces}); read by {@link #rowDim}.
+     */
+    @ColorInt private int mRowGround;
+
+    /** Whether the page's dim is off {@code glass}'s face: a frame covers it and draws no ground. */
+    private static boolean dimHidden(@NonNull BandGlass glass) {
+        return glass.framed && !glass.groundDrawn;
     }
 
     /**
@@ -382,7 +411,77 @@ public final class ChromeInk {
     /** {@link #groundDim} for {@code band} under {@code rootRect}. */
     @ColorInt
     private int bandDim(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
-        return glassFor(band).framed ? Color.TRANSPARENT : dimUnder(rootRect);
+        if (dimHidden(glassFor(band))) return Color.TRANSPARENT;
+        return mProbing ? mProbeGround : dimUnder(rootRect);
+    }
+
+    /** A probe runs ({@link #probeOnGlass}): the ground is {@link #mProbeGround}, no vote counts. */
+    private boolean mProbing;
+    @ColorInt private int mProbeGround;
+    /** The votes a probe's bands would cast over its page's ground; cleared per probe. */
+    @NonNull private final Map<GlassBackdropCache.Band, Integer> mProbeVotes =
+        new java.util.EnumMap<>(GlassBackdropCache.Band.class);
+
+    /** {@link #meanVote} of the votes with the probe's in place of the bands it measured. */
+    @ColorInt
+    private int probedMeanVote() {
+        long red = 0, green = 0, blue = 0;
+        int count = 0;
+        for (GlassBackdropCache.Band band : GlassBackdropCache.Band.values()) {
+            Integer vote = mProbeVotes.get(band);
+            if (vote == null) vote = mVotes.get(band);
+            if (vote == null) continue;
+            red += Color.red(vote);
+            green += Color.green(vote);
+            blue += Color.blue(vote);
+            count++;
+        }
+        count = Math.max(1, count);
+        return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
+    }
+
+    /** The probe's own contract, so a band's real one is never written by a probe. */
+    @NonNull private final Contract mProbeContract = new Contract();
+
+    /**
+     * What {@link #onGlass} would answer for {@code band} at {@code screenRect} if the page's ground
+     * under it were {@code pageGround}, recording nothing: no contract, no veil, no polarity vote,
+     * so nothing redraws and the chrome's polarity stays the one it has (a crossing casts no vote
+     * either, so it is the polarity the page lands with). For the page a crossing will arrive on,
+     * read as the crossing begins, so the band's inks blend toward the ones the landing measures
+     * (#283: the glass shows the ground beneath it). Its co-tenants' veils floor it as in
+     * {@link #resolveBand}, each measured over the same ground.
+     */
+    @NonNull
+    public OnGlass.Resolution probeOnGlass(@NonNull GlassBackdropCache.Band band,
+                                           @NonNull Rect screenRect, @ColorInt int darkInk,
+                                           @ColorInt int paleInk, double target,
+                                           @ColorInt int pageGround) {
+        readMode();
+        Contract probe = mProbeContract;
+        toRootSpace(screenRect, probe.rect);
+        probe.darkInk = darkInk;
+        probe.paleInk = paleInk;
+        probe.target = target;
+        probe.fixedInk = false;
+        probe.seen = true;
+        mProbing = true;
+        mProbeGround = pageGround;
+        mProbeVotes.clear();
+        try {
+            OnGlass.Resolution own = resolveAt(band, probe, 0);
+            int floor = Color.alpha(own.veil);
+            for (GlassBackdropCache.Band other : GlassBackdropCache.Band.values()) {
+                if (other == band || paneOf(other) != paneOf(band)) continue;
+                Contract co = mContracts.get(other);
+                // A fixed-ink co-tenant measures its even-out on the way: left out of a probe.
+                if (co == null || !co.seen || co.fixedInk) continue;
+                floor = Math.max(floor, Color.alpha(resolveAt(other, co, 0).veil));
+            }
+            return floor == Color.alpha(own.veil) ? own : resolveAt(band, probe, floor);
+        } finally {
+            mProbing = false;
+        }
     }
 
     /**
@@ -563,35 +662,6 @@ public final class ChromeInk {
     }
 
     /**
-     * {@link #onGlass} as if {@code band}'s pane wore the glass {@code opacity} and {@code baseColor}
-     * describe, and nothing of the face it was told: what the bar would read once a page it has not
-     * landed on is dressed. A crossing asks it once, at begin, for the end the surface builders have
-     * not dressed yet; the pane's own face (what its surface told, {@link #noteBandGlass}) is put
-     * back before this returns, so every other reader still answers the glass that is drawn.
-     */
-    @NonNull
-    public OnGlass.Resolution onGlassWearing(@NonNull GlassBackdropCache.Band band,
-                                             @NonNull Rect screenRect,
-                                             @ColorInt int darkInk, @ColorInt int paleInk,
-                                             double target, float opacity,
-                                             @ColorInt int baseColor) {
-        BandGlass glass = glassFor(band);
-        float keptOpacity = glass.opacity;
-        boolean keptTinted = glass.tinted;
-        int keptBase = glass.baseColor;
-        glass.opacity = opacity < 0f ? 0f : (opacity > 1f ? 1f : opacity);
-        glass.tinted = true;
-        glass.baseColor = baseColor;
-        try {
-            return onGlass(band, screenRect, darkInk, paleInk, target);
-        } finally {
-            glass.opacity = keptOpacity;
-            glass.tinted = keptTinted;
-            glass.baseColor = keptBase;
-        }
-    }
-
-    /**
      * {@link #onGlass} for a band whose ink is not the chrome's to choose: the in-app keyboard,
      * whose key labels are its theme's and stand on its theme's key caps. The answer is a veil for
      * the band's glass and nothing else — {@link OnGlass.Resolution#ink} is whichever given ink
@@ -763,7 +833,7 @@ public final class ChromeInk {
                                        @ColorInt int veilColor, @ColorInt int ink,
                                        @ColorInt int dimInk) {
         readMode();
-        int dim = dimUnder(rootRect);
+        int dim = paneDim(rootRect);
         double target = mLevel.target(OnGlass.TARGET_BODY_TEXT);
         PaneAnswer answer = mPanes.get(key);
         if (answer != null && !answer.rect.equals(rootRect)) {
@@ -1043,14 +1113,17 @@ public final class ChromeInk {
     }
 
     /**
-     * What a widget at {@code rootRect} stands on before its own card: the wallpaper under the
-     * launcher's dim, opaque. Shares the widget's one sample with {@link #widget}; the card's rim
-     * is decided against it ({@link OnGlass#cardShowsEdge}).
+     * What a Home widget at {@code rootRect} stands on before its own card: the wallpaper under
+     * Home's ground, opaque. Shares the widget's one sample with {@link #widget}; the card's rim
+     * is decided against it ({@link OnGlass#cardShowsEdge}) and a Bare widget's ink on it.
+     * Home's ground, never the ground under the rect now: the rect is where the widget is laid
+     * out with the slide left out, so with the Terminal in front it lies on the Terminal's dim,
+     * and a Bare clock dressed there kept a pale ink on Home's bright wallpaper.
      */
     @ColorInt
     public int widgetWallpaper(@NonNull Rect rootRect) {
         readMode();
-        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, dimUnder(rootRect),
+        return OnGlass.backdrop(widgetSample(rootRect).wallpaper, mSurfaces.homeGround(),
             Color.TRANSPARENT);
     }
 
@@ -1129,7 +1202,7 @@ public final class ChromeInk {
         long red = 0, green = 0, blue = 0;
         int count = 0;
         for (PaneAnswer pane : mPanes.values()) {
-            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != paneDim(pane.rect)) continue;
             int flat = plainMean ? pane.meanFlat : pane.flat;
             red += Color.red(flat);
             green += Color.green(flat);
@@ -1150,7 +1223,7 @@ public final class ChromeInk {
         int worst = Color.TRANSPARENT;
         double worstLuma = 0d;
         for (PaneAnswer pane : mPanes.values()) {
-            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(pane.rect)) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != paneDim(pane.rect)) continue;
             if (pane.evenOutPolarity != polarity) continue;
             double luma = com.google.android.material.color.utilities.ColorUtils.lstarFromArgb(pane.flat);
             if (Color.alpha(worst) == 0 || (pale ? luma > worstLuma : luma < worstLuma)) {
@@ -1357,7 +1430,7 @@ public final class ChromeInk {
      * level make it, at the terminal Opacity's strength — null while the switch is off, which
      * turns every band off. By default a band copies it: the terminal palette's ceilings and the
      * terminal's strength (the same instance, so a band and the panes are seen to share it). A band
-     * whose Opacity does not follow Base ({@code inheritsOpacity} false, a band with a slot only)
+     * whose Opacity does not follow Global ({@code inheritsOpacity} false, a band with a slot only)
      * keeps its own: the ceiling solved from its own body-text target at the Contrast level
      * ({@link EvenOut#ceilingForTarget}), its strength from its own Opacity through
      * {@link #evenOutStrengthPercent}. A strength of 0 is off for that band. Pure.
@@ -1447,7 +1520,7 @@ public final class ChromeInk {
             memo = new BandEvenOut();
             mBandEvenOut.put(band, memo);
         }
-        return measureEvenOut(memo, policy, root, glassFor(band), glassFor(band).framed);
+        return measureEvenOut(memo, policy, root, glassFor(band), dimHidden(glassFor(band)));
     }
 
     /**
@@ -1649,7 +1722,7 @@ public final class ChromeInk {
         int n = 0;
         for (PaneAnswer pane : mPanes.values()) {
             Rect rect = pane.rect;
-            if (pane.parked || pane.tint != tint || pane.dim != dimUnder(rect)) continue;
+            if (pane.parked || pane.tint != tint || pane.dim != paneDim(rect)) continue;
             long area = (long) Math.max(0, rect.width()) * Math.max(0, rect.height());
             if (area == 0) continue;
             surfaces[n] = pane.resolution.surface;
@@ -1827,6 +1900,7 @@ public final class ChromeInk {
         // the same), so the matrix is current before the face is: the legends are chosen on the
         // evened ground, as the pane's palette is.
         bandEvenOutMatrix(band, null);
+        mRowGround = mProbing ? mProbeGround : dimUnder(contract.rect);
         int wallpaper = evened(band, mCache.wallpaperUnder(band, contract.rect));
         int under = OnGlass.backdrop(wallpaper, bandDim(band, contract.rect), Color.TRANSPARENT);
         vote(band, OnGlass.composite(OnGlass.withAlpha(baseColor, baseAlpha), under));
@@ -1936,7 +2010,7 @@ public final class ChromeInk {
         int worst = 0;
         double worstRatio = Double.MAX_VALUE;
         for (int i = 0; i < rows.length; i++) {
-            int rowUnder = OnGlass.backdrop(rows[i], groundDim(glass.framed, mDimColor),
+            int rowUnder = OnGlass.backdrop(rows[i], rowDim(glass),
                 Color.TRANSPARENT);
             float stop = DockGlassRendering.worstLightModelStop(ink, rowUnder, baseColor,
                 baseAlpha, mAccentColor, top, mid, foot, rowPosition(glass, i),
@@ -2125,6 +2199,12 @@ public final class ChromeInk {
     @NonNull
     public Polarity polarity() {
         readMode();
+        // A probe answers the polarity its page would land with: the votes as they stand, the
+        // probed bands' own over their page's ground, decided from the polarity there is now.
+        if (mProbing && !mProbeVotes.isEmpty()) {
+            Polarity now = mPolarity;
+            return decide(now, probedMeanVote());
+        }
         if (mVotes.isEmpty()) {
             return mPolarity != null ? mPolarity : Polarity.DARK_INK;
         }
@@ -2248,11 +2328,30 @@ public final class ChromeInk {
                               float opacity, @ColorInt int tintBase) {
         readMode();
         toRootSpace(screenRect, mTmpRootRect);
+        return faceUnderGlassOn(band, opacity, tintBase, bandDim(band, mTmpRootRect));
+    }
+
+    /**
+     * Prototype #283: {@link #faceUnderGlass} over {@code pageGround}, another page's ground, for
+     * a band whose glass shows the page's ground: the face the band will show at that page's rest,
+     * measured from here, so a crossing toward it lands on the face it drifted to.
+     */
+    @ColorInt
+    public int faceUnderGlass(@NonNull GlassBackdropCache.Band band, @NonNull Rect screenRect,
+                              float opacity, @ColorInt int tintBase, @ColorInt int pageGround) {
+        readMode();
+        toRootSpace(screenRect, mTmpRootRect);
+        int dim = dimHidden(glassFor(band)) ? Color.TRANSPARENT : pageGround;
+        return faceUnderGlassOn(band, opacity, tintBase, dim);
+    }
+
+    @ColorInt
+    private int faceUnderGlassOn(@NonNull GlassBackdropCache.Band band, float opacity,
+                                 @ColorInt int tintBase, @ColorInt int dim) {
         int wallpaper = mCache.wallpaperUnder(band, mTmpRootRect);
         if (!mCache.hasSample(band)) return Color.TRANSPARENT;
         float clamped = opacity < 0f ? 0f : (opacity > 1f ? 1f : opacity);
-        return WallpaperInk.faceOf(evened(band, wallpaper), bandDim(band, mTmpRootRect), tintBase,
-            clamped);
+        return WallpaperInk.faceOf(evened(band, wallpaper), dim, tintBase, clamped);
     }
 
     /**
@@ -2353,6 +2452,7 @@ public final class ChromeInk {
         if (contract == null || !contract.seen) return new int[0];
         int veil = resolveBand(band, contract).veil;
         BandGlass glass = glassFor(band);
+        mRowGround = dimUnder(contract.rect);
         int[] rows = evenedRows(band, rowWallpapers(band, contract.rect));
         return facesOn(glass, veil, rows);
     }
@@ -2367,7 +2467,7 @@ public final class ChromeInk {
         int foot = DockGlassRendering.footAlpha(glass.opacity, glass.withFoot);
         int[] faces = new int[rows.length];
         for (int i = 0; i < rows.length; i++) {
-            int under = OnGlass.backdrop(rows[i], groundDim(glass.framed, mDimColor),
+            int under = OnGlass.backdrop(rows[i], rowDim(glass),
                 Color.TRANSPARENT);
             float centre = (rowPosition(glass, i) + rowPosition(glass, i + 1)) / 2f;
             int surface = DockGlassRendering.glassSurfaceAt(centre, under, baseColor, baseAlpha,
@@ -2392,9 +2492,35 @@ public final class ChromeInk {
     public int probeEitherToneUnderGlass(@NonNull GlassBackdropCache.Band band, float opacity,
                                          @ColorInt int tintBase, @NonNull int[] facesOut) {
         readMode();
+        return eitherToneUnderGlass(band, opacity, tintBase, facesOut);
+    }
+
+    /**
+     * {@link #probeEitherToneUnderGlass(GlassBackdropCache.Band, float, int, int[])} over
+     * {@code pageGround}, the page's ground the arriving page's band will stand on (#283: its
+     * glass shows the ground beneath it), so a crossing's legends blend toward what the landing
+     * measures there. Records nothing, as the probe without a ground.
+     */
+    public int probeEitherToneUnderGlass(@NonNull GlassBackdropCache.Band band, float opacity,
+                                         @ColorInt int tintBase, @NonNull int[] facesOut,
+                                         @ColorInt int pageGround) {
+        readMode();
+        mProbing = true;
+        mProbeGround = pageGround;
+        mProbeVotes.clear();
+        try {
+            return eitherToneUnderGlass(band, opacity, tintBase, facesOut);
+        } finally {
+            mProbing = false;
+        }
+    }
+
+    private int eitherToneUnderGlass(@NonNull GlassBackdropCache.Band band, float opacity,
+                                     @ColorInt int tintBase, @NonNull int[] facesOut) {
         Contract c = mContracts.get(band);
         if (c == null || !c.seen || !c.fixedInk || !c.eitherTone || !mCache.hasSample(band)) return 0;
         BandGlass real = glassFor(band);
+        if (!mProbing) mRowGround = dimUnder(c.rect);
         BandGlass g = new BandGlass();
         g.opacity = opacity < 0f ? 0f : (opacity > 1f ? 1f : opacity);
         g.withFoot = real.withFoot;
@@ -2404,6 +2530,7 @@ public final class ChromeInk {
         g.baseColor = tintBase;
         g.blurRadiusDp = real.blurRadiusDp;
         g.framed = real.framed;
+        g.groundDrawn = real.groundDrawn;
         double target = mLevel.target(c.target);
         int baseAlpha = ChromePolicy.dockGlassBaseAlpha(g.opacity);
         int baseColor = baseOf(g);
@@ -2701,6 +2828,24 @@ public final class ChromeInk {
      * or both with a seam between, the rect stands on. {@link ChromeRenderer.Surfaces#groundUnder}
      * answers it; {@link #mDimColor} stays the wall-wide dim for answers that have no rect.
      */
+    /**
+     * The dim a terminal pane's text stands on ({@link #paneStandsOnDim}): none while the panes
+     * are glass slabs, whose frame covers the ground strip (ADR 0031 section 4: the Wallpaper dim
+     * is everything around the panes, their Opacity is their own); the page's ground under the
+     * pane while they have no slab and the strip shows through. One rule at rest and in a
+     * crossing, so a pane's even-out does not jump at the landing.
+     */
+    @ColorInt
+    private int paneDim(@NonNull Rect rootRect) {
+        return paneStandsOnDim(mSurfaces.paneGlassSlabs(), dimUnder(rootRect));
+    }
+
+    /** {@link #paneDim}'s rule: a slab's frame hides the page's ground; without one it shows. */
+    @ColorInt
+    static int paneStandsOnDim(boolean glassSlabs, @ColorInt int pageGround) {
+        return groundDim(glassSlabs, pageGround);
+    }
+
     @ColorInt
     private int dimUnder(@NonNull Rect rootRect) {
         return mSurfaces.groundUnder(rootRect);
@@ -2741,6 +2886,11 @@ public final class ChromeInk {
     }
 
     private void vote(@NonNull GlassBackdropCache.Band band, @ColorInt int flatGlass) {
+        // A probe measures a page that is not in front: its vote is its own, never counted.
+        if (mProbing) {
+            mProbeVotes.put(band, flatGlass);
+            return;
+        }
         // A crossing casts no vote: the polarity it began with is the one the page lands with.
         if (mLegibility != null && mLegibility.crossing()) return;
         if (mFrontHome != null && mFrontHome.getAsBoolean()) {
@@ -2778,6 +2928,7 @@ public final class ChromeInk {
         BandGlass glass = mGlass.get(pane);
         if (glass == null) {
             glass = new BandGlass();
+            glass.groundDrawn = GlassGround.drawsGround(pane);
             mGlass.put(pane, glass);
         }
         return glass;

@@ -91,7 +91,7 @@ public class CrossingControllerTest {
 
     private static final ResolvedArrangement HOME_ARRANGED =
         home(HOME, PageRef.HOME, LayoutVariant.HOME);
-    private static final ResolvedArrangement WORKSPACE_ARRANGED = ResolvedArrangement.of(WINDOW,
+    private static final ResolvedArrangement TERMINAL_ARRANGED = ResolvedArrangement.of(WINDOW,
         LayoutStyle.DOCKED, DockStyle.GLASS_TRAY, false, false, PlaceOrientation.PORTRAIT,
         LayoutVariant.NORMAL, PageRef.TERMINAL);
 
@@ -199,14 +199,14 @@ public class CrossingControllerTest {
 
         ResolvedArrangement committed() {
             return wallCtl.currentPage() == PageKind.HOME ? HOME_ARRANGED
-                : WORKSPACE_ARRANGED;
+                : TERMINAL_ARRANGED;
         }
 
         DockGeometry.Snapshot snapshot() {
             DockGeometry.Half homeHalf = DockGeometry.Half.builder(
                 homeHome ? arrangementOfId(homeIds.get(0)) : HOME_ARRANGED).build();
-            DockGeometry.Half workspace = DockGeometry.Half.builder(WORKSPACE_ARRANGED).build();
-            return DockGeometry.Snapshot.builder(homeHalf, workspace)
+            DockGeometry.Half terminal = DockGeometry.Half.builder(TERMINAL_ARRANGED).build();
+            return DockGeometry.Snapshot.builder(homeHalf, terminal)
                 .density(DENSITY)
                 .widthPx(Math.round(411 * DENSITY))
                 .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(DENSITY))
@@ -254,9 +254,9 @@ public class CrossingControllerTest {
                     if (a[0] instanceof PageRef) {
                         PageRef p = (PageRef) a[0];
                         return p.isHome() && p.id >= 0 ? arrangementOfId(p.id)
-                            : p.isHome() ? HOME_ARRANGED : WORKSPACE_ARRANGED;
+                            : p.isHome() ? HOME_ARRANGED : TERMINAL_ARRANGED;
                     }
-                    return a[0] == PageKind.HOME ? HOME_ARRANGED : WORKSPACE_ARRANGED;
+                    return a[0] == PageKind.HOME ? HOME_ARRANGED : TERMINAL_ARRANGED;
                 case "arrangementRevision": return REVISION;
                 case "arrangedPageOf":
                 case "endpointPageOf": return PageRef.of((PageKind) a[0]);
@@ -274,7 +274,7 @@ public class CrossingControllerTest {
                 case "dockHalf":
                     return DockGeometry.Half.builder(a[0] instanceof PageRef
                         && ((PageRef) a[0]).id >= 0 ? arrangementOfId(((PageRef) a[0]).id)
-                        : ((PageRef) a[0]).isHome() ? HOME_ARRANGED : WORKSPACE_ARRANGED).build();
+                        : ((PageRef) a[0]).isHome() ? HOME_ARRANGED : TERMINAL_ARRANGED).build();
                 case "dockTravelTranslationPx":
                     return Float.isNaN(moves.dockPx) ? 0f : moves.dockPx;
                 case "chromeRestOf": return restOfPlace((PageKind) a[0]);

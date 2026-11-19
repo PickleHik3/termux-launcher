@@ -260,9 +260,9 @@ public class SheetsControllerTest {
 
     @Test
     public void thePaletteIsGivenCornersThatFollowDockedOrFloating() {
-        // No store: the Sheets element's Corners as shipped, on the resting page.
-        int shipped = com.termux.app.chrome.ElementGlass.of(null,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, 0).cornersDp;
+        // No store: Global's Corners as shipped (the sheets hold none of their own).
+        int shipped = com.termux.app.chrome.SheetGlass.of(
+            (com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences) null).cornersDp;
         assertEquals(shipped, mSheets.commandPaletteCornersDp());
         // Where they follow the Style (CommandPaletteShape.openRadiusDp): square Docked, the
         // rounded-surface token Floating.

@@ -19,11 +19,6 @@
         app:persistent="false"
         app:title="@string/settings_terminal_contrast_title" />
     <Preference
-        app:key="theme_templates_enabled"
-        app:persistent="false"
-        app:title="@string/settings_theme_templates_title"
-        app:summary="@string/settings_theme_templates_summary_none" />
-    <Preference
         app:key="use_system_wallpaper"
         app:persistent="false"
         app:title="@string/settings_wallpaper_title"
@@ -54,5 +49,114 @@
         app:persistent="false"
         app:title="@string/settings_full_screen_title"
         app:summary="@string/termux_fullscreen_summary" />
+
+    <!-- From the Home card (SettingsEditorDoors.cardForSearchKey). -->
+    <Preference
+        app:key="app_launcher_home_icon_scale"
+        app:persistent="false"
+        app:title="@string/settings_home_icon_scale_title" />
+    <Preference
+        app:key="app_launcher_home_label_size"
+        app:persistent="false"
+        app:title="@string/settings_home_label_size_title" />
+    <Preference
+        app:key="app_launcher_home_label_two_lines"
+        app:persistent="false"
+        app:title="@string/settings_home_label_two_lines_title" />
+    <Preference
+        app:key="app_launcher_home_label_shadow"
+        app:persistent="false"
+        app:title="@string/settings_home_label_shadow_title" />
+    <Preference
+        app:key="app_launcher_home_folder_density"
+        app:persistent="false"
+        app:title="@string/settings_home_folder_density_title" />
+    <Preference
+        app:key="app_launcher_builtin_widget_style"
+        app:persistent="false"
+        app:title="@string/settings_builtin_widget_style_title" />
+    <Preference
+        app:key="app_launcher_home_page_indicator"
+        app:persistent="false"
+        app:title="@string/settings_home_page_indicator_title" />
+    <Preference
+        app:key="wallpaper_parallax"
+        app:persistent="false"
+        app:title="@string/settings_wallpaper_parallax_title" />
+    <!-- From the Status bar card (SettingsEditorDoors.cardForSearchKey). -->
+    <Preference
+        app:key="top_pane_clock_am_pm"
+        app:persistent="false"
+        app:title="@string/settings_use_12_hour_title" />
+    <Preference
+        app:key="status_widget_cpu"
+        app:persistent="false"
+        app:title="@string/settings_cpu_usage_title" />
+    <Preference
+        app:key="status_widget_ram"
+        app:persistent="false"
+        app:title="@string/settings_memory_usage_title" />
+    <Preference
+        app:key="status_widget_battery"
+        app:persistent="false"
+        app:title="@string/settings_battery_title" />
+    <Preference
+        app:key="status_widget_media"
+        app:persistent="false"
+        app:title="@string/settings_status_media_title" />
+    <Preference
+        app:key="status_widget_weather"
+        app:persistent="false"
+        app:title="@string/settings_weather_title" />
+    <Preference
+        app:key="status_widget_weather_fahrenheit"
+        app:persistent="false"
+        app:title="@string/settings_weather_fahrenheit_title" />
+    <!-- From the Terminal card (SettingsEditorDoors.cardForSearchKey). -->
+    <Preference
+        app:key="terminal_cursor_trail_style"
+        app:persistent="false"
+        app:title="@string/settings_terminal_cursor_trail_style_title" />
+    <Preference
+        app:key="terminal_retro_effect"
+        app:persistent="false"
+        app:title="@string/settings_terminal_retro_effect_title" />
+    <Preference
+        app:key="terminal_screen_events"
+        app:persistent="false"
+        app:title="@string/settings_terminal_screen_events_title" />
+    <Preference
+        app:key="terminal_retro_composite"
+        app:persistent="false"
+        app:title="@string/settings_terminal_retro_composite_title" />
+    <Preference
+        app:key="split_pane_controls"
+        app:persistent="false"
+        app:title="@string/settings_split_pane_controls_title" />
+    <Preference
+        app:key="pane_dwindle_default"
+        app:persistent="false"
+        app:title="@string/settings_pane_dwindle_default_title" />
+    <Preference
+        app:key="pane_focus_grows"
+        app:persistent="false"
+        app:title="@string/settings_pane_focus_grows_title" />
+    <Preference
+        app:key="fonts_size"
+        app:persistent="false"
+        app:title="@string/termux_fonts_size_title" />
+    <!-- From the Keyboard card (SettingsEditorDoors.cardForSearchKey). -->
+    <Preference
+        app:key="in_app_keyboard_floating_width"
+        app:persistent="false"
+        app:title="@string/settings_keyboard_floating_width_title" />
+    <Preference
+        app:key="in_app_keyboard_floating_height"
+        app:persistent="false"
+        app:title="@string/settings_keyboard_floating_height_title" />
+    <Preference
+        app:key="in_app_keyboard_split_gap"
+        app:persistent="false"
+        app:title="@string/settings_keyboard_split_gap_title" />
 
 </PreferenceScreen>

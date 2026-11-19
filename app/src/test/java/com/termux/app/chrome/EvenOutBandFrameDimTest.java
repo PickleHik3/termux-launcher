@@ -60,19 +60,57 @@ public class EvenOutBandFrameDimTest {
     }
 
     @Test
-    public void aFramedDocksFaceStandsOnNoDim() {
-        int dimmed = ink.faceUnder(GlassBackdropCache.Band.DOCK, new Rect(DOCK));
-        assertTrue(ink.noteBandFrame(GlassBackdropCache.Band.DOCK, true));
-        assertFalse(ink.noteBandFrame(GlassBackdropCache.Band.DOCK, true));
-        int framed = ink.faceUnder(GlassBackdropCache.Band.DOCK, new Rect(DOCK));
+    public void aFramedBandThatDrawsNoGroundStandsOnNoDim() {
+        GlassBackdropCache.Band band = GlassBackdropCache.Band.AZ_STRIP;
+        int dimmed = ink.faceUnder(band, new Rect(DOCK));
+        assertTrue(ink.noteBandFrame(band, true));
+        assertFalse(ink.noteBandFrame(band, true));
+        int framed = ink.faceUnder(band, new Rect(DOCK));
         assertNotEquals(dimmed, framed);
         assertTrue(ColorUtils.lstarFromArgb(framed) > ColorUtils.lstarFromArgb(dimmed) + 10d);
 
         // The framed face is the face the same band shows with no page dim at all.
-        ink.noteBandFrame(GlassBackdropCache.Band.DOCK, false);
+        ink.noteBandFrame(band, false);
         surfaces.dim = Color.TRANSPARENT;
         ink.invalidate();
-        assertEquals(framed, ink.faceUnder(GlassBackdropCache.Band.DOCK, new Rect(DOCK)));
+        assertEquals(framed, ink.faceUnder(band, new Rect(DOCK)));
+    }
+
+    /**
+     * Prototype #283: the dock's glass draws the page's ground over its frame, so a framed dock's
+     * face keeps the dim (gate on); with the gate off it stands on none, as the keyboard's does.
+     */
+    @Test
+    public void aFramedDocksFaceFollowsTheGlassGroundGate() {
+        int dimmed = ink.faceUnder(GlassBackdropCache.Band.DOCK, new Rect(DOCK));
+        assertTrue(ink.noteBandFrame(GlassBackdropCache.Band.DOCK, true));
+        int framed = ink.faceUnder(GlassBackdropCache.Band.DOCK, new Rect(DOCK));
+        if (GlassGround.ON) {
+            assertEquals(dimmed, framed);
+        } else {
+            assertTrue(ColorUtils.lstarFromArgb(framed) > ColorUtils.lstarFromArgb(dimmed) + 10d);
+        }
+    }
+
+    /**
+     * Prototype #283: the face a page's dock will show at its rest, measured from another page
+     * over that page's ground, is the face measured at that rest: the crossing lands on it.
+     */
+    @Test
+    public void theArrivingPagesDockFaceIsMeasuredOverItsGround() {
+        if (!GlassGround.ON) return;
+        ink.noteBandFrame(GlassBackdropCache.Band.DOCK, true);
+        int tint = 0xFF202020;
+        surfaces.dim = Color.TRANSPARENT;
+        ink.invalidate();
+        int fromHome = ink.faceUnderGlass(GlassBackdropCache.Band.DOCK, new Rect(DOCK), 0.3f, tint,
+            PAGE_DIM);
+        surfaces.dim = PAGE_DIM;
+        ink.invalidate();
+        int atRest = ink.faceUnderGlass(GlassBackdropCache.Band.DOCK, new Rect(DOCK), 0.3f, tint);
+        assertEquals(atRest, fromHome);
+        assertNotEquals(fromHome, ink.faceUnderGlass(GlassBackdropCache.Band.DOCK, new Rect(DOCK),
+            0.3f, tint, Color.TRANSPARENT));
     }
 
     @Test
@@ -80,5 +118,37 @@ public class EvenOutBandFrameDimTest {
         int before = ink.faceUnder(GlassBackdropCache.Band.KEYBOARD, new Rect(DOCK));
         ink.noteBandFrame(GlassBackdropCache.Band.DOCK, true);
         assertEquals(before, ink.faceUnder(GlassBackdropCache.Band.KEYBOARD, new Rect(DOCK)));
+    }
+
+    /**
+     * ADR 0031 section 4: the Terminal's Wallpaper dim is everything around the panes. A glass
+     * slab's frame covers the ground strip, so its text stands on no dim, at rest and through a
+     * crossing alike; a pane with no slab stands on the page's ground.
+     */
+    @Test
+    public void aGlassPaneStandsOnNoDimAndABarePaneOnTheGround() {
+        assertEquals(Color.TRANSPARENT, ChromeInk.paneStandsOnDim(true, PAGE_DIM));
+        assertEquals(PAGE_DIM, ChromeInk.paneStandsOnDim(false, PAGE_DIM));
+        // The crossing (Home's ground under the pane's rest) and the rest (the Terminal's) give
+        // a glass pane the same dim: no step at the landing.
+        assertEquals(ChromeInk.paneStandsOnDim(true, Color.TRANSPARENT),
+            ChromeInk.paneStandsOnDim(true, PAGE_DIM));
+    }
+
+    /** The pane's answer through the ink, both phases on the one rule. */
+    @Test
+    public void aGlassPanesAnswerIsTheSameOverEitherPagesGround() {
+        surfaces.paneSlabs = true;
+        Rect pane = new Rect(40, 300, 1040, 1300);
+        surfaces.dim = Color.TRANSPARENT;
+        ink.invalidate();
+        OnGlass.Resolution overHome = ink.terminalPane(pane, new Object(), 0x66202020,
+            0xFF202020, 0xFFE0E0E0, 0xFF909090);
+        surfaces.dim = PAGE_DIM;
+        ink.invalidate();
+        OnGlass.Resolution overTerminal = ink.terminalPane(pane, new Object(), 0x66202020,
+            0xFF202020, 0xFFE0E0E0, 0xFF909090);
+        assertEquals(overHome.surface, overTerminal.surface);
+        assertEquals(overHome.veil, overTerminal.veil);
     }
 }

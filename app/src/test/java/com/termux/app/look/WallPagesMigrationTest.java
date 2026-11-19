@@ -57,7 +57,7 @@ public class WallPagesMigrationTest {
     }
 
     @Test
-    public void homeUsersStartingInTheWorkspaceLandOnTheTerminalPage() {
+    public void homeUsersStartingInTheTerminalLandOnTheTerminalPage() {
         WallPages p = WallPagesMigration.seed("workspace", 2, "home", 3);
         assertEquals(PageKind.TERMINAL, p.home().kind);
     }
@@ -162,7 +162,7 @@ public class WallPagesMigrationTest {
     public void theUpgradedDisplayPageGetsTheTerminalLookOnce() {
         com.termux.app.look.MemoryLookStore look = new com.termux.app.look.MemoryLookStore();
         String key = com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
-            .TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY;
+            .TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM;
         look.putInt(key + "@3", 42);
         assertFalse(WallPagesMigration.copyLookToUpgradedDisplay(prefs, look, 3));
         prefs.edit().putInt(WallPagesMigration.KEY_DISPLAY_LOOK_PENDING, 4).commit();

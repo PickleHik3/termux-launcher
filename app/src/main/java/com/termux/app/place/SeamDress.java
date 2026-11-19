@@ -11,7 +11,7 @@ import java.util.Objects;
 
 /**
  * What each surface wears while the wall slides across the seam between its halves (ADR 0008):
- * Home's Style, Corners and Margin and the Home layout's sizes on the Home pages, the Workspace's
+ * Home's Style, Corners and Margin and the Home layout's sizes on the Home pages, the Terminal's
  * on the windows. The chrome used to be dressed for the page it was committed to and dressed again
  * at settle ({@code restyleChromeForHalfIfChanged}), so a half's surfaces arriving on screen wore
  * the other half's shape for the whole slide and snapped into their own as it landed. Here every
@@ -24,8 +24,8 @@ import java.util.Objects;
  *       in look its glass blends with the wall ({@link StackDress#structureEquals}), and where
  *       they dress it apart in structure the slab and the keyboard blend their numbers
  *       ({@link StackScene}).</li>
- *   <li><b>The status bar</b> is the Workspace's alone (Home wears none), so it wears the
- *       Workspace's dress through any slide across the seam, laid out over Home or not.</li>
+ *   <li><b>The status bar</b> is the Terminal's alone (Home wears none), so it wears the
+ *       Terminal's dress through any slide across the seam, laid out over Home or not.</li>
  *   <li><b>The frame</b> (the window's border, its panes and Home's floats, which share their
  *       pane style) stays with the committed half and switches at settle.</li>
  * </ul>
@@ -40,7 +40,7 @@ public final class SeamDress {
     public enum Surface {
         /** The dock's rows, the index, the extra keys and the keyboard. */
         STACK,
-        /** The status bar, the Workspace's alone. */
+        /** The status bar, the Terminal's alone. */
         STATUS,
         /** The window's frame, its panes and Home's floats: the committed half's. */
         FRAME
@@ -179,7 +179,7 @@ public final class SeamDress {
     }
 
     /**
-     * The id a page's look values are read under: the wall (Base) for Home's pages, which hold no
+     * The id a page's look values are read under: the wall (Global) for Home's pages, which hold no
      * look of their own, and the Terminal page's id for any other page.
      */
     public static int lookPageId(@NonNull PageKind page, int terminalPageId) {
@@ -191,7 +191,7 @@ public final class SeamDress {
      * The id a surface's look values are read under (ADR 0015 §6): the page it stands on. Home's
      * pages read the Home page's own ({@code homePageId}, the wall while none is known); a window
      * reads the bound Display page's ({@code displayPageId}, when the surface stands on Display)
-     * or else the Terminal page's. A page holding no overrides reads Base through its id.
+     * or else the Terminal page's. A page holding no overrides reads Global through its id.
      *
      * @param page the kind of page the surface wears ({@link #lookPage})
      */

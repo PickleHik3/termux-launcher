@@ -22,8 +22,8 @@ import org.robolectric.annotation.Config;
 
 /**
  * The global row's writes (layout editor v2, DECISIONS items 13 and 14): Blur, Opacity and Grain
- * land on the base and put every surface, terminal included, back on it; the terminal's own
- * Opacity detaches it again afterwards.
+ * land on Global and put every surface back on it, but for a chrome surface's own values and
+ * the terminal's Background (its Opacity and Blur), which no Global write reaches (#287).
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -41,24 +41,26 @@ public class GlobalGlassTest {
     }
 
     @Test
-    public void globalOpacityReattachesEverySurfaceTerminalIncluded() {
-        preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 81);
+    public void globalOpacityLeavesTheChromesOwnAndNeverReachesTheTerminal() {
+        preferences.setTerminalBackgroundOpacity(81);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, 70);
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
 
         assertEquals(42, GlobalGlass.write(preferences, SurfaceProperty.OPACITY, 42));
 
+        // Own stays (appearance-one-look spec §1): the dock keeps its own; the rest follow.
         for (SurfaceSlot slot : SurfaceSlot.values()) {
-            if (TermuxAppSharedPreferences.hasSurfaceProperty(slot, SurfaceProperty.OPACITY))
-                assertTrue(slot.key, preferences.isSurfaceInheriting(slot, SurfaceProperty.OPACITY));
+            if (slot != SurfaceSlot.CANVAS
+                    && TermuxAppSharedPreferences.hasSurfaceProperty(slot, SurfaceProperty.OPACITY))
+                assertEquals(slot.key, slot != SurfaceSlot.DOCK,
+                    preferences.isSurfaceInheriting(slot, SurfaceProperty.OPACITY));
         }
-        assertEquals(42, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals("the terminal wears the base now", 42,
-            preferences.getTerminalBackgroundOpacity());
+        assertEquals(42, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
+        // The terminal's Background is its own (ADR 0031 §4, #287).
+        assertEquals(81, preferences.getTerminalBackgroundOpacity());
     }
 
     @Test
-    public void globalGrainReattachesEverySurface() {
+    public void globalGrainLeavesTheKeyboardsOwn() {
         preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.GRAIN, 30);
         preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN, 50);
 
@@ -66,10 +68,10 @@ public class GlobalGlassTest {
 
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             if (TermuxAppSharedPreferences.hasSurfaceProperty(slot, SurfaceProperty.GRAIN))
-                assertTrue(slot.key, preferences.isSurfaceInheriting(slot, SurfaceProperty.GRAIN));
+                assertEquals(slot.key, slot != SurfaceSlot.KEYBOARD,
+                    preferences.isSurfaceInheriting(slot, SurfaceProperty.GRAIN));
         }
-        assertEquals(9, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
-        assertEquals(9, preferences.getInAppKeyboardGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(9, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
     }
 
     @Test
@@ -77,17 +79,17 @@ public class GlobalGlassTest {
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR, 3);
         assertEquals(AppearanceLooks.BLUR_MAX_DP,
             GlobalGlass.write(preferences, SurfaceProperty.BLUR, 99));
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
+        assertFalse("the status bar keeps its own",
+            preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
     }
 
     @Test
-    public void theTerminalsOwnOpacityDetachesItAgainAfterwards() {
+    public void theTerminalsOwnOpacityLeavesGlobalAsItIs() {
         GlobalGlass.write(preferences, SurfaceProperty.OPACITY, 40);
-        preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 75);
         preferences.setTerminalBackgroundOpacity(75);
         assertEquals(75, preferences.getTerminalBackgroundOpacity());
-        assertEquals("the others keep the base", 40,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertEquals("the others keep Global", 40,
+            preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -106,7 +108,7 @@ public class GlobalGlassTest {
 
         for (SurfaceSlot slot : SurfaceSlot.values())
             assertTrue(slot.key, preferences.isSurfaceInheriting(slot, SurfaceProperty.TINT));
-        assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(40, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
         assertEquals(40, preferences.getTerminalTintStrength());
         assertEquals(40, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
@@ -120,7 +122,7 @@ public class GlobalGlassTest {
                 .GLASS_TINT_HUE_TERTIARY);
         assertEquals(GlobalGlass.TINT_ON_HUE_PICK, tint);
         assertEquals(40, GlobalGlass.TINT_ON_HUE_PICK);
-        assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(40, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
         assertEquals("every surface wears it, as the Tint slider writes it", 40,
             preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals("tertiary", preferences.getSurfaceGlassTintHue());
@@ -131,10 +133,10 @@ public class GlobalGlassTest {
     public void aHuePickAboveTintZeroLeavesTheTint() {
         GlobalGlass.write(preferences, SurfaceProperty.TINT, 15);
         assertEquals(15, GlobalGlass.writeTintHue(preferences, "secondary"));
-        assertEquals(15, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(15, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
         assertEquals("secondary", preferences.getSurfaceGlassTintHue());
         GlobalGlass.write(preferences, SurfaceProperty.TINT, 100);
         assertEquals(100, GlobalGlass.writeTintHue(preferences, "primary"));
-        assertEquals(100, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(100, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
     }
 }

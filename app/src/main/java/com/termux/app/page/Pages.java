@@ -22,7 +22,7 @@ import java.util.function.BooleanSupplier;
  */
 public final class Pages {
 
-    /** The pages of a cell that holds several, one in front at a time: the Workspace's windows. */
+    /** The pages of a cell that holds several, one in front at a time: the Terminal's windows. */
     public interface Stops {
         /** The page in front inside the cell, or null when it holds none. */
         @Nullable Page current();

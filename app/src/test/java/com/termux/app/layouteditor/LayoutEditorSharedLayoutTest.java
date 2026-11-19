@@ -30,7 +30,7 @@ import org.robolectric.annotation.ConscryptMode;
 
 /**
  * The Layout editor opened on a Home page while Home wears the one shared layout (ADR 0009, the
- * Home layout off): it edits the Workspace's layout, normal or minimal, so a move there lands on
+ * Home layout off): it edits the Terminal's layout, normal or minimal, so a move there lands on
  * every window too, while offering only what Home wears. Home's keyboard chip is still always on,
  * and the design picked there is the shared layout's.
  */
@@ -81,7 +81,7 @@ public class LayoutEditorSharedLayoutTest {
             plan.restore(LayoutEditorPlan.TrayItem.KEYBOARD));
         assertTrue(places.isHomeKeyboardAlwaysOn());
         assertTrue(plan.shownLayout().keyboardShown);
-        assertFalse("the Workspace keyboard switch is untouched", launcher.isKeyboardTurnedOff());
+        assertFalse("the Terminal keyboard switch is untouched", launcher.isKeyboardTurnedOff());
         assertTrue(plan.isDirty());
 
         plan.revert();

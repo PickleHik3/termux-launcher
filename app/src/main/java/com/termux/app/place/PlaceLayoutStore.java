@@ -48,7 +48,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * #forVariant} pins it to one. The minimal layout is seeded from the normal one the first time it
  * is used ({@link MinimalMode#apply}), and is the user's from then on.
  *
- * <p>One layout dresses both halves of the wall (ADR 0009): a Home page wears the Workspace's
+ * <p>One layout dresses both halves of the wall (ADR 0009): a Home page wears the Terminal's
  * layout, normal or minimal, less what Home leaves out ({@link #resolve(PlaceOrientation,
  * PageKind)}), unless Home holds a <b>Home layout</b> of its own ({@link #hasHomeLayout},
  * {@code place.home_layout}). That is a third arrangement ({@link LayoutVariant#HOME}), under
@@ -76,13 +76,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * launcher-wide flag. Version 8 drops the alphabets index's minimised flag: the pull tab is gone,
  * and an index that was minimised reads as shown. Version 9 moves Home onto the shared layout,
  * keeping a Home that differed as a Home layout ({@link #migrateToOneLayout}). Version 10 gives a
- * kept Home layout the Workspace's status bar, which Home now wears ({@link
+ * kept Home layout the Terminal's status bar, which Home now wears ({@link
  * #migrateHomeLayoutToTheBar}). Version 11 turns the Prompt line design into the Tray with the
  * Search field on ({@link #migratePromptLineToTheSearchField}). Version 12 turns the Taskbar
  * design into the Tray with the Drawer tile on where it stood ({@link
  * #migrateTaskbarToTheDrawerTile}). Version 13 drops the Home layout's own sizes and shape, which
- * it now reads linked from the Workspace's ({@link #migrateToLinkedKeys}). Version 14 gives every
- * install a Home layout: the switch is gone, and Home and the Workspace each keep their own
+ * it now reads linked from the Terminal's ({@link #migrateToLinkedKeys}). Version 14 gives every
+ * install a Home layout: the switch is gone, and Home and the Terminal each keep their own
  * arrangement ({@link #migrateToHomeLayoutAlways}).
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
@@ -192,7 +192,7 @@ public final class PlaceLayoutStore {
 
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
     /**
-     * The Home layout's keyboard element, one value for both orientations like the Workspace's:
+     * The Home layout's keyboard element, one value for both orientations like the Terminal's:
      * {@code layout.home.keyboard_shown}. Shown is always on; absent is put away, which is what the
      * Home layout is seeded with.
      */
@@ -531,7 +531,7 @@ public final class PlaceLayoutStore {
 
     /**
      * The variant a page's chrome is arranged by, and the one the Layout editor opened on it
-     * edits: the layout the page's dress wears ({@link DressResolver#layoutOf}), the Workspace's
+     * edits: the layout the page's dress wears ({@link DressResolver#layoutOf}), the Terminal's
      * (normal or minimal) on a window, the normal one or Home's own on a Home page while it holds a Home layout.
      */
     @NonNull
@@ -577,7 +577,7 @@ public final class PlaceLayoutStore {
 
     /**
      * Turns the Home layout on or off. Turned on, Home's copy starts as what Home wore on the
-     * shared layout (the Workspace's normal layout, its Dock design and toggles), so nothing on
+     * shared layout (the Terminal's normal layout, its Dock design and toggles), so nothing on
      * screen moves until the user edits it; the linked sizes and Style, Corners and Margin are
      * the shared layout's either way and are not copied, and the widget grid and always on are
      * Home's either way and are left alone. Turned off, Home wears the shared layout again and its
@@ -710,11 +710,11 @@ public final class PlaceLayoutStore {
 
     /**
      * Copies {@code from}'s arrangement over {@code to}'s: the Match rows' layout half (Match
-     * Workspace Styling on the Home card, Match Home Styling on the Workspace card). Where every
+     * Terminal Styling on the Home card, Match Home Styling on the Terminal card). Where every
      * bar stands in either orientation, which are put away and their order, the keyboard's form,
      * and the Dock design with its Search field and Drawer tile. Not copied: the widget grid
      * (Home's alone), the linked sizes when Home is either side (one value already, {@link
-     * #LINKED_KEYS}), and when Home is either side the extra keys, which only the Workspace wears
+     * #LINKED_KEYS}), and when Home is either side the extra keys, which only the Terminal wears
      * ({@link DressResolver#wornOn}). A key {@code from} does not hold is removed from {@code to},
      * so the copy reads exactly as the source did. {@link #arrangementKeys} names every key this
      * writes, for an undo snapshot taken before it.
@@ -806,11 +806,11 @@ public final class PlaceLayoutStore {
         // A layout that reads its sizes from the normal one would hold a dead copy of them.
         if (isLinkedKey(key) && (from.linksSizes() || to.linksSizes())) return false;
         boolean home = from.isHomeKind() || to.isHomeKind();
-        return !home || !isWorkspaceOnlyKey(key);
+        return !home || !isTerminalOnlyKey(key);
     }
 
-    /** The extra keys' placement keys: the one element only the Workspace wears. */
-    private static boolean isWorkspaceOnlyKey(@NonNull String key) {
+    /** The extra keys' placement keys: the one element only the Terminal wears. */
+    private static boolean isTerminalOnlyKey(@NonNull String key) {
         return KEY_EXTRA_KEYS.equals(key) || orderKeyName(Element.EXTRA_KEYS).equals(key)
             || underKeyboardKeyName(Element.EXTRA_KEYS).equals(key)
             || restoreEdgeKeyName(Element.EXTRA_KEYS).equals(key);
@@ -884,14 +884,14 @@ public final class PlaceLayoutStore {
     /**
      * One half's Style, Corners and Margin as the preferences hold them now ({@link
      * WallShape#read}): what the Dress resolver shapes a page by. Linked like the sizes, so
-     * Home's half answers the Workspace's and a Home layout brings no shape of its own (#84).
+     * Home's half answers the Terminal's and a Home layout brings no shape of its own (#84).
      */
     @NonNull
     public WallShape shape() {
         return shape(false);
     }
 
-    /** {@link #shape()} for Home pages ({@code home}) or the Workspace's: Margin is per kind. */
+    /** {@link #shape()} for Home pages ({@code home}) or the Terminal's: Margin is per kind. */
     @NonNull
     public WallShape shape(boolean home) {
         return WallShape.read(mPreferences, home);
@@ -927,7 +927,7 @@ public final class PlaceLayoutStore {
 
     /**
      * What a kind shows with nothing stored: Home pages the status bar and the dock (the apps row
-     * and the A-Z index); the Workspace's pages (Terminal, Display and Assistant, ADR 0025) the
+     * and the A-Z index); the Terminal's pages (Terminal, Display and Assistant, ADR 0025) the
      * status bar and the extra keys.
      */
     public static boolean kindShowsByDefault(@NonNull PageKind kind, @NonNull Element element) {
@@ -1972,7 +1972,7 @@ public final class PlaceLayoutStore {
 
     /**
      * Where the widget grid's columns and rows are kept: the Home layout's keys, whichever variant
-     * asks. The grid is Home's content and nothing else draws one, so a Workspace variant changing
+     * asks. The grid is Home's content and nothing else draws one, so a Terminal variant changing
      * underneath (minimal mode) never re-cuts it.
      */
     @NonNull
@@ -2216,10 +2216,7 @@ public final class PlaceLayoutStore {
         LayoutsMigration fold = new LayoutsMigration(mStore.getAll(), wall,
             context.getResources().getConfiguration().smallestScreenWidthDp);
         com.termux.app.place.layout.LayoutStore.shared(context).replaceAll(fold.layouts());
-        SharedPreferences.Editor editor = mStore.edit();
-        for (Map.Entry<String, Object> cell : fold.lookCells().entrySet())
-            put(editor, cell.getKey(), cell.getValue());
-        editor.putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
+        mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
     }
 
@@ -2300,12 +2297,12 @@ public final class PlaceLayoutStore {
      * orientation, where the dock's rows stand, whether each is put away, their order and which
      * stand under the keyboard: {@link #arrangementsDiffer}; and, only while Home's keyboard is
      * always on, the keyboard's form: {@link #keyboardFormsDiffer}) is compared with the
-     * Workspace's normal one. Where anything differs the Home layout is turned on and Home keeps
+     * Terminal's normal one. Where anything differs the Home layout is turned on and Home keeps
      * its arrangement, so its rows stand where they stood. Where nothing does, Home wears the
      * shared layout and its own arrangement keys go; the widget grid and always on are Home's
      * either way and stay. The linked sizes (the dock's and the Strip row's heights, the
      * keyboard's height and chin) and Style, Corners and Margin are no difference (#84): Home
-     * reads them from the Workspace's whatever it stored, and version 13 drops its copies. The
+     * reads them from the Terminal's whatever it stored, and version 13 drops its copies. The
      * Dock design is no difference either: Home's pick becomes the design of the shared layout,
      * normal and minimal, and of the Home layout, with the Taskbar's tile position beside it,
      * under every layout's own keys; Home's old keys for them go.
@@ -2346,7 +2343,7 @@ public final class PlaceLayoutStore {
     /**
      * Version 13: the linked keys (#84). The Home layout holds no sizes and no shape of its own
      * any more: its stored dock and Strip row heights and keyboard height and chin go, in both
-     * orientations, and so do Home's own Style, Corners and Margin, so Home wears the Workspace's
+     * orientations, and so do Home's own Style, Corners and Margin, so Home wears the Terminal's
      * values for all of them. The Home layout switch is left as it is, since it may be the user's
      * choice; whatever else Home's own layout holds (its rows, their order and edge, its design
      * and toggles, its keyboard form) stays. A step of its own rather than a change to version 9,
@@ -2365,8 +2362,8 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * Version 14: Home and the Workspace each keep their own layout (editor-redesign §1, §9). A
-     * Home that wore the shared layout gets a copy of the Workspace's normal one, the layout it
+     * Version 14: Home and the Terminal each keep their own layout (editor-redesign §1, §9). A
+     * Home that wore the shared layout gets a copy of the Terminal's normal one, the layout it
      * was wearing, so nothing on screen moves: where every bar stands, which are put away (the
      * hidden stack) and their order, the Dock design and its toggles ({@link #setHomeLayout}).
      * The keyboard's height and chin (Bottom padding) and the other linked sizes need no copy:
@@ -2463,7 +2460,7 @@ public final class PlaceLayoutStore {
 
     /**
      * Version 10: Home wears the status bar (#90). A Home layout held the bar only as its seed
-     * put it away, never as the user placed it, so it takes the Workspace's normal bar instead:
+     * put it away, never as the user placed it, so it takes the Terminal's normal bar instead:
      * where the bar stands, whether it is put away, its place in the stack and the edge it comes
      * back to, in either orientation. A Home layout that holds nothing yet is seeded on first use
      * as before, now with the bar.

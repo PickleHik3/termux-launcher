@@ -36,9 +36,9 @@ public class ExtraKeyEligibilityTest {
     }
 
     /**
-     * A crossing from Home to the Workspace that stands the Workspace's rows draws them for the
-     * Workspace from that frame: every key is as live, and every place switch as far in front, as
-     * at the settle on the Workspace, so the toolbar rises in the look it lands in. At rest, and
+     * A crossing from Home to the Terminal that stands the Terminal's rows draws them for the
+     * Terminal from that frame: every key is as live, and every place switch as far in front, as
+     * at the settle on the Terminal, so the toolbar rises in the look it lands in. At rest, and
      * before the stack stands the other half's rows, it is the resting place's.
      */
     @Test

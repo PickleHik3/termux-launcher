@@ -69,7 +69,7 @@ public class AppDrawerKeyboardSeparationTest {
 
     // ------------------------------------------------------------------ the plane's bottom
 
-    @Test public void dockedPlaneEndsOnePaneGapAboveTheKeyboardWithPaneCorners() {
+    @Test public void dockedPlaneRunsSquareDownToTheKeyboardSheet() {
         docked();
         host.paneGapPx = 26f;
         host.paneCornerRadiusPx = 55f;
@@ -78,10 +78,11 @@ public class AppDrawerKeyboardSeparationTest {
         applyFrame(1f);
 
         Frame frame = plane.getFrame();
-        assertEquals(KEYBOARD_TOP - 26f, frame.bottom, 1e-3f);
-        assertEquals(55f, (float) ReflectionHelpers.getField(controller, "mCurrentRadiusPx"), 1e-3f);
-        // Still off the bezel at the top, by the larger radius, so no top corner shows.
-        assertEquals(-55f, frame.top, 1e-3f);
+        // The keyboard wears the drawer's sheet glass (KeyboardSheetLook): no gap, no corner.
+        assertEquals(KEYBOARD_TOP, frame.bottom, 1e-3f);
+        assertEquals(0f, (float) ReflectionHelpers.getField(controller, "mCurrentRadiusPx"), 1e-3f);
+        // Still off the bezel at the top, so no top corner shows.
+        assertTrue(frame.top <= 0f);
     }
 
     @Test public void floatingPanelEndsOnePaneGapAboveTheKeyboardCardWithItsOwnCorners() {
@@ -421,5 +422,15 @@ public class AppDrawerKeyboardSeparationTest {
     private void applyFrame(float p) {
         ReflectionHelpers.callInstanceMethod(controller, "applyFrame",
             ReflectionHelpers.ClassParameter.from(float.class, p));
+    }
+
+    @Test
+    public void dockedInAppKeyboardMeetsThePlaneWithNoGapAndNoCorner() {
+        assertEquals(0f, AppDrawerKeyboardSeparation.planeGapPx(false, false, 12f), 0f);
+        assertEquals(12f, AppDrawerKeyboardSeparation.planeGapPx(true, false, 12f), 0f);
+        assertEquals(12f, AppDrawerKeyboardSeparation.planeGapPx(false, true, 12f), 0f);
+        assertEquals(40f, AppDrawerKeyboardSeparation.dockedSheetRadiusPx(false, 40f, 0f), 0f);
+        assertEquals(0f, AppDrawerKeyboardSeparation.dockedSheetRadiusPx(false, 40f, 1f), 0f);
+        assertEquals(40f, AppDrawerKeyboardSeparation.dockedSheetRadiusPx(true, 40f, 1f), 0f);
     }
 }

@@ -149,8 +149,8 @@ public class PeekGlassGeometryTest {
 
     @Test
     public void aHostSlidDownPastTheScreenFadesTheReflectionOverWhatShows() {
-        // Pong, the tail of a Workspace -> Home2 crossing (PEEKBAND-DBG): the host still laid out
-        // 967 px tall with the Workspace's keyboard room, its bottom on the screen's edge as laid
+        // Pong, the tail of a Terminal -> Home2 crossing (PEEKBAND-DBG): the host still laid out
+        // 967 px tall with the Terminal's keyboard room, its bottom on the screen's edge as laid
         // out, the stack slid 654 px down so the row stands where it rests. At rest the host is
         // 313 px tall, flush with the screen's edge.
         int screenH = 2412;

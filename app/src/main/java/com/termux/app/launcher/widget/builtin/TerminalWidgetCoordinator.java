@@ -177,7 +177,7 @@ public final class TerminalWidgetCoordinator {
 
     /**
      * Whether {@code shell} is a Terminal widget's: shown by one, or named by one's record while
-     * that widget is off screen. Such a shell is never adopted as a window of the Workspace.
+     * that widget is off screen. Such a shell is never adopted as a window of the Terminal.
      */
     public boolean isWidgetShell(@Nullable TerminalSession shell) {
         if (shell == null) return false;

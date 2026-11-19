@@ -53,28 +53,28 @@ public class UseAsTest {
         assertSame(PageKind.TERMINAL, terminal.homePage());
     }
 
-    @Test public void terminalOnlyRowIsTheWorkspaceAloneWindowOrNot() {
+    @Test public void terminalOnlyRowIsTheTerminalAloneWindowOrNot() {
         assertEquals(Collections.singletonList(PageKind.TERMINAL), UseAs.TERMINAL.rowPages());
         assertEquals(PaneWallPolicy.rowPages(true), UseAs.HOME.rowPages());
     }
 
-    @Test public void terminalOnlyReadsStartInHomeAsTheWorkspace() {
-        assertEquals(WallRow.START_IN_WORKSPACE, UseAs.TERMINAL.startIn(WallRow.START_IN_HOME));
-        assertEquals(WallRow.START_IN_WORKSPACE, UseAs.TERMINAL.startIn(null));
-        assertEquals(WallRow.START_IN_WORKSPACE, UseAs.TERMINAL.startIn(WallRow.START_IN_WORKSPACE));
+    @Test public void terminalOnlyReadsStartInHomeAsTheTerminal() {
+        assertEquals(WallRow.START_IN_TERMINAL, UseAs.TERMINAL.startIn(WallRow.START_IN_HOME));
+        assertEquals(WallRow.START_IN_TERMINAL, UseAs.TERMINAL.startIn(null));
+        assertEquals(WallRow.START_IN_TERMINAL, UseAs.TERMINAL.startIn(WallRow.START_IN_TERMINAL));
         assertEquals(WallRow.START_IN_DISPLAY, UseAs.TERMINAL.startIn(WallRow.START_IN_DISPLAY));
         assertEquals(WallRow.START_IN_HOME, UseAs.HOME.startIn(WallRow.START_IN_HOME));
         assertEquals(WallRow.START_IN_HOME, UseAs.HOME.startIn("nonsense"));
     }
 
     @Test public void startInDropsHomeOnlyUnderTerminalOnly() {
-        List<String> values = Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_WORKSPACE,
+        List<String> values = Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_TERMINAL,
             WallRow.START_IN_DISPLAY);
         assertEquals(Arrays.asList(0, 1, 2), UseAs.HOME.startInChoices(values));
         assertEquals("Terminal · Display", Arrays.asList(1, 2),
             UseAs.TERMINAL.startInChoices(values));
         assertEquals(Collections.singletonList(1), UseAs.TERMINAL.startInChoices(
-            Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_WORKSPACE)));
+            Arrays.asList(WallRow.START_IN_HOME, WallRow.START_IN_TERMINAL)));
     }
 
     @Test public void terminalOnlyHasNoHomeCard() {
@@ -89,20 +89,21 @@ public class UseAsTest {
     @Test public void terminalOnlyHomeDoorsOpenTheEditorAtRest() {
         UseAs terminal = UseAs.TERMINAL;
         assertNull(UseAsCards.doorCard(terminal, EditorCard.HOME));
-        assertSame(EditorCard.WORKSPACE, UseAsCards.doorCard(terminal, EditorCard.WORKSPACE));
+        assertSame(EditorCard.TERMINAL, UseAsCards.doorCard(terminal, EditorCard.TERMINAL));
         assertSame(EditorCard.APPEARANCE, UseAsCards.doorCard(terminal, EditorCard.APPEARANCE));
         assertNull("never stands the editor on a Home page", terminal.editorPlace(PageKind.HOME));
         assertSame(PageKind.TERMINAL, terminal.editorPlace(PageKind.TERMINAL));
         assertEquals("settings-home hidden by terminal -> REST", terminal.doorLine("settings-home"));
     }
 
-    @Test public void theWorkspaceCardIsTheSameUnderTerminalOnly() {
-        // The Match row it lost under Terminal only retired with the halves (ADR 0015 §6).
-        List<EditorRows.Spec> home = EditorRows.rows(EditorCard.WORKSPACE,
+    @Test public void theTerminalCardGainsOnlyPagesUnderTerminalOnly() {
+        // Edit pages' usual door is Home's card: under Terminal only it stands on the Terminal's.
+        List<EditorRows.Spec> home = EditorRows.rows(EditorCard.TERMINAL,
             new EditorRows.Offers(true, true, true));
-        List<EditorRows.Spec> terminal = EditorRows.rows(EditorCard.WORKSPACE,
+        List<EditorRows.Spec> terminal = EditorRows.rows(EditorCard.TERMINAL,
             new EditorRows.Offers(true, true, false));
-        assertEquals(home.size(), terminal.size());
+        assertEquals(home.size() + 2, terminal.size());
+        assertEquals(EditorRows.Row.LINK_PAGES, terminal.get(terminal.size() - 1).row);
     }
 
     @Test public void choosingTerminalOnlyOnHomeMovesTheWall() {

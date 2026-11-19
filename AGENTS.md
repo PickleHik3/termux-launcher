@@ -181,7 +181,10 @@ Raise these if you think they are wrong; do not silently undo them.
   holding only `log_level` is a fresh install). The one sanctioned way to drop carried-over
   appearance is the reset number, `AppearanceReset.NUMBER`: a build that raises it puts everything
   the Appearance editor owns back to a new install's once, on the first start. Raised to 1 for the
-  2.0 pre-release; raised again only on the developer's say (releasing.md).
+  2.0 pre-release, which also carries the one-look model (ADR 0031): that reset deletes every
+  per-kind and per-page look key, the sheets' and widgets' looks, surfaces' own values beyond
+  Opacity and Blur and the per-page wallpaper dim, converting none. Raised again only on the
+  developer's say (releasing.md).
 - `SettingsLayoutUtils.applyItemLayout` overwrites every preference's layout; a preference with
   its own layout goes on the exemption list.
 - Pane inner padding favours rows; change the rule only in `PaneShape` (`verticalInsetPx`,

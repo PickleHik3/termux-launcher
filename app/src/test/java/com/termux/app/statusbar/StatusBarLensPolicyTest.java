@@ -193,7 +193,7 @@ public class StatusBarLensPolicyTest {
 
     /**
      * With the bar on both halves every place mark goes (decided 2026-10-21, #90): not the house,
-     * not the Workspace's prompt beside the clock, not the Display's. The bar is the clock, the
+     * not the Terminal's prompt beside the clock, not the Display's. The bar is the clock, the
      * readings and the window chips, wherever the wall is and however the bar stands.
      */
     @Test public void noPlaceMarksAtAll() {

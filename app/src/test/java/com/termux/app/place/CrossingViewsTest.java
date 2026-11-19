@@ -6,7 +6,7 @@ import static com.termux.app.place.CrossingTest.REVISION;
 import static com.termux.app.place.CrossingTest.ROW;
 import static com.termux.app.place.CrossingTest.STEP;
 import static com.termux.app.place.CrossingTest.WIDTH;
-import static com.termux.app.place.CrossingTest.WORKSPACE_REST;
+import static com.termux.app.place.CrossingTest.TERMINAL_REST;
 import static com.termux.app.place.CrossingTest.across;
 import static com.termux.app.place.CrossingTest.half;
 import static org.junit.Assert.assertEquals;
@@ -180,7 +180,7 @@ public class CrossingViewsTest {
             if (other != null && other != crossing.seam().other()) {
                 boolean fromHome = committed == PageKind.HOME;
                 crossing.begin(here, there, SeamCrossing.Stage.of(false, () -> false, true),
-                    fromHome ? HOME_REST : WORKSPACE_REST, fromHome ? WORKSPACE_REST : HOME_REST,
+                    fromHome ? HOME_REST : TERMINAL_REST, fromHome ? TERMINAL_REST : HOME_REST,
                     REVISION);
             }
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);

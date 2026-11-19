@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 /**
  * What the host has to hear after a touch focuses a pane: nothing, the pane alone, or the whole
  * change. A finger landing on the pane that already has focus (every swipe that starts on the
- * Workspace) changes nothing the window bar shows, so the host is told nothing; a tap on another
+ * Terminal) changes nothing the window bar shows, so the host is told nothing; a tap on another
  * pane of the same window moves only the bar's window chips; a change of window, or Home's float
  * giving the keyboard back, is the full refresh it always was.
  *

@@ -7,22 +7,22 @@ import com.termux.app.page.PageKind;
 
 /**
  * Where each page of the wall starts at the top, so a slide across the seam between Home and
- * the Workspace never moves a page's content when it settles.
+ * the Terminal never moves a page's content when it settles.
  *
- * <p>The wall's pages share one canvas. The Workspace's status bar takes a band at the top that
+ * <p>The wall's pages share one canvas. The Terminal's status bar takes a band at the top that
  * Home may not have (a Home layout can put the bar away or stand it elsewhere), so a canvas that
- * stood below the bar on the Workspace and reached the top on Home moved every page by the band
+ * stood below the bar on the Terminal and reached the top on Home moved every page by the band
  * at settle: the terminal down as the bar took its band, Home up as it gave it back.
  *
  * <p>Instead, while a Home page can be on screen — the wall resting on Home, or moving at all —
  * the canvas reaches up under the bar ({@link #canvasReachPx}) and each page keeps its own top:
- * a Workspace page (the terminal's or the display window's) one bar band below it, and a Home
+ * a Terminal page (the terminal's or the display window's) one bar band below it, and a Home
  * page one band of its own bar below it (the wall's {@code PageTopInset.pageTopInsetPx}): the same band as a window's
- * where Home wears the bar as the Workspace does (#90), so the two line up across the seam, and
- * the canvas's top itself where Home's layout stands no bar along the top. Resting on the Workspace, the
+ * where Home wears the bar as the Terminal does (#90), so the two line up across the seam, and
+ * the canvas's top itself where Home's layout stands no bar along the top. Resting on the Terminal, the
  * canvas stands below the bar as it always has and no page is inset, so everything that reads
  * the canvas at rest there reads what it always did. Switching between the two moves no page on
- * screen: the canvas grows up by exactly the inset its Workspace pages take, so the terminal
+ * screen: the canvas grows up by exactly the inset its Terminal pages take, so the terminal
  * keeps its rect, its size and its grid.
  *
  * <p>Pure, so the arithmetic is read and tested on its own.
@@ -33,8 +33,8 @@ public final class PageTopInsets {
 
     /**
      * Whether the canvas reaches up under the status bar: while the chrome is committed to a
-     * Home page, and whenever the wall is off its rest, so a slide from the Workspace toward Home
-     * has Home's page at its own top from its first frame. Only a wall resting on a Workspace page
+     * Home page, and whenever the wall is off its rest, so a slide from the Terminal toward Home
+     * has Home's page at its own top from its first frame. Only a wall resting on a Terminal page
      * keeps the canvas below the bar.
      */
     public static boolean canvasReachesUnderBar(@NonNull PageKind committed,
@@ -46,7 +46,7 @@ public final class PageTopInsets {
      * Whether the wall is at rest for {@link #canvasReachesUnderBar}: still, at offset 0, and on
      * the page the chrome is committed to. The wall's last offset callback of a landing comes
      * before the page is committed, so a wall standing still on Home while the chrome is still
-     * committed to the Workspace is not at rest there: reading it so dropped Home's top inset to
+     * committed to the Terminal is not at rest there: reading it so dropped Home's top inset to
      * 0 for one layout pass as Home landed.
      *
      * @param wallPage the kind of the page whose cell the wall is on
@@ -72,21 +72,21 @@ public final class PageTopInsets {
     }
 
     /**
-     * How far below the canvas's top a Workspace page starts: the bar's band, wherever the canvas
+     * How far below the canvas's top a Terminal page starts: the bar's band, wherever the canvas
      * reaches up under it. The band is the one the bar on screen stands in when the layout on
-     * screen has it on the top edge (the Workspace's own, or the bar a slide from Home has brought
-     * over Home), and otherwise the band the Workspace's layout will give it, so the terminal
-     * waiting beside Home has the size it has on the Workspace. 0 while the canvas stands below
-     * the bar, and for a Workspace whose bar is not along the top or is put away.
+     * screen has it on the top edge (the Terminal's own, or the bar a slide from Home has brought
+     * over Home), and otherwise the band the Terminal's layout will give it, so the terminal
+     * waiting beside Home has the size it has on the Terminal. 0 while the canvas stands below
+     * the bar, and for a Terminal whose bar is not along the top or is put away.
      */
-    public static int workspaceTopInsetPx(boolean reaches, boolean barShown,
+    public static int terminalTopInsetPx(boolean reaches, boolean barShown,
                                           @NonNull PlaceLayout onScreen,
-                                          @NonNull PlaceLayout workspace,
+                                          @NonNull PlaceLayout terminal,
                                           @NonNull EdgeStackPolicy.Metrics metrics) {
         if (!reaches || !barShown) return 0;
         int standing = EdgeStackPolicy.topOverlapPx(onScreen, metrics, true);
         if (standing > 0) return standing;
-        return EdgeStackPolicy.topOverlapPx(workspace, metrics, true);
+        return EdgeStackPolicy.topOverlapPx(terminal, metrics, true);
     }
 
     /**
@@ -106,7 +106,7 @@ public final class PageTopInsets {
     /**
      * Where the flat body surface behind the terminal starts below the canvas's top: where the
      * canvas started before it reached under the bar, so the body never shows under the bar on
-     * the Workspace — the canvas's reach while the chrome is committed to a window, 0 on Home.
+     * the Terminal — the canvas's reach while the chrome is committed to a window, 0 on Home.
      */
     public static int bodySurfaceTopPx(@NonNull PageKind committed, int canvasReachPx) {
         return committed == PageKind.HOME ? 0 : Math.max(0, canvasReachPx);

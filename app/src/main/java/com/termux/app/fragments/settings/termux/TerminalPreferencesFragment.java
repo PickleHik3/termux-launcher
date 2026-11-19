@@ -58,12 +58,16 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
-        androidx.preference.Preference layout = findPreference("terminal_layout_editor");
-        if (layout != null) layout.setOnPreferenceClickListener(row -> {
-            SettingsEditorDoors.openEditor(this, row,
-                com.termux.app.surfaces.EditorDoor.SETTINGS_TERMINAL);
-            return true;
-        });
+        // Each of these pages keeps one Appearance row, on the Terminal card.
+        for (String doorKey : new String[] {"terminal_layout_editor", "terminal_text_layout_editor",
+            "terminal_windows_layout_editor"}) {
+            androidx.preference.Preference layout = findPreference(doorKey);
+            if (layout != null) layout.setOnPreferenceClickListener(row -> {
+                SettingsEditorDoors.openEditor(this, row,
+                    com.termux.app.surfaces.EditorDoor.SETTINGS_TERMINAL);
+                return true;
+            });
+        }
         androidx.preference.Preference notifications = findPreference("terminal_notifications");
         if (notifications != null) notifications.setOnPreferenceClickListener(row -> {
             openNotificationSettings(context);

@@ -50,18 +50,18 @@ public class CustomizationLayoutWriteTest {
         places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
     }
 
-    private void assertAz(boolean home, boolean workspace) {
+    private void assertAz(boolean home, boolean terminal) {
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             assertEquals("Home " + orientation, home,
                 places.kindShows(PageKind.HOME, orientation, Element.AZ));
-            assertEquals("Terminal " + orientation, workspace,
+            assertEquals("Terminal " + orientation, terminal,
                 places.kindShows(PageKind.TERMINAL, orientation, Element.AZ));
-            assertEquals("Display " + orientation, workspace,
+            assertEquals("Display " + orientation, terminal,
                 places.kindShows(PageKind.DISPLAY, orientation, Element.AZ));
         }
     }
 
-    /** A–Z hidden on both kinds from a session opened on the Workspace. */
+    /** A–Z hidden on both kinds from a session opened on the Terminal. */
     private LayoutEditorPlan hideAzEverywhere() {
         assertAz(true, false);
         LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL,

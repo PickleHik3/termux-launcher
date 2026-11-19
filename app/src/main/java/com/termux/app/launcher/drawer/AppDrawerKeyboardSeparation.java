@@ -2,7 +2,7 @@ package com.termux.app.launcher.drawer;
 
 /**
  * How the open drawer stands apart from the built-in keyboard its search raised: the same way the
- * terminal pane stands apart from the keyboard on the Workspace.
+ * terminal pane stands apart from the keyboard on the Terminal.
  *
  * <p>Three numbers, all pure so they can be tested without a view tree:
  * <ul>
@@ -14,7 +14,7 @@ package com.termux.app.launcher.drawer;
  *       pane's corners; under Floating the panel keeps its own all round;</li>
  *   <li>the under-pill strip's opacity — the drawer fades the strip out as its glass arrives under
  *       it, but once the keyboard is revealed the plane stops above the keyboard and the strip
- *       under the pill is the keyboard's glass run on, exactly as on the Workspace.</li>
+ *       under the pill is the keyboard's glass run on, exactly as on the Terminal.</li>
  * </ul>
  */
 final class AppDrawerKeyboardSeparation {
@@ -29,6 +29,23 @@ final class AppDrawerKeyboardSeparation {
      */
     static float revealGapPx(float paneGapPx, float capturedGapPx) {
         return paneGapPx >= 0f ? paneGapPx : Math.max(0f, capturedGapPx);
+    }
+
+    /**
+     * The gap actually left at the plane's bottom: none under Docked's in-app keyboard, where the
+     * keyboard wears the drawer's sheet glass ({@code KeyboardSheetLook}) and the two are one
+     * sheet, so no strip of bare scene shows between them. Floating and a system IME keep theirs.
+     */
+    static float planeGapPx(boolean rounded, boolean imePinned, float gapPx) {
+        return rounded || imePinned ? gapPx : 0f;
+    }
+
+    /**
+     * The corner radius the Docked plane's bottom takes as the in-app keyboard is revealed: square,
+     * the plane meets the keyboard's sheet with no corner between them.
+     */
+    static float dockedSheetRadiusPx(boolean rounded, float drawerRadiusPx, float reveal) {
+        return revealRadiusPx(rounded, drawerRadiusPx, 0f, reveal);
     }
 
     /** The plane's bottom edge with the keyboard fully revealed, in host coordinates. */

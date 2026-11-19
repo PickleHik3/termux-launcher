@@ -183,15 +183,13 @@ public final class DockCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.DOCK_TYPE, Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS)
+        // Reflection is Peek glass's own knob, shown only while Peek is the type.
+        return new EditorRows.CardRows()
+            .tier(1, Row.DOCK_TYPE, Row.DOCK_APP_ICONS)
             .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME)
-            .tier(3, Row.SECTION_LAYOUT, Row.DOCK_BARS);
-        // Reflection is Peek glass's own knob, shown only while Peek is the type.
-        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
-            .tier(3, Row.REFLECTION)
-            .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.LINK_GLOBAL)
+            .tier(3, Row.SECTION_BARS, Row.DOCK_BARS)
+            .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST, Row.REFLECTION)
             .build();
     }
 
@@ -452,10 +450,6 @@ public final class DockCard {
 
             @Override public boolean shown(@NonNull Element bar) {
                 return mHost.barShown(bar);
-            }
-
-            @Override public void setShown(@NonNull Element bar, boolean shown) {
-                mHost.setBarShown(bar, shown);
             }
 
             @Override public void reorder(@NonNull List<Element> order) {

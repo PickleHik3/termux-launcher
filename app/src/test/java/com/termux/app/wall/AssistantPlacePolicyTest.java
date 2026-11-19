@@ -13,19 +13,19 @@ import com.termux.app.place.PlaceLayoutStore;
 import org.junit.Test;
 
 /**
- * The Assistant page (ADR 0022) is of the Workspace (ADR 0025), as terminal windows and Display
- * pages are: it wears the Workspace's layout, look and dress. What stays its own is its content:
+ * The Assistant page (ADR 0022) is of the Terminal (ADR 0025), as terminal windows and Display
+ * pages are: it wears the Terminal's layout, look and dress. What stays its own is its content:
  * its pane's insets, its body swipe, and no window chips on its bar.
  */
 public class AssistantPlacePolicyTest {
 
     @Test
-    public void terminalDisplayAndAssistantAreWorkspacePlaces() {
-        assertTrue(PaneWallPolicy.isWorkspacePlace(PageKind.TERMINAL));
-        assertTrue(PaneWallPolicy.isWorkspacePlace(PageKind.DISPLAY));
-        assertTrue(PaneWallPolicy.isWorkspacePlace(PageKind.ASSISTANT));
-        assertFalse(PaneWallPolicy.isWorkspacePlace(PageKind.HOME));
-        assertFalse(PaneWallPolicy.isWorkspacePlace(null));
+    public void terminalDisplayAndAssistantAreTerminalPlaces() {
+        assertTrue(PaneWallPolicy.isTerminalPlace(PageKind.TERMINAL));
+        assertTrue(PaneWallPolicy.isTerminalPlace(PageKind.DISPLAY));
+        assertTrue(PaneWallPolicy.isTerminalPlace(PageKind.ASSISTANT));
+        assertFalse(PaneWallPolicy.isTerminalPlace(PageKind.HOME));
+        assertFalse(PaneWallPolicy.isTerminalPlace(null));
     }
 
     @Test
@@ -36,7 +36,7 @@ public class AssistantPlacePolicyTest {
     }
 
     @Test
-    public void theAssistantPageWearsTheWorkspacesDress() {
+    public void theAssistantPageWearsTheTerminalsDress() {
         assertSame(PageKind.TERMINAL, DressResolver.dressKindOf(PageKind.ASSISTANT));
         assertSame(PageKind.TERMINAL, DressResolver.dressKindOf(PageKind.DISPLAY));
         for (Element element : Element.values()) {
@@ -47,7 +47,7 @@ public class AssistantPlacePolicyTest {
     }
 
     @Test
-    public void aSlideBetweenTwoWorkspacePagesCrossesNoSeam() {
+    public void aSlideBetweenTwoTerminalPagesCrossesNoSeam() {
         assertFalse(com.termux.app.place.SeamTravel.crosses(PageKind.TERMINAL,
             PageKind.ASSISTANT));
         assertFalse(com.termux.app.place.SeamTravel.crosses(PageKind.DISPLAY,

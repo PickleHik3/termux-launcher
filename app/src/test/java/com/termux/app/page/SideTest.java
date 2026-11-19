@@ -9,7 +9,7 @@ import org.junit.Test;
 
 /**
  * The two sides of the seam and the rows each owns (ADR 0030 section 2): Home owns the apps row,
- * the A-Z row, the search field and its own extra-keys bar; the Workspace owns its extra keys, the
+ * the A-Z row, the search field and its own extra-keys bar; the Terminal owns its extra keys, the
  * minimal-layout tab and the window chips. Both own an extra-keys bar of their own.
  */
 public class SideTest {
@@ -23,27 +23,27 @@ public class SideTest {
         assertFalse(Side.HOME.owns(Side.Row.WINDOW_CHIPS));
     }
 
-    @Test public void theWorkspaceOwnsItsRows() {
-        assertTrue(Side.WORKSPACE.owns(Side.Row.EXTRA_KEYS));
-        assertTrue(Side.WORKSPACE.owns(Side.Row.MINIMAL_TAB));
-        assertTrue(Side.WORKSPACE.owns(Side.Row.WINDOW_CHIPS));
-        assertFalse(Side.WORKSPACE.owns(Side.Row.APPS));
-        assertFalse(Side.WORKSPACE.owns(Side.Row.AZ));
-        assertFalse(Side.WORKSPACE.owns(Side.Row.SEARCH));
+    @Test public void theTerminalOwnsItsRows() {
+        assertTrue(Side.TERMINAL.owns(Side.Row.EXTRA_KEYS));
+        assertTrue(Side.TERMINAL.owns(Side.Row.MINIMAL_TAB));
+        assertTrue(Side.TERMINAL.owns(Side.Row.WINDOW_CHIPS));
+        assertFalse(Side.TERMINAL.owns(Side.Row.APPS));
+        assertFalse(Side.TERMINAL.owns(Side.Row.AZ));
+        assertFalse(Side.TERMINAL.owns(Side.Row.SEARCH));
     }
 
     @Test public void everyRowHasASideAndOnlyTheExtraKeysHaveTwo() {
         for (Side.Row row : Side.Row.values()) {
-            int owners = (Side.HOME.owns(row) ? 1 : 0) + (Side.WORKSPACE.owns(row) ? 1 : 0);
+            int owners = (Side.HOME.owns(row) ? 1 : 0) + (Side.TERMINAL.owns(row) ? 1 : 0);
             assertEquals(row.name(), row == Side.Row.EXTRA_KEYS ? 2 : 1, owners);
         }
     }
 
-    @Test public void aWindowIsAWorkspacePage() {
+    @Test public void aWindowIsATerminalPage() {
         assertSame(Side.HOME, Side.of(true));
-        assertSame(Side.WORKSPACE, Side.of(false));
-        assertSame(Side.WORKSPACE, Side.HOME.other());
-        assertSame(Side.HOME, Side.WORKSPACE.other());
+        assertSame(Side.TERMINAL, Side.of(false));
+        assertSame(Side.TERMINAL, Side.HOME.other());
+        assertSame(Side.HOME, Side.TERMINAL.other());
         assertEquals(2, Side.COUNT);
     }
 }

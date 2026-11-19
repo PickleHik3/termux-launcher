@@ -22,7 +22,7 @@ public class LegibilityStoreTest {
 
     private static final long HOME = LegibilityStore.pageKey(0, -1);
     private static final long HOME_2 = LegibilityStore.pageKey(0, 2);
-    private static final long WORKSPACE = LegibilityStore.pageKey(1, -1);
+    private static final long TERMINAL = LegibilityStore.pageKey(1, -1);
     private static final int LOOK = 7;
 
     private LegibilityStore store;
@@ -50,9 +50,9 @@ public class LegibilityStoreTest {
     @Test
     public void aCorrectionIsKeptPerPage() {
         record(HOME, LegibilityBand.DOCK, 0xFFEEEEEE);
-        record(WORKSPACE, LegibilityBand.DOCK, 0xFF202020);
+        record(TERMINAL, LegibilityBand.DOCK, 0xFF202020);
         assertEquals(0xFFEEEEEE, get(HOME, LegibilityBand.DOCK).face(0));
-        assertEquals(0xFF202020, get(WORKSPACE, LegibilityBand.DOCK).face(0));
+        assertEquals(0xFF202020, get(TERMINAL, LegibilityBand.DOCK).face(0));
     }
 
     @Test
@@ -81,7 +81,7 @@ public class LegibilityStoreTest {
         assertTrue(store.needsMeasure(HOME, LegibilityBand.DOCK, 0, 1800, 1080, 2000, LOOK));
         record(HOME, LegibilityBand.DOCK, 0xFF111111);
         assertFalse(store.needsMeasure(HOME, LegibilityBand.DOCK, 0, 1800, 1080, 2000, LOOK));
-        assertTrue(store.needsMeasure(WORKSPACE, LegibilityBand.DOCK, 0, 1800, 1080, 2000, LOOK));
+        assertTrue(store.needsMeasure(TERMINAL, LegibilityBand.DOCK, 0, 1800, 1080, 2000, LOOK));
     }
 
     @Test
@@ -97,10 +97,10 @@ public class LegibilityStoreTest {
     @Test
     public void aWallpaperChangeMakesEveryCorrectionStale() {
         record(HOME, LegibilityBand.DOCK, 0xFF111111);
-        record(WORKSPACE, LegibilityBand.DOCK, 0xFF222222);
+        record(TERMINAL, LegibilityBand.DOCK, 0xFF222222);
         store.onWallpaperChanged();
         assertNull(get(HOME, LegibilityBand.DOCK));
-        assertNull(store.peek(WORKSPACE, LegibilityBand.DOCK));
+        assertNull(store.peek(TERMINAL, LegibilityBand.DOCK));
         assertTrue(store.needsMeasure(HOME, LegibilityBand.DOCK, 0, 1800, 1080, 2000, LOOK));
         assertEquals(1, store.invalidations(LegibilityStore.Reason.WALLPAPER));
     }
@@ -138,8 +138,8 @@ public class LegibilityStoreTest {
         assertNull(store.get(HOME, LegibilityBand.DOCK, 0, 1700, 1080, 2000, LOOK));
         assertTrue(store.needsMeasure(HOME, LegibilityBand.DOCK, 0, 1700, 1080, 2000, LOOK));
         // The other bands and pages did not move.
-        record(WORKSPACE, LegibilityBand.DOCK, 0xFF222222);
-        assertNotNull(get(WORKSPACE, LegibilityBand.DOCK));
+        record(TERMINAL, LegibilityBand.DOCK, 0xFF222222);
+        assertNotNull(get(TERMINAL, LegibilityBand.DOCK));
     }
 
     @Test
@@ -172,21 +172,21 @@ public class LegibilityStoreTest {
     public void aCrossingMeasuresNothingAndAsksForNothing() {
         record(HOME, LegibilityBand.DOCK, 0xFF111111);
         store.beginCrossing();
-        assertFalse(store.needsMeasure(WORKSPACE, LegibilityBand.DOCK, 0, 1800, 1080, 2000, LOOK));
-        assertFalse(record(WORKSPACE, LegibilityBand.DOCK, 0xFF222222));
-        assertNull(store.peek(WORKSPACE, LegibilityBand.DOCK));
+        assertFalse(store.needsMeasure(TERMINAL, LegibilityBand.DOCK, 0, 1800, 1080, 2000, LOOK));
+        assertFalse(record(TERMINAL, LegibilityBand.DOCK, 0xFF222222));
+        assertNull(store.peek(TERMINAL, LegibilityBand.DOCK));
         assertEquals(1, store.measuredInCrossing());
         store.endCrossing();
-        assertTrue(store.needsMeasure(WORKSPACE, LegibilityBand.DOCK, 0, 1800, 1080, 2000, LOOK));
+        assertTrue(store.needsMeasure(TERMINAL, LegibilityBand.DOCK, 0, 1800, 1080, 2000, LOOK));
     }
 
     @Test
     public void aCrossingStillReadsWhatRestMeasured() {
         record(HOME, LegibilityBand.DOCK, 0xFF111111);
-        record(WORKSPACE, LegibilityBand.DOCK, 0xFF222222);
+        record(TERMINAL, LegibilityBand.DOCK, 0xFF222222);
         store.beginCrossing();
         assertNotNull(store.peek(HOME, LegibilityBand.DOCK));
-        assertNotNull(store.peek(WORKSPACE, LegibilityBand.DOCK));
+        assertNotNull(store.peek(TERMINAL, LegibilityBand.DOCK));
         assertEquals(0, store.measuredInCrossing());
     }
 

@@ -112,35 +112,6 @@ public class WallpaperFrostPainterOffDockTest {
     }
 
     @Test
-    public void aCrossingBetweenLooksThatBlurAndBendAlikeBuildsNoSecondFrost() {
-        BarGlassView[] bars = barsWithFrost();
-        chrome.frost().buildArrivingTopFrost();
-        assertNull(bars[0].getArrivingFrost());
-        assertNull(bars[1].getArrivingFrost());
-    }
-
-    @Test
-    public void aCrossingToAnotherBlurRadiusGivesTheBarAnArrivingFrostThatSettlesIn() {
-        BarGlassView[] bars = barsWithFrost();
-        SharedFrameDrawable leaving = SharedFrameDrawable.of(bars[1].getFrost());
-        surfaces.statusBlurRadiusDp = 30;
-        chrome.frost().buildArrivingTopFrost();
-        SharedFrameDrawable arriving = SharedFrameDrawable.of(bars[1].getArrivingFrost());
-        assertNotNull(arriving);
-        assertSame(chrome.blurCache().obtain(30, wallpaperFrame), arriving.frame());
-        assertSame("the leaving frost is untouched", leaving, SharedFrameDrawable.of(bars[1].getFrost()));
-
-        bars[1].setFrostShare(1f);
-        chrome.frost().settleTopFrost();
-        assertNull(bars[1].getArrivingFrost());
-        assertSame(arriving, SharedFrameDrawable.of(bars[1].getFrost()));
-
-        // The landing's pass finds it installed at the arriving radius and builds nothing.
-        chrome.frost().updateTopPane();
-        assertSame(arriving, SharedFrameDrawable.of(bars[1].getFrost()));
-    }
-
-    @Test
     public void aSheetOffTheDockShowsTheDocksOwnFrame() {
         surfaces.dockBlurRadiusDp = 14;
         surfaces.statusBlurRadiusDp = 6;

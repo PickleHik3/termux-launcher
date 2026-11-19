@@ -13,7 +13,7 @@ import androidx.core.view.ViewCompat;
 
 /**
  * A card section's header (editor-redesign §2): its name ("Glass", "Options"), and at its end an
- * optional caption that says where the section reaches ("Workspace only", "widgets, status bar,
+ * optional caption that says where the section reaches ("Terminal only", "widgets, status bar,
  * dock", "drag to reorder"). A divider over it parts it from the section before.
  */
 public final class SectionHeader {

@@ -72,7 +72,7 @@ public class SettingsMotionTest {
         SettingsActivity activity = openOnTerminal();
         Fragment terminal = shown(activity);
         activity.openSearchResult("com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment",
-            "status_widget_cpu");
+            "status_widget_weather_location");
         Fragment status = shown(activity);
         assertTrue(status.getEnterTransition() instanceof MaterialFadeThrough);
         assertTrue("Back from it walks up the tree", status.getReturnTransition() instanceof MaterialSharedAxis);

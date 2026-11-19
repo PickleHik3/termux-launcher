@@ -95,7 +95,7 @@ public class PlaceLayoutHomeLayoutTest {
         assertTrue("one value for both orientations", home.resolve(LANDSCAPE).keyboardShown);
         assertFalse("the keyboard switch is not touched", launcher.isKeyboardTurnedOff());
 
-        // The Workspace's element is the switch, and leaves always on alone.
+        // The Terminal's element is the switch, and leaves always on alone.
         store.setKeyboardShown(false);
         assertTrue(launcher.isKeyboardTurnedOff());
         assertTrue(store.isHomeKeyboardAlwaysOn());
@@ -147,7 +147,7 @@ public class PlaceLayoutHomeLayoutTest {
         store.setMinimal(true);
         assertEquals(KindFixtures.HOME_PAGE, store.variantFor(PageKind.HOME));
         assertEquals(LayoutVariant.MINIMAL, store.variantFor(PageKind.TERMINAL));
-        assertEquals("the Workspace's variant is still what the store stands in",
+        assertEquals("the Terminal's variant is still what the store stands in",
             LayoutVariant.MINIMAL, store.activeVariant());
     }
 

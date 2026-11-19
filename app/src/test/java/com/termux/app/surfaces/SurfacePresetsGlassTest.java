@@ -52,9 +52,9 @@ public class SurfacePresetsGlassTest {
         SurfacePresets.apply(preferences, mist);
 
         // Glass 75.
-        assertEquals(25, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
-        assertEquals(60, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals(7, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(25, preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
+        assertEquals(60, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
+        assertEquals(7, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, preferences.getSurfaceGlassTint());
         assertEquals(TERMUX_APP.GLASS_RIM_GRADIENT, preferences.getSurfaceGlassRim());
         assertEquals(TERMUX_APP.GLASS_MOTION_MIST, preferences.getSurfaceGlassMotion());
@@ -117,7 +117,7 @@ public class SurfacePresetsGlassTest {
         assertFalse(clear.values.containsKey(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY));
 
         SurfacePresets.apply(preferences, clear);
-        assertEquals(10, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertEquals(10, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         assertEquals(0, preferences.getFancierGlassSpecularPercent());
         assertEquals(40, preferences.getFancierGlassDispersionPercent());
         assertTrue(SurfacePresets.matches(preferences, clear));
@@ -275,9 +275,4 @@ public class SurfacePresetsGlassTest {
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLASS_MOTION, preferences.getSurfaceGlassMotion());
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

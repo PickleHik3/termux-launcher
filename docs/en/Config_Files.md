@@ -56,8 +56,8 @@ termux-reload-settings
 | `~/.termux/fonts.d/*.conf` | Font drop-ins, read before `fonts.conf` in name order | [Terminal fonts](Terminal_Fonts.md#use-drop-in-fragments) |
 | `~/.config/kitty/kitty.conf` | Only its font and cursor-trail lines are read | [Terminal fonts](Terminal_Fonts.md#share-a-kitty-configuration) |
 | `~/.termux/font.ttf`, `~/.termux/font-italic.ttf` | The classic Termux font files, also written by Termux:Styling | [Terminal fonts](Terminal_Fonts.md) |
-| `~/.termux/colors.properties` | The terminal colour scheme, also written by Termux:Styling; ignored while **Wallpaper colors** is on | [Look and themes](Look_And_Themes.md) |
-| `~/.termux/launcher-theme.properties` | Overrides single launcher colours, one token per line, even with **Wallpaper colors** on | [Look and themes](Look_And_Themes.md) |
+| `~/.termux/colors.properties` | The terminal colour scheme, also written by Termux:Styling; ignored while **Wallpaper colours** is on | [Look and themes](Look_And_Themes.md) |
+| `~/.termux/launcher-theme.properties` | Overrides single launcher colours, one token per line, even with **Wallpaper colours** on | [Look and themes](Look_And_Themes.md) |
 | `~/.termux/theme-templates/<id>/` | Your own entries for "Tools that follow the terminal colours": a `template.properties`, the file to render and its hooks | [Look and themes](Look_And_Themes.md) |
 | `~/.termux/app-categories.conf` | The app drawer's categories, one section per category, one package per line | [Home screen and apps](Home_Screen_And_Apps.md) |
 | `~/.termux/boot/` | Scripts run at boot by the launcher's Termux:Boot companion | |

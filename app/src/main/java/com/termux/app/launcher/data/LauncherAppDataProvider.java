@@ -682,7 +682,7 @@ public final class LauncherAppDataProvider {
         if (entry == null && com.termux.app.launcher.LauncherEntries.isAlwaysListed(ref)) {
             // Terminal is in every catalogue, so it resolves even while none is loaded (before
             // the first load, after an invalidate): the dock's prune of unresolvable pins must
-            // never take the way back to the Workspace off the row.
+            // never take the way back to the Terminal off the row.
             entry = com.termux.app.launcher.LauncherEntries.ASSISTANT.equals(
                 com.termux.app.launcher.LauncherEntries.idOf(ref)) ? assistantEntry() : terminalEntry();
         }

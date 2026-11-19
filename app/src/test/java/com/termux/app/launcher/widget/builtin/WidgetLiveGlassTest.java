@@ -124,7 +124,7 @@ public class WidgetLiveGlassTest {
         @Override public int paneGlassGrainStrength() { return 0; }
         @Override public float paneGlassCornerRadiusPx() { return 0f; }
         @Override public int paneCornerRadiusDp() {
-            return TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS;
+            return TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS;
         }
         @Override public int paneGapDp() { return 0; }
     }

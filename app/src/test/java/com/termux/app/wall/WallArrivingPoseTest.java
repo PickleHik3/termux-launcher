@@ -25,10 +25,10 @@ import java.util.List;
 import android.app.Application;
 
 /**
- * A programmatic slide from the Workspace to Home ({@link PaneWallLayout#goTo}, what the home key
+ * A programmatic slide from the Terminal to Home ({@link PaneWallLayout#goTo}, what the home key
  * and a chip tap run), driven frame by frame by the wall's own slide animator under every page
  * transition: Home's page eases from its first pose to the identity, never holding one pose over
- * the slide and snapping at the settle, and the Workspace's page leaves the same way. The pure
+ * the slide and snapping at the settle, and the Terminal's page leaves the same way. The pure
  * pose is the identity at rest and moves monotonically with the page's distance from it.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -121,12 +121,12 @@ public class WallArrivingPoseTest {
     }
 
     @Test
-    public void homeEasesInFromTheWorkspaceUnderEveryEffect() {
+    public void homeEasesInFromTheTerminalUnderEveryEffect() {
         for (HomePageTransition effect : HomePageTransition.values()) {
             build(effect);
             wall.goTo(PageKind.HOME, true);
             List<float[]> home = new ArrayList<>();
-            List<float[]> workspace = new ArrayList<>();
+            List<float[]> terminalPoses = new ArrayList<>();
             // The slide's own ticker, stepped one 16 ms frame at a time: its update listener is
             // the wall's frame, exactly as Choreographer runs it on the phone.
             for (long playMs = 16L; playMs < 5000L && wall.isMoving(); playMs += 16L) {
@@ -134,7 +134,7 @@ public class WallArrivingPoseTest {
                 if (slide == null) break;
                 slide.setCurrentPlayTime(playMs);
                 home.add(poseOf(widgets));
-                workspace.add(poseOf(terminal));
+                terminalPoses.add(poseOf(terminal));
             }
             String why = effect.name();
             assertTrue(why + " the slide ran over frames", home.size() > 5);
@@ -162,11 +162,11 @@ public class WallArrivingPoseTest {
             float settleStep = landed[0] - home.get(home.size() - 2)[0];
             assertTrue(why + " settle step " + settleStep + " vs " + largestStep,
                 settleStep <= largestStep + 0.02f);
-            // The Workspace leaves the same way: never growing back, gone or flat at the end.
-            for (int i = 1; i < workspace.size() - 1; i++) {
-                float[] a = workspace.get(i - 1);
-                float[] b = workspace.get(i);
-                String at = why + " workspace frame " + i;
+            // The Terminal leaves the same way: never growing back, gone or flat at the end.
+            for (int i = 1; i < terminalPoses.size() - 1; i++) {
+                float[] a = terminalPoses.get(i - 1);
+                float[] b = terminalPoses.get(i);
+                String at = why + " terminal frame " + i;
                 // Parked off screen it is flat again, which is not a growth on screen.
                 if (b[0] == 1f && b[2] == 0f) continue;
                 assertTrue(at + " scale " + a[0] + " -> " + b[0], b[0] <= a[0] + EPS);

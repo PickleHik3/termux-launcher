@@ -4,8 +4,7 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 
 /**
- * The command palette's corners: the Menus and dialogs surface's Corner radius (the SHEETS slot,
- * Base until detached), grown into from the space bar's small radius as the palette sprouts, and
+ * The command palette's corners: Global's Corner radius (a sheet holds none of its own), grown into from the space bar's small radius as the palette sprouts, and
  * never more than a pill. Pure.
  */
 final class CommandPaletteShape {

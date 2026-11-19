@@ -10,10 +10,10 @@ import com.termux.shared.termux.settings.preferences.LookGrid.Property;
  * The one-way step that makes Margin one number for every page (developer, 2026-11-08), run once
  * per install behind {@link #KEY_MIGRATED}, after the other look-grid steps.
  *
- * <p>Margin was held per kind of page (Home, Workspace) and could be set apart on a page, so a
- * swipe between Home and the Workspace laid the chrome out at a second Margin mid-slide. Now only
- * Base holds it: the Margin Home pages wore becomes Base, and every kind and page Margin cell is
- * dropped. An install whose pages all wore Base's Margin sees nothing change.</p>
+ * <p>Margin was held per kind of page (Home, Terminal) and could be set apart on a page, so a
+ * swipe between Home and the Terminal laid the chrome out at a second Margin mid-slide. Now only
+ * Global holds it: the Margin Home pages wore becomes Global, and every kind and page Margin cell is
+ * dropped. An install whose pages all wore Global's Margin sees nothing change.</p>
  */
 public final class LookGridMarginMigration {
 
@@ -22,8 +22,8 @@ public final class LookGridMarginMigration {
     public static final String KEY_MIGRATED = "look_grid_margin_global";
 
     /**
-     * Writes Home's Margin into Base and drops every other Margin cell, once. Returns whether the
-     * Margin any page wore changed (the Workspace's, a page's own, or Base's).
+     * Writes Home's Margin into Global and drops every other Margin cell, once. Returns whether the
+     * Margin any page wore changed (the Terminal's, a page's own, or Global's).
      */
     public static boolean run(@NonNull LookGrid.Store store) {
         if (store.getBoolean(KEY_MIGRATED, false)) return false;
@@ -32,19 +32,22 @@ public final class LookGridMarginMigration {
         return changed;
     }
 
-    /** The fold itself, ungated: Home's Margin into Base, every kind and page cell dropped. */
+    /** The fold itself, ungated: Home's Margin into Global, every kind and page cell dropped. */
     static boolean fold(@NonNull LookGrid grid) {
-        int home = grid.value(Property.MARGIN, null, Kind.HOME);
+        String homeKey = LookGrid.key(Property.MARGIN, null, Kind.HOME);
+        int home = grid.store().contains(homeKey)
+            ? Property.MARGIN.clamp(grid.store().getInt(homeKey, Property.MARGIN.shipped))
+            : grid.value(Property.MARGIN, null);
         boolean changed = false;
         for (String stored : grid.gridKeys()) {
             Key cell = LookGrid.parse(stored);
             if (cell == null || cell.property != Property.MARGIN) continue;
             if (cell.kind == null && cell.page < 0) continue;
-            grid.clear(cell);
+            grid.store().remove(stored);
             changed = true;
         }
-        if (grid.value(Property.MARGIN, null, LookGrid.NO_PAGE) != home) {
-            grid.write(Property.MARGIN, null, LookGrid.NO_PAGE, home);
+        if (grid.value(Property.MARGIN, null) != home) {
+            grid.write(Property.MARGIN, null, home);
             changed = true;
         }
         return changed;

@@ -98,7 +98,7 @@ public class PageOverviewPagesTest {
         WallPages before = store.current();
         rules(store).chooseHome(PageOverviewPolicy.Kind.TERMINAL, 0);
         assertNotNull(launcher.choice);
-        assertEquals(WallRow.START_IN_WORKSPACE, launcher.choice.startIn);
+        assertEquals(WallRow.START_IN_TERMINAL, launcher.choice.startIn);
         assertSame(before, store.current());
     }
 

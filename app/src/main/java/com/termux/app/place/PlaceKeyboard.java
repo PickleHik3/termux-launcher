@@ -20,7 +20,7 @@ public final class PlaceKeyboard {
     /**
      * Whether the keyboard comes up as the wall lands on the page. Home comes back as it was
      * left, and always up while the Home layout's keyboard element is shown (always on); minimal
-     * mode is the Workspace's and leaves Home alone. A window comes back as it was left, unless
+     * mode is the Terminal's and leaves Home alone. A window comes back as it was left, unless
      * minimal mode puts it away.
      */
     public static boolean keyboardOnEnter(@NonNull PageKind page, boolean remembered,
@@ -34,7 +34,7 @@ public final class PlaceKeyboard {
      * "external text field has the keyboard" flag. A widget's terminal is the typing target once
      * tapped; with the flag left set (by a sheet or field that never reported its end) the in-app
      * keyboard keeps its container hidden on Home however often it is asked to show. A tap in a
-     * pane of the Workspace keeps the flag, as before.
+     * pane of the Terminal keeps the flag, as before.
      */
     public static boolean tapReclaimsFromExternalInput(boolean externalInputActive,
                                                        boolean homeTerminalWidgetFocused) {

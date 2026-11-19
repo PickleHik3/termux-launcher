@@ -48,7 +48,7 @@ public class AssistantInkTest {
     /** The emulator's case: a light theme's glass, nearly clear, over a dark wallpaper. */
     private static final int DARK_WALLPAPER = 0xFF15171C;
     private static final int LIGHT_WALLPAPER = 0xFFECEFF3;
-    /** The Base Look's 34% glass in the light theme's surfaceContainer. */
+    /** The Global Look's 34% glass in the light theme's surfaceContainer. */
     private static final int LIGHT_GLASS = OnGlass.withAlpha(0xFFEFEDF1, 87);
 
     @Test

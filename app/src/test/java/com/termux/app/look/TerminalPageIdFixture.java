@@ -6,8 +6,8 @@ import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
- * Gives test preferences a Terminal page, so the Workspace half maps to its page overrides the
- * way it does in the app (the halves became pages, ADR 0015 6). Without one the Workspace reads
+ * Gives test preferences a Terminal page, so the Terminal half maps to its page overrides the
+ * way it does in the app (the halves became pages, ADR 0015 6). Without one the Terminal reads
  * the wall's keys.
  */
 public final class TerminalPageIdFixture {
@@ -22,19 +22,7 @@ public final class TerminalPageIdFixture {
         if (store != null)
             store.edit().putInt(PageLookKeys.KEY_TERMINAL_PAGE_ID, TERMINAL_PAGE_ID).commit();
         TermuxAppSharedPreferences.setTerminalPageId(TERMINAL_PAGE_ID);
-        installKinds();
         return prefs;
     }
 
-    /**
-     * Tells every look grid that the Terminal page is the Terminal kind, as the app's wall does
-     * (ADR 0020 §2: a page's look is its kind's). Other pages have no kind here, so they read
-     * the wall's cells: Home's half stays the wall's and the Workspace's the Terminal kind's.
-     */
-    public static void installKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(page ->
-            page == TERMINAL_PAGE_ID
-                ? com.termux.shared.termux.settings.preferences.LookGrid.Kind.TERMINAL : null,
-            null);
-    }
 }

@@ -62,7 +62,7 @@ public class LayoutEditorHomeFilterTest {
         return places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE);
     }
 
-    private PlaceLayoutStore workspace() {
+    private PlaceLayoutStore terminal() {
         return places.forVariant(LayoutVariant.NORMAL);
     }
 
@@ -90,21 +90,21 @@ public class LayoutEditorHomeFilterTest {
 
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.APPS_ROW, Edge.TOP));
         assertEquals(Edge.TOP, home().slot(PORTRAIT, Element.APPS).edge);
-        assertEquals("the Workspace's layout is left alone",
-            Edge.BOTTOM, workspace().slot(PORTRAIT, Element.APPS).edge);
+        assertEquals("the Terminal's layout is left alone",
+            Edge.BOTTOM, terminal().slot(PORTRAIT, Element.APPS).edge);
         // What Home offers (no status bar to place) is its dress's: DressResolverTest.
     }
 
     @Test
     public void homesSizesAreTheSharedOnes() {
         LayoutEditorPlan plan = open(PageKind.TERMINAL);
-        float workspaceDock = workspace().dockHeightScale(PORTRAIT);
+        float terminalDock = terminal().dockHeightScale(PORTRAIT);
         plan.showHome(true);
-        float target = workspaceDock > 1f ? 0.9f : 1.2f;
+        float target = terminalDock > 1f ? 0.9f : 1.2f;
         plan.setDockHeightScale(target);
         assertEquals(target, home().dockHeightScale(PORTRAIT), 0.001f);
         assertEquals("linked (#84): the window's follows", target,
-            workspace().dockHeightScale(PORTRAIT), 0.001f);
+            terminal().dockHeightScale(PORTRAIT), 0.001f);
 
         plan.setWidgetGrid(3, 4);
         assertEquals(3, plan.shownLayout().widgetColumns);
@@ -129,7 +129,7 @@ public class LayoutEditorHomeFilterTest {
         LayoutEditorPlan plan = open(PageKind.DISPLAY);
         plan.showHome(true);
         assertEquals(PageKind.DISPLAY, plan.showHome(false));
-        assertEquals("the Workspace's layout (ADR 0025)", LayoutVariant.NORMAL, plan.variant());
+        assertEquals("the Terminal's layout (ADR 0025)", LayoutVariant.NORMAL, plan.variant());
 
         LayoutEditorPlan fromHome = open(PageKind.HOME);
         assertEquals("opened over Home, off is the terminal",
@@ -157,7 +157,7 @@ public class LayoutEditorHomeFilterTest {
 
         plan.revert();
         assertFalse(plan.isDirty());
-        assertEquals(Edge.BOTTOM, workspace().slot(PORTRAIT, Element.APPS).edge);
+        assertEquals(Edge.BOTTOM, terminal().slot(PORTRAIT, Element.APPS).edge);
         assertEquals(Edge.BOTTOM, home().slot(PORTRAIT, Element.APPS).edge);
     }
 
@@ -174,7 +174,7 @@ public class LayoutEditorHomeFilterTest {
         assertTrue(next.isDirty());
         next.revert();
         assertFalse(next.isDirty());
-        assertEquals(Edge.BOTTOM, workspace().slot(PORTRAIT, Element.APPS).edge);
+        assertEquals(Edge.BOTTOM, terminal().slot(PORTRAIT, Element.APPS).edge);
         assertEquals(Edge.BOTTOM, home().slot(PORTRAIT, Element.APPS).edge);
     }
 }

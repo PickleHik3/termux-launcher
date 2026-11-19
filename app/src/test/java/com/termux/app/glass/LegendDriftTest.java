@@ -37,13 +37,13 @@ public class LegendDriftTest {
     public void legendsDriftFromDarkToPaleAcrossALightToDarkCrossing() {
         LegibilityStore store = new LegibilityStore();
         long home = LegibilityStore.pageKey(0, -1);
-        long workspace = LegibilityStore.pageKey(1, -1);
+        long terminal = LegibilityStore.pageKey(1, -1);
         store.recordFace(home, LegibilityBand.DOCK, 0, 1800, 1080, 2000, 1, LIGHT_FACE);
-        store.recordFace(workspace, LegibilityBand.DOCK, 0, 1800, 1080, 2000, 1, DARK_FACE);
+        store.recordFace(terminal, LegibilityBand.DOCK, 0, 1800, 1080, 2000, 1, DARK_FACE);
         store.beginCrossing();
         double target = OnGlass.TARGET_BODY_TEXT;
         int here = GlassInk.faceInk(store.peek(home, LegibilityBand.DOCK).face(0), THEME_INK, target);
-        int there = GlassInk.faceInk(store.peek(workspace, LegibilityBand.DOCK).face(0), THEME_INK,
+        int there = GlassInk.faceInk(store.peek(terminal, LegibilityBand.DOCK).face(0), THEME_INK,
             target);
         assertTrue("a light page wears dark legends", luma(here) < 128);
         assertTrue("a dark page wears pale legends", luma(there) >= 128);

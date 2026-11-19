@@ -17,7 +17,7 @@ import org.junit.Test;
 public class SideRowsTest {
 
     private static final Side H = Side.HOME;
-    private static final Side WS = Side.WORKSPACE;
+    private static final Side WS = Side.TERMINAL;
 
     @Test public void anAppsRowInOnePlaceAtBothEndsStaysPutOtherwiseItGoesWithHome() {
         for (LayoutFixtures.Fixture f : LayoutFixtures.ALL) {
@@ -38,7 +38,7 @@ public class SideRowsTest {
             .withSlot(Element.AZ, Slot.hiddenFrom(Edge.BOTTOM, 1));
         assertSame(SideRows.Carrier.HOME, SideRows.carrier(Element.APPS, H, home, WS, bare));
         assertSame(SideRows.Carrier.HOME, SideRows.carrier(Element.APPS, WS, bare, H, home));
-        assertSame(SideRows.Carrier.WORKSPACE, SideRows.carrier(Element.APPS, WS, home, H, bare));
+        assertSame(SideRows.Carrier.TERMINAL, SideRows.carrier(Element.APPS, WS, home, H, bare));
         assertSame(SideRows.Carrier.NONE, SideRows.carrier(Element.APPS, H, bare, WS, bare));
     }
 
@@ -77,24 +77,24 @@ public class SideRowsTest {
         assertSame(SideRows.Carrier.STACK, SideRows.carrier(Element.STATUS, H, home, WS, window));
     }
 
-    @Test public void theExtraKeysInTheStackAreTheWorkspacesWhateverHomeLists() {
+    @Test public void theExtraKeysInTheStackAreTheTerminalsWhateverHomeLists() {
         PlaceLayout home = LayoutFixtures.HOME;
         PlaceLayout window = LayoutFixtures.PONG.window;
         PlaceLayout homeWithKeys = home.withSlot(Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, 0));
-        // Home has its own bar in the pill layer: the stack's is the Workspace's in every pair.
-        assertSame(SideRows.Carrier.WORKSPACE,
+        // Home has its own bar in the pill layer: the stack's is the Terminal's in every pair.
+        assertSame(SideRows.Carrier.TERMINAL,
             SideRows.carrier(Element.EXTRA_KEYS, H, home, WS, window));
-        assertSame(SideRows.Carrier.WORKSPACE,
+        assertSame(SideRows.Carrier.TERMINAL,
             SideRows.carrier(Element.EXTRA_KEYS, WS, window, H, home));
-        assertSame(SideRows.Carrier.WORKSPACE,
+        assertSame(SideRows.Carrier.TERMINAL,
             SideRows.carrier(Element.EXTRA_KEYS, H, homeWithKeys, WS, window));
-        assertSame(SideRows.Carrier.WORKSPACE,
+        assertSame(SideRows.Carrier.TERMINAL,
             SideRows.carrier(Element.EXTRA_KEYS, H, home, WS, home));
     }
 
     @Test public void eachExtraKeysBarGoesWithItsOwnSide() {
         assertSame(SideRows.Carrier.HOME, SideRows.extraKeysCarrier(H));
-        assertSame(SideRows.Carrier.WORKSPACE, SideRows.extraKeysCarrier(WS));
+        assertSame(SideRows.Carrier.TERMINAL, SideRows.extraKeysCarrier(WS));
     }
 
     @Test public void onlyALandingWithinASideMayMoveRows() {
@@ -110,6 +110,6 @@ public class SideRowsTest {
         assertEquals(0f, SideRows.across(SideRows.Carrier.STACK, tx), 0f);
         assertEquals(0f, SideRows.across(SideRows.Carrier.NONE, tx), 0f);
         assertEquals(-300f, SideRows.across(SideRows.Carrier.HOME, tx), 0f);
-        assertEquals(780f, SideRows.across(SideRows.Carrier.WORKSPACE, tx), 0f);
+        assertEquals(780f, SideRows.across(SideRows.Carrier.TERMINAL, tx), 0f);
     }
 }

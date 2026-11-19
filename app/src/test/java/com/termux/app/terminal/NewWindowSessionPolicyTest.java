@@ -7,8 +7,8 @@ import org.junit.Test;
 /** Which session a new row window joins: the one the bar's session box shows. */
 public class NewWindowSessionPolicyTest {
 
-    @Test public void aFreshStartBeforeAnyWorkspaceVisitAddsToSessionOne() {
-        // Session 1 up with its one window, current, the Workspace never shown.
+    @Test public void aFreshStartBeforeAnyTerminalVisitAddsToSessionOne() {
+        // Session 1 up with its one window, current, the Terminal never shown.
         assertEquals(0, NewWindowSessionPolicy.sessionFor(0, 1));
     }
 

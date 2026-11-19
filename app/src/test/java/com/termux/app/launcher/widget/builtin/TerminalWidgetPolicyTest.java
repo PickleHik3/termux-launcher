@@ -99,7 +99,7 @@ public class TerminalWidgetPolicyTest {
 
         assertTrue(TerminalWidgetPolicy.isWidgetShell(false, "h1", claimed));
         assertTrue("shown by a widget now", TerminalWidgetPolicy.isWidgetShell(true, "h9", claimed));
-        assertFalse("a Workspace shell", TerminalWidgetPolicy.isWidgetShell(false, "h9", claimed));
+        assertFalse("a Terminal shell", TerminalWidgetPolicy.isWidgetShell(false, "h9", claimed));
         assertFalse(TerminalWidgetPolicy.isWidgetShell(false, null, claimed));
     }
 

@@ -6,7 +6,7 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 /**
- * The one rule for a sideways swipe on a terminal's text, a Workspace window's or a Home
+ * The one rule for a sideways swipe on a terminal's text, a Terminal window's or a Home
  * float's: who keeps the drag, and how sideways a start has to be to page.
  */
 public class TerminalBodySwipeTest {

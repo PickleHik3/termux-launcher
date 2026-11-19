@@ -2,7 +2,7 @@ package com.termux.app.terminal;
 
 /**
  * The one rule for a sideways swipe that starts on a terminal's text, wherever the terminal
- * stands: a window in the Workspace pages the wall's row (between windows, the display window
+ * stands: a window in the Terminal pages the wall's row (between windows, the display window
  * among them, and from the first window back to Home's last page), and a Home float pages Home.
  * Either way the swipe moves the place the terminal stands in, exactly as the border slide does,
  * unless the terminal has a use for the drag itself.

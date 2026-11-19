@@ -129,7 +129,7 @@ public class KeyboardHomeGlobalCardsTest {
     public void globalsGlassMaterialStandsAtAnyLookAndItsTintColourIsThreeSwatches() {
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
         EditorCardSheet.Model model = model(editor);
-        assertFalse("the Workspace is on a Look, not Custom",
+        assertFalse("the Terminal is on a Look, not Custom",
             AppearanceLooks.isCustomStop(model.value(Row.LOOK)));
         assertTrue(model.shown(Row.VIBRANCY));
         assertTrue(model.shown(Row.GLASS_EDGE));

@@ -18,7 +18,7 @@ import java.util.Set;
 /**
  * The key scheme and resolution rules behind {@link PageLook}. Key names and defaults are the
  * preference constants' own; the rules mirror {@code TermuxAppSharedPreferences} (override key,
- * Base key, {@code surface_inherit_<slot>_<property>} flag) minus the halves.
+ * Global key, {@code surface_inherit_<slot>_<property>} flag) minus the halves.
  *
  * <p>A page override is the surface's key plus {@code "@<pageId>"}. The plain key is the wall-wide
  * value (the key the pre-halves installs wrote, and what a "both halves" write still writes).
@@ -73,10 +73,10 @@ final class LookKeys {
         switch (slot) {
             case KEYBOARD:
                 switch (property) {
-                    case BLUR: return TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
+                    case BLUR: return TERMUX_APP.DEFAULT_SURFACE_GLOBAL_BLUR;
                     case OPACITY: return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
-                    case GRAIN: return TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN;
-                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+                    case GRAIN: return TERMUX_APP.DEFAULT_SURFACE_GLOBAL_GRAIN;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
                     default: return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET;
                 }
             case STATUS:
@@ -84,7 +84,7 @@ final class LookKeys {
                     case BLUR: return TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
-                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
                     case CORNER_RADIUS: return TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS;
                     default: return TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
                 }
@@ -92,7 +92,7 @@ final class LookKeys {
                 switch (property) {
                     case BLUR: return TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS;
                     case GRAIN: return TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN;
-                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
                     default: return TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY;
                 }
             default:
@@ -100,7 +100,7 @@ final class LookKeys {
                     case BLUR: return TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
                     case CORNER_RADIUS: return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
                     default: return TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
                 }
@@ -130,33 +130,15 @@ final class LookKeys {
             Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY, raw));
     }
 
-    /** The wallpaper dim as its getter reads it, including the retired opacity key's fallback. */
-    static int wallpaperDim(@NonNull LookStore store, int pageId) {
-        String pageKey = pageKey(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, pageId);
-        int stored = pageId >= 0 && store.has(pageKey) ? store.getInt(pageKey, -1) : -1;
-        if (stored < 0) stored = store.getInt(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, -1);
-        if (stored < 0) {
-            int legacy = store.getInt(TERMUX_APP.KEY_WALLPAPER_BACKDROP_OPACITY, -1);
-            stored = legacy < 0 ? TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM
-                : 100 - Math.max(0, Math.min(100, legacy));
-        }
-        return Math.max(0, Math.min(100, stored));
-    }
-
     /**
-     * One surface number for a page: page override, else the surface's wall-wide value when it is
-     * detached from Base, else Base. Shapes answer Base. A slot without the property answers the
-     * shipped value.
+     * One surface number, the same on every page (ADR 0031): the surface's own value, else Global.
+     * A slot without the property answers the shipped value.
      */
-    static int resolve(@NonNull LookStore store, @NonNull PageKind kind, int pageId,
-                       @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
+    static int resolve(@NonNull LookStore store, @NonNull SurfaceSlot slot,
+                       @NonNull SurfaceProperty property) {
         LookGrid grid = new LookGrid(gridStore(store));
         LookGrid.Element element = property.grid.perElement ? slot.element : null;
-        // A page holds its own glass numbers only; the canvas's only on the Terminal page.
-        boolean pageHolds = pageId >= 0 && isLookProperty(property)
-            && (slot != SurfaceSlot.CANVAS || kind == PageKind.TERMINAL);
-        return fromCell(property.grid, grid.value(property.grid, element,
-            pageHolds ? pageId : LookGrid.NO_PAGE));
+        return fromCell(property.grid, grid.value(property.grid, element));
     }
 
     /** A value in the old unit of the cell's property: a Frost stop as its blur in dp. */
@@ -171,7 +153,7 @@ final class LookKeys {
 
     /**
      * The grid cell (everywhere) an old look key names, or null for a key outside the grid: a
-     * Base key is the all-glass cell, a surface's own key that surface's element cell. A grid key
+     * Global key is the all-glass cell, a surface's own key that surface's element cell. A grid key
      * is read as itself, its page dropped.
      */
     @Nullable
@@ -179,7 +161,7 @@ final class LookKeys {
         LookGrid.Key grid = LookGrid.parse(key);
         if (grid != null) return new LookGrid.Key(grid.property, grid.element, LookGrid.NO_PAGE);
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            if (property.baseKey.equals(key))
+            if (property.globalKey.equals(key))
                 return new LookGrid.Key(property.grid, null, LookGrid.NO_PAGE);
             for (SurfaceSlot slot : SurfaceSlot.values()) {
                 if (key.equals(surfaceKey(slot, property)))
@@ -231,7 +213,7 @@ final class LookKeys {
                 KNOWN.add(key);
             }
         }
-        for (SurfaceProperty property : SurfaceProperty.values()) KNOWN.add(property.baseKey);
+        for (SurfaceProperty property : SurfaceProperty.values()) KNOWN.add(property.globalKey);
         KNOWN.add(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY);
         KNOWN.add(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM);
         KNOWN.add(TERMUX_APP.KEY_WALLPAPER_BACKDROP_OPACITY);

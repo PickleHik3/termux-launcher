@@ -28,33 +28,18 @@ public class ElementRowsTest {
     private static final List<Item> SHARED = Arrays.asList(Item.STATUS_BAR, Item.APPS_ROW,
         Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD, Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL);
 
+    /**
+     * Home and the Terminal list the same rows, each written to its own page's layout; the
+     * Search field and the Drawer icon are the Dock card's Show/hide tiles (spec §3, Dock).
+     */
     @Test
-    public void eachScreenListsTheSharedRowsThenItsOwnContent() {
-        List<Item> workspace = ElementRows.rows(PageKind.TERMINAL);
-        assertEquals(SHARED, workspace.subList(0, SHARED.size()));
-        assertEquals(Item.TERMINAL, workspace.get(workspace.size() - 1));
-        assertFalse(workspace.contains(Item.WIDGETS));
-
-        List<Item> home = ElementRows.rows(PageKind.HOME);
-        assertEquals(SHARED, home.subList(0, SHARED.size()));
-        assertEquals(Item.WIDGETS, home.get(home.size() - 1));
-        assertFalse(home.contains(Item.TERMINAL));
-    }
-
-    @Test
-    public void theSearchFieldAndTheDrawerIconAreEveryPagesSoOnlyTheWholeAppListHasThem() {
+    public void bothPageCardsListTheSameRows() {
+        assertEquals(SHARED, ElementRows.rows(PageKind.TERMINAL));
+        assertEquals(SHARED, ElementRows.rows(PageKind.HOME));
         for (PageKind screen : new PageKind[] {PageKind.TERMINAL, PageKind.HOME}) {
             assertFalse(ElementRows.rows(screen).contains(Item.SEARCH_FIELD));
             assertFalse(ElementRows.rows(screen).contains(Item.DRAWER_ICON));
         }
-        assertTrue(ElementRows.wholeApp().contains(Item.SEARCH_FIELD));
-        assertTrue(ElementRows.wholeApp().contains(Item.DRAWER_ICON));
-    }
-
-    @Test
-    public void theTerminalAndTheWidgetsHaveNoEye() {
-        assertFalse(Item.TERMINAL.hasEye());
-        assertFalse(Item.WIDGETS.hasEye());
         for (Item item : SHARED)
             assertTrue(item + " has an eye", item.hasEye());
     }
@@ -63,7 +48,6 @@ public class ElementRowsTest {
     public void theSlidersOpenTheElementsCard() {
         assertEquals(EditorCard.STATUS, Item.STATUS_BAR.card);
         assertEquals(EditorCard.KEYBOARD, Item.KEYBOARD.card);
-        assertEquals(EditorCard.TERMINAL, Item.TERMINAL.card);
         for (Item bar : new Item[] {Item.APPS_ROW, Item.AZ, Item.EXTRA_KEYS}) {
             assertEquals(EditorCard.DOCK, bar.card);
             assertEquals("the Dock card opens with " + bar + "'s settings expanded", bar.element,
@@ -87,9 +71,6 @@ public class ElementRowsTest {
             assertTrue("the Dock card holds the Options " + tile + " scrolls to",
                 rowsOf(EditorCard.DOCK).contains(Row.DOCK_OPTIONS));
         }
-        // The Widgets row opens the Widgets card (overhaul §4), at its top.
-        assertEquals(EditorCard.WIDGETS, Item.WIDGETS.card);
-        assertNull(Item.WIDGETS.section);
     }
 
     @Test
@@ -103,25 +84,21 @@ public class ElementRowsTest {
         assertEquals(Visibility.SEARCH_FIELD, Item.SEARCH_FIELD.visibility);
         assertEquals(Visibility.DRAWER_TILE, Item.DRAWER_ICON.visibility);
         assertEquals(Visibility.COMMAND_PALETTE_BUTTON, Item.COMMAND_PALETTE.visibility);
-        assertEquals(Visibility.NONE, Item.TERMINAL.visibility);
-        assertEquals(Visibility.NONE, Item.WIDGETS.visibility);
     }
 
     @Test
     public void onlyTheScreenCardsHoldTheList() {
         assertEquals(PageKind.HOME, ElementRows.screenOf(EditorCard.HOME));
-        assertEquals(PageKind.TERMINAL, ElementRows.screenOf(EditorCard.WORKSPACE));
+        assertEquals(PageKind.TERMINAL, ElementRows.screenOf(EditorCard.TERMINAL));
         EditorRows.Offers offers = new EditorRows.Offers(true, true);
         for (EditorCard card : EditorCard.values()) {
-            // The Terminal card's Layout is the Workspace's list, Customization's the whole
-            // app's (overhaul §2).
-            boolean screen = ElementRows.screenOf(card) != null || card == EditorCard.TERMINAL
-                || card == EditorCard.APPEARANCE;
+            // Only the page cards list rows: Global has no Layout list (spec §3).
+            boolean screen = card.isPageCard();
             assertEquals(card + " holds the Elements list", screen,
                 rowsOf(card).contains(Row.ELEMENTS));
         }
-        assertTrue("without Home the Workspace still lists its elements",
-            EditorRows.tier(EditorCard.WORKSPACE, new EditorRows.Offers(true, true, false), 3)
+        assertTrue("without Home the Terminal still lists its rows",
+            EditorRows.tier(EditorCard.TERMINAL, new EditorRows.Offers(true, true, false), 3)
                 .contains(Row.ELEMENTS));
         assertTrue(EditorRows.tier(EditorCard.HOME, offers, 3).contains(Row.ELEMENTS));
     }
@@ -130,13 +107,12 @@ public class ElementRowsTest {
     public void theListStandsBeforeTheLinkChips() {
         // ADR 0017 (fb44e0fb2): every glass card's own rows go under More, after Grain and Rim,
         // so the Elements list closes the More section and the link chips follow it.
-        for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.WORKSPACE}) {
+        for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.TERMINAL}) {
             List<Row> rows = rowsOf(card);
             int list = rows.indexOf(Row.ELEMENTS);
             // Overhaul §2: the list is the Layout section's, and no link repeats it.
             assertEquals(card + ": the list is under Layout", Row.SECTION_LAYOUT,
                 rows.get(list - 1));
-            assertFalse(card + ": no Widgets link", rows.contains(Row.LINK_WIDGETS));
         }
     }
 
