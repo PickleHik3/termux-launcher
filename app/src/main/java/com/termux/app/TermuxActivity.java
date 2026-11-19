@@ -9693,9 +9693,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                @NonNull Bitmap frame, @NonNull Rect frameRect,
                                                int blurRadiusDp) {
         android.graphics.drawable.Drawable live = liveDockPicture(backdrop, blurRadiusDp);
-        // Prototype #283: the page's ground over the stored frame; a Live picture records the
-        // ground strip beneath the dock already.
-        syncDockGround(backdrop, live != null);
+        // The page's ground over the dock's picture, stored or Live (#283). A Live picture does
+        // not carry the strip's dim: on pong (round 2) the dock and the keyboard rows it holds
+        // kept Home's luma over a Terminal dimmed 50 while their ground was left to it.
+        syncDockGround(backdrop, false);
         if (live != null) {
             // Live blur: the picture records what is beneath the dock; it is aimed by the recording.
             if (backdrop.getDrawable() != live) backdrop.setImageDrawable(live);
@@ -9727,7 +9728,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.app.chrome.GlassGround.ON) return;
         if (mDockGround == null) {
             com.termux.app.chrome.GroundUnderGlass ground =
-                new com.termux.app.chrome.GroundUnderGlass(backdrop, "dock");
+                new com.termux.app.chrome.GroundUnderGlass(backdrop, "dock-keyboard");
             mDockGround = ground;
             backdrop.getOverlay().add(ground);
             ground.setBounds(0, 0, backdrop.getWidth(), backdrop.getHeight());
