@@ -8241,10 +8241,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     rest.bottom, otherLook)) continue;
             int lookId = lookIdOf(other);
             int[] rows = new int[com.termux.app.chrome.ChromeInk.FACE_ROWS];
-            int otherTone = mChrome.ink().probeEitherToneUnderGlass(
-                com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
-                mPreferences.getAppBarOpacity(lookId) / 100f,
-                mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)), rows);
+            float otherOpacity = mPreferences.getAppBarOpacity(lookId) / 100f;
+            int otherTint = mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId));
+            // The keyboard's glass shows the page's ground (#283): the arriving page's faces are
+            // measured over its own, so the legends blend to what the landing measures there.
+            int otherTone = com.termux.app.chrome.GlassGround.ON
+                ? mChrome.ink().probeEitherToneUnderGlass(
+                    com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD, otherOpacity, otherTint,
+                    rows, groundOfWallPage(kind))
+                : mChrome.ink().probeEitherToneUnderGlass(
+                    com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD, otherOpacity, otherTint,
+                    rows);
             if (otherTone == 0) continue;
             store.record(legibilityKey(other), com.termux.app.glass.LegibilityBand.KEYBOARD,
                 rest.left, rest.top, rest.right, rest.bottom, otherLook,

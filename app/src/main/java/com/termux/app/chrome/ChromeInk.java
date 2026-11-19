@@ -373,6 +373,25 @@ public final class ChromeInk {
         boolean groundDrawn;
     }
 
+    /**
+     * The dim under a band's rows ({@link #bandFaces}, the keyboard's tone): the wall-wide dim, or
+     * a probe's page ground ({@link #probeEitherToneUnderGlass} with one), none under a frame that
+     * draws no ground.
+     */
+    @ColorInt
+    private int rowDim(@NonNull BandGlass glass) {
+        if (dimHidden(glass)) return Color.TRANSPARENT;
+        if (mProbing) return mProbeGround;
+        // A glass that draws the page's ground stands on the ground under its own rect.
+        return glass.groundDrawn ? mRowGround : mDimColor;
+    }
+
+    /**
+     * The page's ground under the rect a fixed-ink band's rows are being measured on, set where
+     * that measure begins ({@link #resolveFixedAt}, {@link #bandFaces}); read by {@link #rowDim}.
+     */
+    @ColorInt private int mRowGround;
+
     /** Whether the page's dim is off {@code glass}'s face: a frame covers it and draws no ground. */
     private static boolean dimHidden(@NonNull BandGlass glass) {
         return glass.framed && !glass.groundDrawn;
@@ -1878,6 +1897,7 @@ public final class ChromeInk {
         // the same), so the matrix is current before the face is: the legends are chosen on the
         // evened ground, as the pane's palette is.
         bandEvenOutMatrix(band, null);
+        mRowGround = mProbing ? mProbeGround : dimUnder(contract.rect);
         int wallpaper = evened(band, mCache.wallpaperUnder(band, contract.rect));
         int under = OnGlass.backdrop(wallpaper, bandDim(band, contract.rect), Color.TRANSPARENT);
         vote(band, OnGlass.composite(OnGlass.withAlpha(baseColor, baseAlpha), under));
@@ -1987,7 +2007,7 @@ public final class ChromeInk {
         int worst = 0;
         double worstRatio = Double.MAX_VALUE;
         for (int i = 0; i < rows.length; i++) {
-            int rowUnder = OnGlass.backdrop(rows[i], groundDim(dimHidden(glass), mDimColor),
+            int rowUnder = OnGlass.backdrop(rows[i], rowDim(glass),
                 Color.TRANSPARENT);
             float stop = DockGlassRendering.worstLightModelStop(ink, rowUnder, baseColor,
                 baseAlpha, mAccentColor, top, mid, foot, rowPosition(glass, i),
@@ -2429,6 +2449,7 @@ public final class ChromeInk {
         if (contract == null || !contract.seen) return new int[0];
         int veil = resolveBand(band, contract).veil;
         BandGlass glass = glassFor(band);
+        mRowGround = dimUnder(contract.rect);
         int[] rows = evenedRows(band, rowWallpapers(band, contract.rect));
         return facesOn(glass, veil, rows);
     }
@@ -2443,7 +2464,7 @@ public final class ChromeInk {
         int foot = DockGlassRendering.footAlpha(glass.opacity, glass.withFoot);
         int[] faces = new int[rows.length];
         for (int i = 0; i < rows.length; i++) {
-            int under = OnGlass.backdrop(rows[i], groundDim(dimHidden(glass), mDimColor),
+            int under = OnGlass.backdrop(rows[i], rowDim(glass),
                 Color.TRANSPARENT);
             float centre = (rowPosition(glass, i) + rowPosition(glass, i + 1)) / 2f;
             int surface = DockGlassRendering.glassSurfaceAt(centre, under, baseColor, baseAlpha,
@@ -2468,9 +2489,35 @@ public final class ChromeInk {
     public int probeEitherToneUnderGlass(@NonNull GlassBackdropCache.Band band, float opacity,
                                          @ColorInt int tintBase, @NonNull int[] facesOut) {
         readMode();
+        return eitherToneUnderGlass(band, opacity, tintBase, facesOut);
+    }
+
+    /**
+     * {@link #probeEitherToneUnderGlass(GlassBackdropCache.Band, float, int, int[])} over
+     * {@code pageGround}, the page's ground the arriving page's band will stand on (#283: its
+     * glass shows the ground beneath it), so a crossing's legends blend toward what the landing
+     * measures there. Records nothing, as the probe without a ground.
+     */
+    public int probeEitherToneUnderGlass(@NonNull GlassBackdropCache.Band band, float opacity,
+                                         @ColorInt int tintBase, @NonNull int[] facesOut,
+                                         @ColorInt int pageGround) {
+        readMode();
+        mProbing = true;
+        mProbeGround = pageGround;
+        mProbeVotes.clear();
+        try {
+            return eitherToneUnderGlass(band, opacity, tintBase, facesOut);
+        } finally {
+            mProbing = false;
+        }
+    }
+
+    private int eitherToneUnderGlass(@NonNull GlassBackdropCache.Band band, float opacity,
+                                     @ColorInt int tintBase, @NonNull int[] facesOut) {
         Contract c = mContracts.get(band);
         if (c == null || !c.seen || !c.fixedInk || !c.eitherTone || !mCache.hasSample(band)) return 0;
         BandGlass real = glassFor(band);
+        if (!mProbing) mRowGround = dimUnder(c.rect);
         BandGlass g = new BandGlass();
         g.opacity = opacity < 0f ? 0f : (opacity > 1f ? 1f : opacity);
         g.withFoot = real.withFoot;
