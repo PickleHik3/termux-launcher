@@ -115,6 +115,15 @@ public final class GroundStripView extends View implements LiveBackdrop.WallGrou
             if (mRiders[i] == glass) return;
             if (free < 0 && mRiders[i] == null) free = i;
         }
+        // One stack ground per view: a stack built again for the same view takes the old one's
+        // place, which no longer draws.
+        View bound = glass.boundHost();
+        for (int i = 0; i < MAX_RIDERS && bound != null; i++) {
+            if (mRiders[i] != null && mRiders[i].boundHost() == bound) {
+                mRiders[i] = glass;
+                return;
+            }
+        }
         if (free < 0) {
             for (int i = 0; i < MAX_RIDERS && free < 0; i++) {
                 if (!mRiders[i].live()) free = i;

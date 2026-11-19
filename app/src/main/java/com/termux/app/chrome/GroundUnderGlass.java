@@ -31,6 +31,12 @@ public final class GroundUnderGlass extends Drawable {
     private static final int MAX_CALLBACK_DEPTH = 8;
 
     @Nullable private final View mFixedHost;
+    /**
+     * The view a stack's ground is drawn on, named where the stack is built ({@link #bind}): the
+     * wrappers a stack is worn through (a layout-neutral or rounded sheet, a crossfade) do not
+     * all pass their callbacks on, so the callbacks alone cannot be trusted to reach the view.
+     */
+    @Nullable private View mBoundHost;
     @NonNull private final String mTag;
     @Nullable private GroundStripView mStrip;
     private boolean mCarried;
@@ -57,6 +63,7 @@ public final class GroundUnderGlass extends Drawable {
     @Nullable
     public View host() {
         if (mFixedHost != null) return mFixedHost;
+        if (mBoundHost != null) return mBoundHost;
         Callback callback = getCallback();
         for (int i = 0; i < MAX_CALLBACK_DEPTH && callback instanceof Drawable; i++)
             callback = ((Drawable) callback).getCallback();
@@ -71,8 +78,35 @@ public final class GroundUnderGlass extends Drawable {
 
     /** The strip moved its bands: draw again. */
     void redraw() {
-        if (mFixedHost != null) mFixedHost.invalidate();
+        View named = mFixedHost != null ? mFixedHost : mBoundHost;
+        if (named != null) named.invalidate();
         else invalidateSelf();
+    }
+
+    /** The view this ground was bound to ({@link #bind}), or null. */
+    @Nullable
+    View boundHost() {
+        return mBoundHost;
+    }
+
+    /**
+     * Names {@code host} as the view the grounds in {@code stack} (a {@link GlassStack#build}
+     * result: the ground itself or a layer of a {@code LayerDrawable}) are drawn on, and rides the
+     * strip with them. Called where a stack is built for a view, once per build, never per frame.
+     */
+    public static void bind(@Nullable Drawable stack, @NonNull View host) {
+        if (!GlassGround.ON || stack == null) return;
+        if (stack instanceof GroundUnderGlass) {
+            GroundUnderGlass ground = (GroundUnderGlass) stack;
+            ground.mBoundHost = host;
+            ground.attach();
+            return;
+        }
+        if (stack instanceof android.graphics.drawable.LayerDrawable) {
+            android.graphics.drawable.LayerDrawable layers =
+                (android.graphics.drawable.LayerDrawable) stack;
+            for (int i = 0; i < layers.getNumberOfLayers(); i++) bind(layers.getDrawable(i), host);
+        }
     }
 
     /**

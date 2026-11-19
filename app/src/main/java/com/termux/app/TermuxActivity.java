@@ -4218,8 +4218,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withGround(true);
         // Wrapped so the apps row's band can be left out where it wears Lens beads; with no band
         // it draws the sheet whole (FrameBandCutDrawable).
-        mFrameGutterDrawable = new com.termux.app.dock.FrameBandCutDrawable(
-            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop));
+        Drawable frameStack = com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
+            backdrop);
+        com.termux.app.chrome.GroundUnderGlass.bind(frameStack, body);
+        mFrameGutterDrawable = new com.termux.app.dock.FrameBandCutDrawable(frameStack);
         body.setBackground(mFrameGutterDrawable);
         growFrameGlassUnderSystemBars(body);
         body.setVisibility(View.VISIBLE);
@@ -6456,9 +6458,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withSlice(1f, true)
             // The page's ground over the frame, as the bars and the dock draw it (#283).
             .withGround(true);
-        under.setBackground(new com.termux.app.chrome.RoundedSheetDrawable(
-            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
-                getResources().getDisplayMetrics().density, backdrop),
+        Drawable underStack = com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
+            getResources().getDisplayMetrics().density, backdrop);
+        // Its ground is drawn on the card: the rounded sheet passes no callbacks on.
+        com.termux.app.chrome.GroundUnderGlass.bind(underStack, under);
+        under.setBackground(new com.termux.app.chrome.RoundedSheetDrawable(underStack,
             com.termux.app.dock.UnderKeyboardBand.sideInsetPx(dock), radiusPx));
     }
 
@@ -8734,8 +8738,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 Drawable held = mKeyboardHostBackground.reuse(key);
                 if (held != null) return held;
             }
-            Drawable built = new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(
-                mChrome.glass(), spec, density, backdrop));
+            Drawable stack = com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
+                backdrop);
+            // Its ground is drawn on the host: the layout-neutral wrapper passes no callbacks on.
+            com.termux.app.chrome.GroundUnderGlass.bind(stack, surfaceHost);
+            Drawable built = new LayoutNeutralDrawable(stack);
             if (keep) mKeyboardHostBackground.hold(key, built);
             return built;
         } finally {
