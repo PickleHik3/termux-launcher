@@ -33,7 +33,7 @@ page also lists every action id you can use in those places.
   value, such as a new window name, then **Enter** applies it.
 - Actions that end shells (**Kill focused pane**, **Close window**, **Close session**) ask first.
 - An action that cannot run right now stays in the list, greyed, with the reason, for example
-  "Unavailable: compatibility mode is on" when **Split-pane controls** is off.
+  "Unavailable: compatibility mode is on" when **Multiplexer** is off.
 - The four keys under the list are your most-used actions.
 
 Besides the actions, the palette has three sections of its own:
@@ -66,8 +66,8 @@ new one), **Show wallpaper** or **Hide wallpaper**, **Style** (when Termux:Styli
 Every action below can be bound in `~/.termux/termux-launcher-bindings.conf`, put on an extra key as
 `tool:<id>` (with arguments as `tool:<id>:name=value`), or put on a keyboard swipe as
 `tool:<id>` (no arguments). The title is what the palette shows. Shortcuts marked "on" or "off"
-apply only with **Split-pane controls** on or off; see [Keyboard shortcuts](Keyboard_Shortcuts.md).
-Pane, window, session-browser and workspace actions need **Split-pane controls** on, except
+apply only with **Multiplexer** on or off; see [Keyboard shortcuts](Keyboard_Shortcuts.md).
+Pane, window, session-browser and workspace actions need **Multiplexer** on, except
 **Kill focused pane** and **Rename pane**, which need only a running session.
 
 ### Pane

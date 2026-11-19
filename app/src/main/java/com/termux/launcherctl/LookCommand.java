@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.FrostStops;
 import com.termux.shared.termux.settings.preferences.LookGrid;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -18,15 +19,27 @@ import java.util.Locale;
  * {@code reset} that cleared something, runs the caller's {@code onChanged} once, and the route
  * re-dresses the live chrome from there.
  *
+ * <p>It sets what the Appearance cards can (ADR 0031): Global's values; the own Opacity and Blur
+ * of the status bar, the dock and the keyboard; and the Terminal's Background (opacity, blur and
+ * wallpaper dim, kept in their own preferences, never following Global).</p>
+ *
  * <p>Request: {@code {"op":"get|set|reset","property":"opacity","value":"60","element":"dock"}};
  * property and element are optional where the CLI makes them so. The chrome wears one look on
- * every page (ADR 0031): a {@code page} or {@code kind} is refused.</p>
+ * every page: a {@code page} or {@code kind} is refused.</p>
  */
 final class LookCommand {
 
     /** What a request naming a page or a kind of page is told. */
     static final String NO_PAGE_LOOK =
         "the look is the same on every page: leave out --page and --kind";
+    static final String NO_TERMINAL_ELEMENT =
+        "the Terminal's look is its Background: use --element background";
+    static final String NO_OWN_LOOK =
+        "widgets and menus wear Global's look and hold none of their own: leave out --element";
+    static final String DIM_IS_TERMINALS =
+        "dim belongs to the Terminal's Background: use --element background";
+    static final String ELEMENTS = "'element' must be one of status, dock, keyboard, background";
+    private static final String TERMINAL = "Terminal";
 
     private LookCommand() {
     }
@@ -47,38 +60,91 @@ final class LookCommand {
         }
     }
 
+    /** The Terminal's Background: its own three numbers, never Global's. */
+    enum Setting {
+        OPACITY("opacity", 0, 100, TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY),
+        /** In dp, what a pane can render. */
+        BLUR("blur", 0, TermuxPreferenceConstants.TERMUX_APP.MAX_TERMINAL_BG_BLUR,
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_BG_BLUR),
+        DIM("dim", 0, 100, TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_WALLPAPER_DIM);
+
+        final String key;
+        final int min;
+        final int max;
+        final int shipped;
+
+        Setting(String key, int min, int max, int shipped) {
+            this.key = key;
+            this.min = min;
+            this.max = max;
+            this.shipped = shipped;
+        }
+
+        @Nullable
+        static Setting forKey(@NonNull String key) {
+            for (Setting each : values()) {
+                if (each.key.equals(key)) return each;
+            }
+            return null;
+        }
+    }
+
+    /** Where the Terminal's Background lives: the preferences on a device, a map in tests. */
+    interface TerminalBackground {
+        int get(@NonNull Setting setting);
+
+        void set(@NonNull Setting setting, int value);
+    }
+
     @NonNull
-    static JSONObject handle(@NonNull LookGrid grid, @NonNull JSONObject request) throws JSONException {
-        return handle(grid, request, () -> { });
+    static JSONObject handle(@NonNull LookGrid grid, @NonNull TerminalBackground background,
+                             @NonNull JSONObject request) throws JSONException {
+        return handle(grid, background, request, () -> { });
     }
 
     /**
      * Answers one request. {@code onChanged} runs once after a {@code set}, or after a
-     * {@code reset} that cleared at least one cell; never for a {@code get} or an error.
+     * {@code reset} that changed at least one value; never for a {@code get} or an error.
      */
     @NonNull
-    static JSONObject handle(@NonNull LookGrid grid, @NonNull JSONObject request,
-                             @NonNull Runnable onChanged) throws JSONException {
+    static JSONObject handle(@NonNull LookGrid grid, @NonNull TerminalBackground background,
+                             @NonNull JSONObject request, @NonNull Runnable onChanged)
+            throws JSONException {
         String op = request.optString("op", "");
         String propertyName = request.optString("property", "").trim().toLowerCase(Locale.ROOT);
         String elementName = request.optString("element", "").trim().toLowerCase(Locale.ROOT);
-        LookGrid.Element element = null;
-        if (!elementName.isEmpty()) {
-            element = LookGrid.Element.forKey(elementName);
-            if (element == null)
-                return error("'element' must be one of status, dock, keyboard, terminal, widgets, sheets");
-        }
         if ((request.has("page") && !request.isNull("page"))
                 || !request.optString("kind", "").trim().isEmpty())
             return error(NO_PAGE_LOOK);
+        boolean terminal = false;
+        LookGrid.Element element = null;
+        switch (elementName) {
+            case "":
+                break;
+            case "background":
+                terminal = true;
+                break;
+            case "terminal":
+                return error(NO_TERMINAL_ELEMENT);
+            case "widgets":
+            case "sheets":
+                return error(NO_OWN_LOOK);
+            default:
+                element = LookGrid.Element.forKey(elementName);
+                if (element == null) return error(ELEMENTS);
+        }
+        if (terminal) return background(background, op, propertyName, request, onChanged);
         LookGrid.Property property = null;
         if (!propertyName.isEmpty()) {
-            property = LookGrid.Property.forKey(propertyName.equals("colour") ? "tint_hue" : propertyName);
+            if (propertyName.equals("dim")) return error(DIM_IS_TERMINALS);
+            property = LookGrid.Property.forKey(propertyName.equals("colour") ? "tint_hue"
+                : propertyName.equals("blur") ? "frost" : propertyName);
             if (property == null)
-                return error("'property' must be one of frost, opacity, tint, colour, corners, depth, edge,"
-                    + " grain, rim, vibrancy, margin");
-            if (element != null && !property.perElement)
-                return error(propertyName + " is set for all glass, not for one element");
+                return error("'property' must be one of blur, opacity, tint, colour, corners, depth,"
+                    + " edge, grain, rim, vibrancy, margin");
+            if (element != null && !ownable(property))
+                return error(propertyName + " is Global's only: a surface owns just opacity and blur,"
+                    + " so leave out --element");
         }
         switch (op) {
             case "get":
@@ -93,6 +159,66 @@ final class LookCommand {
             default:
                 return error("'op' must be get, set or reset");
         }
+    }
+
+    /** What the status bar, the dock and the keyboard may own. */
+    static boolean ownable(@NonNull LookGrid.Property property) {
+        return property == LookGrid.Property.OPACITY || property == LookGrid.Property.FROST;
+    }
+
+    /** {@code --element background}: the Terminal's own numbers; they never follow Global. */
+    @NonNull
+    private static JSONObject background(@NonNull TerminalBackground background, @NonNull String op,
+                                         @NonNull String propertyName, @NonNull JSONObject request,
+                                         @NonNull Runnable onChanged) throws JSONException {
+        Setting setting = null;
+        if (!propertyName.isEmpty()) {
+            setting = Setting.forKey(propertyName.equals("frost") ? "blur" : propertyName);
+            if (setting == null) return error("the Terminal's Background takes opacity, blur and dim");
+        }
+        switch (op) {
+            case "get":
+                if (setting == null) return error("'property' is required");
+                return new JSONObject().put("ok", true).put("property", setting.key)
+                    .put("value", render(setting, background.get(setting))).put("from", TERMINAL);
+            case "set": {
+                if (setting == null) return error("'property' is required");
+                Integer value = parse(setting,
+                    request.optString("value", "").trim().toLowerCase(Locale.ROOT));
+                if (value == null) return error(setting.key + " takes a whole number");
+                background.set(setting, value);
+                onChanged.run();
+                return new JSONObject().put("ok", true).put("property", setting.key)
+                    .put("value", render(setting, background.get(setting))).put("at", TERMINAL);
+            }
+            case "reset": {
+                int changed = 0;
+                for (Setting each : Setting.values()) {
+                    if (setting != null && each != setting) continue;
+                    if (background.get(each) == each.shipped) continue;
+                    background.set(each, each.shipped);
+                    changed++;
+                }
+                if (changed > 0) onChanged.run();
+                return new JSONObject().put("ok", true).put("reset", changed).put("at", TERMINAL);
+            }
+            default:
+                return error("'op' must be get, set or reset");
+        }
+    }
+
+    /** A Background number in the words the CLI takes it in. */
+    @NonNull
+    static String render(@NonNull Setting setting, int value) {
+        return setting == Setting.BLUR ? value + "dp" : String.valueOf(value);
+    }
+
+    @Nullable
+    static Integer parse(@NonNull Setting setting, @NonNull String text) {
+        String digits = setting == Setting.BLUR && text.endsWith("dp")
+            ? text.substring(0, text.length() - 2) : text;
+        Integer number = whole(digits);
+        return number == null ? null : Math.max(setting.min, Math.min(setting.max, number));
     }
 
     /** The cell a request names. */
@@ -145,7 +271,8 @@ final class LookCommand {
 
     @NonNull
     static String name(@NonNull LookGrid.Property property) {
-        return property == LookGrid.Property.TINT_HUE ? "colour" : property.key;
+        return property == LookGrid.Property.TINT_HUE ? "colour"
+            : property == LookGrid.Property.FROST ? "blur" : property.key;
     }
 
     /** A grid number in the words the CLI takes it in. */
@@ -210,7 +337,7 @@ final class LookCommand {
     @NonNull
     private static String hint(LookGrid.Property property) {
         switch (property) {
-            case FROST: return "frost takes a stop from 0 to " + FrostStops.LAST + ", or a blur such as 12dp";
+            case FROST: return "blur takes a stop from 0 to " + FrostStops.LAST + ", or a blur such as 12dp";
             case TINT_HUE: return "colour takes primary, secondary or tertiary";
             case RIM: return "rim takes off, hairline or bright";
             case CORNERS: return "corners takes a size in dp, or auto";

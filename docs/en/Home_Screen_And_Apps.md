@@ -70,8 +70,8 @@ Folders on a Home page work like the dock's. While a page is in edit mode (hold 
 an icon and rest it on another icon for a moment: the icon under it swells, and letting go there
 makes a folder of the two, named after the app you dropped. Rest an icon on a folder the same way
 to add it. Let go before the swell and the icon moves as it always does. Nothing merges with a
-widget, and a folder holds up to 16 apps (Settings › Home › Folders › Max folder size changes
-that, and Folder density how tightly an open folder lays its apps out).
+widget, and a folder holds up to 16 apps (the Home card's **Folders** rows change that, and how
+tightly an open folder lays its apps out).
 
 - A folder takes one cell and shows up to four of its apps in a small grid, with its name under
   it.

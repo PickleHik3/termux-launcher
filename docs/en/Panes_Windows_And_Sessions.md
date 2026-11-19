@@ -22,7 +22,7 @@ Session
 
 Switching away from a pane, window or session leaves its shells running. Closing one ends them.
 
-All of this needs **Settings → Terminal → Windows & panes → Split-pane controls** ("Enable window
+All of this needs **Multiplexer** on the Terminal card ("Enable window
 splitting and tmux-style pane shortcuts."), on by default. Turning it off returns to single-pane
 Termux behaviour, closes the extra panes and disables pane and window actions, so finish or save
 work in those shells first.
@@ -131,7 +131,7 @@ with the full-width row, and the row's shell drops into the lower cell.
   you lift your finger, with a light tick. Holding a corner does not resize; it only shows the tab.
 - `Ctrl+Alt+Shift+Arrow` grows the focused pane in that direction; repeat to keep going.
 - **Equalize pane dividers** in the palette resets every divider in the window to equal shares.
-- **Settings → Terminal → Windows & panes → Focus active pane** ("Enlarge the active pane and
+- **Focus grows** on the Terminal card ("Enlarge the active pane and
   shrink the others.") gives the pane you tap the larger share.
 
 Text size is separate from pane size. Pinch inside a pane, or run **Increase font size** /
@@ -161,7 +161,7 @@ window by hand (dragging or key-resizing a divider, **Rotate pane layout**, **Mo
 hands it back to manual control; **Equalize pane dividers** does not. Under `dwindle` the dividers
 you drag stay where you put them.
 
-**Settings → Terminal → Windows & panes → Automatic tiling** ("Split the current pane when
+**Automatic tiling** on the Terminal card ("Split the current pane when
 opening a new one.") starts every new window under `dwindle`. The lone pane's corner tab switches
 it too.
 
