@@ -263,7 +263,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         com.termux.x11.LorieHost.primePrefs(getContext());
         mDisplay = findViewById(R.id.x11_display_view);
         applyDisplaySurfaceZOrder(mDisplay);
-        com.termux.x11.X11KeysDiag.gate = () -> com.termux.app.chrome.MotionLog.enabled; // DIAG(x11-keys)
         mGlass = findViewById(R.id.x11_pane_glass);
         mCornerMask = findViewById(R.id.x11_pane_corner_mask);
         mEmptyState = findViewById(R.id.x11_pane_empty);
