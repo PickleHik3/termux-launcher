@@ -59,7 +59,14 @@ release() {
 HELD=0
 lease "$TARGET" status 2>/dev/null | grep -q "^$TARGET is leased by .*(you)" && HELD=1
 if [ "$HELD" = 1 ]; then
+    # Some ad commands resolve the name to its serial and check the lease there: hold that too,
+    # and give back only what this round took.
     release() { :; }
+    if [ -n "$SERIAL" ] && [ "$SERIAL" != "$TARGET" ] \
+        && ! lease "$SERIAL" status 2>/dev/null | grep -qF "${SERIAL//[^A-Za-z0-9._-]/_} is leased by"; then
+        lease "$SERIAL" acquire --for 20 "$PURPOSE" || exit 1
+        release() { lease "$SERIAL" release >/dev/null 2>&1; }
+    fi
 else
     lease "$TARGET" acquire --for 20 "$PURPOSE" || exit 1
     if [ -n "$SERIAL" ] && [ "$SERIAL" != "$TARGET" ]; then
