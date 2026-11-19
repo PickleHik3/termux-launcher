@@ -5687,8 +5687,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float mPeekCardRowsPx;
     private float mHomeRestCardRowsPx;
-    /** The rows' offset over the host when the reflection was last aimed. */
-    private float mPeekReflectionRowsPx;
     /** The rows' offset over the host the cut was last drawn at; a change re-cuts it. */
     private float mPeekDrawnRowsPx;
     /** The slab's cut, the card's and the one drawn, reused: the blend runs every frame. */
@@ -6034,12 +6032,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         reflection.attachStrip(null, 0f, 0f);
         boolean live = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
             && mFancierGlassLook != null;
-        reflection.update(card, mPeekRow, rowAt[0] - hostAt[0],
-            rowAt[1] - hostAt[1] + mStackRenderer.rowsOverHostPx(),
+        // Aimed as the card was cut: the row where it stood over the host then, and the whole
+        // reflection moved by as much as the rows have moved over the host since, the same as
+        // the card's top (peekCardCut), so the mirror stays under the icons and on the card.
+        float cutAt = card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx;
+        reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], cutAt,
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
         reflection.setFade(drawnPeekShare());
-        mPeekReflectionRowsPx = peekRowsOverHost();
-        reflection.setDrawnOffsetY(0f);
+        reflection.setDrawnOffsetY(peekRowsOverHost() - cutAt);
     }
 
     /** The reflection and its views let go, and the knob no longer heard; for the activity's end. */
@@ -7274,7 +7274,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 host.getHeight()));
         if (mPeekReflection != null) {
             mPeekReflection.setFade(drawnPeekShare());
-            mPeekReflection.setDrawnOffsetY(rows - mPeekReflectionRowsPx);
+            float cutAt = shown == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx;
+            mPeekReflection.setDrawnOffsetY(rows - cutAt);
         }
         rebuildBackdropGlassEffectForLens();
     }

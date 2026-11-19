@@ -121,13 +121,19 @@ public final class GlassEffects {
     /** Rebuild + re-apply the dock's effect with the current lens state (no recapture). */
     public void rebuildForLens() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mParamsValid) {
+            if (MotionLog.enabled) MotionLog.log("lens-rebuild", "skipped params=" + mParamsValid); // DIAG(lens)
             return;
         }
         View backdrop = mHost.dockBackdrop();
         if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) {
+            if (MotionLog.enabled) MotionLog.log("lens-rebuild", "skipped backdrop="
+                + (backdrop == null ? "none" : backdrop.getVisibility())); // DIAG(lens)
             return;
         }
         RenderEffect glass = buildDock(mBlurPx, mCapLeft, mCapTop, mCapRight, mCapBottom, mRadiusPx);
+        if (MotionLog.enabled) MotionLog.log("lens-rebuild", "rect=" + mRect[0] + "," + mRect[1]
+            + "," + mRect[2] + "," + mRect[3] + " r=" + mRect[4] + " share=" + mHost.peekShare()
+            + " backdropTy=" + backdrop.getTranslationY() + " top=" + backdrop.getTop()); // DIAG(lens)
         if (glass != null) {
             backdrop.setRenderEffect(glass);
         }
