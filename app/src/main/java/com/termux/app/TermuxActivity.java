@@ -2076,6 +2076,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return groundUnderRect(screenRect);
         }
 
+        @Override public int homeGround() {
+            return groundOfWallPage(com.termux.app.page.PageKind.HOME);
+        }
+
         @Override public boolean paneGlassSlabs() {
             return isTerminalPaneGlassActive();
         }
