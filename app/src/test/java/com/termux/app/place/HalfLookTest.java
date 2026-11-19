@@ -61,12 +61,12 @@ public class HalfLookTest {
             TermuxAppSharedPreferences.terminalPageId(), 90);
         preferences.setInAppKeyboardBackdropOpacity(TermuxAppSharedPreferences.terminalPageId(), 40);
         HalfLook home = HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL);
-        HalfLook workspace = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
+        HalfLook terminal = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
 
-        assertTrue(home.stackEquals(workspace));
-        assertTrue(home.statusEquals(workspace));
+        assertTrue(home.stackEquals(terminal));
+        assertTrue(home.statusEquals(terminal));
         assertEquals(SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, home),
-            SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, workspace));
+            SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, terminal));
     }
 
     /**
@@ -78,9 +78,9 @@ public class HalfLookTest {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.terminalPageId(), 5);
         HalfLook home = HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL);
-        HalfLook workspace = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
+        HalfLook terminal = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
         SeamDress.StackDress a = SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, home);
-        assertTrue(a.structureEquals(SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, workspace)));
+        assertTrue(a.structureEquals(SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, terminal)));
         assertFalse(a.structureEquals(SeamDress.StackDress.of(
             WallShape.of(LayoutStyle.DOCKED, -1, 16), 1f, 1f, 0, home)));
         assertFalse(a.structureEquals(SeamDress.StackDress.of(SHAPE, 0.8f, 1f, 0, home)));
@@ -96,7 +96,7 @@ public class HalfLookTest {
             assertEquals(PageKind.TERMINAL, SeamDress.lookPage(surface, window, window, false));
         }
         // Mid-slide from Home: the stack wears the half whose rows it stands, the status bar the
-        // Workspace's, the frame the committed half's.
+        // Terminal's, the frame the committed half's.
         assertEquals(PageKind.TERMINAL,
             SeamDress.lookPage(SeamDress.Surface.STACK, home, window, true));
         assertEquals(PageKind.HOME,

@@ -18,7 +18,7 @@ import org.robolectric.annotation.Config;
 import com.termux.app.page.PageKind;
 
 /**
- * A live neighbour parked beside the Workspace page ({@code GONE}) is laid out at the page's size
+ * A live neighbour parked beside the Terminal page ({@code GONE}) is laid out at the page's size
  * at rest, so a keyboard or chrome change resizes its shells then and a crossing lays it out at
  * the size it already has.
  */

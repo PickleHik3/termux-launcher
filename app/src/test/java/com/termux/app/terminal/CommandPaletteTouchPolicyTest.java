@@ -60,7 +60,7 @@ public class CommandPaletteTouchPolicyTest {
     }
 
     @Test
-    public void aKeyboardOnASideEdge_inTheWorkspace_reachesTheKeyboard() {
+    public void aKeyboardOnASideEdge_inTheTerminal_reachesTheKeyboard() {
         float[] terminal = {0f, 56f, 2638f, 1623f};
         float[] sideKeyboard = {0f, 400f, 700f, 1600f};
         assertEquals(Target.PASS_THROUGH,

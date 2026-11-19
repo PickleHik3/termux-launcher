@@ -17,8 +17,8 @@ import org.robolectric.annotation.Config;
 import com.termux.app.page.PageKind;
 
 /**
- * The display window stands in the Workspace's room: it ends where the Terminal's rest puts the
- * Workspace page's bottom, so a Resize display keyboard (a rest with the keyboard taking room)
+ * The display window stands in the Terminal's room: it ends where the Terminal's rest puts the
+ * Terminal page's bottom, so a Resize display keyboard (a rest with the keyboard taking room)
  * shrinks it, and an Overlay one (the keyboard's height handed back) leaves it to the rows.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -54,7 +54,7 @@ public class DisplayWindowRoomTest {
     }
 
     @Test
-    public void theDisplayEndsWhereTheWorkspacesRoomPutsIt() {
+    public void theDisplayEndsWhereTheTerminalsRoomPutsIt() {
         wall.setPageBottomInsetPx(PageKind.TERMINAL, 900);
         wall.goTo(PageKind.DISPLAY, false);
         layOut();
@@ -63,7 +63,7 @@ public class DisplayWindowRoomTest {
     }
 
     @Test
-    public void aRoomWrittenForTheDisplayIsTheWorkspaces() {
+    public void aRoomWrittenForTheDisplayIsTheTerminals() {
         wall.setPageBottomInsetPx(PageKind.DISPLAY, 400);
         assertEquals(400, wall.pageBottomInsetPx(PageKind.TERMINAL));
     }

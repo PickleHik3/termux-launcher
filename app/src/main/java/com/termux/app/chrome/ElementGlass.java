@@ -18,31 +18,32 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
  *
  * <p>Parity: Depth, Edge, the tint colour and the rim are global numbers the renderer already
  * holds (the Fancier Glass look, {@link GlassLook#of}). An element only replaces them where a cell
- * of its own, or a page's, holds a value ({@link #ownCell}); following Base it hands the global
- * look back untouched, so a grid holding only Base draws exactly what it did.</p>
+ * of its own, or a page's, holds a value ({@link #ownCell}); following Global it hands the global
+ * look back untouched, so a grid holding only Global draws exactly what it did.</p>
  */
 public final class ElementGlass {
 
     /** The blur ceiling the getters clamp to (the terminal's). */
     static final int MAX_BLUR_DP = 48;
 
-    @NonNull public final LookGrid.Element element;
+    /** The element, or null for Global's own cell (the sheets and the Home float wear it). */
+    @Nullable public final LookGrid.Element element;
     public final int blurDp;
     public final int opacityPercent;
     public final int grainPercent;
     public final int tintPercent;
     /** Corners as stored: dp, or {@link LookGrid#CORNERS_AUTO}. */
     public final int cornersDp;
-    /** The tint colour this element holds of its own, or null while it follows Base. */
+    /** The tint colour this element holds of its own, or null while it follows Global. */
     @Nullable public final GlassLook.Hue ownHue;
-    /** The rim ({@link LookGrid#RIM_OFF} and friends) of its own, or null while it follows Base. */
+    /** The rim ({@link LookGrid#RIM_OFF} and friends) of its own, or null while it follows Global. */
     @Nullable public final Integer ownRim;
-    /** The refraction bend in dp of its own, or null while it follows Base. */
+    /** The refraction bend in dp of its own, or null while it follows Global. */
     @Nullable public final Integer ownDepthDp;
-    /** The dispersion of its own, or null while it follows Base. */
+    /** The dispersion of its own, or null while it follows Global. */
     @Nullable public final Integer ownEdgePercent;
 
-    private ElementGlass(@NonNull LookGrid.Element element, int blurDp, int opacityPercent,
+    private ElementGlass(@Nullable LookGrid.Element element, int blurDp, int opacityPercent,
                          int grainPercent, int tintPercent, int cornersDp,
                          @Nullable GlassLook.Hue ownHue, @Nullable Integer ownRim,
                          @Nullable Integer ownDepthDp, @Nullable Integer ownEdgePercent) {
@@ -63,7 +64,7 @@ public final class ElementGlass {
      * chrome wears one look on every page (ADR 0031).
      */
     @NonNull
-    public static ElementGlass resolve(@NonNull LookGrid grid, @NonNull LookGrid.Element element,
+    public static ElementGlass resolve(@NonNull LookGrid grid, @Nullable LookGrid.Element element,
                                        int pageId) {
         LookGrid.Resolved hue = grid.resolve(LookGrid.Property.TINT_HUE, element);
         LookGrid.Resolved rim = grid.resolve(LookGrid.Property.RIM, element);
@@ -85,10 +86,18 @@ public final class ElementGlass {
     /** {@link #resolve} over the live store; the shipped look when there is none. */
     @NonNull
     public static ElementGlass of(@Nullable TermuxAppSharedPreferences preferences,
-                                  @NonNull LookGrid.Element element, int pageId) {
+                                  @Nullable LookGrid.Element element, int pageId) {
         LookGrid grid = preferences != null ? preferences.lookGrid()
             : new LookGrid(new LookGrid.MemoryStore());
         return resolve(grid, element, pageId);
+    }
+
+    /** This glass with its opacity raised to {@code floorPercent} when it is lower; else itself. */
+    @NonNull
+    ElementGlass withOpacityFloor(int floorPercent) {
+        if (opacityPercent >= floorPercent) return this;
+        return new ElementGlass(element, blurDp, floorPercent, grainPercent, tintPercent,
+            cornersDp, ownHue, ownRim, ownDepthDp, ownEdgePercent);
     }
 
     /**
@@ -96,7 +105,7 @@ public final class ElementGlass {
      * renderer's global look already carries.
      */
     static boolean ownCell(@NonNull LookGrid.Resolved resolved) {
-        return resolved.cell != LookGrid.Cell.BASE && resolved.cell != LookGrid.Cell.SHIPPED;
+        return resolved.cell != LookGrid.Cell.GLOBAL && resolved.cell != LookGrid.Cell.SHIPPED;
     }
 
     @NonNull
@@ -159,7 +168,7 @@ public final class ElementGlass {
         return look;
     }
 
-    /** Whether the element turned its rim off in a cell of its own; Base never does. */
+    /** Whether the element turned its rim off in a cell of its own; Global never does. */
     public boolean rimOff() {
         return ownRim != null && ownRim == LookGrid.RIM_OFF;
     }

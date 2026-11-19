@@ -22,22 +22,22 @@ public class LookGridTest {
         for (int mask = 0; mask < 4; mask++) {
             LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
             boolean element = (mask & 1) != 0;
-            boolean base = (mask & 2) != 0;
+            boolean global = (mask & 2) != 0;
             if (element) grid.write(Property.OPACITY, Element.DOCK, 33);
-            if (base) grid.write(Property.OPACITY, null, 44);
+            if (global) grid.write(Property.OPACITY, null, 44);
             Resolved resolved = grid.resolve(Property.OPACITY, Element.DOCK);
             if (element) {
                 assertEquals(33, resolved.value);
                 assertEquals(Cell.ELEMENT, resolved.cell);
-            } else if (base) {
+            } else if (global) {
                 assertEquals(44, resolved.value);
-                assertEquals(Cell.BASE, resolved.cell);
+                assertEquals(Cell.GLOBAL, resolved.cell);
             } else {
                 assertEquals(Property.OPACITY.shipped, resolved.value);
                 assertEquals(Cell.SHIPPED, resolved.cell);
             }
             // All glass never reads an element's column.
-            assertEquals(base ? Cell.BASE : Cell.SHIPPED, grid.resolve(Property.OPACITY, null).cell);
+            assertEquals(global ? Cell.GLOBAL : Cell.SHIPPED, grid.resolve(Property.OPACITY, null).cell);
         }
     }
 
@@ -61,7 +61,7 @@ public class LookGridTest {
             assertEquals(element.key, 40, grid.value(Property.OPACITY, element));
             assertFalse(element.key, grid.holdsOwn(Property.OPACITY, element));
         }
-        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP,
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_SIDE_GAP,
             grid.value(Property.MARGIN, null));
     }
 
@@ -92,7 +92,7 @@ public class LookGridTest {
             grid.value(Property.GRAIN, Element.DOCK));
         grid.write(Property.GRAIN, null, 18);
         assertEquals(18, grid.value(Property.GRAIN, Element.DOCK));
-        assertEquals(Cell.BASE, grid.resolve(Property.GRAIN, Element.DOCK).cell);
+        assertEquals(Cell.GLOBAL, grid.resolve(Property.GRAIN, Element.DOCK).cell);
     }
 
     /**

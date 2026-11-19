@@ -28,16 +28,15 @@
     <string name="appearance_bar_turn_for_portrait">Turn the phone to edit portrait</string>
     <!-- Under the frame: which half of the wall the frame shows, and what a card changes. -->
     <string name="appearance_half_home">Home</string>
-    <string name="appearance_half_workspace">Workspace</string>
+    <string name="appearance_half_terminal">Terminal</string>
     <string name="appearance_half_description">Editing %1$s.</string>
     <!-- A surface in the preview, as accessibility names it. -->
     <string name="appearance_target_description">%1$s. Tap to change it, hold to move it.</string>
 
     <!-- The cards' titles: one per thing you can tap, and the palette's. -->
     <string name="appearance_card_home">Home</string>
-    <string name="appearance_card_workspace">Workspace</string>
-    <string name="appearance_card_status">Status bar</string>
     <string name="appearance_card_terminal">Terminal</string>
+    <string name="appearance_card_status">Status bar</string>
     <string name="appearance_card_dock">Dock</string>
     <string name="appearance_card_keyboard">Keyboard</string>
     <string name="appearance_card_appearance">Appearance</string>
@@ -82,7 +81,20 @@
     <string name="appearance_row_margin">Margin</string>
     <string name="appearance_row_depth">Depth</string>
     <string name="appearance_row_search_field">Search field</string>
-    <string name="appearance_row_text_size">Font size</string>
+    <string name="appearance_row_text_size">Text size</string>
+    <string name="appearance_row_terminal_font_size">Font size</string>
+    <!-- The reset arrow (appearance-one-look spec §2). -->
+    <string name="editor_row_reset_to_global">Put %1$s back on Global</string>
+    <string name="editor_row_state_own">%1$s, its own</string>
+    <string name="editor_row_state_global">%1$s, following Global</string>
+    <string name="editor_card_reset_to_global">Put %1$s back on Global</string>
+    <string name="editor_global_reset_all">Put every surface back on Global</string>
+    <string name="editor_global_reset_all_title">Put every surface back on Global?</string>
+    <string name="editor_global_reset_all_line">The status bar, the dock and the keyboard lose their own Opacity and Blur and wear Global\'s.</string>
+    <string name="editor_global_reset_all_confirm">Put back</string>
+    <string name="appearance_row_keyboard_width">Width</string>
+    <string name="appearance_row_keyboard_float_height">Floating height</string>
+    <string name="appearance_row_keyboard_split_gap">Split gap</string>
     <string name="appearance_row_contrast">Contrast</string>
     <string name="appearance_row_cursor_trail">Cursor trail</string>
     <string name="appearance_row_effect">Effect</string>

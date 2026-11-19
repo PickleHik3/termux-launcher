@@ -419,10 +419,10 @@ public final class WallpaperFrostPainter {
      * Fancier Glass look with that element's own Depth and Edge where it holds them (ADR 0017).
      */
     private final class ElementOn {
-        @NonNull final com.termux.shared.termux.settings.preferences.LookGrid.Element element;
+        @Nullable final com.termux.shared.termux.settings.preferences.LookGrid.Element element;
         final int page;
 
-        ElementOn(@NonNull com.termux.shared.termux.settings.preferences.LookGrid.Element element,
+        ElementOn(@Nullable com.termux.shared.termux.settings.preferences.LookGrid.Element element,
                   int page) {
             this.element = element;
             this.page = page;
@@ -437,12 +437,12 @@ public final class WallpaperFrostPainter {
 
     @NonNull private ElementOn status() { return new ElementOn(com.termux.shared.termux.settings.preferences.LookGrid.Element.STATUS, mSurfaces.statusLookPage()); }
     @NonNull private ElementOn dock() { return new ElementOn(com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, mSurfaces.stackLookPage()); }
-    @NonNull private ElementOn sheets() { return new ElementOn(com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, mSurfaces.stackLookPage()); }
+    /** The sheets wear Global's glass (the all-glass cell), not an element's own. */
+    @NonNull private ElementOn sheets() { return new ElementOn(null, mSurfaces.stackLookPage()); }
 
-    /** What a sheet's tint (the Sheets element's opacity) covers of its frost. */
+    /** What a sheet's tint (Global's opacity, raised to the sheets' floor) covers of its frost. */
     private float sheetsCover() {
-        return ElementGlass.of(mSurfaces.preferences(), com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS,
-            mSurfaces.stackLookPage()).tintAlpha();
+        return SheetGlass.of(mSurfaces.preferences()).tintAlpha();
     }
 
     /** What the status bar's tint covers of its frost. */

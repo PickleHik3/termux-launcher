@@ -983,7 +983,7 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void theWallStripsRowIsTheWorkspaceLayoutsOwn() {
+    public void theWallStripsRowIsTheTerminalLayoutsOwn() {
         PlaceLayoutStore store = store();
         store.setHomeLayout(true);
         PlaceLayoutStore home = store.forVariant(LayoutVariant.HOME);
@@ -1470,7 +1470,7 @@ public class PlaceLayoutStoreTest {
         assertEquals(DrawerTilePolicy.Place.at(4), home.drawerTilePlace());
         assertEquals(DrawerTilePolicy.Place.at(4),
             store().forVariant(LayoutVariant.HOME).drawerTilePlace());
-        assertEquals("the Workspace reads Home's", DrawerTilePolicy.Place.at(4),
+        assertEquals("the Terminal reads Home's", DrawerTilePolicy.Place.at(4),
             store.drawerTilePlace());
 
         store.setDrawerTileColumn(2);
@@ -1536,7 +1536,7 @@ public class PlaceLayoutStoreTest {
     // ------------------------------------------------------------------ migration to one layout
 
     /** An install on version 8 whose Home layout was seeded from the normal one and left alone. */
-    private SharedPreferences.Editor version8WithHomeAsTheWorkspace() {
+    private SharedPreferences.Editor version8WithHomeAsTheTerminal() {
         SharedPreferences.Editor editor = prefs.edit().putInt("place.migrated", 8);
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             String o = orientation.storageValue();
@@ -1556,7 +1556,7 @@ public class PlaceLayoutStoreTest {
 
     @Test
     public void anUpgradeOnPromptLineOrTaskbarStoresItsToggle() {
-        version8WithHomeAsTheWorkspace().putString("layout.home.dock_style", "prompt_line")
+        version8WithHomeAsTheTerminal().putString("layout.home.dock_style", "prompt_line")
             .commit();
         PlaceLayoutStore store = store();
         assertTrue(store.searchField());
@@ -1567,7 +1567,7 @@ public class PlaceLayoutStoreTest {
         assertFalse(store.drawerTile());
 
         prefs.edit().clear().commit();
-        version8WithHomeAsTheWorkspace().putString("layout.home.dock_style", "taskbar")
+        version8WithHomeAsTheTerminal().putString("layout.home.dock_style", "taskbar")
             .putString("layout.home.taskbar_home_tile", "middle").commit();
         store = store();
         assertTrue(store.drawerTile());
@@ -1581,7 +1581,7 @@ public class PlaceLayoutStoreTest {
 
     @Test
     public void anUpgradeWhoseHomeDockRowsDifferKeepsThemAsAHomeLayout() {
-        version8WithHomeAsTheWorkspace()
+        version8WithHomeAsTheTerminal()
             .putString("layout.home.portrait.apps_row", "hidden")
             .putString("layout.home.dock_style", "lens_beads")
             .commit();
@@ -1599,8 +1599,8 @@ public class PlaceLayoutStoreTest {
 
     /** The bar Home never wore is no difference, and a kept Home layout wears the window's (#90). */
     @Test
-    public void aKeptHomeLayoutTakesTheWorkspacesBarOnTheUpgrade() {
-        version8WithHomeAsTheWorkspace()
+    public void aKeptHomeLayoutTakesTheTerminalsBarOnTheUpgrade() {
+        version8WithHomeAsTheTerminal()
             .putString("layout.home.portrait.apps_row", "hidden")
             .putString("layout.landscape.status_bar", "bottom")
             .commit();
@@ -1617,7 +1617,7 @@ public class PlaceLayoutStoreTest {
 
     /** A store already on version 9 with a seeded Home layout: its bar put away becomes the window's. */
     @Test
-    public void aVersion9HomeLayoutTakesTheWorkspacesBar() {
+    public void aVersion9HomeLayoutTakesTheTerminalsBar() {
         SharedPreferences.Editor editor = prefs.edit().putInt("place.migrated", 9)
             .putBoolean("place.home_layout", true);
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
@@ -1640,7 +1640,7 @@ public class PlaceLayoutStoreTest {
     /** The dock's height is linked (#84): Home's own is no difference, and it goes. */
     @Test
     public void anUpgradeWhoseHomeDockHeightDiffersWearsTheSharedOne() {
-        version8WithHomeAsTheWorkspace().putFloat("layout.home.landscape.dock_height", 0.8f)
+        version8WithHomeAsTheTerminal().putFloat("layout.home.landscape.dock_height", 0.8f)
             .commit();
         PlaceLayoutStore store = store();
         // One size for every kind (ADR 0020 §3): Home wears the shared height.
@@ -1652,7 +1652,7 @@ public class PlaceLayoutStoreTest {
 
     @Test
     public void anUpgradeWhoseHomeRowOrderDiffersKeepsIt() {
-        version8WithHomeAsTheWorkspace().putInt("layout.home.portrait.az_bar_order", 3).commit();
+        version8WithHomeAsTheTerminal().putInt("layout.home.portrait.az_bar_order", 3).commit();
         PlaceLayoutStore store = store();
         assertHomeKeepsItsOwnLayout(store);
         assertTrue("Home's own order, not a copy",
@@ -1661,7 +1661,7 @@ public class PlaceLayoutStoreTest {
 
     @Test
     public void anUpgradeWhoseHomeRowStandsUnderTheKeyboardKeepsIt() {
-        version8WithHomeAsTheWorkspace()
+        version8WithHomeAsTheTerminal()
             .putBoolean("layout.home.portrait.apps_row_under_keyboard", true).commit();
         PlaceLayoutStore store = store();
         assertHomeKeepsItsOwnLayout(store);
@@ -1672,14 +1672,14 @@ public class PlaceLayoutStoreTest {
     /** The keyboard's height and chin are linked (#84): no difference even while always on. */
     @Test
     public void anUpgradeWhoseHomeKeyboardHeightOrChinDiffersAndIsAlwaysOnIgnoresIt() {
-        version8WithHomeAsTheWorkspace()
+        version8WithHomeAsTheTerminal()
             .putBoolean("layout.home.keyboard_shown", true)
             .putFloat("layout.home.portrait.keyboard_height", 1.3f)
             .commit();
         assertHomeWearsTheSharedLayout(store());
 
         prefs.edit().clear().commit();
-        version8WithHomeAsTheWorkspace()
+        version8WithHomeAsTheTerminal()
             .putBoolean("layout.home.keyboard_shown", true)
             .putInt("layout.home.portrait.keyboard_chin", 40)
             .commit();
@@ -1688,7 +1688,7 @@ public class PlaceLayoutStoreTest {
 
     @Test
     public void anUpgradeWhoseHomeKeyboardFormDiffersCounts() {
-        version8WithHomeAsTheWorkspace()
+        version8WithHomeAsTheTerminal()
             .putBoolean("layout.home.keyboard_shown", true)
             .putString("layout.home.landscape.keyboard_form", "floating")
             .commit();
@@ -1700,7 +1700,7 @@ public class PlaceLayoutStoreTest {
 
     @Test
     public void anUpgradeWhoseHomeKeyboardDiffersButIsNotAlwaysOnIgnoresIt() {
-        version8WithHomeAsTheWorkspace()
+        version8WithHomeAsTheTerminal()
             .putFloat("layout.home.portrait.keyboard_height", 1.3f)
             .putString("layout.home.landscape.keyboard_form", "floating")
             .commit();
@@ -1709,8 +1709,8 @@ public class PlaceLayoutStoreTest {
 
     /** Style, Corners and Margin are linked (#84): Home's own is no difference, and it goes. */
     @Test
-    public void anUpgradeWhoseHomeShapeDiffersWearsTheWorkspacesShape() {
-        version8WithHomeAsTheWorkspace()
+    public void anUpgradeWhoseHomeShapeDiffersWearsTheTerminalsShape() {
+        version8WithHomeAsTheTerminal()
             .putInt(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, 30)
             .commit();
         PlaceLayoutStore store = store();
@@ -1720,8 +1720,8 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void anUpgradeWhoseHomeShapeWasSetToTheWorkspacesDropsIt() {
-        version8WithHomeAsTheWorkspace()
+    public void anUpgradeWhoseHomeShapeWasSetToTheTerminalsDropsIt() {
+        version8WithHomeAsTheTerminal()
             .putInt(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, launcher.getLayoutMarginDp(false))
             .commit();
         PlaceLayoutStore store = store();
@@ -1762,7 +1762,7 @@ public class PlaceLayoutStoreTest {
 
     @Test
     public void theMoveToOneLayoutRunsOnce() {
-        version8WithHomeAsTheWorkspace().commit();
+        version8WithHomeAsTheTerminal().commit();
         store();
         // The user sets Home apart afterwards; a later start does not fold it back.
         PlaceLayoutStore again = store();

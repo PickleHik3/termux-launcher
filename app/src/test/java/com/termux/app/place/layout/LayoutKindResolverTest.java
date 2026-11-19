@@ -18,7 +18,7 @@ import java.util.Map;
 public class LayoutKindResolverTest {
 
     @Test
-    public void homeWearsItsOwnAndEveryWorkspacePageTheWorkspaces() {
+    public void homeWearsItsOwnAndEveryTerminalPageTheTerminals() {
         assertEquals(LayoutKind.HOME, LayoutKind.of(PageKind.HOME, false));
         assertEquals(LayoutKind.TERMINAL, LayoutKind.of(PageKind.TERMINAL, false));
         assertEquals(LayoutKind.TERMINAL, LayoutKind.of(PageKind.DISPLAY, false));
@@ -26,7 +26,7 @@ public class LayoutKindResolverTest {
     }
 
     @Test
-    public void minimalDressesTheWholeWorkspaceButNeverHome() {
+    public void minimalDressesTheWholeTerminalButNeverHome() {
         assertEquals(LayoutKind.HOME, LayoutKind.of(PageKind.HOME, true));
         assertEquals(LayoutKind.TERMINAL_MINIMAL, LayoutKind.of(PageKind.TERMINAL, true));
         assertEquals(LayoutKind.TERMINAL_MINIMAL, LayoutKind.of(PageKind.DISPLAY, true));
@@ -36,8 +36,8 @@ public class LayoutKindResolverTest {
     @Test
     public void theEditorNamesTheLayout() {
         assertEquals("Home layout", LayoutKind.HOME.title);
-        assertEquals("Workspace layout", LayoutKind.TERMINAL.title);
-        assertEquals("Workspace minimal layout", LayoutKind.TERMINAL_MINIMAL.title);
+        assertEquals("Terminal layout", LayoutKind.TERMINAL.title);
+        assertEquals("Terminal minimal layout", LayoutKind.TERMINAL_MINIMAL.title);
     }
 
     @Test
@@ -48,7 +48,7 @@ public class LayoutKindResolverTest {
     }
 
     @Test
-    public void theDisplayAndAssistantDocumentsAreRetiredIntoTheWorkspaces() {
+    public void theDisplayAndAssistantDocumentsAreRetiredIntoTheTerminals() {
         assertTrue(LayoutKind.DISPLAY.retired());
         assertTrue(LayoutKind.ASSISTANT.retired());
         assertFalse(LayoutKind.TERMINAL.retired());
@@ -60,7 +60,7 @@ public class LayoutKindResolverTest {
     }
 
     @Test
-    public void aRetiredKindReadsAndWritesTheWorkspacesDocument() {
+    public void aRetiredKindReadsAndWritesTheTerminalsDocument() {
         KindLayout terminal = KindLayout.EMPTY.with(PlaceOrientation.PORTRAIT, "bar_order", "a,b");
         Layouts layouts = Layouts.shipped().withKind(LayoutKind.TERMINAL, terminal);
         assertEquals(terminal, layouts.kind(LayoutKind.DISPLAY));
@@ -73,7 +73,7 @@ public class LayoutKindResolverTest {
 
     /**
      * The migration (ADR 0025): an install that holds its own Display and Assistant documents
-     * wears the Terminal's on every Workspace page; the old documents read without harm and are
+     * wears the Terminal's on every Terminal page; the old documents read without harm and are
      * left in the file as they were, for a downgrade.
      */
     @Test
@@ -98,7 +98,7 @@ public class LayoutKindResolverTest {
             assertEquals(kind.name(), "terminal", worn.portrait().string("bar_order"));
             assertFalse(kind.name(), worn.portrait().has("dress.extra_keys"));
         }
-        // A write from any Workspace page lands on the Terminal's document alone.
+        // A write from any Terminal page lands on the Terminal's document alone.
         store.update(LayoutKind.ASSISTANT,
             k -> k.with(PlaceOrientation.PORTRAIT, "bar_order", "edited"));
         assertEquals("edited",

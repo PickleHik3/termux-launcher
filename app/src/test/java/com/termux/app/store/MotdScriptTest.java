@@ -27,7 +27,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * The welcome {@code motd.sh} prints, run by the host's {@code sh} at a terminal width: side by
  * side where that fits, else stacked in a box that spans the terminal (#103: a Home widget or a
- * phone's Workspace pane was left with an empty strip on the right), and never wider than the
+ * phone's Terminal pane was left with an empty strip on the right), and never wider than the
  * terminal. Past the side-by-side threshold the box keeps its own width, however wide the screen.
  * Skipped where there is no {@code sh}.
  */

@@ -60,7 +60,7 @@ _Avoid_: edge swipe, status bar swipe, page swipe
 
 **Chrome**:
 Everything the launcher draws around a page: the status bar, dock, keyboard, borders and corner
-tabs. The **Workspace** wears all of it; a **Home page** wears the same status bar, starting below
+tabs. The **Terminal** wears all of it; a **Home page** wears the same status bar, starting below
 it as a window's page does, and the same dock (without the extra keys) and the keyboard, as
 overlays that take no room from the grid. The dock and
 status bar are one each across both halves and stay put while the wall moves (decided 2026-10-21,
@@ -68,7 +68,7 @@ replacing the 2026-10-19 Home without a launcher status bar).
 _Avoid_: UI (too wide), decoration
 
 **Crossing**:
-One slide of the wall between Home and the Workspace, from the first frame the wall moves to the
+One slide of the wall between Home and the Terminal, from the first frame the wall moves to the
 frame it lands. During a crossing the dock morphs from the leaving half's **Dress** to the arriving
 one in step with the wall's offset (icon size, row width, bands, Search field and Drawer tile), so
 nothing changes at the landing. The keyboard travels with the half that has it open, and a reversal
@@ -81,7 +81,7 @@ _ADR 0015 (proposed): any slide between two neighbouring pages, not only between
 
 **Display**, **display window**:
 One X display, shown whole by the embedded X server (`x11-server/`) as a **window** in the
-**Workspace**: a Linux desktop or the X11 apps on it, managed inside by the display's own window
+**Terminal**: a Linux desktop or the X11 apps on it, managed inside by the display's own window
 manager. It appears when something asks for it (a **Linux app** tapped in the drawer, the Display
 entry under Linux Apps), joining the end of the current session's row, and leaves when the display
 stops. It is an ordinary window of the row (2026-10-19): it has a chip among the windows' chips,
@@ -96,7 +96,7 @@ of it, but the window is the display)
 **Dock**:
 The band of chrome that carries the pinned-apps row, the A–Z index and the extra keys, along the
 bottom by default. There is one dock for both halves of the wall, dressed by one **Dock design**;
-only the Workspace's carries the extra keys. Its shape follows the **Style**. Its rows may stand under
+only the Terminal's carries the extra keys. Its shape follows the **Style**. Its rows may stand under
 the keyboard instead of over it. Not the same as the Layout editor's restore tray, which holds elements that are put away.
 _Avoid_: taskbar, nav bar, hotseat
 _ADR 0030 (accepted, not yet built): the dock's rows belong to a **side** and travel with it, riding the keyboard's top; the glass slab stays with the shared stack and only blends. Floating follows the same rule with its own card geometry._
@@ -115,7 +115,7 @@ Which of the dock's variants dresses it, held by the layout (so on both halves u
 **Home layout**): #1 Tray (the default), #2 Beads (each pinned app its own round glass bead floating
 on the background with air between, no shared card, in both Styles) or #3 Strip (a big clock and a
 tile per terminal over the apps; the clock slides out at 3+ terminals). The extra keys are not part
-of any design: the Workspace shows them under every design and Style. Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
+of any design: the Terminal shows them under every design and Style. Separate from the **Style**, which shapes all the chrome, and from the **Search field** and
 the **Drawer tile**, which any design can carry.
 _Avoid_: dock style (the old name, it collides with **Style**), dock form, dock theme, Glass tray,
 Lens beads, Wall strip, Taskbar (old names; Taskbar became the Drawer tile, Prompt line the Search field)
@@ -159,9 +159,9 @@ press or a sideways drag stays with the page. When a border drag's glow hands ov
 _Avoid_: handle (the Layout editor's size control), pull tab
 
 **Home**:
-The launcher half of the wall: the **Home pages**, left of the **Workspace**. It is always there,
+The launcher half of the wall: the **Home pages**, left of the **Terminal**. It is always there,
 and it is where the home press lands. Its chrome is the dock with the pinned-apps row and the A–Z
-index, the launcher status bar it shares with the Workspace, and the keyboard; it has no borders.
+index, the launcher status bar it shares with the Terminal, and the keyboard; it has no borders.
 _Avoid_: home screen (as a name for the whole launcher), the widgets place, Widgets page
 _ADR 0015 (proposed): Home stops being a half; a **Home page** is one page kind among three, and the home press lands on the **home page**._
 
@@ -173,7 +173,7 @@ pinned to it.
 _Avoid_: place, widgets page, desktop
 
 **Home float**:
-A **window** of the current session drawn floating over one Home page instead of in the Workspace's
+A **window** of the current session drawn floating over one Home page instead of in the Terminal's
 row: born full-size, moved only by its **titlebar** (a **body swipe** on its terminal pages Home as
 a swipe beside it does), resized at its bottom-right corner, minimised into
 its **window chip** in the status bar and docked into the row by the titlebar's Dock. It is what
@@ -189,13 +189,13 @@ _Avoid_: float chip (for the bar's chip, say window chip), minimised pill, Home 
 **Home pill**:
 Home's extra keys as a small floating glass pill over Home's content, in the same spot on every
 **Home page**. A hold picks it up to move it and shows "Edit keys". It flies to the docked bar above
-the keyboard, and between Home and the **Workspace**'s pages.
+the keyboard, and between Home and the **Terminal**'s pages.
 _Avoid_: floating bar, key bubble
 
 **Keyboard swipe**:
-The one way to the keyboard in the **Workspace**: an up or down swipe that starts on the window's
+The one way to the keyboard in the **Terminal**: an up or down swipe that starts on the window's
 bottom border, or at its **grabber**, before the border drag's hold takes. Up opens the keyboard
-(turning a switched-off keyboard back on), down closes it, and the Workspace remembers which. On a
+(turning a switched-off keyboard back on), down closes it, and the Terminal remembers which. On a
 **Home page** the same swipe is the palette gesture (configurable): it opens the command palette
 and the keyboard together, and both close on Esc, on a tap outside, or when the action is done.
 Home has no remembered keyboard state; the keyboard stays up on Home only when **always on**. The
@@ -248,7 +248,7 @@ Only a managed wallpaper can move with parallax; a wallpaper set anywhere else s
 _Avoid_: custom wallpaper, in-app wallpaper
 
 **Minimal mode**:
-A second saved **Workspace** layout, and nothing more. It starts with only each window's content, so
+A second saved **Terminal** layout, and nothing more. It starts with only each window's content, so
 by default the bars, the A–Z index, the extra keys and the keyboard go away, and it changes no
 behaviour. It is one mode for every window, turned on and off only from the corner tab's minimal
 button or the command palette's Minimal action, and stays on until turned off. Home ignores it:
@@ -273,7 +273,7 @@ every page. One layout dresses both halves, minimal only for windows; a Home pag
 only when Home holds a **Home layout**.
 _Avoid_: place (the retired word for Home, Terminal and Display as three pages), screen, tab
 _ADR 0015 (proposed): a page is a Home page, the Terminal page or a Display page, and each follows **Global** or detaches its own look values._
-_ADR 0030 (accepted, not yet built): every Home page and every window (terminal, display, Assistant) is a page of one contract and names its **side**; a window is a page of the Workspace._
+_ADR 0030 (accepted, not yet built): every Home page and every window (terminal, display, Assistant) is a page of one contract and names its **side**; a window is a page of the Terminal._
 
 **Page switcher**:
 One switcher with two entry points: the **glyph row** under the Home grid (Home, Terminal, Assistant,
@@ -326,33 +326,33 @@ name; prose and the drawer do not)
 
 **Session**, **window**:
 The terminal's own layers: a session holds windows, and a window holds a tree of **panes**. A window
-is also the unit the **Workspace** pages between: a terminal window (its split tree) or a **display
+is also the unit the **Terminal** pages between: a terminal window (its split tree) or a **display
 window**. New windows (Ctrl+Alt+C, a Terminal=true Linux app, Terminal from Home) land right after
 the current one. Each pane runs its own shell, which is a `TerminalSession` in code; that is the
 code's word for a pane's shell, not for a session. See `project-docs/reference/terminal/split-panes.md`.
 _Avoid_: tab (for a window), terminal (for a pane), column (Niri's word; in prose say window)
 
 **Side**:
-Home or the Workspace: the two halves of the **wall** seen from the seam. A side owns the rows its pages share (Home: the apps row, the A–Z row, the search field and Home's own extra-keys bar; the Workspace: the extra keys, the minimal-layout tab and the **window chips**) and travels with them across a crossing. Every **page** names its side.
+Home or the Terminal: the two halves of the **wall** seen from the seam. A side owns the rows its pages share (Home: the apps row, the A–Z row, the search field and Home's own extra-keys bar; the Terminal: the extra keys, the minimal-layout tab and the **window chips**) and travels with them across a crossing. Every **page** names its side.
 _Avoid_: half (the pre-0030 word), place, "its page" for a shared row
 _ADR 0030 (accepted, not yet built): the app as built still lays rows out per page and swaps them at the landing._
 
 **Top stack**:
-The top of the window seen as one stack, like the bottom one: the status bar's glass (the strip behind the system bar and the bar's own card) is one slab both ends of a crossing share. It stays put and blends its look, frost and ink from the leaving page to the arriving one on the crossing's curve; the clock and readings stand on it; the **window chips** are the Workspace's and slide across it with the Workspace, so on Home they rest out of sight. A bar only one end shows still rides with its page. The bar edge setting puts the same stack at the top or the bottom. In code `TopStackScene` (pure) and `TopStackRenderer` (its one writer), ADR 0030 section 6.
+The top of the window seen as one stack, like the bottom one: the status bar's glass (the strip behind the system bar and the bar's own card) is one slab both ends of a crossing share. It stays put and blends its look, frost and ink from the leaving page to the arriving one on the crossing's curve; the clock and readings stand on it; the **window chips** are the Terminal's and slide across it with the Terminal, so on Home they rest out of sight. A bar only one end shows still rides with its page. The bar edge setting puts the same stack at the top or the bottom. In code `TopStackScene` (pure) and `TopStackRenderer` (its one writer), ADR 0030 section 6.
 _Avoid_: top band (the pre-#267 name for the strip and bar's glass), wallpaper twin (the bars draw their own frost now)
 
 **Side lane**:
-The part of the **bottom stack** that only one **side** uses: a row only Home's layout has stands in Home's lane and a row only the Workspace's has in the Workspace's, while a row both show in the same place belongs to the shared stack.
+The part of the **bottom stack** that only one **side** uses: a row only Home's layout has stands in Home's lane and a row only the Terminal's has in the Terminal's, while a row both show in the same place belongs to the shared stack.
 _Avoid_: half row, per-side row
 
 **Start in**:
 The one setting that says where a cold start and a home press land: Home (the default), the
-Workspace, which opens one fresh shell window (a home press goes to its first window), or Display, the **display window**, which holds only while the
+Terminal, which opens one fresh shell window (a home press goes to its first window), or Display, the **display window**, which holds only while the
 display starts with the launcher (choosing it turns that on; turning it off falls back to the
-Workspace when a terminal window is open, else Home). It is also what the page overview's home
+Terminal when a terminal window is open, else Home). It is also what the page overview's home
 button sets: a Home page, the first terminal window or the display window. It replaces the usage
 mode's Terminal alone. Under **Use as** Terminal only it offers Terminal and Display, and a stored
-Home reads as the Workspace.
+Home reads as the Terminal.
 _Avoid_: default place, start page, usage mode
 _ADR 0015 (proposed): retires into the **home page**._
 
@@ -360,7 +360,7 @@ _ADR 0015 (proposed): retires into the **home page**._
 Home screen (the default) or Terminal only, asked on the welcome sheet's first page and kept in
 Settings › General › Launcher beside **Start in** (`use_as`, policy in `UseAs`). Terminal only takes
 the Home page off the wall, hides Home's settings, drops Home from Start in and removes the Home
-card and both Match rows; the home press lands on the Workspace. Whether the app is the phone's
+card and both Match rows; the home press lands on the Terminal. Whether the app is the phone's
 home app is a separate choice.
 _Avoid_: usage mode, launcher mode, terminal alone
 _ADR 0015 (proposed): retires as a setting; the welcome sheet's choice only seeds the wall._
@@ -372,7 +372,7 @@ _Avoid_: Prompt line, Ask, omnibar, search bar
 
 **Status swipe**:
 The keyboard swipe's mirror on the top border: down unfolds the status bar, up folds it, on Home as
-in the Workspace. It is there only while the status bar stands along the top and can unfold. The bar has these two forms only (a
+in the Terminal. It is there only while the status bar stands along the top and can unfold. The bar has these two forms only (a
 third, the capsule, was tried in phase two and removed). A press in Android's own strip at
 the top of the screen is never taken, so the notification shade still pulls down. Full behaviour in
 `project-docs/reference/launcher/gestures-and-style.md`.
@@ -401,9 +401,9 @@ more broadly, for every path a change has to cover.
 _Avoid_: panel, layer, widget (for the Widgets element say "the Widgets surface")
 _ADR 0031 (accepted, not yet built): as built every element holds every look property, per kind of page._
 
-**Terminal** (the entry):
+**Terminal entry**:
 The launcher's own app entry, pinned to the dock at migration and listed in the drawer: a tap goes
-to the **Workspace** at the window you left, opening one if there is none; a long press opens a new
+to the **Terminal** at the window you left, opening one if there is none; a long press opens a new
 **Home float** on the page you are on, as Home's long-press Terminal item does.
 _Avoid_: terminal icon (in prose), Create Pane, Open Workspace
 
@@ -424,8 +424,8 @@ the floating pane's move corner and pill; resizing stays at the bottom-right cor
 _Avoid_: pill (the retired control; the dictation pill is another thing), header, handle bar
 
 **Wall**:
-The one horizontal row the launcher pages along: the **Home pages**, then the **Workspace**. Swiping
-past the last Home page reaches the first window, opening a fresh one when the Workspace has none;
+The one horizontal row the launcher pages along: the **Home pages**, then the **Terminal**. Swiping
+past the last Home page reaches the first window, opening a fresh one when the Terminal has none;
 dragging back before the first window returns to the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
 `PaneWallPage`. See ADR 0008.
 _Avoid_: pane wall (the retired name), pager, strip, carousel, home screen
@@ -441,15 +441,14 @@ One of the six named layers of the launcher's window, back to front: ground (wal
 _Avoid_: layer (on its own), z-level, overlay
 _Built so far: every top-level view stands in a layer's host (ground, chrome, sheets inside the launcher's shell; editor and notices beside it), runtime views join their host through `WindowLayers`, and `bringToFront` is gone. The shell's body holds the pages and, until the stacks move, the chrome laid out against them; elevation orders nothing but the A-Z row and the edge stacks, which the row rebuild (#260) replaces; every other elevation draws a shadow (ADR 0028)._
 
-**Workspace**:
+**Terminal**:
 The terminal half of the wall, right of Home: the current session's windows, then the display
 windows, under the full chrome. It exists while its row has at least one window; closing the last
 one returns to Home. A **Home float** is a session window that is not in the row and does not keep
-the Workspace alive. A home press on it goes to Home page 1; a home press from another app comes back
+the Terminal alive. A home press on it goes to Home page 1; a home press from another app comes back
 to the window that was left. The drawer, the corner tab and the border drag also lead back to Home.
-_Avoid_: usage mode, Terminal place, terminal environment, saved workspace (that is **Saved
+_Avoid_: Workspace (the name before ADR 0031), usage mode, Terminal place, terminal environment, saved workspace (that is **Saved
 sessions**)
-_ADR 0031 (accepted, not yet built): renamed **Terminal** everywhere, for the side, its card and its rows; Workspace moves to Avoid._
 
 ### Pages (ADR 0015, proposed)
 
@@ -457,7 +456,7 @@ These words come from ADR 0015 (the wall is a list of pages), still a draft on 2
 is accepted the entries above describe the app as built.
 
 **Page kind**:
-What a page is: Home, Terminal, Display or Assistant; the **side** follows from it (Home for Home, the Workspace for the rest). Each kind has its own
+What a page is: Home, Terminal, Display or Assistant; the **side** follows from it (Home for Home, the Terminal for the rest). Each kind has its own
 default **Dress**: the dock on Home pages; the status bar and extra keys, dock off, on the others.
 _Avoid_: page type, place
 
@@ -471,7 +470,7 @@ _Avoid_: start page, default page, Start in
 The one page (at most one) that holds the sessions: one session's row of windows side by side,
 extended sideways by windows (Ctrl+Alt+C) and vertically by sessions (Ctrl+Alt+Shift+C, swapped in
 place by Ctrl+Alt+Up/Down). It stays on the wall when its last window closes and starts a shell
-when landed on. Named "Terminal" in the UI. Replaces the **Workspace**.
+when landed on. Named "Terminal" in the UI.
 _Avoid_: Workspace, run, shell (that is what a pane runs)
 
 **Display page**:
@@ -576,8 +575,8 @@ The two chips at the top of every Appearance card: **Where it applies** (Everywh
 Terminal or Display pages, the kind of the page in front | <page name>) and **What it applies to**
 (All glass | <element>). Together they name the **Cell** the card's
 rows read and write. Before ADR 0017 there was one chip, **Global | <page name>**, on four cards.
-_Avoid_: Global as the scope chip's label (the old chip; in prose and code say Base). **Global** is
-the Appearance editor's card for the Base look (developer, 2026-11-03).
+_Avoid_: Global | <page name> as the scope chip's label (the old chip). **Global** is the Appearance
+editor's card for the look every surface wears (developer, 2026-11-03).
 _ADR 0031 (accepted, not yet built): goes, with the Applies to row that replaced it; no card chooses a page._
 
 ### Look and motion
@@ -603,9 +602,8 @@ _Avoid_: animated background, live wallpaper (removed), animation
 The look every glass surface wears until it holds an **own value**: one value for each look
 property, set on the Global card. A surface **follows** Global where it holds none. Settings rows,
 presets, the wallpaper policy and launcherctl write Global unless they name a surface.
-_Avoid_: Base (the earlier word), default (the shipped value is the default; Global is what the
+_Avoid_: Base (the earlier word, renamed in ADR 0031), default (the shipped value is the default; Global is what the
 user set), inherited and detached (the old flag words)
-_ADR 0031 (accepted, not yet built): as built the code and launcherctl still say Base, and a value held for a kind of page is read before it._
 
 **Backstop**:
 The time or frame count after which a **Hold** releases on its own because its signal has not
@@ -733,7 +731,7 @@ The glass every surface wears, set on the Global card. Its slider has five
 stops: Clear, Mist, Tint, Solid and Custom. A surface's own slider moves the Look to Custom by
 itself; Custom is never a gate. One Look covers every page and both orientations (ADR 0031).
 _Avoid_: theme (the light, dark and black scheme is separate), preset, skin
-_ADR 0031 (accepted, not yet built): as built Home and the Workspace each hold a Look of their own (ADR 0013)._
+_ADR 0031 (accepted, not yet built): as built Home and the Terminal each hold a Look of their own (ADR 0013)._
 
 **Material palette**:
 The colours the launcher takes from the system's Material roles, from the wallpaper or from a colour
@@ -773,7 +771,7 @@ _Avoid_: screenshot, freeze frame
 
 **Appearance editor**:
 The one editor for how the launcher looks and sits, over the launcher scaled into a frame that
-slides between Home and the Workspace. Its rule is **tap the thing**: tap a surface (Home, Status
+slides between Home and the Terminal. Its rule is **tap the thing**: tap a surface (Home, Status
 bar, Terminal, Dock, Keyboard) and its **card** rises with everything about it, ordered by how
 often it is touched, rare controls under **More**; drag a surface to move it; tap the **pill** for
 what has no surface (the Look slider, wallpaper, theme, icon pack, text size, full screen, minimal,
@@ -812,7 +810,7 @@ page; the last write wins, whichever door it came through.
 _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an element stands)
 
 **Home layout**:
-An opt-in layout of Home's own, for a user who wants Home laid out unlike the Workspace. Off by
+An opt-in layout of Home's own, for a user who wants Home laid out unlike the Terminal. Off by
 default, when Home wears the one shared layout. While on, Home holds its own copy of which rows show
 (the apps row, the A–Z row, the status bar), their order, edge and under-keyboard placement, the
 **Dock design**, and the Search field and Drawer tile toggles (with the tile's position). The sizes

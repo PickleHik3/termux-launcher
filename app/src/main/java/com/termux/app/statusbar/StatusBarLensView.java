@@ -301,7 +301,7 @@ public final class StatusBarLensView extends View {
     /**
      * The place's accent: the same roles the badge and chips take. The display's place keeps its
      * own for what is the display's alone — its touchpad and its help — while the bar over the
-     * display window wears the Workspace's, as over any of its windows.
+     * display window wears the Terminal's, as over any of its windows.
      */
     public static int accentFor(@NonNull Context context, @NonNull PageKind page) {
         switch (page) {

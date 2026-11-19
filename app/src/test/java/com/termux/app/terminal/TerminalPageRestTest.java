@@ -45,7 +45,7 @@ public class TerminalPageRestTest {
     }
 
     @Test
-    public void theLookIsTheWorkspacesTerminalKind() {
+    public void theLookIsTheTerminalsTerminalKind() {
         assertTrue(TerminalRest.of(new Rest.Inputs.Builder().build()).windowChips);
     }
 }

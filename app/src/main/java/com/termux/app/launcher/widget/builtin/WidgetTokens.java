@@ -91,7 +91,7 @@ final class WidgetTokens {
 
     /**
      * The scale every widget's type is planned at: the system font scale times the shared Text
-     * size (Appearance › Base), so a widget's type follows the same knob as the terminal and the
+     * size (Appearance › Global), so a widget's type follows the same knob as the terminal and the
      * chrome. The planners take it as their {@code fontScale}.
      */
     static float typeScale(@NonNull Resources resources) {

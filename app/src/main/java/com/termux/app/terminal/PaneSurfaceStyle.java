@@ -177,7 +177,7 @@ public interface PaneSurfaceStyle {
     @Nullable default android.graphics.Bitmap paneGlassClearFrame() { return null; }
 
     /**
-     * The Look's own glass, Base's values rather than this surface's, which Home's widgets wear
+     * The Look's own glass, Global's values rather than this surface's, which Home's widgets wear
      * whatever a detached surface does; null where nothing supplies one. Carried here so it rides
      * the pass that dresses the wall's pages, and so a Look change re-dresses them
      * ({@link PaneStyleKey}).

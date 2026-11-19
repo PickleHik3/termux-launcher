@@ -27,6 +27,7 @@
     <string name="editor_section_text">Text</string>
     <string name="editor_section_panes">Panes</string>
     <string name="editor_section_effects">Effects</string>
+    <string name="editor_section_background">Background</string>
     <string name="editor_section_bars">Bars</string>
     <string name="editor_row_not_on_this_phone">Not on this phone.</string>
     <string name="editor_row_refraction_off_switch">Glass refraction is off.</string>
@@ -46,16 +47,16 @@
     <string name="editor_link_layouts_summary">Settings › Keyboard › Layouts</string>
     <string name="editor_link_keyboard_theme_summary">Settings › Keyboard › Keyboard theme</string>
     <string name="editor_link_font_summary">Settings › Terminal › Font</string>
-    <string name="editor_link_tool_colours_summary">Settings › Appearance</string>
+    <string name="editor_link_tool_colours_summary">Settings › Terminal</string>
     <string name="editor_link_camera_cutout_summary">Settings › Status bar</string>
     <string name="editor_link_opens_card">Opens a card</string>
     <string name="editor_link_opens_settings">Opens Settings</string>
     <!-- Layout rows: the card a row opens, where it is not the element's own. -->
     <string name="editor_elements_opens_card">%1$s card</string>
     <string name="editor_note_home_only">Home only</string>
-    <string name="editor_note_workspace_only">Workspace only</string>
+    <string name="editor_note_terminal_only">Terminal only</string>
     <string name="editor_note_home_glass">Widgets, status bar, dock</string>
-    <string name="editor_note_workspace_glass">Status bar, dock, keyboard, terminal</string>
+    <string name="editor_note_terminal_glass">Status bar, dock, keyboard, terminal</string>
     <string name="editor_note_both_screens">Both screens</string>
     <string name="editor_hint_glass_material">Edge and Depth show on phones that draw the glass edge.</string>
 
@@ -91,9 +92,7 @@
     <!-- Under the Icon size row while the pinned apps cap it: count, then the largest step. -->
     <string name="editor_icon_size_cap">%1$d pinned apps fit up to %2$s</string>
     <!-- Settings › Home › Icon size: a step, and its size. -->
-    <string name="settings_icon_size_step">%1$s, %2$d dp</string>
     <!-- Settings › Home › Icon size while the pinned apps cap it: the step drawn, then why. -->
-    <string name="settings_icon_size_capped">%1$s. %2$s</string>
     <string-array name="editor_home_icon_size_entries">
         <item>@string/editor_home_icon_small</item>
         <item>@string/editor_home_icon_default</item>

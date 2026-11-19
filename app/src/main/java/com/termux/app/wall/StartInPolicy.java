@@ -7,13 +7,13 @@ import androidx.annotation.Nullable;
  * Which page is Home, where a cold start and a home press land: the one place Start in is decided.
  * Start in is the only store — Edit pages' Home marker is read from it, and choosing a card as
  * Home writes it — so the marker and Settings can never disagree. Start in names Home ({@link WallRow#START_IN_HOME}, the Home page Home opens
- * on), the Workspace ({@link WallRow#START_IN_WORKSPACE}, its first terminal window) or the
+ * on), the Terminal ({@link WallRow#START_IN_TERMINAL}, its first terminal window) or the
  * display window ({@link WallRow#START_IN_DISPLAY}).
  *
  * <p>Display is Start in only while the display starts with the launcher: choosing it turns that
  * on, and turning that off (or removing the display's card in Edit pages) falls back to the
- * Workspace when a terminal window is open, else Home. Removing the last terminal window while
- * the Workspace is Home falls back to Home. Pure; the overview, Settings and the activity apply it.
+ * Terminal when a terminal window is open, else Home. Removing the last terminal window while
+ * the Terminal is Home falls back to Home. Pure; the overview, Settings and the activity apply it.
  */
 public final class StartInPolicy {
 
@@ -34,16 +34,16 @@ public final class StartInPolicy {
     /** A stored value as this version reads it; anything unknown is Home, as it always was. */
     @NonNull
     public static String read(@Nullable String stored) {
-        if (WallRow.START_IN_WORKSPACE.equals(stored)) return WallRow.START_IN_WORKSPACE;
+        if (WallRow.START_IN_TERMINAL.equals(stored)) return WallRow.START_IN_TERMINAL;
         if (WallRow.START_IN_DISPLAY.equals(stored)) return WallRow.START_IN_DISPLAY;
         if (WallRow.START_IN_ASSISTANT.equals(stored)) return WallRow.START_IN_ASSISTANT;
         return WallRow.START_IN_HOME;
     }
 
-    /** Where Start in goes when its page is gone: the Workspace if it has a terminal, else Home. */
+    /** Where Start in goes when its page is gone: the Terminal if it has a terminal, else Home. */
     @NonNull
     public static String fallback(boolean hasTerminal) {
-        return hasTerminal ? WallRow.START_IN_WORKSPACE : WallRow.START_IN_HOME;
+        return hasTerminal ? WallRow.START_IN_TERMINAL : WallRow.START_IN_HOME;
     }
 
     /**
@@ -72,7 +72,7 @@ public final class StartInPolicy {
     @NonNull
     public static Choice choose(@NonNull PageOverviewPolicy.Kind kind) {
         switch (kind) {
-            case TERMINAL: return choose(WallRow.START_IN_WORKSPACE);
+            case TERMINAL: return choose(WallRow.START_IN_TERMINAL);
             case DISPLAY: return choose(WallRow.START_IN_DISPLAY);
             case HOME_PAGE:
             default: return choose(WallRow.START_IN_HOME);
@@ -99,7 +99,7 @@ public final class StartInPolicy {
         String value = read(effective);
         switch (kind) {
             case HOME_PAGE: return defaultPage && WallRow.START_IN_HOME.equals(value);
-            case TERMINAL: return WallRow.START_IN_WORKSPACE.equals(value);
+            case TERMINAL: return WallRow.START_IN_TERMINAL.equals(value);
             case DISPLAY: return WallRow.START_IN_DISPLAY.equals(value);
             default: return false;
         }

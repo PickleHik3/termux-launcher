@@ -67,7 +67,8 @@ public class KeyboardThemePageTest {
         assertNull(fragment.findPreference("in_app_keyboard_theme"));
         assertNull(fragment.findPreference("in_app_keyboard_font"));
         assertNotNull(fragment.findPreference("customize_keyboard_surface"));
-        TermuxStylePreferencesFragment look = (TermuxStylePreferencesFragment) launch(TermuxStylePreferencesFragment.class);
-        assertNull("one home: not on Look any more", look.findPreference("in_app_keyboard_color_scheme_editor"));
+        TuiAppThemesPreferencesFragment tui =
+            (TuiAppThemesPreferencesFragment) launch(TuiAppThemesPreferencesFragment.class);
+        assertNull("one home: not on the TUI themes page", tui.findPreference("in_app_keyboard_color_scheme_editor"));
     }
 }

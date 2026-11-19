@@ -231,13 +231,44 @@ public class EditorRowKindsTest {
 
     // ---------------------------------------------------------------------------------- strip
 
+    /**
+     * The reset arrow's slot (spec §2): every track is one length and every arrow stands in one
+     * column, whether or not its row holds an own value, at 1.0 and 1.3.
+     */
+    @Test
+    public void everyTrackIsOneLengthAndTheArrowsStandInOneColumn() {
+        for (float scale : new float[] {1f, 1.3f}) {
+            Fixture f = new Fixture(scale);
+            SliderRow row = SliderRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
+                new NoStrip());
+            row.setOwn(1, true, "Opacity, its own");
+            f.layOut(row.root);
+            int width = -1;
+            int arrowLeft = Integer.MIN_VALUE;
+            for (int i = 0; i < row.items.size(); i++) {
+                SliderRow.Item item = row.items.get(i);
+                String which = "at " + scale + ", " + item.name.getText();
+                if (width < 0) width = item.slider.getWidth();
+                assertEquals(which + ": one track length", width, item.slider.getWidth());
+                int left = item.reset.getLeft();
+                if (arrowLeft == Integer.MIN_VALUE) arrowLeft = left;
+                assertEquals(which + ": one arrow column", arrowLeft, left);
+                assertEquals(which + ": the arrow only on the own row",
+                    i == 1 ? android.view.View.VISIBLE : android.view.View.INVISIBLE,
+                    item.reset.getVisibility());
+                assertTrue(which + ": the arrow is a 48dp target",
+                    item.reset.getWidth() >= f.dp(48) - 1);
+            }
+        }
+    }
+
     @Test
     public void sliderRowsStandOnOneLineWithTheValueInsideTheTrack() {
         for (float scale : SCALES) {
             Fixture f = new Fixture(scale);
             SliderRow row = SliderRow.build(f.themed, glassStrips(), new int[] {20, 10, 0, 24, 8},
                 new NoStrip());
-            row.setSource(1, 0xFF4285F4, "Opacity, from Home page");
+            row.setOwn(1, true, "Opacity, its own");
             f.layOut(row.root);
             String at = "at " + scale;
             float density = f.themed.getResources().getDisplayMetrics().density;
@@ -255,8 +286,9 @@ public class EditorRowKindsTest {
                         <= sliderTop + item.slider.getHeight() + 1);
                 assertTrue(which + ": the name ends before the track",
                     left(f, item.name) + item.name.getWidth() <= left(f, item.slider) + 1);
-                assertEquals(which + ": the track ends at the row's margin",
-                    f.width - f.dp(16), left(f, item.slider) + item.slider.getWidth(), 1);
+                assertEquals(which + ": the track ends at the reset slot",
+                    f.width - f.dp(16) - f.dp(48), left(f, item.slider) + item.slider.getWidth(),
+                    1);
                 for (View part : new View[] {item.slider, item.glyph, item.name})
                     assertInsideGutter(f, part, which);
                 assertNotCut(item.name, which);
@@ -276,13 +308,13 @@ public class EditorRowKindsTest {
             row.setValue(3, 40);
             assertEquals("40 dp", row.items.get(3).value.getText().toString());
             SliderRow.Item opacity = row.items.get(1);
-            assertNotNull("the source dot rides after the name",
-                opacity.name.getCompoundDrawablesRelative()[2]);
-            assertEquals("Opacity, from Home page",
-                String.valueOf(opacity.name.getContentDescription()));
-            assertTrue("the track says where its value comes from", opacity.slider.isMarked());
-            assertEquals("no dot on a shared value", null,
-                row.items.get(0).name.getCompoundDrawablesRelative()[2]);
+            // No dot: the own value is the reset arrow, and the slider says its state.
+            assertEquals(null, opacity.name.getCompoundDrawablesRelative()[2]);
+            assertEquals("Opacity, its own",
+                String.valueOf(opacity.slider.getContentDescription()));
+            assertFalse(opacity.slider.isMarked());
+            assertEquals(android.view.View.VISIBLE, opacity.reset.getVisibility());
+            assertEquals(android.view.View.INVISIBLE, row.items.get(0).reset.getVisibility());
         }
     }
 
@@ -304,8 +336,8 @@ public class EditorRowKindsTest {
         assertTrue(which + ": the name line stands over the track",
             top(f, head) + head.getHeight() <= top(f, item.slider) + 1);
         assertEquals(which + ": a 48dp hit area", f.dp(48), item.slider.getHeight());
-        assertEquals(which + ": the track spans the row inside its margins",
-            f.width - 2 * f.dp(16), item.slider.getWidth(), 1);
+        assertEquals(which + ": the track spans the row inside its margins and reset slot",
+            f.width - 2 * f.dp(16) - f.dp(48), item.slider.getWidth(), 1);
         for (View part : new View[] {item.slider, item.glyph, item.name, item.value})
             assertInsideGutter(f, part, which);
         assertNotCut(item.value, which);
@@ -507,7 +539,7 @@ public class EditorRowKindsTest {
             Fixture f = new Fixture(scale);
             int[] taps = {0};
             ActionRow row = ActionRow.build(f.themed, R.drawable.ic_ms_swap_horiz,
-                "Match Workspace styling", "Copy", v -> taps[0]++);
+                "Match Terminal styling", "Copy", v -> taps[0]++);
             f.layOut(row.root);
             String at = "at " + scale;
             assertTitleIsSixteenSp(f, row.title);

@@ -5,7 +5,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.page.PageKind;
 
 /**
- * The wall's row as a list of pages (ADR 0008): Home page 1 … Home page n, then the Workspace's
+ * The wall's row as a list of pages (ADR 0008): Home page 1 … Home page n, then the Terminal's
  * windows, the display window among them while a display was up (before ADR 0015 A3b). Pure, so the
  * seam, the insertion of a new window, Start in and the saved position read as arithmetic.
  *
@@ -19,13 +19,13 @@ public final class WallRow {
 
     /** Saved-state value of the half the wall rested in: Home. */
     public static final String HALF_HOME = "home";
-    /** Saved-state value of the half the wall rested in: the Workspace. */
-    public static final String HALF_WORKSPACE = "workspace";
+    /** Saved-state value of the half the wall rested in: the Terminal. */
+    public static final String HALF_TERMINAL = "workspace";
 
     /** Start in: a cold start shows Home page 1. The default. */
     public static final String START_IN_HOME = "home";
-    /** Start in: a cold start shows the Workspace, with one fresh shell window if it has none. */
-    public static final String START_IN_WORKSPACE = "workspace";
+    /** Start in: a cold start shows the Terminal, with one fresh shell window if it has none. */
+    public static final String START_IN_TERMINAL = "workspace";
     /**
      * Start in: a cold start shows the display window, which starts with the launcher. Only while
      * that is on; see {@link StartInPolicy}.
@@ -72,10 +72,10 @@ public final class WallRow {
         return new Position(PageKind.TERMINAL, index);
     }
 
-    /** The half a kind of page belongs to: Home, or the Workspace (its windows, the display's too). */
+    /** The half a kind of page belongs to: Home, or the Terminal (its windows, the display's too). */
     @NonNull
     public static String halfOf(@NonNull PageKind kind) {
-        return kind == PageKind.HOME ? HALF_HOME : HALF_WORKSPACE;
+        return kind == PageKind.HOME ? HALF_HOME : HALF_TERMINAL;
     }
 
     /**
@@ -136,26 +136,26 @@ public final class WallRow {
 
     /**
      * The page kind a cold start shows, by the Start in preference; Home for anything unknown.
-     * The display window is one of the Workspace's windows, so Display lands there too.
+     * The display window is one of the Terminal's windows, so Display lands there too.
      */
     @NonNull
     public static PageKind coldStart(@Nullable String startIn) {
-        return START_IN_WORKSPACE.equals(startIn) || START_IN_DISPLAY.equals(startIn)
+        return START_IN_TERMINAL.equals(startIn) || START_IN_DISPLAY.equals(startIn)
             ? PageKind.TERMINAL : PageKind.HOME;
     }
 
     /**
      * The kind of page the wall opens on, known before anything is laid out: the half a
-     * recreation saved ({@code savedHalf}, {@link #HALF_HOME} or {@link #HALF_WORKSPACE}), else
+     * recreation saved ({@code savedHalf}, {@link #HALF_HOME} or {@link #HALF_TERMINAL}), else
      * the page Start in names. Only the half matters to what the chrome wears (the Dress),
-     * so a Workspace half is the window page whether it lands on a terminal window, the display
+     * so a Terminal half is the window page whether it lands on a terminal window, the display
      * window, or waits for the windows to come back. A half this version does not know opens Home, as
      * {@link #restore} does.
      */
     @NonNull
     public static PageKind openingKind(@Nullable String savedHalf, @Nullable String startIn) {
         if (savedHalf == null) return coldStart(startIn);
-        return HALF_WORKSPACE.equals(savedHalf) ? PageKind.TERMINAL : PageKind.HOME;
+        return HALF_TERMINAL.equals(savedHalf) ? PageKind.TERMINAL : PageKind.HOME;
     }
 
     /**
@@ -170,7 +170,7 @@ public final class WallRow {
      * The page a saved half and index come back to, on the row as it is now. A Home page past
      * the last comes back as the last, and so does a window past the last window — the display
      * window, which is not saved with the windows, may not be back yet. A half this version does
-     * not know, or a Workspace with nothing in it, comes back to Home page 1.
+     * not know, or a Terminal with nothing in it, comes back to Home page 1.
      */
     @NonNull
     public static Position restore(@Nullable String half, int index, int homeCount,
@@ -178,19 +178,19 @@ public final class WallRow {
         if (HALF_HOME.equals(half)) {
             return homePage(Math.min(Math.max(0, index), lastHomePage(homeCount)));
         }
-        if (HALF_WORKSPACE.equals(half) && windowCount > 0) {
+        if (HALF_TERMINAL.equals(half) && windowCount > 0) {
             return window(Math.min(Math.max(0, index), windowCount - 1));
         }
         return homePage(0);
     }
 
     /**
-     * Whether the Workspace is on the row (spec §6, Lifetime): while the current session's row has
+     * Whether the Terminal is on the row (spec §6, Lifetime): while the current session's row has
      * a window, the display window counting as one. Home floats are shells but never windows of
      * the row, so they do not count. Before the terminal service is bound nothing is known and the
-     * Workspace is assumed.
+     * Terminal is assumed.
      */
-    public static boolean hasWorkspace(boolean serviceBound, int currentSessionWindows) {
+    public static boolean hasTerminal(boolean serviceBound, int currentSessionWindows) {
         return !serviceBound || currentSessionWindows > 0;
     }
 
@@ -198,7 +198,7 @@ public final class WallRow {
      * Whether an activity that finds the terminal service with no shell starts one. Only a cold
      * start does — the process has not started its first shell yet, so the bootstrap, Welcome and
      * the first-boot tour get theirs — or a launch that asks for a shell by name (New session,
-     * failsafe). After that an empty service is the user's empty Workspace, and Home stays.
+     * failsafe). After that an empty service is the user's empty Terminal, and Home stays.
      */
     public static boolean startsShellOnConnect(boolean sessionsEmpty, boolean firstShellStarted,
                                                boolean launchAsksForSession) {
@@ -206,7 +206,7 @@ public final class WallRow {
     }
 
     /**
-     * What closing the Workspace's last shell — the last window, the last Home float, or an
+     * What closing the Terminal's last shell — the last window, the last Home float, or an
      * {@code exit} in either — leaves on screen: Home's last page ({@code true}), or nothing, the
      * activity finishing as plain Termux does ({@code false}). Home stays whenever there is a Home
      * to show: the wall has Home pages ({@code hasHomePages}), or the launcher is the phone's home

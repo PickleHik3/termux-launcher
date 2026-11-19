@@ -115,7 +115,6 @@ public class TermuxAppSharedPreferencesPageLookTest {
         String key = LookGrid.key(LookGrid.Property.OPACITY, LookGrid.Element.TERMINAL,
             LookGrid.NO_PAGE);
         store.edit().putInt(key, 80).putInt(PageLookKeys.pageKey(key, T), 30).commit();
-        assertEquals(80, prefs.getTerminalBackgroundOpacity());
         assertEquals(80, prefs.getSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, T));
     }
 

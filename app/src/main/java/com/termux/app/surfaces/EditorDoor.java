@@ -37,13 +37,13 @@ public enum EditorDoor {
      */
     TERMINAL_SHEET_APPEARANCE("terminal-sheet-appearance"),
     /**
-     * The terminal's action sheet (the Workspace's More), then Wallpaper: the picker, for those
+     * The terminal's action sheet (the Terminal's More), then Wallpaper: the picker, for those
      * who use the launcher as a terminal only and have no Home sheet.
      */
     TERMINAL_SHEET_WALLPAPER("terminal-sheet-wallpaper"),
     /** The legacy terminal context-menu item for the editor, which no sheet lists today. */
     TERMINAL_CONTEXT_MENU("terminal-context-menu"),
-    /** A pane's or window's controls, then Appearance: the Workspace card. */
+    /** A pane's or window's controls, then Appearance: the Terminal card. */
     PANE_CONTROLS("pane-controls-appearance"),
     /** {@code launcherctl appearance.surface_editor}: the page's own card. */
     LAUNCHERCTL("launcherctl-surface-editor"),
@@ -62,7 +62,7 @@ public enum EditorDoor {
      * dock's own tiles).
      */
     ELEMENTS_LIST("elements-list"),
-    /** In the editor: a tap on the page label under the frame, Home or Workspace. */
+    /** In the editor: a tap on the page label under the frame, Home or Terminal. */
     EDITOR_PAGE_LABEL("editor-page-label"),
     /**
      * In the editor: the preview swiped to the other page while a screen's card is open; the card
@@ -77,6 +77,8 @@ public enum EditorDoor {
     SETTINGS_TERMINAL("settings-terminal"),
     /** Settings › Keyboard › Edit on screen. */
     SETTINGS_KEYBOARD("settings-keyboard"),
+    /** Settings › Status bar › Edit on screen. */
+    SETTINGS_STATUS("settings-status"),
     /** Settings › Look (the root's Appearance row, and the row at the top of its page). */
     SETTINGS_LOOK("settings-look"),
     /** A Settings search hit on a row the editor holds; the card is the row's. */
@@ -133,6 +135,7 @@ public enum EditorDoor {
             case APP_MENU_EDIT_DOCK:
                 return EditorCard.DOCK;
             case POPUP_STATUS:
+            case SETTINGS_STATUS:
                 return EditorCard.STATUS;
             case EDITOR_PAGE_LABEL:
             case EDITOR_PAGE_SWIPE:
@@ -168,7 +171,7 @@ public enum EditorDoor {
         }
     }
 
-    /** The card of the screen {@code page} is on: Home's on Home, the Workspace's elsewhere. */
+    /** The card of the screen {@code page} is on: Home's on Home, the Terminal's elsewhere. */
     @NonNull
     static EditorCard screenCard(@NonNull PageKind page) {
         return EditorCard.forScreen(page);
@@ -176,7 +179,7 @@ public enum EditorDoor {
 
     /**
      * The page the editor opens on. A card that stands on one screen only (Home's, the
-     * Workspace's, the terminal's) opens on that screen when the page on screen is the other; else
+     * Terminal's, the terminal's) opens on that screen when the page on screen is the other; else
      * {@code place}, null for the page on screen.
      */
     @Nullable

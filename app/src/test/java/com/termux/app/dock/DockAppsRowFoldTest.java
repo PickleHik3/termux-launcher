@@ -14,7 +14,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * The pinned icons hold their size while the extra-keys row folds in over the keyboard (ADR 0009):
- * the keys are the Workspace's own, so they never make the apps row a shared one. The row is the
+ * the keys are the Terminal's own, so they never make the apps row a shared one. The row is the
  * same band on Home and in a window, and the dock grows by the keys' row instead.
  */
 public class DockAppsRowFoldTest {

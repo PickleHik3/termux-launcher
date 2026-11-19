@@ -14,7 +14,7 @@ import org.junit.Test;
 public class WidgetGridCapsTest {
 
     /** Home's Margin as a new install seeds it. */
-    private static final float SEEDED_MARGIN_DP = TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP;
+    private static final float SEEDED_MARGIN_DP = TERMUX_APP.DEFAULT_SURFACE_GLOBAL_SIDE_GAP;
 
     @Test
     public void pongsPortraitWallHoldsSixColumnsFlushAndFiveAtTheSeededMargin() {

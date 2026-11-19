@@ -13,10 +13,11 @@ import org.junit.Test;
 public class LookCommandChangeTest {
 
     private final LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
+    private final LookCommandTest.MemoryBackground background = new LookCommandTest.MemoryBackground();
     private int changes;
 
     private JSONObject run(String json) throws Exception {
-        return LookCommand.handle(grid, new JSONObject(json), () -> changes++);
+        return LookCommand.handle(grid, background, new JSONObject(json), () -> changes++);
     }
 
     @Test

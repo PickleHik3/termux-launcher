@@ -28,7 +28,7 @@ public class SideRowViewsTest {
 
     @Test public void eachSideHasItsOwnExtraKeysBar() {
         int home = SideRowViews.id(Side.HOME, Side.Row.EXTRA_KEYS, SideRowViews.Part.ROW);
-        int work = SideRowViews.id(Side.WORKSPACE, Side.Row.EXTRA_KEYS, SideRowViews.Part.ROW);
+        int work = SideRowViews.id(Side.TERMINAL, Side.Row.EXTRA_KEYS, SideRowViews.Part.ROW);
         assertNotEquals(0, home);
         assertNotEquals(0, work);
         assertNotEquals(home, work);
@@ -36,7 +36,7 @@ public class SideRowViewsTest {
 
     @Test public void aSideHasNoViewForARowItDoesNotOwn() {
         for (SideRowViews.Part part : SideRowViews.Part.values()) {
-            assertEquals(0, SideRowViews.id(Side.WORKSPACE, Side.Row.APPS, part));
+            assertEquals(0, SideRowViews.id(Side.TERMINAL, Side.Row.APPS, part));
             assertEquals(0, SideRowViews.id(Side.HOME, Side.Row.WINDOW_CHIPS, part));
         }
     }

@@ -22,7 +22,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-/** {@link ElementGlass}: one element's glass from the look grid, Base-only parity first. */
+/** {@link ElementGlass}: one element's glass from the look grid, Global-only parity first. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class ElementGlassTest {
@@ -31,7 +31,7 @@ public class ElementGlassTest {
     private static final int PAGE = 7;
     private static final int OTHER_PAGE = 8;
 
-    private static LookGrid baseOnly() {
+    private static LookGrid globalOnly() {
         LookGrid grid = new LookGrid(new LookGrid.MemoryStore());
         grid.write(LookGrid.Property.FROST, null, FrostStops.MIST);
         grid.write(LookGrid.Property.OPACITY, null, 52);
@@ -55,8 +55,8 @@ public class ElementGlassTest {
     }
 
     @Test
-    public void baseOnly_everyElementFollowsBaseAndHandsTheGlobalLookBack() {
-        LookGrid grid = baseOnly();
+    public void globalOnly_everyElementFollowsGlobalAndHandsTheGlobalLookBack() {
+        LookGrid grid = globalOnly();
         ElementGlass dock = ElementGlass.resolve(grid, LookGrid.Element.DOCK, PAGE);
         for (LookGrid.Element element : LookGrid.Element.values()) {
             ElementGlass glass = ElementGlass.resolve(grid, element, PAGE);
@@ -76,15 +76,15 @@ public class ElementGlassTest {
     }
 
     @Test
-    public void baseOnly_specEqualsTheDockSpecBuiltFromTheNamedGetters() {
+    public void globalOnly_specEqualsTheDockSpecBuiltFromTheNamedGetters() {
         Context context = RuntimeEnvironment.getApplication().getApplicationContext();
         SharedPreferences store = context.getSharedPreferences("element-glass-test",
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         TermuxAppSharedPreferences preferences = new TermuxAppSharedPreferences(context, store, null);
         preferences.migrateLookGrid(java.util.Collections.emptyList());
-        preferences.setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 61);
-        preferences.setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.TINT, 22);
+        preferences.setSurfaceGlobalValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 61);
+        preferences.setSurfaceGlobalValue(TermuxAppSharedPreferences.SurfaceProperty.TINT, 22);
         int page = TermuxAppSharedPreferences.terminalPageId();
         GlassStack.Spec today = GlassStack.Spec.of(preferences.getExtraKeysBlurRadius(page),
             preferences.getAppBarOpacity(page) / 100f, preferences.getDockGlassGrain(page), 12f,
@@ -96,7 +96,7 @@ public class ElementGlassTest {
     }
 
     @Test
-    public void storeRefraction_followsBaseUntilAnElementHoldsItsOwn() {
+    public void storeRefraction_followsGlobalUntilAnElementHoldsItsOwn() {
         Context context = RuntimeEnvironment.getApplication().getApplicationContext();
         SharedPreferences store = context.getSharedPreferences("element-glass-refraction",
             Context.MODE_PRIVATE);
@@ -122,7 +122,7 @@ public class ElementGlassTest {
 
     @Test
     public void elementCell_changesOnlyThatElement() {
-        LookGrid grid = baseOnly();
+        LookGrid grid = globalOnly();
         grid.write(LookGrid.Property.OPACITY, LookGrid.Element.SHEETS, 80);
         grid.write(LookGrid.Property.DEPTH, LookGrid.Element.SHEETS, 3);
         grid.write(LookGrid.Property.EDGE, LookGrid.Element.SHEETS, 70);
@@ -152,7 +152,7 @@ public class ElementGlassTest {
     /** An older build's page cell is no page's look: every page reads the same glass (ADR 0031). */
     @Test
     public void anOldPageCell_isNoPagesLook() {
-        LookGrid grid = baseOnly();
+        LookGrid grid = globalOnly();
         grid.store().putInt(LookGrid.key(LookGrid.Property.TINT, null, PAGE), 60);
         grid.store().putInt(LookGrid.key(LookGrid.Property.TINT, null, LookGrid.Kind.TERMINAL), 60);
         for (LookGrid.Element element : LookGrid.Element.values()) {
@@ -165,7 +165,7 @@ public class ElementGlassTest {
 
     @Test
     public void glassWidgetsOff_isASolidCard() {
-        LookGrid grid = baseOnly();
+        LookGrid grid = globalOnly();
         grid.write(LookGrid.Property.OPACITY, LookGrid.Element.WIDGETS, 100);
         grid.write(LookGrid.Property.FROST, LookGrid.Element.WIDGETS, FrostStops.SOLID);
         ElementGlass widgets = ElementGlass.resolve(grid, LookGrid.Element.WIDGETS, PAGE);

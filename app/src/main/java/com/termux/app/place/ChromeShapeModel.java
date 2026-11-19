@@ -220,7 +220,7 @@ public final class ChromeShapeModel {
 
             /**
              * The air the opening keeps from what lies above and below it, in place of Margin:
-             * the Workspace's terminal stands this close to its bars, so it gets the rows. Never
+             * the Terminal's terminal stands this close to its bars, so it gets the rows. Never
              * more than Margin; negative (the default) is Margin itself. The sides keep Margin.
              */
             @NonNull public Builder openingVerticalGap(float value) {
@@ -362,7 +362,7 @@ public final class ChromeShapeModel {
         final float m = floating ? Math.max(0f, in.margin) : 0f;
         // The gutter: Margin as the Docked insert's air from the bars and the screen's edge.
         final float gutter = Math.max(0f, in.margin);
-        // The opening's air above and below: Margin, or the closer gap a Workspace terminal asks.
+        // The opening's air above and below: Margin, or the closer gap a Terminal terminal asks.
         final float verticalGap = in.openingVerticalGap < 0f ? gutter
             : Math.min(in.openingVerticalGap, gutter);
         final PlaceLayout layout = in.layout;

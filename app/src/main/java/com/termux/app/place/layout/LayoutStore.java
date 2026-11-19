@@ -140,7 +140,7 @@ public final class LayoutStore {
     /** Changes one kind's document, writes it whole, and asks for one redress. */
     public synchronized void update(@NonNull LayoutKind asked, @NonNull UnaryOperator<KindLayout> change) {
         assertMainThread();
-        // A retired kind's document is the Workspace's (ADR 0025).
+        // A retired kind's document is the Terminal's (ADR 0025).
         LayoutKind kind = asked.live();
         KindLayout before = mStored.kind(kind);
         KindLayout after = change.apply(before);

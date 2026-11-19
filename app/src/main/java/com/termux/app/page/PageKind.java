@@ -16,7 +16,7 @@ public enum PageKind {
     private static final PageKind[] ROOM_KINDS = computeRoomKinds();
 
     /**
-     * Whether this kind stands a page of its own room; a display window is the Workspace's, so it
+     * Whether this kind stands a page of its own room; a display window is the Terminal's, so it
      * does not.
      */
     public boolean hasOwnRoom() {
@@ -24,7 +24,7 @@ public enum PageKind {
     }
 
     /**
-     * The kind whose room a page of this kind stands in: its own, or the Workspace's for a display
+     * The kind whose room a page of this kind stands in: its own, or the Terminal's for a display
      * window, which ends where the Terminal's rest (read off the display while it is in front)
      * puts it, so its keyboard mode decides whether the keyboard takes room from it.
      */
@@ -52,9 +52,9 @@ public enum PageKind {
         return rooms;
     }
 
-    /** Home's side for a Home page, the Workspace's for every window. */
+    /** Home's side for a Home page, the Terminal's for every window. */
     @NonNull
     public Side side() {
-        return this == HOME ? Side.HOME : Side.WORKSPACE;
+        return this == HOME ? Side.HOME : Side.TERMINAL;
     }
 }

@@ -21,7 +21,7 @@ import java.util.Set;
  *
  * <p>Version 1:
  * <ul>
- *   <li>The usage mode becomes Start in: the terminal alone starts in the Workspace, the other two
+ *   <li>The usage mode becomes Start in: the terminal alone starts in the Terminal, the other two
  *   (and the older two-way switch's {@code launcher}) start on Home. A Start in that is already
  *   stored is the user's and stands. The mode and the snapshot it kept of the home surfaces go.</li>
  *   <li>The Display switch goes: the display comes up on demand now.</li>
@@ -32,7 +32,7 @@ import java.util.Set;
  *   would lose the values it folds.</li>
  * </ul>
  *
- * <p>Not here, on purpose: the normal and minimal layouts are the Workspace layouts as they are,
+ * <p>Not here, on purpose: the normal and minimal layouts are the Terminal layouts as they are,
  * the Home layout seeds itself from the normal one on its first read (after {@code
  * PlaceLayoutStore} has migrated, which its constructor does first), and the Terminal entry's dock
  * pin is {@code TerminalEntryPin}'s, guarded by its own once-flag so it can neither pin twice nor
@@ -99,13 +99,13 @@ public final class WallReworkMigration {
         }
     }
 
-    /** Terminal alone starts in the Workspace; everything else, known or not, on Home. */
+    /** Terminal alone starts in the Terminal; everything else, known or not, on Home. */
     @VisibleForTesting
     @NonNull
     static String startInFor(@Nullable String usageMode) {
         return usageMode != null
             && TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(usageMode.trim())
-            ? TERMUX_APP.LAUNCHER_START_IN_WORKSPACE : TERMUX_APP.LAUNCHER_START_IN_HOME;
+            ? TERMUX_APP.LAUNCHER_START_IN_TERMINAL : TERMUX_APP.LAUNCHER_START_IN_HOME;
     }
 
     @VisibleForTesting

@@ -189,7 +189,7 @@ public final class TerminalCommandPaletteController
     /** The Home palette's fallback strip: the terminal defaults are all terminal-only there. */
     private static final String[][] HOME_KEYCAPS = {
         {CommandPaletteHomeSet.TOOL_OPEN_TERMINAL_HERE, "❯", "term"},
-        {CommandPaletteHomeSet.TOOL_GO_TO_WORKSPACE, "→", "work"},
+        {CommandPaletteHomeSet.TOOL_GO_TO_TERMINAL, "→", "work"},
         {CommandPaletteHomeSet.TOOL_ADD_WIDGET, "＋", "widget"},
         {LauncherToolRegistry.TOOL_APPEARANCE_SET_WALLPAPER, "◩", "wall"},
         {LauncherToolRegistry.TOOL_APP_OPEN_SETTINGS, "⚙", "set"},
@@ -248,17 +248,17 @@ public final class TerminalCommandPaletteController
     private long mLastFrameTimeNanos;
     /** True while {@link #doFrame} runs: a kick from inside it continues the loop and keeps its clock. */
     private boolean mInFrame;
-    /** Where the open glass ends in the Workspace; on Home, the lowest it may end. */
+    /** Where the open glass ends in the Terminal; on Home, the lowest it may end. */
     private float mAnchorY;
     /**
      * On Home, the middle the glass grows about and the highest its top may rise, both in host
-     * coordinates ({@link CommandPaletteHomeOverlay#glassBottomPx}); NaN in the Workspace, whose
+     * coordinates ({@link CommandPaletteHomeOverlay#glassBottomPx}); NaN in the Terminal, whose
      * glass ends at {@link #mAnchorY} and grows upward.
      */
     private float mHomeCenterY = Float.NaN;
     private float mHomeHighestTop = Float.NaN;
     /**
-     * The tallest the glass may grow: unbounded in the Workspace, and on Home the room above the
+     * The tallest the glass may grow: unbounded in the Terminal, and on Home the room above the
      * dock ({@link CommandPaletteHomeOverlay#availableHeightPx}).
      */
     private float mMaxHeightPx = Float.MAX_VALUE;
@@ -802,7 +802,7 @@ public final class TerminalCommandPaletteController
         float hostWidth = mHost.getWidth();
         float openLeft = dp(SIDE_INSET);
         float openRight = hostWidth - dp(SIDE_INSET);
-        // On Home the glass is centred and grows about its middle; in the Workspace it ends at the
+        // On Home the glass is centred and grows about its middle; in the Terminal it ends at the
         // anchor and grows upward. Arithmetic on the animated height only: nothing is laid out.
         float openBottom = Float.isNaN(mHomeCenterY) ? mAnchorY
             : CommandPaletteHomeOverlay.glassBottomPx(mHeight.value, mHomeCenterY,
@@ -2002,7 +2002,7 @@ public final class TerminalCommandPaletteController
         // A window's jump row on Home switches to that window, then goes to it.
         if (mContext == CommandPaletteContext.HOME
             && CommandPaletteHomeSet.CATEGORY_WINDOWS.equals(entry.category))
-            mHomeHost.goToWorkspace();
+            mHomeHost.goToTerminal();
     }
 
     /**

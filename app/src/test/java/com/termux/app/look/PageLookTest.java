@@ -94,28 +94,27 @@ public class PageLookTest {
     @Test
     public void emptyStoreAnswersShippedValues() {
         PageLook.Snapshot s = look.of(HOME);
-        // Every surface follows Base until detached, so a fresh install reads Base's defaults.
+        // Every surface follows Global until detached, so a fresh install reads Global's defaults.
         assertEquals(com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN.shipped, s.dockGlassGrain());
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY, s.appBarOpacity());
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_OPACITY, s.appBarOpacity());
         assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.CLEAR), s.extraKeysBlurRadius());
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY, s.statusBarOpacity());
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_OPACITY, s.statusBarOpacity());
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_MATERIAL, s.surfaceMaterial());
         assertEquals(TERMUX_APP.DEFAULT_SURFACE_MATERIAL_INTENSITY, s.surfaceMaterialIntensity());
-        assertEquals(TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM, s.wallpaperDim());
         assertEquals(100, s.inAppKeyboardBackdropOpacity());
     }
 
     @Test
-    public void surfaceFollowsBaseByDefault() {
-        put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 40);
-        put(dockGrain(), 77); // a stale own value, the flag still says follow Base
+    public void surfaceFollowsGlobalByDefault() {
+        put(TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN, 40);
+        put(dockGrain(), 77); // a stale own value, the flag still says follow Global
         assertEquals(40, look.of(HOME).dockGlassGrain());
         assertEquals(40, look.of(TERMINAL).dockGlassGrain());
     }
 
     @Test
     public void detachedSurfaceHoldsItsWallValue() {
-        put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 40);
+        put(TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN, 40);
         put(dockGrain(), 77);
         detach(SurfaceSlot.DOCK, SurfaceProperty.GRAIN);
         assertEquals(77, look.of(HOME).dockGlassGrain());
@@ -123,8 +122,8 @@ public class PageLookTest {
 
     @Test
     public void valuesAreClampedAsTheGettersClamp() {
-        put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, 90);
-        put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, -4);
+        put(TERMUX_APP.KEY_SURFACE_GLOBAL_BLUR, 90);
+        put(TERMUX_APP.KEY_SURFACE_GLOBAL_OPACITY, -4);
         PageLook.Snapshot s = look.of(HOME);
         // Past the last Frost stop: its 36 dp.
         assertEquals(36, s.extraKeysBlurRadius());
@@ -135,8 +134,8 @@ public class PageLookTest {
 
     @Test
     public void shapesAreWallWideAndIgnorePageOverrides() {
-        put(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS, 30);
-        put(TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, 7);
+        put(TERMUX_APP.KEY_SURFACE_GLOBAL_CORNER_RADIUS, 30);
+        put(TERMUX_APP.KEY_SURFACE_GLOBAL_SIDE_GAP, 7);
         String corner = LookKeys.surfaceKey(SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS);
         assertFalse(PageLook.isDetachable(corner));
         assertFalse(look.write(PageLook.Scope.page(3), corner, 2));
@@ -149,11 +148,11 @@ public class PageLookTest {
 
     @Test
     public void baseAndInheritFlagsAreWallWide() {
-        assertFalse(PageLook.isDetachable(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+        assertFalse(PageLook.isDetachable(TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN));
         assertFalse(PageLook.isDetachable(
             ("surface_inherit_" + SurfaceSlot.DOCK.key + "_" + SurfaceProperty.GRAIN.key)));
-        assertFalse(look.write(PageLook.Scope.page(3), TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 1));
-        assertFalse(has(LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 3)));
+        assertFalse(look.write(PageLook.Scope.page(3), TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN, 1));
+        assertFalse(has(LookKeys.pageKey(TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN, 3)));
     }
 
     /**
@@ -181,25 +180,14 @@ public class PageLookTest {
     }
 
     @Test
-    public void groundInputsAreDetachable() {
-        put(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, 20);
-        assertTrue(look.write(PageLook.Scope.page(3), TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, 55));
-        assertEquals(55, look.of(HOME_B).wallpaperDim());
-        assertEquals(20, look.of(HOME).wallpaperDim());
+    public void keyboardBackdropIsNotAPagesOwn() {
+        // The per-page wallpaper dim is no longer read: the Terminal card's one dim replaces it
+        // (ADR 0031 §4, #287), and the reset deletes the stored keys.
         // The keyboard's backdrop is the chrome's: no page holds its own (ADR 0031).
         assertFalse(look.write(PageLook.Scope.page(3),
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, 60));
         assertEquals(look.of(HOME).inAppKeyboardBackdropOpacity(),
             look.of(HOME_B).inAppKeyboardBackdropOpacity());
-    }
-
-    @Test
-    public void canvasTintOnTheTerminalPageFollowsBaseUnlessDetached() {
-        put(TERMUX_APP.KEY_SURFACE_BASE_TINT, 25);
-        assertEquals(25, look.of(TERMINAL).canvasTint());
-        detach(SurfaceSlot.CANVAS, SurfaceProperty.TINT);
-        put(TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, 60);
-        assertEquals(60, look.of(TERMINAL).canvasTint());
     }
 
     // ---- caching and invalidation
@@ -216,7 +204,7 @@ public class PageLookTest {
         PageLook.Snapshot home = look.of(HOME);
         look.of(TERMINAL);
         look.of(HOME_B);
-        assertTrue(look.write(PageLook.Scope.GLOBAL, TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 50));
+        assertTrue(look.write(PageLook.Scope.GLOBAL, TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN, 50));
         assertEquals(1, events.size());
         assertEquals(ids(1, 2, 3), events.get(0));
         assertNotSame(home, look.of(HOME));
@@ -244,7 +232,7 @@ public class PageLookTest {
 
     @Test
     public void noEventWhenNothingIsCached() {
-        look.write(PageLook.Scope.GLOBAL, TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 50);
+        look.write(PageLook.Scope.GLOBAL, TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN, 50);
         assertTrue(events.isEmpty());
     }
 
@@ -292,7 +280,7 @@ public class PageLookTest {
         look.of(HOME);
         look.of(TERMINAL);
         events.clear();
-        assertTrue(look.write(PageLook.Scope.GLOBAL, TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 33));
+        assertTrue(look.write(PageLook.Scope.GLOBAL, TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN, 33));
         assertEquals(ids(1, 2), events.get(events.size() - 1));
         assertEquals(33, look.of(TERMINAL).dockGlassGrain());
     }

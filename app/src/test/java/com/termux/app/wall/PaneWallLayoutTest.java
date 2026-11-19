@@ -116,7 +116,7 @@ public class PaneWallLayoutTest {
         PageKind[] pages = {PageKind.HOME, PageKind.DISPLAY, PageKind.TERMINAL};
         int[] first = new int[3];
         View[] views = {widgets, display, terminal};
-        // The display window stands in the Workspace's room (PageKind#roomKind).
+        // The display window stands in the Terminal's room (PageKind#roomKind).
         int[] insets = {0, 300, 300};
         // Each page stands above the bottom by its own inset, once it is the one on screen.
         for (int i = 0; i < pages.length; i++) {
@@ -373,7 +373,7 @@ public class PaneWallLayoutTest {
     @Test
     public void aDragTowardAnotherWindowKeepsTheNextViewOutOfSight() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        // Window 2 of 3: one more window on each side, inside the Workspace's view.
+        // Window 2 of 3: one more window on each side, inside the Terminal's view.
         wall.setListener(new PaneWallLayout.Listener() {
             @Override public boolean hasInnerPage(PageKind page, int steps) {
                 return page == PageKind.TERMINAL;

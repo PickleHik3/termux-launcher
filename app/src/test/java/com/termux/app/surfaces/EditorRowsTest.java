@@ -55,7 +55,7 @@ public class EditorRowsTest {
 
     @Test
     public void theDockCardOpensOnItsStyleItsBarsAndItsGlass() {
-        assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS),
+        assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.DOCK_APP_ICONS),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         // Bars keep order and settings; Appearance holds the dock's own Opacity and Blur and
         // Peek's Reflection (spec §3, Dock). No Links: Global is the pill's.
@@ -82,7 +82,8 @@ public class EditorRowsTest {
     @Test
     public void theKeyboardCardOpensOnItsTypeThenItsGlassWithTheOpacityLink() {
         assertEquals(Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
-            Row.KEY_CORNERS, Row.BOTTOM_PADDING), EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
+            Row.KEY_CORNERS, Row.BOTTOM_PADDING, Row.KEYBOARD_WIDTH, Row.KEYBOARD_FLOAT_HEIGHT,
+            Row.KEYBOARD_SPLIT_GAP), EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.OPACITY, Row.OPACITY_LINK,
             Row.KEY_OPACITY, Row.FROST, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 3));
@@ -99,14 +100,15 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theTerminalCardHoldsTextItsGlassPanesEffectsAndLayout() {
-        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.TEXT_SIZE, Row.CONTRAST, Row.LINK_FONT),
+    public void theTerminalCardHoldsTextItsBackgroundPanesEffectsAndLayout() {
+        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
-            Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM, Row.TINT_HUE,
+        assertEquals(Arrays.asList(Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY,
+            Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
             Row.SECTION_PANES, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
             Row.PANE_BORDERS, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT,
-            Row.SECTION_LAYOUT, Row.ELEMENTS, Row.MINIMAL),
+            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
+            Row.MINIMAL),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 3));
         List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
         assertFalse(all.contains(Row.VISIBLE));
@@ -114,8 +116,8 @@ public class EditorRowsTest {
 
     @Test
     public void theHomeCardHoldsOneTransitionRowOfFiveGlyphTilesInTheEnumsOrder() {
-        // Page transition closes the Home section (overhaul §2).
-        assertTrue(EditorRows.tier(EditorCard.HOME, ALL, 1).contains(Row.PAGE_TRANSITION));
+        // Page transition is Global's Screen (spec §3).
+        assertTrue(EditorRows.tier(EditorCard.APPEARANCE, ALL, 3).contains(Row.PAGE_TRANSITION));
         assertEquals(Kind.SEGMENTS, Row.PAGE_TRANSITION.kind);
         assertEquals(5, com.termux.app.launcher.home.HomePageTransition.values().length);
         assertEquals("slide", com.termux.app.launcher.home.HomePageTransition.values()[0].value);
@@ -136,12 +138,11 @@ public class EditorRowsTest {
     @Test
     public void theHomeCardOpensOnHomesGridLookAndGlassAndItIsAlwaysTheHomeHalfs() {
         assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
-            Row.HOME_ICON_SIZE, Row.PAGE_TRANSITION, Row.ICON_PACK),
-            EditorRows.tier(EditorCard.HOME, ALL, 1));
+            Row.ICON_PACK), EditorRows.tier(EditorCard.HOME, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
             Row.PAGE_DOTS, Row.FOLDERS, Row.WALLPAPER_SCROLL, Row.SECTION_WIDGETS,
             Row.GLASS_WIDGETS, Row.NUMERALS, Row.SECTION_LAYOUT, Row.ELEMENTS,
-            Row.SECTION_APPEARANCE, Row.WALLPAPER_DIM, Row.SECTION_LINKS, Row.LINK_GESTURES,
+            Row.SECTION_LINKS, Row.LINK_GESTURES,
             Row.LINK_PAGES),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PageKind frame : PageKind.values()) {
@@ -160,14 +161,15 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
         assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.GRAIN, Row.GLASS_EDGE, Row.DEPTH,
             Row.VIBRANCY, Row.RIM, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
-            Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.WALLPAPER_COLOURS, Row.TINT_HUE,
-            Row.TOOL_COLOURS, Row.SECTION_SCREEN, Row.SHOW_WALLPAPER, Row.FULL_SCREEN),
+            Row.HOME_ICON_SIZE, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
+            Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_SCREEN,
+            Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN, Row.PAGE_TRANSITION),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);
         // Status position and Dock type are on their own cards; the Layout lists on the page
         // cards (spec §3, Global).
         for (Row gone : new Row[] {Row.CHANGE_WALLPAPER, Row.MINIMAL, Row.ICON_PACK,
-            Row.TEXT_SIZE, Row.HINT_GLASS_MATERIAL, Row.STATUS_POSITION, Row.DOCK_TYPE,
+            Row.FONT_SIZE, Row.HINT_GLASS_MATERIAL, Row.STATUS_POSITION, Row.DOCK_TYPE,
             Row.ELEMENTS})
             assertFalse(gone + " is not Global's", rows.contains(gone));
     }
@@ -177,9 +179,9 @@ public class EditorRowsTest {
         for (EditorCard card : EditorCard.values()) {
             List<Row> rows = rowsOf(card, ALL);
             // Home has no glass: the chrome wears one look on every page (ADR 0031); the
-            // Terminal's glass is its panes'.
-            assertEquals(card + " has Frost", card != EditorCard.HOME,
-                rows.contains(Row.FROST));
+            // Terminal's is its Background's own Blur, never Global's Frost (#287).
+            assertEquals(card + " has Frost",
+                card != EditorCard.HOME && card != EditorCard.TERMINAL, rows.contains(Row.FROST));
         }
         // Grain is its own row since the look grid (ADR 0017); Blur stays Frost's.
         for (Row row : Row.values())
@@ -235,7 +237,8 @@ public class EditorRowsTest {
             }
             // The spec's touch order puts Colour between the legend strip and Corners, and
             // Grain under More, so a card may hold several runs; it holds one at least.
-            assertTrue(card + " has a slider", runs >= 1);
+            // Home's one slider, Wallpaper dim, is the Terminal's since #287.
+            assertTrue(card + " has a slider", card == EditorCard.HOME || runs >= 1);
             for (int i = 0; i < rows.size(); i++) {
                 if (CardBody.shape(rows.get(i)) != CardBody.Shape.SLIDER_LINK)
                     continue;
@@ -304,18 +307,14 @@ public class EditorRowsTest {
         }
     }
 
+    /** Only the status bar, the dock and the keyboard own values (ADR 0031 §2): the arrow's cards. */
     @Test
-    public void theDotIsOnlyForASurfacesOwnGlass() {
-        assertTrue(EditorRows.marksOwnValue(EditorCard.DOCK, Row.OPACITY));
-        assertTrue(EditorRows.marksOwnValue(EditorCard.TERMINAL, Row.TINT));
-        assertTrue(EditorRows.marksOwnValue(EditorCard.STATUS, Row.FROST));
-        assertFalse("the shared glass has no dot",
-            EditorRows.marksOwnValue(EditorCard.APPEARANCE, Row.FROST));
-        assertFalse(EditorRows.marksOwnValue(EditorCard.DOCK, Row.CORNERS));
-        assertFalse(EditorRows.marksOwnValue(EditorCard.APPEARANCE, Row.TEXT_SIZE));
-        assertFalse(EditorRows.marksOwnValue(EditorCard.HOME, Row.HOME_ICON_SIZE));
-        assertFalse("Home's glass is the Base itself", EditorRows.marksOwnValue(EditorCard.HOME,
-            Row.FROST));
+    public void onlyTheChromeCardsShowAnArrow() {
+        for (EditorCard card : EditorCard.values()) {
+            boolean own = card == EditorCard.STATUS || card == EditorCard.DOCK
+                || card == EditorCard.KEYBOARD;
+            assertEquals(card.toString(), own, SurfaceEditorController.ownColumn(card) != null);
+        }
     }
 
     @Test

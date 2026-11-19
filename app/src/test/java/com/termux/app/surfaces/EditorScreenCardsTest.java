@@ -19,15 +19,15 @@ import java.util.List;
 
 /**
  * The two page cards (appearance-one-look spec §3): Home's, and the Terminal's, which the
- * Workspace card merged into.
+ * old Workspace card merged into.
  */
 public class EditorScreenCardsTest {
 
     private static final EditorRows.Offers ALL = new EditorRows.Offers(true, true);
 
-    /** The Workspace's rows live on the Terminal card, each once: Contrast, Layout, Minimal. */
+    /** The Terminal's rows live on the Terminal card, each once: Contrast, Layout, Minimal. */
     @Test
-    public void theTerminalCardHoldsTheWorkspacesRowsOnce() {
+    public void theTerminalCardHoldsTheTerminalsRowsOnce() {
         List<Row> rows = rowsOf(EditorCard.TERMINAL);
         for (Row row : new Row[] {Row.CONTRAST, Row.ELEMENTS, Row.MINIMAL})
             assertEquals(row + " once", 1, java.util.Collections.frequency(rows, row));

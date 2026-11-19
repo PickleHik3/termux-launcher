@@ -62,7 +62,7 @@ public class DockAppearancePreferencesTest {
     public void cornerRadiusSupportsStyleDefaultAndSliderBounds() {
         // The shipped Docked look names a radius on the shared layer; the dock's own -1 stays the
         // "follow the selected style" sentinel the slider's lower bound clamps to.
-        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS,
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS,
             preferences.getAppLauncherDockCornerRadius());
 
         preferences.setAppLauncherDockCornerRadius(-4);
@@ -103,8 +103,8 @@ public class DockAppearancePreferencesTest {
 
     @Test
     public void surfaceEdgeInsetsDefaultToTheSharedOuterMargin() {
-        // A fresh install starts fully linked, so all three read the Base gap. The keyboard used to
-        // ship 3dp wider than its neighbours; following Base lines it up with them instead, and an
+        // A fresh install starts fully linked, so all three read the Global gap. The keyboard used to
+        // ship 3dp wider than its neighbours; following Global lines it up with them instead, and an
         // existing install keeps its 13dp because migration sees the difference and detaches it.
         assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
             preferences.getDockHorizontalInset());
@@ -116,7 +116,7 @@ public class DockAppearancePreferencesTest {
 
     @Test
     public void surfaceEdgeInsetsCannotBeDetachedAndAreClampedToTheirSliderBounds() {
-        // Side gap is one Margin: a detach is ignored, so all three keep naming the Base gap.
+        // Side gap is one Margin: a detach is ignored, so all three keep naming the Global gap.
         preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
             TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, 0);
         assertTrue(preferences.isSurfaceInheriting(TermuxAppSharedPreferences.SurfaceSlot.DOCK,

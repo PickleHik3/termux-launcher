@@ -63,7 +63,7 @@ public class ChromeInkBandsTest {
     private static final int DAY_CARD_TEXT = 0xFF44474E;
     private static final int DARK_CARD = 0xFF1D2024;
     private static final int DARK_CARD_TEXT = 0xFFC4C6D0;
-    /** The Look's day glass at Base's opacity 30, the slab under a glass widget. */
+    /** The Look's day glass at Global's opacity 30, the slab under a glass widget. */
     private static final int DAY_TINT_30 = 0x4DE1E7F2;
 
     /** A sampler that answers per rect and remembers what it was asked. */

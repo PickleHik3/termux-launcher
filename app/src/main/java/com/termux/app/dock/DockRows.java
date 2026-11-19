@@ -186,7 +186,7 @@ public final class DockRows {
     private boolean mStatusBarShown;
     private boolean mKeyboardLaidOut;
     /** The side in front, and whose lane each of APPS, AZ and EXTRA_KEYS is (null: the stack's). */
-    @NonNull private com.termux.app.page.Side mFrontSide = com.termux.app.page.Side.WORKSPACE;
+    @NonNull private com.termux.app.page.Side mFrontSide = com.termux.app.page.Side.TERMINAL;
     @NonNull private final com.termux.app.page.Side[] mLaneSides = new com.termux.app.page.Side[3];
     /** The other side's applied rest, which sizes the rows only that side shows; null for none. */
     @Nullable private DockLayout mOtherLayout;

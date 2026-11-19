@@ -46,7 +46,7 @@ public class SideBarDockTest {
     }
 
     @Test
-    public void theWorkspaceIsPaddedOnTheBarsSide() {
+    public void theTerminalIsPaddedOnTheBarsSide() {
         for (int rotation : new int[] {Surface.ROTATION_90, Surface.ROTATION_270}) {
             Edge side = SideBarDock.sideFor(true, true, PHONE_SW, rotation);
             ResolvedArrangement bar = home(RowPlacement.BOTTOM).asSideBarDock(side);

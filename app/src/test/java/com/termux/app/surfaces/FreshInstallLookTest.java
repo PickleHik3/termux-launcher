@@ -73,11 +73,11 @@ public class FreshInstallLookTest {
         // Clear names no Tint cell, so no surface may hold one of its own: a per-surface Tint
         // detaches that row and the Look row reads Custom.
         for (TermuxAppSharedPreferences.SurfaceSlot slot : TermuxAppSharedPreferences.SurfaceSlot.values())
-            assertTrue(slot + " follows Base's Tint",
+            assertTrue(slot + " follows Global's Tint",
                 preferences.isSurfaceInheriting(slot, SurfaceProperty.TINT));
         assertEquals(Integer.valueOf(GlassControlsMigration.FORMAT),
             store.getAll().get(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT));
-        // What the editor's Look row reads on Home and on the Workspace.
+        // What the editor's Look row reads on Home and on the Terminal.
         for (PageKind half : new PageKind[]{PageKind.HOME, PageKind.TERMINAL}) {
             assertTrue(half + " wears Clear", SurfacePresets.wornOn(preferences, clearFor(), half));
             assertTrue(half + " matches Clear", SurfacePresets.matches(preferences, clearFor(), half));
@@ -126,11 +126,11 @@ public class FreshInstallLookTest {
         launch();
 
         assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(stored(SurfacePresets.cellKey(null, SurfaceProperty.BLUR))),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
         assertEquals(stored(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         assertEquals(stored(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_BEND), preferences.getFancierGlassBendDp());
         assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH),
             preferences.getFancierGlassEdgeWidthDp());

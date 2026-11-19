@@ -8,7 +8,7 @@ import java.util.function.BooleanSupplier;
 
 /**
  * The lifecycle of the command in each shell, as the window pills show it — the same three states
- * a terminal workspace manager badges its agents with, read from what the terminal can see rather
+ * a terminal terminal manager badges its agents with, read from what the terminal can see rather
  * than from agent hooks:
  *
  * <ul>

@@ -12,7 +12,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 import org.junit.Test;
 
 /**
- * The Look's glass Home's widgets wear: Base's numbers, clamped as the surfaces clamp them, the
+ * The Look's glass Home's widgets wear: Global's numbers, clamped as the surfaces clamp them, the
  * corner sentinel resolved where it always is, and a blur frame asked for only when one is drawn.
  */
 public class LookGlassSpecTest {
@@ -46,14 +46,14 @@ public class LookGlassSpecTest {
     }
 
     @Test
-    public void noStoreToReadIsTheShippedBase() {
+    public void noStoreToReadIsTheShippedGlobal() {
         LookGlassSpec spec = LookGlassSpec.read(null);
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR, spec.blurDp);
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY, spec.opacityPercent);
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN, spec.grainPercent);
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_TINT, spec.tintPercent);
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS, spec.cornerRadiusDp);
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS,
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_BLUR, spec.blurDp);
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_OPACITY, spec.opacityPercent);
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_GRAIN, spec.grainPercent);
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT, spec.tintPercent);
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS, spec.cornerRadiusDp);
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS,
             LookGlassSpec.cornerRadiusDp((TermuxAppSharedPreferences) null));
     }
 
@@ -72,7 +72,7 @@ public class LookGlassSpecTest {
     }
 
     @Test
-    public void theSurfaceColourIsTheBaseHueAtTheLooksOpacity() {
+    public void theSurfaceColourIsTheGlobalHueAtTheLooksOpacity() {
         assertEquals(0x00123456, LookGlassSpec.of(true, 8, 0, 0, 0, 24).surfaceColor(0xFF123456));
         assertEquals(0xFF123456, LookGlassSpec.of(true, 8, 100, 0, 0, 24).surfaceColor(0x00123456));
         assertEquals(0x80123456, LookGlassSpec.of(true, 8, 50, 0, 0, 24).surfaceColor(0xFF123456));

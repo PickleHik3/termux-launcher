@@ -303,36 +303,41 @@ launcherctl motion-log dump > motion.txt
 ## look
 
 ```text
-launcherctl look get PROPERTY [--element ELEMENT] [--page ID | --kind KIND]
-launcherctl look set PROPERTY VALUE [--element ELEMENT] [--page ID | --kind KIND]
-launcherctl look reset [PROPERTY] [--element ELEMENT] [--page ID | --kind KIND]
+launcherctl look get PROPERTY [--element ELEMENT]
+launcherctl look set PROPERTY VALUE [--element ELEMENT]
+launcherctl look reset [PROPERTY] [--element ELEMENT]
 ```
 
-Reads and sets the glass look the way the Appearance editor does. **Properties**: `frost`,
-`opacity`, `tint`, `colour`, `corners`, `depth`, `edge`, `grain`, `rim`, `vibrancy` and `margin`.
-**Elements**: `status`, `dock`, `keyboard`, `terminal`, `widgets` and `sheets`. Without
-`--element` a value applies to all glass; without `--page` or `--kind`, everywhere. `--kind` takes
-`home`, `terminal` or `display` and names every page of that kind, as the editor's **Home pages**,
-**Terminal** and **Display pages**; it cannot be given with `--page`. A page has no look of its
-own: `--page ID` names that page's kind, so `--page 2` on a Home page reads and writes the **Home
-pages** cell, and a page not on the wall is an error. `vibrancy` and `margin` are for all glass,
-everywhere, only.
+Reads and sets the look the way the Appearance editor's cards do, and nothing more.
+
+- **Global**, without `--element`: `blur`, `opacity`, `tint`, `colour`, `corners`, `depth`, `edge`,
+  `grain`, `rim`, `vibrancy` and `margin`.
+- **A surface's own look**, with `--element status`, `dock` or `keyboard`: `opacity` and `blur`
+  only. Setting one gives that surface its own value; everything else about it is Global's, so
+  `--element` with any other property is refused.
+- **The Terminal's Background**, with `--element background`: `opacity`, `blur` and `dim`
+  (Wallpaper dim). These are the Terminal's own and never follow Global.
+
+The look is the same on every page, so there is no `--page` or `--kind`. Menus, dialogs and
+widgets wear Global and have no look of their own; `--element widgets`, `sheets` and `terminal`
+are refused.
 
 ```text
-launcherctl look set opacity 60 --element keyboard --kind home
-launcherctl look get opacity --element keyboard --kind display
+launcherctl look set opacity 60 --element dock
+launcherctl look set dim 30 --element background
 ```
 
-Values are numbers, except `frost`, which takes a step from 0 to 7 or a blur in dp such as
-`12dp`; `colour`, which takes `primary`, `secondary` or `tertiary`; `rim`, which takes `off`,
-`hairline` or `bright`; and `corners`, which takes dp or `auto`. A value outside a property's range
-is held to it.
+Values are numbers, except `blur`, which takes a step from 0 to 7 or a size in dp such as `12dp`
+(the Terminal's blur is always a size in dp, up to 48); `colour`, which takes `primary`,
+`secondary` or `tertiary`; `rim`, which takes `off`, `hairline` or `bright`; and `corners`, which
+takes dp or `auto`. A value outside a property's range is held to it.
 
-`get` answers the value and where it is set (the element on a page, the page, the element on a
-kind of page such as "keyboard on Home pages", all glass on that kind, the element everywhere,
-all glass everywhere, or the shipped look). `set` changes one place and the launcher
-redraws at once. `reset` puts a place back on what it followed before; without a property it
-resets everything that place holds.
+`get` answers the value and whose it is: the element's own (`"from":"dock"`), Global's
+(`"from":"Global"`), the shipped look (`"from":"shipped"`) or, for the Background, the Terminal's
+(`"from":"Terminal"`). `set` changes one value and the launcher redraws at once. `reset` puts an
+element back on Global, which is the reset arrow in the editor; without a property it resets
+everything the element owns. Without `--element` it resets Global's own values, and for the
+Background it puts the shipped numbers back.
 
 ```sh
 launcherctl look set opacity 60 --element dock

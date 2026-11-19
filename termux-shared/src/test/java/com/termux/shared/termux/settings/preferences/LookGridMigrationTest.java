@@ -86,7 +86,7 @@ public class LookGridMigrationTest {
     }
 
     @Test
-    public void aBaseOnlyInstallLandsOnBase() {
+    public void aGlobalOnlyInstallLandsOnGlobal() {
         LookGrid.MemoryStore store = store();
         store.putInt("surface_base_blur", 12);
         store.putInt("surface_base_grain", 4);
@@ -126,14 +126,14 @@ public class LookGridMigrationTest {
         store.putInt(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 25);
         LookGrid grid = migrate(store);
         assertEquals(FrostStops.MIST, grid.value(Property.FROST, Element.DOCK));
-        // Mist's own grain is 7; the dock's grain followed Base's 4 and still does.
+        // Mist's own grain is 7; the dock's grain followed Global's 4 and still does.
         assertEquals(4, grid.value(Property.GRAIN, Element.DOCK));
         assertEquals(4, grid.value(Property.GRAIN, Element.DOCK));
         assertEquals(FrostStops.TINT, grid.value(Property.FROST, Element.STATUS));
     }
 
     @Test
-    public void anInstallFromBeforeBaseTakesTheDocksNumbersAsBase() {
+    public void anInstallFromBeforeGlobalTakesTheDocksNumbersAsGlobal() {
         LookGrid.MemoryStore store = bare();
         store.putInt(TERMUX_APP.KEY_APP_BAR_OPACITY, 60);
         store.putInt(TERMUX_APP.KEY_STATUS_BAR_OPACITY, 60);
@@ -159,12 +159,12 @@ public class LookGridMigrationTest {
     }
 
     /**
-     * The half upgrade's output for a Workspace that followed its own Base of 12 while Home's
+     * The half upgrade's output for a Terminal that followed its own Global of 12 while Home's
      * dock was detached at 30: the dock's own 30 everywhere; the Terminal page's 12 is kept
      * under its key, unread.
      */
     @Test
-    public void aWorkspacesOwnBaseIsKeptUnderTheTerminalPagesKeyAndNotRead() {
+    public void aTerminalsOwnGlobalIsKeptUnderTheTerminalPagesKeyAndNotRead() {
         LookGrid.MemoryStore store = store();
         store.putInt("surface_base_blur", 4);
         store.putBoolean("surface_inherit_dock_blur", false);
@@ -203,7 +203,7 @@ public class LookGridMigrationTest {
     }
 
     @Test
-    public void wallWideGlassValuesLandOnBase() {
+    public void wallWideGlassValuesLandOnGlobal() {
         LookGrid.MemoryStore store = store();
         store.putInt(TERMUX_APP.KEY_SURFACE_GLASS_VIBRANCY, 120);
         store.putString(TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE, TERMUX_APP.GLASS_TINT_HUE_TERTIARY);

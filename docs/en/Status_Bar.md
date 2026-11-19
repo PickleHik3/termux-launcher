@@ -7,11 +7,11 @@ This page covers what it shows, how to open it, and its settings under **Setting
 
 ## What it shows
 
-- **The clock.** The same on Home and in the Workspace, with no marks for the place you are on.
-- **The row of windows.** The same on Home and in the Workspace: the session number, then a window
-  chip for each Workspace window, the display window and each Home float, in that order, then `+`
-  for a new window. On Home, `+` opens a new Workspace window and slides you to it.
-- **Readings.** CPU, memory and weather, as switched on in Settings, on Home and in the Workspace.
+- **The clock.** The same on Home and in the Terminal, with no marks for the place you are on.
+- **The row of windows.** The same on Home and in the Terminal: the session number, then a window
+  chip for each Terminal window, the display window and each Home float, in that order, then `+`
+  for a new window. On Home, `+` opens a new Terminal window and slides you to it.
+- **Readings.** CPU, memory and weather, as switched on in the Status bar card, on Home and in the Terminal.
 - **Mouse mode.** A small mouse at the end of the readings means mouse mode is on.
 
 ## Open and fold it
@@ -22,7 +22,7 @@ The bar has a slim form and an open form with a larger clock and room for cards.
   of the border. Let go past about a third of the way, or flick, and it finishes on its own.
 - Or drag across the bar itself.
 
-The top-border swipe works on Home and in the Workspace, minimal mode included, while the bar stands along the
+The top-border swipe works on Home and in the Terminal, minimal mode included, while the bar stands along the
 top. A swipe that starts in Android's own strip at the very top of the screen still pulls the
 notification shade. A sideways swipe along the window chips scrolls the chips and never changes
 place.
@@ -53,9 +53,9 @@ Coding agents add a dot before the label: **Working**, **Needs you** or **Idle**
 
 ## Clock
 
-- **Settings → Terminal → Status bar → Clock → 12-hour time** ("Show AM and PM."), off by default.
-- The face and alignment are part of the look. Open **Appearance**, go to **Look**, slide to
-  **Custom**, tap the status bar and tap **Clock**. Faces: **Flip**, **LCD**, **Minimal**, **LED
+- **12 h / 24 h** on the Status bar card shows AM and PM; it is 24 h by default.
+- The face and alignment are on the Status bar card, under **Clock & Weather**: **Clock face** and
+  **Clock position**. Faces: **Flip**, **LCD**, **Minimal**, **LED
   matrix**, **Tape**, **Slab**. Alignment: **Left**, **Center**, **Right**.
 
 When the bar is open, the clock keeps its full face and scales to the room left beside any cards.
@@ -84,10 +84,9 @@ The readings describe the whole phone, not only your shells.
 
 ## Weather
 
-Under **Settings → Terminal → Status bar → Weather**:
+The weather reading is switched on with the other readings on the Status bar card, where **°C / °F**
+sets the unit. Under **Settings → Terminal → Status bar → Weather**:
 
-- **Weather**: on by default.
-- **Fahrenheit**: "Show °F instead of °C."
 - **Location**: opens a search. Type a city in **Search for a city** and pick a result, or choose
   **Use device location**.
 
@@ -108,6 +107,7 @@ Hidden, the clock, weather and window chips go with it and the content takes the
 tab still opens Appearance, so you can bring it back. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
-The bar's blur, opacity, grain and tint are set in Appearance → **Look**; see
+The bar wears Global's glass. Its own **Opacity** and **Blur** are on the Status bar card, under
+**Appearance**; see
 [Look and themes](Look_And_Themes.md). **Settings → Notifications** holds the
 notification settings.

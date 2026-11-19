@@ -47,7 +47,7 @@ import java.util.Set;
 
 /**
  * The Glass switch of a built-in widget: off is the solid card, on is the Look's glass — the slab
- * a terminal pane wears, fed by the page from the Look (Base's values) — and back off returns to
+ * a terminal pane wears, fed by the page from the Look (Global's values) — and back off returns to
  * the solid card. Every widget's corner is the Look's.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -99,9 +99,9 @@ public class BuiltinWidgetGlassTest {
         }
     }
 
-    /** The Look's glass, at the shipped Base Corners unless told otherwise. */
+    /** The Look's glass, at the shipped Global Corners unless told otherwise. */
     private static PaneSurfaceStyle glass(boolean active, @Nullable Bitmap frame) {
-        return glass(active, frame, TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS);
+        return glass(active, frame, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS);
     }
 
     private static PaneSurfaceStyle glass(boolean active, @Nullable Bitmap frame, int cornersDp) {
@@ -238,7 +238,7 @@ public class BuiltinWidgetGlassTest {
     @Test
     public void everyStyleIsCutAtTheLooksCornersWhateverTheStyleSetting() {
         float density = context.getResources().getDisplayMetrics().density;
-        float look = TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS * density;
+        float look = TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS * density;
         assertEquals(look, style.cornerRadiusPx, 0.01f);
         assertEquals("Pane is no longer its own 12dp", look, BuiltinWidgetStyle.resolve(context,
             BuiltinWidgetStyle.Numerals.MONO, false, null).cornerRadiusPx, 0.01f);
@@ -544,7 +544,7 @@ public class BuiltinWidgetGlassTest {
         activity.setContentView(page);
         int builds = view.builds;
         float density = context.getResources().getDisplayMetrics().density;
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS * density,
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS * density,
             view.corner().radiusPx(), 0.01f);
 
         // A Corners slider's ticks: every one lands, none builds the layout again.

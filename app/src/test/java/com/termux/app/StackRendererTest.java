@@ -371,7 +371,7 @@ public class StackRendererTest {
 
         mFrontHome = false;
         mRenderer.applyAtRest();
-        assertEquals("the Workspace's room is 300 higher", 1600, body.getClipBounds().bottom);
+        assertEquals("the Terminal's room is 300 higher", 1600, body.getClipBounds().bottom);
     }
 
     @Test public void aCrossingBlendsTheRoomsAndItsLandingWritesNothing() {

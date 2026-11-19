@@ -126,7 +126,7 @@ public final class GlassSurfaceFactory {
     private int dockTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         return preferences != null ? preferences.getDockTintStrength(mSurfaces.stackLookPage())
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
     }
 
     /**
@@ -191,7 +191,7 @@ public final class GlassSurfaceFactory {
     public int statusTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         return preferences != null ? preferences.getStatusBarTintStrength(mSurfaces.statusLookPage())
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
     }
 
     @NonNull

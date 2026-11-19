@@ -285,7 +285,7 @@ public class EdgeStackViewTest {
         assertTrue(with.top.overlayFollowing(with.band, 0));
         assertFalse("asking again changes nothing", with.top.overlayFollowing(with.band, 0));
         with.layOut();
-        assertEquals("the Workspace: the bar takes its row and the canvas starts under it",
+        assertEquals("the Terminal: the bar takes its row and the canvas starts under it",
             BAR_PX, with.bandBounds()[0]);
         assertEquals(COLUMN_HEIGHT, with.bandBounds()[1]);
         assertEquals(0f, with.top.getTranslationZ(), 0f);
@@ -332,16 +332,16 @@ public class EdgeStackViewTest {
         View apps = row(100);
         View keys = row(98);
         stack.setStack(Arrays.asList(keys, apps));
-        stack.setLane(keys, StackLanes.WORKSPACE);
+        stack.setLane(keys, StackLanes.TERMINAL);
         // Home in front: the shared apps row stands on the band's floor under the keys' room.
         stack.setFrontLane(StackLanes.HOME);
         layOut(stack);
         assertEquals("the union of both sides' rests", 198, stack.getMeasuredHeight());
         assertEquals(98, apps.getTop());
         assertEquals(198, apps.getBottom());
-        assertEquals("the Workspace's lane stands over the apps row", 100, keys.getTop());
-        // The Workspace in front: the apps row stands on the extra keys, as before lanes.
-        stack.setFrontLane(StackLanes.WORKSPACE);
+        assertEquals("the Terminal's lane stands over the apps row", 100, keys.getTop());
+        // The Terminal in front: the apps row stands on the extra keys, as before lanes.
+        stack.setFrontLane(StackLanes.TERMINAL);
         layOut(stack);
         assertEquals(198, stack.getMeasuredHeight());
         assertEquals(0, apps.getTop());
@@ -355,11 +355,11 @@ public class EdgeStackViewTest {
         View shared = row(50);
         stack.setStack(Arrays.asList(shared, keys, homeRow));
         stack.setLane(homeRow, StackLanes.HOME);
-        stack.setLane(keys, StackLanes.WORKSPACE);
+        stack.setLane(keys, StackLanes.TERMINAL);
         layOut(stack);
         assertEquals("shared rows plus the taller lane", 148, stack.getMeasuredHeight());
         assertEquals("the shared row on the floor", 98, shared.getTop());
-        assertEquals("the Workspace's row stacked on it", 0, keys.getTop());
+        assertEquals("the Terminal's row stacked on it", 0, keys.getTop());
         assertEquals("Home's row stacked on the same floor, in the same band", 38,
             homeRow.getTop());
         assertEquals(98, homeRow.getBottom());
@@ -370,7 +370,7 @@ public class EdgeStackViewTest {
         View apps = row(100);
         View keys = row(98);
         stack.setStack(Arrays.asList(keys, apps));
-        stack.setLane(keys, StackLanes.WORKSPACE);
+        stack.setLane(keys, StackLanes.TERMINAL);
         keys.setVisibility(View.GONE);
         layOut(stack);
         assertEquals(100, stack.getMeasuredHeight());
@@ -382,8 +382,8 @@ public class EdgeStackViewTest {
         View keys = row(98);
         stack.setStack(Arrays.asList(keys));
         assertEquals(StackLanes.STACK, stack.getLane(keys));
-        assertTrue(stack.setLane(keys, StackLanes.WORKSPACE));
-        assertFalse(stack.setLane(keys, StackLanes.WORKSPACE));
+        assertTrue(stack.setLane(keys, StackLanes.TERMINAL));
+        assertFalse(stack.setLane(keys, StackLanes.TERMINAL));
         assertTrue(stack.setLane(keys, StackLanes.STACK));
         assertEquals(StackLanes.STACK, stack.getLane(keys));
     }

@@ -374,7 +374,7 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private FolderEntryDragState activeFolderEntryDragState;
     /** Identifies a folder-member drag in windows the drag's local state does not reach. */
     static final String FOLDER_ENTRY_CLIP_LABEL = "folder-entry";
-    /** The half of the wall whose dock glass the menus wear; the Workspace until the host says. */
+    /** The half of the wall whose dock glass the menus wear; the Terminal until the host says. */
     @NonNull private java.util.function.Supplier<Integer> lookPageSupplier = () -> com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId();
 
     public void setLookPageSupplier(@NonNull java.util.function.Supplier<Integer> supplier) {
@@ -383,7 +383,7 @@ public final class SuggestionBarView extends GridLayout
 
     /**
      * The launcher's look-and-feel, read live by the popup module. Menus and folders are sheets:
-     * their opacity, blur and grain are the Sheets element's (ADR 0017), not the dock's; whether
+     * they wear Global's glass with the sheets' opacity floor (ADR 0031); whether
      * blur can run at all (the wallpaper blurs here) stays the host's call ({@link #setBlurConfig}).
      */
     private final AnchoredMenuTheme menuTheme = new AnchoredMenuTheme() {
@@ -393,7 +393,7 @@ public final class SuggestionBarView extends GridLayout
             com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
             return sheets == null ? appBarOpacity : sheets.opacityPercent;
         }
-        // Blur runs where the wallpaper blurs and the Sheets Frost stop is above 0 (ADR 0017).
+        // Blur runs where the wallpaper blurs and Global's Frost stop is above 0 (ADR 0031).
         @Override public boolean blurEnabled() {
             return com.termux.app.chrome.ChromePolicy.dockBlurEnabled(blurRadiusDp());
         }
@@ -408,13 +408,11 @@ public final class SuggestionBarView extends GridLayout
         }
     };
 
-    /** The Sheets element on the page the menus open over; null without a store. */
+    /** Global's glass at the sheets' opacity floor, which the menus wear; null without a store. */
     @androidx.annotation.Nullable
     private com.termux.app.chrome.ElementGlass sheetsGlass() {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
-        return preferences == null ? null : com.termux.app.chrome.ElementGlass.of(preferences,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS,
-            lookPageSupplier.get());
+        return preferences == null ? null : com.termux.app.chrome.SheetGlass.of(preferences);
     }
     private final MenuRowFactory menuRows = new MenuRowFactory(getContext(), menuTheme);
 

@@ -139,14 +139,14 @@ public class DockPlacementTest {
 
     // ---- The Peek answer a crossing travels with, and the one its settle commits ----
 
-    /** The terminal's keyboard is up on the Workspace and stays up through the slide. */
-    private static final boolean WORKSPACE_KEYBOARD_UP = true;
+    /** The terminal's keyboard is up on the Terminal and stays up through the slide. */
+    private static final boolean TERMINAL_KEYBOARD_UP = true;
 
     /**
      * The Peek answer on a frame of a crossing from {@code committed} toward {@code other}, at
      * {@code progress} into the other half: the rows the stack stands there (SeamDress#stackPage,
      * the page the activity's stackDressPage reads), laid out by that page's rows, read for that
-     * page. The keyboard is the one the activity reads, still up from the Workspace.
+     * page. The keyboard is the one the activity reads, still up from the Terminal.
      */
     private static boolean travelAnswer(PageKind committed, PlaceLayout committedLayout,
                                         PageKind other, PlaceLayout otherLayout,
@@ -156,7 +156,7 @@ public class DockPlacementTest {
         PlaceLayout standing = rowsPage == committed ? committedLayout
             : SeamTravel.withDockOf(committedLayout, otherLayout);
         return DockPlacement.peekCardStandsOn(rowsPage, true, true, standing, false,
-            WORKSPACE_KEYBOARD_UP, false, false);
+            TERMINAL_KEYBOARD_UP, false, false);
     }
 
     /** The answer the settle commits on {@code page}, at rest there with its own layout. */
@@ -168,9 +168,9 @@ public class DockPlacementTest {
 
 
     @Test
-    public void workspaceToHomeTheRowsStayTheWorkspacesAndHomesPeekComesAtTheLanding() {
+    public void terminalToHomeTheRowsStayTheTerminalsAndHomesPeekComesAtTheLanding() {
         assertEquals(DockPlan.NONE, SeamTravel.dockPlan(WITH_EXTRA_KEYS, APPS_OVER_AZ));
-        // The Workspace's keyboard is still up on every frame: the card is refused to the end,
+        // The Terminal's keyboard is still up on every frame: the card is refused to the end,
         // and the landing on Home alone brings Peek, the same answer it commits.
         for (float progress : new float[] {0.25f, 0.5f, 0.99f, 1f}) {
             assertFalse("at " + progress, travelAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS,
@@ -181,22 +181,22 @@ public class DockPlacementTest {
     }
 
     @Test
-    public void homeToWorkspaceTheRowsStayHomesAndTheWorkspacesTrayComesAtTheLanding() {
+    public void homeToTerminalTheRowsStayHomesAndTheTerminalsTrayComesAtTheLanding() {
         assertEquals(DockPlan.NONE, SeamTravel.dockPlan(APPS_OVER_AZ, WITH_EXTRA_KEYS));
         for (float progress : new float[] {0f, 0.25f, 0.5f, 0.99f, 1f}) {
             assertTrue("at " + progress, travelAnswer(PageKind.HOME, APPS_OVER_AZ,
                 PageKind.TERMINAL, WITH_EXTRA_KEYS, progress));
         }
-        assertFalse(settleAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS, WORKSPACE_KEYBOARD_UP));
+        assertFalse(settleAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS, TERMINAL_KEYBOARD_UP));
     }
 
     @Test
     public void aSlideThatFallsBackWearsTheLookItStartedWith() {
         // Rows that differ never swap on the way: out and back, the committed answer all along.
-        boolean workspace = settleAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS,
-            WORKSPACE_KEYBOARD_UP);
+        boolean terminal = settleAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS,
+            TERMINAL_KEYBOARD_UP);
         for (float progress : new float[] {0f, 0.3f, 0.7f, 0.3f, 0f}) {
-            assertEquals("from the Workspace at " + progress, workspace,
+            assertEquals("from the Terminal at " + progress, terminal,
                 travelAnswer(PageKind.TERMINAL, WITH_EXTRA_KEYS, PageKind.HOME,
                     APPS_OVER_AZ, progress));
         }
@@ -210,7 +210,7 @@ public class DockPlacementTest {
 
     @Test
     public void aFoldOutNeverStandsHomesRowsSoItsLookChangesAtTheLanding() {
-        // Home's rows plus the extra keys on the Workspace: the stack stands the Workspace's rows
+        // Home's rows plus the extra keys on the Terminal: the stack stands the Terminal's rows
         // to the landing, which alone brings Peek.
         assertEquals(DockPlan.NONE, SeamTravel.dockPlan(APPS_AZ_AND_KEYS, APPS_OVER_AZ));
         assertFalse(travelAnswer(PageKind.TERMINAL, APPS_AZ_AND_KEYS, PageKind.HOME,
@@ -220,7 +220,7 @@ public class DockPlacementTest {
 
     @Test
     public void oneLayoutOnBothHalvesKeepsTheCommittedAnswerToTheLanding() {
-        // No rows travel, so nothing of the dock goes out of sight: the Workspace's keyboard
+        // No rows travel, so nothing of the dock goes out of sight: the Terminal's keyboard
         // alone refuses the card there, and the look changes as the slide lands.
         assertEquals(DockPlan.NONE, SeamTravel.dockPlan(APPS_OVER_AZ, APPS_OVER_AZ));
         assertFalse(travelAnswer(PageKind.TERMINAL, APPS_OVER_AZ, PageKind.HOME,

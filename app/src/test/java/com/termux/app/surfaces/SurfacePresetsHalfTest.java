@@ -56,7 +56,7 @@ public class SurfacePresetsHalfTest {
 
     @Test
     public void equalHalves_saveOneLook() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 33);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 33);
         Map<String, Object> look = SurfacePresets.captureLook(preferences);
         assertFalse(look.containsKey(SurfacePresets.KEY_HOME_LOOK));
         for (String key : look.keySet())
@@ -65,26 +65,27 @@ public class SurfacePresetsHalfTest {
 
     @Test
     public void oneHalfsLook_appliesToBoth() {
-        // Base is wall-wide: the Workspace's 2 is replaced by Home's 40 on the one wall value.
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(), 2);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 40);
+        // Global is wall-wide: the Terminal's 2 is replaced by Home's 40 on the one wall value.
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(), 2);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 40);
         SurfacePresets.Preset home = saved(SurfacePresets.captureLook(preferences, PageKind.HOME));
         assertFalse(SurfacePresets.hasHomeLook(home));
 
         SurfacePresets.apply(preferences, home);
 
-        assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN,
+        assertEquals(40, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
+        assertEquals(40, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN,
             TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
     public void lookOnHome_leavesTheTerminalAlone() {
-        preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 88);
+        preferences.setTerminalBackgroundOpacity(88);
 
         SurfacePresets.applyLook(preferences, preset("stock"), PageKind.HOME);
+        SurfacePresets.applyLook(preferences, preset("stock"), PageKind.TERMINAL);
 
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
+        // The terminal's Background takes no preset (ADR 0031 §4, #287).
         assertEquals(88, preferences.getTerminalBackgroundOpacity());
     }
 

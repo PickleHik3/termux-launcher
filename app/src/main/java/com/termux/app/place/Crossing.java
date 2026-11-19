@@ -11,7 +11,7 @@ import com.termux.app.terminal.GeometryScheduler;
 import com.termux.app.wall.PageRef;
 
 /**
- * A crossing (ADR 0012): one slide of the wall between Home and the Workspace, from the first frame
+ * A crossing (ADR 0012): one slide of the wall between Home and the Terminal, from the first frame
  * the wall moves to the frame it lands, owned here from begin to land. The activity hands it the
  * wall's frames and applies nothing of a crossing that this does not answer.
  *
@@ -61,7 +61,7 @@ public final class Crossing {
         default void endSides() {}
     }
 
-    /** The status bar, riding with the Workspace's page. */
+    /** The status bar, riding with the Terminal's page. */
     public interface Bar {
         /** The bar drawn {@code px} from its rest (0 puts it back). */
         void rideX(float px);
@@ -245,7 +245,7 @@ public final class Crossing {
 
     /**
      * The status bar for this frame: drawn where the page that carries it stands whenever the
-     * seam says it rides ({@link SeamCrossing#rideBar}), the Workspace's across the seam and the
+     * seam says it rides ({@link SeamCrossing#rideBar}), the Terminal's across the seam and the
      * Home page that wears it between two Home pages ({@link SeamCrossing#barScreenXPx}), else at
      * its rest. Whether it rides.
      */
@@ -335,7 +335,7 @@ public final class Crossing {
      * The end {@code page} names while a crossing runs: the end that is that page or whose
      * arrangement is resolved for it, else the end of its kind (Home's end for any Home page, the
      * Terminal's for the Terminal page); a page of a kind neither end has is no end, and the
-     * store answers it (a Home ↔ Home crossing holds no Workspace half). Between two pages of
+     * store answers it (a Home ↔ Home crossing holds no Terminal half). Between two pages of
      * one kind (two Home pages), a page of that kind with no id said names the committed end:
      * the reader asking by kind alone is asking what the chrome stands in. Null while none runs.
      */

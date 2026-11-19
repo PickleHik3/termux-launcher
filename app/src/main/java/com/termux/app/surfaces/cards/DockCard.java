@@ -185,7 +185,7 @@ public final class DockCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         // Reflection is Peek glass's own knob, shown only while Peek is the type.
         return new EditorRows.CardRows()
-            .tier(1, Row.DOCK_TYPE, Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS)
+            .tier(1, Row.DOCK_TYPE, Row.DOCK_APP_ICONS)
             .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME)
             .tier(3, Row.SECTION_BARS, Row.DOCK_BARS)

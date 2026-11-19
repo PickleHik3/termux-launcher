@@ -14,7 +14,7 @@ import org.junit.Test;
 
 /**
  * The design a page's slab wears: its layout's while the layout shows the pinned apps, the plain
- * tray where it shows none (pong, round 9: a Workspace with only the extra keys resolved to Lens
+ * tray where it shows none (pong, round 9: a Terminal with only the extra keys resolved to Lens
  * beads, and a slide to Home's Peek glass re-dressed the slab at the landing).
  */
 public class WornDockDesignTest {
@@ -23,11 +23,11 @@ public class WornDockDesignTest {
     private static final PlaceLayout HOME = new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM,
         true, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
         PlaceLayout.KeyboardForm.DOCKED, 4, 5);
-    /** The developer's Workspace: the extra keys alone, the dock's apps row turned off. */
+    /** The developer's Terminal: the extra keys alone, the dock's apps row turned off. */
     private static final PlaceLayout KEYS_ONLY = new PlaceLayout(Edge.TOP, RowPlacement.HIDDEN,
         false, Edge.BOTTOM, RowPlacement.BOTTOM, PlaceLayout.KeyboardMode.RESIZE,
         PlaceLayout.KeyboardForm.DOCKED, 4, 5);
-    /** A Workspace with the apps and the extra keys. */
+    /** A Terminal with the apps and the extra keys. */
     private static final PlaceLayout APPS_AND_KEYS = new PlaceLayout(Edge.TOP,
         RowPlacement.BOTTOM, false, Edge.BOTTOM, RowPlacement.BOTTOM,
         PlaceLayout.KeyboardMode.RESIZE, PlaceLayout.KeyboardForm.DOCKED, 4, 5);
@@ -74,21 +74,21 @@ public class WornDockDesignTest {
     }
 
     /**
-     * Workspace (dock off) to Home and back: the crossing's two designs are the resolver's, so a
-     * dock-off Workspace and Home's Peek glass have a design apart only where Home's stands; the
+     * Terminal (dock off) to Home and back: the crossing's two designs are the resolver's, so a
+     * dock-off Terminal and Home's Peek glass have a design apart only where Home's stands; the
      * rows a dip brings in rise in their own design and the settle commits that same design.
      */
     @Test
     public void theCrossingsDesignsAreTheResolversAtRest() {
-        DockStyle workspace = WornDockDesign.of(DockStyle.LENS_BEADS, KEYS_ONLY);
+        DockStyle terminal = WornDockDesign.of(DockStyle.LENS_BEADS, KEYS_ONLY);
         DockStyle home = WornDockDesign.of(DockStyle.PEEK_GLASS, HOME);
-        assertSame(DockStyle.GLASS_TRAY, workspace);
+        assertSame(DockStyle.GLASS_TRAY, terminal);
         assertSame(DockStyle.PEEK_GLASS, home);
         // The rows the dip brings in stand Home's apps row, so they wear Home's design, the one
-        // the settle on Home resolves; back on the Workspace its slab is the plain tray again.
+        // the settle on Home resolves; back on the Terminal its slab is the plain tray again.
         PlaceLayout standingHome = SeamTravel.withDockOf(KEYS_ONLY, HOME);
         assertSame(home, WornDockDesign.of(DockStyle.PEEK_GLASS, standingHome));
-        PlaceLayout standingWorkspace = SeamTravel.withDockOf(HOME, KEYS_ONLY);
-        assertSame(workspace, WornDockDesign.of(DockStyle.LENS_BEADS, standingWorkspace));
+        PlaceLayout standingTerminal = SeamTravel.withDockOf(HOME, KEYS_ONLY);
+        assertSame(terminal, WornDockDesign.of(DockStyle.LENS_BEADS, standingTerminal));
     }
 }

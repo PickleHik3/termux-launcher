@@ -307,7 +307,7 @@ public final class StackScene {
 
     /**
      * {@code side}'s rows drawn this far across at progress {@code p} on a wall {@code widthPx}
-     * wide: Home's to the left of the seam, the Workspace's to its right, one wall apart.
+     * wide: Home's to the left of the seam, the Terminal's to its right, one wall apart.
      */
     public static float sideSlide(@NonNull Side side, @NonNull Side from, @NonNull Side to,
                                   float p, int widthPx) {
@@ -318,7 +318,7 @@ public final class StackScene {
     /**
      * Each side's rows (ADR 0030 section 4): across with their side, and down to the keyboard's
      * top as the frame draws it, so no row hangs over a sinking keyboard. Rows carry no glass;
-     * the slab under them is the shared stack's. Home's lane and the Workspace's slide with their
+     * the slab under them is the shared stack's. Home's lane and the Terminal's slide with their
      * pages ({@link #sideSlide}), so the front side's lane stands at 0 and the other's a wall's
      * width off its page's side, and the frame at progress 0 and 1 is each end's rest.
      * {@code StackRenderer} writes {@code sideTx} to the lanes' rows; {@code sideTy} is not
@@ -354,7 +354,7 @@ public final class StackScene {
 
     /**
      * Home's share of the stack's look at progress {@code p} from {@code fromHome}'s side to
-     * {@code toHome}'s: 1 at Home's rest, 0 at the Workspace's, the material curve between. What
+     * {@code toHome}'s: 1 at Home's rest, 0 at the Terminal's, the material curve between. What
      * only Home's rest draws on the shared slab (the Peek card) blends by it.
      */
     public static float homeShare(boolean fromHome, boolean toHome, float p) {

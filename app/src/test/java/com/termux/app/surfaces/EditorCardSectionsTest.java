@@ -93,23 +93,24 @@ public class EditorCardSectionsTest {
             "SECTION_LOOK", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT),
             "SECTION_FINE_TUNE", Arrays.asList(Row.GRAIN, Row.GLASS_EDGE, Row.DEPTH,
                 Row.VIBRANCY, Row.RIM),
-            "SECTION_SHAPE", Arrays.asList(Row.STYLE, Row.CORNERS, Row.MARGIN),
+            "SECTION_SHAPE", Arrays.asList(Row.STYLE, Row.CORNERS, Row.MARGIN,
+                Row.HOME_ICON_SIZE),
             "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.WALLPAPER_COLOURS,
                 Row.TINT_HUE, Row.TOOL_COLOURS),
-            "SECTION_SCREEN", Arrays.asList(Row.SHOW_WALLPAPER, Row.FULL_SCREEN)));
+            "SECTION_SCREEN", Arrays.asList(Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN,
+                Row.PAGE_TRANSITION)));
     }
 
     @Test
     public void home() {
         check(EditorCard.HOME, expect(
             CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
-                Row.HOME_ICON_SIZE, Row.PAGE_TRANSITION, Row.ICON_PACK),
+                Row.ICON_PACK),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
                 Row.FOLDERS, Row.WALLPAPER_SCROLL),
             "SECTION_WIDGETS", Arrays.asList(Row.GLASS_WIDGETS, Row.NUMERALS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
-            // No glass: the chrome wears one look on every page (ADR 0031).
-            "SECTION_APPEARANCE", Arrays.asList(Row.WALLPAPER_DIM),
+            // No glass (ADR 0031) and no dim: Wallpaper dim is the Terminal's (#287).
             "SECTION_LINKS", Arrays.asList(Row.LINK_GESTURES, Row.LINK_PAGES)));
     }
 
@@ -132,7 +133,7 @@ public class EditorCardSectionsTest {
     @Test
     public void dock() {
         check(EditorCard.DOCK, expect(
-            CARD, Arrays.asList(Row.DOCK_TYPE, Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS),
+            CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_APP_ICONS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME),
             "SECTION_BARS", Arrays.asList(Row.DOCK_BARS),
@@ -142,11 +143,13 @@ public class EditorCardSectionsTest {
     @Test
     public void terminal() {
         check(EditorCard.TERMINAL, expect(
-            "SECTION_TEXT", Arrays.asList(Row.TEXT_SIZE, Row.CONTRAST, Row.LINK_FONT),
-            "SECTION_APPEARANCE", block(),
+            "SECTION_TEXT", Arrays.asList(Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT),
+            "SECTION_BACKGROUND", Arrays.asList(Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
+                Row.WALLPAPER_DIM),
             "SECTION_PANES", Arrays.asList(Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
                 Row.FOCUS_GROWS, Row.PANE_BORDERS),
-            "SECTION_EFFECTS", Arrays.asList(Row.CURSOR_TRAIL, Row.EFFECT),
+            "SECTION_EFFECTS", Arrays.asList(Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
+                Row.COMPOSITE_SIGNAL),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS, Row.MINIMAL)));
     }
 
@@ -162,7 +165,8 @@ public class EditorCardSectionsTest {
     public void keyboard() {
         check(EditorCard.KEYBOARD, expect(
             CARD, Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
-                Row.KEY_CORNERS, Row.BOTTOM_PADDING),
+                Row.KEY_CORNERS, Row.BOTTOM_PADDING, Row.KEYBOARD_WIDTH,
+                Row.KEYBOARD_FLOAT_HEIGHT, Row.KEYBOARD_SPLIT_GAP),
             "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.OPACITY_LINK,
                 Row.KEY_OPACITY, Row.FROST),
             "SECTION_LINKS", Arrays.asList(Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)));

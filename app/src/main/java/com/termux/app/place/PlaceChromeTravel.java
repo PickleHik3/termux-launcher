@@ -93,7 +93,7 @@ public final class PlaceChromeTravel {
 
     /**
      * Answers whether the page the wall shows {@code steps} away from the current one (-1 on its
-     * left, +1 on its right) is another page of the current one's own — the Workspace's previous
+     * left, +1 on its right) is another page of the current one's own — the Terminal's previous
      * or next window — rather than the next place on the row. A drag toward a window moves the
      * wall's offset exactly as a drag toward the next place does, so the offset alone cannot tell
      * them apart.
@@ -193,7 +193,7 @@ public final class PlaceChromeTravel {
      * state.
      *
      * <p>The same, for a wall whose current page may hold pages of its own beside it
-     * ({@code inner}): a slide toward one of those — from one Workspace window to the next or
+     * ({@code inner}): a slide toward one of those — from one Terminal window to the next or
      * the previous — stays on {@code current}'s place, so the frame is its rest. Without this the
      * offset of a slide toward the previous window read as a slide toward the place on the left,
      * Home, and the dock and the keyboard sank toward Home's state mid-swipe.

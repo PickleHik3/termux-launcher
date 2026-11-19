@@ -37,8 +37,8 @@ import android.app.Application;
 
 /**
  * A Look by card (appearance-cards-overhaul §1): Customization's reaches every page; Home's lands
- * in Home pages' all-glass cells alone, the Workspace's in Terminal and Display pages' together,
- * and their Reset returns those pages to Base.
+ * in Home pages' all-glass cells alone, the Terminal's in Terminal and Display pages' together,
+ * and their Reset returns those pages to Global.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -67,20 +67,20 @@ public class EditorScreenLookTest {
 
     /** The user's own look: Opacity 12, Blur 20%, Grain 3, Tint 0, Edge 40, Depth, Rim Bright. */
     private void setUpCustom() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 12);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 3);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 3);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 0);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 12);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 3);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 3);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 0);
         preferences.setFancierGlassDispersionPercent(40);
         preferences.setFancierGlassBendDp(30);
         preferences.setSurfaceGlassRim("gradient");
     }
 
     private void assertCustomValues() {
-        assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals(3, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(12, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
+        assertEquals(3, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         assertEquals(1, preferences.lookGrid().value(LookGrid.Property.FROST, null));
-        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(0, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
         assertEquals(40, preferences.getFancierGlassDispersionPercent());
         assertEquals(30, preferences.getFancierGlassBendDp());
         assertEquals("gradient", preferences.getSurfaceGlassRim());
@@ -93,7 +93,7 @@ public class EditorScreenLookTest {
             TERMINAL_PAGE);
         assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
         tapLook(editor, SOLID);
-        assertEquals(92, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertEquals(92, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         tapLook(editor, AppearanceLooks.CUSTOM_STOP);
 
         assertCustomValues();
@@ -129,7 +129,7 @@ public class EditorScreenLookTest {
 
         tapLook(editor, SOLID);
         tapLook(editor, AppearanceLooks.CUSTOM_STOP);
-        assertEquals(33, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertEquals(33, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         assertNotNull(SurfacePresets.custom(preferences));
     }
 

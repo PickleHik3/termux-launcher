@@ -18,7 +18,7 @@ letter in a shortcut means Shift, so `Ctrl+Alt+R` is `Ctrl+Alt+Shift+R`.
 
 ## Which column applies
 
-**Settings → Terminal → Windows & panes → Split-pane controls** is on by default. With it on,
+**Multiplexer** on the Terminal card is on by default. With it on,
 the terminal has windows and panes and the **Split panes on** column applies. Turning it off gives
 traditional single-pane Termux behaviour and the **Split panes off** column applies. "(to the shell)" means
 the keys go to the shell.
@@ -88,7 +88,7 @@ down-left and down-right to the previous and next session. See [Keyboard](Keyboa
 
 ## When a shortcut does nothing
 
-- Check whether **Split-pane controls** changes its meaning (the two columns above).
+- Check whether **Multiplexer** changes its meaning (the two columns above).
 - Open **Key inspector** from the command palette and press the shortcut. It shows the key event,
   the binding that claimed it, and the bytes sent to the shell. It has no shortcut of its own, so
   it can inspect any key.

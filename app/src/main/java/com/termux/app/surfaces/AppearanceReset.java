@@ -86,6 +86,9 @@ public final class AppearanceReset {
         TERMUX_APP.KEY_WALLPAPER_ENABLED_APP_BAR_OPACITY,
         TERMUX_APP.KEY_WALLPAPER_ENABLED_EXTRAKEYS_BLUR_RADIUS,
         TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, SoftWallpaper.KEY_WALLPAPER_SOFT,
+        // The Terminal's Background: its panes' Opacity and Blur and its Wallpaper dim.
+        TERMUX_APP.KEY_TERMINAL_BG_OPACITY, TERMUX_APP.KEY_TERMINAL_BG_BLUR,
+        TERMUX_APP.KEY_TERMINAL_WALLPAPER_DIM,
         // The dock: its style and how many app buttons it shows.
         TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE, TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT,
         // The terminal: border, corners, pane gap and borders, contrast, Dynamic colour, cursor
@@ -98,6 +101,14 @@ public final class AppearanceReset {
         TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED,
         TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL_STYLE,
         TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT, TERMUX_APP.KEY_TEXT_SIZE_PERCENT,
+        // The rows #286 moved onto the Terminal and Keyboard cards.
+        TERMUX_APP.KEY_TERMINAL_SCREEN_EVENTS, TERMUX_APP.KEY_TERMINAL_RETRO_COMPOSITE,
+        TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE,
+        TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE,
+        TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+        TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE,
+        TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION,
+        TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE,
         TERMUX_APP.KEY_COMPATIBILITY_MODE, TERMUX_APP.KEY_DWINDLE_DEFAULT_LAYOUT,
         TERMUX_APP.KEY_FOCUSED_PANE_GROWS,
         // The keyboard's look: blur, grain, key opacity and its link, key corners and spacing,
@@ -132,7 +143,7 @@ public final class AppearanceReset {
         "look_grid_seeded_cells");
 
     /**
-     * Whether the reset removes {@code key}: a named key, a surface's Base or own value, a look
+     * Whether the reset removes {@code key}: a named key, a surface's Global or own value, a look
      * grid cell ({@code look.*}), a surface link ({@code surface_inherit_*}), a page's own value
      * ({@code <key>@<page id>}), the terminal's pinch size ({@code fontsize*}), or a flat copy of
      * a place's layout or dress ({@code layout.*}, {@code place.dress.*}; the voice pill's and a
@@ -148,7 +159,7 @@ public final class AppearanceReset {
             || LayoutReset.isFlatLayoutKey(key);
     }
 
-    /** Every surface's Base and own value, and the keys a page may hold its own copy of. */
+    /** Every surface's Global and own value, and the keys a page may hold its own copy of. */
     private static final Set<String> SURFACE_KEYS = surfaceKeys();
     private static final Set<String> PAGE_ABLE = pageAble();
 
@@ -231,7 +242,7 @@ public final class AppearanceReset {
     private static Set<String> surfaceKeys() {
         Set<String> keys = new HashSet<>();
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            keys.add(property.baseKey);
+            keys.add(property.globalKey);
             for (SurfaceSlot slot : SurfaceSlot.values()) {
                 String own = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
                 if (own != null) keys.add(own);

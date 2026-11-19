@@ -181,15 +181,15 @@ public final class ChromePolicy {
             // Restore the shared layer first, so every surface that was following it comes back
             // with it, then place the surfaces that remembered something different. Writing these
             // through the plain setters would have made each one overwrite the last, because while
-            // they are linked they all name the same Base value.
-            // Base is named outright: all glass, everywhere (the grid's first cell).
+            // they are linked they all name the same Global value.
+            // Global is named outright: all glass, everywhere (the grid's first cell).
             preferences.lookGrid().write(LookGrid.Property.OPACITY, null, appBar);
             preferences.lookGrid().write(LookGrid.Property.FROST, null,
                 FrostStops.nearestStopByBlur(blur));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, appBar);
-            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
-                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, terminal);
+            // The terminal's Opacity is its own key, outside the grid (ADR 0031 §4).
+            preferences.setTerminalBackgroundOpacity(terminal);
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, blur);
         } else {
@@ -204,8 +204,7 @@ public final class ChromePolicy {
                 FrostStops.nearestStopByBlur(0));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
-            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
-                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
+            preferences.setTerminalBackgroundOpacity(100);
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, 0);
         }

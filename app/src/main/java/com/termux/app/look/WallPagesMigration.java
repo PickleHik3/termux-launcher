@@ -27,7 +27,7 @@ import java.util.List;
  * Home pages. Gated by its own key. Nothing is deleted: the old keys stay.
  *
  * <p>Home screen users get [Home 1..n][Terminal]; home is the default Home page for Start in
- * Home, the Terminal page for Workspace, and the Display page for Display (ADR 0015 section 7: a Display page follows Terminal when the
+ * Home, the Terminal page for Terminal, and the Display page for Display (ADR 0015 section 7: a Display page follows Terminal when the
  * display was in the row or Start in was Display).
  * Terminal only users get [Terminal] as home and their n Home pages detached, kept for Edit
  * pages' Add. Page ids are 1..n for the Home pages, then the Terminal page, so the widget
@@ -161,7 +161,7 @@ public final class WallPagesMigration {
         if (display != null) all.add(display);
         int defaultId = Math.max(0, Math.min(defaultPage, n - 1)) + 1;
         int home = defaultId;
-        if (WallRow.START_IN_WORKSPACE.equals(start)) {
+        if (WallRow.START_IN_TERMINAL.equals(start)) {
             home = terminal.id;
         } else if (startsDisplay) {
             home = display.id;

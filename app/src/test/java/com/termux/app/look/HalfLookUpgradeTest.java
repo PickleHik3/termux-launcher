@@ -90,7 +90,8 @@ public class HalfLookUpgradeTest {
         assertEquals(60, store.getInt(TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, -1));
         assertFalse(store.has(LookKeys.pageKey(TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH,
             TERMINAL_ID)));
-        assertEquals(60, snapshot(TERMINAL_ID, PageKind.TERMINAL).canvasTint());
+        assertEquals(60, snapshot(TERMINAL_ID, PageKind.TERMINAL)
+            .value(SurfaceSlot.CANVAS, SurfaceProperty.TINT));
     }
 
     @Test

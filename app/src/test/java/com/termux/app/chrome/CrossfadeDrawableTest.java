@@ -62,14 +62,14 @@ public class CrossfadeDrawableTest {
     }
 
     /**
-     * The band behind the system bar across Home 2 to the Workspace: Home's glass, the
-     * Workspace's beside it, crossing with the finger and resting on the Workspace's.
+     * The band behind the system bar across Home 2 to the Terminal: Home's glass, the
+     * Terminal's beside it, crossing with the finger and resting on the Terminal's.
      */
     @Test
     public void theBandCrossesWithTheFingerAndLandsOnTheArrivingDress() {
         ColorDrawable home = new ColorDrawable(0x22FFFFFF);
-        ColorDrawable workspace = new ColorDrawable(0xAA000000);
-        CrossfadeDrawable band = new CrossfadeDrawable(home, workspace, 0f);
+        ColorDrawable terminal = new ColorDrawable(0xAA000000);
+        CrossfadeDrawable band = new CrossfadeDrawable(home, terminal, 0f);
         int last = -1;
         for (int i = 0; i <= 20; i++) {
             band.setShare(com.termux.app.place.SeamFade.share(i / 20f));
@@ -78,18 +78,18 @@ public class CrossfadeDrawableTest {
         }
         assertEquals(255, band.thereAlpha());
         assertEquals(0, band.hereAlpha());
-        assertTrue(band.endpoint() == workspace);
+        assertTrue(band.endpoint() == terminal);
     }
 
     /** A cancelled crossing fades back the same way and rests on the dress it began in. */
     @Test
     public void aCancelFadesBackAndRestsOnTheLeavingDress() {
         ColorDrawable home = new ColorDrawable(0x22FFFFFF);
-        ColorDrawable workspace = new ColorDrawable(0xAA000000);
-        CrossfadeDrawable band = new CrossfadeDrawable(home, workspace, 0f);
+        ColorDrawable terminal = new ColorDrawable(0xAA000000);
+        CrossfadeDrawable band = new CrossfadeDrawable(home, terminal, 0f);
         band.setShare(com.termux.app.place.SeamFade.share(0.6f));
         assertTrue(band.thereAlpha() > 0 && band.hereAlpha() > 0);
-        assertTrue("past the middle it would rest on the arriving one", band.endpoint() == workspace);
+        assertTrue("past the middle it would rest on the arriving one", band.endpoint() == terminal);
         int last = 256;
         for (int i = 12; i >= 0; i--) {
             band.setShare(com.termux.app.place.SeamFade.share(i / 20f));

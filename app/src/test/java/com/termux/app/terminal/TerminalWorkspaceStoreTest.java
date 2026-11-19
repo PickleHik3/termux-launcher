@@ -135,17 +135,17 @@ public class TerminalWorkspaceStoreTest {
     public void validationRejectsBadFloatBoundsAndCountsFloatsIntoActivePane() throws Exception {
         TerminalWorkspace.FloatingPane badBounds = new TerminalWorkspace.FloatingPane(
             new TerminalWorkspace.Pane("/", null, null), 0f, 0f, Float.NaN, .5f);
-        expectCode("invalid_workspace", () -> workspaceAround(
+        expectCode("invalid_workspace", () -> terminalAround(
             new TerminalWorkspace.Window(0, new TerminalWorkspace.Pane("/", null, null),
                 Collections.singletonList(badBounds))).validate());
 
         TerminalWorkspace.FloatingPane sane = new TerminalWorkspace.FloatingPane(
             new TerminalWorkspace.Pane("/", null, null), .1f, .1f, .5f, .5f);
         // One tiled pane plus one float: index 1 is the float, index 2 is out of range.
-        workspaceAround(new TerminalWorkspace.Window(1,
+        terminalAround(new TerminalWorkspace.Window(1,
             new TerminalWorkspace.Pane("/", null, null),
             Collections.singletonList(sane))).validate();
-        expectCode("invalid_workspace", () -> workspaceAround(
+        expectCode("invalid_workspace", () -> terminalAround(
             new TerminalWorkspace.Window(2, new TerminalWorkspace.Pane("/", null, null),
                 Collections.singletonList(sane))).validate());
     }
@@ -311,7 +311,7 @@ public class TerminalWorkspaceStoreTest {
         assertEquals(height, shape.height, .001f);
     }
 
-    private static TerminalWorkspace workspaceAround(TerminalWorkspace.Window window) {
+    private static TerminalWorkspace terminalAround(TerminalWorkspace.Window window) {
         return new TerminalWorkspace("w", 1L, 0, Collections.singletonList(
             new TerminalWorkspace.Session(null, 0, Collections.singletonList(window))));
     }

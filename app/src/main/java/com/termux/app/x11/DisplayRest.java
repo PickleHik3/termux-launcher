@@ -14,7 +14,7 @@ public final class DisplayRest {
      * The display types with the phone's keyboard when that setting is on and a server runs. The
      * launcher's keyboard is up when remembered and not put away by minimal mode or the preview,
      * except while the phone's keyboard types and mouse mode's touchpad does not own the frame.
-     * The bar shows the Display's set, the chips show; the page wears the Workspace's look
+     * The bar shows the Display's set, the chips show; the page wears the Terminal's look
      * (ADR 0025).
      */
     @NonNull

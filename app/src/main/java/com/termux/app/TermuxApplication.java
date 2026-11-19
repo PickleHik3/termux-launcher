@@ -98,7 +98,7 @@ public class TermuxApplication extends Application {
         com.termux.terminal.TerminalEmulator.setXtVersion(BuildConfig.VERSION_NAME);
         // Before any session: whether a crash keeps the Ghostty core off, and memory pressure for it.
         com.termux.app.terminal.GhosttyFailSafes.install(this);
-        // Fold the old per-surface glass values into Base plus overrides. Must run before anything
+        // Fold the old per-surface glass values into Global plus overrides. Must run before anything
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
         // Read before the wall migration stores its version: an earlier build ran it already.
@@ -121,7 +121,7 @@ public class TermuxApplication extends Application {
                     .pageCount(),
                 com.termux.app.wall.WallPagesStore.open(context));
             // The look's halves became pages (ADR 0015 §6): tell the preferences which page the
-            // Workspace is, then fold the old half keys into wall values and Terminal-page
+            // Terminal is, then fold the old half keys into wall values and Terminal-page
             // overrides, once, before any look migration or activity reads a look.
             com.termux.app.wall.WallPages.Page terminalPage =
                 com.termux.app.wall.WallPagesStore.open(context).current().terminal();
@@ -130,7 +130,7 @@ public class TermuxApplication extends Application {
                 com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID,
                 terminalId).apply();
             TermuxAppSharedPreferences.setTerminalPageId(terminalId);
-            // With no Terminal page the Workspace's differing values have nowhere to go; the
+            // With no Terminal page the Terminal's differing values have nowhere to go; the
             // upgrade still runs and records its version.
             com.termux.app.look.HalfLookUpgrade.run(
                 new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
@@ -157,7 +157,7 @@ public class TermuxApplication extends Application {
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences,
                 lookFresh);
-            // Margin is one number for every page: the Margin Home wore becomes Base's, once.
+            // Margin is one number for every page: the Margin Home wore becomes Global's, once.
             com.termux.shared.termux.settings.preferences.LookGridMarginMigration.run(
                 new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
                     surfacePreferences.getSharedPreferences()));

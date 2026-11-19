@@ -14,7 +14,7 @@ import androidx.annotation.Nullable;
 
 /**
  * The Home pill's two one-shot flights at a page change. {@link #flyToDock} carries the pill onto
- * the docked bar that has just come up on a Workspace page; {@link #armToPill} followed by the pill
+ * the docked bar that has just come up on a Terminal page; {@link #armToPill} followed by the pill
  * showing carries it from where the docked bar stood to its own spot on Home. Both are draw-only
  * (translation, scale, alpha), last {@link HomePillFlight#DURATION_MS} and end at their final
  * state; anything that hides the docked bar gives it back (alpha 1, translation 0, scale 1) when

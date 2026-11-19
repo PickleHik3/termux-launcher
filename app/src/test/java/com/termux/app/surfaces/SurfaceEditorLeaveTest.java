@@ -67,7 +67,7 @@ public class SurfaceEditorLeaveTest {
     }
 
     @Test
-    public void backTakesTheCardToPeekThenAWorkspaceChangeAsks() {
+    public void backTakesTheCardToPeekThenATerminalChangeAsks() {
         SurfaceEditorController editor = open(EditorCard.DOCK, PageKind.TERMINAL, null);
         assertEquals(PageKind.TERMINAL, editor.screen());
         model(editor).onValue(Row.OPACITY, 21, false);

@@ -29,7 +29,7 @@ public class GlassEffectsProgramRectTest {
         assertArrayEquals(PEEK, rect(PEEK, 1f), 0f);
     }
 
-    @Test public void theWorkspacesRestIsTheCap() {
+    @Test public void theTerminalsRestIsTheCap() {
         assertArrayEquals(CAP, rect(PEEK, 0f), 0f);
     }
 

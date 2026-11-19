@@ -350,13 +350,17 @@ final class CardBody {
                 @Override public void onReleased(int index) {
                     mModel.onReleased(columns.get(index));
                 }
+
+                @Override public void onReset(int index) {
+                    mModel.resetRow(columns.get(index));
+                }
             },
             linkAfter, link == null ? "" : name(link), link != null && mModel.value(link) != 0,
             on -> {
                 if (link != null)
                     mModel.onValue(link, on ? 1 : 0, false);
             },
-            (index, anchor) -> mModel.openRowMenu(anchor, columns.get(index)));
+            null);
         for (int i = 0; i < columns.size(); i++)
             strip.items.get(i).slider.setTag(columns.get(i));
         return new CardRowView(strip.root, () -> {
@@ -372,8 +376,8 @@ final class CardBody {
                 if (item.slider.isEnabled() != enabled)
                     item.slider.setEnabled(enabled);
                 item.root.setAlpha(enabled ? 1f : 0.5f);
-                // The source dot: where the value comes from, and Reset would take it back.
-                strip.setSource(i, mModel.source(row).ink(mContext), spokenSource(row));
+                // The reset arrow: shown while the value is the surface's own.
+                strip.setOwn(i, mModel.ownValue(row), mModel.rowState(row));
             }
             if (link != null)
                 strip.setLinked(mModel.value(link) != 0);
@@ -381,14 +385,6 @@ final class CardBody {
             if (strip.root.getVisibility() != visibility)
                 strip.root.setVisibility(visibility);
         });
-    }
-
-    /** "<Row>, from <where>", or null where the row's value is shared. */
-    @Nullable
-    private CharSequence spokenSource(@NonNull Row row) {
-        CharSequence from = mModel.source(row).marked() ? mModel.sourceName(row) : null;
-        return from == null ? null
-            : mContext.getString(R.string.editor_source_from, name(row), from);
     }
 
     /**

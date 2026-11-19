@@ -12,7 +12,7 @@ import org.junit.Test;
 
 /**
  * ADR 0014 wave 2c (decided 2026-10-28): which even-out a chrome band draws with. By default the
- * terminal pane's own stage; a band with an Opacity of its own that no longer follows Base, its
+ * terminal pane's own stage; a band with an Opacity of its own that no longer follows Global, its
  * own text target at its own strength; the switch off, none at all.
  */
 public class EvenOutBandPolicyTest {

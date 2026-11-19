@@ -11,12 +11,12 @@ public final class PageTopInset {
 
     /**
      * Where {@code page} starts below the canvas's top: a Home page at Home's inset; every
-     * Workspace page ({@code null} is one the wall does not know, the display window's) at the
-     * Workspace's inset.
+     * Terminal page ({@code null} is one the wall does not know, the display window's) at the
+     * Terminal's inset.
      */
-    public static int pageTopInsetPx(@Nullable PageKind page, int workspaceTopInsetPx,
+    public static int pageTopInsetPx(@Nullable PageKind page, int terminalTopInsetPx,
                                      int homeTopInsetPx) {
         if (page == PageKind.HOME) return Math.max(0, homeTopInsetPx);
-        return Math.max(0, workspaceTopInsetPx);
+        return Math.max(0, terminalTopInsetPx);
     }
 }

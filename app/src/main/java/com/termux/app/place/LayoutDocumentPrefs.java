@@ -27,9 +27,9 @@ import java.util.Set;
  * {@code layouts} file, never the flat key, which stays as it was for a downgrade. Everything else
  * passes through to the preferences.
  *
- * <p>The scope names the kind: none is the Workspace's, {@code home.} Home's, {@code minimal.}
- * Workspace-minimal's. The retired scopes {@code display.} and {@code assistant.} (and their
- * {@code place.dress.*} spellings) are the Workspace's too (ADR 0025): Terminal, Display and
+ * <p>The scope names the kind: none is the Terminal's, {@code home.} Home's, {@code minimal.}
+ * Terminal-minimal's. The retired scopes {@code display.} and {@code assistant.} (and their
+ * {@code place.dress.*} spellings) are the Terminal's too (ADR 0025): Terminal, Display and
  * Assistant pages wear one document. Each place's remembered keyboard stays its own: the
  * Terminal's in the document, the Display's and the Assistant's in their flat keys. The four sizes are the one {@code sizes} document
  * whatever the scope, and the widget grid is Home's whatever the scope: the cross-layout rules of
@@ -118,7 +118,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
             LayoutKind.DISPLAY, LayoutKind.ASSISTANT}) {
             String scope = scopeOf(k);
             if (rest.startsWith(scope)) {
-                // A retired scope's keys are the Workspace's (ADR 0025).
+                // A retired scope's keys are the Terminal's (ADR 0025).
                 kind = k.live();
                 rest = rest.substring(scope.length());
                 break;
@@ -160,7 +160,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         LayoutKind kind = LayoutKind.forKey(parts[0]);
         if (kind == null || kind == LayoutKind.TERMINAL_MINIMAL) return null;
         for (PlaceOrientation o : PlaceOrientation.values()) {
-            // A Display or Assistant page shows what the Workspace shows (ADR 0025).
+            // A Display or Assistant page shows what the Terminal shows (ADR 0025).
             if (o.storageValue().equals(parts[1]))
                 return new Route(kind.live(), o, LayoutsJson.DRESS_PREFIX + parts[2]);
         }
@@ -232,7 +232,7 @@ final class LayoutDocumentPrefs implements SharedPreferences {
         }
         Layouts layouts = mStoredOnly ? store.stored() : store.current();
         for (LayoutKind kind : LayoutKind.values()) {
-            // A retired kind's keys read the Workspace's document, listed once under its own.
+            // A retired kind's keys read the Terminal's document, listed once under its own.
             if (kind.retired()) continue;
             KindLayout layout = layouts.kind(kind);
             String scope = LAYOUT + scopeOf(kind);

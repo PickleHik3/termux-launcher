@@ -23,7 +23,7 @@ import org.robolectric.util.ReflectionHelpers;
 import android.app.Application;
 
 /**
- * Contrast is previewed live: a change on the Global or the Workspace card rebuilds the terminal
+ * Contrast is previewed live: a change on the Global or the Terminal card rebuilds the terminal
  * palette at once, marks the session dirty, and Discard puts the entry's level and palette back.
  * Both cards' rows are the one stored setting.
  */
@@ -66,19 +66,19 @@ public class ContrastRowLiveTest {
     }
 
     @Test
-    public void theGlobalAndWorkspaceRowsAreOneSetting() {
-        SurfaceEditorController workspace = open(EditorCard.TERMINAL);
-        model(workspace).onValue(Row.CONTRAST, 0, false);
+    public void theGlobalAndTerminalRowsAreOneSetting() {
+        SurfaceEditorController terminal = open(EditorCard.TERMINAL);
+        model(terminal).onValue(Row.CONTRAST, 0, false);
         assertEquals(TerminalContrastLevel.SOFTER, preferences.getTerminalContrastLevel());
         // Done stores the draft; the next editor then opens on the store.
-        workspace.done();
+        terminal.done();
         SurfaceEditorController global = open(EditorCard.APPEARANCE);
         assertEquals(0, model(global).value(Row.CONTRAST));
 
         model(global).onValue(Row.CONTRAST, 2, false);
         global.done();
-        workspace = open(EditorCard.TERMINAL);
-        assertEquals(2, model(workspace).value(Row.CONTRAST));
+        terminal = open(EditorCard.TERMINAL);
+        assertEquals(2, model(terminal).value(Row.CONTRAST));
     }
 
     private SurfaceEditorController open(EditorCard card) {

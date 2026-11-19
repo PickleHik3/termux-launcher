@@ -34,7 +34,7 @@ import org.robolectric.annotation.Config;
 
 /**
  * The top stack's one writer over fake views: a shared bar stays put while the chips slide with
- * the Workspace's rows and the glass crosses on {@link SeamFade}'s curve, a riding bar carries the
+ * the Terminal's rows and the glass crosses on {@link SeamFade}'s curve, a riding bar carries the
  * strip and the chips' counter-slide, a landing that stands the last frame writes nothing, the
  * rests put the chips a wall off on Home, and the three properties it owns are on the guards.
  */
@@ -52,6 +52,7 @@ public class TopStackRendererTest {
     private View mHost;
     private View mStrip;
     private View mChips;
+    private View mHomeChips;
     private View mStripGlass;
     private View mBarGlass;
     private CrossfadeDrawable mStripBlend;
@@ -62,6 +63,7 @@ public class TopStackRendererTest {
         mHost = put(R.id.terminal_window_bar_host, new FrameLayout(context));
         mStrip = put(R.id.terminal_status_bar_background, new FrameLayout(context));
         mChips = put(R.id.terminal_status_place_content, new FrameLayout(context));
+        mHomeChips = put(R.id.terminal_status_home_chips, new FrameLayout(context));
         mStripGlass = put(R.id.terminal_status_bar_glass_surface, new FrameLayout(context));
         mBarGlass = put(R.id.terminal_window_bar_background, new FrameLayout(context));
         mStripBlend = new CrossfadeDrawable(new ColorDrawable(Color.RED),
@@ -121,14 +123,14 @@ public class TopStackRendererTest {
 
     @Test public void aSharedBarStaysPutWhileTheChipsSlideAndTheGlassCrosses() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         for (float p = 0f; p <= 1.0001f; p += 0.125f) {
             frameAt(Math.min(1f, p));
             float q = Math.min(1f, p);
             assertEquals(0f, mHost.getTranslationX(), 0f);
             assertEquals(0f, mStrip.getTranslationX(), 0f);
             assertEquals("chips: " + q, WIDTH * (1f - q), mChips.getTranslationX(), 0.001f);
-            assertEquals(StackScene.sideSlide(Side.WORKSPACE, Side.HOME, Side.WORKSPACE, q, WIDTH),
+            assertEquals(StackScene.sideSlide(Side.TERMINAL, Side.HOME, Side.TERMINAL, q, WIDTH),
                 mChips.getTranslationX(), 0f);
             assertEquals(SeamFade.share(q), mStripBlend.share(), 0f);
             assertEquals(SeamFade.share(q), mBarBlend.share(), 0f);
@@ -138,9 +140,31 @@ public class TopStackRendererTest {
         assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
     }
 
+    @Test public void homesFloatChipsSlideOutWithHomeAWallFromTheWindowChips() {
+        mRenderer.rest(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true));
+        settle();
+        assertEquals(0f, mHomeChips.getTranslationX(), 0f);
+        mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
+        for (float p = 0f; p <= 1.0001f; p += 0.125f) {
+            float q = Math.min(1f, p);
+            frameAt(q);
+            assertEquals(StackScene.sideSlide(Side.HOME, Side.HOME, Side.TERMINAL, q, WIDTH),
+                mHomeChips.getTranslationX(), 0f);
+            assertEquals(WIDTH, mChips.getTranslationX() - mHomeChips.getTranslationX(), 0.001f);
+        }
+        int writes = mRenderer.mWriteCount;
+        mRenderer.onLanding();
+        settle();
+        assertEquals(writes, mRenderer.mWriteCount);
+        assertEquals(-WIDTH, mHomeChips.getTranslationX(), 0f);
+        assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
+        assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
+    }
+
     @Test public void aStripTheLeavingEndDidNotShowComesInByItsAlpha() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, false, false),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), false);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), false);
         frameAt(0f);
         assertEquals(SeamFade.presence(false, true, 0f), mStripGlass.getAlpha(), 0f);
         frameAt(0.5f);
@@ -152,7 +176,7 @@ public class TopStackRendererTest {
 
     @Test public void aLandingThatStandsTheLastFrameWritesNothing() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         frameAt(0.5f);
         frameAt(1f);
         float host = mHost.getTranslationX(), strip = mStrip.getTranslationX(),
@@ -172,7 +196,7 @@ public class TopStackRendererTest {
 
     @Test public void theChipsFollowThePagesFractionWhileTheGlassFollowsTheChrome() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         mRenderer.setProgress(0.2f, 0.6f);
         settle();
         assertEquals(WIDTH * 0.4f, mChips.getTranslationX(), 0.001f);
@@ -182,7 +206,7 @@ public class TopStackRendererTest {
     @Test public void theChipsStayInsideTheirSlotWhileTheySlideAndTheClipIsGoneAtRest() {
         mChips.layout(0, 0, 400, 60);
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         frameAt(0.5f);
         assertEquals(new android.graphics.Rect(-500, 0, -100, 60), mChips.getClipBounds());
         frameAt(0.9f);
@@ -206,7 +230,7 @@ public class TopStackRendererTest {
     @Test public void aLandingWritesNoClipEither() {
         mChips.layout(0, 0, 400, 60);
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         frameAt(0.6f);
         frameAt(1f);
         int writes = mRenderer.mWriteCount;
@@ -219,7 +243,7 @@ public class TopStackRendererTest {
 
     @Test public void aCrossingBackToItsStartLandsOnItsStartAsWell() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         frameAt(0.6f);
         frameAt(0f);
         int writes = mRenderer.mWriteCount;
@@ -230,12 +254,12 @@ public class TopStackRendererTest {
         assertEquals(0, Counters.countOf(FrameGuards.LANDING_WROTE));
     }
 
-    @Test public void atRestTheChipsStandAWallOffOnHomeAndInPlaceOnTheWorkspace() {
+    @Test public void atRestTheChipsStandAWallOffOnHomeAndInPlaceOnTheTerminal() {
         mRenderer.rest(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true));
         settle();
         assertEquals(WIDTH, mChips.getTranslationX(), 0f);
         assertEquals(0f, mHost.getTranslationX(), 0f);
-        mRenderer.rest(end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true));
+        mRenderer.rest(end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true));
         settle();
         assertEquals(0f, mChips.getTranslationX(), 0f);
         // The wall laid out at another width: the chips stand a whole of it off again.
@@ -245,7 +269,7 @@ public class TopStackRendererTest {
         assertEquals(720f, mChips.getTranslationX(), 0f);
         // A rest asked during a crossing waits for it.
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         mRenderer.setProgress(0.5f);
         mRenderer.rest(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true));
         settle();
@@ -254,11 +278,11 @@ public class TopStackRendererTest {
 
     @Test public void aRidingBarCarriesItsStripAndTheChipsSlideAgainstIt() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 1, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 2, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 2, true, true), true);
         mRenderer.setProgress(0.7f);
         mRenderer.setRide(RIDE_PX, true);
         settle();
-        float slide = StackScene.sideSlide(Side.WORKSPACE, Side.HOME, Side.WORKSPACE, 0.7f, WIDTH);
+        float slide = StackScene.sideSlide(Side.TERMINAL, Side.HOME, Side.TERMINAL, 0.7f, WIDTH);
         assertEquals(RIDE_PX, mHost.getTranslationX(), 0f);
         assertEquals(RIDE_PX, mStrip.getTranslationX(), 0f);
         assertEquals(slide - RIDE_PX, mChips.getTranslationX(), 0.001f);
@@ -272,7 +296,7 @@ public class TopStackRendererTest {
 
     @Test public void aRidingBarsStripFollowsOnlyWhereItContinuesTheBarsGlass() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 1, true, false),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 2, true, false), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 2, true, false), true);
         mRenderer.setProgress(0.4f);
         mRenderer.setRide(RIDE_PX, true);
         settle();
@@ -282,13 +306,13 @@ public class TopStackRendererTest {
 
     @Test public void aBarOnTheBottomEdgeStaysPutAndTheChipsSlideTheSame() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.BOTTOM, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.BOTTOM, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.BOTTOM, 0, true, true), true);
         frameAt(0.25f);
         assertEquals(0f, mHost.getTranslationX(), 0f);
         assertEquals(WIDTH * 0.75f, mChips.getTranslationX(), 0.001f);
         // Apart in edge, with no ride the bar still stands put and its glass crosses.
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 1, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.BOTTOM, 2, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.BOTTOM, 2, true, true), true);
         frameAt(0.5f);
         assertEquals(0f, mHost.getTranslationX(), 0f);
         assertEquals(SeamFade.share(0.5f), mBarBlend.share(), 0f);
@@ -296,7 +320,7 @@ public class TopStackRendererTest {
 
     @Test public void theThreePropertiesAreTheTopWritersAndAForeignWriteIsHeard() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         frameAt(0.3f);
         assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
         // The counter keeps the last detail of a kind, so each property is heard on its own.
@@ -317,7 +341,7 @@ public class TopStackRendererTest {
 
     @Test public void onAPipelineTheStepAloneWrites() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         mRenderer.setProgress(0.5f);
         assertEquals(0f, mChips.getTranslationX(), 0f);
         mFrames.flush("test");
@@ -345,7 +369,7 @@ public class TopStackRendererTest {
     private void beginInked() {
         mRenderer.begin(
             inked(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true), PALE_INK),
-            inked(end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), DARK_INK), true);
+            inked(end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), DARK_INK), true);
     }
 
     @Test public void theInksCrossBlendedAndStandExactlyOnEachEndsAtItsEnds() {
@@ -384,7 +408,7 @@ public class TopStackRendererTest {
         settle();
         assertEquals(applied, mApplied.size());
         // A rest asked for the page it settled on does not wipe the inks it landed with.
-        mRenderer.rest(end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true));
+        mRenderer.rest(end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true));
         settle();
         assertEquals(applied, mApplied.size());
     }
@@ -406,7 +430,7 @@ public class TopStackRendererTest {
     @Test public void aCrossingWithUnresolvedEndsWritesNoInks() {
         sink();
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
+            end(Side.TERMINAL, PlaceLayout.Edge.TOP, 0, true, true), true);
         frameAt(0.5f);
         assertEquals(0, mApplied.size());
     }

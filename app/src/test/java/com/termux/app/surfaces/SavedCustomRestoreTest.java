@@ -147,7 +147,7 @@ public class SavedCustomRestoreTest {
         SurfaceEditorController.SessionCustom session = new SurfaceEditorController.SessionCustom();
         session.enter(prefs);
 
-        assertEquals(17, prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, prefs.getSurfaceGlobalValue(SurfaceProperty.BLUR));
         assertFalse(prefs.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
         assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertTrue(prefs.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
@@ -246,7 +246,9 @@ public class SavedCustomRestoreTest {
         }
         assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(TINT, prefs.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(OPACITY, prefs.getTerminalBackgroundOpacity());
+        // The canvas cell itself: the panes read their Background's own key since #287.
+        assertEquals(OPACITY, prefs.getSurfaceOverrideValue(SurfaceSlot.CANVAS,
+            SurfaceProperty.OPACITY));
         assertEquals(TINT, prefs.getSurfaceOverrideValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT));
         assertEquals(KEYS, prefs.getInAppKeyboardKeyOpacity());
     }

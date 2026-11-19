@@ -15,7 +15,7 @@ import java.util.Map;
 /**
  * The Glass switch every built-in widget's settings carry, per widget: Page by default, which
  * follows "Widgets on glass" (on unless switched off); off is the solid card; on, the widget
- * wears the Look's glass — Base's blur, opacity, tint, grain, rim and Fancier Glass, from the shared blur frames, drawn by the same slab a terminal pane wears
+ * wears the Look's glass — Global's blur, opacity, tint, grain, rim and Fancier Glass, from the shared blur frames, drawn by the same slab a terminal pane wears
  * ({@code PaneGlass} over {@code LookGlassStyle}). A detached terminal, keyboard, status bar or
  * dock never reaches it. Where the glass cannot be shown or the system asks for contrast
  * ({@link #solidFallback}) the widget wears its solid card.

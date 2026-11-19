@@ -117,16 +117,6 @@
         <item>normal</item>
         <item>high</item>
     </string-array>
-    <string-array name="termux_theme_mode_entries">
-        <item>@string/termux_theme_mode_system</item>
-        <item>@string/termux_theme_mode_light</item>
-        <item>@string/termux_theme_mode_dark</item>
-    </string-array>
-    <string-array name="termux_theme_mode_values">
-        <item>system</item>
-        <item>false</item>
-        <item>true</item>
-    </string-array>
     <string-array name="app_launcher_az_lock_method_entries">
         <item>@string/termux_app_launcher_az_lock_method_off</item>
         <item>@string/termux_app_launcher_az_lock_method_shizuku</item>
@@ -366,22 +356,6 @@
         <item>scaled</item>
         <item>exact</item>
         <item>custom</item>
-    </string-array>
-    <string-array name="settings_terminal_cursor_trail_style_entries">
-        <item>Default</item>
-        <item>Motion blur</item>
-        <item>Railgun</item>
-        <item>Torpedo</item>
-        <item>Pixie dust</item>
-        <item>Comet</item>
-    </string-array>
-    <string-array name="settings_terminal_cursor_trail_style_values">
-        <item>default</item>
-        <item>motion_blur</item>
-        <item>railgun</item>
-        <item>torpedo</item>
-        <item>pixiedust</item>
-        <item>comet</item>
     </string-array>
     <string-array name="appearance_editor_cursor_trail_entries">
         <item>Off</item>

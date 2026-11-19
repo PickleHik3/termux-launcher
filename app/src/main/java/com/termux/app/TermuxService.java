@@ -270,7 +270,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         LifecycleTrail.service("stop-action", "Exit");
         mWantsToStop = true;
         // Exit is itself the arrangement (wall rework slice 9): the next cold start shows exactly
-        // what Exit leaves, an empty Workspace. Written before the shells die; the activity's
+        // what Exit leaves, an empty Terminal. Written before the shells die; the activity's
         // autosave stands down once mWantsToStop is set.
         try {
             new com.termux.app.terminal.TerminalWorkspaceStore().saveAutosave(null);
@@ -1059,7 +1059,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()
             && !activityKeepsServiceWhenEmpty()) {
             // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
-            // Not while the launcher shows Home over an empty Workspace: the activity binds without
+            // Not while the launcher shows Home over an empty Terminal: the activity binds without
             // BIND_AUTO_CREATE, so a stopped service disconnects it (onServiceDisconnected) and it
             // finishes, dropping the user to another launcher (WallRow.lastShellClosedShowsHome).
             LifecycleTrail.service("stop", "nothing left to run and the activity does not keep it");
@@ -1071,7 +1071,7 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     /**
      * Whether the attached activity outlives the last shell: Home stays on screen over an empty
-     * Workspace, and the activity finishes when this service stops. False with no activity attached.
+     * Terminal, and the activity finishes when this service stops. False with no activity attached.
      */
     private boolean activityKeepsServiceWhenEmpty() {
         TermuxTerminalSessionActivityClient client = mTermuxTerminalSessionActivityClient;

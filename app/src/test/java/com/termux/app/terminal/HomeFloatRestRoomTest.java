@@ -23,11 +23,11 @@ import org.robolectric.annotation.Config;
 
 /**
  * A Home float's size comes only from Home's rest, whichever page is in front: the
- * Workspace's stack and keyboard, read while it stands in front, gave the float a size its shell
- * was resized to when a crossing toward Home showed it (the Workspace's keyboard up: 44x37 to
+ * Terminal's stack and keyboard, read while it stands in front, gave the float a size its shell
+ * was resized to when a crossing toward Home showed it (the Terminal's keyboard up: 44x37 to
  * 44x25 during the slide, back to 44x37 after the landing). The drive here is the activity's
  * geometry pass, which hands the float layer what covers it only when
- * {@link HomeFloatPolicy#obstructionsMayMove} says so: Home at rest, the Workspace in front with
+ * {@link HomeFloatPolicy#obstructionsMayMove} says so: Home at rest, the Terminal in front with
  * its keyboard up, a crossing back, Home at rest again.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -58,13 +58,13 @@ public class HomeFloatRestRoomTest {
         layout(mLayer, LAYER_WIDTH, LAYER_HEIGHT);
     }
 
-    @Test public void aFloatKeepsHomesRoomWhileTheWorkspaceIsInFrontWithItsKeyboardUp() {
+    @Test public void aFloatKeepsHomesRoomWhileTheTerminalIsInFrontWithItsKeyboardUp() {
         int[] rest = boundsOfFloat();
 
-        // The Workspace committed, its keyboard up: the stack it reads is the Workspace's, taller
+        // The Terminal committed, its keyboard up: the stack it reads is the Terminal's, taller
         // and with the keyboard's top standing in the room.
         pass(false, false, false, HOME_ROOM_TOP + 40, 700, 560);
-        assertBounds("the Workspace in front, keyboard up", rest);
+        assertBounds("the Terminal in front, keyboard up", rest);
         pass(false, false, false, HOME_ROOM_TOP + 40, 700, 520);
         assertBounds("the keyboard moving there", rest);
     }

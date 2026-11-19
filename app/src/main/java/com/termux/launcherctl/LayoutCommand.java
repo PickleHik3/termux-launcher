@@ -29,7 +29,7 @@ public final class LayoutCommand {
     public static String names() {
         StringBuilder out = new StringBuilder();
         for (LayoutKind kind : LayoutKind.values()) {
-            // A retired name (display, assistant) still works and names the Workspace's (ADR 0025).
+            // A retired name (display, assistant) still works and names the Terminal's (ADR 0025).
             if (!kind.retired()) out.append(kind.key).append(", ");
         }
         return out.append(SIZES).toString();

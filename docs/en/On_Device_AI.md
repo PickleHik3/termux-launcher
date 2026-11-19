@@ -16,7 +16,7 @@ The short version:
 
 ## Where it lives
 
-Open **Settings → On-device AI**. It sits in the **Workspace** group, after **Display**, with the
+Open **Settings → On-device AI**. It sits in the **Terminal** group, after **Display**, with the
 summary "Models, voice and local API". The page has five groups:
 
 - **Runtime**: **Runtime status**, with the loaded model and quick actions.

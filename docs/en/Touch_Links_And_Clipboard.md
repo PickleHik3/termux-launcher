@@ -89,7 +89,7 @@ The app never edits your rc files. Open a new shell afterwards; scrollback from 
 
 - Copy a selection with **Copy**, or **Copy selected text** in the palette.
 - Paste with the paste key on the keyboard, **Paste** in the selection menu, or **Paste** in the
-  palette (`Ctrl+Alt+V` with **Split-pane controls** off).
+  palette (`Ctrl+Alt+V` with **Multiplexer** off).
 - **Settings → Terminal → Clipboard & compatibility → Clean up clipboard text** ("Trim trailing spaces and
   single-line paste newlines."), on by default, tidies copied text.
 - **Pictures.** When the clipboard holds a picture, pasting saves a copy and pastes the path to it,

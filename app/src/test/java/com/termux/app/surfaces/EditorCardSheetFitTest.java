@@ -424,7 +424,7 @@ public class EditorCardSheetFitTest {
 
     @Test
     public void anInlineSegmentRowKeepsItsIconOffTheEdgeAndNoCheckMark() {
-        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
+        Fixture fixture = new Fixture(EditorCard.TERMINAL, 1f);
         fixture.layOut();
         com.google.android.material.button.MaterialButtonToggleGroup style = null;
         for (com.google.android.material.button.MaterialButtonToggleGroup group
@@ -435,8 +435,8 @@ public class EditorCardSheetFitTest {
                 break;
             }
         }
-        // Style became a picker rail; Rim is the Dock card's segment row beside its label.
-        assertTrue("the Dock card has a row of segments beside its label", style != null);
+        // Rim is the Terminal card's segment row beside its label (the terminal's glass).
+        assertTrue("the Terminal card has a row of segments beside its label", style != null);
         ViewGroup row = (ViewGroup) style.getParent();
         View icon = row.getChildAt(0);
         int[] at = new int[2];
@@ -665,20 +665,25 @@ public class EditorCardSheetFitTest {
         return out;
     }
 
+    /** The reset arrow stands at the own row's end and nowhere else; no dot marks a row. */
     @Test
-    public void theSetHereDotRidesOnTheRotatedLegend() {
+    public void theResetArrowStandsOnTheOwnRowOnly() {
         Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
         fixture.layOut();
-        int marked = 0;
+        String opacity = fixture.themed.getString(R.string.editor_row_reset_to_global,
+            fixture.themed.getString(R.string.appearance_row_opacity));
+        int shown = 0;
         for (LegendSlider slider : legends(fixture.sheet.rows())) {
-            boolean opacity = slider.getContentDescription().toString().equals(
-                fixture.themed.getString(R.string.appearance_row_opacity));
-            assertEquals(String.valueOf(slider.getContentDescription()), opacity,
-                slider.isMarked());
-            if (slider.isMarked())
-                marked++;
+            assertFalse("no dot", slider.isMarked());
+            android.widget.ImageButton reset = (android.widget.ImageButton)
+                ((ViewGroup) slider.getParent()).getChildAt(4);
+            boolean own = opacity.contentEquals(reset.getContentDescription());
+            assertEquals(String.valueOf(reset.getContentDescription()),
+                own ? View.VISIBLE : View.INVISIBLE, reset.getVisibility());
+            if (reset.getVisibility() == View.VISIBLE)
+                shown++;
         }
-        assertEquals(1, marked);
+        assertEquals(1, shown);
     }
 
     @NonNull

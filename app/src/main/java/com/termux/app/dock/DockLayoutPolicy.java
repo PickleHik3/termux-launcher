@@ -688,7 +688,7 @@ public final class DockLayoutPolicy {
      * off the resolved bottom stack ({@code EdgeStackPolicy.stack(layout, BOTTOM)}): no band
      * beside it on the sheet but the extra keys.
      *
-     * <p>The extra keys do not count. They are the Workspace's own and fold in and out with the
+     * <p>The extra keys do not count. They are the Terminal's own and fold in and out with the
      * swipe (ADR 0009), so counting them made the row a shared one on one half and a lone one on
      * the other, and its icons shrank as the keys folded in. The row keeps the band it has
      * without them — the same icon and the same air — and the dock grows by the keys' row

@@ -9,7 +9,7 @@ import com.termux.app.page.PageKind;
 
 /**
  * Every layout at one moment (ADR 0020 §5): the kind documents and the shared sizes. A retired
- * kind (ADR 0025) reads and writes the Workspace's document. Read
+ * kind (ADR 0025) reads and writes the Terminal's document. Read
  * once from the {@code layouts} file and never changed in place, so no reader holds a
  * half-written layout; a reader takes {@link LayoutStore#current()} per pass.
  */
@@ -33,7 +33,7 @@ public final class Layouts {
         return new Layouts(new EnumMap<>(LayoutKind.class), Sizes.EMPTY);
     }
 
-    /** {@code kind}'s document; a retired kind's is the Workspace's (ADR 0025). */
+    /** {@code kind}'s document; a retired kind's is the Terminal's (ADR 0025). */
     @NonNull
     public KindLayout kind(@NonNull LayoutKind kind) {
         return mKinds.get(kind.live());

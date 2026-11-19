@@ -31,7 +31,7 @@ public class EditorCardTest {
     }
 
     @Test
-    public void homeStandsOnHomeAndTheTerminalOnTheWorkspace() {
+    public void homeStandsOnHomeAndTheTerminalOnTheTerminal() {
         assertTrue(EditorCard.HOME.standsOn(PageKind.HOME));
         assertFalse(EditorCard.HOME.standsOn(PageKind.TERMINAL));
         assertTrue(EditorCard.TERMINAL.standsOn(PageKind.TERMINAL));
@@ -43,7 +43,7 @@ public class EditorCardTest {
         }
     }
 
-    /** Six cards (spec §3): the Workspace, Widgets and Menus and dialogs cards are gone. */
+    /** Six cards (spec §3): the Terminal, Widgets and Menus and dialogs cards are gone. */
     @Test
     public void theEditorHasSixCards() {
         assertEquals(6, EditorCard.values().length);

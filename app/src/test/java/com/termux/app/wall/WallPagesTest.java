@@ -440,7 +440,7 @@ public class WallPagesTest {
     }
 
     @Test
-    public void aTripThroughTerminalOnlyFromTheWorkspaceStaysOnTheWorkspace() {
+    public void aTripThroughTerminalOnlyFromTheTerminalStaysOnTheTerminal() {
         WallPages p = ok(ok(three().setHome(2)).setHome(3));
         WallPages back = ok(ok(p.detachHomes()).attachDetached());
         assertEquals(3, back.home().id);
@@ -458,7 +458,7 @@ public class WallPagesTest {
     }
 
     @Test
-    public void startInHomeAfterTheWorkspaceReturnsToTheRememberedHomePage() {
+    public void startInHomeAfterTheTerminalReturnsToTheRememberedHomePage() {
         WallPages p = ok(three().setHome(2));
         WallPages ws = ok(p.chooseStartIn("workspace"));
         assertEquals(2, ws.lastHomePageId());

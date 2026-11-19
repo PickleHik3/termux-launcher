@@ -57,6 +57,8 @@ public class SettingsTreeTest {
     @Test
     public void everyScreenExistsAndIsASettingsFragment() throws Exception {
         for (SettingsTree.Screen screen : SettingsTree.screens()) {
+            // The Appearance door is a name only: its row opens the editor, no page is built.
+            if (screen.door) continue;
             Class<?> type = Class.forName(screen.className);
             assertTrue(screen.className, Fragment.class.isAssignableFrom(type));
             assertTrue(screen.className, screen.className.startsWith("com.termux.app.fragments.settings."));
@@ -69,7 +71,7 @@ public class SettingsTreeTest {
         for (String old : OLD_TARGETS) {
             String now = SettingsTree.redirect(PAGES + old, null);
             assertNotNull(old + " -> " + now, SettingsTree.find(now));
-            Class.forName(now);
+            if (!SettingsTree.find(now).door) Class.forName(now);
         }
     }
 
@@ -85,6 +87,15 @@ public class SettingsTreeTest {
     /** Old page, row key, and the row's key must be on the page the link is sent to. */
     private static final String[][] MOVED_ROWS = {
         {"TermuxStylePreferencesFragment", "terminal_fonts"},
+        {"TermuxStylePreferencesFragment", "theme_templates_enabled"},
+        {"HomePreferencesFragment", "app_launcher_home_icon_scale"},
+        {"HomePreferencesFragment", "app_launcher_home_page_indicator"},
+        {"StatusBarPreferencesFragment", "status_widget_weather_fahrenheit"},
+        {"TerminalTextPreferencesFragment", "terminal_screen_events"},
+        {"TerminalWindowsPreferencesFragment", "pane_dwindle_default"},
+        {"TermuxFontsPreferencesFragment", "fonts_size"},
+        {"KeyboardSizePreferencesFragment", "in_app_keyboard_split_gap"},
+        {"KeyboardPreferencesFragment", "in_app_keyboard_floating_width"},
         {"TermuxStylePreferencesFragment", "customize_keyboard_surface"},
         {"TermuxStylePreferencesFragment", "in_app_keyboard_color_scheme_editor"},
         {"TermuxStylePreferencesFragment", "wallpaper_parallax"},

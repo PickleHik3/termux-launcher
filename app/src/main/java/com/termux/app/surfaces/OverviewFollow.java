@@ -6,7 +6,7 @@ import com.termux.app.wall.PageOverviewPolicy;
 
 /**
  * What the surface editor does when the Edit pages overview centres a card over it: a Home card
- * keeps Home's card, and a card of any Workspace page (a terminal, a Display page, the Assistant
+ * keeps Home's card, and a card of any Terminal page (a terminal, a Display page, the Assistant
  * page) gets the Terminal's, whose Layout they all wear (ADR 0025). The fold to the handle is
  * left for a card the editor has nothing for.
  */

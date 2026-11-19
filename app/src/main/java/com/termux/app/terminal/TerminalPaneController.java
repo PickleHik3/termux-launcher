@@ -233,7 +233,7 @@ public class TerminalPaneController {
         default void openSurfaceEditor() {}
         /** The launcher's settings, asked for from the pane corner's tab. */
         default void openSettings() {}
-        /** The pane corner's "More": the sheet a long press on the Workspace opens, for the active pane. */
+        /** The pane corner's "More": the sheet a long press on the Terminal opens, for the active pane. */
         default void showMoreSheet() {}
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
         default void onAutoTilingChanged(boolean enabled) {}
@@ -283,7 +283,7 @@ public class TerminalPaneController {
         }
         /**
          * Dock on a Home float: {@code window} is a tiled window now and belongs in the
-         * Workspace's row, right after the current window, and the Workspace slides in.
+         * Terminal's row, right after the current window, and the Terminal slides in.
          */
         default void onHomeFloatDocked(@NonNull Window window) {}
         /**
@@ -384,7 +384,7 @@ public class TerminalPaneController {
         float focusShareH, focusShareV;
         /**
          * The id of the Home page this window floats over while it is a <b>Home float</b>;
-         * {@link HomeFloatPolicy#NOT_HOME_FLOAT} while it is in the Workspace's row. A Home float
+         * {@link HomeFloatPolicy#NOT_HOME_FLOAT} while it is in the Terminal's row. A Home float
          * has no tiled tree: its one pane is its only float.
          */
         int homePageId = HomeFloatPolicy.NOT_HOME_FLOAT;
@@ -408,7 +408,7 @@ public class TerminalPaneController {
         public static final int NOT_HOSTED = Integer.MIN_VALUE;
 
         /**
-         * Whether this window is a Home float rather than a window of the Workspace's row: a free
+         * Whether this window is a Home float rather than a window of the Terminal's row: a free
          * one over a Home page, or one a terminal widget hosts.
          */
         public boolean isHomeFloat() { return homePageId >= 0 || isHostedFloat(); }
@@ -465,7 +465,7 @@ public class TerminalPaneController {
     /**
      * Home floats, in z-order on Home (last on top), across every page. Each is also in
      * {@link #mWindows}, so a shell, the drawer and the shortcuts find it as a window; none is in
-     * the Workspace's row, which the host keeps.
+     * the Terminal's row, which the host keeps.
      */
     private final List<Window> mHomeFloats = new ArrayList<>();
     /** Each Home float's container in the float layer; never touched by {@link #render()}. */
@@ -1020,13 +1020,13 @@ public class TerminalPaneController {
         List<Leaf> floats = new ArrayList<>();
         for (TerminalWorkspace.FloatingPane saved : definition.floats) {
             if (position[0] >= sessions.size())
-                throw new IllegalArgumentException("Not enough sessions for workspace pane tree");
+                throw new IllegalArgumentException("Not enough sessions for terminal pane tree");
             Leaf leaf = new Leaf(sessions.get(position[0]++));
             leaf.floatFrac = sanitizedFloatFrac(saved.left, saved.top, saved.width, saved.height);
             floats.add(leaf);
         }
         if (position[0] != sessions.size())
-            throw new IllegalArgumentException("Session count does not match workspace pane tree");
+            throw new IllegalArgumentException("Session count does not match terminal pane tree");
         root.parent = null;
         List<Leaf> panes = leavesOf(root);
         panes.addAll(floats);
@@ -1106,7 +1106,7 @@ public class TerminalPaneController {
                                       @NonNull List<TerminalSession> sessions, @NonNull int[] position) {
         if (definition instanceof TerminalWorkspace.Pane) {
             if (position[0] >= sessions.size())
-                throw new IllegalArgumentException("Not enough sessions for workspace pane tree");
+                throw new IllegalArgumentException("Not enough sessions for terminal pane tree");
             return new Leaf(sessions.get(position[0]++));
         }
         TerminalWorkspace.Split saved = (TerminalWorkspace.Split) definition;
@@ -1607,7 +1607,7 @@ public class TerminalPaneController {
         forgetSplitLayouts(node);
         // A neighbour's panes follow the size its container is laid out at, as the window in
         // front does: the container is GONE at rest but the wall lays it out at the
-        // Workspace page's size then too, so a keyboard or chrome change resizes its shells at
+        // Terminal page's size then too, so a keyboard or chrome change resizes its shells at
         // rest and a crossing finds them fitting. Under a host resize every pane is held; its end
         // resumes these with the panes on screen (setAllPaneSizeUpdatesPaused).
         for (Leaf leaf : leavesOf(node)) {
@@ -2814,7 +2814,7 @@ public class TerminalPaneController {
             return FINISHED_PANE;
         }
         if (owner.isHomeFloat()) {
-            // A Home float is its one pane: it goes, and nothing in the Workspace moves.
+            // A Home float is its one pane: it goes, and nothing in the Terminal moves.
             removeHomeFloat(owner);
             return FINISHED_PANE;
         }
@@ -3713,7 +3713,7 @@ public class TerminalPaneController {
      * Opens a Home float around {@code shell} on Home page {@code page}: a window of its own whose
      * one pane floats over that page, born a window inside the room
      * ({@link HomeFloatPolicy#birthFrac()}), raised and focused. It is never in the
-     * Workspace's row and never keeps the Workspace alive; the host keeps the row and only hears
+     * Terminal's row and never keeps the Terminal alive; the host keeps the row and only hears
      * that the floats changed.
      */
     @NonNull
@@ -3814,7 +3814,7 @@ public class TerminalPaneController {
 
     /**
      * Home takes focus back from the focused Home float, if one has it: a press beside the floats,
-     * the page turned away, the wall gone to the Workspace. The host closes the keyboard it raised.
+     * the page turned away, the wall gone to the Terminal. The host closes the keyboard it raised.
      */
     public void releaseHomeFloatFocus() {
         if (mFocusedHomeFloat == null) return;
@@ -3880,7 +3880,7 @@ public class TerminalPaneController {
 
     /**
      * Dock on a Home float: it leaves Home and becomes a tiled window whose one pane is its tree.
-     * The host puts it in the Workspace's row right after the current window and slides there.
+     * The host puts it in the Terminal's row right after the current window and slides there.
      */
     public void dockHomeFloat(@NonNull Window w) {
         if (!mHomeFloats.contains(w) || w.active == null) return;
@@ -4193,7 +4193,7 @@ public class TerminalPaneController {
         container.setPivotY(container.getHeight() / 2f);
     }
 
-    /** A Home float's shell ended: it goes, and nothing in the Workspace moves. */
+    /** A Home float's shell ended: it goes, and nothing in the Terminal moves. */
     private void removeHomeFloat(@NonNull Window w) {
         boolean wasFocused = w == mFocusedHomeFloat;
         Leaf leaf = w.active;
@@ -4385,7 +4385,7 @@ public class TerminalPaneController {
 
     /**
      * A hosted float's pane, as its widget holds it: the pane frame on the terminal's own ground,
-     * so the ink reads as it does in the Workspace whatever the widget's card is. While the
+     * so the ink reads as it does in the Terminal whatever the widget's card is. While the
      * focused float's cursor row is under the keyboard the widget is lifted over it.
      */
     private final class HostedFloatContainer extends FrameLayout {
@@ -6517,7 +6517,7 @@ public class TerminalPaneController {
         visible.addAll(shownHostedFloatPaneViews());
         for (TerminalView view : mPaneViews.values()) {
             // A live neighbour is owed its size like a pane on screen when its container is laid
-            // out (the wall lays a filled one out at the Workspace page's size at rest too); one
+            // out (the wall lays a filled one out at the Terminal page's size at rest too); one
             // that never was holds the size it had, as a hidden window does.
             FrameLayout neighbour = neighbourContainerOf(view);
             if (neighbour != null) {

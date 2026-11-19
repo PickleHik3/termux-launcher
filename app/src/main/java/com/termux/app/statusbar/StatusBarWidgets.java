@@ -225,7 +225,7 @@ final class StatusBarWidgets {
     /**
      * Writes {@code inks} ({@link StatusInkSlots}) to the bar's content: each view takes its
      * colour only when it differs from the one it wears (the views compare), so an unchanged
-     * array writes nothing. The sessions chip and the window chips are Workspace content that
+     * array writes nothing. The sessions chip and the window chips are Terminal content that
      * slides with the chips and does not blend ({@link #applySessionsBand}); the media widget and
      * the clock's theme are the scheme's, not the band's.
      */
@@ -255,7 +255,7 @@ final class StatusBarWidgets {
     }
 
     /**
-     * The sessions chip is inked on {@code band}, the Workspace end's: it slides with the window
+     * The sessions chip is inked on {@code band}, the Terminal end's: it slides with the window
      * chips and does not blend across a crossing. Nothing for a null band.
      */
     void applySessionsBand(@Nullable com.termux.app.chrome.OnGlass.Resolution band) {

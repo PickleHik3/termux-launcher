@@ -863,7 +863,7 @@ public final class SheetsController {
             content.addView(mTerminalActionsSheet, new android.view.ViewGroup.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
         }
-        // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Workspace.
+        // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Terminal.
         // Style stands only when the companion is installed: a row that opens the Appearance
         // settings under the name of a plugin the device does not have is a broken promise.
         mTerminalActionsSheet.openRows(activity.getString(R.string.terminal_actions_title),
@@ -1040,13 +1040,11 @@ public final class SheetsController {
     }
 
     /**
-     * The Menus and dialogs surface's Corners on the resting page, as stored (dp; -1 follows the
-     * style), and whether the style is Floating: what the command palette's corners follow.
+     * Global's Corners, as stored (dp; -1 follows the style): what the command palette's corners
+     * follow. The sheets hold no corners of their own.
      */
     public int commandPaletteCornersDp() {
-        return com.termux.app.chrome.ElementGlass.of(mHost.preferences(),
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, mHost.restingPage())
-            .cornersDp;
+        return com.termux.app.chrome.SheetGlass.of(mHost.preferences()).cornersDp;
     }
 
     /**
@@ -1057,14 +1055,12 @@ public final class SheetsController {
     public android.graphics.drawable.Drawable buildTerminalSheetSurface() {
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             mHost.preferences();
-        // The Sheets element's glass (ADR 0017), no longer the dock's.
-        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(preferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, mHost.restingPage());
+        // Global's glass at the sheets' opacity floor (ADR 0031).
+        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
         float barAlpha = preferences != null ? sheets.tintAlpha() : 0.5f;
         int grain = preferences != null ? sheets.grainPercent
             : com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-        // Modifier: floored well above the Sheets opacity. A sheet has body text over a live blur,
-        // and at a bar's tint the terminal behind it reads straight through the words.
-        return mHost.chromeGlass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
+        return mHost.chromeGlass().forElement(sheets).surface(barAlpha, 0f, 1f, false, grain,
             mHost.dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), !sheets.rimOff(),
             null, sheets.tintPercent);
     }

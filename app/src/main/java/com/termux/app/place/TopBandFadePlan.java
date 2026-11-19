@@ -1,7 +1,7 @@
 package com.termux.app.place;
 
 /**
- * What a crossing between Home and the Workspace does with the top band (the glass strip behind
+ * What a crossing between Home and the Terminal does with the top band (the glass strip behind
  * the system bar and the window bar's glass): the chrome wears one look on every page
  * (ADR 0031), so nothing is built for the arriving end as the crossing begins; the first re-dress
  * on the way builds it beside the end the band began with, and the band crosses between them by

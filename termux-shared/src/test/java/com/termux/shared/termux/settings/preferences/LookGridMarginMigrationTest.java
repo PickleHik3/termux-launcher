@@ -16,7 +16,7 @@ public class LookGridMarginMigrationTest {
     }
 
     @Test
-    public void homesOwnMarginBecomesBaseAndEveryOtherCellGoes() {
+    public void homesOwnMarginBecomesGlobalAndEveryOtherCellGoes() {
         LookGrid.MemoryStore store = new LookGrid.MemoryStore();
         LookGrid grid = grid(store);
         grid.write(Property.MARGIN, null, 8);
@@ -33,7 +33,7 @@ public class LookGridMarginMigrationTest {
     }
 
     @Test
-    public void homeFollowingBaseKeepsBaseAndDropsTheWorkspaces() {
+    public void homeFollowingGlobalKeepsGlobalAndDropsTheTerminals() {
         LookGrid.MemoryStore store = new LookGrid.MemoryStore();
         LookGrid grid = grid(store);
         grid.write(Property.MARGIN, null, 8);

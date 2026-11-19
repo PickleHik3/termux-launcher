@@ -77,18 +77,21 @@ public class StatusTerminalCardsTest {
     }
 
     @Test
-    public void theTerminalCardReadsGlassContrastTrailEffectAndFont() {
-        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.TEXT_SIZE, Row.CONTRAST, Row.LINK_FONT,
-            Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_PANES,
+    public void theTerminalCardReadsBackgroundContrastTrailEffectAndFont() {
+        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT,
+            Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
+            Row.SECTION_PANES,
             Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
-            Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT, Row.SECTION_LAYOUT, Row.ELEMENTS,
+            Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
+            Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
             Row.MINIMAL),
             rows(TerminalCard.rows(ALL)));
         assertFalse("no Screen effect where its shader does not run",
             rows(TerminalCard.rows(NONE)).contains(Row.EFFECT));
-        assertTrue("the Terminal card owns Text size",
-            rows(TerminalCard.rows(NONE)).contains(Row.TEXT_SIZE));
+        assertTrue("the Terminal card owns its Font size",
+            rows(TerminalCard.rows(NONE)).contains(Row.FONT_SIZE));
+        assertFalse("no Screen effect switches where its shader does not run",
+            rows(TerminalCard.rows(NONE)).contains(Row.SCREEN_EVENTS));
     }
 
     // ------------------------------------------------------------------------------ policy
@@ -333,7 +336,7 @@ public class StatusTerminalCardsTest {
             Fixture f = new Fixture(scale);
             FakeTerminal host = new FakeTerminal();
             String at = "at " + scale;
-            for (Row row : new Row[] {Row.GLASS_SECTION, Row.CONTRAST, Row.CURSOR_TRAIL,
+            for (Row row : new Row[] {Row.CONTRAST, Row.CURSOR_TRAIL,
                 Row.EFFECT, Row.LINK_FONT}) {
                 CardRowView built = TerminalCard.view(f.themed, row, f.width, host);
                 assertNotNull(row + " is the card's own", built);

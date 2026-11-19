@@ -10,15 +10,15 @@ import org.junit.Test;
 /**
  * A terminal launched from Home opens as a Home float ({@link HomeFloatPolicy#launchesAsFloat}).
  * The regression: the first terminal launched from Home, with no window anywhere, went into the
- * Workspace as a full window and took the screen, because the Terminal entry's tap into an empty
- * Workspace, the new-window keybind and the local API's new session all added a row window
+ * Terminal as a full window and took the screen, because the Terminal entry's tap into an empty
+ * Terminal, the new-window keybind and the local API's new session all added a row window
  * whatever page was in front.
  */
 public class HomeFloatLaunchTest {
 
     @Test
     public void theFirstTerminalFromHomeIsAFloat() {
-        // No window anywhere: the Workspace is not on the row.
+        // No window anywhere: the Terminal is not on the row.
         assertTrue(HomeFloatPolicy.launchesAsFloat(Launch.ENTRY_TAP, true, false, true));
         assertTrue(HomeFloatPolicy.launchesAsFloat(Launch.NEW_TERMINAL, true, false, true));
     }
@@ -29,8 +29,8 @@ public class HomeFloatLaunchTest {
     }
 
     @Test
-    public void theEntryTapGoesToAWorkspaceThatExists() {
-        // A tap with a Workspace on the row is a way there, not a launch.
+    public void theEntryTapGoesToATerminalThatExists() {
+        // A tap with a Terminal on the row is a way there, not a launch.
         assertFalse(HomeFloatPolicy.launchesAsFloat(Launch.ENTRY_TAP, true, true, true));
     }
 

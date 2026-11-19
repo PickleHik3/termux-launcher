@@ -54,7 +54,7 @@ public final class CrossingController {
         /** The page the wall is committed to. */
         @NonNull com.termux.app.page.PageKind lastWallPage();
 
-        /** The place the wall has committed to, the Workspace's page read as the display's while it is in front. */
+        /** The place the wall has committed to, the Terminal's page read as the display's while it is in front. */
         @NonNull com.termux.app.page.PageKind currentWallPlace();
 
         /** The pane wall's controller; null before it is built. */
@@ -198,7 +198,7 @@ public final class CrossingController {
         /** The keyboard's height as the stack lays it out; 0 while it is down or floating. */
         int travelKeyboardLaidOutPx();
 
-        /** Whether a display window is the Workspace's window in front (its keyboard form rules). */
+        /** Whether a display window is the Terminal's window in front (its keyboard form rules). */
         default boolean displayWindowInFront() {
             return false;
         }
@@ -389,7 +389,7 @@ public final class CrossingController {
         // and the editors own the stack while they are up and move it their own way.
         if (mHost.isReducedMotionEnabled() || mHost.isAppDrawerEngaged() || mHost.surfaceEditorActive()
             || mHost.appliedContentReservationPx() < 0) return;
-        // The Workspace's page is the display's place while the display window is in front of it,
+        // The Terminal's page is the display's place while the display window is in front of it,
         // so the chrome travels to and from the state that place rests in.
         // The cells' kinds around the current cell, so a slide between two cells of a kind's
         // pages and the one beside reads the arriving cell's dress (ADR 0016 section 3). A far
@@ -397,7 +397,7 @@ public final class CrossingController {
         java.util.List<com.termux.app.page.PageKind> pages =
             mHost.paneWallController().slideCellKinds();
         int cellAt = mHost.paneWallController().currentCellIndex();
-        // A slide toward another window of the Workspace stays on its place: the wall's offset
+        // A slide toward another window of the Terminal stays on its place: the wall's offset
         // alone reads the previous window as Home, the place on the left.
         com.termux.app.place.PlaceChromeTravel.InnerPages inner =
             mHost.paneWallController()::showsInnerPage;
@@ -459,7 +459,7 @@ public final class CrossingController {
         Trace.beginSection("Travel.material");
         mHost.syncKeyboardMaterialTravel(frame);
         Trace.endSection();
-        // The status bar travels with the Workspace's page wherever the frame reaches Home while
+        // The status bar travels with the Terminal's page wherever the frame reaches Home while
         // the pages slide; it fades in place where it cannot ride (a bar on a side or the bottom
         // edge, or pages that turn).
         Trace.beginSection("Travel.status");
@@ -739,7 +739,7 @@ public final class CrossingController {
      * other half, the crossing begins (SeamCrossing.begin): it is handed both halves' dresses, their
      * layouts and which of them keeps a keyboard in the stack, and reads from them how the dock's
      * rows cross, whether the halves dress the stack differently and how the bar crosses. The
-     * status bar wears the Workspace's dress from then on (SeamDress), so a bar about to be laid
+     * status bar wears the Terminal's dress from then on (SeamDress), so a bar about to be laid
      * out over Home is dressed for it now. Every frame after is the crossing's to answer.
      */
     private void readSeamTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
@@ -818,9 +818,9 @@ public final class CrossingController {
         // out at its final size for the slide rather than re-measured at the landing.
         if (otherHome && rests != null)
             applyArrivingHomeGridReserve(rests, therePage, thereRest, otherArrangement);
-        // From Home, the bar takes off Home's dress for the Workspace's while it is still hidden,
+        // From Home, the bar takes off Home's dress for the Terminal's while it is still hidden,
         // before any pass lays it out over Home.
-        if (mCrossing.seam().barTakesWorkspaceDressFirst()) {
+        if (mCrossing.seam().barTakesTerminalDressFirst()) {
             mHost.refreshTerminalWindowBar();
             mHost.chrome().requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         }
@@ -871,10 +871,10 @@ public final class CrossingController {
     }
 
     /**
-     * One frame of the dock's rows across the seam between Home and the Workspace, as the crossing
+     * One frame of the dock's rows across the seam between Home and the Terminal, as the crossing
      * answers it: the stack stands the other half's rows, dressed for that half, from the frame
      * the plan says — laid out there once, while none of them shows, under the content's hold —
-     * and from Home the Workspace's status bar is laid out as the slide starts, off screen with
+     * and from Home the Terminal's status bar is laid out as the slide starts, off screen with
      * its page. Returns the dock's reveal for this frame.
      */
     private float syncSeamTravel(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {

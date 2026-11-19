@@ -52,6 +52,17 @@ public class PlaceContentStripFadeTest {
         assertEquals(1, canvas.masks);
     }
 
+    @Test public void aStripSlidLeftMasksTheSlotsLeftEdgeOnce() {
+        // Home's float chips leave through the slot's left edge.
+        PlaceContentStrip strip = strip();
+        strip.layout(0, 0, 200, 40);
+        strip.setTranslationX(-30f);
+        CountingCanvas canvas = new CountingCanvas();
+        strip.dispatchDraw(canvas);
+        assertEquals(1, canvas.layers);
+        assertEquals(1, canvas.masks);
+    }
+
     @Test public void aStripAtRestDrawsWithoutALayer() {
         PlaceContentStrip strip = strip();
         strip.layout(0, 0, 200, 40);

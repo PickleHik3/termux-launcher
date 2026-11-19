@@ -538,7 +538,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private static final float AUTO_SCROLL_STEP_DP = 6f;
 
     @Nullable private OnWindowChipMovedListener mMoveListener;
-    /** How many chips, from the first, stand for the Workspace's windows and so can be moved. */
+    /** How many chips, from the first, stand for the Terminal's windows and so can be moved. */
     private int mMovableChipCount;
     /** The long press that lifts {@link #mPendingLiftIndex}, armed at DOWN on a movable chip. */
     @Nullable private Runnable mPendingLift;
@@ -674,7 +674,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * Whether the selected chip's window is on screen on {@code page}: on the Workspace and the
+     * Whether the selected chip's window is on screen on {@code page}: on the Terminal and the
      * Display it is; on Home and the Assistant the chip stands for a window to go to.
      */
     public static boolean selectedChipOnScreen(@Nullable com.termux.app.page.PageKind page) {
@@ -683,7 +683,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * Whether a tap on the selected chip offers its ×: on the Workspace, where that window is on
+     * Whether a tap on the selected chip offers its ×: on the Terminal, where that window is on
      * screen. On Home the same chip stands for the window in front of the row, which a tap brings
      * on screen instead (the selected chip could not be reached from Home at all, #90).
      */
@@ -1964,9 +1964,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * How many chips, counted from the first, stand for the Workspace's windows and may be dragged
+     * How many chips, counted from the first, stand for the Terminal's windows and may be dragged
      * to reorder them. The chips after them — the display's, the Home floats' — and every chip of
-     * a place whose row is not the Workspace's (Home, Display) pass 0 and never lift.
+     * a place whose row is not the Terminal's (Home, Display) pass 0 and never lift.
      */
     public void setMovableChipCount(int count) {
         mMovableChipCount = Math.max(0, count);

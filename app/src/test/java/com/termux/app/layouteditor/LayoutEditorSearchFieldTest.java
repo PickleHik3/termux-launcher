@@ -83,7 +83,7 @@ public class LayoutEditorSearchFieldTest {
         LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, PORTRAIT);
         plan.setSearchField(true);
         assertTrue(places.forVariant(com.termux.app.place.KindFixtures.HOME_PAGE).searchField());
-        assertTrue("the Workspace reads the same one (ADR 0023 §1)",
+        assertTrue("the Terminal reads the same one (ADR 0023 §1)",
             places.forVariant(LayoutVariant.NORMAL).searchField());
     }
 

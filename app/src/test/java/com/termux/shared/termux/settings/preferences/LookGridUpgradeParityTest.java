@@ -20,9 +20,9 @@ import org.robolectric.annotation.Config;
 import java.util.Arrays;
 
 /**
- * An install stored the old way (Base, own keys, inherit flags, {@code @<page>} values) answers
+ * An install stored the old way (Global, own keys, inherit flags, {@code @<page>} values) answers
  * the same through the named getters after the grid upgrade, on the wall and on every page. The
- * expected numbers are worked out by hand from the old rule (a page's own value, else Base while
+ * expected numbers are worked out by hand from the old rule (a page's own value, else Global while
  * the flag holds, else the surface's own); blur alone answers its nearest Frost stop's blur.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -90,8 +90,7 @@ public class LookGridUpgradeParityTest {
             assertEquals(at, 20, preferences.getDockTintStrength(page));
             assertEquals(at, 20, preferences.getStatusBarTintStrength(page));
         }
-        // The terminal's own blur 25 is Mist's stop; its grain still follows Base's 4.
-        assertEquals(25, preferences.getTerminalGlassBlurRadius());
+        // The terminal's grain still follows Global's 4 (its Blur is its Background's own, #287).
         assertEquals(4, preferences.getTerminalGlassGrain());
         assertEquals(20, preferences.getTerminalTintStrength());
         assertEquals(120, preferences.getSurfaceGlassVibrancy());
@@ -99,14 +98,16 @@ public class LookGridUpgradeParityTest {
         assertEquals(40, preferences.getFancierGlassDispersionPercent());
         assertEquals(TERMUX_APP.GLASS_TINT_HUE_SECONDARY, preferences.getSurfaceGlassTintHue());
         assertEquals(TERMUX_APP.GLASS_RIM_GRADIENT, preferences.getSurfaceGlassRim());
-        assertEquals(16, preferences.getAppLauncherDrawerCornerRadius());
+        // The drawer is a sheet: it wears Global's corners, not its old own 16 (#288).
+        assertEquals(preferences.lookGrid().value(LookGrid.Property.CORNERS, null),
+            preferences.getAppLauncherDrawerCornerRadius());
         assertFalse(preferences.isWidgetsOnGlassEnabled());
         assertFalse(store.contains(TERMUX_APP.KEY_APP_BAR_OPACITY));
         assertFalse(store.contains("surface_inherit_dock_opacity"));
     }
 
     @Test
-    public void aBaseOffEveryStopMovesBlurToTheNearestStopAndKeepsTheRest() {
+    public void aGlobalOffEveryStopMovesBlurToTheNearestStopAndKeepsTheRest() {
         store.edit().putInt("surface_base_blur", 8).putInt("surface_base_grain", 18).commit();
         upgrade();
         for (int page : WHERE) {
@@ -116,7 +117,7 @@ public class LookGridUpgradeParityTest {
             assertEquals(at, 7, preferences.getStatusBarBlurRadius(page));
             assertEquals(at, 18, preferences.getDockGlassGrain(page));
             assertEquals(at, 18, preferences.getInAppKeyboardGrain(page));
-            assertEquals(at, TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
+            assertEquals(at, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_OPACITY,
                 preferences.getAppBarOpacity(page));
         }
         assertEquals(18, preferences.getTerminalGlassGrain());

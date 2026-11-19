@@ -38,7 +38,7 @@ final class EditorBar {
         void onPalette();
         /** The theme hint went for good: the palette or the bubble was tapped. */
         void onThemeHintSeen();
-        /** The page label under the frame (Home or Workspace) was tapped: that screen's card. */
+        /** The page label under the frame (Home or Terminal) was tapped: that screen's card. */
         default void onPageLabel() {}
     }
 
@@ -162,7 +162,7 @@ final class EditorBar {
         mHalfRow.setMinimumHeight(dp(EditorFramePose.HALF_ROW_DP));
         mHalfRow.setOnClickListener(v -> { if (mListener != null) mListener.onPageLabel(); });
         setOrientation(false);
-        setPageName(context.getString(R.string.appearance_half_workspace));
+        setPageName(context.getString(R.string.appearance_half_terminal));
         setDirty(false);
     }
 

@@ -25,12 +25,6 @@
             app:summary="@string/settings_keyboard_sub_layout_summary"
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardLayoutPreferencesFragment" />
         <Preference
-            app:key="keyboard_sub_size"
-            app:persistent="false"
-            app:title="@string/settings_keyboard_sub_size_title"
-            app:summary="@string/settings_keyboard_sub_size_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.KeyboardSizePreferencesFragment" />
-        <Preference
             app:key="keyboard_sub_typing"
             app:persistent="false"
             app:title="@string/settings_keyboard_sub_typing_title"

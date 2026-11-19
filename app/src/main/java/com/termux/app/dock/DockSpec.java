@@ -45,7 +45,7 @@ public final class DockSpec {
         public final boolean rimOff;
         /** Corner radius the style resolves to (the {@code -1} sentinel already resolved), dp. */
         public final float cornerRadiusDp;
-        /** Refraction bend and dispersion of the element's own, or null while it follows Base. */
+        /** Refraction bend and dispersion of the element's own, or null while it follows Global. */
         @Nullable public final Integer depthDp;
         @Nullable public final Integer edgePercent;
 

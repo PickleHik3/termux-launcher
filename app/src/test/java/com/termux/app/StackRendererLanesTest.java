@@ -77,7 +77,7 @@ public class StackRendererLanesTest {
         mRowStack.addView(mHomeRow);
         mRowStack.addView(mKeys);
         mRowStack.setLane(mHomeRow, StackLanes.HOME);
-        mRowStack.setLane(mKeys, StackLanes.WORKSPACE);
+        mRowStack.setLane(mKeys, StackLanes.TERMINAL);
         mContainer.addView(mRowStack);
         mContainer.layout(0, 0, WIDTH, 600);
         mViews.put(R.id.accessory_stack_container, mContainer);
@@ -106,7 +106,7 @@ public class StackRendererLanesTest {
         return mApps.writes + mKeys.writes + mHomeRow.writes;
     }
 
-    @Test public void onTheWorkspaceItsLaneStandsAtZeroAndHomesIsOffToTheLeft() {
+    @Test public void onTheTerminalItsLaneStandsAtZeroAndHomesIsOffToTheLeft() {
         mFrontHome = false;
         mRenderer.apply();
         assertEquals(0f, mKeys.getTranslationX(), 0f);
@@ -130,7 +130,7 @@ public class StackRendererLanesTest {
         assertEquals("a frame equal to the last announces nothing", 0, mMoved.size());
     }
 
-    @Test public void onHomeTheWorkspacesLaneStandsOffToTheRight() {
+    @Test public void onHomeTheTerminalsLaneStandsOffToTheRight() {
         mFrontHome = true;
         mRenderer.apply();
         assertEquals(0f, mHomeRow.getTranslationX(), 0f);

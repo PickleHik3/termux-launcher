@@ -102,6 +102,24 @@ public final class EditorRows {
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
         SPLIT_GAP(Kind.SLIDER, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
+        /** The terminal's own font size, in dp (the stored value is pixels, {@code fontsize}). */
+        FONT_SIZE(Kind.SLIDER, R.string.appearance_row_terminal_font_size,
+            R.drawable.ic_editor_text_size),
+        /** Screen events, shown while a Screen effect is on. */
+        SCREEN_EVENTS(Kind.SWITCH, R.string.settings_terminal_screen_events_title,
+            R.drawable.ic_symbol_tune),
+        /** Composite signal, shown while a Screen effect is on. */
+        COMPOSITE_SIGNAL(Kind.SWITCH, R.string.settings_terminal_retro_composite_title,
+            R.drawable.ic_symbol_tune),
+        /** The floating keyboard's width, % of the screen; shown while it floats. */
+        KEYBOARD_WIDTH(Kind.SLIDER, R.string.appearance_row_keyboard_width,
+            R.drawable.ic_ms_width),
+        /** The floating keyboard's height, % of the docked one's; shown while it floats. */
+        KEYBOARD_FLOAT_HEIGHT(Kind.SLIDER, R.string.appearance_row_keyboard_float_height,
+            R.drawable.ic_editor_height),
+        /** The split keyboard's gap, % of its width; shown while it is split. */
+        KEYBOARD_SPLIT_GAP(Kind.SLIDER, R.string.appearance_row_keyboard_split_gap,
+            R.drawable.ic_ms_space_bar),
         LABEL_SIZE(Kind.SEGMENTS, R.string.appearance_row_label_size, R.drawable.ic_editor_text_size),
         GLASS_WIDGETS(Kind.SWITCH, R.string.appearance_row_glass_widgets, R.drawable.ic_symbol_stacks),
         TWO_LINE(Kind.SWITCH, R.string.appearance_row_two_line, R.drawable.ic_editor_text_size),
@@ -111,8 +129,16 @@ public final class EditorRows {
             R.drawable.ic_ed_transition_slide),
         NUMERALS(Kind.SEGMENTS, R.string.appearance_row_numerals, R.drawable.ic_editor_text_size),
         PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
+        /**
+         * The black dim over the wallpaper on the Terminal's pages, Display and Assistant pages
+         * included (the Terminal card's Background); Home's pages have none.
+         */
         WALLPAPER_DIM(Kind.SLIDER, R.string.appearance_row_wallpaper_dim,
             R.drawable.ic_symbol_wallpaper),
+        /** The terminal panes' Opacity, its own key, never Global's (the Terminal's Background). */
+        TERMINAL_OPACITY(Kind.SLIDER, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
+        /** The terminal panes' Blur in dp, its own key, never Global's (the Terminal's Background). */
+        TERMINAL_BLUR(Kind.SLIDER, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,
             R.drawable.ic_symbol_wallpaper),
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),
@@ -189,7 +215,7 @@ public final class EditorRows {
         /** The dock's Monochrome icons, a switch row of its own (was a Show/hide tile). */
         DOCK_MONOCHROME(Kind.SWITCH, R.string.editor_dock_option_monochrome,
             R.drawable.ic_ed_monochrome),
-        // The Keyboard, Home, Global and Workspace cards' own rows (editor-redesign §2), drawn by
+        // The Keyboard, Home, Global and Terminal cards' own rows (editor-redesign §2), drawn by
         // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
         // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
         /** The air under the keyboard's last key row (the layout's chin), in dp. */
@@ -241,6 +267,7 @@ public final class EditorRows {
         SECTION_TEXT(Kind.MENU, R.string.editor_section_text, 0),
         SECTION_PANES(Kind.MENU, R.string.editor_section_panes, 0),
         SECTION_EFFECTS(Kind.MENU, R.string.editor_section_effects, 0),
+        SECTION_BACKGROUND(Kind.MENU, R.string.editor_section_background, 0),
         SECTION_BARS(Kind.MENU, R.string.editor_section_bars, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
         HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),
@@ -548,12 +575,4 @@ public final class EditorRows {
             ? TermuxAppSharedPreferences.PAGE_WALL : none;
     }
 
-    /**
-     * Whether a slider row carries the "set here" dot: the surface's own value for one of its
-     * glass numbers, where Reset would take it back to the Look.
-     */
-    public static boolean marksOwnValue(@NonNull EditorCard card, @NonNull Row row) {
-        return card.slot != null && row.property() != null
-            && TermuxAppSharedPreferences.hasSurfaceProperty(card.slot, row.property());
-    }
 }

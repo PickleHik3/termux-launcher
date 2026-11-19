@@ -35,7 +35,7 @@ public final class GlassEffects {
         float[] peekGlassRect();
 
         /**
-         * How much of the Peek card the program draws: 1 at Home's rest, 0 at the Workspace's,
+         * How much of the Peek card the program draws: 1 at Home's rest, 0 at the Terminal's,
          * Home's share across a crossing ({@code StackScene#homeShare}).
          */
         default float peekShare() {

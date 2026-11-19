@@ -52,7 +52,7 @@ command palette, the app drawer and settings. Give Home its own keys in the edit
 - **Keys**: a tap presses a key. A hold on the floating pill moves it instead of repeating the key.
 - **With the keyboard**: when the keyboard comes up the pill slides down into the dock above it and
   becomes the bar, where holds repeat and lock again. It floats back when the keyboard goes down.
-- **Other pages**: moving from Home to the Workspace or the Assistant page carries the pill into
+- **Other pages**: moving from Home to the Terminal or the Assistant page carries the pill into
   the dock as that page's bar, and coming back lifts it out again.
 
 The pill hides while the app drawer, the command palette, a sheet or an editor is open, and while a
@@ -185,7 +185,7 @@ extra-keys = [[ \
 
 Names and values are trimmed and separated by commas; there is no quoting inside a `tool:` string,
 so prefer a package name for `app.launch`. Pane and window actions do nothing while
-**Settings → Terminal → Windows & panes → Split-pane controls** is off. Every action id and its
+**Multiplexer** on the Terminal card is off. Every action id and its
 arguments are listed in [Command palette and actions](Command_Palette_And_Actions.md).
 
 ### Macros for shell programs
