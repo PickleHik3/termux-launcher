@@ -4209,7 +4209,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withTintStrength(mPreferences.getDockTintStrength(restingPage()))
             // Every edge of this sheet is the screen's own. The gathered light, which every side
             // takes a share of, would run a glow round the screen, so all four are seams.
-            .withSeams(com.termux.app.chrome.ChromeEdgeRule.ALL);
+            .withSeams(com.termux.app.chrome.ChromeEdgeRule.ALL)
+            // The page's ground over the frame, as the bars and the dock draw it (#283).
+            .withGround(true);
         // Wrapped so the apps row's band can be left out where it wears Lens beads; with no band
         // it draws the sheet whole (FrameBandCutDrawable).
         mFrameGutterDrawable = new com.termux.app.dock.FrameBandCutDrawable(
@@ -6447,7 +6449,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A card under Floating, with its whole rim. Docked it joins the frame below the
             // keyboard: its top is a join and the rest is the screen's edge, so it draws none.
             .withRim(arrangement().floating())
-            .withSlice(1f, true);
+            .withSlice(1f, true)
+            // The page's ground over the frame, as the bars and the dock draw it (#283).
+            .withGround(true);
         under.setBackground(new com.termux.app.chrome.RoundedSheetDrawable(
             com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
                 getResources().getDisplayMetrics().density, backdrop),
@@ -7673,6 +7677,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.OnGlass.Resolution band = ok ? mStatusBar.resolvedStatusBand() : null;
         if (ok) System.arraycopy(mTopEndHere.inks, 0, mTopEndThere.inks, 0,
             mTopEndHere.inks.length);
+        // The bar's glass shows the ground beneath it (#283): toward a page whose ground differs,
+        // the arriving end is inked over that ground, read now and recording nothing, so the
+        // inks cross with the wall to what the landing measures.
+        if (ok && com.termux.app.chrome.GlassGround.ON) {
+            int thereGround = groundOfWallPage(there.kind);
+            if (thereGround != groundOfWallPage(here.kind))
+                mStatusBar.probeStatusInks(mTopEndThere.inks, thereGround);
+        }
         mTopEndHere.inksResolved = ok;
         mTopEndThere.inksResolved = ok;
         mStatusBar.applySessionsBand(band);
@@ -7836,7 +7848,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : com.termux.app.chrome.ChromeEdgeRule.ALL & ~modelRim)
             .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
                 Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)))
-            .withBand(band);
+            .withBand(band)
+            // The page's ground over the frame, as the bars and the dock draw it (#283).
+            .withGround(true);
     }
 
     /**
@@ -14003,6 +14017,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mKeyboardBlendOn;
 
     private void legendBlend(float share) {
+        // The bar's inks over each page's ground cross on the same share (#283).
+        mTopStackRenderer.setInkShare(share);
         if (mLegendBlendOn) {
             applyExtraKeysInk(com.termux.app.glass.LegibilityBlend.color(mLegendInkHere,
                 mLegendInkThere, share));

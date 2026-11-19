@@ -23,7 +23,7 @@ public final class GlassGround {
     /**
      * Whether {@code band}'s glass draws the page's ground over its frame (the status bar, the
      * window bar and the dock): its ink and even-out are then measured over the page's dim even
-     * when its frame is up. The keyboard's stack does not draw it.
+     * when its frame is up. The keyboard's stack draws it too ({@link GlassStack.Spec#withGround}).
      */
     public static boolean drawsGround(@NonNull GlassBackdropCache.Band band) {
         if (!ON) return false;
@@ -32,6 +32,7 @@ public final class GlassGround {
             case WINDOW_BAR:
             case SESSION_CHIP:
             case DOCK:
+            case KEYBOARD:
                 return true;
             default:
                 return false;
@@ -49,6 +50,13 @@ public final class GlassGround {
             if (wallX < bands.end(i)) return bands.color(i);
         }
         return bands.color(count - 1);
+    }
+
+    /** {@code color} with its alpha scaled by {@code alpha} (0..255): a faded glass's ground. */
+    public static int faded(int color, int alpha) {
+        if (alpha >= 255) return color;
+        int a = Math.round((color >>> 24) * Math.max(0, alpha) / 255f);
+        return (a << 24) | (color & 0x00FFFFFF);
     }
 
     /**

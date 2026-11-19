@@ -151,6 +151,17 @@ public final class TopStackScene {
      */
     public static void at(@NonNull End from, @NonNull End to, float p, float slide, int widthPx,
                           float rideXPx, boolean rideWearsTo, @NonNull Frame out) {
+        at(from, to, p, slide, widthPx, rideXPx, rideWearsTo, Float.NaN, out);
+    }
+
+    /**
+     * {@link #at(End, End, float, float, int, float, boolean, Frame)} with the inks on a share of
+     * their own: {@code inkShare}, 0 to 1 toward {@code to}, the crossing's end share (the inks
+     * over each page's ground cross with the wall, as the dock's legends do); NaN keeps them on
+     * the look's share.
+     */
+    public static void at(@NonNull End from, @NonNull End to, float p, float slide, int widthPx,
+                          float rideXPx, boolean rideWearsTo, float inkShare, @NonNull Frame out) {
         boolean one = shared(from, to);
         float chipsTx = StackScene.sideSlide(Side.TERMINAL, from.side, to.side, slide, widthPx);
         float homeChipsTx = StackScene.sideSlide(Side.HOME, from.side, to.side, slide, widthPx);
@@ -180,8 +191,9 @@ public final class TopStackScene {
         out.fromLookId = from.lookId;
         out.toLookId = to.lookId;
         out.lookShare = share;
+        float inks = Float.isNaN(inkShare) ? share : Math.max(0f, Math.min(1f, inkShare));
         for (int i = 0; i < INK_COUNT; i++) {
-            out.inks[i] = StackMaterial.mixArgb(from.inks[i], to.inks[i], share);
+            out.inks[i] = StackMaterial.mixArgb(from.inks[i], to.inks[i], inks);
         }
     }
 

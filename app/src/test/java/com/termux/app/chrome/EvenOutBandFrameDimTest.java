@@ -60,8 +60,8 @@ public class EvenOutBandFrameDimTest {
     }
 
     @Test
-    public void aFramedKeyboardsFaceStandsOnNoDim() {
-        GlassBackdropCache.Band band = GlassBackdropCache.Band.KEYBOARD;
+    public void aFramedBandThatDrawsNoGroundStandsOnNoDim() {
+        GlassBackdropCache.Band band = GlassBackdropCache.Band.AZ_STRIP;
         int dimmed = ink.faceUnder(band, new Rect(DOCK));
         assertTrue(ink.noteBandFrame(band, true));
         assertFalse(ink.noteBandFrame(band, true));

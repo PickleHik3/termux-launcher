@@ -113,7 +113,10 @@ public class BarGlassView extends View {
             // Prototype #283: the page's ground over the frost and under the tint, as the ink's
             // chain composites it (frost, dim, base layer).
             GroundUnderGlass ground = mGround;
-            if (ground != null) ground.draw(canvas);
+            if (ground != null) {
+                ground.setBounds(0, 0, getWidth(), getHeight());
+                ground.draw(canvas);
+            }
         }
         super.draw(canvas);
     }

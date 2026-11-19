@@ -113,6 +113,38 @@ public class GlassGroundTest {
         assertEquals(GlassGround.ON, GlassGround.drawsGround(GlassBackdropCache.Band.DOCK));
         assertEquals(GlassGround.ON, GlassGround.drawsGround(GlassBackdropCache.Band.STATUS_BAR));
         assertEquals(GlassGround.ON, GlassGround.drawsGround(GlassBackdropCache.Band.WINDOW_BAR));
-        assertFalse(GlassGround.drawsGround(GlassBackdropCache.Band.KEYBOARD));
+        assertFalse(GlassGround.drawsGround(GlassBackdropCache.Band.AZ_STRIP));
+    }
+
+    @Test
+    public void homesGroundUnderTheGlassIsNone() {
+        // #287: Home carries no dim, whatever the Terminal's, and never the terminal's tint.
+        int homeGround = com.termux.app.terminal.TerminalSurfacePolicy.pageGround(false, false,
+            0xE0202020, com.termux.app.terminal.TerminalSurfacePolicy.dimColor(
+                com.termux.app.terminal.TerminalSurfacePolicy.pageDimPercent(
+                    com.termux.app.page.PageKind.HOME, 80)));
+        assertEquals(0, homeGround);
+        int terminal = com.termux.app.terminal.TerminalSurfacePolicy.dimColor(
+            com.termux.app.terminal.TerminalSurfacePolicy.pageDimPercent(
+                com.termux.app.page.PageKind.TERMINAL, 80));
+        GroundBands b = new GroundBands();
+        b.set(new int[] {homeGround, terminal}, 2, 0, STRIDE, 0f, FEATHER);
+        for (int a : drawn(b, 0f, STRIDE)) assertEquals(0, a);
+    }
+
+    @Test
+    public void aFadedGlassFadesItsGround() {
+        assertEquals(TERMINAL, GlassGround.faded(TERMINAL, 255));
+        assertEquals(0, GlassGround.faded(TERMINAL, 0) >>> 24);
+        assertEquals(Math.round((TERMINAL >>> 24) / 2f), GlassGround.faded(TERMINAL, 128) >>> 24, 1);
+        assertEquals(0x123456, GlassGround.faded(0xFF123456, 100) & 0xFFFFFF);
+    }
+
+    @Test
+    public void theKeyboardDrawsTheGroundToo() {
+        assertEquals(GlassGround.ON, GlassGround.drawsGround(GlassBackdropCache.Band.KEYBOARD));
+        assertEquals(GlassGround.ON, GlassStack.Spec.of(10, 0.5f, 0, 0f, null).withGround(true)
+            .withRim(true).withBand(GlassBackdropCache.Band.KEYBOARD).drawsGround());
+        assertFalse(GlassStack.Spec.of(10, 0.5f, 0, 0f, null).withRim(true).drawsGround());
     }
 }

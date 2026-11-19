@@ -392,7 +392,77 @@ public final class ChromeInk {
     /** {@link #groundDim} for {@code band} under {@code rootRect}. */
     @ColorInt
     private int bandDim(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
-        return dimHidden(glassFor(band)) ? Color.TRANSPARENT : dimUnder(rootRect);
+        if (dimHidden(glassFor(band))) return Color.TRANSPARENT;
+        return mProbing ? mProbeGround : dimUnder(rootRect);
+    }
+
+    /** A probe runs ({@link #probeOnGlass}): the ground is {@link #mProbeGround}, no vote counts. */
+    private boolean mProbing;
+    @ColorInt private int mProbeGround;
+    /** The votes a probe's bands would cast over its page's ground; cleared per probe. */
+    @NonNull private final Map<GlassBackdropCache.Band, Integer> mProbeVotes =
+        new java.util.EnumMap<>(GlassBackdropCache.Band.class);
+
+    /** {@link #meanVote} of the votes with the probe's in place of the bands it measured. */
+    @ColorInt
+    private int probedMeanVote() {
+        long red = 0, green = 0, blue = 0;
+        int count = 0;
+        for (GlassBackdropCache.Band band : GlassBackdropCache.Band.values()) {
+            Integer vote = mProbeVotes.get(band);
+            if (vote == null) vote = mVotes.get(band);
+            if (vote == null) continue;
+            red += Color.red(vote);
+            green += Color.green(vote);
+            blue += Color.blue(vote);
+            count++;
+        }
+        count = Math.max(1, count);
+        return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
+    }
+
+    /** The probe's own contract, so a band's real one is never written by a probe. */
+    @NonNull private final Contract mProbeContract = new Contract();
+
+    /**
+     * What {@link #onGlass} would answer for {@code band} at {@code screenRect} if the page's ground
+     * under it were {@code pageGround}, recording nothing: no contract, no veil, no polarity vote,
+     * so nothing redraws and the chrome's polarity stays the one it has (a crossing casts no vote
+     * either, so it is the polarity the page lands with). For the page a crossing will arrive on,
+     * read as the crossing begins, so the band's inks blend toward the ones the landing measures
+     * (#283: the glass shows the ground beneath it). Its co-tenants' veils floor it as in
+     * {@link #resolveBand}, each measured over the same ground.
+     */
+    @NonNull
+    public OnGlass.Resolution probeOnGlass(@NonNull GlassBackdropCache.Band band,
+                                           @NonNull Rect screenRect, @ColorInt int darkInk,
+                                           @ColorInt int paleInk, double target,
+                                           @ColorInt int pageGround) {
+        readMode();
+        Contract probe = mProbeContract;
+        toRootSpace(screenRect, probe.rect);
+        probe.darkInk = darkInk;
+        probe.paleInk = paleInk;
+        probe.target = target;
+        probe.fixedInk = false;
+        probe.seen = true;
+        mProbing = true;
+        mProbeGround = pageGround;
+        mProbeVotes.clear();
+        try {
+            OnGlass.Resolution own = resolveAt(band, probe, 0);
+            int floor = Color.alpha(own.veil);
+            for (GlassBackdropCache.Band other : GlassBackdropCache.Band.values()) {
+                if (other == band || paneOf(other) != paneOf(band)) continue;
+                Contract co = mContracts.get(other);
+                // A fixed-ink co-tenant measures its even-out on the way: left out of a probe.
+                if (co == null || !co.seen || co.fixedInk) continue;
+                floor = Math.max(floor, Color.alpha(resolveAt(other, co, 0).veil));
+            }
+            return floor == Color.alpha(own.veil) ? own : resolveAt(band, probe, floor);
+        } finally {
+            mProbing = false;
+        }
     }
 
     /**
@@ -2106,6 +2176,12 @@ public final class ChromeInk {
     @NonNull
     public Polarity polarity() {
         readMode();
+        // A probe answers the polarity its page would land with: the votes as they stand, the
+        // probed bands' own over their page's ground, decided from the polarity there is now.
+        if (mProbing && !mProbeVotes.isEmpty()) {
+            Polarity now = mPolarity;
+            return decide(now, probedMeanVote());
+        }
         if (mVotes.isEmpty()) {
             return mPolarity != null ? mPolarity : Polarity.DARK_INK;
         }
@@ -2742,6 +2818,11 @@ public final class ChromeInk {
     }
 
     private void vote(@NonNull GlassBackdropCache.Band band, @ColorInt int flatGlass) {
+        // A probe measures a page that is not in front: its vote is its own, never counted.
+        if (mProbing) {
+            mProbeVotes.put(band, flatGlass);
+            return;
+        }
         // A crossing casts no vote: the polarity it began with is the one the page lands with.
         if (mLegibility != null && mLegibility.crossing()) return;
         if (mFrontHome != null && mFrontHome.getAsBoolean()) {
