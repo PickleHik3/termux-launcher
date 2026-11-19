@@ -216,7 +216,7 @@ public class KeyboardPreferencesFragmentTest {
         SegmentedPillPreference method = fragment.getPreferenceScreen()
             .findPreference("keyboard_input_method");
         assertNotNull(method);
-        String[] builtInOnly = {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"};
+        String[] builtInOnly = {"keyboard_sub_layout", "keyboard_sub_typing"};
         String[] always = {"keyboard_sub_voice", "keyboard_sub_hardware", "edit_extra_keys_row",
             "extra_keys_text_all_caps"};
         assertEnabled(fragment, true, builtInOnly);

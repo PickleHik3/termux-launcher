@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Home: the Appearance editor first, then the rows that shape the Home half. Every key is the
-     one it always was (the old Apps page and Appearance). Use as Terminal only hides the whole
-     section. -->
+<!-- Home: the Appearance editor first, then what Home does (gestures, widgets, pages). How Home
+     looks (icon and label size, folders, widget numerals, page indicator, wallpaper scrolling) is
+     the editor's Home card. Every key is the one it always was. Use as Terminal only hides the
+     whole section. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -10,47 +11,6 @@
         app:persistent="false"
         app:title="@string/settings_layout_editor_title"
         app:summary="@string/settings_appearance_door_summary" />
-
-    <!-- How the app icons and folders on Home pages are drawn; the dock draws its own. -->
-    <PreferenceCategory app:key="home_icons" app:title="@string/settings_home_icons_header">
-        <!-- The one icon size (ADR 0020 §3), held in the layouts' sizes document: the row
-             stores nothing itself (HomePreferencesFragment.bindIconSize). -->
-        <ListPreference
-            app:key="app_launcher_home_icon_scale"
-            app:persistent="false"
-            app:title="@string/settings_home_icon_scale_title"
-            app:dialogTitle="@string/settings_home_icon_scale_title" />
-        <ListPreference
-            app:key="app_launcher_home_label_size"
-            app:title="@string/settings_home_label_size_title"
-            app:dialogTitle="@string/settings_home_label_size_title"
-            app:entries="@array/settings_home_label_size_entries"
-            app:entryValues="@array/settings_home_label_size_values"
-            app:useSimpleSummaryProvider="true"
-            android:defaultValue="default" />
-        <SwitchPreferenceCompat
-            app:key="app_launcher_home_label_two_lines"
-            app:title="@string/settings_home_label_two_lines_title"
-            app:summary="@string/settings_home_label_two_lines_summary"
-            android:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="app_launcher_home_label_shadow"
-            app:title="@string/settings_home_label_shadow_title"
-            app:summary="@string/settings_home_label_shadow_summary"
-            android:defaultValue="true" />
-    </PreferenceCategory>
-
-    <!-- Folders on Home pages; the dock's folders keep their own popup. -->
-    <PreferenceCategory app:key="home_folders" app:title="@string/settings_home_folders_header">
-        <ListPreference
-            app:key="app_launcher_home_folder_density"
-            app:title="@string/settings_home_folder_density_title"
-            app:dialogTitle="@string/settings_home_folder_density_title"
-            app:entries="@array/settings_home_folder_density_entries"
-            app:entryValues="@array/settings_home_folder_density_values"
-            app:useSimpleSummaryProvider="true"
-            android:defaultValue="default" />
-    </PreferenceCategory>
 
     <!-- Every gesture in one place (spec §4): first the five on a Home page's free area, whose
          choices are filled in code (HomeGesturesRows; the actions that need the accessibility
@@ -108,36 +68,15 @@
             app:title="@string/settings_widget_pane_enabled_title"
             app:summary="@string/settings_widget_pane_enabled_summary"
             android:defaultValue="true" />
-        <ListPreference
-            app:key="app_launcher_builtin_widget_style"
-            app:title="@string/settings_builtin_widget_style_title"
-            app:summary="@string/settings_builtin_widget_style_summary"
-            app:entries="@array/settings_builtin_widget_style_entries"
-            app:entryValues="@array/settings_builtin_widget_style_values"
-            app:useSimpleSummaryProvider="true"
-            android:defaultValue="sans" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="home_pages" app:title="@string/settings_home_pages_header">
-        <ListPreference
-            app:key="app_launcher_home_page_indicator"
-            app:title="@string/settings_home_page_indicator_title"
-            app:dialogTitle="@string/settings_home_page_indicator_title"
-            app:entries="@array/settings_home_page_indicator_entries"
-            app:entryValues="@array/settings_home_page_indicator_values"
-            app:useSimpleSummaryProvider="true"
-            android:defaultValue="dots" />
         <!-- Opens Edit pages over Home, as the Home sheet's Edit pages does. -->
         <Preference
             app:key="home_edit_pages"
             app:persistent="false"
             app:title="@string/settings_home_edit_pages_title"
             app:summary="@string/settings_home_edit_pages_summary" />
-        <SwitchPreferenceCompat
-            app:key="wallpaper_parallax"
-            app:title="@string/settings_wallpaper_parallax_title"
-            app:summary="@string/settings_wallpaper_parallax_summary"
-            android:defaultValue="true" />
         <!-- The Home sheet's Lock and Unlock write the same key. -->
         <SwitchPreferenceCompat
             app:key="app_launcher_home_layout_locked"

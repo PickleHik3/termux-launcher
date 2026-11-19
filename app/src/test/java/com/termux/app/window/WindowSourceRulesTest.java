@@ -133,7 +133,7 @@ public class WindowSourceRulesTest {
         // names the activity: takes a Host or PageHost instead
         "app/fragments/settings/termux/TerminalViewPreferencesDataStore.java:1",
         // names the activity: takes a Host or PageHost instead
-        "app/fragments/settings/termux/TermuxStylePreferencesFragment.java:1",
+        "app/fragments/settings/termux/TermuxStylePreferencesDataStore.java:1",
         // names the activity: takes a Host or PageHost instead
         "app/help/HelpActivity.java:1",
         // names the activity: takes a Host or PageHost instead

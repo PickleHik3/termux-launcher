@@ -44,7 +44,7 @@ import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.fragments.settings.termux.KeyboardLayoutsFragment;
 import com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment;
-import com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment;
+import com.termux.app.fragments.settings.termux.TuiAppThemesPreferencesFragment;
 import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.layouteditor.LayoutEditorController;
@@ -3857,8 +3857,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 openIconPackCard();
                 break;
             case TOOL_COLOURS:
-                openSettingsFromEditor(TermuxStylePreferencesFragment.class,
-                    R.string.appearance_row_tool_colours, null, TOOL_COLOURS_KEY);
+                openSettingsFromEditor(TuiAppThemesPreferencesFragment.class,
+                    R.string.appearance_row_tool_colours, null, null);
                 break;
             case LINK_GESTURES:
                 openSettingsFromEditor(HomePreferencesFragment.class,
@@ -6487,8 +6487,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private static final String HOME_GESTURES_SECTION = "home_gestures";
     /** Settings › Home's Pages section, which the Home card's Edit pages chip scrolls to. */
     private static final String HOME_PAGES_SECTION = "home_pages";
-    /** The tools that follow the terminal's colours, on the page the Tool colours chip opens. */
-    private static final String TOOL_COLOURS_KEY = "theme_templates_enabled";
 
     /** The Tint colour swatches' stored values, in order. */
     private String[] tintHueValues() {

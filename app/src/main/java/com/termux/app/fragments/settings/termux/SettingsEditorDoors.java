@@ -44,14 +44,63 @@ public final class SettingsEditorDoors {
 
     /**
      * The card that holds a searchable Settings row the editor owns (SettingsTree's Appearance
-     * door), by the row's key. Widgets on glass is Home's; every other row the editor holds
-     * (theme, wallpaper, colours, icons, full screen) is the Appearance card's, as is any key not
-     * listed.
+     * door), by the row's key. Home's rows (icon and label size, folders, widget numerals, page
+     * indicator, wallpaper scrolling, widgets on glass) are the Home card's; the status bar's
+     * switches and clock the Status bar card's; the terminal's effects, panes and font size the
+     * Terminal card's; the floating and split keyboard sizes the Keyboard card's. Every other row
+     * the editor holds (theme, wallpaper, colours, icons, full screen), and any key not listed,
+     * is Global's.
      */
     @NonNull
     public static EditorCard cardForSearchKey(@Nullable String key) {
-        if ("widgets_on_glass".equals(key)) return EditorCard.HOME;
-        return EditorCard.APPEARANCE;
+        if (key == null) return EditorCard.APPEARANCE;
+        if (isHomeOnlyKey(key)) return EditorCard.HOME;
+        switch (key) {
+            case "top_pane_clock_am_pm":
+            case "status_widget_cpu":
+            case "status_widget_ram":
+            case "status_widget_battery":
+            case "status_widget_media":
+            case "status_widget_weather":
+            case "status_widget_weather_fahrenheit":
+                return EditorCard.STATUS;
+            case "terminal_cursor_trail_style":
+            case "terminal_retro_effect":
+            case "terminal_screen_events":
+            case "terminal_retro_composite":
+            case "split_pane_controls":
+            case "pane_dwindle_default":
+            case "pane_focus_grows":
+            case "fonts_size":
+                return EditorCard.TERMINAL;
+            case "in_app_keyboard_floating_width":
+            case "in_app_keyboard_floating_height":
+            case "in_app_keyboard_split_gap":
+                return EditorCard.KEYBOARD;
+            default:
+                return EditorCard.APPEARANCE;
+        }
+    }
+
+    /**
+     * Whether {@code key} is a row of the Home card, which Use as Terminal only takes away: a
+     * search that hides Home's section hides these hits too.
+     */
+    public static boolean isHomeOnlyKey(@NonNull String key) {
+        switch (key) {
+            case "widgets_on_glass":
+            case "app_launcher_home_icon_scale":
+            case "app_launcher_home_label_size":
+            case "app_launcher_home_label_two_lines":
+            case "app_launcher_home_label_shadow":
+            case "app_launcher_home_folder_density":
+            case "app_launcher_builtin_widget_style":
+            case "app_launcher_home_page_indicator":
+            case "wallpaper_parallax":
+                return true;
+            default:
+                return false;
+        }
     }
 
     /**

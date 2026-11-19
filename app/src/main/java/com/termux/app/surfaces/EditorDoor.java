@@ -77,6 +77,8 @@ public enum EditorDoor {
     SETTINGS_TERMINAL("settings-terminal"),
     /** Settings › Keyboard › Edit on screen. */
     SETTINGS_KEYBOARD("settings-keyboard"),
+    /** Settings › Status bar › Edit on screen. */
+    SETTINGS_STATUS("settings-status"),
     /** Settings › Look (the root's Appearance row, and the row at the top of its page). */
     SETTINGS_LOOK("settings-look"),
     /** A Settings search hit on a row the editor holds; the card is the row's. */
@@ -133,6 +135,7 @@ public enum EditorDoor {
             case APP_MENU_EDIT_DOCK:
                 return EditorCard.DOCK;
             case POPUP_STATUS:
+            case SETTINGS_STATUS:
                 return EditorCard.STATUS;
             case EDITOR_PAGE_LABEL:
             case EDITOR_PAGE_SWIPE:

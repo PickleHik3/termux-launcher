@@ -68,16 +68,16 @@ public class SettingsSearchLandingTest {
         SettingsSearchPreference search = root.findPreference("settings_search");
         SettingsRowRing.sLastRungKey = null;
 
-        search.getOnQueryChangedListener().onQueryChanged("12-hour");
+        search.getOnQueryChangedListener().onQueryChanged("keep clear of the camera");
         SettingsSearchIndex.Entry first = root.searchResults().results().get(0);
-        assertEquals("top_pane_clock_am_pm", first.key);
-        search.getOnQuerySubmitListener().onQuerySubmit("12-hour");
+        assertEquals("status_bar_cutout_mode", first.key);
+        search.getOnQuerySubmitListener().onQuerySubmit("keep clear of the camera");
         idle(activity);
 
         assertEquals(PAGES + "StatusBarPreferencesFragment", shown(activity).getClass().getName());
         FragmentManager fm = activity.getSupportFragmentManager();
         assertEquals("Terminal, then Status bar", 2, fm.getBackStackEntryCount());
-        assertEquals("the row rang once", "top_pane_clock_am_pm", SettingsRowRing.sLastRungKey);
+        assertEquals("the row rang once", "status_bar_cutout_mode", SettingsRowRing.sLastRungKey);
 
         // Back walks up the tree, and the page does not ring again on the way.
         SettingsRowRing.sLastRungKey = null;
@@ -93,11 +93,11 @@ public class SettingsSearchLandingTest {
         SettingsActivity activity = open(new Intent(RuntimeEnvironment.getApplication(), SettingsActivity.class));
         SettingsActivity.RootPreferencesFragment root = (SettingsActivity.RootPreferencesFragment) shown(activity);
         EditText field = root.getView().findViewById(R.id.settings_search_input);
-        field.setText("12-hour");
+        field.setText("keep clear of the camera");
         assertFalse(root.searchResults().results().isEmpty());
 
         SettingsSearchPreference search = root.findPreference("settings_search");
-        search.getOnQuerySubmitListener().onQuerySubmit("12-hour");
+        search.getOnQuerySubmitListener().onQuerySubmit("keep clear of the camera");
         idle(activity);
         FragmentManager fm = activity.getSupportFragmentManager();
         fm.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
@@ -122,8 +122,8 @@ public class SettingsSearchLandingTest {
             (android.view.ViewGroup) shown(activity).getView()));
         SettingsSearchPreference search = ((SettingsActivity.RootPreferencesFragment) shown(activity))
             .findPreference("settings_search");
-        search.getOnQueryChangedListener().onQueryChanged("12-hour");
-        search.getOnQuerySubmitListener().onQuerySubmit("12-hour");
+        search.getOnQueryChangedListener().onQueryChanged("keep clear of the camera");
+        search.getOnQuerySubmitListener().onQuerySubmit("keep clear of the camera");
         idle(activity);
         assertTrue(androidx.core.view.ViewGroupCompat.isTransitionGroup(
             (android.view.ViewGroup) shown(activity).getView()));

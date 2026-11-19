@@ -19327,11 +19327,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
+    /** The palette's Look and Termux:Styling's fallback: the Appearance editor, on the Global card. */
     private void openLookAndFeelSettings() {
-        ActivityUtils.startActivity(this,
-            SettingsActivity.createFragmentIntent(this,
-                com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment.class,
-                R.string.settings_section_look));
+        openSurfaceEditor(com.termux.app.surfaces.EditorCard.APPEARANCE);
     }
 
     private void openAppsBarSettings() {

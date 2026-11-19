@@ -98,14 +98,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         preferenceManager.setPreferenceDataStore(store);
         setPreferencesFromResource(preferencesXml(), rootKey);
 
-        // Keyboard sizes are percentage ratios, whichever page holds them.
-        for (String key : new String[] {"in_app_keyboard_floating_width",
-            "in_app_keyboard_floating_height", "in_app_keyboard_split_gap"}) {
-            Preference slider = findPreference(key);
-            if (slider instanceof com.termux.app.fragments.settings.SliderPreference)
-                ((com.termux.app.fragments.settings.SliderPreference) slider).setValueSuffix("%");
-        }
-
         SegmentedPillPreference inputMethodPreference = findPreference("keyboard_input_method");
         if (inputMethodPreference == null) {
             // A focused subpage has no input-method row of its own: it follows the stored choice,
@@ -252,9 +244,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
     private void updateBuiltInKeyboardRows(boolean enabled) {
         Preference layout = findPreference("keyboard_layout");
-        Preference shapes = findPreference("keyboard_shapes");
         Preference feedback = findPreference("keyboard_feedback");
-        for (String key : new String[] {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"}) {
+        for (String key : new String[] {"keyboard_sub_layout", "keyboard_sub_typing"}) {
             Preference row = findPreference(key);
             if (row != null) row.setEnabled(enabled);
         }
@@ -262,7 +253,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         Preference look = findPreference("keyboard_appearance");
         if (look != null) look.setEnabled(enabled);
         if (layout != null) layout.setEnabled(enabled);
-        if (shapes != null) shapes.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);
     }
 

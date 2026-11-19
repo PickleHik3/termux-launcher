@@ -32,6 +32,13 @@
         app:fragment="com.termux.app.fragments.settings.termux.TerminalTextPreferencesFragment" />
 
     <Preference
+        app:key="terminal_sub_tui_themes"
+        app:persistent="false"
+        app:title="@string/appearance_row_tool_colours"
+        app:summary="@string/settings_terminal_sub_tui_themes_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.TuiAppThemesPreferencesFragment" />
+
+    <Preference
         app:key="terminal_sub_clipboard"
         app:persistent="false"
         app:title="@string/settings_terminal_sub_clipboard_title"
