@@ -170,6 +170,19 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
+    public void theSharedGlassIsLaidOutOverTheKeyboardOnceItReachesTheStacksBottom() {
+        // Pong's Terminal at rest: a 1063 px stack, the host 199 px below its top (the lane
+        // slack and the top inset), 864 px tall, over a 588 px keyboard. Its height is never the
+        // stack's, but it covers the keyboard: the keyboard wears no coat of its own.
+        assertTrue(ChromePolicy.unifiedHostLaidOut(1063, 864, 1063, 588));
+        // Still laid out for the dock alone: it stops short of the stack's bottom.
+        assertFalse(ChromePolicy.unifiedHostLaidOut(450, 251, 1063, 588));
+        // No taller than the keyboard: the old dock-only state.
+        assertFalse(ChromePolicy.unifiedHostLaidOut(1063, 588, 1063, 588));
+        assertFalse(ChromePolicy.unifiedHostLaidOut(1063, 864, 0, 588));
+    }
+
+    @Test
     public void unifiedKeyboardGlassWaitsForACropOnlyWhenThereIsOneToWaitFor() {
         // With a frame to blur, both the expanded layout and its crop have to be there before the
         // keyboard-local coat comes off, or the keyboard flashes sharp wallpaper.

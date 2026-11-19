@@ -8908,13 +8908,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewGroup.LayoutParams containerParams = accessoryContainer.getLayoutParams();
         int expectedHeight = containerParams != null && containerParams.height > 0
             ? containerParams.height : accessoryContainer.getHeight();
-        if (expectedHeight <= 0 || surfaceHost.getHeight() < expectedHeight) {
-            return false;
-        }
-        // Before expanded layout, both values above can still describe the old dock-only state and
-        // therefore appear consistent. A unified dock+keyboard host must be taller than the
-        // keyboard portion by itself.
-        return surfaceHost.getHeight() > state.keyboardHeight;
+        // Its bottom reaching the stack's, not its height matching it: asked that way the
+        // keyboard kept a coat of its own over the shared glass for good, a keyboard more opaque
+        // than the extra keys above it.
+        return ChromePolicy.unifiedHostLaidOut(surfaceHost.getBottom(), surfaceHost.getHeight(),
+            expectedHeight, state.keyboardHeight);
     }
 
     /**

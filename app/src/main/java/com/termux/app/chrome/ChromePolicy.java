@@ -65,6 +65,18 @@ public final class ChromePolicy {
      * painted the same translucent glass again on top. Two coats of one material is a visibly
      * darker keyboard, and no amount of matching the two recipes could have closed it.</p>
      */
+    /**
+     * Whether the dock's glass host is laid out over the keyboard too: its bottom reaches the
+     * stack's bottom ({@code stackHeightPx}) and it is taller than the keyboard alone. The host
+     * stands below the stack's top by the lane slack and its top inset, so its height is never
+     * the stack's own.
+     */
+    public static boolean unifiedHostLaidOut(int hostBottomPx, int hostHeightPx,
+                                             int stackHeightPx, int keyboardHeightPx) {
+        return stackHeightPx > 0 && hostBottomPx >= stackHeightPx
+            && hostHeightPx > keyboardHeightPx;
+    }
+
     public static boolean unifiedKeyboardSurfaceIsTheMaterial(boolean geometryReady,
                                                               boolean blurEnabled,
                                                               boolean cropReady) {
