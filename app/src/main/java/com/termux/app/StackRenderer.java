@@ -144,6 +144,14 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * landing's layout finds it already standing there.
      */
     private final float[] mRestHostTop = {Float.NaN, Float.NaN};
+    /**
+     * Each side's host top at its own rest as the pass works it out at rest (Home, the Workspace),
+     * NaN before it has; the arriving end of a crossing is aimed at this, so a side never rested
+     * on since the start, or last rested on with the keyboard the other way, lands where it rests.
+     */
+    private final float[] mPredictedHostTop = {Float.NaN, Float.NaN};
+    /** The arriving rest's top the last crossing aimed at, held after its landing. */
+    private float mHeldTop = Float.NaN;
     /** How far the host is moved off its layout on this frame; 0 at rest. */
     private float mHostShiftPx;
     /**
@@ -314,6 +322,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         requestApply();
     }
 
+    /** Each side's host top at its own rest, written by the pass at rest ({@link #mPredictedHostTop}). */
+    public void setRestHostTops(int homePx, int workspacePx) {
+        mPredictedHostTop[0] = homePx;
+        mPredictedHostTop[1] = workspacePx;
+    }
+
     /**
      * Each side's room, the window's bottom up to where its page's cells end
      * ({@link com.termux.app.place.PageRoom#wallInsetPx}): what the flat body surface is cut to at
@@ -379,18 +393,20 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                 return;
             }
             float from = mRestHostTop[mFromHome ? 0 : 1];
-            float to = mRestHostTop[mToHome ? 0 : 1];
+            float to = mPredictedHostTop[mToHome ? 0 : 1];
+            if (Float.isNaN(to)) to = mRestHostTop[mToHome ? 0 : 1];
             float layoutFrom = Float.isNaN(from) ? hostTop : from;
             float target = Float.isNaN(to) ? layoutFrom
                 : layoutFrom + (to - layoutFrom) * StackScene.materialShare(mEndsProgress);
             mHostShiftPx = target - hostTop;
             mHeldSide = mToHome ? 0 : 1;
+            mHeldTop = to;
             mHeldUntilMs = now + HOLD_REST_TOP_MS;
             mHeldLayoutTop = hostTop;
             return;
         }
         int front = mViews.frontIsHome() ? 0 : 1;
-        float rest = mRestHostTop[front];
+        float rest = mHeldTop;
         if (mHeldSide == front && !Float.isNaN(rest) && hostTop == mHeldLayoutTop
             && hostTop != rest && now < mHeldUntilMs) {
             mHostShiftPx = rest - hostTop;
@@ -403,7 +419,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mHostShiftPx = 0f;
         if (mRestHostTop[front] != hostTop && com.termux.app.chrome.MotionLog.enabled)
             com.termux.app.chrome.MotionLog.log("host-rest", "front=" + front + " top=" + hostTop
-                + " was=" + mRestHostTop[front]); // DIAG(host-shift)
+                + " was=" + mRestHostTop[front] + " predicted=" + mPredictedHostTop[0] + ","
+                + mPredictedHostTop[1]); // DIAG(host-shift)
         mRestHostTop[front] = hostTop;
     }
 

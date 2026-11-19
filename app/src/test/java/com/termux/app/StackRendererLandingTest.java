@@ -196,6 +196,25 @@ public class StackRendererLandingTest {
         }
     }
 
+    /**
+     * The first crossing toward a side never rested on (as after a restart) still lands the glass
+     * host where that side rests: it is aimed at the rest the pass works out, not one remembered.
+     */
+    @Test public void theHostReachesTheArrivingRestsTopWithoutHavingRestedThere() {
+        build(0, 0, false);
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        mContainer.addView(host);
+        host.layout(0, 63, WIDTH, 800);
+        mViews.put(R.id.accessory_surface_host, host);
+        mFrontHome = true;
+        mRenderer.setRestHostTops(63, 199);
+        mRenderer.applyAtRest();
+        mFrames.flush("test");
+        assertEquals(63f, host.getTop() + host.getTranslationY(), 0.5f);
+        lastCrossingFrame(true);
+        assertEquals(199f, host.getTop() + host.getTranslationY(), 0.5f);
+    }
+
     /** A traversal of {@code parent} at {@code heightPx}: measured, then laid out. */
     private static void layOut(View parent, int heightPx) {
         parent.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
