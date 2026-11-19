@@ -13969,6 +13969,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 * Math.max(0f, Math.min(1f, share))) * getResources().getDisplayMetrics().density;
             mGlass.livePicture(DOCK_GLASS, px, com.termux.app.chrome.LivePicture.class);
         }
+        if (mDockFilterBlendOn && mDockFilterHere != null && mDockFilterThere != null
+                && share != mDockFilterShare) {
+            mDockFilterShare = share;
+            mDockFilterNow = com.termux.app.chrome.GlassFilters.blend(mDockFilterHere,
+                mDockFilterThere, share);
+            ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+            if (backdrop != null) backdrop.setColorFilter(mDockFilterNow);
+        }
         if (mDockCoverBlendOn) {
             float cover = mDockCoverHere + (mDockCoverThere - mDockCoverHere)
                 * Math.max(0f, Math.min(1f, share));
@@ -14017,7 +14025,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockCoverThere = coverThere;
         mDockCoverNow = mDockCoverHere;
         mDockCoverBlendOn = mDockCoverHere >= 0f && mDockCoverHere != mDockCoverThere;
+        // And its frost: the even-out each look's dock measured over its own rest, from the one
+        // up now to the arriving look's as it was last measured there.
+        mDockFilterBlendOn = false;
+        mDockFilterNow = null;
+        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+        android.graphics.ColorMatrix filterHere = backdrop == null ? null
+            : com.termux.app.chrome.GlassFilters.matrixOf(backdrop.getColorFilter());
+        android.graphics.ColorMatrix filterThere = mDockFilterAtRest.get(lookIdOf(there));
+        if (filterHere != null && filterThere != null
+            && !java.util.Arrays.equals(filterHere.getArray(), filterThere.getArray())) {
+            mDockFilterHere = filterHere;
+            mDockFilterThere = filterThere;
+            mDockFilterShare = 0f;
+            mDockFilterNow = backdrop.getColorFilter();
+            mDockFilterBlendOn = true;
+        }
     }
+
+    /** The dock frost at each end of a look blend, and the one drawn now. */
+    @Nullable private android.graphics.ColorMatrix mDockFilterHere;
+    @Nullable private android.graphics.ColorMatrix mDockFilterThere;
+    @Nullable private android.graphics.ColorFilter mDockFilterNow;
+    private float mDockFilterShare;
+    private boolean mDockFilterBlendOn;
 
     /** The dock program's cover at each end of a look blend, and the one it is built with now. */
     private float mDockCoverHere;
@@ -14081,6 +14112,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockFrostBlendOn = false;
         if (mDockCoverBlendOn) mDockCoverPending = true;
         mDockCoverBlendOn = false;
+        // The landing's pass measures the arriving frost afresh; what the blend left up stands
+        // until then.
+        mDockFilterBlendOn = false;
         com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
         mKeyboardLookBlend = null;
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
@@ -17619,8 +17653,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The last pass's squeeze, an input to every snapshot asked between two passes.
         mDock.setDockSqueezePx(stack.squeezePx);
         mAppliedTerminalFlushPaddingPx = stack.flushPaddingPx;
-        if (terminalOnScreen && !state.keyboardShown && !mCrossing.crossing())
+        if (terminalOnScreen && !state.keyboardShown && !mCrossing.crossing()) {
             mTerminalRestFlushPaddingPx = stack.flushPaddingPx;
+            mTerminalRestFlushKnown = true;
+        }
 
         noteLanes(stackIn.dock);
         boolean dockMoved = mDock.applyDockLayout(stack.dock, stackIn.dock.arrangement);
@@ -18114,13 +18150,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     .ownRows(measuredToolbarPx));
             slack = com.termux.app.place.StackLanes.slackPx(otherRows, frontRows);
         }
-        // The Terminal stands its flush padding only at a rest with the keyboard down.
-        slack += com.termux.app.place.StackLanes.flushSlackPx(mTerminalRestFlushPaddingPx,
-            otherStandsFlush ? mTerminalRestFlushPaddingPx : 0);
+        // The Terminal stands its flush padding only at a rest with the keyboard down. Until it
+        // has rested with it down (as after a restart on Home) it is worked out the way its own
+        // pass would, from its rest's room and the laid-out terminal.
+        int flush = mTerminalRestFlushKnown || !frontHome ? mTerminalRestFlushPaddingPx
+            : Math.max(0, resolveTerminalFlushDockPaddingPx(
+                mCrossingController == null ? 0 : mCrossingController.travelRestReservationPx(
+                    com.termux.app.page.PageKind.TERMINAL, false), 0));
+        slack += com.termux.app.place.StackLanes.flushSlackPx(flush,
+            otherStandsFlush ? flush : 0);
         int slabInset = com.termux.app.dock.DockGeometry.compute(snapshot.restOf(otherPage))
             .slabTopInsetPx;
         return (mStatusBarOnDockPlank ? 0 : mStatusBar.bottomStatusBandPx()) + slabInset + slack;
     }
+
+    /** Whether {@link #mTerminalRestFlushPaddingPx} was taken from a Terminal rest yet. */
+    private boolean mTerminalRestFlushKnown;
 
     /** The keyboard's keys' height (its foot not counted) the container is laid out taller by, with the foot, while it is down. */
     private int mKeyboardDownLaidOutPx;
@@ -23496,6 +23541,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private android.graphics.ColorFilter dockFrostFilter(@Nullable View surfaceHost) {
+        // Across a look blend the frost is the blend's (beginDockFrostBlend): a pass on the way
+        // re-measures nothing the eye would see change.
+        if (mDockFilterBlendOn && mDockFilterNow != null) {
+            if (mChrome != null)
+                mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK, true);
+            return mDockFilterNow;
+        }
+        android.graphics.ColorFilter filter = measureDockFrostFilter(surfaceHost);
+        // Each look's frost as it stands at rest, for a crossing toward it to blend into.
+        if (surfaceHost != null && !mCrossing.crossing()) {
+            android.graphics.ColorMatrix matrix =
+                com.termux.app.chrome.GlassFilters.matrixOf(filter);
+            if (matrix != null) mDockFilterAtRest.put(stackLookPage(), matrix);
+        }
+        return filter;
+    }
+
+    /** Each look's dock frost matrix as last worked out at rest, by look page id. */
+    private final android.util.SparseArray<android.graphics.ColorMatrix> mDockFilterAtRest =
+        new android.util.SparseArray<>();
+
+    @Nullable
+    private android.graphics.ColorFilter measureDockFrostFilter(@Nullable View surfaceHost) {
         android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
             mPreferences != null ? mPreferences.getAppBarOpacity(stackLookPage()) : 100);
         if (mChrome == null) return frost;
