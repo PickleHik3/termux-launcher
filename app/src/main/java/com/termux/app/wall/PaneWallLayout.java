@@ -3002,9 +3002,15 @@ public final class PaneWallLayout extends ViewGroup
      * the dim as its paint; none otherwise. Only ever called for a page the plank, the sink or the
      * transition has touched.
      */
+    // DIAG(page-layer): debug.tl.page_layer=off draws posed pages without a layer; revert before merge.
+    private static final com.termux.terminal.DebugChoice PAGE_LAYER =
+        new com.termux.terminal.DebugChoice("debug.tl.page_layer", "on",
+            com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
+
     private void syncPageLayer(@NonNull View page) {
         boolean dimmed = page == mSinkPage && mSinkLayered;
-        if (mTiltPages.contains(page) || dimmed || mPosedPages.contains(page)) {
+        boolean layered = !"off".equals(PAGE_LAYER.get(android.os.SystemClock.uptimeMillis()));
+        if (dimmed || (layered && (mTiltPages.contains(page) || mPosedPages.contains(page)))) {
             page.setLayerType(View.LAYER_TYPE_HARDWARE, dimmed ? mSinkPaint : null);
         } else {
             page.setLayerType(View.LAYER_TYPE_NONE, null);

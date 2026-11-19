@@ -204,4 +204,19 @@ public final class DockSurfaceHostLayout extends FrameLayout
     public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
         drawChild(canvas, child, getDrawingTime());
     }
+
+    // DIAG(host-ty): every change of the host's translationY with its caller; revert before merge.
+    @Override
+    public void setTranslationY(float translationY) {
+        if (com.termux.app.chrome.MotionLog.enabled && translationY != getTranslationY()) {
+            StackTraceElement[] st = new Throwable().getStackTrace();
+            StringBuilder by = new StringBuilder();
+            for (int k = 1; k < Math.min(st.length, 4); k++)
+                by.append(st[k].getClassName().replaceAll(".*\\.", "")).append('.')
+                    .append(st[k].getMethodName()).append(':').append(st[k].getLineNumber()).append(' ');
+            com.termux.app.chrome.MotionLog.log("host-ty", "was=" + getTranslationY() + " now="
+                + translationY + " by=" + by);
+        }
+        super.setTranslationY(translationY);
+    }
 }

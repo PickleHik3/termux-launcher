@@ -25,6 +25,9 @@ public final class PageTicksWriter {
         strip = next;
         if (previous != null) {
             previous.setPages(1, 0f, -1);
+            if (com.termux.app.chrome.MotionLog.enabled && previous.getVisibility() == View.VISIBLE)
+                com.termux.app.chrome.MotionLog.log("ticks-shown", "shown=false unbound by="
+                    + caller()); // DIAG(ticks-shown)
             previous.setVisibility(View.INVISIBLE);
         }
         if (last != null) writeTo(strip, last);
@@ -42,6 +45,16 @@ public final class PageTicksWriter {
         return strip;
     }
 
+    // DIAG(ticks-shown): revert before merge.
+    private static String caller() {
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        StringBuilder by = new StringBuilder();
+        for (int k = 2; k < Math.min(st.length, 8); k++)
+            by.append(st[k].getClassName().replaceAll(".*\\.", "")).append('.')
+                .append(st[k].getMethodName()).append(':').append(st[k].getLineNumber()).append(' ');
+        return by.toString();
+    }
+
     private static void writeTo(@Nullable PageTickStripView target, @NonNull PageTicks ticks) {
         if (target == null) return;
         target.setVerticalForm(ticks.vertical);
@@ -54,7 +67,7 @@ public final class PageTicksWriter {
         // DIAG(ticks-shown): a change of the strip's shown state; reverted before merge.
         if (com.termux.app.chrome.MotionLog.enabled && target.getVisibility() != visibility)
             com.termux.app.chrome.MotionLog.log("ticks-shown", "shown=" + ticks.shown
-                + " pages=" + ticks.pages + " pos=" + ticks.position);
+                + " pages=" + ticks.pages + " pos=" + ticks.position + " by=" + caller());
         target.setVisibility(visibility);
     }
 }

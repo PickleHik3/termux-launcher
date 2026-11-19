@@ -136,6 +136,29 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private final StackEnd mEndHome = new StackEnd(PageRef.HOME);
     private final StackEnd mEndWorkspace = new StackEnd(PageRef.TERMINAL);
     private boolean mHasEnds;
+    /**
+     * The glass host's laid-out top in the stack at each side's rest (Home, the Workspace), NaN
+     * until that side has been seen at rest. The host is laid out for the front side's rest, so a
+     * crossing moves it from where the leaving rest has it toward where the arriving rest does by
+     * the material share ({@link #hostShiftPx}): the slab never slides, its top blends, and the
+     * landing's layout finds it already standing there.
+     */
+    private final float[] mRestHostTop = {Float.NaN, Float.NaN};
+    /** How far the host is moved off its layout on this frame; 0 at rest. */
+    private float mHostShiftPx;
+    /**
+     * The side a crossing just arrived at while the host is still laid out for the side it left:
+     * its rest top is held until the arrival's layout comes, never past {@link #mHeldUntilMs}.
+     */
+    private int mHeldSide = -1;
+    private long mHeldUntilMs;
+    /** The longest the arrival's rest top is held waiting for its layout. */
+    private static final long HOLD_REST_TOP_MS = 600L;
+    @Nullable private View mWatchedHost;
+    private final View.OnLayoutChangeListener mHostLayout =
+        (v, l, t, r, b, ol, ot, or, ob) -> {
+            if (t != ot || b != ob) requestApply();
+        };
     private boolean mFromHome;
     private boolean mToHome;
     private float mEndsProgress;
@@ -329,7 +352,51 @@ public final class StackRenderer implements DockPlankController.SlabSink {
 
     /** The frame last written: the Peek reflection reads its rows' offset from the host here. */
     public float rowsOverHostPx() {
-        return mFrame.ty[StackScene.V_ROWS] - mFrame.ty[StackScene.V_HOST];
+        return mFrame.ty[StackScene.V_ROWS] - mFrame.ty[StackScene.V_HOST] - mHostShiftPx;
+    }
+
+    /** How far the glass host stands off its layout on this frame ({@link #mRestHostTop}). */
+    public float hostShiftPx() {
+        return mHostShiftPx;
+    }
+
+    /**
+     * The host's shift for this frame: across a crossing between the sides, from the leaving
+     * rest's top to the arriving rest's by the material share; on the frames after a landing,
+     * the arriving rest's until its layout comes; 0 at rest, where the rest's top is recorded.
+     */
+    private void shiftHost(int hostTop) {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (mHasEnds) {
+            if (mFromHome == mToHome) {
+                mHostShiftPx = 0f;
+                return;
+            }
+            float from = mRestHostTop[mFromHome ? 0 : 1];
+            float to = mRestHostTop[mToHome ? 0 : 1];
+            float layoutFrom = Float.isNaN(from) ? hostTop : from;
+            float target = Float.isNaN(to) ? layoutFrom
+                : layoutFrom + (to - layoutFrom) * StackScene.materialShare(mEndsProgress);
+            mHostShiftPx = target - hostTop;
+            mHeldSide = mToHome ? 0 : 1;
+            mHeldUntilMs = now + HOLD_REST_TOP_MS;
+            return;
+        }
+        int front = mViews.frontIsHome() ? 0 : 1;
+        float rest = mRestHostTop[front];
+        if (mHeldSide == front && !Float.isNaN(rest) && hostTop != rest && now < mHeldUntilMs) {
+            mHostShiftPx = rest - hostTop;
+            if (com.termux.app.chrome.MotionLog.enabled)
+                com.termux.app.chrome.MotionLog.log("host-hold", "front=" + front + " rest=" + rest
+                    + " layout=" + hostTop); // DIAG(host-shift)
+            return;
+        }
+        mHeldSide = -1;
+        mHostShiftPx = 0f;
+        if (mRestHostTop[front] != hostTop && com.termux.app.chrome.MotionLog.enabled)
+            com.termux.app.chrome.MotionLog.log("host-rest", "front=" + front + " top=" + hostTop
+                + " was=" + mRestHostTop[front]); // DIAG(host-shift)
+        mRestHostTop[front] = hostTop;
     }
 
     /** One rest change or chrome commit at rest: written unless another surface owns the stack. */
@@ -362,6 +429,14 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             StackScene.at(front, front, 0f, mEffective, mGeometry, mFrame);
         }
         mPlankTarget = plankTarget();
+        View hostView = mViews.view(LAYER_IDS[StackGeometry.HOST]);
+        if (hostView != null && hostView != mWatchedHost) {
+            if (mWatchedHost != null) mWatchedHost.removeOnLayoutChangeListener(mHostLayout);
+            mWatchedHost = hostView;
+            hostView.addOnLayoutChangeListener(mHostLayout);
+        }
+        if (mGeometry.layerPresent[StackGeometry.HOST])
+            shiftHost(mGeometry.layerTopPx[StackGeometry.HOST]);
 
         boolean containerMoved = writeTy(StackScene.V_CONTAINER, container,
             mFrame.ty[StackScene.V_CONTAINER] + plankTy(PLANK_CONTAINER));
@@ -380,7 +455,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             View layer = mViews.view(LAYER_IDS[i]);
             if (layer == null) continue;
             boolean host = i == StackGeometry.HOST;
-            layersMoved |= writeTy(v, layer, mFrame.ty[v] + (host ? plankTy(PLANK_HOST) : 0f));
+            layersMoved |= writeTy(v, layer, mFrame.ty[v]
+                + (host ? plankTy(PLANK_HOST) + mHostShiftPx : 0f));
             if (host) writePlank(v, layer, PLANK_HOST, 0f);
             layersMoved |= writeClip(v, layer);
         }

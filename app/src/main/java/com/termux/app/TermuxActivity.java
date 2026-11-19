@@ -7126,7 +7126,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (MotionLog.enabled) MotionLog.log("peek-card", "card=" + (card != null)
             + " homeRest=" + isHomeAtRest() + " share=" + mPeekShare + " travel="
             + peekChromeTravelling() + " dress=" + stackDressPage());
-        mPeekCardRowsPx = mStackRenderer.rowsOverHostPx();
+        mPeekCardRowsPx = peekRowsOverHost();
         if (!isHomeAtRest()) return;
         View host = findViewById(R.id.accessory_surface_host);
         mHomeRestCard = card;
@@ -7161,8 +7161,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void peekCardCut(@NonNull com.termux.app.dock.PeekGlassGeometry.Card card,
                              @NonNull float[] out) {
         float cutAt = card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx;
-        com.termux.app.dock.PeekGlassGeometry.cut(card, mStackRenderer.rowsOverHostPx() - cutAt,
-            out);
+        com.termux.app.dock.PeekGlassGeometry.cut(card, peekRowsOverHost() - cutAt, out);
+    }
+
+    /**
+     * How far the apps row stands below the dock's glass host, in the stack, as drawn now: each
+     * one's layout and every translation up to the stack's container. Whatever moves one and not
+     * the other (the host's layout at another rest, its shift across a crossing, the rows riding
+     * the keyboard) moves the card's top, the icons' centre line, by as much.
+     */
+    private float peekRowsOverHost() {
+        View row = mSuggestionBarView;
+        View host = findViewById(R.id.accessory_surface_host);
+        View container = findViewById(R.id.accessory_stack_container);
+        if (row == null || host == null || container == null) return 0f;
+        return drawnTopIn(row, container) - drawnTopIn(host, container);
+    }
+
+    /** {@code view}'s top in {@code ancestor}: layouts, scrolls and translations on the way up. */
+    private static float drawnTopIn(@NonNull View view, @NonNull View ancestor) {
+        float y = 0f;
+        View current = view;
+        while (current != null && current != ancestor) {
+            y += current.getTop() + current.getTranslationY();
+            android.view.ViewParent parent = current.getParent();
+            if (!(parent instanceof View)) return y;
+            current = (View) parent;
+            if (current != ancestor) y -= current.getScrollY();
+        }
+        return y;
     }
 
     /** How much of the card is drawn: Home's share while the card blends, else all of it. */
@@ -7193,7 +7220,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onPeekShare(float share) {
         float was = mPeekShare;
-        float rows = mStackRenderer.rowsOverHostPx();
+        float rows = peekRowsOverHost();
         if (share == was && rows == mPeekDrawnRowsPx) return;
         mPeekDrawnRowsPx = rows;
         View host = findViewById(R.id.accessory_surface_host);
