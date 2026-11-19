@@ -20516,14 +20516,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull
         @Override
         public Drawable chipBackground() {
-            // The rename chip is a popup: the Sheets element's glass (ADR 0017).
-            com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, restingPage());
+            // The rename chip is a popup: a sheet, Global's glass with the sheets' opacity floor.
+            com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(mPreferences);
             float barAlpha = mPreferences != null ? sheets.tintAlpha() : 0.5f;
             int grain = mPreferences != null ? sheets.grainPercent
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-            // Modifiers: floored above the Sheets opacity, and half the chip's 40dp height for a
-            // full pill, with the same containing rim the other floating glass surfaces carry.
-            return mChrome.glass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.88f), 0f, 1f, false, grain,
+            // Modifiers: half the chip's 40dp height for a full pill, with the same containing
+            // rim the other floating glass surfaces carry.
+            return mChrome.glass().forElement(sheets).surface(barAlpha, 0f, 1f, false, grain,
                 dpToPx(20f), !sheets.rimOff(), null, sheets.tintPercent);
         }
 

@@ -474,9 +474,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getAppLauncherDrawerCornerRadius() {
         LookGrid grid = lookGrid();
-        if (!grid.has(LookGrid.Property.CORNERS, LookGrid.Element.SHEETS))
-            return TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS;
-        int value = grid.value(LookGrid.Property.CORNERS, LookGrid.Element.SHEETS);
+        // The drawer is a sheet: it wears Global's Corners, with no value of its own.
+        int value = grid.value(LookGrid.Property.CORNERS, null);
         if (value < 0) return TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_CORNER_RADIUS;
         return Math.min(TERMUX_APP.MAX_APP_LAUNCHER_DRAWER_CORNER_RADIUS, value);
     }
