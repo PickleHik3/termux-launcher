@@ -17463,6 +17463,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean keyboardOverlays = mCrossing.holdsContent()
             || KeyboardOverlayPolicy.overlays(mLastWallPage, isDisplayWindowInFront(),
                 arrangement().layout());
+        // DIAG(display-kb): the overlay decision and what it read, on change; revert before merge.
+        if (MotionLog.enabled) {
+            View display = mDisplayKeys == null ? null : mDisplayKeys.displayView();
+            String d = "overlays=" + keyboardOverlays + " holds=" + mCrossing.holdsContent()
+                + " last=" + mLastWallPage + " displayFront=" + isDisplayWindowInFront()
+                + " mode=" + arrangement().layout().keyboardMode + " form="
+                + arrangement().layout().keyboardForm + " kbShown=" + state.keyboardShown
+                + " kbH=" + state.keyboardHeight + " displayH="
+                + (display == null ? -1 : display.getHeight());
+            if (!d.equals(mDiagDisplayKb)) {
+                mDiagDisplayKb = d;
+                MotionLog.log("display-kb", d);
+            }
+        }
         // The keyboard coming and going is also when the place's claim on the system IME changes.
         applyPlaceSystemImeOwner();
         int toolbarHeightPx = state.extraKeysRowEnabled ? measuredToolbarHeightPx : 0;
@@ -27092,6 +27106,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // page, a frame between would draw the bare wallpaper.
         mDisplayPageBinding.ensureFrame();
     }
+
+    @Nullable private String mDiagDisplayKb; // DIAG(display-kb)
 
     /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
     private boolean isLayerOpen() {
