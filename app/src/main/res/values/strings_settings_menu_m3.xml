@@ -13,7 +13,7 @@
     <string name="settings_section_terminal_summary">Windows, status bar and text</string>
     <string name="settings_section_look">Appearance</string>
     <string name="settings_section_look_summary">Wallpaper, glass, theme and icons</string>
-    <string name="settings_section_keyboard_summary">Layouts, size and voice</string>
+    <string name="settings_section_keyboard_summary">Layouts, typing and voice</string>
     <string name="settings_section_notifications_summary">Dots, pinned alerts and history</string>
     <string name="settings_section_ai_summary">Models, voice and assistant</string>
     <string name="settings_section_general">General</string>
@@ -39,8 +39,8 @@
     <string name="settings_apps_linux_apps_link_summary">Show, hide and set them up</string>
 
     <string name="settings_terminal_sub_windows_title">Windows &amp; panes</string>
-    <string name="settings_terminal_sub_windows_summary">Tiling, focus, hints and program control</string>
-    <string name="settings_terminal_sub_status_summary">Clock, CPU, memory, media and weather</string>
+    <string name="settings_terminal_sub_windows_summary">Key hints and program control</string>
+    <string name="settings_terminal_sub_status_summary">Weather place and camera gap</string>
     <string name="settings_terminal_sub_text_title">Text &amp; display</string>
     <string name="settings_terminal_sub_text_summary">Terminal font</string>
     <string name="settings_terminal_sub_tui_themes_summary">Tools that follow the terminal colours</string>
