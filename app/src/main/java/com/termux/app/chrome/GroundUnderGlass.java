@@ -41,11 +41,6 @@ public final class GroundUnderGlass extends Drawable {
     @Nullable private GroundStripView mStrip;
     private boolean mCarried;
     private int mAlpha = 255;
-    // DIAG(283): what the glass last logged; revert before merge.
-    private int mLoggedLeft;
-    private int mLoggedMid;
-    private int mLoggedRight;
-    private int mLoggedCount;
 
     /** A glass that is {@code host} itself, or its overlay: the bars and the dock's backdrop. */
     public GroundUnderGlass(@NonNull View host, @NonNull String tag) {
@@ -145,28 +140,8 @@ public final class GroundUnderGlass extends Drawable {
         if (strip == null || host == null) return;
         Rect bounds = getBounds();
         if (bounds.isEmpty()) return;
-        float leftInWall = strip.drawUnder(canvas, host, bounds.left, bounds.top, bounds.right,
-            bounds.bottom, mAlpha);
-        // DIAG(283): the ground drawn under this glass at its left, middle and right, on change
-        // (each frame of a crossing whose seam is in view); revert before merge.
-        if (MotionLog.enabled && !Float.isNaN(leftInWall)) {
-            float width = bounds.width();
-            int left = GlassGround.faded(strip.groundAtWallX(leftInWall + 1f), mAlpha);
-            int mid = GlassGround.faded(strip.groundAtWallX(leftInWall + width / 2f), mAlpha);
-            int right = GlassGround.faded(strip.groundAtWallX(leftInWall + width - 1f), mAlpha);
-            int count = strip.bandCount();
-            if (count > 1 || left != mLoggedLeft || mid != mLoggedMid || right != mLoggedRight
-                    || count != mLoggedCount) {
-                mLoggedLeft = left;
-                mLoggedMid = mid;
-                mLoggedRight = right;
-                mLoggedCount = count;
-                MotionLog.log("glass-ground", "glass=" + mTag + " bands=" + count
-                    + " x=" + Math.round(leftInWall) + " w=" + Math.round(width)
-                    + " dimL=" + (left >>> 24) + " dimM=" + (mid >>> 24)
-                    + " dimR=" + (right >>> 24) + " argbM=" + Integer.toHexString(mid));
-            }
-        }
+        strip.drawUnder(canvas, host, bounds.left, bounds.top, bounds.right, bounds.bottom,
+            mAlpha);
     }
 
     /** A stack's one alpha (a fade, {@link GlassStack#applyStackAlpha}) fades the ground too. */
