@@ -9612,6 +9612,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                @NonNull Bitmap frame, @NonNull Rect frameRect,
                                                int blurRadiusDp) {
         android.graphics.drawable.Drawable live = liveDockPicture(backdrop, blurRadiusDp);
+        // Prototype #283: the page's ground over the stored frame; a Live picture records the
+        // ground strip beneath the dock already.
+        syncDockGround(backdrop, live != null);
         if (live != null) {
             // Live blur: the picture records what is beneath the dock; it is aimed by the recording.
             if (backdrop.getDrawable() != live) backdrop.setImageDrawable(live);
@@ -9628,6 +9631,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The surface moved or the geometry changed, or this would not have run: re-aim now, since
         // a view whose ancestor moved is not redrawn on its own.
         backdrop.invalidate();
+    }
+
+    /** Prototype #283: the ground drawn in the dock backdrop's overlay; null until first needed. */
+    @Nullable private com.termux.app.chrome.GroundUnderGlass mDockGround;
+
+    /**
+     * Prototype #283 ({@link com.termux.app.chrome.GlassGround}): the dock's backdrop wears the
+     * page's ground in its overlay, over its frost filter's output and under its refraction, and
+     * rides the strip so a seam crossing beneath redraws it. {@code carried}: its picture is Live
+     * and holds the strip already.
+     */
+    private void syncDockGround(@NonNull ImageView backdrop, boolean carried) {
+        if (!com.termux.app.chrome.GlassGround.ON) return;
+        if (mDockGround == null) {
+            com.termux.app.chrome.GroundUnderGlass ground =
+                new com.termux.app.chrome.GroundUnderGlass(backdrop, "dock");
+            mDockGround = ground;
+            backdrop.getOverlay().add(ground);
+            ground.setBounds(0, 0, backdrop.getWidth(), backdrop.getHeight());
+            backdrop.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
+                ground.setBounds(0, 0, r - l, b - t));
+            ground.attach();
+        }
+        mDockGround.setCarried(carried);
     }
 
     @Nullable
@@ -13791,7 +13818,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int dockLegibilityLook(@NonNull com.termux.app.wall.PageRef page) {
         if (mPreferences == null) return 0;
         int look = lookIdOf(page);
-        return mPreferences.getAppBarOpacity(look) * 131 + mPreferences.getDockTintStrength(look);
+        int dress = mPreferences.getAppBarOpacity(look) * 131 + mPreferences.getDockTintStrength(look);
+        // Prototype #283: the dock's glass shows the page's ground, so its face moves with it.
+        return com.termux.app.chrome.GlassGround.ON
+            ? dress * 31 + groundOfWallPage(page.kind) : dress;
     }
 
     /** The store stands down while a crossing runs; read from the crossing itself, so it cannot stick. */
@@ -13825,9 +13855,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!store.needsMeasure(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
                     rest.left, rest.top, rest.right, rest.bottom, look)) continue;
             int lookId = lookIdOf(other);
-            int there = mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, rest,
-                mPreferences.getAppBarOpacity(lookId) / 100f,
-                mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)));
+            float opacity = mPreferences.getAppBarOpacity(lookId) / 100f;
+            int tint = mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId));
+            // Prototype #283: measured over the arriving page's ground, which its dock shows.
+            int there = com.termux.app.chrome.GlassGround.ON
+                ? mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, rest, opacity, tint,
+                    groundOfWallPage(kind))
+                : mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, rest, opacity, tint);
             if (Color.alpha(there) == 0) continue;
             store.recordFace(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
                 rest.left, rest.top, rest.right, rest.bottom, look, there);

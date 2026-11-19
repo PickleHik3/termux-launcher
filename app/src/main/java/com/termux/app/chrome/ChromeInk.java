@@ -366,6 +366,16 @@ public final class ChromeInk {
          * #noteBandFrame}): it is drawn over the page's dim, so its content stands on no dim.
          */
         boolean framed;
+        /**
+         * Prototype #283: the band's glass draws the page's ground over its frame
+         * ({@link GlassGround#drawsGround}), so its content stands on the page's dim framed or not.
+         */
+        boolean groundDrawn;
+    }
+
+    /** Whether the page's dim is off {@code glass}'s face: a frame covers it and draws no ground. */
+    private static boolean dimHidden(@NonNull BandGlass glass) {
+        return glass.framed && !glass.groundDrawn;
     }
 
     /**
@@ -382,7 +392,7 @@ public final class ChromeInk {
     /** {@link #groundDim} for {@code band} under {@code rootRect}. */
     @ColorInt
     private int bandDim(@NonNull GlassBackdropCache.Band band, @NonNull Rect rootRect) {
-        return glassFor(band).framed ? Color.TRANSPARENT : dimUnder(rootRect);
+        return dimHidden(glassFor(band)) ? Color.TRANSPARENT : dimUnder(rootRect);
     }
 
     /**
@@ -1418,7 +1428,7 @@ public final class ChromeInk {
             memo = new BandEvenOut();
             mBandEvenOut.put(band, memo);
         }
-        return measureEvenOut(memo, policy, root, glassFor(band), glassFor(band).framed);
+        return measureEvenOut(memo, policy, root, glassFor(band), dimHidden(glassFor(band)));
     }
 
     /**
@@ -1907,7 +1917,7 @@ public final class ChromeInk {
         int worst = 0;
         double worstRatio = Double.MAX_VALUE;
         for (int i = 0; i < rows.length; i++) {
-            int rowUnder = OnGlass.backdrop(rows[i], groundDim(glass.framed, mDimColor),
+            int rowUnder = OnGlass.backdrop(rows[i], groundDim(dimHidden(glass), mDimColor),
                 Color.TRANSPARENT);
             float stop = DockGlassRendering.worstLightModelStop(ink, rowUnder, baseColor,
                 baseAlpha, mAccentColor, top, mid, foot, rowPosition(glass, i),
@@ -2219,11 +2229,30 @@ public final class ChromeInk {
                               float opacity, @ColorInt int tintBase) {
         readMode();
         toRootSpace(screenRect, mTmpRootRect);
+        return faceUnderGlassOn(band, opacity, tintBase, bandDim(band, mTmpRootRect));
+    }
+
+    /**
+     * Prototype #283: {@link #faceUnderGlass} over {@code pageGround}, another page's ground, for
+     * a band whose glass shows the page's ground: the face the band will show at that page's rest,
+     * measured from here, so a crossing toward it lands on the face it drifted to.
+     */
+    @ColorInt
+    public int faceUnderGlass(@NonNull GlassBackdropCache.Band band, @NonNull Rect screenRect,
+                              float opacity, @ColorInt int tintBase, @ColorInt int pageGround) {
+        readMode();
+        toRootSpace(screenRect, mTmpRootRect);
+        int dim = dimHidden(glassFor(band)) ? Color.TRANSPARENT : pageGround;
+        return faceUnderGlassOn(band, opacity, tintBase, dim);
+    }
+
+    @ColorInt
+    private int faceUnderGlassOn(@NonNull GlassBackdropCache.Band band, float opacity,
+                                 @ColorInt int tintBase, @ColorInt int dim) {
         int wallpaper = mCache.wallpaperUnder(band, mTmpRootRect);
         if (!mCache.hasSample(band)) return Color.TRANSPARENT;
         float clamped = opacity < 0f ? 0f : (opacity > 1f ? 1f : opacity);
-        return WallpaperInk.faceOf(evened(band, wallpaper), bandDim(band, mTmpRootRect), tintBase,
-            clamped);
+        return WallpaperInk.faceOf(evened(band, wallpaper), dim, tintBase, clamped);
     }
 
     /**
@@ -2338,7 +2367,7 @@ public final class ChromeInk {
         int foot = DockGlassRendering.footAlpha(glass.opacity, glass.withFoot);
         int[] faces = new int[rows.length];
         for (int i = 0; i < rows.length; i++) {
-            int under = OnGlass.backdrop(rows[i], groundDim(glass.framed, mDimColor),
+            int under = OnGlass.backdrop(rows[i], groundDim(dimHidden(glass), mDimColor),
                 Color.TRANSPARENT);
             float centre = (rowPosition(glass, i) + rowPosition(glass, i + 1)) / 2f;
             int surface = DockGlassRendering.glassSurfaceAt(centre, under, baseColor, baseAlpha,
@@ -2375,6 +2404,7 @@ public final class ChromeInk {
         g.baseColor = tintBase;
         g.blurRadiusDp = real.blurRadiusDp;
         g.framed = real.framed;
+        g.groundDrawn = real.groundDrawn;
         double target = mLevel.target(c.target);
         int baseAlpha = ChromePolicy.dockGlassBaseAlpha(g.opacity);
         int baseColor = baseOf(g);
@@ -2749,6 +2779,7 @@ public final class ChromeInk {
         BandGlass glass = mGlass.get(pane);
         if (glass == null) {
             glass = new BandGlass();
+            glass.groundDrawn = GlassGround.drawsGround(pane);
             mGlass.put(pane, glass);
         }
         return glass;

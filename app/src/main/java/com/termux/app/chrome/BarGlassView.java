@@ -32,6 +32,8 @@ public class BarGlassView extends View {
     /** Made on each attach, once the id that names the entry is set. */
     @Nullable private SlabAim mAim;
     @Nullable private WallpaperParallax mParallax;
+    /** Prototype #283: the ground of the page beneath, drawn over the frost ({@link GlassGround}). */
+    @Nullable private GroundUnderGlass mGround;
 
     public BarGlassView(@NonNull Context context) {
         this(context, null);
@@ -108,6 +110,10 @@ public class BarGlassView extends View {
         if (mFrostShown && frost != null) {
             frost.setBounds(0, 0, getWidth(), getHeight());
             frost.draw(canvas);
+            // Prototype #283: the page's ground over the frost and under the tint, as the ink's
+            // chain composites it (frost, dim, base layer).
+            GroundUnderGlass ground = mGround;
+            if (ground != null) ground.draw(canvas);
         }
         super.draw(canvas);
     }
@@ -118,11 +124,16 @@ public class BarGlassView extends View {
         mAim = new SlabAim(this, elementName(), WindowLayer.CHROME, GlassEntry.PRIORITY_DOCK);
         mAim.setParallax(mParallax);
         mAim.attach();
+        if (GlassGround.ON) {
+            if (mGround == null) mGround = new GroundUnderGlass(this, elementName());
+            mGround.attach();
+        }
     }
 
     @Override
     protected void onDetachedFromWindow() {
         if (mAim != null) mAim.detach();
+        if (mGround != null) mGround.detach();
         super.onDetachedFromWindow();
     }
 }

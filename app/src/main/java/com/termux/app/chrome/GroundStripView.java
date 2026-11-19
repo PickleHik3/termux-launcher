@@ -42,6 +42,13 @@ public final class GroundStripView extends View implements LiveBackdrop.WallGrou
     @NonNull private final int[] mOwn = new int[2];
     @NonNull private final int[] mWallAt = new int[2];
     @Nullable private View mWall;
+    /** Prototype #283: glass that draws these bands over its own frame ({@link GlassGround}). */
+    private static final int MAX_RIDERS = 6;
+    @NonNull private final View[] mRiders = new View[MAX_RIDERS];
+    /** The bands the riders last drew, so a frame that moves nothing they show redraws none. */
+    private final GroundBands mRidden = new GroundBands();
+    @NonNull private final Paint mGlassPaint = new Paint();
+    @NonNull private final int[] mGlassAt = new int[2];
 
     public GroundStripView(@NonNull Context context) {
         this(context, null);
@@ -51,6 +58,7 @@ public final class GroundStripView extends View implements LiveBackdrop.WallGrou
         super(context, attrs);
         setWillNotDraw(false);
         mPaint.setStyle(Paint.Style.FILL);
+        mGlassPaint.setStyle(Paint.Style.FILL);
         mFeatherPx = FEATHER_DP * context.getResources().getDisplayMetrics().density;
     }
 
@@ -86,6 +94,73 @@ public final class GroundStripView extends View implements LiveBackdrop.WallGrou
     private void recompute() {
         mBands.set(mGrounds, mStops, mCurrent, mStride, mOffsetPx, mFeatherPx);
         invalidate();
+        // Prototype #283: the glass over the strip draws the bands too, so it redraws when they
+        // move. Equal grounds give one band that never moves: a crossing between them costs none.
+        if (!mBands.sameAs(mRidden)) {
+            mRidden.copyFrom(mBands);
+            for (View rider : mRiders) {
+                if (rider != null) rider.invalidate();
+            }
+        }
+    }
+
+    /**
+     * Prototype #283: {@code glass} draws the ground under it ({@link #drawUnder}) and is
+     * redrawn when the bands move. Idempotent; at most {@link #MAX_RIDERS}.
+     */
+    public void addRider(@NonNull View glass) {
+        int free = -1;
+        for (int i = 0; i < MAX_RIDERS; i++) {
+            if (mRiders[i] == glass) return;
+            if (free < 0 && mRiders[i] == null) free = i;
+        }
+        if (free >= 0) mRiders[free] = glass;
+    }
+
+    public void removeRider(@NonNull View glass) {
+        for (int i = 0; i < MAX_RIDERS; i++) {
+            if (mRiders[i] == glass) mRiders[i] = null;
+        }
+    }
+
+    /** Whether the strip paints a ground now: shown, with bands. */
+    public boolean paintsGround() {
+        return getVisibility() == View.VISIBLE && mBands.count() > 0;
+    }
+
+    /**
+     * Prototype #283: draws the bands into {@code glass}'s canvas over its own rect, each where it
+     * stands on screen, so the glass shows the ground of the page beneath it. Allocates nothing.
+     *
+     * @return the glass's left edge in the wall's px (for the diagnostic), NaN when nothing drew
+     */
+    public float drawUnder(@NonNull Canvas canvas, @NonNull View glass) {
+        int count = mBands.count();
+        if (count == 0 || getVisibility() != View.VISIBLE) return Float.NaN;
+        glass.getLocationOnScreen(mGlassAt);
+        float glassLeftInWall = mGlassAt[0] - wallLeftOnScreen();
+        float width = glass.getWidth();
+        float height = glass.getHeight();
+        for (int i = 0; i < count; i++) {
+            int color = mBands.color(i);
+            if ((color >>> 24) == 0) continue;
+            float x0 = GlassGround.spanLeft(mBands, i, glassLeftInWall, width);
+            float x1 = GlassGround.spanRight(mBands, i, glassLeftInWall, width);
+            if (x1 <= x0) continue;
+            mGlassPaint.setColor(color);
+            canvas.drawRect(x0, 0f, x1, height, mGlassPaint);
+        }
+        return glassLeftInWall;
+    }
+
+    /** The ground at {@code wallX} in the wall's px, as {@link #drawUnder} draws it there. */
+    public int groundAtWallX(float wallX) {
+        return GlassGround.groundAt(mBands, wallX);
+    }
+
+    /** How many bands the strip holds now: 1 at rest, more while a seam is in view. */
+    public int bandCount() {
+        return mBands.count();
     }
 
     /** Whether any two stops' grounds differ: a seam then travels while the wall moves. */

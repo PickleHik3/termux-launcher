@@ -92,6 +92,24 @@ public final class GroundBands {
         add(edge + half, stride, b);
     }
 
+    /** Whether {@code other} holds exactly these bands. */
+    public boolean sameAs(@NonNull GroundBands other) {
+        if (other.mCount != mCount) return false;
+        for (int i = 0; i < mCount; i++) {
+            if (other.mStart[i] != mStart[i] || other.mEnd[i] != mEnd[i]
+                || other.mColor[i] != mColor[i]) return false;
+        }
+        return true;
+    }
+
+    /** Makes these bands {@code other}'s; allocates nothing. */
+    public void copyFrom(@NonNull GroundBands other) {
+        mCount = other.mCount;
+        System.arraycopy(other.mStart, 0, mStart, 0, mCount);
+        System.arraycopy(other.mEnd, 0, mEnd, 0, mCount);
+        System.arraycopy(other.mColor, 0, mColor, 0, mCount);
+    }
+
     private void add(float start, float end, int color) {
         if (end <= start) return;
         mStart[mCount] = start;
