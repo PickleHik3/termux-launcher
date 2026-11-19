@@ -26,6 +26,14 @@ public class PageKindTest {
     }
 
     @Test
+    public void aDisplayWindowStandsInTheWorkspacesRoom() {
+        assertEquals(PageKind.HOME, PageKind.HOME.roomKind());
+        assertEquals(PageKind.TERMINAL, PageKind.TERMINAL.roomKind());
+        assertEquals(PageKind.TERMINAL, PageKind.DISPLAY.roomKind());
+        assertEquals(PageKind.ASSISTANT, PageKind.ASSISTANT.roomKind());
+    }
+
+    @Test
     public void roomKindsAreThoseWithAnOwnRoomInEnumOrder() {
         assertArrayEquals(
             new PageKind[] {PageKind.HOME, PageKind.TERMINAL, PageKind.ASSISTANT},

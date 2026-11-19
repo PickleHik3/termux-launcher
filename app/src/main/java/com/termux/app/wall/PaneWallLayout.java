@@ -3788,22 +3788,26 @@ public final class PaneWallLayout extends ViewGroup
      * rest unchanged asks for no layout.
      */
     public void setPageBottomInsetPx(@NonNull PageKind kind, int px) {
+        kind = kind.roomKind();
         int inset = Math.max(0, px);
         if (inset == mPageBottomInsetPx[kind.ordinal()]) return;
         mPageBottomInsetPx[kind.ordinal()] = inset;
         requestLayout();
     }
 
-    /** {@code kind}'s bottom inset as last set; 0 at rest and for a page never given one. */
+    /**
+     * {@code kind}'s bottom inset as last set, read through its room ({@link PageKind#roomKind}:
+     * a display window's is the Workspace's); 0 for a page never given one.
+     */
     public int pageBottomInsetPx(@NonNull PageKind kind) {
-        return mPageBottomInsetPx[kind.ordinal()];
+        return mPageBottomInsetPx[kind.roomKind().ordinal()];
     }
 
     /** How far {@code child} ends above the wall's bottom, beyond its frame. */
     private int pageBottomInsetPx(@NonNull View child) {
         // A live neighbour stands at the size the Workspace page does, so its shells never resize.
         PageKind kind = pageKindOf(child);
-        return kind == null ? 0 : mPageBottomInsetPx[kind.ordinal()];
+        return kind == null ? 0 : pageBottomInsetPx(kind);
     }
 
     /**

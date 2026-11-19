@@ -24,6 +24,16 @@ public enum PageKind {
     }
 
     /**
+     * The kind whose room a page of this kind stands in: its own, or the Workspace's for a display
+     * window, which ends where the Terminal's rest (read off the display while it is in front)
+     * puts it, so its keyboard mode decides whether the keyboard takes room from it.
+     */
+    @NonNull
+    public PageKind roomKind() {
+        return hasOwnRoom() ? this : TERMINAL;
+    }
+
+    /**
      * The kinds that stand a page of their own room, in enum order. The array is shared: callers
      * iterate it and never write to it.
      */

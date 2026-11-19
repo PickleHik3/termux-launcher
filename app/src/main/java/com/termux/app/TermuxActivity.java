@@ -17865,9 +17865,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The room the page in front leaves its content (the wall's inset for its kind). */
     private int frontPageRoomPx() {
         if (mPaneWallController == null) return 0;
-        return mPaneWallController.wall().pageBottomInsetPx(
-            mLastWallPage == com.termux.app.page.PageKind.DISPLAY
-                ? com.termux.app.page.PageKind.TERMINAL : mLastWallPage);
+        return mPaneWallController.wall().pageBottomInsetPx(mLastWallPage);
     }
 
     /**

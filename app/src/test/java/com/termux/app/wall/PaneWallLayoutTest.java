@@ -110,14 +110,14 @@ public class PaneWallLayoutTest {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.setPageBottomInsetPx(PageKind.TERMINAL, 300);
         wall.setPageBottomInsetPx(PageKind.HOME, 0);
-        wall.setPageBottomInsetPx(PageKind.DISPLAY, 120);
         wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         wall.layout(0, 0, WIDTH, HEIGHT);
         PageKind[] pages = {PageKind.HOME, PageKind.DISPLAY, PageKind.TERMINAL};
         int[] first = new int[3];
         View[] views = {widgets, display, terminal};
-        int[] insets = {0, 120, 300};
+        // The display window stands in the Workspace's room (PageKind#roomKind).
+        int[] insets = {0, 300, 300};
         // Each page stands above the bottom by its own inset, once it is the one on screen.
         for (int i = 0; i < pages.length; i++) {
             wall.goTo(pages[i], false);
