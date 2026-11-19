@@ -60,22 +60,22 @@ public class GlassControlsMigrationTest {
         com.termux.shared.termux.settings.preferences.LookGrid grid = preferences.lookGrid();
         grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT_HUE, null);
         grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.VIBRANCY, null);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 100);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 100);
         // Clear's face terms came with generation 6; a store this old has none.
         preferences.setFancierGlassFaceClarityPercent(0);
         preferences.setFancierGlassDimPercent(0);
         preferences.setFancierGlassSizeLensPercent(0);
         switch (id) {
             case "minimal":
-                preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 4);
-                preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 4);
+                preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 4);
+                preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 4);
                 break;
             case "frost":
-                preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 8);
+                preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 8);
                 break;
             case "stock":
-                preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 10);
-                preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 10);
+                preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 10);
+                preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 10);
                 store.edit().putString(TERMUX_APP.KEY_SURFACE_GLASS_TINT,
                     TERMUX_APP.GLASS_TINT_MATERIAL).commit();
                 break;
@@ -137,8 +137,8 @@ public class GlassControlsMigrationTest {
     @Test
     public void aMaterialLookKeepsItsColourAsScaledAmountsOnTheSchemeInk() {
         preferences.setSurfaceGlassTint(TERMUX_APP.GLASS_TINT_MATERIAL);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 60);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 17);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 60);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT, 30);
         // The old Material blend at strength 0.6, read off the old formula.
         int before = 0xFF2F2742;
@@ -155,8 +155,8 @@ public class GlassControlsMigrationTest {
     @Test
     public void aSchemeOrObsidianLookWearsItsOwnColour() {
         preferences.setSurfaceGlassTint(TERMUX_APP.GLASS_TINT_OBSIDIAN);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 40);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 17);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 40);
         preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT, 70);
 
         foldThenRun();
@@ -171,8 +171,8 @@ public class GlassControlsMigrationTest {
     @Test
     public void aTintNeverStoredIsTheOldFullStrength() {
         preferences.setSurfaceGlassTint(TERMUX_APP.GLASS_TINT_MATERIAL);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
-        assertFalse(store.contains(TERMUX_APP.KEY_SURFACE_BASE_TINT));
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 17);
+        assertFalse(store.contains(TERMUX_APP.KEY_SURFACE_GLOBAL_TINT));
 
         foldThenRun();
 
@@ -182,30 +182,30 @@ public class GlassControlsMigrationTest {
 
     @Test
     public void blurAndGrainMoveToTheNearestGlassAndASurfaceTakesBoth() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 10);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 10);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 10);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 10);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR, 20);
 
         foldThenRun();
 
-        assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
-        assertEquals(5, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(12, preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
+        assertEquals(5, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         int[] dock = GlassControls.snapped(20, 10);
         assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(com.termux.shared.termux.settings.preferences.FrostStops.nearestStopByBlur(dock[0])), preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(dock[1], preferences.getDockGlassGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.GRAIN));
-        assertTrue("an untouched surface still follows Base",
+        assertTrue("an untouched surface still follows Global",
             preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
     }
 
     @Test
     public void noFrostStaysNoFrost() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 0);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 0);
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 80);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 0);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 0);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 80);
         foldThenRun();
-        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
-        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(0, preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
+        assertEquals(0, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
     }
 
     @Test
@@ -283,7 +283,7 @@ public class GlassControlsMigrationTest {
 
         foldThenRun();
 
-        assertEquals(GlassLook.TINT_LOOK_PERCENT, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(GlassLook.TINT_LOOK_PERCENT, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
         assertEquals("a detached cell", 14, preferences.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT));
         assertEquals("the same colour", before, dockColourNow());
@@ -304,23 +304,23 @@ public class GlassControlsMigrationTest {
         storeFormatOne();
         foldThenRun();
         assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
-        assertEquals(0, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 100);
+        assertEquals(0, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 100);
         foldThenRun();
         assertEquals("the user's 100 after the scale is left alone", 100,
-            preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
     }
 
     @Test
     public void itRunsOnce() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 17);
         foldThenRun();
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 45);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 10);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 45);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 10);
         foldThenRun();
-        assertEquals(45, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(45, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
         // Blur 10 wears the nearest Frost stop's 12.
-        assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(12, preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
     }
 
     /** The new knobs are clamped on the way in and out, and default to today's glass. */
@@ -396,7 +396,7 @@ public class GlassControlsMigrationTest {
     @Test
     public void everyWriteLandsInOneEditor() {
         preferences.setSurfaceGlassTint(TERMUX_APP.GLASS_TINT_MATERIAL);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 17);
         preferences.setSurfaceCustomPreset("{\"format_version\":4,\"surface_base_blur\":4,"
             + "\"surface_base_grain\":4}");
         CountingStore counting = new CountingStore(store);
@@ -418,8 +418,8 @@ public class GlassControlsMigrationTest {
     @Test
     public void aMigrationKilledHalfWayLeavesTheStoreAsItWas() {
         preferences.setSurfaceGlassTint(TERMUX_APP.GLASS_TINT_MATERIAL);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 70);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 17);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 70);
         java.util.Map<String, ?> before = new java.util.HashMap<>(store.getAll());
         CountingStore dying = new CountingStore(store);
         dying.dies = true;
@@ -439,30 +439,30 @@ public class GlassControlsMigrationTest {
     /** The blur wallpaper mode puts back when it is turned on again lands on the curve too. */
     @Test
     public void theBlurWallpaperModeRemembersMovesOntoTheCurve() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 10);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 10);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 10);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 10);
         preferences.setWallpaperEnabledExtraKeysBlurRadius(10);
 
         foldThenRun();
 
-        int grain = preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN);
+        int grain = preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN);
         int remembered = preferences.getWallpaperEnabledExtraKeysBlurRadius();
-        assertTrue("on the curve with Base's grain: " + remembered + "/" + grain,
+        assertTrue("on the curve with Global's grain: " + remembered + "/" + grain,
             GlassControls.onCurve(remembered, grain));
     }
 
-    /** The Glass slider's position is written for Base and each detached surface. */
+    /** The Glass slider's position is written for Global and each detached surface. */
     @Test
     public void theGlassPositionsAreWritten() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 10);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 10);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 10);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 10);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR, 30);
         foldThenRun();
-        int base = preferences.getSurfaceGlassPosition(null);
-        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.BLUR),
-            GlassControls.blurForGlass(base));
+        int global = preferences.getSurfaceGlassPosition(null);
+        assertEquals(preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR),
+            GlassControls.blurForGlass(global));
         assertTrue(preferences.getSurfaceGlassPosition(SurfaceSlot.STATUS) >= 0);
-        assertEquals("a surface that follows Base has none", -1,
+        assertEquals("a surface that follows Global has none", -1,
             preferences.getSurfaceGlassPosition(SurfaceSlot.DOCK));
     }
 
@@ -500,14 +500,14 @@ public class GlassControlsMigrationTest {
     public void formatThreeDropsTheRetiredShadeAndNothingElse() {
         store.edit().putInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 2)
             .putInt(SurfacePresets.RETIRED_SHADE_KEY, 60).commit();
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 50);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 50);
         preferences.setFancierGlassDispersionPercent(80);
 
         foldThenRun();
 
         assertFalse("the Shade is gone from the store", store.contains(SurfacePresets.RETIRED_SHADE_KEY));
         assertEquals(3, store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0));
-        assertEquals(50, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(50, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
         assertEquals("Edge keeps its stored value", 80, preferences.getFancierGlassDispersionPercent());
     }
 

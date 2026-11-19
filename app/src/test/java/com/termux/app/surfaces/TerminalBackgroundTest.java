@@ -44,8 +44,8 @@ public class TerminalBackgroundTest {
 
     @Test
     public void unsetValuesReadTheTerminalsShippedValuesNotGlobals() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 12);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 30);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 12);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 30);
 
         assertEquals(TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY,
             preferences.getTerminalBackgroundOpacity());
@@ -60,7 +60,7 @@ public class TerminalBackgroundTest {
         // A fresh install opens on Clear: Global's Opacity is Clear's.
         preferences.migrateLookGrid(java.util.Collections.emptyList(), true);
         assertTrue(TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY
-            > preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+            > preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         assertEquals(TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY,
             preferences.getWallpaperEnabledTerminalBackgroundOpacity());
     }

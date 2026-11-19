@@ -84,9 +84,9 @@ public final class ChromeRenderer {
         default int glassFrameTint() {
             TermuxAppSharedPreferences preferences = preferences();
             if (preferences == null) return GlassFrameTint.NONE;
-            int amount = preferences.getSurfaceBaseValue(
+            int amount = preferences.getSurfaceGlobalValue(
                 TermuxAppSharedPreferences.SurfaceProperty.TINT);
-            int opacity = preferences.getSurfaceBaseValue(
+            int opacity = preferences.getSurfaceGlobalValue(
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY);
             if (GlassFrameTint.strength(amount, opacity) <= 0f) return GlassFrameTint.NONE;
             return new GlassSurfaceFactory(this).look(amount).frameTint(opacity);

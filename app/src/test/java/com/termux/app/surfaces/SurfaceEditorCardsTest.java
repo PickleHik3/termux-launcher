@@ -159,7 +159,7 @@ public class SurfaceEditorCardsTest {
     }
 
     @Test
-    public void allSurfacesStandsAtTheCustomStopAndWritesBase() {
+    public void allSurfacesStandsAtTheCustomStopAndWritesGlobal() {
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
         assertEquals(PageKind.TERMINAL, editor.screen());
         EditorCardSheet.Model model = model(editor);
@@ -176,20 +176,20 @@ public class SurfaceEditorCardsTest {
         assertTrue(model.shown(Row.FROST));
         assertTrue(model.shown(Row.TEXT_SIZE));
 
-        // Global writes Base, which every page wears (ADR 0015 §6): no half of its own.
+        // Global writes Global, which every page wears (ADR 0015 §6): no half of its own.
         model.onValue(Row.OPACITY, 33, false);
         model.onReleased(Row.OPACITY);
-        assertEquals("Global writes Base", 33,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
+        assertEquals("Global writes Global", 33,
+            preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals("the dock wears it on every page", 33, opacity(PageKind.HOME));
         assertEquals(33, opacity(PageKind.TERMINAL));
 
         model.onValue(Row.FROST, 75, false);
         model.onReleased(Row.FROST);
         assertEquals(GlassControls.blurForGlass(75),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(GlassControls.grainForGlass(75),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(75, model.value(Row.FROST));
 
         model.onValue(Row.LOOK, 1, false);
@@ -307,7 +307,7 @@ public class SurfaceEditorCardsTest {
     /** Every key the store holds for Home's half alone, with its value. */
     private java.util.Map<String, Object> homeKeys() {
         java.util.Map<String, Object> out = new java.util.TreeMap<>();
-        // Home is the wall now: its own look is the plain per-half keys (Base, the surfaces'
+        // Home is the wall now: its own look is the plain per-half keys (Global, the surfaces'
         // cells and links, the material point), which a Workspace edit must leave alone.
         java.util.Map<String, ?> all = preferences.getSharedPreferences().getAll();
         for (String key : AppearanceSnapshot.halfAbleKeys()) {

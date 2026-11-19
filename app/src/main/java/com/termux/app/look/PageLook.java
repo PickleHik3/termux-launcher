@@ -24,7 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * {@link Snapshot}s cached per page id, writes at a {@link Scope}, and change events.
  *
  * <p>The chrome wears one look on every page (ADR 0031): a surface's number is its own value,
- * else Base, whatever the page. A page holds only its wallpaper dim
+ * else Global, whatever the page. A page holds only its wallpaper dim
  * ({@code <key>@<pageId>}, {@link LookKeys#OVERRIDABLE}); a Look write at a page scope lands
  * nowhere else.
  */
@@ -90,7 +90,7 @@ public final class PageLook {
 
         /**
          * The resolved number of a surface's property, clamped as its getter clamps it. Shapes
-         * (corner radius, side gap) answer the wall's Base value. A property the slot does not
+         * (corner radius, side gap) answer the wall's Global value. A property the slot does not
          * have answers its shipped value.
          */
         public int value(@NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
@@ -117,10 +117,10 @@ public final class PageLook {
         public int appBarOpacity() { return value(SurfaceSlot.DOCK, SurfaceProperty.OPACITY); }
         public int extraKeysBlurRadius() { return value(SurfaceSlot.DOCK, SurfaceProperty.BLUR); }
 
-        /** The material family of the Base triple. */
+        /** The material family of the Global triple. */
         @NonNull public String surfaceMaterial() { return material; }
 
-        /** Where on the family's curve the Base triple was set, 0..100. */
+        /** Where on the family's curve the Global triple was set, 0..100. */
         public int surfaceMaterialIntensity() { return materialIntensity; }
 
     }
@@ -166,7 +166,7 @@ public final class PageLook {
     }
 
     /**
-     * Writes a Look number at a scope. Global writes the plain key (Base or a surface's wall-wide
+     * Writes a Look number at a scope. Global writes the plain key (Global or a surface's wall-wide
      * value); a page writes its override, and only for a key a page may detach. Returns whether it
      * wrote.
      */

@@ -37,8 +37,8 @@ final class EditorCardReset {
                 remove(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
                 break;
             case DOCK:
-                prefs.setLayoutCornersDp(false, TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS);
-                prefs.setLayoutMarginDp(false, TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP);
+                prefs.setLayoutCornersDp(false, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS);
+                prefs.setLayoutMarginDp(false, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_SIDE_GAP);
                 prefs.setAppLauncherButtonCount(TERMUX_APP.DEFAULT_APP_LAUNCHER_BUTTON_COUNT);
                 PeekGlassPreferences.setReflection(prefs.getSharedPreferences(),
                     PeekGlassGeometry.REFLECTION_DEFAULT);

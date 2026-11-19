@@ -181,8 +181,8 @@ public final class ChromePolicy {
             // Restore the shared layer first, so every surface that was following it comes back
             // with it, then place the surfaces that remembered something different. Writing these
             // through the plain setters would have made each one overwrite the last, because while
-            // they are linked they all name the same Base value.
-            // Base is named outright: all glass, everywhere (the grid's first cell).
+            // they are linked they all name the same Global value.
+            // Global is named outright: all glass, everywhere (the grid's first cell).
             preferences.lookGrid().write(LookGrid.Property.OPACITY, null, appBar);
             preferences.lookGrid().write(LookGrid.Property.FROST, null,
                 FrostStops.nearestStopByBlur(blur));

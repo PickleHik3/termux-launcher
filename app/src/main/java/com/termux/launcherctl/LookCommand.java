@@ -55,7 +55,7 @@ final class LookCommand {
     static String describe(@NonNull LookGrid.Cell cell, @Nullable LookGrid.Element element) {
         switch (cell) {
             case ELEMENT: return describeCell(element);
-            case BASE: return describeCell(null);
+            case GLOBAL: return describeCell(null);
             default: return "shipped";
         }
     }

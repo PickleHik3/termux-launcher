@@ -2216,7 +2216,7 @@
                 <!-- Only rendered once a surface has taken a value of its own; tapping it puts
                      the row back on the shared layer. -->
                 <string name="termux_surface_tuning_link_detached">↺</string>
-                <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Base again.</string>
+                <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Global again.</string>
                 <!-- The keyboard's shape, under the Layout editor's Keyboard heading. -->
                 <string name="termux_surface_editor_place_keyboard_type">Type</string>
                 <!-- One shape for the two chips on the status row: the sessions indicator and the

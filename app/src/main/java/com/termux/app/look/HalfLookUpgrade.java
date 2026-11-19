@@ -26,7 +26,7 @@ import java.util.Set;
  * that key. The surface numbers are settled by what each page <em>shows</em>, not by raw key:
  * after the per-key step the Terminal page's resolved value is compared with what the Workspace
  * showed before, and any surface number that moved gets the Workspace's value as an override. So a
- * Workspace that followed a Base of its own, or a detached value Home never used, still looks the
+ * Workspace that followed a Global of its own, or a detached value Home never used, still looks the
  * same. Canvas keys were never per half and stay wall values. The half keys are not deleted
  * (a downgrade still finds them). Gated by {@link #KEY_VERSION}; pure over the store it reads.
  */
@@ -99,12 +99,12 @@ public final class HalfLookUpgrade {
                 // The old link flag; the grid upgrade that follows deletes it.
                 ENTRIES.add(new Entry("surface_inherit_" + slot.key + "_" + property.key,
                     Write.Type.BOOL,
-                    TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE, false));
+                    TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_GLOBAL, false));
             }
         }
         for (SurfaceProperty property : SurfaceProperty.values()) {
             if (TermuxAppSharedPreferences.isPerPageProperty(property))
-                ENTRIES.add(new Entry(property.baseKey, Write.Type.INT, property.baseDefault, false));
+                ENTRIES.add(new Entry(property.globalKey, Write.Type.INT, property.globalDefault, false));
         }
         ENTRIES.add(new Entry(TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, Write.Type.INT,
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY, true));
@@ -199,7 +199,7 @@ public final class HalfLookUpgrade {
 
     /**
      * What a surface showed on a page under the old keys this upgrade reads and writes: the
-     * page's own value, else Base while the surface's link held, else its own number. This
+     * page's own value, else Global while the surface's link held, else its own number. This
      * upgrade runs before the look grid exists (the grid upgrade folds its output next), so it
      * keeps the old rule for itself rather than reading the grid.
      */
@@ -207,15 +207,15 @@ public final class HalfLookUpgrade {
                                    @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
         String key = LookKeys.surfaceKey(slot, property);
         if (key == null) return LookKeys.surfaceDefault(slot, property);
-        if (LookKeys.isShape(property)) return store.getInt(property.baseKey, property.baseDefault);
+        if (LookKeys.isShape(property)) return store.getInt(property.globalKey, property.globalDefault);
         if (LookKeys.detachable(slot, property, kind)) {
             String pageKey = LookKeys.pageKey(key, pageId);
             if (store.has(pageKey))
                 return LookKeys.clamp(property, store.getInt(pageKey, LookKeys.surfaceDefault(slot, property)));
         }
         int value = store.getBoolean("surface_inherit_" + slot.key + "_" + property.key,
-            TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE)
-            ? store.getInt(property.baseKey, property.baseDefault)
+            TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_GLOBAL)
+            ? store.getInt(property.globalKey, property.globalDefault)
             : store.getInt(key, LookKeys.surfaceDefault(slot, property));
         return LookKeys.clamp(property, value);
     }

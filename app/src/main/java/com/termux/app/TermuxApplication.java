@@ -98,7 +98,7 @@ public class TermuxApplication extends Application {
         com.termux.terminal.TerminalEmulator.setXtVersion(BuildConfig.VERSION_NAME);
         // Before any session: whether a crash keeps the Ghostty core off, and memory pressure for it.
         com.termux.app.terminal.GhosttyFailSafes.install(this);
-        // Fold the old per-surface glass values into Base plus overrides. Must run before anything
+        // Fold the old per-surface glass values into Global plus overrides. Must run before anything
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
         // Read before the wall migration stores its version: an earlier build ran it already.
@@ -157,7 +157,7 @@ public class TermuxApplication extends Application {
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences,
                 lookFresh);
-            // Margin is one number for every page: the Margin Home wore becomes Base's, once.
+            // Margin is one number for every page: the Margin Home wore becomes Global's, once.
             com.termux.shared.termux.settings.preferences.LookGridMarginMigration.run(
                 new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
                     surfacePreferences.getSharedPreferences()));

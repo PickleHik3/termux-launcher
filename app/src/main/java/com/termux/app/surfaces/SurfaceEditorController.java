@@ -585,14 +585,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The Appearance card on a page: one property of every surface that page shows, as its own. */
     private boolean writeAllOnPage(@NonNull EditorCard card, @NonNull SurfaceProperty property,
                                    int value) {
-        // The three main cards write their chips' all-glass cells (Base, Home's, or the
+        // The three main cards write their chips' all-glass cells (Global, Home's, or the
         // Workspace's two kinds); an element's card never comes here.
         if (card.slot != null)
             return false;
         return writeOnPage(card, SurfaceSlot.STATUS, property, value);
     }
 
-    /** Reset under a page: every value the page holds of the card's surface goes back to Base. */
+    /** Reset under a page: every value the page holds of the card's surface goes back to Global. */
     private void resetOnPage(@NonNull EditorCard card) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs != null)
@@ -601,7 +601,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
     /**
      * The cells a card's Reset clears at {@code chips}: every glass property's cells there. A
-     * property with no element column or kind row (Vibrancy, Margin) is Base's, cleared only by
+     * property with no element column or kind row (Vibrancy, Margin) is Global's, cleared only by
      * Customization's Reset.
      */
     @VisibleForTesting
@@ -1673,7 +1673,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         }
         if (card.slot == null) {
-            // Customization, Home and Workspace: their cells (Base, Home's, the Workspace's two
+            // Customization, Home and Workspace: their cells (Global, Home's, the Workspace's two
             // kinds) follow again, then the card's other values below.
             resetOnPage(card);
             prefs.setSurfaceGlassPosition(null, -1);
@@ -2997,7 +2997,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     if (property == null)
                         return 0;
                     // The Appearance card's are the shared glass of the half the frame shows.
-                    // The main cards read their chips' cells (Base, Home's, the Workspace's).
+                    // The main cards read their chips' cells (Global, Home's, the Workspace's).
                     int stored = scopedSurfaceValue(prefs, card,
                         card.slot != null ? card.slot : SurfaceSlot.STATUS, property);
                     return row == Row.OPACITY ? AppearanceLooks.opacityPercent(stored)
@@ -3023,7 +3023,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case DESIGN:
                     return layout == null ? 0 : Math.max(0, DockStyle.CHOICES.indexOf(layout.dockStyle()));
                 case CORNERS: return AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
-                case MARGIN: return AppearanceLooks.marginDp(prefs.getBaseMarginDp());
+                case MARGIN: return AppearanceLooks.marginDp(prefs.getGlobalMarginDp());
                 case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
                 case REFLECTION: return PeekGlassPreferences.reflection(prefs.getSharedPreferences());
                 case TEXT_SIZE:
@@ -3628,7 +3628,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return false;
         if (row == Row.GRAIN || row == Row.RIM)
             return true;
-        // Margin is one number for every page, Base's alone: whatever Where says, it keeps its
+        // Margin is one number for every page, Global's alone: whatever Where says, it keeps its
         // own writer (writeMargin), and no page holds a Margin of its own.
         if (row == Row.MARGIN)
             return false;
@@ -3999,7 +3999,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
         }
         if (card.slot == null)
-            // Customization reads its cells, Base.
+            // Customization reads its cells, Global.
             return GlassControls.readBack(prefs.getSurfaceGlassPosition(null),
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.BLUR),
                 scopedSurfaceValue(prefs, card, SurfaceSlot.STATUS, SurfaceProperty.GRAIN));

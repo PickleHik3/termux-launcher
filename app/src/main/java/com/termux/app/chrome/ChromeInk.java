@@ -1328,7 +1328,7 @@ public final class ChromeInk {
      * level make it, at the terminal Opacity's strength — null while the switch is off, which
      * turns every band off. By default a band copies it: the terminal palette's ceilings and the
      * terminal's strength (the same instance, so a band and the panes are seen to share it). A band
-     * whose Opacity does not follow Base ({@code inheritsOpacity} false, a band with a slot only)
+     * whose Opacity does not follow Global ({@code inheritsOpacity} false, a band with a slot only)
      * keeps its own: the ceiling solved from its own body-text target at the Contrast level
      * ({@link EvenOut#ceilingForTarget}), its strength from its own Opacity through
      * {@link #evenOutStrengthPercent}. A strength of 0 is off for that band. Pure.

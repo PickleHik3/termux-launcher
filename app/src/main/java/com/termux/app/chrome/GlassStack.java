@@ -82,7 +82,7 @@ public final class GlassStack {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, false,
                 lookFor(fancierLook), 0, 0f, 1f, false, 100, null, null,
                 com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
-                    .DEFAULT_SURFACE_BASE_TINT);
+                    .DEFAULT_SURFACE_GLOBAL_TINT);
         }
 
         @NonNull public Spec withBlur(int dp) {
@@ -161,7 +161,7 @@ public final class GlassStack {
     }
 
     /**
-     * The keyboard's glass as its own slot says: its blur and grain follow Base until detached, its
+     * The keyboard's glass as its own slot says: its blur and grain follow Global until detached, its
      * tint follows the dock's opacity ({@code dockAlpha}) while its own Intensity row does, and the
      * whole-stack alpha is its Opacity row once that detaches ({@link #keyboardStackAlphaPercent}).
      * Rim, seams and slice are the caller's to set; the tint colour and rim style come from the
@@ -195,7 +195,7 @@ public final class GlassStack {
 
     /**
      * The one alpha over the keyboard's finished stack, in percent. While the keyboard's opacity
-     * still follows Base it is the dock's material, and a whole-stack fade would let the unblurred,
+     * still follows Global it is the dock's material, and a whole-stack fade would let the unblurred,
      * ungrained wallpaper through and read as a different material, so it stays at 100 exactly as
      * the background colour and Intensity are ignored in that state. Detached, the keyboard's own
      * Opacity row applies. The under-keyboard strip asks here too, so both fade together.

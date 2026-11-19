@@ -490,7 +490,7 @@ public final class TermuxPreferenceConstants {
         /**
          * Home's own Style, Corners and Margin (ADR 0008): what the Home pages' chrome wears, apart
          * from the Workspace's {@link #KEY_APP_LAUNCHER_DOCK_STYLE},
-         * {@link #KEY_SURFACE_BASE_CORNER_RADIUS} and {@link #KEY_SURFACE_BASE_SIDE_GAP}, in the same
+         * {@link #KEY_SURFACE_GLOBAL_CORNER_RADIUS} and {@link #KEY_SURFACE_GLOBAL_SIDE_GAP}, in the same
          * stored forms. While one is unset it reads the Workspace's value, so an upgrade changes
          * nothing on screen; the first write to it pins it.
          */
@@ -580,7 +580,7 @@ public final class TermuxPreferenceConstants {
          * Corner radius (dp) of the two chips on the status row — the sessions indicator and the
          * window pills — which wear one shape between them.
          *
-         * <p>Outside the Base cascade, like the terminal frame's radius: this is the shape of two
+         * <p>Outside the Global cascade, like the terminal frame's radius: this is the shape of two
          * pieces of content inside the status surface, not the shape of a surface. {@code -1} is
          * the shipped "follow the bar" state, which is square while Docked and the capsule's own
          * radius while Floating; any value the user dials in holds in both styles.
@@ -591,7 +591,7 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_STATUS_INDICATOR_CORNER_RADIUS = 16;
 
         /**
-         * Corner radius (dp) of the Docked terminal's bordered frame. Not part of the Base
+         * Corner radius (dp) of the Docked terminal's bordered frame. Not part of the Global
          * cascade: Floating derives the frame radius from the capsule, so this only exists where
          * the user can actually see it act — Docked with the border on. Defaults to the flush
          * square frame Docked always drew.
@@ -1363,7 +1363,7 @@ public final class TermuxPreferenceConstants {
 
         /**
          * The keyboard's own blur radius (dp), read only while the KEYBOARD slot's blur is detached
-         * from Base. Legacy installs stored {@code -1} here for "same as the dock".
+         * from Global. Legacy installs stored {@code -1} here for "same as the dock".
          */
         public static final String KEY_IN_APP_KEYBOARD_BLUR_RADIUS = "in_app_keyboard_blur_radius";
 
@@ -1375,7 +1375,7 @@ public final class TermuxPreferenceConstants {
 
         /**
          * The keyboard's own film-grain strength (percent), read only while the KEYBOARD slot's
-         * grain is detached from Base. Legacy installs stored {@code -1} here for "same as the dock".
+         * grain is detached from Global. Legacy installs stored {@code -1} here for "same as the dock".
          */
         public static final String KEY_IN_APP_KEYBOARD_GRAIN = "in_app_keyboard_grain";
 
@@ -1574,7 +1574,7 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT = true;
 
         /**
-         * Widgets on glass: whether the built-in widgets wear the Look's glass (Base's values).
+         * Widgets on glass: whether the built-in widgets wear the Look's glass (Global's values).
          * A widget's own Glass choice (on or off) still overrides it. On by default, for existing
          * installs too: the key is deliberately not pinned in adoptShippedSurfaceDefaults.
          */
@@ -1749,14 +1749,14 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_BORDER_ENABLED = "terminal_border_enabled";
         /*
          * Surface inheritance. Five properties are shared across the surfaces; each surface either
-         * follows the Base value or holds an override of its own. The per-surface value keys already
+         * follows the Global value or holds an override of its own. The per-surface value keys already
          * exist above and keep their meaning - they are simply only consulted once a surface has
          * detached. Replaces the old all-or-nothing normalize flag, which could not
          * express "the same everywhere except this one thing".
          */
-        public static final String KEY_SURFACE_BASE_BLUR = "surface_base_blur";
-        public static final String KEY_SURFACE_BASE_OPACITY = "surface_base_opacity";
-        public static final String KEY_SURFACE_BASE_GRAIN = "surface_base_grain";
+        public static final String KEY_SURFACE_GLOBAL_BLUR = "surface_base_blur";
+        public static final String KEY_SURFACE_GLOBAL_OPACITY = "surface_base_opacity";
+        public static final String KEY_SURFACE_GLOBAL_GRAIN = "surface_base_grain";
         /**
          * How much accent colour is mixed into the glass, percent: 0 is the Look's own colour
          * untouched, 35 the Material blend (the Tint Look), 100 the accent's container. Until the
@@ -1764,30 +1764,30 @@ public final class TermuxPreferenceConstants {
          * 100 the shipped tint; until format 2 100 was the Material blend. The app's
          * {@code GlassControlsMigration} maps every stored value once per format.
          */
-        public static final String KEY_SURFACE_BASE_TINT = "surface_base_tint";
-        public static final String KEY_SURFACE_BASE_CORNER_RADIUS = "surface_base_corner_radius";
-        public static final String KEY_SURFACE_BASE_SIDE_GAP = "surface_base_side_gap";
+        public static final String KEY_SURFACE_GLOBAL_TINT = "surface_base_tint";
+        public static final String KEY_SURFACE_GLOBAL_CORNER_RADIUS = "surface_base_corner_radius";
+        public static final String KEY_SURFACE_GLOBAL_SIDE_GAP = "surface_base_side_gap";
 
         /**
          * The shared layer's shipped values. Deliberately its own set rather than an alias of the
          * dock's: the shipped look gives the dock a slightly denser opacity than the surfaces that
-         * follow Base, and folding the two together would drag every other surface along with it.
+         * follow Global, and folding the two together would drag every other surface along with it.
          */
-        public static final int DEFAULT_SURFACE_BASE_BLUR = 8;
-        public static final int DEFAULT_SURFACE_BASE_OPACITY = 34;
-        public static final int DEFAULT_SURFACE_BASE_GRAIN = 18;
-        public static final int DEFAULT_SURFACE_BASE_TINT = 0;
-        /** Each surface's own tint amount, consulted once it has detached from Base. */
+        public static final int DEFAULT_SURFACE_GLOBAL_BLUR = 8;
+        public static final int DEFAULT_SURFACE_GLOBAL_OPACITY = 34;
+        public static final int DEFAULT_SURFACE_GLOBAL_GRAIN = 18;
+        public static final int DEFAULT_SURFACE_GLOBAL_TINT = 0;
+        /** Each surface's own tint amount, consulted once it has detached from Global. */
         public static final String KEY_DOCK_TINT_STRENGTH = "dock_tint_strength";
         public static final String KEY_STATUS_BAR_TINT_STRENGTH = "status_bar_tint_strength";
         public static final String KEY_TERMINAL_TINT_STRENGTH = "terminal_tint_strength";
         public static final String KEY_IN_APP_KEYBOARD_TINT_STRENGTH = "in_app_keyboard_tint_strength";
-        public static final int DEFAULT_SURFACE_BASE_CORNER_RADIUS = 24;
-        public static final int DEFAULT_SURFACE_BASE_SIDE_GAP = 12;
+        public static final int DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS = 24;
+        public static final int DEFAULT_SURFACE_GLOBAL_SIDE_GAP = 12;
 
         /**
-         * The Base glass triple said as one decision: a material family plus how much of it.
-         * The editor's macro writes blur/opacity/grain through the Base setters like anything
+         * The Global glass triple said as one decision: a material family plus how much of it.
+         * The editor's macro writes blur/opacity/grain through the Global setters like anything
          * else; these two keys only remember which point on which family's curve the triple came
          * from, so the control can show that point again — or "Custom" once the triple no longer
          * matches any point, which is how hand-tuned installs are left untouched.
@@ -1797,7 +1797,7 @@ public final class TermuxPreferenceConstants {
         public static final String SURFACE_MATERIAL_SOLID = "solid";
         public static final String SURFACE_MATERIAL_GLASS = "glass";
         public static final String SURFACE_MATERIAL_FROST = "frost";
-        /** Glass at 50 reproduces the shipped Base triple exactly (8 / 34 / 18). */
+        /** Glass at 50 reproduces the shipped Global triple exactly (8 / 34 / 18). */
         public static final String DEFAULT_SURFACE_MATERIAL = SURFACE_MATERIAL_GLASS;
         public static final int DEFAULT_SURFACE_MATERIAL_INTENSITY = 50;
 
@@ -1814,7 +1814,7 @@ public final class TermuxPreferenceConstants {
         public static final String GLASS_TINT_OBSIDIAN = "obsidian";
         /**
          * Glass in Material colours. Legacy: since the glass controls' format 1 the Material blend
-         * is the tint amount ({@link #KEY_SURFACE_BASE_TINT}) on the scheme tint, so a stored
+         * is the tint amount ({@link #KEY_SURFACE_GLOBAL_TINT}) on the scheme tint, so a stored
          * {@code material} is read as {@code scheme} and migrated to it once.
          */
         public static final String GLASS_TINT_MATERIAL = "material";
@@ -1850,7 +1850,7 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_TEXT_SIZE_PERCENT = 150;
 
         /**
-         * Where the Look editor's Glass slider was left, 0 to 100: Base's under this key, each
+         * Where the Look editor's Glass slider was left, 0 to 100: Global's under this key, each
          * surface's under the key plus {@code _} and the surface's name. Blur and grain stay the
          * stored glass; this only says which of the positions that write the same pair the slider
          * stood at, and is read only while the pair is still the one it writes. Absent reads as
@@ -1884,8 +1884,8 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_SURFACE_CUSTOM_PRESET = "surface_custom_preset";
 
-        /** A surface follows Base until the user moves that one control. */
-        public static final boolean DEFAULT_VALUE_SURFACE_INHERITS_BASE = true;
+        /** A surface follows Global until the user moves that one control. */
+        public static final boolean DEFAULT_VALUE_SURFACE_INHERITS_GLOBAL = true;
 
         /** Set once the one-time inheritance migration has folded the old per-surface values in. */
         public static final String KEY_SURFACE_INHERITANCE_MIGRATED = "surface_inheritance_migrated";
@@ -1900,7 +1900,7 @@ public final class TermuxPreferenceConstants {
 
         /**
          * Set once the keyboard-opacity rows detached at the old sentinel default have been
-         * relinked to Base. Before the tuned Docked look, {@code 100} on
+         * relinked to Global. Before the tuned Docked look, {@code 100} on
          * {@link #KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY} meant "never touched — render the shared
          * dock material", and the inheritance fold turned that sentinel into a detached override.
          * When the default then changed, those installs silently lost the unified

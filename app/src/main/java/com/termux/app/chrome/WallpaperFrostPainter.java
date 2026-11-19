@@ -437,7 +437,7 @@ public final class WallpaperFrostPainter {
 
     @NonNull private ElementOn status() { return new ElementOn(com.termux.shared.termux.settings.preferences.LookGrid.Element.STATUS, mSurfaces.statusLookPage()); }
     @NonNull private ElementOn dock() { return new ElementOn(com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, mSurfaces.stackLookPage()); }
-    /** The sheets wear Global's glass (the base cell), not an element's own. */
+    /** The sheets wear Global's glass (the all-glass cell), not an element's own. */
     @NonNull private ElementOn sheets() { return new ElementOn(null, mSurfaces.stackLookPage()); }
 
     /** What a sheet's tint (Global's opacity, raised to the sheets' floor) covers of its frost. */

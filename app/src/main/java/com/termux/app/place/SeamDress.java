@@ -179,7 +179,7 @@ public final class SeamDress {
     }
 
     /**
-     * The id a page's look values are read under: the wall (Base) for Home's pages, which hold no
+     * The id a page's look values are read under: the wall (Global) for Home's pages, which hold no
      * look of their own, and the Terminal page's id for any other page.
      */
     public static int lookPageId(@NonNull PageKind page, int terminalPageId) {
@@ -191,7 +191,7 @@ public final class SeamDress {
      * The id a surface's look values are read under (ADR 0015 §6): the page it stands on. Home's
      * pages read the Home page's own ({@code homePageId}, the wall while none is known); a window
      * reads the bound Display page's ({@code displayPageId}, when the surface stands on Display)
-     * or else the Terminal page's. A page holding no overrides reads Base through its id.
+     * or else the Terminal page's. A page holding no overrides reads Global through its id.
      *
      * @param page the kind of page the surface wears ({@link #lookPage})
      */

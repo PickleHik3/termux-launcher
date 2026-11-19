@@ -26,7 +26,7 @@ import org.robolectric.util.ReflectionHelpers;
 import android.app.Application;
 
 /**
- * The Global card's glass strips write Base, the one look every page wears (ADR 0031); the Home
+ * The Global card's glass strips write Global, the one look every page wears (ADR 0031); the Home
  * and Workspace cards have no glass of their own.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -45,17 +45,17 @@ public class SurfaceEditorHomeGlassTest {
         com.termux.app.look.TerminalPageIdFixture.give(preferences);
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(1));
         // Pong's Home half, and a Workspace that looks otherwise.
-        // Base is wall-wide since the halves became pages: the Workspace's numbers first, then
+        // Global is wall-wide since the halves became pages: the Workspace's numbers first, then
         // Home's, which are the wall's.
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 40);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId(),
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.terminalPageId(), 40);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.terminalPageId(),
             GlassControls.blurForGlass(60));
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(),
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.terminalPageId(),
             GlassControls.grainForGlass(60));
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 92);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL, 0);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 0);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, TermuxAppSharedPreferences.PAGE_WALL, 0);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL, 92);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL, 0);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL, 0);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, TermuxAppSharedPreferences.PAGE_WALL, 0);
         // The Workspace's Frost was left at 60: Home's pair is not that position's.
         preferences.setSurfaceGlassPosition(null, 60);
         for (SurfaceSlot slot : new SurfaceSlot[] {SurfaceSlot.DOCK, SurfaceSlot.STATUS}) {
@@ -71,7 +71,7 @@ public class SurfaceEditorHomeGlassTest {
     }
 
     @Test
-    public void customizationWritesBaseAndLeavesTheDocksOwn() {
+    public void customizationWritesGlobalAndLeavesTheDocksOwn() {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.PAGE_WALL, 30);
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.HOME);

@@ -53,7 +53,7 @@ public class GlassResetTest {
 
     @Test
     public void resetClearsTheGridKeepsLayoutsAndAppliesThePreset() {
-        // The user's glass: a Base value, an element on a kind, and the accent.
+        // The user's glass: a Global value, an element on a kind, and the accent.
         store.edit()
             .putInt(LookGrid.key(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE), 3)
             .putInt(LookGrid.key(LookGrid.Property.FROST, LookGrid.Element.DOCK,

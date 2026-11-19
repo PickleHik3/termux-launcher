@@ -143,7 +143,7 @@ public final class AppearanceReset {
         "look_grid_seeded_cells");
 
     /**
-     * Whether the reset removes {@code key}: a named key, a surface's Base or own value, a look
+     * Whether the reset removes {@code key}: a named key, a surface's Global or own value, a look
      * grid cell ({@code look.*}), a surface link ({@code surface_inherit_*}), a page's own value
      * ({@code <key>@<page id>}), the terminal's pinch size ({@code fontsize*}), or a flat copy of
      * a place's layout or dress ({@code layout.*}, {@code place.dress.*}; the voice pill's and a
@@ -159,7 +159,7 @@ public final class AppearanceReset {
             || LayoutReset.isFlatLayoutKey(key);
     }
 
-    /** Every surface's Base and own value, and the keys a page may hold its own copy of. */
+    /** Every surface's Global and own value, and the keys a page may hold its own copy of. */
     private static final Set<String> SURFACE_KEYS = surfaceKeys();
     private static final Set<String> PAGE_ABLE = pageAble();
 
@@ -242,7 +242,7 @@ public final class AppearanceReset {
     private static Set<String> surfaceKeys() {
         Set<String> keys = new HashSet<>();
         for (SurfaceProperty property : SurfaceProperty.values()) {
-            keys.add(property.baseKey);
+            keys.add(property.globalKey);
             for (SurfaceSlot slot : SurfaceSlot.values()) {
                 String own = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
                 if (own != null) keys.add(own);

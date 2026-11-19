@@ -48,8 +48,8 @@ public class EditorCardResetTest {
         PeekGlassPreferences.setReflection(store, 5);
         prefs.setSurfaceGlassPosition(SurfaceSlot.DOCK, 77);
         EditorCardReset.resetStore(prefs, EditorCard.DOCK, TermuxAppSharedPreferences.terminalPageId());
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS, prefs.getLayoutCornersDp(false));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP, prefs.getLayoutMarginDp(false));
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS, prefs.getLayoutCornersDp(false));
+        assertEquals(TERMUX_APP.DEFAULT_SURFACE_GLOBAL_SIDE_GAP, prefs.getLayoutMarginDp(false));
         assertEquals(TERMUX_APP.DEFAULT_APP_LAUNCHER_BUTTON_COUNT, prefs.getAppLauncherButtonCount());
         assertEquals(PeekGlassGeometry.REFLECTION_DEFAULT, PeekGlassPreferences.reflection(store));
         assertEquals(-1, prefs.getSurfaceGlassPosition(SurfaceSlot.DOCK));

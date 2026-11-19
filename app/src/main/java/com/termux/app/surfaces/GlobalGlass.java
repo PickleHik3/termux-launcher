@@ -10,7 +10,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 
 /**
  * The shared glass (layout editor v2, DECISIONS items 13 and 14; the Appearance card's All
- * surfaces strip): Blur, Opacity, Grain and Tint written as the base values, Frost writing blur
+ * surfaces strip): Blur, Opacity, Grain and Tint written as Global's values, Frost writing blur
  * and grain together. The terminal's Background (its panes' Opacity and Blur, its Wallpaper dim)
  * is never Global's and no write here reaches it (ADR 0031 §4). Own stays (appearance-one-look spec §1): the status bar's, the dock's and
  * the keyboard's own values are left as they are, and only their reset arrows put them back on
@@ -32,7 +32,7 @@ final class GlobalGlass {
     }
 
     /**
-     * Writes {@code value} as the base for {@code property} and puts every surface back on it.
+     * Writes {@code value} as Global's value for {@code property} and puts every surface back on it.
      * Only Blur, Opacity, Grain and Tint are glass; Corners and Margin are Layout's and are refused.
      *
      * @return the value written, clamped to the property's range
@@ -44,7 +44,7 @@ final class GlobalGlass {
 
     /**
      * {@link #write(TermuxAppSharedPreferences, SurfaceProperty, int)} for one page (ADR 0015): the
-     * page's base, and only the surfaces standing on that page put back on it. PAGE_ALL writes the
+     * page's Global, and only the surfaces standing on that page put back on it. PAGE_ALL writes the
      * wall and every page.
      */
     static int write(@NonNull TermuxAppSharedPreferences prefs, @NonNull SurfaceProperty property,
@@ -76,7 +76,7 @@ final class GlobalGlass {
                 continue;
             prefs.setSurfaceInheriting(slot, property, pageId, true);
         }
-        prefs.setSurfaceBaseValue(property, pageId, clamped);
+        prefs.setSurfaceGlobalValue(property, pageId, clamped);
         return clamped;
     }
 
@@ -98,7 +98,7 @@ final class GlobalGlass {
      */
     static int writeTintHue(@NonNull TermuxAppSharedPreferences prefs, @NonNull String hueId) {
         prefs.setSurfaceGlassTintHue(hueId);
-        int tint = prefs.getSurfaceBaseValue(SurfaceProperty.TINT);
+        int tint = prefs.getSurfaceGlobalValue(SurfaceProperty.TINT);
         if (tint > 0)
             return tint;
         return write(prefs, SurfaceProperty.TINT, TINT_ON_HUE_PICK);

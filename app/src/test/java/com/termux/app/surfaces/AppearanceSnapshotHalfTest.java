@@ -77,7 +77,7 @@ public class AppearanceSnapshotHalfTest {
         }
         for (SurfaceProperty property : SurfaceProperty.values()) {
             if (TermuxAppSharedPreferences.isPerPageProperty(property))
-                assertTrue(property.name(), keys.contains(property.baseKey));
+                assertTrue(property.name(), keys.contains(property.globalKey));
         }
     }
 

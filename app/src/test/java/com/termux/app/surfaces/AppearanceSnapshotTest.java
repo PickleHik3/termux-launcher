@@ -53,7 +53,7 @@ public class AppearanceSnapshotTest {
         preferences.setAppLauncherDockStyle(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED);
         preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 81);
         preferences.setSurfaceGlassTint(TERMUX_APP.GLASS_TINT_OBSIDIAN);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 17);
         preferences.setInAppKeyboardKeyOpacity(33);
         preferences.setInAppKeyboardKeyCornerRadiusDp(13f);
         preferences.setWallpaperBackdropDim(60);
@@ -63,21 +63,21 @@ public class AppearanceSnapshotTest {
         preferences.setTerminalRetroEffect("crt_amber");
         preferences.setTextSizePercent(130);
         // Layout mode's Corners and Margin.
-        int corners = preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS);
-        int sideGap = preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
+        int corners = preferences.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS);
+        int sideGap = preferences.getSurfaceGlobalValue(SurfaceProperty.SIDE_GAP);
         int terminalCorners = preferences.getTerminalCornerRadius();
         int paneGap = preferences.getTerminalPaneGap();
-        preferences.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, corners + 7);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS, corners + 7);
         preferences.setTerminalCornerRadius(terminalCorners + 7);
-        preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, sideGap + 5);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.SIDE_GAP, sideGap + 5);
         preferences.setTerminalPaneGap(paneGap + 5);
         assertNotEquals(signature, AppearanceSnapshot.signatureOf(preferences));
 
         entry.restore(preferences);
 
         assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
-        assertEquals(corners, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
-        assertEquals(sideGap, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
+        assertEquals(corners, preferences.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS));
+        assertEquals(sideGap, preferences.getSurfaceGlobalValue(SurfaceProperty.SIDE_GAP));
         assertEquals(terminalCorners, preferences.getTerminalCornerRadius());
         assertEquals(paneGap, preferences.getTerminalPaneGap());
         assertTrue(SurfacePresets.matches(preferences, SurfacePresets.presets().get(1)));
@@ -249,7 +249,7 @@ public class AppearanceSnapshotTest {
     public void unsavedCustomValuesComeBackAfterAVisitToALook() {
         SurfacePresets.apply(preferences, SurfacePresets.presets().get(1));
         SurfacePresets.saveCustom(preferences);
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 63);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 63);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, 77);
         // Leaving Custom keeps the session values, then a Look replaces them.
         AppearanceSnapshot session = AppearanceSnapshot.capture(preferences);
@@ -259,26 +259,26 @@ public class AppearanceSnapshotTest {
         session.restore(preferences);
 
         // 63 dp is past the last Frost stop: its 36 dp.
-        assertEquals(36, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(36, preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
         assertEquals(session.signature(), AppearanceSnapshot.signatureOf(preferences));
     }
 
     @Test
     public void undoPutsTheTintBack() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 70);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 70);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT, 55);
         AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
         String signature = entry.signature();
 
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 5);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 5);
         preferences.setSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT, true);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, 9);
         assertNotEquals(signature, AppearanceSnapshot.signatureOf(preferences));
 
         entry.restore(preferences);
 
-        assertEquals(70, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(70, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT));
         assertEquals(55, preferences.getStatusBarTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT));

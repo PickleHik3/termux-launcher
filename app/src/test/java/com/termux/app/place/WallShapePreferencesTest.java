@@ -43,8 +43,8 @@ public class WallShapePreferencesTest {
     @Test
     public void homeReadsTheWorkspacesValues() {
         prefs.setLayoutStyle(LayoutStyle.FLOATING);
-        prefs.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, 30);
-        prefs.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, 18);
+        prefs.setSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS, 30);
+        prefs.setSurfaceGlobalValue(SurfaceProperty.SIDE_GAP, 18);
         assertEquals(WallShape.of(LayoutStyle.FLOATING, 30, 18), WallShape.read(prefs));
         assertEquals(LayoutStyle.FLOATING, prefs.getLayoutStyle(true));
         assertEquals(30, prefs.getLayoutCornersDp(true));
@@ -55,7 +55,7 @@ public class WallShapePreferencesTest {
     public void aStaleHomeKeyIsNeverRead() {
         sp.edit().putInt(TERMUX_APP.KEY_HOME_SURFACE_SIDE_GAP, 4)
             .putString(TERMUX_APP.KEY_HOME_LAYOUT_STYLE, "floating").commit();
-        prefs.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, 16);
+        prefs.setSurfaceGlobalValue(SurfaceProperty.SIDE_GAP, 16);
         prefs.setLayoutStyle(LayoutStyle.DOCKED);
         assertEquals(16, prefs.getLayoutMarginDp(true));
         assertEquals(LayoutStyle.DOCKED, prefs.getLayoutStyle(true));
@@ -68,8 +68,8 @@ public class WallShapePreferencesTest {
         prefs.setLayoutMarginDp(true, 20);
         assertEquals("the Workspace's keys are the ones every surface reads",
             LayoutStyle.FLOATING, prefs.getLayoutStyle());
-        assertEquals(8, prefs.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
-        assertEquals(20, prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
+        assertEquals(8, prefs.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS));
+        assertEquals(20, prefs.getSurfaceGlobalValue(SurfaceProperty.SIDE_GAP));
         prefs.setLayoutCornersDp(false, 24);
         assertEquals(24, prefs.getLayoutCornersDp(true));
         assertFalse(sp.contains(TERMUX_APP.KEY_HOME_LAYOUT_STYLE)

@@ -18,7 +18,7 @@ import com.termux.app.material.M3;
  * The resolved look of every built-in widget: Material containers (sans captions, pill bars, a
  * filled clock face) in the launcher's scheme colours, on either the solid card or the
  * see-through one. One {@link Numerals} choice, Sans or Mono, sets the face of every numeral. The
- * card is cut at the Look's Corners (Base's, {@link com.termux.app.chrome.LookGlassSpec}), which
+ * card is cut at the Look's Corners (Global's, {@link com.termux.app.chrome.LookGlassSpec}), which
  * every surface shares; a detached surface's never reaches a widget. Every colour is a scheme role read through
  * {@link M3}, so a widget follows the terminal scheme, Material You and the scheme-chrome override
  * exactly as the rest of the chrome does.</p>

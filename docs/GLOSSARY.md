@@ -576,8 +576,8 @@ The two chips at the top of every Appearance card: **Where it applies** (Everywh
 Terminal or Display pages, the kind of the page in front | <page name>) and **What it applies to**
 (All glass | <element>). Together they name the **Cell** the card's
 rows read and write. Before ADR 0017 there was one chip, **Global | <page name>**, on four cards.
-_Avoid_: Global as the scope chip's label (the old chip; in prose and code say Base). **Global** is
-the Appearance editor's card for the Base look (developer, 2026-11-03).
+_Avoid_: Global | <page name> as the scope chip's label (the old chip). **Global** is the Appearance
+editor's card for the look every surface wears (developer, 2026-11-03).
 _ADR 0031 (accepted, not yet built): goes, with the Applies to row that replaced it; no card chooses a page._
 
 ### Look and motion
@@ -603,9 +603,8 @@ _Avoid_: animated background, live wallpaper (removed), animation
 The look every glass surface wears until it holds an **own value**: one value for each look
 property, set on the Global card. A surface **follows** Global where it holds none. Settings rows,
 presets, the wallpaper policy and launcherctl write Global unless they name a surface.
-_Avoid_: Base (the earlier word), default (the shipped value is the default; Global is what the
+_Avoid_: Base (the earlier word, renamed in ADR 0031), default (the shipped value is the default; Global is what the
 user set), inherited and detached (the old flag words)
-_ADR 0031 (accepted, not yet built): as built the code and launcherctl still say Base, and a value held for a kind of page is read before it._
 
 **Backstop**:
 The time or frame count after which a **Hold** releases on its own because its signal has not

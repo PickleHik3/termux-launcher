@@ -60,7 +60,7 @@ public class SurfacePresetsTest {
 
     @Test
     public void applyingTintWritesItsRecipeDetachesNothingAndLeavesStyleAlone() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 25);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 25);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN, 77);
         preferences.setAppLauncherDockStyle(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED);
 
@@ -68,9 +68,9 @@ public class SurfacePresetsTest {
         SurfacePresets.apply(preferences, tint);
 
         // Glass 40.
-        assertEquals(12, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
-        assertEquals(46, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals(4, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(12, preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
+        assertEquals(46, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
+        assertEquals(4, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         // A Look never detaches a surface and never touches Style.
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows())
             assertTrue(row.slot + "/" + row.property,
@@ -92,7 +92,7 @@ public class SurfacePresetsTest {
      */
     @Test
     public void savedCustomLookOutlivesLaterEdits() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 21);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 21);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN, 63);
         SurfacePresets.saveCustom(preferences);
 
@@ -109,7 +109,7 @@ public class SurfacePresetsTest {
                 .get(SurfacePresets.cellKey(null, SurfaceProperty.BLUR)));
 
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
-        assertEquals(17, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
         assertEquals(63,
             preferences.getSurfaceOverrideValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
@@ -142,7 +142,7 @@ public class SurfacePresetsTest {
         preferences.setSurfaceCustomPreset(stored);
         preferences.setAppLauncherDockStyle("docked");
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
-        assertEquals(17, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(17, preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
         assertEquals("docked", preferences.getAppLauncherDockStyle());
         assertTrue(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
     }
@@ -214,15 +214,15 @@ public class SurfacePresetsTest {
 
     @Test
     public void theLayoutOwnedKeysAreCornersSideGapsAndTheTerminalsMargin() {
-        assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS));
-        assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP));
+        assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_SURFACE_GLOBAL_CORNER_RADIUS));
+        assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_SURFACE_GLOBAL_SIDE_GAP));
         assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS));
         assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
         assertTrue(SurfacePresets.isLayoutOwned(TermuxAppSharedPreferences.surfaceOverrideKey(
             SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS)));
         assertTrue(SurfacePresets.isLayoutOwned(TermuxAppSharedPreferences.surfaceOverrideKey(
             SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP)));
-        assertFalse(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertFalse(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_SURFACE_GLOBAL_BLUR));
         assertFalse(SurfacePresets.isLayoutOwned(TermuxAppSharedPreferences.surfaceOverrideKey(
             SurfaceSlot.DOCK, SurfaceProperty.GRAIN)));
         // The key caps' radius is the keyboard's Key corners, not the global shape.
@@ -233,17 +233,17 @@ public class SurfacePresetsTest {
     /** Switching Looks keeps the user's Layout corners and margin, one value each. */
     @Test
     public void switchingLooksKeepsCornersAndMargins() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, 33);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS, 33);
         preferences.setTerminalCornerRadius(33);
-        preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, 21);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.SIDE_GAP, 21);
         preferences.setTerminalPaneGap(9);
 
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
             SurfacePresets.apply(preferences, preset);
             assertEquals(preset.id, 33,
-                preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+                preferences.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS));
             assertEquals(preset.id, 33, preferences.getTerminalCornerRadius());
-            assertEquals(preset.id, 21, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
+            assertEquals(preset.id, 21, preferences.getSurfaceGlobalValue(SurfaceProperty.SIDE_GAP));
             assertEquals(preset.id, 9, preferences.getTerminalPaneGap());
             // The Look still reads as applied: its ring does not care about the shape.
             assertTrue(preset.id, SurfacePresets.matches(preferences, preset));
@@ -257,22 +257,22 @@ public class SurfacePresetsTest {
     @Test
     public void aStoredCustomsCornersAndMarginsAreIgnored() {
         preferences.setSurfaceCustomPreset("{\"format_version\":2,\"surface_base_blur\":21,"
-            + "\"" + TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS + "\":2,"
-            + "\"" + TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP + "\":3,"
+            + "\"" + TERMUX_APP.KEY_SURFACE_GLOBAL_CORNER_RADIUS + "\":2,"
+            + "\"" + TERMUX_APP.KEY_SURFACE_GLOBAL_SIDE_GAP + "\":3,"
             + "\"" + TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS + "\":2,"
             + "\"" + TERMUX_APP.KEY_TERMINAL_PANE_GAP + "\":1}");
-        preferences.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, 30);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS, 30);
         preferences.setTerminalCornerRadius(30);
-        preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, 16);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.SIDE_GAP, 16);
         preferences.setTerminalPaneGap(6);
 
         SurfacePresets.Preset custom = SurfacePresets.custom(preferences);
         assertNotNull(custom);
         SurfacePresets.apply(preferences, custom);
-        assertEquals(17, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
-        assertEquals(30, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+        assertEquals(17, preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
+        assertEquals(30, preferences.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS));
         assertEquals(30, preferences.getTerminalCornerRadius());
-        assertEquals(16, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
+        assertEquals(16, preferences.getSurfaceGlobalValue(SurfaceProperty.SIDE_GAP));
         assertEquals(6, preferences.getTerminalPaneGap());
         assertTrue(SurfacePresets.matches(preferences, custom));
 
@@ -286,10 +286,10 @@ public class SurfacePresetsTest {
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
             int amount = "stock".equals(preset.id) ? 35 : 0;
             assertEquals(preset.id, amount, preset.values.get(SurfacePresets.cellKey(null, SurfaceProperty.TINT)));
-            preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 20);
+            preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 20);
             preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT, 10);
             SurfacePresets.apply(preferences, preset);
-            assertEquals(preset.id, amount, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+            assertEquals(preset.id, amount, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
             assertTrue(preset.id,
                 preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT));
             assertTrue(preset.id, SurfacePresets.matches(preferences, preset));
@@ -298,14 +298,14 @@ public class SurfacePresetsTest {
 
     @Test
     public void customKeepsAHandTunedTintAndAnOlderCustomReadsAsItsOwnColour() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 45);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 45);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, 15);
         SurfacePresets.saveCustom(preferences);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 100);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 100);
         preferences.setSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT, true);
 
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
-        assertEquals(45, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(45, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
         assertEquals(15, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
 
         // A Custom saved before the amount wore its own Look's colour in full: amount 0 now.
@@ -326,7 +326,7 @@ public class SurfacePresetsTest {
         assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.TINT,
             json.getInt("look.frost"));
         assertEquals(70, json.getInt("look.opacity.dock"));
-        assertFalse(json.has(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertFalse(json.has(TERMUX_APP.KEY_SURFACE_GLOBAL_BLUR));
         assertFalse(json.has(TERMUX_APP.KEY_APP_BAR_OPACITY));
         java.util.Map<String, Object> back = SurfacePresets.deserialize(json.toString());
         assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.TINT,
@@ -339,12 +339,12 @@ public class SurfacePresetsTest {
     public void anOldSavedCustomIsRewrittenUnderGridKeys() throws Exception {
         org.json.JSONObject old = new org.json.JSONObject();
         old.put("format_version", 5);
-        old.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 30);
+        old.put(TERMUX_APP.KEY_SURFACE_GLOBAL_OPACITY, 30);
         preferences.setSurfaceCustomPreset(old.toString());
         SurfacePresets.rewriteStoredCustom(preferences);
         org.json.JSONObject now = new org.json.JSONObject(preferences.getSurfaceCustomPreset());
         assertEquals(30, now.getInt("look.opacity"));
-        assertFalse(now.has(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
+        assertFalse(now.has(TERMUX_APP.KEY_SURFACE_GLOBAL_OPACITY));
         assertEquals(30, SurfacePresets.custom(preferences).values
             .get(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)));
     }

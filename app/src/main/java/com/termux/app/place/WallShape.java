@@ -20,7 +20,7 @@ public final class WallShape {
     /** What a launcher with no preferences yet wears. */
     public static final WallShape DEFAULT = new WallShape(
         LayoutStyle.parse(TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE),
-        TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS, TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP);
+        TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_SIDE_GAP);
 
     @NonNull public final LayoutStyle style;
     public final int cornersDp;

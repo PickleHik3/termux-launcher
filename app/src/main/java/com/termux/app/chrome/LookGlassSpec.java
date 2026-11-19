@@ -8,11 +8,11 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 /**
- * The Look's own glass: the Base values the Looks menu and the Appearance editor's shared layer
+ * The Look's own glass: the Global values the Looks menu and the Appearance editor's shared layer
  * set, which every surface inherits until it is detached. What Home's widgets wear, so a
  * detached terminal, keyboard, status bar or dock never reaches them.
  *
- * <p>Pure: read from the stored Base numbers, clamped as the surfaces clamp them, with the
+ * <p>Pure: read from the stored Global numbers, clamped as the surfaces clamp them, with the
  * corner radius's "follow the style" sentinel resolved in the one place it is resolved.</p>
  */
 public final class LookGlassSpec {
@@ -39,7 +39,7 @@ public final class LookGlassSpec {
         this.cornerRadiusDp = cornerRadiusDp;
     }
 
-    /** The spec for stored Base values; {@code storedCornersDp} may be the -1 sentinel. */
+    /** The spec for stored Global values; {@code storedCornersDp} may be the -1 sentinel. */
     public static LookGlassSpec of(boolean wallpaper, int blurDp, int opacityPercent,
                                    int grainPercent, int tintPercent, int storedCornersDp) {
         return new LookGlassSpec(wallpaper, clamp(blurDp, 0, MAX_BLUR_DP),
@@ -47,31 +47,31 @@ public final class LookGlassSpec {
             clamp(tintPercent, 0, 100), cornerRadiusDp(storedCornersDp));
     }
 
-    /** The Workspace's Look as stored now; the shipped Base when there is no store to read. */
+    /** The Workspace's Look as stored now; the shipped Global when there is no store to read. */
     public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences) {
         return read(preferences, TermuxAppSharedPreferences.terminalPageId());
     }
 
-    /** One half's Look as stored now (ADR 0013); the shipped Base when there is no store. */
+    /** One half's Look as stored now (ADR 0013); the shipped Global when there is no store. */
     public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences,
                                      int pageId) {
         if (preferences == null) {
-            return of(false, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
-                TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN,
-                TERMUX_APP.DEFAULT_SURFACE_BASE_TINT,
-                TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS);
+            return of(false, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_BLUR,
+                TERMUX_APP.DEFAULT_SURFACE_GLOBAL_OPACITY, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_GRAIN,
+                TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT,
+                TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS);
         }
         return of(preferences.isUseSystemWallpaperEnabled(),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, pageId),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, pageId),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, pageId),
-            preferences.getSurfaceBaseValue(SurfaceProperty.TINT, pageId),
-            preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR, pageId),
+            preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY, pageId),
+            preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN, pageId),
+            preferences.getSurfaceGlobalValue(SurfaceProperty.TINT, pageId),
+            preferences.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS));
     }
 
     /**
      * One element's glass on one page as stored now (ADR 0017): its own cells where it holds them,
-     * Base where it follows; the shipped Base when there is no store.
+     * Global where it follows; the shipped Global when there is no store.
      */
     public static LookGlassSpec read(@Nullable TermuxAppSharedPreferences preferences,
                                      @NonNull TermuxAppSharedPreferences.SurfaceSlot slot,
@@ -86,7 +86,7 @@ public final class LookGlassSpec {
     }
 
     /**
-     * Base's Corners in dp. The -1 sentinel follows the rounded-surface token, as the chrome's
+     * Global's Corners in dp. The -1 sentinel follows the rounded-surface token, as the chrome's
      * own Corners do: a widget is a card, never the Docked straight edge.
      */
     public static int cornerRadiusDp(int storedDp) {
@@ -95,11 +95,11 @@ public final class LookGlassSpec {
             : storedDp;
     }
 
-    /** Base's Corners in dp, as stored now. */
+    /** Global's Corners in dp, as stored now. */
     public static int cornerRadiusDp(@Nullable TermuxAppSharedPreferences preferences) {
         return cornerRadiusDp(preferences == null
-            ? TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS
-            : preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+            ? TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS
+            : preferences.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS));
     }
 
     /** Whether a slab is worn: on the wallpaper, whatever the blur (tint and grain alone at 0). */

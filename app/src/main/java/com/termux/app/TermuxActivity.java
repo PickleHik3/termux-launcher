@@ -4445,7 +4445,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (!shouldShowTerminalOverlaySurface()) return Color.TRANSPARENT;
                 return mChrome.glass().look(mPreferences != null
                         ? mPreferences.getTerminalTintStrength()
-                        : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
+                        : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT)
                     .flatTint(resolveTerminalSurfaceColor());
             }
 
@@ -4566,7 +4566,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.chrome.LookGlassStyle mLookGlass;
 
     /**
-     * The Look's own glass (Base's values) as a pane style, which Home's widgets wear whatever a
+     * The Look's own glass (Global's values) as a pane style, which Home's widgets wear whatever a
      * detached surface does. It samples the same blur cache, wallpaper frame and Fancier Glass
      * look as the panes, in the chrome's glass base colour.
      */
@@ -6443,7 +6443,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
                 radiusPx, com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, stackLookPage(), mFancierGlassLook))
             .withTintStrength(mPreferences != null ? mPreferences.getDockTintStrength(stackLookPage())
-                : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
+                : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT)
             // A card under Floating, with its whole rim. Docked it joins the frame below the
             // keyboard: its top is a join and the rest is the screen's edge, so it draws none.
             .withRim(arrangement().floating())
@@ -6778,7 +6778,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int chromeCornersDp(@NonNull com.termux.app.place.SeamDress.Surface surface) {
         return mPreferences == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS
             : mPreferences.getLayoutCornersDp(chromeWearsHomeShape(surface));
     }
 
@@ -6789,7 +6789,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int chromeMarginDp(@NonNull com.termux.app.place.SeamDress.Surface surface) {
         return mPreferences == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_SIDE_GAP
             : mPreferences.getLayoutMarginDp(chromeWearsHomeShape(surface));
     }
 
@@ -7418,7 +7418,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The keyboard's own blur radius as its own glass draws it — the KEYBOARD slot's blur, which
-     * follows Base until detached, so an untouched keyboard resolves to the same number
+     * follows Global until detached, so an untouched keyboard resolves to the same number
      * {@link #getEffectiveExtraKeysBlurRadius()} does. See that method for the wallpaper-does-not-
      * blur gate this mirrors.
      */
@@ -7809,7 +7809,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.chrome.GlassStack.Spec inAppKeyboardGlassSpec(@NonNull ChromeSpec state,
             boolean capsule, float cornerRadiusPx,
             @Nullable com.termux.app.chrome.GlassBackdropCache.Band band) {
-        // While the keyboard's opacity still follows Base it renders the shared material, so its
+        // While the keyboard's opacity still follows Global it renders the shared material, so its
         // own background colour and opacity are ignored here exactly as in the unified path. An
         // overlaying keyboard ignores them for the other reason (D3): it is opaque, and both say
         // how much of the wallpaper shows through.
@@ -7842,7 +7842,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The opacity the keyboard's glass is built at.
      *
-     * <p>Its own once it has one, the dock's while it still follows Base. Built at, not scaled to:
+     * <p>Its own once it has one, the dock's while it still follows Global. Built at, not scaled to:
      * fading the finished drawable fades every layer of the light model including the grain, so
      * raising the keyboard's opacity brightened the speckle instead of thickening the background.
      */
@@ -7893,13 +7893,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The keyboard's own film-grain strength — the KEYBOARD slot's grain, which follows Base until
+     * The keyboard's own film-grain strength — the KEYBOARD slot's grain, which follows Global until
      * detached, so an untouched keyboard grains like the dock.
      */
     private int getInAppKeyboardTintStrengthPercent() {
         return mPreferences != null
             ? mPreferences.getInAppKeyboardTintStrength(stackLookPage())
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
     }
 
     private int getInAppKeyboardGrainPercent() {
@@ -15050,7 +15050,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Whether the keyboard's background opacity still follows Base. That is the question the old
+     * Whether the keyboard's background opacity still follows Global. That is the question the old
      * all-or-nothing "match all surfaces" switch was standing in for here: a keyboard on the shared
      * value is the dock's material, and only a detached one paints its own.
      */
@@ -15847,7 +15847,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int homeMarginDp() {
         return mPreferences == null
-            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP
+            ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_SIDE_GAP
             : Math.max(0, mPreferences.getLayoutMarginDp(homeHoldsOwnLayout()));
     }
 
@@ -23460,7 +23460,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Tells the chrome bands their even-out (ADR 0014, wave 2c; ChromeInk.bandEvenOutPolicy): by
      * default the terminal's stage, the same policy the panes draw with; a band whose Opacity no
-     * longer follows Base evens out to its own text target at its own Opacity's strength. The
+     * longer follows Global evens out to its own text target at its own Opacity's strength. The
      * keyboard and the dock have a frost to compose into; the nav strip always takes the default.
      * The status strip's glass is the top pane's (WallpaperFrostPainter), which this stage does
      * not reach, so it gets none and its ink stays on today's ground. Run with the terminal's

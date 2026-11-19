@@ -1018,7 +1018,7 @@ public final class StatusBarController {
      * The shape the status row's two chips wear: the sessions indicator and the window pills.
      *
      * <p>They are content inside the status surface rather than surfaces of their own, so they are
-     * not part of the Base cascade and have their own knob. Until it is touched they follow the bar
+     * not part of the Global cascade and have their own knob. Until it is touched they follow the bar
      * — square while Docked, the capsule's radius while Floating — which is what they always did.
      * Once it is set, that shape holds in both styles, clamped so a chip can never round past half
      * of its own height.

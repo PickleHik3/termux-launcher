@@ -1647,7 +1647,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /**
      * Feed the empty state's panel, so the text group stays readable over a busy wallpaper: the
-     * Base Look's blur, grain and radius at the group's rect (while the Look wears a slab), under
+     * Global Look's blur, grain and radius at the group's rect (while the Look wears a slab), under
      * a frosted-card scrim of the surface colour that gives the panel contrast of its own - the
      * slab's tint alone can be all but clear. The scrim shows whenever the page is see-through,
      * slab or no slab; an opaque page has its own ground and wears neither.

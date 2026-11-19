@@ -71,16 +71,16 @@ public class WallpaperModePreferencesTest {
         preferences.setWallpaperEnabledTerminalBackgroundOpacity(10);
         preferences.setWallpaperEnabledAppBarOpacity(10);
         preferences.setWallpaperEnabledExtraKeysBlurRadius(4);
-        preferences.setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR, 25);
-        preferences.setSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 60);
+        preferences.setSurfaceGlobalValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR, 25);
+        preferences.setSurfaceGlobalValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 60);
 
         // Not a switch of the mode, so no recreate: the picker's Apply and `launcherctl wallpaper
         // set` land here, and a recreate closed the Look editor and dropped an X11 display pane.
         assertFalse(ChromePolicy.applyWallpaperModePreferences(preferences, true));
 
         assertTrue(preferences.isUseSystemWallpaperEnabled());
-        assertEquals(25, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR));
-        assertEquals(60, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY));
+        assertEquals(25, preferences.getSurfaceGlobalValue(TermuxAppSharedPreferences.SurfaceProperty.BLUR));
+        assertEquals(60, preferences.getSurfaceGlobalValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY));
         assertEquals(25, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(60, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         // The terminal's own Opacity is not the Look's: it stays at its shipped value.

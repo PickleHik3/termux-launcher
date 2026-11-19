@@ -60,7 +60,7 @@ public class LowMemoryPresetTest {
     @Test
     public void otherSurfacesKeepSolidsOpacity() {
         LowMemoryPreset.turnOn(preferences);
-        assertEquals(92, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertEquals(92, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
     }
 

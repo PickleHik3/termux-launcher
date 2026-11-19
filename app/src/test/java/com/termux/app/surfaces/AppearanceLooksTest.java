@@ -186,8 +186,8 @@ public class AppearanceLooksTest {
         assertEquals(100, AppearanceLooks.OPACITY_MAX);
         assertEquals(100, AppearanceLooks.GRAIN_MAX);
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
-            Object opacity = preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY);
-            Object grain = preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN);
+            Object opacity = preset.values.get(TERMUX_APP.KEY_SURFACE_GLOBAL_OPACITY);
+            Object grain = preset.values.get(TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN);
             if (opacity instanceof Number) {
                 int value = ((Number) opacity).intValue();
                 assertEquals(preset.id, value, AppearanceLooks.opacityPercent(value));

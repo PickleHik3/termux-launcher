@@ -63,8 +63,8 @@ public final class LookGrid {
         FROST("frost", 0, FrostStops.LAST, FrostStops.CLEAR, true),
         /** Grain in percent; absent everywhere, it follows the Frost stop ({@link #resolve}). */
         GRAIN("grain", 0, 100, FrostStops.grainPercentFor(FrostStops.CLEAR), true),
-        OPACITY("opacity", 0, 100, TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY, true),
-        TINT("tint", 0, 100, TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT, true),
+        OPACITY("opacity", 0, 100, TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_OPACITY, true),
+        TINT("tint", 0, 100, TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT, true),
         TINT_HUE("tint_hue", TINT_HUE_PRIMARY, TINT_HUE_TERTIARY, TINT_HUE_PRIMARY, true),
         /** The refraction bend in dp, today's stored unit (see the W1 report: not the slider's). */
         DEPTH("depth", TermuxPreferenceConstants.TERMUX_APP.MIN_FANCIER_GLASS_BEND,
@@ -76,14 +76,14 @@ public final class LookGrid {
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_DISPERSION, true),
         /** Corner radius in dp, or {@link #CORNERS_AUTO}. */
         CORNERS("corners", CORNERS_AUTO, 40,
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS, true),
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS, true),
         RIM("rim", RIM_OFF, RIM_GRADIENT, RIM_HAIRLINE, true),
         VIBRANCY("vibrancy", TermuxPreferenceConstants.TERMUX_APP.MIN_SURFACE_GLASS_VIBRANCY,
             TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_GLASS_VIBRANCY,
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_VIBRANCY, false),
         /** All glass only. */
         MARGIN("margin", 0, TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_HORIZONTAL_INSET,
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP, false);
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_SIDE_GAP, false);
 
         public final String key;
         public final int min;
@@ -152,7 +152,7 @@ public final class LookGrid {
     }
 
     /** The cell a value came from, in read order. */
-    public enum Cell { ELEMENT, BASE, SHIPPED }
+    public enum Cell { ELEMENT, GLOBAL, SHIPPED }
 
     /** A resolved value and the cell it was read from. */
     public static final class Resolved {
@@ -421,7 +421,7 @@ public final class LookGrid {
                 return new Resolved(FrostStops.grainPercentFor(
                     resolve(Property.FROST, element).value), Cell.ELEMENT);
         }
-        Resolved found = read(key(property, null), property, Cell.BASE);
+        Resolved found = read(key(property, null), property, Cell.GLOBAL);
         if (found != null) return found;
         if (property == Property.GRAIN)
             return new Resolved(FrostStops.grainPercentFor(

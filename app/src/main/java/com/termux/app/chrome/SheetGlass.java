@@ -9,7 +9,7 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 /**
  * The glass the sheets wear (ADR 0031): the app drawer, folders, anchored and long-press menus,
  * the command palette and notices. They hold no look of their own. They wear Global's glass, the
- * look grid's base cell, with one floor on Opacity so text over a busy page stays readable when
+ * look grid's Global cell, with one floor on Opacity so text over a busy page stays readable when
  * Global is very clear. Blur, Tint, Grain, Corners and the rest follow Global as they are.
  *
  * <p>The Home float (the floating terminal window) is not a sheet: it wears {@link #global} with

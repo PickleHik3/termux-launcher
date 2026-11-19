@@ -49,7 +49,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center">
 
-    <!-- The text group's own glass panel: the Base Look's blur and radius at the group's rect,
+    <!-- The text group's own glass panel: the Global Look's blur and radius at the group's rect,
          under the group's own scrim, so the message and buttons stay readable over any
          wallpaper. Shown only while the page is see-through (X11PaneFrame.applyEmptyPanel); an
          opaque page has a ground already. -->

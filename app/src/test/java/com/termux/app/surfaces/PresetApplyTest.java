@@ -171,7 +171,7 @@ public class PresetApplyTest {
         slide(open(prefs, EditorCard.APPEARANCE, PageKind.HOME, HOME_PAGE), Row.MARGIN, 10);
         assertMargins(prefs, 10, "Customization on Home");
 
-        // Where standing on a page still writes Base: no page holds a Margin of its own.
+        // Where standing on a page still writes Global: no page holds a Margin of its own.
         slide(open(prefs, EditorCard.APPEARANCE, PageKind.TERMINAL, TERMINAL_PAGE),
             Row.MARGIN, 20);
         assertMargins(prefs, 20, "Customization on the Workspace");
@@ -182,12 +182,12 @@ public class PresetApplyTest {
         TermuxAppSharedPreferences prefs = install();
         SurfaceEditorController global = open(prefs, EditorCard.APPEARANCE, PageKind.HOME,
             HOME_PAGE);
-        int base = prefs.getBaseMarginDp();
+        int margin = prefs.getGlobalMarginDp();
         slide(global, Row.MARGIN, 6);
         assertMargins(prefs, 6, "Customization");
         ReflectionHelpers.callInstanceMethod(global, "revertToEntry");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertMargins(prefs, base, "after Discard");
+        assertMargins(prefs, margin, "after Discard");
     }
 
     private static void assertMargins(TermuxAppSharedPreferences prefs, int margin, String what) {

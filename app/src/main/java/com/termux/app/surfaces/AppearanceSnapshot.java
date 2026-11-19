@@ -20,7 +20,7 @@ import java.util.List;
  * (kept while a Look shows, so the Custom stop brings them back) are both one of these.
  *
  * <p>Raw values and the link shape rather than resolved numbers: a surface that was detached at
- * the same number as Base must come back detached, and a key cap radius that was the theme's
+ * the same number as Global must come back detached, and a key cap radius that was the theme's
  * default (absent) must come back absent rather than written as today's default. The same fields,
  * folded to one string, are the editor's dirty signature, so Undo, Discard and "is anything
  * unsaved" cannot disagree about what the editor owns (SPEC §4: tint, rim, motion and the depth
@@ -36,7 +36,7 @@ final class AppearanceSnapshot {
     private static final int STATUS_SWITCH_COUNT = 13;
 
     private final String mLinks;
-    private final int[] mBase;
+    private final int[] mGlobal;
     private final int[] mRaws;
     private final String mMaterial;
     private final int mIntensity;
@@ -60,7 +60,7 @@ final class AppearanceSnapshot {
     private final int mVibrancy;
     /** The shared Text size, in percent. */
     private final int mTextSize;
-    /** Where Base's Glass slider and each surface's were left; -1 for none stored. */
+    /** Where Global's Glass slider and each surface's were left; -1 for none stored. */
     private final int[] mGlassPositions;
     private final int mBend;
     private final int mEdgeWidth;
@@ -121,9 +121,9 @@ final class AppearanceSnapshot {
     private AppearanceSnapshot(@NonNull TermuxAppSharedPreferences prefs) {
         mLinks = linkSignature(prefs);
         SurfaceProperty[] properties = SurfaceProperty.values();
-        mBase = new int[properties.length];
+        mGlobal = new int[properties.length];
         for (SurfaceProperty property : properties)
-            mBase[property.ordinal()] = prefs.getSurfaceBaseValue(property);
+            mGlobal[property.ordinal()] = prefs.getSurfaceGlobalValue(property);
         List<SurfaceEditorRows.Row> rows = SurfaceEditorRows.rows();
         mRaws = new int[rows.size()];
         for (int i = 0; i < rows.size(); i++) {
@@ -241,7 +241,7 @@ final class AppearanceSnapshot {
     /** Writes every captured value back. The caller re-renders. */
     void restore(@NonNull TermuxAppSharedPreferences prefs) {
         for (SurfaceProperty property : SurfaceProperty.values())
-            prefs.setSurfaceBaseValue(property, mBase[property.ordinal()]);
+            prefs.setSurfaceGlobalValue(property, mGlobal[property.ordinal()]);
         List<SurfaceEditorRows.Row> rows = SurfaceEditorRows.rows();
         for (int i = 0; i < rows.size() && i < mRaws.length; i++) {
             if (isKeyboardBlur(rows.get(i))) continue; // mKeyboardBlurRaw restores it below
@@ -312,7 +312,7 @@ final class AppearanceSnapshot {
     @NonNull
     String signature() {
         StringBuilder out = new StringBuilder(256).append(mLinks).append('|');
-        for (int value : mBase) out.append(value).append(',');
+        for (int value : mGlobal) out.append(value).append(',');
         out.append('|');
         for (int value : mRaws) out.append(value).append(',');
         return out.append('|').append(mMaterial).append('|').append(mIntensity)
@@ -356,7 +356,7 @@ final class AppearanceSnapshot {
     // ------------------------------------------------------------------------------ helpers
 
     /**
-     * The shared keys a half may hold its own copy of: the per-half Base numbers, every per-half
+     * The shared keys a half may hold its own copy of: the per-half Global numbers, every per-half
      * surface cell and its link, the material point, and the keyboard's backdrop fade.
      */
     @NonNull
@@ -364,7 +364,7 @@ final class AppearanceSnapshot {
         List<String> keys = new java.util.ArrayList<>();
         for (SurfaceProperty property : SurfaceProperty.values()) {
             if (TermuxAppSharedPreferences.isPerPageProperty(property))
-                keys.add(property.baseKey);
+                keys.add(property.globalKey);
         }
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
@@ -442,11 +442,11 @@ final class AppearanceSnapshot {
     }
 
     /**
-     * Puts one half's Base back as captured for {@code properties}: the half's own value written
+     * Puts one half's Global back as captured for {@code properties}: the half's own value written
      * as it was, or dropped where the half followed the shared value then. Home's Reset uses it
      * to put Home's glass back on the Look it wore when the editor opened.
      */
-    void restoreHalfBase(@NonNull TermuxAppSharedPreferences prefs,
+    void restoreHalfGlobal(@NonNull TermuxAppSharedPreferences prefs,
                          int pageId,
                          @NonNull SurfaceProperty... properties) {
         SharedPreferences store = prefs.getSharedPreferences();
@@ -456,9 +456,9 @@ final class AppearanceSnapshot {
         for (SurfaceProperty property : properties) {
             if (!TermuxAppSharedPreferences.isPerPageProperty(property))
                 continue;
-            String halfKey = TermuxAppSharedPreferences.surfacePageKey(property.baseKey, pageId);
-            if (halfKey.equals(property.baseKey))
-                continue; // Base is the wall's: the shared restore puts it back
+            String halfKey = TermuxAppSharedPreferences.surfacePageKey(property.globalKey, pageId);
+            if (halfKey.equals(property.globalKey))
+                continue; // Global is the wall's: the shared restore puts it back
             Object value = mHalfKeys.get(halfKey);
             if (value instanceof Integer) editor.putInt(halfKey, (Integer) value);
             else if (store.contains(halfKey)) editor.remove(halfKey);
