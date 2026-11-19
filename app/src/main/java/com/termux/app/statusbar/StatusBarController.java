@@ -1332,8 +1332,8 @@ public final class StatusBarController {
     }
 
     /** {@link StatusBarWidgets#resolveStatusInks}: a crossing's ends, measured once at begin. */
-    public boolean resolveStatusInks(@NonNull int[] out, boolean wearingLook) {
-        return mWidgets.resolveStatusInks(out, wearingLook);
+    public boolean resolveStatusInks(@NonNull int[] out) {
+        return mWidgets.resolveStatusInks(out);
     }
 
     /** The band the last {@link #resolveStatusInks} measured; null before the first. */

@@ -138,8 +138,9 @@ public final class CrossingController {
         default void legibilityCrossingBegan() {}
 
         /**
-         * A look-only crossing begins between two pages: the dock's legends are to drift from
-         * {@code here}'s ink to {@code there}'s on the crossing's curve, from what rest measured.
+         * A crossing between two kinds of page begins: the inks over each page's ground drift
+         * from {@code here}'s to {@code there}'s on the crossing's curve, from what rest
+         * measured, and the keyboard fades toward a page where it is down.
          */
         default void beginLegendBlend(@NonNull com.termux.app.wall.PageRef here,
                                       @NonNull com.termux.app.wall.PageRef there) {}
@@ -422,8 +423,9 @@ public final class CrossingController {
             mHost.promptFieldUnderPalette());
         Trace.endSection();
         Trace.beginSection("Travel.blends");
-        // A stack whose halves differ in look blends its glass with the wall.
-        syncStackLookBlend(seam);
+        // The inks over each page's ground, and the keyboard toward a page where it is down,
+        // cross with the wall.
+        syncEndBlend(seam);
         // The band behind the system bar crosses with the bar's glass by the same share, written
         // by the top stack's renderer from the status travel below.
         // A band only one half's dock carries follows its page across the seam.
@@ -802,16 +804,11 @@ public final class CrossingController {
             hereRest, thereRest, mHost.arrangementRevision());
         mHost.beginTopStack(herePage, therePage, committed, otherLayout);
         if (!begins) return;
-        // A look apart blends the dock's glass from here to there (syncStackLookBlend).
-        mLookBlendShare = Float.NaN;
-        mLookBlendHereOpacity = mHost.preferences() == null ? 100
-            : mHost.preferences().getAppBarOpacity(mHost.lookIdOf(herePage));
-        mLookBlendThereOpacity = mHost.preferences() == null ? 100
-            : mHost.preferences().getAppBarOpacity(mHost.lookIdOf(therePage));
-        mLookBlendHereId = mHost.lookIdOf(herePage);
-        beginStackLookBlend(therePage);
+        // What differs by page and not by look crosses with the wall (syncEndBlend).
+        mEndBlendShare = Float.NaN;
+        mHost.endLegendBlend();
         mHost.legibilityCrossingBegan();
-        if (mCrossing.seam().lookBlends()) mHost.beginLegendBlend(herePage, therePage);
+        if (mCrossing.seam().endsBlend()) mHost.beginLegendBlend(herePage, therePage);
         mHost.beginTopBandFade(herePage, therePage);
         // From here to the landing the chrome travels over the wallpaper: its bands keep the
         // even-out they stand on, so the ground moving under them asks for no whole apply each
@@ -927,85 +924,25 @@ public final class CrossingController {
         return seam.dockReveal();
     }
 
-    /** The dock's opacity at each end of a look blend, read as the crossing begins. */
-    private int mLookBlendHereOpacity = 100, mLookBlendThereOpacity = 100;
-    /** The blend's step last applied; NaN while none has been. */
-    private float mLookBlendShare = Float.NaN;
+    /** The end share last applied; NaN while none has been. */
+    private float mEndBlendShare = Float.NaN;
 
     /**
-     * One frame of a crossing between halves that dress the stack apart only in look
-     * (SeamCrossing.Answers#lookShare): the dock's frost, which carries its opacity, is set at the
-     * blend's step between the two ends' opacities, over the even-out matrix last measured. Set
-     * only when the step changes (at most SeamCrossing.LOOK_STEPS times a crossing), never at
-     * rest, and nothing is laid out; the RenderEffect (blur and lens) is left as it is. The
-     * landing's re-dress then sets the arriving look, which the last step already showed.
+     * One frame of a crossing between two kinds of page (SeamCrossing.Answers#endShare): what
+     * differs by page and not by look (the inks over each page's ground, the keyboard toward a
+     * page where it is down) is set at the share's step, only when the step changes (at most
+     * SeamCrossing.END_STEPS times a crossing), never at rest; nothing is built or laid out.
      */
-    private void syncStackLookBlend(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
-        float share = seam.lookShare();
-        if (Float.isNaN(share) || share == mLookBlendShare || mHost.chrome() == null) return;
-        mLookBlendShare = share;
-        // A re-dress on the way put the arriving look's sheet up in place of the blend: it is
-        // the blend's arriving end from now on, so the sheet keeps crossing rather than jumping.
-        View sheet = mHost.findViewById(R.id.extrakeys_background);
-        if (mLookBlendDock != null && sheet != null && sheet.getBackground() != mLookBlendDock
-            && sheet.getBackground() != null) {
-            // Both ends rebuilt from their own looks: a re-dress is dressed for whichever end the
-            // stack's look stands on then, which is not always the arriving one.
-            mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(
-                mHost.chrome().glass().dockSurfaceOf(mLookBlendHereId, 0f, 1f, false),
-                mHost.chrome().glass().dockSurfaceOf(mLookBlendThereId, 0f, 1f, false), share);
-            sheet.setBackground(mLookBlendDock);
-            if (com.termux.app.chrome.MotionLog.enabled)
-                com.termux.app.chrome.MotionLog.log("look-blend", "rewrapped share=" + share); // DIAG
-        }
-        // The dock's sheet, its opacity, tint and grain: a redraw at the step, nothing built.
-        if (mLookBlendDock != null) mLookBlendDock.setShare(share);
-        // The legends drift on the same step, from the corrections rest kept: nothing measured.
+    private void syncEndBlend(@NonNull com.termux.app.place.SeamCrossing.Answers seam) {
+        float share = seam.endShare();
+        if (Float.isNaN(share) || share == mEndBlendShare) return;
+        mEndBlendShare = share;
         mHost.legendBlend(share);
-        android.widget.ImageView backdrop = mHost.hotView(R.id.accessory_blur_backdrop);
-        if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) return;
-        int opacity = com.termux.app.place.SeamCrossing.lookBlendValue(mLookBlendHereOpacity,
-            mLookBlendThereOpacity, share);
-        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.withEvenOut(
-            mHost.chrome().ink().lastBandEvenOutMatrix(com.termux.app.chrome.GlassBackdropCache.Band.DOCK),
-            com.termux.app.chrome.GlassFilters.frost(opacity)));
     }
 
-    /**
-     * The dock's sheet across a look-only crossing: the glass it wears beside the arriving end's,
-     * built once as the crossing begins, crossed by the blend's step
-     * ({@link #syncStackLookBlend}). The sheet carries the dock's opacity, tint and grain (the
-     * frost filter alone carries only the Clear step), so this is the blend the eye sees. Null
-     * while none runs.
-     */
-    @Nullable private com.termux.app.chrome.CrossfadeDrawable mLookBlendDock;
-    /** The look ids the blend runs between: the end it leaves and the end it arrives at. */
-    private int mLookBlendHereId;
-    private int mLookBlendThereId;
-
-    private void beginStackLookBlend(@NonNull com.termux.app.wall.PageRef there) {
-        endStackLookBlend();
-        if (mHost.chrome() == null || !mCrossing.seam().lookBlends()) return;
-        View sheet = mHost.findViewById(R.id.extrakeys_background);
-        Drawable here = sheet == null ? null : sheet.getBackground();
-        // Standing down on a joined Docked frame, the sheet draws nothing to blend.
-        if (here == null) return;
-        mLookBlendThereId = mHost.lookIdOf(there);
-        mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(here,
-            mHost.chrome().glass().dockSurfaceOf(mLookBlendThereId, 0f, 1f, false), 0f);
-        sheet.setBackground(mLookBlendDock);
-        if (com.termux.app.chrome.MotionLog.enabled)
-            com.termux.app.chrome.MotionLog.log("look-blend", "begin there=" + mHost.lookIdOf(there)); // DIAG
-    }
-
-    /** The blend is over: the sheet keeps the end it reached, nothing rebuilt. */
-    public void endStackLookBlend() {
+    /** The crossing is over: what crossed with it keeps the end it reached. */
+    public void endEndBlend() {
         mHost.endLegendBlend();
-        com.termux.app.chrome.CrossfadeDrawable blend = mLookBlendDock;
-        mLookBlendDock = null;
-        if (blend == null) return;
-        View sheet = mHost.findViewById(R.id.extrakeys_background);
-        if (sheet != null && sheet.getBackground() == blend) sheet.setBackground(blend.endpoint());
     }
 
     /**

@@ -163,7 +163,7 @@ public class SeamCrossingTest {
         float fraction, progress, dockReveal, keyboardReveal, frameKeyboardReveal;
         float beadShare;
         float stripShare, fieldShare;
-        float barMarginShare, barMarginDp, lookShare;
+        float barMarginShare, barMarginDp, endShare;
         DockStyle stackDesign;
         boolean active, rowsSink, relayout, restyle, restyleShape, bandsMoved, rides;
         boolean barRedressed;
@@ -219,7 +219,7 @@ public class SeamCrossingTest {
             step.beadShare = answers.beadShare();
             step.barMarginShare = answers.barMarginShare();
             step.barMarginDp = crossing.barMarginDp(answers.barMarginShare());
-            step.lookShare = answers.lookShare();
+            step.endShare = answers.endShare();
             step.stackDesign = crossing.stackDesign();
             step.rowsSink = answers.rowsSink(100);
             step.relayout = answers.relayout();
@@ -713,68 +713,32 @@ public class SeamCrossingTest {
         }
     }
 
-    /** One end of a crossing whose stack wears the dock at {@code dockOpacity}, nothing else apart. */
-    private static SeamCrossing.Endpoint lookEnd(@NonNull DressResolver dresses,
-                                                 @NonNull PageKind page, int dockOpacity) {
-        Dress dress = dresses.dressOf(page);
-        PlaceLayout layout = page == PageKind.HOME ? home() : window();
-        return SeamCrossing.Endpoint.of(PageRef.of(page), dress, layout,
-            SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0, HalfLook.ofDockOpacity(dockOpacity)),
-            false);
-    }
-
     /**
-     * Halves apart only in look (amendment 2026-11-04): the stack moves exactly as between halves
-     * dressed alike (no dip, no re-dress mid-slide), its look blends with the wall in steps to the
-     * landed end, and the landing's re-dress is one the landed frame has nothing to show from, so
-     * it follows that frame instead of holding it (58-88 ms on pong). A slide that came back has
-     * blended back and commits nothing.
+     * The chrome wears one look on every page (ADR 0031): a crossing between Home and the
+     * Workspace carries its end share in steps with the wall, to the landed end, for what differs
+     * by page and not by look (the inks over each page's ground, the keyboard toward a page where
+     * it is down); nothing is dressed again mid-slide for it.
      */
     @Test
-    public void aLookApartAloneBlendsAndItsLandingFollowsTheFrame() {
+    public void aCrossingBetweenKindsCarriesItsEndShareInSteps() {
         for (PageKind from : BOTH) {
             for (boolean comesBack : new boolean[] {false, true}) {
-                PageKind to = from == PageKind.HOME ? PageKind.TERMINAL
-                    : PageKind.HOME;
-                DressResolver dresses = new DressResolver(new Stored());
-                Drive drive = new Drive(lookEnd(dresses, from, 20), lookEnd(dresses, to, 90),
-                    SeamCrossing.Stage.of(false, () -> false, true));
-                Drive alike = oneLayout(from);
+                Drive drive = oneLayout(from);
                 drive.slow(0f, 1f);
-                alike.slow(0f, 1f);
-                if (comesBack) {
-                    drive.slow(1f, 0f);
-                    alike.slow(1f, 0f);
-                }
+                if (comesBack) drive.slow(1f, 0f);
                 String why = "from " + from + (comesBack ? ", back" : "");
                 float last = Float.NaN;
-                for (int i = 0; i < drive.steps.size(); i++) {
-                    Step step = drive.steps.get(i), plain = alike.steps.get(i);
-                    assertEquals(why + ": no dip", plain.dockReveal, step.dockReveal, EPSILON);
-                    assertEquals(why, plain.keyboardReveal, step.keyboardReveal, EPSILON);
+                for (Step step : drive.steps) {
                     assertFalse(why + ": nothing dressed again mid-slide", step.restyle);
                     if (!step.active) continue;
-                    assertFalse(why + ": blends", Float.isNaN(step.lookShare));
+                    assertFalse(why + ": an end share", Float.isNaN(step.endShare));
                     assertEquals(why + ": in steps", 0f,
-                        step.lookShare * SeamCrossing.LOOK_STEPS
-                            - Math.round(step.lookShare * SeamCrossing.LOOK_STEPS), EPSILON);
-                    last = step.lookShare;
+                        step.endShare * SeamCrossing.END_STEPS
+                            - Math.round(step.endShare * SeamCrossing.END_STEPS), EPSILON);
+                    last = step.endShare;
                 }
-                assertEquals(why + ": the last frame shows the landed look", comesBack ? 0f : 1f,
+                assertEquals(why + ": the last frame stands on the landed end", comesBack ? 0f : 1f,
                     last, EPSILON);
-                // The glass the last moving frame drew is the landed end's, which the landing's
-                // re-dress builds: the dock's opacity (20 here, 90 there) and, read the same
-                // way, its tint strength (the sheet's crossfade stands wholly on that end).
-                assertEquals(why + ": opacity", comesBack ? 20 : 90,
-                    SeamCrossing.lookBlendValue(20, 90, last));
-                assertEquals(why + ": tint", comesBack ? 35 : 70,
-                    SeamCrossing.lookBlendValue(35, 70, last));
-                PageKind landed = comesBack ? from : to;
-                SeamCrossing.Landing landing = drive.crossing.land();
-                assertFalse(why, landing.stackDressedFor(landed));
-                assertFalse(why, landing.redressesBack(landed));
-                assertEquals(why + ": the re-dress follows the landed frame", !comesBack,
-                    landing.lookBlendedOnto(landed));
             }
         }
     }

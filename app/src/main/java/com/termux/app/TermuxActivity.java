@@ -5566,9 +5566,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mFancierGlassLook;
             }
             @Override public float dockCover() {
-                // Across a look blend, and from its end to the landing's own pass, the cover the
-                // blend reached (beginDockFrostBlend).
-                if (mDockCoverBlendOn || mDockCoverPending) return mDockCoverNow;
                 return mDockGlassCover;
             }
             @Override public void applyDockSurfaceGlass(
@@ -7678,44 +7675,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Both top ends' inks. The arriving end is asked of the glass its page's look gives the bar,
-     * with the status reads answering that page; the sessions chip, which slides with the chips
-     * and does not blend, is inked on the Workspace end's band. The committed end is measured
-     * last so the band's memory finishes on what is drawn.
+     * Both top ends' inks: the chrome wears one look on every page (ADR 0031), so both ends are
+     * inked from the glass drawn now; the sessions chip, which slides with the chips and does not
+     * blend, is inked on the Workspace end's band.
      */
     private void fillTopInks(@NonNull com.termux.app.wall.PageRef here,
                              @NonNull com.termux.app.wall.PageRef there) {
-        boolean sameLook = mTopEndHere.lookId == mTopEndThere.lookId;
-        com.termux.app.chrome.OnGlass.Resolution thereBand = null;
-        boolean thereOk;
-        if (sameLook) {
-            thereOk = false;
-        } else {
-            mLookIdOverride = mTopEndThere.lookId;
-            try {
-                thereOk = mStatusBar.resolveStatusInks(mTopEndThere.inks, true);
-            } finally {
-                mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
-            }
-            if (thereOk) thereBand = mStatusBar.resolvedStatusBand();
-        }
-        boolean hereOk = mStatusBar.resolveStatusInks(mTopEndHere.inks, false);
-        com.termux.app.chrome.OnGlass.Resolution hereBand = hereOk
-            ? mStatusBar.resolvedStatusBand() : null;
-        if (sameLook || !thereOk) {
-            if (hereOk) System.arraycopy(mTopEndHere.inks, 0, mTopEndThere.inks, 0,
-                mTopEndHere.inks.length);
-            thereOk = hereOk;
-            thereBand = hereBand;
-        } else if (!hereOk) {
-            System.arraycopy(mTopEndThere.inks, 0, mTopEndHere.inks, 0, mTopEndThere.inks.length);
-            hereOk = true;
-            hereBand = thereBand;
-        }
-        mTopEndHere.inksResolved = hereOk;
-        mTopEndThere.inksResolved = thereOk;
-        mStatusBar.applySessionsBand(!here.isHome() ? hereBand : !there.isHome() ? thereBand
-            : hereBand);
+        boolean ok = mStatusBar.resolveStatusInks(mTopEndHere.inks);
+        com.termux.app.chrome.OnGlass.Resolution band = ok ? mStatusBar.resolvedStatusBand() : null;
+        if (ok) System.arraycopy(mTopEndHere.inks, 0, mTopEndThere.inks, 0,
+            mTopEndHere.inks.length);
+        mTopEndHere.inksResolved = ok;
+        mTopEndThere.inksResolved = ok;
+        mStatusBar.applySessionsBand(band);
     }
 
     private void fillTopEnd(@NonNull com.termux.app.statusbar.TopStackScene.End end,
@@ -7773,35 +7745,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTopFadeStripHere = strip != null && strip.isShown() ? strip.getBackground() : null;
         View bar = findViewById(R.id.terminal_window_bar_background);
         mTopFadeBarHere = bar != null ? bar.getBackground() : null;
-        // A look apart: build the arriving end now, so the band crosses with the wall and the
-        // landing's re-dress finds it already in that dress.
-        int arriving = com.termux.app.place.TopBandFadePlan.arrivingLookAtBegin(
-            lookIdOf(here), lookIdOf(there));
-        View host = findViewById(R.id.terminal_window_bar_host);
-        if (arriving != com.termux.app.place.TopBandFadePlan.NONE && host != null && mChrome != null
-            && mCrossing.crossing())
-            buildTopBandFadeEnds(host, arriving);
+        // One look on every page (ADR 0031): no arriving end is built here; the first re-dress
+        // on the way builds it (topFadeTakesRedress).
     }
 
-    /** Builds both crossfades, the arriving end under look {@code lookId}, once per crossing. */
-    private void buildTopBandFadeEnds(@NonNull View host, int lookId) {
+    /** Builds both crossfades, the arriving end as the band is dressed now, once per crossing. */
+    private void buildTopBandFadeEnds(@NonNull View host) {
         mTopFadeBuilt = true;
-        mLookIdOverride = lookId;
-        try {
-            View strip = findViewById(R.id.terminal_status_bar_glass_surface);
-            if (strip != null) {
-                strip.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeStripHere,
-                    buildStatusInsetStripSurface(host), mTopStackRenderer.glassShare()));
-            }
-            View bar = findViewById(R.id.terminal_window_bar_background);
-            if (bar != null) {
-                bar.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeBarHere,
-                    buildTerminalWindowBarBackground(host), mTopStackRenderer.glassShare()));
-            }
-            // The frost crosses too, at the arriving look's blur and bend.
-            mChrome.frost().buildArrivingTopFrost();
-        } finally {
-            mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+        View strip = findViewById(R.id.terminal_status_bar_glass_surface);
+        if (strip != null) {
+            strip.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeStripHere,
+                buildStatusInsetStripSurface(host), mTopStackRenderer.glassShare()));
+        }
+        View bar = findViewById(R.id.terminal_window_bar_background);
+        if (bar != null) {
+            bar.setBackground(new com.termux.app.chrome.CrossfadeDrawable(mTopFadeBarHere,
+                buildTerminalWindowBarBackground(host), mTopStackRenderer.glassShare()));
         }
         // The top stack's writer puts the blend's share (and the band's presence) on them.
         mTopStackRenderer.requestApply();
@@ -7821,7 +7780,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTopFadeBuilt) return true;
         View host = findViewById(R.id.terminal_window_bar_host);
         if (host == null || mChrome == null) return false;
-        buildTopBandFadeEnds(host, com.termux.app.place.TopBandFadePlan.NONE);
+        buildTopBandFadeEnds(host);
         return true;
     }
 
@@ -7838,7 +7797,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 strip.setAlpha(1f);
             }
             settleCrossfade(findViewById(R.id.terminal_window_bar_background));
-            if (mChrome != null) mChrome.frost().settleTopFrost();
         }
         mTopFadeActive = false;
         mTopFadeHerePage = null;
@@ -9470,8 +9428,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         for (int barId : barIds) {
             View bar = findViewById(barId);
             if (bar instanceof com.termux.app.chrome.BarGlassView
-                && (drawableShowsFrame(((com.termux.app.chrome.BarGlassView) bar).getFrost(), frame)
-                    || drawableShowsFrame(((com.termux.app.chrome.BarGlassView) bar).getArrivingFrost(), frame)))
+                && drawableShowsFrame(((com.termux.app.chrome.BarGlassView) bar).getFrost(), frame))
                 return true;
         }
         View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
@@ -9533,17 +9490,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.SharedFrameDrawable installed =
             com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable());
         float dockCover = mDock.dockGlassCover();
-        if (mDockCoverPending) {
-            // The landing's pass: from here the cover is the one this pass works out. A crossing
-            // that came back to where it began keeps its own cover, which nothing below rebuilds.
-            mDockCoverPending = false;
-            if (dockCover == mDockGlassCover && mDockCoverNow != dockCover)
-                rebuildBackdropGlassEffectForLens();
-        }
-        // DIAG(dock-cover): the program's cover as each pass finds it; revert before merge.
-        if (MotionLog.enabled && dockCover != mDockGlassCover)
-            MotionLog.log("dock-cover", "pass=" + dockCover + " built=" + mDockGlassCover
-                + " blend=" + mDockCoverBlendOn + " now=" + mDockCoverNow);
         // A Frost drag moves the radius every tick; the bakes are held, so a re-install would put
         // up a stand-in and rebuild the refraction effect for nothing the eye gains. The frame
         // up stays until the release's pass, which re-cuts at the radius the drag settled on.
@@ -13786,7 +13732,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncExtraKeysInk(float dockOpacity) {
         View keys = getVisibleExtraKeys();
         if (keys == null || keys.getWidth() <= 0 || keys.getHeight() <= 0) return;
-        // A look-only crossing is drifting these inks from what rest kept (beginLegendBlend).
+        // A crossing is drifting these inks from what rest kept (beginLegendBlend).
         if (mLegendBlendOn) return;
         // The bar is the Workspace's: while it stands as that lane with Home in front it is
         // inked from the Workspace's own look, as it will be on landing, and the Home page's
@@ -13892,14 +13838,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final com.termux.app.page.PageKind[] LEGIBILITY_KINDS =
         com.termux.app.page.PageKind.values();
 
-    /** The extra keys' ink at each end of a look-only crossing; set by {@link #beginLegendBlend}. */
+    /** The extra keys' ink at each end of a crossing; set by {@link #beginLegendBlend}. */
     private boolean mLegendBlendOn;
     @androidx.annotation.ColorInt private int mLegendInkHere;
     @androidx.annotation.ColorInt private int mLegendInkThere;
 
     /**
-     * A look-only crossing begins: the extra keys' ink at each end is chosen from the face rest
-     * kept for that page, so the legends drift between the two on the glass's own curve instead of
+     * A crossing between two kinds of page begins: the extra keys' ink at each end is chosen from
+     * the face rest kept for that page (the ground under the dock differs by page, the look does
+     * not, ADR 0031), so the legends drift between the two on the glass's own curve instead of
      * flipping at the landing. Without a kept face for both ends nothing drifts and the landing's
      * re-dress inks as it always did; nothing is measured either way.
      */
@@ -13908,7 +13855,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         endLegendBlend();
         if (mChrome == null) return;
         beginKeyboardLookBlend(there);
-        beginDockFrostBlend(there);
+        beginDockGroundBlend(there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);
         long thereKey = legibilityKey(there);
@@ -13971,13 +13918,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTilesInkBlendOn) mDock.tilesInkBlend(share);
         if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.setInkBlend(share);
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.setGlassBlend(share);
-        if (mDockFrostBlendOn) {
-            // The dock's frost crosses too: its live picture's blur at the blended radius, so the
-            // landing's pass finds the arriving radius already drawn (ADR 0029 section 8).
-            float px = (mDockFrostHereDp + (mDockFrostThereDp - mDockFrostHereDp)
-                * Math.max(0f, Math.min(1f, share))) * getResources().getDisplayMetrics().density;
-            mGlass.livePicture(DOCK_GLASS, px, com.termux.app.chrome.LivePicture.class);
-        }
         if (mDockFilterBlendOn && mDockFilterHere != null && mDockFilterThere != null
                 && share != mDockFilterShare) {
             mDockFilterShare = share;
@@ -13985,14 +13925,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mDockFilterThere, share);
             ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
             if (backdrop != null) backdrop.setColorFilter(mDockFilterNow);
-        }
-        if (mDockCoverBlendOn) {
-            float cover = mDockCoverHere + (mDockCoverThere - mDockCoverHere)
-                * Math.max(0f, Math.min(1f, share));
-            if (cover != mDockCoverNow) {
-                mDockCoverNow = cover;
-                rebuildBackdropGlassEffectForLens();
-            }
         }
         com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
         if (keyboardBlend != null) {
@@ -14011,31 +13943,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** The dock's blur at each end of a look blend, in dp, and whether they differ. */
-    private int mDockFrostHereDp;
-    private int mDockFrostThereDp;
-    private boolean mDockFrostBlendOn;
-
-    private void beginDockFrostBlend(@NonNull com.termux.app.wall.PageRef there) {
-        mDockFrostHereDp = getEffectiveExtraKeysBlurRadius();
-        mLookIdOverride = lookIdOf(there);
-        float coverThere;
-        try {
-            mDockFrostThereDp = getEffectiveExtraKeysBlurRadius();
-            coverThere = mDock.dockGlassCover();
-        } finally {
-            mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
-        }
-        mDockFrostBlendOn = mDockFrostHereDp != mDockFrostThereDp;
-        // The dock program's cover (what its tint covers of the gathered edge) crosses too: the
-        // cover the program was last built with, toward the arriving look's.
-        mDockCoverPending = false;
-        mDockCoverHere = mDockGlassCover;
-        mDockCoverThere = coverThere;
-        mDockCoverNow = mDockCoverHere;
-        mDockCoverBlendOn = mDockCoverHere >= 0f && mDockCoverHere != mDockCoverThere;
-        // And its frost: the even-out each look's dock measured over its own rest, from the one
-        // up now to the arriving look's as it was last measured there.
+    /**
+     * The dock's frost across a crossing: the even-out each page's dock measured over the ground
+     * under its own rest (the wallpaper there, and the page's dim where the dock has no frame),
+     * from the one up now to the arriving page's as it was last measured there. The look is one
+     * on every page (ADR 0031); the ground is not.
+     */
+    private void beginDockGroundBlend(@NonNull com.termux.app.wall.PageRef there) {
         mDockFilterBlendOn = false;
         mDockFilterNow = null;
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
@@ -14056,7 +13970,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** The dock frost at each end of a look blend, and the one drawn now. */
+    /** The dock frost at each end of a crossing, and the one drawn now. */
     @Nullable private android.graphics.ColorMatrix mDockFilterHere;
     @Nullable private android.graphics.ColorMatrix mDockFilterThere;
     @Nullable private android.graphics.ColorFilter mDockFilterNow;
@@ -14071,14 +13985,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return String.format(java.util.Locale.ROOT, "[%.3f %.3f %.3f | %.1f %.1f %.1f]",
             m[0], m[6], m[12], m[4], m[9], m[14]);
     }
-
-    /** The dock program's cover at each end of a look blend, and the one it is built with now. */
-    private float mDockCoverHere;
-    private float mDockCoverThere;
-    private float mDockCoverNow;
-    private boolean mDockCoverBlendOn;
-    /** The blend ended and the landing's pass has not built the cover of its own yet. */
-    private boolean mDockCoverPending;
 
     /** Whether the keyboard look blend arrives at a keyboard (else the keyboard's material goes). */
     private boolean mKeyboardLookBlendArrives;
@@ -14099,7 +14005,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mKeyboardLookBlendArrives = chromeRestOf(there.kind).keyboardReveal() > 0f;
         if (!mKeyboardLookBlendArrives) {
             // Toward a rest with no keyboard: the material the keyboard wears goes with the
-            // look's share, so the landing that drops it finds it already gone.
+            // crossing's share, so the landing that drops it finds it already gone.
             Drawable here = surfaceHost.getBackground();
             if (here == null) return;
             mKeyboardLookBlend = new com.termux.app.chrome.CrossfadeDrawable(here,
@@ -14131,9 +14037,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPromptInkBlendOn = false;
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.endGlassBlend();
         mKeyboardBlendOn = false;
-        mDockFrostBlendOn = false;
-        if (mDockCoverBlendOn) mDockCoverPending = true;
-        mDockCoverBlendOn = false;
         // The landing's pass measures the arriving frost afresh; what the blend left up stands
         // until then.
         mDockFilterBlendOn = false;
@@ -23568,7 +23471,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private android.graphics.ColorFilter dockFrostFilter(@Nullable View surfaceHost) {
-        // Across a look blend the frost is the blend's (beginDockFrostBlend): a pass on the way
+        // Across a crossing the frost is the blend's (beginDockGroundBlend): a pass on the way
         // re-measures nothing the eye would see change.
         if (mDockFilterBlendOn && mDockFilterNow != null) {
             if (mChrome != null)
@@ -23576,7 +23479,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mDockFilterNow;
         }
         android.graphics.ColorFilter filter = measureDockFrostFilter(surfaceHost);
-        // Each look's frost as it stands at rest, for a crossing toward it to blend into.
+        // Each page's frost as it stands at rest, for a crossing toward it to blend into.
         if (surfaceHost != null && !mCrossing.crossing()) {
             android.graphics.ColorMatrix matrix =
                 com.termux.app.chrome.GlassFilters.matrixOf(filter);
@@ -25381,12 +25284,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // plainly, as that end wears it.
             Trace.beginSection("Settle.fades");
             endTopBandFade();
-            mCrossingController.endStackLookBlend();
+            mCrossingController.endEndBlend();
             Trace.endSection();
-            // A stack dressed for the landed half on the way, or a look the crossing blended onto
-            // it: the landed frame already shows what the half's re-dress would, which follows it.
-            mLandingStackDressed = seamLanding.stackDressedFor(page)
-                || seamLanding.lookBlendedOnto(page);
+            // A stack dressed for the landed half on the way: the landed frame already shows what
+            // the half's re-dress would, which follows it.
+            mLandingStackDressed = seamLanding.stackDressedFor(page);
             // A keyboard laid out down that the arriving place wants is shown where the travel
             // already stood it (reveal 1, translation 0): quietly, with no reveal and no second
             // movement. One the place does not want stays laid out down.

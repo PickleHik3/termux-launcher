@@ -138,25 +138,6 @@ public class TopStackRendererTest {
         assertEquals(0, Counters.countOf(FrameGuards.FOREIGN_WRITER));
     }
 
-    @Test public void theBarsFrostShareFollowsTheGlassShareOnASharedBar() {
-        Context context = RuntimeEnvironment.getApplication();
-        com.termux.app.chrome.BarGlassView[] bars = new com.termux.app.chrome.BarGlassView[3];
-        int[] ids = {R.id.terminal_status_bar_glass_surface, R.id.terminal_window_bar_background,
-            R.id.terminal_window_bar_background_side};
-        for (int i = 0; i < 3; i++) {
-            bars[i] = new com.termux.app.chrome.BarGlassView(context);
-            bars[i].setArrivingFrost(new ColorDrawable(Color.GREEN));
-            put(ids[i], bars[i]);
-        }
-        mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, true, true),
-            end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), true);
-        for (float p : new float[] {0f, 0.5f, 1f}) {
-            frameAt(p);
-            for (com.termux.app.chrome.BarGlassView bar : bars)
-                assertEquals("frost share at " + p, SeamFade.share(p), bar.frostShare(), 0f);
-        }
-    }
-
     @Test public void aStripTheLeavingEndDidNotShowComesInByItsAlpha() {
         mRenderer.begin(end(Side.HOME, PlaceLayout.Edge.TOP, 0, false, false),
             end(Side.WORKSPACE, PlaceLayout.Edge.TOP, 0, true, true), false);
