@@ -12,9 +12,8 @@ import androidx.annotation.Nullable;
 /**
  * What the in-app keyboard's host wears over its own look while the app drawer is open
  * ({@link KeyboardSheetLook}): the sheet's glass, laid over the host's own background at the
- * drawer's fraction, and the top corners the drawer's radius gives it. One instance per host.
- * Allocation free once the glass is set; the only allocation per change is the outline's clip,
- * and only when the radius moves a whole pixel.
+ * drawer's fraction,. One instance per host.
+ * Allocation free once the glass is set.
  */
 public final class KeyboardSheetSkin {
 
@@ -60,22 +59,6 @@ public final class KeyboardSheetSkin {
         if (!engaged()) return inner;
         mLayers.setInner(inner);
         return mLayers;
-    }
-
-    /**
-     * {@code clip} with its top corners at {@code topPx} (whole pixels): the same clip when they
-     * are already there. Null for no clip and no radius to give.
-     */
-    @Nullable
-    public static LiveChromeShape.Clip withTopRadius(@Nullable LiveChromeShape.Clip clip,
-                                                     float topPx) {
-        float t = Math.max(0f, Math.round(topPx));
-        if (clip == null) {
-            return t <= 0f ? null : new LiveChromeShape.Clip(0, 0, 0, 0, t, t, 0f, 0f, true);
-        }
-        if (clip.topLeft == t && clip.topRight == t) return clip;
-        return new LiveChromeShape.Clip(clip.reachLeft, clip.reachTop, clip.reachRight,
-            clip.reachBottom, t, t, clip.bottomRight, clip.bottomLeft, true);
     }
 
     /** The host's own background under the sheet, which fades in over it. */
