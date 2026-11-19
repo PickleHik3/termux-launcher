@@ -8698,6 +8698,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Sets the host's background; one that is not the held glass lets the held glass go. */
     private void setKeyboardHostBackground(@NonNull View surfaceHost, @Nullable Drawable background) {
+        // DIAG(kb-host): the keyboard host's material as it changes, with its caller; revert before merge.
+        if (MotionLog.enabled && surfaceHost.getBackground() != background) {
+            StackTraceElement[] st = new Throwable().getStackTrace();
+            StringBuilder by = new StringBuilder();
+            for (int k = 1; k < Math.min(st.length, 4); k++)
+                by.append(st[k].getMethodName()).append(':').append(st[k].getLineNumber()).append(' ');
+            Drawable d = background instanceof LayoutNeutralDrawable
+                ? ((LayoutNeutralDrawable) background).source() : background;
+            MotionLog.log("kb-host", "now=" + (d == null ? "null" : d.getClass().getSimpleName())
+                + " crossing=" + mCrossing.crossing() + " look=" + stackLookPage() + " by=" + by);
+        }
         if (!mKeyboardHostBackground.holds(background)) mKeyboardHostBackground.release();
         surfaceHost.setBackground(background);
     }
@@ -13848,6 +13859,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                   @NonNull com.termux.app.wall.PageRef there) {
         endLegendBlend();
         if (mChrome == null) return;
+        beginKeyboardLookBlend(there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);
         long thereKey = legibilityKey(there);
@@ -13910,6 +13922,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTilesInkBlendOn) mDock.tilesInkBlend(share);
         if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.setInkBlend(share);
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.setGlassBlend(share);
+        if (mKeyboardLookBlend != null) mKeyboardLookBlend.setShare(share);
+    }
+
+    /**
+     * The keyboard host's material across a look-apart crossing toward a page whose rest shows the
+     * keyboard: the arriving look's material, built once as the crossing begins under that page's
+     * look, crossed in by the look's share over what the host wears now (ADR 0029 section 8). The
+     * landing's own dress builds the same material, so it changes nothing the eye sees. Null
+     * while none runs.
+     */
+    @Nullable private com.termux.app.chrome.CrossfadeDrawable mKeyboardLookBlend;
+
+    private void beginKeyboardLookBlend(@NonNull com.termux.app.wall.PageRef there) {
+        mKeyboardLookBlend = null;
+        View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+        if (surfaceHost == null || mPreferences == null
+            || chromeRestOf(there.kind).keyboardReveal() <= 0f) return;
+        Drawable thereMaterial;
+        mLookIdOverride = lookIdOf(there);
+        try {
+            ChromeSpec state = buildChromeSpec();
+            thereMaterial = buildInAppKeyboardSurfaceBackground(state, surfaceHost, false, 0f, true);
+        } finally {
+            mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+        }
+        if (thereMaterial == null) return;
+        Drawable here = surfaceHost.getBackground();
+        mKeyboardLookBlend = new com.termux.app.chrome.CrossfadeDrawable(
+            here != null ? here : new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT),
+            thereMaterial, 0f);
+        setKeyboardHostBackground(surfaceHost, mKeyboardLookBlend);
     }
 
     private void endLegendBlend() {
@@ -13920,6 +13963,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPromptInkBlendOn = false;
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.endGlassBlend();
         mKeyboardBlendOn = false;
+        com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
+        mKeyboardLookBlend = null;
+        View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+        if (keyboardBlend != null && surfaceHost != null
+            && surfaceHost.getBackground() == keyboardBlend)
+            setKeyboardHostBackground(surfaceHost, keyboardBlend.endpoint());
     }
 
     /**

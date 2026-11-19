@@ -1880,6 +1880,18 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
             }
             mAim.postTranslate(margin, margin + reach);
             picture.aimGround(mAim);
+            // DIAG(widget-ground): a page surface's ground as the wall moves; revert before merge.
+            if (MotionLog.enabled && surface.getWidth() > 0 && surface.getWidth() < 900) {
+                float[] v = new float[9];
+                mAim.getValues(v);
+                android.graphics.Bitmap g = mGroundBitmap;
+                MotionLog.log("widget-ground", "w=" + surface.getWidth() + " plan=" + plan
+                    + " scene=" + (scene != null) + " frame=" + (g == null ? "none"
+                    : g.getWidth() + "x" + g.getHeight()) + " frameRect=" + mFrameRect.toShortString()
+                    + " groundRect=" + mGroundRect.toShortString() + " radius=" + picture.radiusPx()
+                    + " aim=" + v[0] + "," + v[2] + "," + v[4] + "," + v[5]
+                    + " localGround=" + mLocalGround + " local=" + mLocal.size());
+            }
             boolean pages = (plan & BackdropLayers.PAGES) != 0;
             if (pages) {
                 Rect rect = picture.mPageRect;
