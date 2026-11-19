@@ -34,6 +34,14 @@ public final class GlassEffects {
         @Nullable
         float[] peekGlassRect();
 
+        /**
+         * How much of the Peek card the program draws: 1 at Home's rest, 0 at the Workspace's,
+         * Home's share across a crossing ({@code StackScene#homeShare}).
+         */
+        default float peekShare() {
+            return 1f;
+        }
+
         /** The Fancier Glass look, or null for the numbers the dock always ran with. */
         @Nullable
         GlassRefraction.Look fancierLook();
@@ -62,6 +70,9 @@ public final class GlassEffects {
     private boolean mParamsValid = false;
     private float mBlurPx, mCapLeft, mCapTop, mCapRight, mCapBottom, mRadiusPx;
     @NonNull private final float[] mLens = new float[5];
+    /** The slab's cap and the program's rect, reused: a crossing rebuilds the effect per frame. */
+    @NonNull private final float[] mCap = new float[RoundCut.SIZE];
+    @NonNull private final float[] mRect = new float[RoundCut.SIZE];
 
     public GlassEffects(@NonNull Host host) {
         mHost = host;
@@ -122,6 +133,19 @@ public final class GlassEffects {
         }
     }
 
+    /**
+     * The program's rect: the slab's {@code cap} with no Peek card, the card's {@code peek} at
+     * Home's rest ({@code homeShare} 1), the blend between them across a crossing.
+     */
+    static void programRect(@NonNull float[] cap, @Nullable float[] peek, float homeShare,
+                            @NonNull float[] out) {
+        if (peek == null) {
+            RoundCut.blend(cap, cap, 0f, out);
+            return;
+        }
+        RoundCut.blend(cap, peek, homeShare, out);
+    }
+
     @Nullable
     private RenderEffect build(float blurPx, float capLeft, float capTop,
                                float capRight, float capBottom, float radiusPx) {
@@ -139,13 +163,12 @@ public final class GlassEffects {
             }
             // The view's own pixels are the content here, so the aim is identity.
             program.setAim(1f, 1f, 0f, 0f);
-            // Peek glass: the dock's glass is the card, its rim on the card's top and sides.
-            float[] peek = mHost.peekGlassRect();
-            if (peek != null) {
-                program.setRect(peek[0], peek[1], peek[2], peek[3], peek[4]);
-            } else {
-                program.setRect(capLeft, capTop, capRight, capBottom, radiusPx);
-            }
+            // Peek glass: the dock's glass is the card, its rim on the card's top and sides; a
+            // crossing blends it with the slab's by Home's share.
+            RoundCut.set(mCap, capLeft, capTop, capRight, capBottom, radiusPx);
+            programRect(mCap, mHost.peekGlassRect(), mHost.peekShare(), mRect);
+            program.setRect(mRect[RoundCut.LEFT], mRect[RoundCut.TOP], mRect[RoundCut.RIGHT],
+                mRect[RoundCut.BOTTOM], mRect[RoundCut.RADIUS]);
             // The user's knobs while Fancier Glass is on, the numbers this dock always ran with
             // otherwise; either way its gathered edge is raised by what the dock's tint covers
             // of it, the one rule every glass surface's edge follows. The cover is the one

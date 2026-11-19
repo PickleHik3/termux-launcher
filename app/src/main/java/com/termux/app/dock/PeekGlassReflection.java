@@ -169,6 +169,11 @@ public final class PeekGlassReflection {
     private final float mRippleKy;
     private final float mSpecularThicknessPx;
 
+    /**
+     * How much of the reflection shows: 1 at Home's rest, Home's share across a crossing. Its
+     * views' own alpha, so a fade records nothing again.
+     */
+    private float mFade = 1f;
     @Nullable private PeekReflectionView mHostView;
     @Nullable private PeekReflectionView mStripView;
 
@@ -289,6 +294,21 @@ public final class PeekGlassReflection {
         }
     }
 
+    /** Shows {@code fade} of the reflection (0..1) through its views' alpha. */
+    public void setFade(float fade) {
+        float f = fade <= 0f ? 0f : fade >= 1f ? 1f : fade;
+        if (f == mFade) return;
+        mFade = f;
+        for (PeekReflectionView view : new PeekReflectionView[] {mHostView, mStripView}) {
+            if (view != null && view.getAlpha() != f) view.setAlpha(f);
+        }
+    }
+
+    /** The fade last set ({@link #setFade}). */
+    public float fade() {
+        return mFade;
+    }
+
     /** Nothing reflected, the views put away, and every drawing let go. */
     public void clear() {
         mShown = false;
@@ -372,6 +392,7 @@ public final class PeekGlassReflection {
             if (view == null) continue;
             int visibility = show ? View.VISIBLE : View.GONE;
             if (view.getVisibility() != visibility) view.setVisibility(visibility);
+            if (view.getAlpha() != mFade) view.setAlpha(mFade);
             if (show) dress(view);
         }
     }

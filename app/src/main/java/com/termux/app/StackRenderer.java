@@ -81,6 +81,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         default boolean othersOwnStack() {
             return false;
         }
+        /**
+         * Home's share of the stack on this frame ({@link StackScene#homeShare}): 1 at Home's
+         * rest, 0 at the Workspace's, the material blend across a crossing. What only Home's rest
+         * draws on the shared slab (the Peek card) blends by it.
+         */
+        default void homeShare(float share) {
+        }
     }
 
     /** The sinking layers by {@link StackGeometry} index, in {@code CrossingViews}' order. */
@@ -399,6 +406,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         }
         writeLanes();
         writeContent();
+        mViews.homeShare(mHasEnds ? StackScene.homeShare(mFromHome, mToHome, mEndsProgress)
+            : mViews.frontIsHome() ? 1f : 0f);
         if (guard != null) {
             // On a landing frame every change is counted: the scene at progress 1 is the rest.
             FrameGuards guards = mFrames.guards();

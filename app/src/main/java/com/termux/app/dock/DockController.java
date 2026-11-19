@@ -322,6 +322,11 @@ public final class DockController {
     }
 
     /** Cuts {@code surface} (the dock's host or the strip under the pill) to the dock's shape. */
+    /** The slab's cut over the glass host, as last cut; see {@link DockSurface#slabCut}. */
+    public void slabCut(@NonNull View host, @NonNull float[] out) {
+        mSurface.slabCut(host, out);
+    }
+
     public void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
                                       boolean ownsInnerEdge, boolean innerRim) {
         mSurface.applyDockSurfaceShape(surface, capsule, surfaceHeightPx, ownsInnerEdge, innerRim);

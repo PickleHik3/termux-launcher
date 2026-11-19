@@ -353,6 +353,17 @@ public final class StackScene {
     }
 
     /**
+     * Home's share of the stack's look at progress {@code p} from {@code fromHome}'s side to
+     * {@code toHome}'s: 1 at Home's rest, 0 at the Workspace's, the material curve between. What
+     * only Home's rest draws on the shared slab (the Peek card) blends by it.
+     */
+    public static float homeShare(boolean fromHome, boolean toHome, float p) {
+        if (fromHome == toHome) return fromHome ? 1f : 0f;
+        float w = materialShare(p);
+        return toHome ? w : 1f - w;
+    }
+
+    /**
      * How much of a region the arriving end's layer draws: a region one end has wears that end's
      * look at every p (0 for the end left, 1 for the arriving end), a region both have blends by
      * {@code w}; none, 0.
