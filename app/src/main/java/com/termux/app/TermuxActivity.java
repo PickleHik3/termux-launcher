@@ -7204,6 +7204,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mPeekShare = share;
         com.termux.app.dock.PeekGlassGeometry.Card shown = shownPeekCard(host);
+        // DIAG(peek-share): the host's box and the drawn cut, at the edges and the middle.
+        if (MotionLog.enabled && host != null && shown != null
+            && (was <= 0f || share >= 1f || (was < 0.5f) != (share < 0.5f) || share == was)) {
+            int[] at = new int[2];
+            host.getLocationOnScreen(at);
+            float[] cut = drawnPeekCut(host, shown);
+            MotionLog.log("peek-host", "share=" + share + " top=" + at[1] + " h=" + host.getHeight()
+                + " ty=" + host.getTranslationY() + " rows=" + rows + " cutTop=" + cut[1]
+                + " cutL=" + cut[0] + " clip=" + host.getClipToOutline() + " provider="
+                + (host.getOutlineProvider() == mPeekOutline ? "peek" : "other")
+                + " vis=" + host.getVisibility() + " alpha=" + host.getAlpha());
+        }
         // DIAG(peek-share): the blend's state as it leaves or reaches a rest; revert before merge.
         if (MotionLog.enabled && (was <= 0f || was >= 1f || share <= 0f || share >= 1f))
             MotionLog.log("peek-share", "was=" + was + " share=" + share + " blends=" + mPeekBlends
