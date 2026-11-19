@@ -8548,9 +8548,69 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mKeyboardCornerFollowed = surfaceHost;
         surfaceHost.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
             if (surfaceHost.getOutlineProvider() != mKeyboardOutline) return;
-            if (mKeyboardOutline.setClip(fullScreenKeyboardClip(surfaceHost, mKeyboardBaseClip)))
+            if (mKeyboardOutline.setClip(keyboardOutlineClip(surfaceHost)))
                 surfaceHost.invalidateOutline();
         });
+    }
+
+    /**
+     * The clip the keyboard host's outline takes: {@link #fullScreenKeyboardClip}, and under an
+     * open drawer a Docked keyboard's top corners at the drawer's radius ({@link KeyboardSheetLook}).
+     * A card keeps its own corners, and below Android 13 the outline has one radius for all four
+     * corners, which would round the keyboard's foot, so it keeps its own there too.
+     */
+    @Nullable
+    private com.termux.app.chrome.LiveChromeShape.Clip keyboardOutlineClip(@NonNull View surfaceHost) {
+        com.termux.app.chrome.LiveChromeShape.Clip clip =
+            fullScreenKeyboardClip(surfaceHost, mKeyboardBaseClip);
+        if (!mKeyboardSheet.engaged() || Build.VERSION.SDK_INT < 33) return clip;
+        float own = clip == null ? 0f : Math.max(clip.topLeft, clip.topRight);
+        return com.termux.app.chrome.KeyboardSheetSkin.withTopRadius(clip,
+            com.termux.app.chrome.KeyboardSheetLook.topRadiusPx(mKeyboardSurfaceDressedAsCard, own,
+                mKeyboardSheetRadiusPx, mKeyboardSheet.fraction()));
+    }
+
+    /** What the keyboard host wears over its own material while the drawer is open. */
+    private final com.termux.app.chrome.KeyboardSheetSkin mKeyboardSheet =
+        new com.termux.app.chrome.KeyboardSheetSkin();
+    private float mKeyboardSheetRadiusPx;
+    /** The host's own background, under the sheet; what {@link #setKeyboardHostBackground} was given. */
+    @Nullable private Drawable mKeyboardHostInner;
+
+    /**
+     * One frame of the drawer's motion, as the keyboard sees it ({@link KeyboardSheetLook}): the
+     * sheet's glass over its own at the drawer's fraction, and the top corners following. A
+     * compare per frame at rest; the glass is built when the drawer first reaches the keyboard and
+     * let go when it leaves, and the outline is touched only when the radius moves.
+     */
+    private void onKeyboardSheetFraction(float drawerFraction, float radiusPx) {
+        View host = findViewById(R.id.inapp_keyboard_view_host);
+        float f = host == null ? 0f : com.termux.app.chrome.KeyboardSheetLook.glassFraction(
+            isInAppKeyboardShown(), drawerFraction);
+        if (f <= 0f && !mKeyboardSheet.engaged() && mKeyboardSheet.sheet() == null) return;
+        boolean wasEngaged = mKeyboardSheet.engaged();
+        mKeyboardSheetRadiusPx = radiusPx;
+        if (f > 0f && mKeyboardSheet.sheet() == null) {
+            mKeyboardSheet.setSheet(buildKeyboardSheetGlass(host, radiusPx),
+                (int) Math.ceil(radiusPx));
+        }
+        mKeyboardSheet.setFraction(f);
+        if (mKeyboardSheet.engaged() != wasEngaged && host != null)
+            host.setBackground(mKeyboardSheet.dress(mKeyboardHostInner));
+        if (f <= 0f && mKeyboardSheet.sheet() != null) mKeyboardSheet.setSheet(null, 0);
+        if (host != null && host.getOutlineProvider() == mKeyboardOutline
+            && mKeyboardOutline.setClip(keyboardOutlineClip(host)))
+            host.invalidateOutline();
+    }
+
+    /** The sheet's glass at the keyboard's place: Global's, at the sheets' opacity floor. */
+    @Nullable
+    private Drawable buildKeyboardSheetGlass(@Nullable View host, float radiusPx) {
+        if (host == null || mPreferences == null) return null;
+        com.termux.app.chrome.ElementGlass sheets =
+            com.termux.app.chrome.SheetGlass.of(mPreferences);
+        return buildInAppKeyboardGlass(sheets.spec(radiusPx, mFancierGlassLook)
+            .withRim(!sheets.rimOff()), buildChromeSpec(), host, false);
     }
 
     private void applyInAppKeyboardSurfaceClip(@NonNull View surfaceHost, boolean capsule,
@@ -8558,8 +8618,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mKeyboardBaseClip = capsule
             ? com.termux.app.chrome.LiveChromeShape.cardClip(cornerRadiusPx)
             : chromeClipOf(KEYBOARD_PIECES);
-        boolean changed = mKeyboardOutline.setClip(
-            fullScreenKeyboardClip(surfaceHost, mKeyboardBaseClip));
+        boolean changed = mKeyboardOutline.setClip(keyboardOutlineClip(surfaceHost));
         followKeyboardForScreenCorners(surfaceHost);
         if (surfaceHost.getOutlineProvider() != mKeyboardOutline)
             surfaceHost.setOutlineProvider(mKeyboardOutline);
@@ -8605,8 +8664,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                          @NonNull View surfaceHost,
                                                          boolean capsule, float cornerRadiusPx,
                                                          boolean keep) {
-        com.termux.app.chrome.GlassStack.Spec spec = inAppKeyboardGlassSpec(state, capsule,
-            cornerRadiusPx, noteInAppKeyboardBand(surfaceHost));
+        return buildInAppKeyboardGlass(inAppKeyboardGlassSpec(state, capsule, cornerRadiusPx,
+            noteInAppKeyboardBand(surfaceHost)), state, surfaceHost, keep);
+    }
+
+    /** The glass {@code spec} says, over the keyboard's backdrop frame; {@code keep} as above. */
+    @NonNull
+    private Drawable buildInAppKeyboardGlass(@NonNull com.termux.app.chrome.GlassStack.Spec spec,
+                                             @NonNull ChromeSpec state, @NonNull View surfaceHost,
+                                             boolean keep) {
         int blurRadiusDp = spec.blurRadiusDp;
         com.termux.app.chrome.SharedFrameDrawable backdrop = null;
         // Over a Display page the bed is see-through: what is behind it is the live display, which
@@ -8695,7 +8761,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 + " crossing=" + mCrossing.crossing() + " look=" + stackLookPage() + " by=" + by);
         }
         if (!mKeyboardHostBackground.holds(background)) mKeyboardHostBackground.release();
-        surfaceHost.setBackground(background);
+        mKeyboardHostInner = background;
+        // Under an open drawer the host wears the sheet's glass over this (KeyboardSheetSkin).
+        surfaceHost.setBackground(mKeyboardSheet.dress(background));
     }
 
     /**
@@ -19745,6 +19813,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public int sheetsBandPx() {
             return mSheets.bottomBandPx();
+        }
+
+        @Override public void onDrawerSheetFraction(float fraction, float radiusPx) {
+            onKeyboardSheetFraction(fraction, radiusPx);
         }
 
         @Override public boolean inAppKeyboardShown() {
