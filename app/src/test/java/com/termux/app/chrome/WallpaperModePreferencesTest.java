@@ -38,11 +38,9 @@ public class WallpaperModePreferencesTest {
     @Test
     public void disablingWallpaperForcesOpaqueUnblurredSurfacesAndEnablingRestoresValues() {
         preferences.setUseSystemWallpaperEnabled(true);
-        // A user whose terminal and dock differ has, by definition, taken the terminal off the
-        // shared layer - while linked the two name the same value and cannot disagree.
+        // The terminal's Opacity is its own Background's (ADR 0031 §4), never the shared layer's.
         preferences.setAppBarOpacity(63);
-        preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
-            TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 37);
+        preferences.setTerminalBackgroundOpacity(37);
         preferences.setExtraKeysBlurRadius(19);
 
         ChromePolicy.applyWallpaperModePreferences(preferences, false);
@@ -85,7 +83,9 @@ public class WallpaperModePreferencesTest {
         assertEquals(60, preferences.getSurfaceBaseValue(TermuxAppSharedPreferences.SurfaceProperty.OPACITY));
         assertEquals(25, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(60, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(60, preferences.getTerminalBackgroundOpacity());
+        // The terminal's own Opacity is not the Look's: it stays at its shipped value.
+        assertEquals(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+            .TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY, preferences.getTerminalBackgroundOpacity());
     }
 
     @Test

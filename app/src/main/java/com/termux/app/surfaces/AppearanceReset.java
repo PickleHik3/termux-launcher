@@ -86,6 +86,9 @@ public final class AppearanceReset {
         TERMUX_APP.KEY_WALLPAPER_ENABLED_APP_BAR_OPACITY,
         TERMUX_APP.KEY_WALLPAPER_ENABLED_EXTRAKEYS_BLUR_RADIUS,
         TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, SoftWallpaper.KEY_WALLPAPER_SOFT,
+        // The Terminal's Background: its panes' Opacity and Blur and its Wallpaper dim.
+        TERMUX_APP.KEY_TERMINAL_BG_OPACITY, TERMUX_APP.KEY_TERMINAL_BG_BLUR,
+        TERMUX_APP.KEY_TERMINAL_WALLPAPER_DIM,
         // The dock: its style and how many app buttons it shows.
         TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE, TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT,
         // The terminal: border, corners, pane gap and borders, contrast, Dynamic colour, cursor

@@ -27,6 +27,7 @@
     <string name="editor_section_text">Text</string>
     <string name="editor_section_panes">Panes</string>
     <string name="editor_section_effects">Effects</string>
+    <string name="editor_section_background">Background</string>
     <string name="editor_section_bars">Bars</string>
     <string name="editor_row_not_on_this_phone">Not on this phone.</string>
     <string name="editor_row_refraction_off_switch">Glass refraction is off.</string>

@@ -246,7 +246,9 @@ public class SavedCustomRestoreTest {
         }
         assertEquals(OPACITY, prefs.getInAppKeyboardBackgroundOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(TINT, prefs.getInAppKeyboardTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(OPACITY, prefs.getTerminalBackgroundOpacity());
+        // The canvas cell itself: the panes read their Background's own key since #287.
+        assertEquals(OPACITY, prefs.getSurfaceOverrideValue(SurfaceSlot.CANVAS,
+            SurfaceProperty.OPACITY));
         assertEquals(TINT, prefs.getSurfaceOverrideValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT));
         assertEquals(KEYS, prefs.getInAppKeyboardKeyOpacity());
     }

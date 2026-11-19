@@ -22,8 +22,8 @@ import org.robolectric.annotation.Config;
 
 /**
  * The global row's writes (layout editor v2, DECISIONS items 13 and 14): Blur, Opacity and Grain
- * land on the base and put every surface, terminal included, back on it; the terminal's own
- * Opacity detaches it again afterwards.
+ * land on the base and put every surface back on it, but for a chrome surface's own values and
+ * the terminal's Background (its Opacity and Blur), which no Global write reaches (#287).
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -41,22 +41,22 @@ public class GlobalGlassTest {
     }
 
     @Test
-    public void globalOpacityReattachesTheTerminalAndLeavesTheChromesOwn() {
-        preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 81);
+    public void globalOpacityLeavesTheChromesOwnAndNeverReachesTheTerminal() {
+        preferences.setTerminalBackgroundOpacity(81);
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, 70);
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
 
         assertEquals(42, GlobalGlass.write(preferences, SurfaceProperty.OPACITY, 42));
 
         // Own stays (appearance-one-look spec §1): the dock keeps its own; the rest follow.
         for (SurfaceSlot slot : SurfaceSlot.values()) {
-            if (TermuxAppSharedPreferences.hasSurfaceProperty(slot, SurfaceProperty.OPACITY))
+            if (slot != SurfaceSlot.CANVAS
+                    && TermuxAppSharedPreferences.hasSurfaceProperty(slot, SurfaceProperty.OPACITY))
                 assertEquals(slot.key, slot != SurfaceSlot.DOCK,
                     preferences.isSurfaceInheriting(slot, SurfaceProperty.OPACITY));
         }
         assertEquals(42, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals("the terminal wears the base now", 42,
-            preferences.getTerminalBackgroundOpacity());
+        // The terminal's Background is its own (ADR 0031 §4, #287).
+        assertEquals(81, preferences.getTerminalBackgroundOpacity());
     }
 
     @Test
@@ -84,9 +84,8 @@ public class GlobalGlassTest {
     }
 
     @Test
-    public void theTerminalsOwnOpacityDetachesItAgainAfterwards() {
+    public void theTerminalsOwnOpacityLeavesGlobalAsItIs() {
         GlobalGlass.write(preferences, SurfaceProperty.OPACITY, 40);
-        preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 75);
         preferences.setTerminalBackgroundOpacity(75);
         assertEquals(75, preferences.getTerminalBackgroundOpacity());
         assertEquals("the others keep the base", 40,

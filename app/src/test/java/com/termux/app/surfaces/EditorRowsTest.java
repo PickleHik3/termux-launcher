@@ -100,11 +100,11 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theTerminalCardHoldsTextItsGlassPanesEffectsAndLayout() {
+    public void theTerminalCardHoldsTextItsBackgroundPanesEffectsAndLayout() {
         assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
-            Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM, Row.TINT_HUE,
+        assertEquals(Arrays.asList(Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY,
+            Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
             Row.SECTION_PANES, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
             Row.PANE_BORDERS, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT,
             Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
@@ -142,7 +142,7 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
             Row.PAGE_DOTS, Row.FOLDERS, Row.WALLPAPER_SCROLL, Row.SECTION_WIDGETS,
             Row.GLASS_WIDGETS, Row.NUMERALS, Row.SECTION_LAYOUT, Row.ELEMENTS,
-            Row.SECTION_APPEARANCE, Row.WALLPAPER_DIM, Row.SECTION_LINKS, Row.LINK_GESTURES,
+            Row.SECTION_LINKS, Row.LINK_GESTURES,
             Row.LINK_PAGES),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PageKind frame : PageKind.values()) {
@@ -179,9 +179,9 @@ public class EditorRowsTest {
         for (EditorCard card : EditorCard.values()) {
             List<Row> rows = rowsOf(card, ALL);
             // Home has no glass: the chrome wears one look on every page (ADR 0031); the
-            // Terminal's glass is its panes'.
-            assertEquals(card + " has Frost", card != EditorCard.HOME,
-                rows.contains(Row.FROST));
+            // Terminal's is its Background's own Blur, never Global's Frost (#287).
+            assertEquals(card + " has Frost",
+                card != EditorCard.HOME && card != EditorCard.TERMINAL, rows.contains(Row.FROST));
         }
         // Grain is its own row since the look grid (ADR 0017); Blur stays Frost's.
         for (Row row : Row.values())
@@ -237,7 +237,8 @@ public class EditorRowsTest {
             }
             // The spec's touch order puts Colour between the legend strip and Corners, and
             // Grain under More, so a card may hold several runs; it holds one at least.
-            assertTrue(card + " has a slider", runs >= 1);
+            // Home's one slider, Wallpaper dim, is the Terminal's since #287.
+            assertTrue(card + " has a slider", card == EditorCard.HOME || runs >= 1);
             for (int i = 0; i < rows.size(); i++) {
                 if (CardBody.shape(rows.get(i)) != CardBody.Shape.SLIDER_LINK)
                     continue;

@@ -148,10 +148,11 @@ public class EditorCardBodyTest {
     public void theSectionsCarryTheirNamesAndNotes() {
         Fixture home = new Fixture(EditorCard.HOME, 1f);
         List<String> texts = texts(home.sheet.rows());
-        // Home's sections (overhaul §2): Home · More options · Layout · Appearance · Links.
+        // Home's sections (spec §3, Home): Home · More options · Widgets · Layout · Links; its
+        // Wallpaper dim is the Terminal's Background's since #287.
         for (int res : new int[] {R.string.appearance_card_home,
-            R.string.editor_section_more_options, R.string.editor_section_layout,
-            R.string.editor_section_appearance, R.string.editor_section_links})
+            R.string.editor_section_more_options, R.string.editor_section_widgets,
+            R.string.editor_section_layout, R.string.editor_section_links})
             assertTrue("Home shows " + home.themed.getString(res),
                 texts.contains(home.themed.getString(res)));
         // Section titles are W1b's collapsible headers: a section's note is no longer drawn.
@@ -161,6 +162,8 @@ public class EditorCardBodyTest {
         assertFalse(globalTexts.contains(global.themed.getString(
             R.string.editor_hint_glass_material)));
         assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_section_colours)));
+        assertFalse("Home has no Appearance section",
+            texts.contains(home.themed.getString(R.string.editor_section_appearance)));
     }
 
     @Test

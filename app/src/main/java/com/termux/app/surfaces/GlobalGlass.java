@@ -11,7 +11,8 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 /**
  * The shared glass (layout editor v2, DECISIONS items 13 and 14; the Appearance card's All
  * surfaces strip): Blur, Opacity, Grain and Tint written as the base values, Frost writing blur
- * and grain together. Own stays (appearance-one-look spec §1): the status bar's, the dock's and
+ * and grain together. The terminal's Background (its panes' Opacity and Blur, its Wallpaper dim)
+ * is never Global's and no write here reaches it (ADR 0031 §4). Own stays (appearance-one-look spec §1): the status bar's, the dock's and
  * the keyboard's own values are left as they are, and only their reset arrows put them back on
  * Global.
  *
@@ -43,8 +44,8 @@ final class GlobalGlass {
 
     /**
      * {@link #write(TermuxAppSharedPreferences, SurfaceProperty, int)} for one page (ADR 0015): the
-     * page's base, and only the surfaces standing on that page put back on it. The terminal stands
-     * on the Workspace alone, so Home's shared glass leaves it as it is. PAGE_ALL writes the wall and every page.
+     * page's base, and only the surfaces standing on that page put back on it. PAGE_ALL writes the
+     * wall and every page.
      */
     static int write(@NonNull TermuxAppSharedPreferences prefs, @NonNull SurfaceProperty property,
                      int pageId, int value) {
@@ -65,26 +66,17 @@ final class GlobalGlass {
             default:
                 throw new IllegalArgumentException("not a glass property: " + property);
         }
-        boolean workspace = pageId != TermuxAppSharedPreferences.PAGE_WALL;
         for (SurfaceSlot slot : SurfaceSlot.values()) {
-            if (slot == SurfaceSlot.CANVAS && !workspace)
+            // The terminal's Opacity and Blur are its Background's own keys, never Global's
+            // (ADR 0031 §4); its Grain and Tint are Global's like everything else's.
+            if (slot == SurfaceSlot.CANVAS && (property == SurfaceProperty.OPACITY
+                    || property == SurfaceProperty.BLUR))
                 continue;
             if (ownsStay(slot) && property != SurfaceProperty.TINT)
                 continue;
             prefs.setSurfaceInheriting(slot, property, pageId, true);
         }
         prefs.setSurfaceBaseValue(property, pageId, clamped);
-        if (property == SurfaceProperty.OPACITY && pageId == TermuxAppSharedPreferences.PAGE_ALL) {
-            // The terminal follows the base now; the setter also keeps the copy the wallpaper
-            // mode restores from in step, so turning the wallpaper off and on keeps this number.
-            prefs.setTerminalBackgroundOpacity(clamped);
-        } else if (property == SurfaceProperty.OPACITY && workspace
-            && prefs.isUseSystemWallpaperEnabled()) {
-            // The terminal follows the Workspace's base already; only the wallpaper mode's copy
-            // is kept. The terminal's own setter writes the shared base, which would drop both
-            // halves' own values and land this number on Home too.
-            prefs.setWallpaperEnabledTerminalBackgroundOpacity(clamped);
-        }
         return clamped;
     }
 

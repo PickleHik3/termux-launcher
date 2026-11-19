@@ -28,7 +28,6 @@ public final class HomeCard {
                 Row.FOLDERS, Row.WALLPAPER_SCROLL)
             .tier(3, Row.SECTION_WIDGETS, Row.GLASS_WIDGETS, Row.NUMERALS)
             .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)
-            .tier(3, Row.SECTION_APPEARANCE, Row.WALLPAPER_DIM)
             .tier(3, Row.SECTION_LINKS, Row.LINK_GESTURES);
         // Pages is not offered while the overview it opens is already up.
         if (!offers.overviewUp) rows.tier(3, Row.LINK_PAGES);

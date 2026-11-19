@@ -130,19 +130,6 @@ final class LookKeys {
             Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY, raw));
     }
 
-    /** The wallpaper dim as its getter reads it, including the retired opacity key's fallback. */
-    static int wallpaperDim(@NonNull LookStore store, int pageId) {
-        String pageKey = pageKey(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, pageId);
-        int stored = pageId >= 0 && store.has(pageKey) ? store.getInt(pageKey, -1) : -1;
-        if (stored < 0) stored = store.getInt(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, -1);
-        if (stored < 0) {
-            int legacy = store.getInt(TERMUX_APP.KEY_WALLPAPER_BACKDROP_OPACITY, -1);
-            stored = legacy < 0 ? TERMUX_APP.DEFAULT_WALLPAPER_BACKDROP_DIM
-                : 100 - Math.max(0, Math.min(100, legacy));
-        }
-        return Math.max(0, Math.min(100, stored));
-    }
-
     /**
      * One surface number, the same on every page (ADR 0031): the surface's own value, else Base.
      * A slot without the property answers the shipped value.

@@ -80,11 +80,12 @@ public class SurfacePresetsHalfTest {
 
     @Test
     public void lookOnHome_leavesTheTerminalAlone() {
-        preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, 88);
+        preferences.setTerminalBackgroundOpacity(88);
 
         SurfacePresets.applyLook(preferences, preset("stock"), PageKind.HOME);
+        SurfacePresets.applyLook(preferences, preset("stock"), PageKind.TERMINAL);
 
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
+        // The terminal's Background takes no preset (ADR 0031 §4, #287).
         assertEquals(88, preferences.getTerminalBackgroundOpacity());
     }
 

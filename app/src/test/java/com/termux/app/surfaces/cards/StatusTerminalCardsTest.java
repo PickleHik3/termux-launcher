@@ -77,10 +77,10 @@ public class StatusTerminalCardsTest {
     }
 
     @Test
-    public void theTerminalCardReadsGlassContrastTrailEffectAndFont() {
+    public void theTerminalCardReadsBackgroundContrastTrailEffectAndFont() {
         assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT,
-            Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_PANES,
+            Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
+            Row.SECTION_PANES,
             Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
             Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
             Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
@@ -336,7 +336,7 @@ public class StatusTerminalCardsTest {
             Fixture f = new Fixture(scale);
             FakeTerminal host = new FakeTerminal();
             String at = "at " + scale;
-            for (Row row : new Row[] {Row.GLASS_SECTION, Row.CONTRAST, Row.CURSOR_TRAIL,
+            for (Row row : new Row[] {Row.CONTRAST, Row.CURSOR_TRAIL,
                 Row.EFFECT, Row.LINK_FONT}) {
                 CardRowView built = TerminalCard.view(f.themed, row, f.width, host);
                 assertNotNull(row + " is the card's own", built);
