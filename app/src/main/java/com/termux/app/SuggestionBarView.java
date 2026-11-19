@@ -8306,11 +8306,6 @@ public final class SuggestionBarView extends GridLayout
         getLocationOnScreen(carryLocation);
         float x = rawX - carryLocation[0];
         float y = rawY - carryLocation[1];
-        if (com.termux.app.window.Counters.enabled) // diag-reorder
-            com.termux.app.window.Counters.ring("diag-reorder", "hover raw=" + rawX + "," + rawY
-                + " loc=" + carryLocation[0] + "," + carryLocation[1] + " wh=" + getWidth() + "x" + getHeight()
-                + " ty=" + getTranslationY() + " rotX=" + getRotationX() + " parentTy="
-                + (getParent() instanceof View ? ((View) getParent()).getTranslationY() : 0f));
         // Just above or below the row is still the row until the icon is Home's: the lift's
         // slab may sink the row under a finger near its top edge.
         if (getWidth() <= 0 || !DockDropPolicy.carriedOverRow(y, 0f, getHeight(), density())) {
@@ -8716,19 +8711,12 @@ public final class SuggestionBarView extends GridLayout
      * a folder into it, exactly as the row's drag does.
      */
     private boolean dropLiftedOnRow(@NonNull DockLift lift, float rawX) {
-        if (com.termux.app.window.Counters.enabled) // diag-reorder
-            com.termux.app.window.Counters.ring("diag-reorder", "drop raw=" + rawX + " pins="
-                + (pinnedItems == null ? -1 : pinnedItems.size()) + " takes=" + takesCarriedIcons()
-                + " source=" + liftSourceIndex(lift));
         if (pinnedItems == null || !takesCarriedIcons()) return false;
         int source = liftSourceIndex(lift);
         if (source < 0) return false;
         getLocationOnScreen(carryLocation);
         DockReorderPolicy.Kind kind = settleReorder(rawX - carryLocation[0], source, true, true,
             null);
-        if (com.termux.app.window.Counters.enabled) // diag-reorder
-            com.termux.app.window.Counters.ring("diag-reorder", "settle kind=" + kind + " index="
-                + reorder.index() + " loc=" + carryLocation[0] + " w=" + getWidth());
         // Back onto its own slot, or onto nothing: nothing moves.
         if (kind == DockReorderPolicy.Kind.NONE) return false;
         boolean merge = kind == DockReorderPolicy.Kind.MERGE;
