@@ -234,12 +234,10 @@ public final class PaneGlass {
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
                 tab.getContext(), false);
-        // The window tab is a transient control over the pane (a Home float's too): the Sheets
-        // element's grain (ADR 0017), not the dock's.
-        tab.setGrainPercent(preferences == null ? 0 : preferences.getSurfaceValue(
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot.SHEETS,
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty.GRAIN,
-            pageId));
+        // The window tab is a transient control over the pane (a Home float's too): Global's
+        // grain as it is, with no sheet floor (ADR 0031).
+        tab.setGrainPercent(preferences == null ? 0
+            : com.termux.app.chrome.SheetGlass.global(preferences).grainPercent);
         if (style == null) {
             tab.setPaneGlass(null, EMPTY_RECT, null);
             return;
