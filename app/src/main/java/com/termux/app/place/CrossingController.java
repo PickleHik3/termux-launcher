@@ -943,6 +943,17 @@ public final class CrossingController {
         float share = seam.lookShare();
         if (Float.isNaN(share) || share == mLookBlendShare || mHost.chrome() == null) return;
         mLookBlendShare = share;
+        // A re-dress on the way put the arriving look's sheet up in place of the blend: it is
+        // the blend's arriving end from now on, so the sheet keeps crossing rather than jumping.
+        View sheet = mHost.findViewById(R.id.extrakeys_background);
+        if (mLookBlendDock != null && sheet != null && sheet.getBackground() != mLookBlendDock
+            && sheet.getBackground() != null) {
+            mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(mLookBlendDock.here(),
+                sheet.getBackground(), share);
+            sheet.setBackground(mLookBlendDock);
+            if (com.termux.app.chrome.MotionLog.enabled)
+                com.termux.app.chrome.MotionLog.log("look-blend", "rewrapped share=" + share); // DIAG
+        }
         // The dock's sheet, its opacity, tint and grain: a redraw at the step, nothing built.
         if (mLookBlendDock != null) mLookBlendDock.setShare(share);
         // The legends drift on the same step, from the corrections rest kept: nothing measured.
@@ -975,6 +986,8 @@ public final class CrossingController {
         mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(here,
             mHost.chrome().glass().dockSurfaceOf(mHost.lookIdOf(there), 0f, 1f, false), 0f);
         sheet.setBackground(mLookBlendDock);
+        if (com.termux.app.chrome.MotionLog.enabled)
+            com.termux.app.chrome.MotionLog.log("look-blend", "begin there=" + mHost.lookIdOf(there)); // DIAG
     }
 
     /** The blend is over: the sheet keeps the end it reached, nothing rebuilt. */

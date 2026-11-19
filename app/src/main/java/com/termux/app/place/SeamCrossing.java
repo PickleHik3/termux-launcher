@@ -548,7 +548,10 @@ public final class SeamCrossing {
         // Two halves that both stand rows never are; both sides' rows stand in their lanes.
         mRun.dressDiffers = structureApart && mRun.plan == DockPlan.SLIDE_IN
             && !mRun.committedKeyboard;
-        mRun.lookBlends = !mRun.oneKind && lookApart && !mRun.dressDiffers;
+        // The look blends whether or not the stack is dressed again on the way: a re-dress takes
+        // the arriving look's sheet as the blend's arriving end (CrossingController), so a slide
+        // in toward rows the committed half has none of still crosses its glass with the wall.
+        mRun.lookBlends = !mRun.oneKind && lookApart;
         // Only from Home: the Workspace's bar is the one that travels with its page, unless the
         // bar is one across the wall and stands still.
         mRun.statusMayShow = !mRun.barStill && committed.page.isHome()
