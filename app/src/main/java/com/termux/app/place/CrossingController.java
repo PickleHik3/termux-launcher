@@ -808,6 +808,7 @@ public final class CrossingController {
             : mHost.preferences().getAppBarOpacity(mHost.lookIdOf(herePage));
         mLookBlendThereOpacity = mHost.preferences() == null ? 100
             : mHost.preferences().getAppBarOpacity(mHost.lookIdOf(therePage));
+        mLookBlendHereId = mHost.lookIdOf(herePage);
         beginStackLookBlend(therePage);
         mHost.legibilityCrossingBegan();
         if (mCrossing.seam().lookBlends()) mHost.beginLegendBlend(herePage, therePage);
@@ -948,8 +949,11 @@ public final class CrossingController {
         View sheet = mHost.findViewById(R.id.extrakeys_background);
         if (mLookBlendDock != null && sheet != null && sheet.getBackground() != mLookBlendDock
             && sheet.getBackground() != null) {
-            mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(mLookBlendDock.here(),
-                sheet.getBackground(), share);
+            // Both ends rebuilt from their own looks: a re-dress is dressed for whichever end the
+            // stack's look stands on then, which is not always the arriving one.
+            mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(
+                mHost.chrome().glass().dockSurfaceOf(mLookBlendHereId, 0f, 1f, false),
+                mHost.chrome().glass().dockSurfaceOf(mLookBlendThereId, 0f, 1f, false), share);
             sheet.setBackground(mLookBlendDock);
             if (com.termux.app.chrome.MotionLog.enabled)
                 com.termux.app.chrome.MotionLog.log("look-blend", "rewrapped share=" + share); // DIAG
@@ -975,6 +979,9 @@ public final class CrossingController {
      * while none runs.
      */
     @Nullable private com.termux.app.chrome.CrossfadeDrawable mLookBlendDock;
+    /** The look ids the blend runs between: the end it leaves and the end it arrives at. */
+    private int mLookBlendHereId;
+    private int mLookBlendThereId;
 
     private void beginStackLookBlend(@NonNull com.termux.app.wall.PageRef there) {
         endStackLookBlend();
@@ -983,8 +990,9 @@ public final class CrossingController {
         Drawable here = sheet == null ? null : sheet.getBackground();
         // Standing down on a joined Docked frame, the sheet draws nothing to blend.
         if (here == null) return;
+        mLookBlendThereId = mHost.lookIdOf(there);
         mLookBlendDock = new com.termux.app.chrome.CrossfadeDrawable(here,
-            mHost.chrome().glass().dockSurfaceOf(mHost.lookIdOf(there), 0f, 1f, false), 0f);
+            mHost.chrome().glass().dockSurfaceOf(mLookBlendThereId, 0f, 1f, false), 0f);
         sheet.setBackground(mLookBlendDock);
         if (com.termux.app.chrome.MotionLog.enabled)
             com.termux.app.chrome.MotionLog.log("look-blend", "begin there=" + mHost.lookIdOf(there)); // DIAG

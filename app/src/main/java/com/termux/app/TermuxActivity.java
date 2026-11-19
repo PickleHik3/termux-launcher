@@ -7137,7 +7137,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (MotionLog.enabled) MotionLog.log("peek-card", "card=" + (card != null)
             + " homeRest=" + isHomeAtRest() + " share=" + mPeekShare + " travel="
             + peekChromeTravelling() + " dress=" + stackDressPage());
-        mPeekCardRowsPx = peekRowsOverHost();
+        mPeekCardRowsPx = peekLayoutRowsOverHost();
         if (!isHomeAtRest()) return;
         View host = findViewById(R.id.accessory_surface_host);
         mHomeRestCard = card;
@@ -7187,6 +7187,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View container = findViewById(R.id.accessory_stack_container);
         if (row == null || host == null || container == null) return 0f;
         return drawnTopIn(row, container) - drawnTopIn(host, container);
+    }
+
+    /**
+     * {@link #peekRowsOverHost} as laid out, no translation counted: what a card is cut from
+     * ({@link #resolvePeekCard} reads the row and the host as laid out), so it is the offset a
+     * card's cut is measured from.
+     */
+    private float peekLayoutRowsOverHost() {
+        View row = mSuggestionBarView;
+        View host = findViewById(R.id.accessory_surface_host);
+        View container = findViewById(R.id.accessory_stack_container);
+        if (row == null || host == null || container == null) return 0f;
+        float[] rowAt = com.termux.app.dock.DockController.layoutOffsetIn(row, container);
+        float[] hostAt = com.termux.app.dock.DockController.layoutOffsetIn(host, container);
+        return rowAt == null || hostAt == null ? 0f : rowAt[1] - hostAt[1];
     }
 
     /** {@code view}'s top in {@code ancestor}: layouts, scrolls and translations on the way up. */
