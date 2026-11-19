@@ -5566,6 +5566,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mFancierGlassLook;
             }
             @Override public float dockCover() {
+                // Across a look blend, and from its end to the landing's own pass, the cover the
+                // blend reached (beginDockFrostBlend).
+                if (mDockCoverBlendOn || mDockCoverPending) return mDockCoverNow;
                 return mDockGlassCover;
             }
             @Override public void applyDockSurfaceGlass(
@@ -9530,6 +9533,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.SharedFrameDrawable installed =
             com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable());
         float dockCover = mDock.dockGlassCover();
+        if (mDockCoverPending) {
+            // The landing's pass: from here the cover is the one this pass works out. A crossing
+            // that came back to where it began keeps its own cover, which nothing below rebuilds.
+            mDockCoverPending = false;
+            if (dockCover == mDockGlassCover && mDockCoverNow != dockCover)
+                rebuildBackdropGlassEffectForLens();
+        }
         // A Frost drag moves the radius every tick; the bakes are held, so a re-install would put
         // up a stand-in and rebuild the refraction effect for nothing the eye gains. The frame
         // up stays until the release's pass, which re-cuts at the radius the drag settled on.
@@ -13955,6 +13965,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 * Math.max(0f, Math.min(1f, share))) * getResources().getDisplayMetrics().density;
             mGlass.livePicture(DOCK_GLASS, px, com.termux.app.chrome.LivePicture.class);
         }
+        if (mDockCoverBlendOn) {
+            float cover = mDockCoverHere + (mDockCoverThere - mDockCoverHere)
+                * Math.max(0f, Math.min(1f, share));
+            if (cover != mDockCoverNow) {
+                mDockCoverNow = cover;
+                rebuildBackdropGlassEffectForLens();
+            }
+        }
         com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
         if (keyboardBlend != null) {
             // A pass on the way dressed the host again: what it put up is the blend's end on the
@@ -13980,13 +13998,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void beginDockFrostBlend(@NonNull com.termux.app.wall.PageRef there) {
         mDockFrostHereDp = getEffectiveExtraKeysBlurRadius();
         mLookIdOverride = lookIdOf(there);
+        float coverThere;
         try {
             mDockFrostThereDp = getEffectiveExtraKeysBlurRadius();
+            coverThere = mDock.dockGlassCover();
         } finally {
             mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
         }
         mDockFrostBlendOn = mDockFrostHereDp != mDockFrostThereDp;
+        // The dock program's cover (what its tint covers of the gathered edge) crosses too: the
+        // cover the program was last built with, toward the arriving look's.
+        mDockCoverPending = false;
+        mDockCoverHere = mDockGlassCover;
+        mDockCoverThere = coverThere;
+        mDockCoverNow = mDockCoverHere;
+        mDockCoverBlendOn = mDockCoverHere >= 0f && mDockCoverHere != mDockCoverThere;
     }
+
+    /** The dock program's cover at each end of a look blend, and the one it is built with now. */
+    private float mDockCoverHere;
+    private float mDockCoverThere;
+    private float mDockCoverNow;
+    private boolean mDockCoverBlendOn;
+    /** The blend ended and the landing's pass has not built the cover of its own yet. */
+    private boolean mDockCoverPending;
 
     /** Whether the keyboard look blend arrives at a keyboard (else the keyboard's material goes). */
     private boolean mKeyboardLookBlendArrives;
@@ -14040,6 +14075,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.endGlassBlend();
         mKeyboardBlendOn = false;
         mDockFrostBlendOn = false;
+        if (mDockCoverBlendOn) mDockCoverPending = true;
+        mDockCoverBlendOn = false;
         com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
         mKeyboardLookBlend = null;
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
