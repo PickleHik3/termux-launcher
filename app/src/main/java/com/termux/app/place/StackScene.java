@@ -402,6 +402,12 @@ public final class StackScene {
                 g.stackPaddingBottomPx, g.keyboardFootPx,
                 BottomInsets.keyboardKeysPx(g.keyboardHeightPx, g.keyboardFootPx))
             : Math.round(share);
+        // A keyboard all the way down is cut whole, not by where its page's stack padding leaves
+        // the slide: every page's rest then cuts it alike and a landing writes nothing.
+        if (inColumn && g.keyboardHeightPx > 0 && m.keyboardSharePx
+                >= BottomInsets.keyboardKeysPx(g.keyboardHeightPx, g.keyboardFootPx)) {
+            hidden = Math.max(hidden, g.keyboardHeightPx);
+        }
         if (hidden <= 0) {
             out.clipped[V_KEYBOARD] = false;
         } else {

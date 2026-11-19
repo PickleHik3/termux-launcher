@@ -450,6 +450,75 @@ public class FramePipelineTest {
     }
 
     @Test
+    public void aStructureStepAskedAfterTheAnimationPhaseWaitsForTheNextFramesAnimationPhase() {
+        Counters.enable(true, null);
+        int[] runs = {0};
+        View root = newRoot();
+        frames.bind(FrameStep.PAGE_FRONT, () -> {
+            runs[0]++;
+            root.requestLayout();
+        });
+        frames.attach(root);
+        drawFirstFrame(root);
+        root.layout(0, 0, 10, 10);
+        runs[0] = 0;
+
+        frames.requestFrame(FrameStep.PAGE_FRONT);
+        assertTrue("never cancels the draw", draws(root));
+
+        assertEquals("not in this frame's pre-draw", 0, runs[0]);
+        assertEquals(0, Counters.countOf(FrameGuards.CROSSING_LAID_OUT));
+        mainLooper().idle();
+        assertEquals("in the next frame's animation phase", 1, runs[0]);
+        assertEquals(0, Counters.countOf(FrameGuards.CROSSING_LAID_OUT));
+    }
+
+    @Test
+    public void aStructureStepAskedBeforeTheAnimationPhaseRunsInThatPhase() {
+        int[] runs = {0};
+        View root = newRoot();
+        frames.bind(FrameStep.PAGE_FRONT, () -> runs[0]++);
+        frames.attach(root);
+        drawFirstFrame(root);
+        root.layout(0, 0, 10, 10);
+        runs[0] = 0;
+
+        frames.requestFrame(FrameStep.PAGE_FRONT);
+        assertEquals(0, runs[0]);
+        mainLooper().idle();
+        assertEquals(1, runs[0]);
+        draws(root);
+        assertEquals("once", 1, runs[0]);
+    }
+
+    @Test
+    public void flushRunsAStructureStepAtOnce() {
+        int[] runs = {0};
+        View root = newRoot();
+        frames.bind(FrameStep.PAGE_FRONT, () -> runs[0]++);
+        frames.attach(root);
+        drawFirstFrame(root);
+        runs[0] = 0;
+
+        frames.requestFrame(FrameStep.PAGE_FRONT);
+        frames.flush("test");
+        assertEquals(1, runs[0]);
+    }
+
+    @Test
+    public void aNonStructureStepAskedLateStillRunsInThePreDraw() {
+        View root = newRoot();
+        frames.attach(root);
+        drawFirstFrame(root);
+        root.layout(0, 0, 10, 10);
+        chromeRuns = 0;
+
+        frames.requestFrame(FrameStep.CHROME_COMMIT);
+        draws(root);
+        assertEquals(1, chromeRuns);
+    }
+
+    @Test
     public void guardsCountNothingWhileTheMotionLogIsOff() {
         View root = newRoot();
         frames.attach(root);

@@ -65,4 +65,14 @@ public enum FrameStep {
     boolean drawStep() {
         return this == GLASS_COMMIT;
     }
+
+    /**
+     * Whether this step is a structure point: it runs only in a frame's animation phase (or a
+     * flush, or the first frame / a windowless pass), never in a late pre-draw run, where a layout
+     * it requests would draw the new look on the old layout. Asked late, it waits for the next
+     * frame's animation phase.
+     */
+    boolean structureStep() {
+        return this == PAGE_FRONT;
+    }
 }

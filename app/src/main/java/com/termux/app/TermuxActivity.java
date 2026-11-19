@@ -1058,20 +1058,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mixKey(key, paneHost == null ? -1 : paneHost.getHeight());
     }
 
-    /** Longest the return hold waits for the pane host's layout before it is decided anyway. */
+    /** Longest the return hold waits for a settled frame before it is decided anyway. */
     private static final long RETURN_WAIT_BACKSTOP_MS = 160L;
 
-    /** One wait for the pane host's next layout, then the return hold is decided. */
+    /**
+     * One wait for the first frame of this window drawn with focus and no layout pending, then the
+     * return hold is decided. A return with nothing changed never lays the pane host out, so the
+     * wait watches the window's frames, not the host's layout.
+     */
     private void armReturnWait() {
         if (!mReturnHoldOpen || mIsInvalidState) return;
         cancelReturnWait();
-        View paneHost = findViewById(R.id.terminal_pane_host);
-        if (paneHost == null) {
+        // The window's root, not the pane host: off the Workspace the host is off screen or gone,
+        // where a layout asked of it stays pending and no frame of the window reads as settled.
+        View root = com.termux.app.window.WindowLayers.windowRoot(this);
+        if (root == null || findViewById(R.id.terminal_pane_host) == null) {
             finishReturnHold(false);
             return;
         }
-        mReturnWait = com.termux.app.window.FirstLayout.afterNextLayout(paneHost,
-            RETURN_WAIT_BACKSTOP_MS, this::finishReturnHold);
+        mReturnWait = com.termux.app.window.FirstLayout.afterSettledFrame(
+            root, RETURN_WAIT_BACKSTOP_MS, this::finishReturnHold);
     }
 
     private void cancelReturnWait() {
@@ -2936,8 +2942,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (com.termux.BuildConfig.X11_SERVER) {
             com.termux.app.sound.LauncherSound.get(this).onContainersMaybeChanged();
         }
-        // A return hold opened by the stop starts watching for the layout to settle; it is let
-        // go once focus has come too (onWindowFocusChanged) and the size has stopped moving.
+        // A return hold opened by the stop starts waiting for a settled frame (focus held, no
+        // layout pending); window focus arriving later keeps this wait and asks for that frame.
         armReturnWait();
         // A new intent to the resumed launcher (HOME while home; a second start racing a cold
         // start) pauses and resumes it inside one message. Nothing can have changed in between,
@@ -33136,8 +33142,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        // The focus applies the fullscreen flags and moves the insets: wait for the layout after it.
-        if (hasFocus) armReturnWait();
+        // The focus applies the fullscreen flags and moves the insets. A return wait armed at
+        // resume stays (it releases on the first frame with focus); only a hold with no wait
+        // yet arms one here.
+        if (hasFocus && mReturnWait == null) armReturnWait();
         if (hasFocus) {
             applyFullscreenMode();
         }

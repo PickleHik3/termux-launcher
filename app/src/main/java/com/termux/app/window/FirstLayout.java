@@ -90,14 +90,35 @@ public final class FirstLayout {
         return handle;
     }
 
+    /**
+     * Runs {@code action} once, on the main loop, after the first frame of the view's window that
+     * is drawn with window focus and no layout pending: for a hold that ends when the window has
+     * settled, which a layout-change signal cannot tell (a return with nothing changed never lays
+     * the view out). The wait never cancels a draw. When the window gains focus meanwhile it asks
+     * for one frame, so a frame with focus comes even if nothing else draws. {@code backstopMs}
+     * runs the action with {@code byBackstop} true when no such frame came.
+     */
+    @NonNull
+    public static Handle afterSettledFrame(@NonNull View view, long backstopMs,
+                                           @NonNull LayoutAction action) {
+        Handle handle = new Handle(view, Handle.SETTLED, null, null);
+        handle.mLayoutAction = action;
+        handle.listenPreDraw();
+        handle.mObserver.addOnWindowFocusChangeListener(handle);
+        view.postDelayed(handle.mFireBackstop, backstopMs);
+        return handle;
+    }
+
     /** One wait; {@link #cancel} drops it. */
     public static final class Handle implements ViewTreeObserver.OnPreDrawListener,
-        ViewTreeObserver.OnDrawListener, View.OnLayoutChangeListener {
+        ViewTreeObserver.OnDrawListener, View.OnLayoutChangeListener,
+        ViewTreeObserver.OnWindowFocusChangeListener {
 
         static final int BEFORE_DRAW = 0;
         static final int UNTIL = 1;
         static final int AFTER_DRAW = 2;
         static final int AFTER_LAYOUT = 3;
+        static final int SETTLED = 4;
 
         @NonNull private final View mView;
         private final int mKind;
@@ -109,6 +130,11 @@ public final class FirstLayout {
         private final Runnable mFireBackstop = () -> fire(true);
         @Nullable private LayoutAction mLayoutAction;
         private final Runnable mDetach = this::detach;
+        private final Runnable mFireSettled = () -> {
+            LayoutAction layoutAction = mLayoutAction;
+            mLayoutAction = null;
+            if (layoutAction != null) layoutAction.run(false);
+        };
 
         private Handle(@NonNull View view, int kind, @Nullable Runnable action,
                        @Nullable BooleanSupplier done) {
@@ -130,7 +156,12 @@ public final class FirstLayout {
 
         /** Drops the wait without running it. */
         public void cancel() {
-            if (mFinished) return;
+            if (mFinished) {
+                // A settled-frame release may still be posted.
+                mLayoutAction = null;
+                mView.removeCallbacks(mFireSettled);
+                return;
+            }
             mFinished = true;
             mAction = null;
             mLayoutAction = null;
@@ -140,6 +171,15 @@ public final class FirstLayout {
         @Override
         public boolean onPreDraw() {
             if (mFinished) return true;
+            if (mKind == SETTLED) {
+                if (mView.hasWindowFocus() && !mView.isLayoutRequested()) {
+                    mFinished = true;
+                    mAction = null;
+                    detach();
+                    mView.post(mFireSettled);
+                }
+                return true;
+            }
             if (mKind == UNTIL) {
                 BooleanSupplier done = mDone;
                 if (done != null && done.getAsBoolean()) cancel();
@@ -151,6 +191,12 @@ public final class FirstLayout {
             detach();
             if (action != null) action.run();
             return true;
+        }
+
+        @Override
+        public void onWindowFocusChanged(boolean hasFocus) {
+            // Focus alone draws nothing: ask for the frame that can settle the wait.
+            if (hasFocus && !mFinished) mView.invalidate();
         }
 
         @Override
@@ -205,6 +251,7 @@ public final class FirstLayout {
         private void remove(@NonNull ViewTreeObserver observer) {
             if (mKind == AFTER_DRAW) observer.removeOnDrawListener(this);
             else observer.removeOnPreDrawListener(this);
+            if (mKind == SETTLED) observer.removeOnWindowFocusChangeListener(this);
         }
     }
 }

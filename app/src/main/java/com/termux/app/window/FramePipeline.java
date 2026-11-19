@@ -69,6 +69,7 @@ public final class FramePipeline {
     private int mArmed;
     /** The steps that run only in the pre-draw hook ({@link FrameStep#drawStep}). */
     private static final int DRAW_STEPS = drawSteps();
+    private static final int STRUCTURE_STEPS = structureSteps();
     @NonNull private final LongSupplier mClock;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     @Nullable private Log mLog;
@@ -165,7 +166,7 @@ public final class FramePipeline {
         if (mDestroyed) return;
         mDirty |= 1 << step.ordinal();
         // The chrome commit is rare (a few per crossing), so its caller is always noted.
-        if (Counters.enabled && (mAfterPass || step == FrameStep.CHROME_COMMIT)) {
+        if (Counters.enabled && ((mAfterPass && !step.structureStep()) || step == FrameStep.CHROME_COMMIT)) {
             recordLateCaller(step.ordinal());
         }
         bookFrame();
@@ -494,6 +495,9 @@ public final class FramePipeline {
                 int bit = 1 << i;
                 if ((mDirty & bit) == 0) continue;
                 if (!preDraw && (DRAW_STEPS & bit) != 0) continue;
+                // A structure step never runs late: it stays dirty and the frame booked below
+                // runs it in the next animation phase.
+                if (late && (STRUCTURE_STEPS & bit) != 0) continue;
                 mDirty &= ~bit;
                 Runnable step = mSteps[i];
                 if (step == null || mDestroyed) continue;
@@ -528,6 +532,12 @@ public final class FramePipeline {
         String[] keys = new String[FrameStep.TABLE.length];
         for (int i = 0; i < keys.length; i++) keys[i] = "pre-draw-step:" + FrameStep.TABLE[i].name();
         return keys;
+    }
+
+    private static int structureSteps() {
+        int bits = 0;
+        for (FrameStep step : FrameStep.TABLE) if (step.structureStep()) bits |= 1 << step.ordinal();
+        return bits;
     }
 
     private static int allSteps() {

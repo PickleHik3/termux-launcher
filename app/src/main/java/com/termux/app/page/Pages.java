@@ -121,7 +121,7 @@ public final class Pages {
      */
     @Nullable
     public Page anyOf(@NonNull PageKind kind) {
-        Page committed = mCommittedId < 0 ? null : resolve(mCommittedId);
+        Page committed = mCommittedKind == null ? null : resolve(mCommittedId);
         if (committed != null && committed.kind() == kind) return committed;
         for (Page page : mPages.values()) {
             if (page.kind() == kind) return page;
@@ -212,7 +212,8 @@ public final class Pages {
     /** The registered page for the recorded front, or null for a page not behind the contract. */
     @Nullable
     public Page front() {
-        return mFrontId < 0 ? null : resolve(mFrontId);
+        // Kind-only rows register their pages under negative ids: no kind is what means no front.
+        return mFrontKind == null ? null : resolve(mFrontId);
     }
 
     /** How far the wall has moved from the front page, clamped to 0..1; 0 at rest. */

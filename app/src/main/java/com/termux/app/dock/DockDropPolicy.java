@@ -155,6 +155,16 @@ public final class DockDropPolicy {
     }
 
     /**
+     * Whether an icon carried at screen height {@code y} is still over the row
+     * ({@code top}..{@code bottom}) for a drop: anywhere it has not left far enough to be Home's
+     * ({@link #handsOverToHome}), so the band either side of the row reorders rather than sending
+     * the icon back. The row itself may move under the finger as the lift plays.
+     */
+    public static boolean carriedOverRow(float y, float top, float bottom, float density) {
+        return !handsOverToHome(0f, y, 0f, top, 0f, bottom, density);
+    }
+
+    /**
      * Where an unpinned icon goes back to on Undo: the index it had, or the end of the row when
      * the row has since got shorter than that.
      */
