@@ -10408,6 +10408,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (windowBar instanceof com.termux.app.terminal.TerminalWindowBar)
             ((com.termux.app.terminal.TerminalWindowBar) windowBar).setScreenKeepOut(
                 mProperties != null && mProperties.isUsingFullScreen() ? screen : null);
+        homeFloatChipBar().setScreenKeepOut(
+            mProperties != null && mProperties.isUsingFullScreen() ? screen : null);
         if (!(row instanceof com.termux.app.statusbar.StatusRowLayout)) return;
         ((com.termux.app.statusbar.StatusRowLayout) row).setScreenKeepOut(screen);
     }
@@ -23683,6 +23685,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The window bar: its chips, the stats' display window, and the slab under them.
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) bar.setDeckLook(deck);
+        homeFloatChipBar().setDeckLook(deck);
         View sessionsIndicator = findViewById(R.id.terminal_sessions_indicator);
         if (sessionsIndicator instanceof com.termux.app.statusbar.SessionsIndicatorView)
             ((com.termux.app.statusbar.SessionsIndicatorView) sessionsIndicator).setDeckLook(deck);
@@ -26506,6 +26509,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             windowColumn.setVisibility(windowsShown && mStatusBar.isStatusBarVertical()
                 ? View.VISIBLE : View.GONE);
         }
+        // Home's float chips, in Home's accent: they are Home's content, not the Workspace's.
+        homeFloatChipBar().dress(mChrome.ink(), com.termux.app.statusbar.StatusBarLensView
+            .accentFor(this, com.termux.app.page.PageKind.HOME), mStatusBar.isStatusBarVertical());
         bindPlaceBadge(sessions);
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
         if (lens != null) {
@@ -26547,6 +26553,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View strip = findViewById(R.id.terminal_status_place_content);
         View widgets = findViewById(R.id.terminal_status_widgets);
         if (row == null || row.getWidth() == 0) return null;
+        // The strip stands in the slot the two sides share, at the slot's own left.
+        View slot = findViewById(R.id.terminal_status_sides);
+        int slotLeft = slot == null || strip == null || strip.getParent() != slot ? 0 : slot.getLeft();
         boolean rtl = row.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
         boolean widgetsShown = widgets != null && widgets.getVisibility() == View.VISIBLE
             && widgets.getWidth() > 0;
@@ -26554,11 +26563,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float low;
         float high;
         if (!rtl) {
-            low = strip != null ? strip.getLeft() + strip.getPaddingLeft() : row.getPaddingLeft();
+            low = strip != null ? slotLeft + strip.getLeft() + strip.getPaddingLeft()
+                : row.getPaddingLeft();
             high = widgetsShown ? widgets.getLeft() - gap : row.getWidth() - row.getPaddingRight();
         } else {
             low = widgetsShown ? widgets.getRight() + gap : row.getPaddingLeft();
-            high = strip != null ? strip.getRight() - strip.getPaddingRight()
+            high = strip != null ? slotLeft + strip.getRight() - strip.getPaddingRight()
                 : row.getWidth() - row.getPaddingRight();
         }
         return new float[] {low, high, rtl ? 0f : 1f};
@@ -26674,7 +26684,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the content and past the edges, and take no room from the row.
      */
     private void applyPlaceStripInset(float expansion) {
-        View strip = findViewById(R.id.terminal_status_place_content);
+        applyPlaceStripInset(findViewById(R.id.terminal_status_place_content));
+        applyPlaceStripInset(findViewById(R.id.terminal_status_home_chips));
+    }
+
+    /** {@link #applyPlaceStripInset(float)} for one side's strip. */
+    private void applyPlaceStripInset(@Nullable View strip) {
         if (strip == null) return;
         int lens = Math.round(dpToPx(com.termux.app.statusbar.PlaceContentStrip.LENS_WIDTH_DP));
         // The lens runs along the bar, so what it keeps clear is the bar's leading end: the row's
@@ -30097,8 +30112,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             chips = windowChips();
         // One bar across the wall (#90): the same chips in the same order on Home as on every
         // window, the display window's at its place and the Home floats after the row's.
+        java.util.Map<com.termux.app.terminal.TerminalPaneController.Window,
+            com.termux.app.terminal.TerminalWindowBar.WindowItem> floatItems =
+                new java.util.HashMap<>();
         java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
-            windowChipItems(chips, foregroundPids);
+            windowChipItems(chips, foregroundPids, floatItems);
+        // Home's own chips: the floats of the Home page shown, dressed from the same observation.
+        syncHomeFloatChips(floatItems);
         // Home's dock may show the same chips as the Wall strip's tiles, and so may a window whose
         // dock wears the Wall strip over its apps (#93).
         if (mPages.isCommitted(com.termux.app.page.PageKind.HOME) || wallStripFed() && wallStripOn(mLastWallPage))
@@ -30700,6 +30720,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean lazy = isLazyModeEnabled();
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) bar.setLazyMode(lazy);
+        homeFloatChipBar().setLazyMode(lazy);
         com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
         if (clock != null) clock.setLazyMode(lazy);
     }
@@ -32216,6 +32237,63 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return floats;
     }
 
+    /** Home's float chips on the status bar; made with the bar's views on first use. */
+    @Nullable private com.termux.app.statusbar.HomeFloatChipBar mHomeFloatChipBar;
+
+    @NonNull
+    private com.termux.app.statusbar.HomeFloatChipBar homeFloatChipBar() {
+        if (mHomeFloatChipBar == null) {
+            mHomeFloatChipBar = new com.termux.app.statusbar.HomeFloatChipBar(
+                findViewById(R.id.terminal_home_float_bar),
+                findViewById(R.id.terminal_home_float_column), this::onHomeFloatChipTapped);
+        }
+        return mHomeFloatChipBar;
+    }
+
+    /**
+     * Home's chips as they stand now ({@link com.termux.app.chrome.HomeFloatChips}): the floats of
+     * the Home page shown, in the order they were opened.
+     */
+    @NonNull
+    private com.termux.app.chrome.HomeFloatChips<com.termux.app.terminal.TerminalPaneController.Window>
+            homeFloatChips() {
+        int page = mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
+        com.termux.app.chrome.HomeFloatChips<com.termux.app.terminal.TerminalPaneController.Window>
+            chips = new com.termux.app.chrome.HomeFloatChips<>(page);
+        if (mPaneController == null) return chips;
+        com.termux.app.terminal.TerminalPaneController.Window focused =
+            mPaneController.focusedHomeFloat();
+        for (com.termux.app.terminal.TerminalPaneController.Window window
+                : mPaneController.homeFloats()) {
+            chips.add(window, window.id, window.homePage(), window.isMinimised(), window == focused);
+        }
+        return chips;
+    }
+
+    /** Hands Home's chip strip its chips, each dressed as {@code floatItems} has it. */
+    private void syncHomeFloatChips(@NonNull java.util.Map<
+            com.termux.app.terminal.TerminalPaneController.Window,
+            com.termux.app.terminal.TerminalWindowBar.WindowItem> floatItems) {
+        com.termux.app.chrome.HomeFloatChips<com.termux.app.terminal.TerminalPaneController.Window>
+            home = homeFloatChips();
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items =
+            new java.util.ArrayList<>(home.size());
+        for (com.termux.app.chrome.HomeFloatChips.Chip<
+                com.termux.app.terminal.TerminalPaneController.Window> chip : home.chips()) {
+            com.termux.app.terminal.TerminalWindowBar.WindowItem item = floatItems.get(chip.window);
+            if (item != null) items.add(item);
+        }
+        homeFloatChipBar().setChips(items,
+            items.size() == home.size() ? home.selected() : -1);
+    }
+
+    /** A tap on Home's chip at {@code index}: its float comes forward, or back from its chip. */
+    private void onHomeFloatChipTapped(int index) {
+        com.termux.app.terminal.TerminalPaneController.Window window =
+            homeFloatChips().tap(index);
+        if (window != null) showHomeFloat(window);
+    }
+
     /**
      * The window chips as they stand now ({@link com.termux.app.chrome.WindowChips}), seen from
      * Home while Home shows: the current row's windows, the display
@@ -32253,7 +32331,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> windowChipItems(
             @NonNull com.termux.app.chrome.WindowChips<
                 com.termux.app.terminal.TerminalPaneController.Window> chips,
-            @NonNull java.util.List<Integer> foregroundPids) {
+            @NonNull java.util.List<Integer> foregroundPids,
+            @Nullable java.util.Map<com.termux.app.terminal.TerminalPaneController.Window,
+                com.termux.app.terminal.TerminalWindowBar.WindowItem> floatItemsOut) {
         java.util.List<com.termux.app.chrome.WindowChips.Chip<
             com.termux.app.terminal.TerminalPaneController.Window>> list =
                 chips.chips();
@@ -32285,7 +32365,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // focus on Home is the one the user is looking at.
                 boolean seen = window == focusedFloat && !chip.minimised;
                 if (seen) clearWindowAttention(window);
-                items.add(windowItem(window, items.size(), foregroundPids, seen, now)
+                com.termux.app.terminal.TerminalWindowBar.WindowItem own =
+                    windowItem(window, items.size(), foregroundPids, seen, now);
+                // Home's own chip for it stands on its page, so it carries no page mark.
+                if (floatItemsOut != null) floatItemsOut.put(window, own.withMinimised(chip.minimised));
+                items.add(own
                     .withHomeFloat(window.homePage(), getString(chip.minimised
                         ? R.string.window_chip_home_float_minimised
                         : R.string.window_chip_home_float, window.homePage() + 1))
@@ -32710,6 +32794,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Asked as the float is minimised: it folds into its own chip in the bar (#91), which
             // stands for it minimised or not, on the bar's row or in its window column. A bar off
             // screen, or the chip scrolled out of sight, leaves the flight to go down and away.
+            // On Home the float folds into Home's own chip for it.
+            int own = homeFloatChips().chipOf(window);
+            if (own >= 0 && homeFloatChipBar().chipBoundsOnScreen(own, out)) return true;
             int at = windowChips().barChipOf(window);
             if (at < 0) return false;
             com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);

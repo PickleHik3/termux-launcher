@@ -17,8 +17,8 @@ import com.termux.app.window.FrameStep;
 
 /**
  * The only writer of the top stack's transforms (ADR 0030 section 6), during a crossing and at
- * rest: the bar host's ride, the strip behind the system bar and the window chips' slide, all
- * their {@code translationX}, and the blend of the two glass views' {@link CrossfadeDrawable}s
+ * rest: the bar host's ride, the strip behind the system bar, the window chips' slide and Home's
+ * float chips' slide, all their {@code translationX}, and the blend of the two glass views' {@link CrossfadeDrawable}s
  * with the strip glass's presence. Each owner hands its share in (the crossing's two ends as
  * {@link TopStackScene.End}s, the wall's progress, the ride), which only records it and asks the
  * frame pipeline for its {@link FrameStep#TOP_STACK} step; the step ({@link #apply}) asks
@@ -47,7 +47,7 @@ public final class TopStackRenderer {
 
     private static final String[] OWNED = {"terminal_window_bar_host.translationX",
         "terminal_status_bar_background.translationX", "terminal_status_place_content.translationX",
-        "terminal_status_place_content.clipLeft"};
+        "terminal_status_place_content.clipLeft", "terminal_status_home_chips.translationX"};
 
     @NonNull private final Views mViews;
     @Nullable private FramePipeline mFrames;
@@ -108,6 +108,10 @@ public final class TopStackRenderer {
         guard.own(OWNED[3], () -> {
             View view = mViews.view(R.id.terminal_status_place_content);
             return view == null || !view.getClipBounds(mClipRead) ? 0f : mClipRead.left;
+        });
+        guard.own(OWNED[4], () -> {
+            View view = mViews.view(R.id.terminal_status_home_chips);
+            return view == null ? 0f : view.getTranslationX();
         });
         mGuard = guard;
     }
@@ -251,6 +255,8 @@ public final class TopStackRenderer {
         View chips = mViews.view(R.id.terminal_status_place_content);
         writeTx(chips, mFrame.chipsTx);
         writeClip(chips, mFrame.chipsTx);
+        // Home's chips need no clip of their own: the frame both sides' strips share clips them.
+        writeTx(mViews.view(R.id.terminal_status_home_chips), mFrame.homeChipsTx);
         writeInks(riding);
         if (mCrossing) {
             mGlassShare = riding ? (mRideWearsTo ? 1f : 0f) : mFrame.lookShare;
