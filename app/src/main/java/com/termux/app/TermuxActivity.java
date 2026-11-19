@@ -7106,6 +7106,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void setPeekCard(@Nullable com.termux.app.dock.PeekGlassGeometry.Card card) {
         mPeekCard = card;
+        // DIAG(peek-share): revert before merge.
+        if (MotionLog.enabled) MotionLog.log("peek-card", "card=" + (card != null)
+            + " homeRest=" + isHomeAtRest() + " share=" + mPeekShare + " travel="
+            + peekChromeTravelling() + " dress=" + stackDressPage());
         if (!isHomeAtRest()) return;
         View host = findViewById(R.id.accessory_surface_host);
         mHomeRestCard = card;
@@ -7169,6 +7173,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mPeekShare = share;
         com.termux.app.dock.PeekGlassGeometry.Card shown = shownPeekCard(host);
+        // DIAG(peek-share): the blend's state as it leaves or reaches a rest; revert before merge.
+        if (MotionLog.enabled && (was <= 0f || was >= 1f || share <= 0f || share >= 1f))
+            MotionLog.log("peek-share", "was=" + was + " share=" + share + " blends=" + mPeekBlends
+                + " card=" + (mPeekCard != null) + " rest=" + (mHomeRestCard != null)
+                + " restW=" + mHomeRestCardWidth + " hostW=" + (host == null ? -1 : host.getWidth())
+                + " cut=" + mDock.dockShapeCut() + " shown=" + (shown != null)
+                + " wasShown=" + (wasShown != null));
         if (host == null || !mDock.dockShapeCut() || (wasShown == null && shown == null)) return;
         if (shown == null || wasShown == null) {
             mDock.applyDockSurfaceShape(host, mDock.dockFloats(), mDock.dockShapeHeightPx(), true,
