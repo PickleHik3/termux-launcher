@@ -9558,6 +9558,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // now asks for (mid-drag the one last measured, re-measured on the release's pass);
             // the same filter instance when neither moved, which re-dresses nothing.
             backdrop.setColorFilter(dockFrostFilter(mGlassDragPreview ? null : surfaceHost));
+            // DIAG(dock-filter): the frost a pass at rest puts up, on change; revert before merge.
+            if (MotionLog.enabled && !mCrossing.crossing()) {
+                String d = matrixDiag(com.termux.app.chrome.GlassFilters.matrixOf(
+                    backdrop.getColorFilter())) + " look=" + stackLookPage();
+                if (!d.equals(mDiagDockFilter)) {
+                    mDiagDockFilter = d;
+                    MotionLog.log("dock-filter", "rest " + d);
+                }
+            }
             backdrop.setVisibility(View.VISIBLE);
             if (beadsMoved) rebuildBackdropGlassEffectForLens();
             mDock.syncDockShelf(state);
@@ -14033,6 +14042,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.graphics.ColorMatrix filterHere = backdrop == null ? null
             : com.termux.app.chrome.GlassFilters.matrixOf(backdrop.getColorFilter());
         android.graphics.ColorMatrix filterThere = mDockFilterAtRest.get(lookIdOf(there));
+        // DIAG(dock-filter): both ends of the frost blend; revert before merge.
+        if (MotionLog.enabled)
+            MotionLog.log("dock-filter", "begin here=" + matrixDiag(filterHere) + " there="
+                + matrixDiag(filterThere) + " thereId=" + lookIdOf(there));
         if (filterHere != null && filterThere != null
             && !java.util.Arrays.equals(filterHere.getArray(), filterThere.getArray())) {
             mDockFilterHere = filterHere;
@@ -14049,6 +14062,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private android.graphics.ColorFilter mDockFilterNow;
     private float mDockFilterShare;
     private boolean mDockFilterBlendOn;
+
+    /** DIAG(dock-filter): a matrix's gains and offsets, for the log. */
+    @NonNull
+    private static String matrixDiag(@Nullable android.graphics.ColorMatrix matrix) {
+        if (matrix == null) return "none";
+        float[] m = matrix.getArray();
+        return String.format(java.util.Locale.ROOT, "[%.3f %.3f %.3f | %.1f %.1f %.1f]",
+            m[0], m[6], m[12], m[4], m[9], m[14]);
+    }
 
     /** The dock program's cover at each end of a look blend, and the one it is built with now. */
     private float mDockCoverHere;
@@ -18159,6 +18181,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.page.PageKind.TERMINAL, false), 0));
         slack += com.termux.app.place.StackLanes.flushSlackPx(flush,
             otherStandsFlush ? flush : 0);
+        // DIAG(host-shift): the flush worked out before the Terminal rested; revert before merge.
+        if (MotionLog.enabled && !mTerminalRestFlushKnown && frontHome && flush != mDiagFlushGuess) {
+            mDiagFlushGuess = flush;
+            MotionLog.log("flush-guess", "flush=" + flush);
+        }
         int slabInset = com.termux.app.dock.DockGeometry.compute(snapshot.restOf(otherPage))
             .slabTopInsetPx;
         return (mStatusBarOnDockPlank ? 0 : mStatusBar.bottomStatusBandPx()) + slabInset + slack;
@@ -27330,6 +27357,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Nullable private String mDiagDisplayKb; // DIAG(display-kb)
     @Nullable private String mDiagRestTops; // DIAG(host-shift)
+    @Nullable private String mDiagDockFilter; // DIAG(dock-filter)
+    private int mDiagFlushGuess = -1; // DIAG(host-shift)
 
     /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
     private boolean isLayerOpen() {
