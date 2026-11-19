@@ -4586,8 +4586,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         return com.termux.app.chrome.ElementGlass.refraction(mPreferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.WIDGETS,
                             pageId(), mFancierGlassLook);
                     }
-                    // The Home page at rest: the one whose widgets the chrome pass dresses.
-                    @Override public int pageId() { return restingPage(); }
+                    // The Home page the widgets stand on, whatever is in front: a surface only
+                    // Home has keeps Home's look across a crossing and never blends (ADR 0029
+                    // section 8). Read through the resting page it took the Terminal's look on
+                    // the Workspace and through a crossing back, and changed at the landing.
+                    @Override public int pageId() {
+                        return com.termux.app.place.SeamDress.lookPageId(
+                            com.termux.app.page.PageKind.HOME, mHomeSeam.pageInFront(), -1,
+                            terminalLookPageId());
+                    }
                     @Override public com.termux.app.chrome.WallpaperParallax parallax() {
                         return mWallpaperParallax;
                     }
