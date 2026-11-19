@@ -179,6 +179,9 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
   A Home float opens from `ad long 540 1000` (a free cell) then the Terminal row of the Home actions
   sheet that slides up (`ad tap Terminal`; the sheet's rows are real nodes, unlike the old menu); on a
   full-size float Close is about 1006,283 and Minimise about 796,283.
+  A float's bottom-right 28 dp is its resize grip: a page swipe that starts there resizes the float
+  instead (with the keyboard up the grip rises to about y 1500 on pong). Start page swipes clear of
+  any float, or with the keyboard down.
 - The Terminal entry's menu is a long press at 76,2190 on the dock (New float here / New window).
   The dock's edit sheet is a long press at 540,2180; the Terminal entry is under MOST USED there.
 - The Appearance editor on a named card without the corner tab (the Layout-mode intent
