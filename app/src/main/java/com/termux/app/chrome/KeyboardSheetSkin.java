@@ -1,6 +1,7 @@
 package com.termux.app.chrome;
 
 import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.ColorFilter;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
@@ -54,6 +55,14 @@ public final class KeyboardSheetSkin {
         mLayers.setCardTopRadius(Math.max(0f, Math.round(px)));
     }
 
+    /**
+     * The drawer's own dim over the scene, as the keyboard wears it (0..255 black alpha): drawn
+     * under the sheet's glass, so the glass sits over the same darkened ground the drawer's does.
+     */
+    public void setDim(int alpha) {
+        mLayers.setDim(alpha);
+    }
+
     /** @return whether the fraction moved */
     public boolean setFraction(float fraction) {
         if (fraction == mFraction) return false;
@@ -97,6 +106,8 @@ public final class KeyboardSheetSkin {
         private int mExtendBelowPx;
         private float mFraction;
         private float mTopRadius;
+        private int mDim;
+        private final Paint mDimPaint = new Paint();
         private final Path mCard = new Path();
         private final RectF mCardRect = new RectF();
         private final float[] mCardRadii = new float[8];
@@ -127,6 +138,14 @@ public final class KeyboardSheetSkin {
             mSheet = sheet;
             mExtendBelowPx = Math.max(0, extendBelowPx);
             placeSheet(getBounds());
+            invalidateSelf();
+        }
+
+        void setDim(int alpha) {
+            int a = Math.max(0, Math.min(255, alpha));
+            if (a == mDim) return;
+            mDim = a;
+            mDimPaint.setColor(a << 24);
             invalidateSelf();
         }
 
@@ -165,12 +184,16 @@ public final class KeyboardSheetSkin {
             }
             Drawable sheet = mSheet;
             if (sheet == null || !(mFraction > 0f)) return;
+            Rect b = getBounds();
+            if (mDim > 0) {
+                canvas.drawRect(b.left, b.top - mExtendBelowPx, b.right,
+                    b.bottom + mExtendBelowPx, mDimPaint);
+            }
             if (mFraction >= 1f) {
                 sheet.draw(canvas);
                 return;
             }
             // Mid-handoff only: a few frames, as long as the drawer's own glass takes to arrive.
-            Rect b = getBounds();
             int saved = canvas.saveLayerAlpha(b.left, b.top - mExtendBelowPx, b.right,
                 b.bottom + mExtendBelowPx,
                 Math.round(255f * mFraction));
