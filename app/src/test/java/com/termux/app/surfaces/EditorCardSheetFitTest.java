@@ -49,8 +49,8 @@ import android.app.Application;
 public class EditorCardSheetFitTest {
 
     private static final int NAV_DP = 24;
-    /** Whether the fake model offers a Where chip, so the sheet shows its chip row. */
-    private static boolean sChips;
+    /** Whether the fake model offers no Home card, as under Use as Terminal only. */
+    private static boolean sNoHome;
     /** The row the fake model draws as a 24 dp heading, or null for none. */
     private static EditorRows.Row sShortRow;
 
@@ -67,30 +67,6 @@ public class EditorCardSheetFitTest {
             for (EditorCard card : EditorCard.values()) {
                 fixture = Fixture.raise(fixture, card, scale);
                 assertFits(fixture, card, scale);
-            }
-        }
-    }
-
-    @Test
-    public void theLeastHalfHeightCountsTheChipRowWhenItIsShown() {
-        for (float scale : new float[] {1f, 1.3f}) {
-            sChips = false;
-            Fixture plain = new Fixture(EditorCard.DOCK, scale);
-            plain.layOut();
-            int without = plain.sheet.minHalfHeightPx(plain.parent.getWidth());
-            int tierOneWithout = plain.sheet.tierOneHeightPx(plain.parent.getWidth());
-            sChips = true;
-            try {
-                Fixture chips = new Fixture(EditorCard.DOCK, scale);
-                chips.layOut();
-                int with = chips.sheet.minHalfHeightPx(chips.parent.getWidth());
-                int grown = with - without;
-                assertTrue("the chip row (56dp) is counted at " + scale + ", grew " + grown,
-                    grown >= chips.dp(56));
-                assertTrue("tier 1 counts it too", chips.sheet.tierOneHeightPx(
-                    chips.parent.getWidth()) - tierOneWithout >= chips.dp(56));
-            } finally {
-                sChips = false;
             }
         }
     }
@@ -534,26 +510,34 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
-    public void theMainPillAndAppliesToShowEveryWordWhole() {
-        // Overhaul §4: "Customiza…" and "Workspa…" no more, at 1.0× and 1.3× on 411dp.
-        boolean chips = sChips;
-        sChips = true;
+    public void underTerminalOnlyThePillReadsGlobalAndTerminal() {
+        sNoHome = true;
         try {
+            Fixture fixture = new Fixture(EditorCard.TERMINAL, 1f);
+            fixture.layOut();
+            List<MaterialButton> pill = fixture.sheet.mainPillButtons();
+            assertEquals(3, pill.size());
+            assertTrue("Global", pill.get(0).isShown());
+            assertFalse("no Home", pill.get(1).isShown());
+            assertTrue("Terminal", pill.get(2).isShown());
+            assertEquals("Terminal", pill.get(2).getText().toString());
+        } finally {
+            sNoHome = false;
+        }
+    }
+
+    @Test
+    public void theMainPillShowsEveryWordWhole() {
+        // Overhaul §4: "Customiza…" and "Workspa…" no more, at 1.0× and 1.3× on 411dp.
+        {
             for (float scale : new float[] {1f, 1.3f}) {
-                for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.STATUS}) {
+                for (EditorCard card : new EditorCard[] {EditorCard.HOME}) {
                     Fixture fixture = new Fixture(card, scale);
                     for (int frame = 0; frame < 4; frame++) {
                         fixture.layOut();
                         org.robolectric.shadows.ShadowLooper.idleMainLooper();
                     }
-                    List<MaterialButton> group = new ArrayList<>();
-                    if (card == EditorCard.HOME) {
-                        group.addAll(fixture.sheet.mainPillButtons());
-                    } else {
-                        ViewGroup applies = fixture.sheet.appliesToGroup();
-                        for (int i = 0; i < applies.getChildCount(); i++)
-                            group.add((MaterialButton) applies.getChildAt(i));
-                    }
+                    List<MaterialButton> group = new ArrayList<>(fixture.sheet.mainPillButtons());
                     assertEquals(card + " at " + scale, 3, group.size());
                     for (MaterialButton button : group) {
                         String which = card + " at " + scale + ": " + button.getText();
@@ -568,8 +552,6 @@ public class EditorCardSheetFitTest {
                     }
                 }
             }
-        } finally {
-            sChips = chips;
         }
     }
 
@@ -876,10 +858,8 @@ public class EditorCardSheetFitTest {
             mDock = new com.termux.app.surfaces.cards.DockCard(new FakeDockHost(context));
         }
 
-        @Nullable @Override public EditorCardSheet.Chip appliesToChip() {
-            return sChips ? new EditorCardSheet.Chip("Applies to",
-                new CharSequence[] {"Global", "Home", "Workspace"}, 0)
-                : null;
+        @Override public boolean offersCard(@NonNull EditorCard card) {
+            return !(sNoHome && card == EditorCard.HOME);
         }
 
         @Nullable @Override public View rowView(@NonNull Row row, int widthPx) {

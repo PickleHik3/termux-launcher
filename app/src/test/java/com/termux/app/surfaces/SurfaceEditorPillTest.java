@@ -59,10 +59,10 @@ public class SurfaceEditorPillTest {
         assertEquals(PageKind.HOME, editor.screen());
         wallMoves.clear();
 
-        pill(editor, EditorCard.WORKSPACE);
+        pill(editor, EditorCard.TERMINAL);
         assertEquals("the wall slides to the Workspace", PageKind.TERMINAL, last());
         assertEquals(PageKind.TERMINAL, editor.screen());
-        assertEquals(EditorCard.WORKSPACE, editor.shownCard());
+        assertEquals(EditorCard.TERMINAL, editor.shownCard());
 
         pill(editor, EditorCard.HOME);
         assertEquals("the wall slides back to Home", PageKind.HOME, last());
@@ -93,11 +93,11 @@ public class SurfaceEditorPillTest {
     @Test
     public void thePillAsksForThePageTheCardStandsOn() {
         assertEquals(PageKind.TERMINAL,
-            SurfaceEditorController.pillPlace(EditorCard.WORKSPACE, PageKind.HOME));
+            SurfaceEditorController.pillPlace(EditorCard.TERMINAL, PageKind.HOME));
         assertEquals(PageKind.HOME,
             SurfaceEditorController.pillPlace(EditorCard.HOME, PageKind.TERMINAL));
         assertNull(SurfaceEditorController.pillPlace(EditorCard.HOME, PageKind.HOME));
-        assertNull(SurfaceEditorController.pillPlace(EditorCard.WORKSPACE, PageKind.TERMINAL));
+        assertNull(SurfaceEditorController.pillPlace(EditorCard.TERMINAL, PageKind.TERMINAL));
         assertNull(SurfaceEditorController.pillPlace(EditorCard.APPEARANCE, PageKind.HOME));
     }
 

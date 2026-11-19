@@ -212,11 +212,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         /** The terminal's own frame in {@code terminal_root_container}'s unscaled coordinates. */
         @Nullable int[] terminalFrameRectInRoot();
-        /**
-         * The Card-form widget (one wearing glass) under the screen point {@code rawX, rawY}, as
-         * {left, top, right, bottom} in the root container's unscaled space; null where none is.
-         */
-        @Nullable default int[] cardWidgetAt(float rawX, float rawY) { return null; }
         /** The corner that frame actually draws with. */
         float terminalFrameCornerRadiusPx();
         /** The corner the keyboard surface itself is clipped to. */
@@ -1261,7 +1256,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     static PageKind pillPlace(@NonNull EditorCard card, @NonNull PageKind screen) {
         if (card == EditorCard.HOME && screen != PageKind.HOME)
             return PageKind.HOME;
-        if (card == EditorCard.WORKSPACE && screen == PageKind.HOME)
+        if (card == EditorCard.TERMINAL && screen == PageKind.HOME)
             return PageKind.TERMINAL;
         return null;
     }
@@ -1303,8 +1298,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mCard = card;
         mSubcardParent = null;
         mSubcardRow = null;
-        mWidgetRing = card == EditorCard.WIDGETS ? mTappedWidget : null;
-        mTappedWidget = null;
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
         sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate, raiseTo);
@@ -1439,8 +1432,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (mBar != null)
                 mBar.setPageName(pageName());
         }
-        if (mCard == null || mCard == EditorCard.HOME || mCard == EditorCard.WORKSPACE
-                || !mCard.standsOn(screen)) {
+        if (mCard == null || mCard.isPageCard() || !mCard.standsOn(screen)) {
             int detent = sheet.isShown() ? sheet.detent() : EditorCardSheet.DETENT_PEEK;
             openCard(follow.card, false, detent);
             if (sheet.isShown() && sheet.detent() != detent)
@@ -1459,7 +1451,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private String cardResetLabel(@NonNull EditorCard card) {
         switch (card) {
             case HOME: return getString(R.string.appearance_reset_home);
-            case WORKSPACE: return getString(R.string.appearance_reset_workspace);
             case STATUS: return getString(R.string.appearance_reset_status);
             case TERMINAL: return getString(R.string.appearance_reset_terminal);
             case DOCK: return getString(R.string.appearance_reset_dock);
@@ -2232,188 +2223,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    // ------------------------------------------------------- Customization › Layout (§2)
-
-    /** Customization's Layout list: every element, written to Home and the Workspace. */
-    @NonNull
-    private View customizationElementsView() {
-        com.termux.app.surfaces.cards.ElementsList list =
-            com.termux.app.surfaces.cards.ElementsList.build(mHost.context(),
-                new WholeAppElementsHost(),
-                com.termux.app.surfaces.cards.ElementRows.wholeApp(), true);
-        mElements = list;
-        return list.root;
-    }
-
-    /**
-     * What Customization's Layout list reads and writes: each element's show/hide on the Home
-     * layout and on the Workspace's (Terminal and Display), both orientations, through the layout
-     * session as the screen cards' lists write. The dock's own tiles have one value for the app
-     * and go through the screen cards' host.
-     */
-    private final class WholeAppElementsHost
-            implements com.termux.app.surfaces.cards.ElementsList.Host {
-        @NonNull private final ElementsHost mOne = new ElementsHost();
-
-        @Nullable @Override public String layoutTitle() {
-            return null;
-        }
-
-        @Override public boolean offers(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            return true;
-        }
-
-        @Override public boolean shown(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            return reading(item).switchOn();
-        }
-
-        @Nullable @Override public CharSequence summary(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            switch (reading(item)) {
-                case HOME_ONLY: return getString(R.string.editor_layout_home_only);
-                case WORKSPACE_ONLY: return getString(R.string.editor_layout_workspace_only);
-                default: return null;
-            }
-        }
-
-        @NonNull
-        private com.termux.app.surfaces.cards.LayoutOverride.Reading reading(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            return com.termux.app.surfaces.cards.LayoutOverride.read(
-                sideShows(item, com.termux.app.surfaces.cards.LayoutOverride.Side.HOME),
-                sideShows(item, com.termux.app.surfaces.cards.LayoutOverride.Side.WORKSPACE));
-        }
-
-        @Override public void setShown(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item, boolean shown) {
-            if (!byKind(item)) {
-                mOne.setShown(item, shown);
-                return;
-            }
-            Boolean home = sideShows(item, com.termux.app.surfaces.cards.LayoutOverride.Side.HOME);
-            Boolean workspace = sideShows(item,
-                com.termux.app.surfaces.cards.LayoutOverride.Side.WORKSPACE);
-            com.termux.app.surfaces.cards.LayoutOverride.Decision decision =
-                com.termux.app.surfaces.cards.LayoutOverride.decide(home, workspace, shown);
-            if (!decision.ask) {
-                writeSides(item, decision.writes, shown);
-                return;
-            }
-            askOverride(item, decision, home, workspace, shown);
-        }
-
-        @Override public void open(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            mOne.open(item);
-        }
-
-        /** Whether {@code item}'s show/hide is held per page kind (else one app-wide value). */
-        private boolean byKind(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            return item.visibility == com.termux.app.surfaces.cards.ElementRows.Visibility.ELEMENT
-                || item.visibility
-                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD;
-        }
-
-        /** Whether {@code side} shows {@code item}; null where the side does not wear it. */
-        @Nullable
-        private Boolean sideShows(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
-                                  @NonNull com.termux.app.surfaces.cards.LayoutOverride.Side side) {
-            boolean home = side == com.termux.app.surfaces.cards.LayoutOverride.Side.HOME;
-            if (!byKind(item))
-                return item.hasEye() ? mOne.shown(item) : Boolean.TRUE;
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout == null)
-                return null;
-            com.termux.app.place.LayoutVariant variant = home
-                ? com.termux.app.place.LayoutVariant.HOME
-                : com.termux.app.place.LayoutVariant.NORMAL;
-            if (item.visibility
-                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD)
-                return layout.isShownOn(variant, null);
-            Element element = item.element;
-            if (element == null)
-                return null;
-            // Home never wears the extra keys (DressResolver.wornOn).
-            if (!com.termux.app.chrome.DressResolver.wornOn(variant, element))
-                return null;
-            // The session's layouts in the edited orientation: what Home's and the Workspace's
-            // own lists read, unsaved changes included.
-            return layout.isShownOn(variant, element);
-        }
-
-        /** Writes {@code shown} for {@code item} on {@code sides}, then restates the editor. */
-        private void writeSides(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
-                                @NonNull java.util.Set<com.termux.app.surfaces.cards.LayoutOverride.Side> sides,
-                                boolean shown) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout != null) {
-                // Through the layout session, as the Home and Workspace lists write: Undo,
-                // Discard and Done treat it the same.
-                java.util.List<com.termux.app.place.LayoutVariant> variants =
-                    com.termux.app.surfaces.cards.LayoutOverride.variantsOf(sides);
-                boolean keyboard = item.visibility
-                    == com.termux.app.surfaces.cards.ElementRows.Visibility.KEYBOARD;
-                if (keyboard || item.element != null)
-                    layout.setShownOnLayouts(variants, keyboard ? null : item.element, shown);
-            }
-            positionTargets();
-            syncDirty();
-            com.termux.app.surfaces.cards.ElementsList list = mElements;
-            if (list != null)
-                list.restate();
-            EditorCardSheet sheet = mSheet;
-            if (sheet != null && sheet.isShown())
-                sheet.restate();
-        }
-
-        /**
-         * The page kind with a layout of its own would change: ask first (§2). Cancel puts the
-         * switch back; Override writes both kinds.
-         */
-        private void askOverride(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item,
-                                 @NonNull com.termux.app.surfaces.cards.LayoutOverride.Decision decision,
-                                 @Nullable Boolean home, @Nullable Boolean workspace,
-                                 boolean shown) {
-            Context context = mHost.context();
-            boolean ownHome = decision.own
-                == com.termux.app.surfaces.cards.LayoutOverride.Side.HOME;
-            boolean ownWorkspace = !ownHome;
-            int title = ownHome ? R.string.editor_layout_own_home
-                : R.string.editor_layout_own_workspace;
-            String name = context.getString(item.nameRes);
-            StringBuilder line = new StringBuilder();
-            if (ownHome && home != null)
-                line.append(context.getString(home ? R.string.editor_layout_shown_on
-                    : R.string.editor_layout_hidden_on, name,
-                    context.getString(R.string.appearance_card_home)));
-            if (ownWorkspace && workspace != null) {
-                line.append(context.getString(workspace ? R.string.editor_layout_shown_on
-                    : R.string.editor_layout_hidden_on, name,
-                    context.getString(R.string.appearance_card_workspace)));
-            }
-            boolean[] answered = {false};
-            com.google.android.material.dialog.MaterialAlertDialogBuilder builder =
-                new com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
-                    .setTitle(title)
-                    .setMessage(line.toString())
-                    .setNegativeButton(R.string.editor_layout_cancel, null)
-                    .setPositiveButton(R.string.editor_layout_override, (d, w) -> {
-                        answered[0] = true;
-                        writeSides(item, decision.writes, shown);
-                    });
-            builder.setOnDismissListener(d -> {
-                if (answered[0])
-                    return;
-                // Cancel, back or a tap outside: no change, the switch reads as before.
-                com.termux.app.surfaces.cards.ElementsList list = mElements;
-                if (list != null)
-                    list.restate();
-            });
-            builder.show();
-        }
-    }
-
     // ------------------------------------------------------- Reset everything (§1, §6)
 
     /** ⋮ › Reset everything on Customization: asked first, then {@link #resetEverything}. */
@@ -3110,6 +2919,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Every card's values and writes, row by row. */
     private final class CardModel implements EditorCardSheet.Model, CardBody.Looks {
 
+        @Override public boolean offersCard(@NonNull EditorCard card) {
+            return UseAsCards.reaches(useAs(), card);
+        }
+
         @Override public int value(@NonNull Row row) {
             TermuxAppSharedPreferences prefs = prefs();
             LayoutEditorController layout = mHost.layoutEditor();
@@ -3557,31 +3370,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
                     && row != Row.CAMERA_CUTOUT)
                 return linkRow(row).root;
-            if (row == Row.ELEMENTS && card == EditorCard.APPEARANCE)
-                return customizationElementsView();
             if (row == Row.ELEMENTS && card != null) {
-                // The Terminal card's Layout is the Workspace's list.
-                PageKind screen = card == EditorCard.TERMINAL ? PageKind.TERMINAL
-                    : com.termux.app.surfaces.cards.ElementRows.screenOf(card);
+                // A page card's Layout lists the rows that page shows.
+                PageKind screen = com.termux.app.surfaces.cards.ElementRows.screenOf(card);
                 if (screen != null)
                     return elementsView(screen);
-            }
-            // The status bar's position and the dock's type are every page's (ADR 0023 §1): the
-            // Global card holds them, and so do the Status bar and Dock cards, which say so.
-            if (row == Row.DOCK_TYPE) {
-                View type = dockCard().view(row, widthPx);
-                return card == EditorCard.DOCK ? withAllPagesNote(type) : type;
-            }
-            if (row == Row.STATUS_POSITION) {
-                com.termux.app.surfaces.cards.CardRowView position =
-                    com.termux.app.surfaces.cards.StatusBarCard.view(mHost.context(), row,
-                        widthPx, mStatusCardHost);
-                if (position == null) return null;
-                if (card == EditorCard.STATUS)
-                    position = new com.termux.app.surfaces.cards.CardRowView(
-                        withAllPagesNote(position.view), position::restate);
-                mOwnRows.put(row, position);
-                return position.view;
             }
             if (card == EditorCard.DOCK)
                 return dockCard().view(row, widthPx);
@@ -3612,10 +3405,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 elements.restate();
                 return;
             }
-            if (row == Row.DOCK_TYPE || card == EditorCard.DOCK)
+            if (card == EditorCard.DOCK)
                 dockCard().restate(row);
-            else if (row == Row.STATUS_POSITION)
-                restateStatusTerminalRow(row, view);
             else if (card != null && CardBody.redesigned(card)) {
                 CardBody body = mCardBody;
                 if (body != null) body.restate(row, view);
@@ -3688,9 +3479,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         boolean external;
         int summary;
         switch (row) {
-            case LINK_GLOBAL: external = false; summary = R.string.editor_link_global_summary; break;
-            case LINK_SHEETS: external = false; summary = R.string.editor_link_sheets_summary; break;
-            case LINK_WIDGETS: external = false; summary = R.string.editor_link_widgets_summary; break;
             case LINK_PAGES: external = false; summary = R.string.editor_link_pages_summary; break;
             case PANE_BORDERS:
                 external = false; summary = R.string.editor_link_pane_borders_summary; break;
@@ -4073,17 +3861,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         .EssentialNotificationRulesFragment.class,
                     R.string.settings_essential_notifications_title);
                 break;
-            case LINK_WIDGETS:
-                openCard(EditorCard.WIDGETS, true);
-                break;
-            case LINK_SHEETS:
-                openCard(EditorCard.SHEETS, true);
-                break;
-            case LINK_GLOBAL: {
-                EditorCard global = EditorDoor.EDITOR_GLOBAL_CHIP.route(null, null);
-                if (global != null) openCard(global, true);
-                break;
-            }
             default:
                 break;
         }
@@ -4933,8 +4710,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 continue;
             final int index = i;
             group.setOnClickListener(view -> {
-                if (openWidgetsAt(index))
-                    return;
                 EditorCard card = cardOfGroup(index);
                 if (card != null) {
                     EditorDoor.EDITOR_OUTLINE.log(card);
@@ -4972,30 +4747,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 }
             });
         }
-    }
-
-    /** The tapped Card-form widget's rect, for the next {@link #openCard} of the Widgets card. */
-    @Nullable private int[] mTappedWidget;
-    /** The widget the Widgets card's ring stands around while that card is up. */
-    @Nullable private int[] mWidgetRing;
-
-    /**
-     * A tap on the bare frame or the canvas that lands on a Card-form widget raises the Widgets
-     * card, ringed around that widget. False when no such widget is under the finger.
-     */
-    private boolean openWidgetsAt(int groupIndex) {
-        EditorCard groupCard = GROUP_CARDS[groupIndex];
-        if (groupCard != null && groupCard != EditorCard.TERMINAL)
-            return false;
-        if (cardRefusal(EditorCard.WIDGETS) != null)
-            return false;
-        int[] widget = mHost.cardWidgetAt(mDownRawX, mDownRawY);
-        if (widget == null)
-            return false;
-        EditorDoor.EDITOR_OUTLINE.log(EditorCard.WIDGETS);
-        mTappedWidget = widget;
-        openCard(EditorCard.WIDGETS, true);
-        return true;
     }
 
     private void setOverlayVisible(boolean visible) {
@@ -5038,10 +4789,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return null;
         if (card == null || isScreenCard(card))
             return new int[] {0, 0, overlay.getWidth(), overlay.getHeight()};
-        int[] widget = mWidgetRing;
-        if (card == EditorCard.WIDGETS && widget != null)
-            return new int[] {widget[0] - overlayOffset[0], widget[1] - overlayOffset[1],
-                widget[2] - overlayOffset[0], widget[3] - overlayOffset[1]};
         if (card == EditorCard.TERMINAL) {
             int[] frame = mHost.terminalFrameRectInRoot();
             if (frame == null || frame[2] - frame[0] < dp(24) || frame[3] - frame[1] < dp(24))
@@ -5397,7 +5144,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** Whether {@code card} is a screen's own (Home's or the Workspace's): the whole frame. */
     private static boolean isScreenCard(@Nullable EditorCard card) {
-        return card == EditorCard.HOME || card == EditorCard.WORKSPACE;
+        return card != null && card.isPageCard();
     }
 
     /** The radius a surface's outline wears: the surface's own. */
@@ -6044,22 +5791,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     // ------------------------------------------------------- Status bar and Terminal cards
-
-    /** {@code row} with the line "All pages" under it: a value the per-page cards share. */
-    @NonNull
-    private View withAllPagesNote(@NonNull View row) {
-        Context context = mHost.context();
-        android.widget.LinearLayout column = new android.widget.LinearLayout(context);
-        column.setOrientation(android.widget.LinearLayout.VERTICAL);
-        column.addView(row);
-        android.widget.TextView note = com.termux.app.surfaces.rows.RowKit.caption(context,
-            context.getString(R.string.editor_row_all_pages));
-        int edge = com.termux.app.surfaces.rows.RowKit.dp(context,
-            com.termux.app.surfaces.rows.RowKit.EDGE_DP);
-        note.setPadding(edge, 0, edge, com.termux.app.surfaces.rows.RowKit.dp(context, 4));
-        column.addView(note);
-        return column;
-    }
 
     /** The rows the Status bar and Terminal cards drew themselves, for their restates. */
     @NonNull private final java.util.Map<Row, com.termux.app.surfaces.cards.CardRowView> mOwnRows =
@@ -6829,12 +6560,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         switch (row) {
             case SECTION_LOOK:
                 if (card == EditorCard.HOME) return getString(R.string.editor_note_home_only);
-                if (card == EditorCard.WORKSPACE)
+                if (card == EditorCard.TERMINAL)
                     return getString(R.string.editor_note_workspace_only);
                 return null;
             case SECTION_GLASS:
                 if (card == EditorCard.HOME) return getString(R.string.editor_note_home_glass);
-                if (card == EditorCard.WORKSPACE)
+                if (card == EditorCard.TERMINAL)
                     return getString(R.string.editor_note_workspace_glass);
                 return null;
             case SECTION_GLASS_MATERIAL:

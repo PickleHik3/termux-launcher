@@ -12,7 +12,6 @@ import com.termux.app.surfaces.cards.HomeCard;
 import com.termux.app.surfaces.cards.KeyboardCard;
 import com.termux.app.surfaces.cards.StatusBarCard;
 import com.termux.app.surfaces.cards.TerminalCard;
-import com.termux.app.surfaces.cards.WorkspaceCard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 
@@ -116,8 +115,6 @@ public final class EditorRows {
             R.drawable.ic_symbol_wallpaper),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,
             R.drawable.ic_symbol_wallpaper),
-        /** A screen's card to the card both screens share (the palette's). */
-        LINK_GLOBAL(Kind.LINK, R.string.appearance_row_global, R.drawable.ic_symbol_palette),
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),
         CLOCK_FACE(Kind.MENU, R.string.appearance_row_clock_face, R.drawable.ic_editor_clock),
         KEYBOARD_THEME(Kind.LINK, R.string.appearance_row_keyboard_theme, R.drawable.ic_editor_dark_mode),
@@ -150,10 +147,6 @@ public final class EditorRows {
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
         GLASS_EDGE(Kind.SLIDER, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
         TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_symbol_terminal),
-        /** The Home card's way to the Widgets card. */
-        LINK_WIDGETS(Kind.LINK, R.string.editor_element_widgets, R.drawable.ic_symbol_stacks),
-        /** The Appearance card's way to the Sheets card. */
-        LINK_SHEETS(Kind.LINK, R.string.editor_element_sheets, R.drawable.ic_symbol_grid_view),
         LINK_GESTURES(Kind.LINK, R.string.appearance_row_gestures, R.drawable.ic_symbol_tune),
         /** Settings › Performance, offered under Depth and Edge while a setting puts them out. */
         LINK_GLASS_REFRACTION(Kind.LINK, R.string.settings_performance_glass_refraction_title,
@@ -230,14 +223,25 @@ public final class EditorRows {
         SECTION_GLASS_MATERIAL(Kind.MENU, R.string.editor_section_glass_material, 0),
         // The overhaul's sections (appearance-cards-overhaul §2): [card name] · More options ·
         // Layout · Appearance · Links, plus Colours (Customization) and Clock & Weather (Status
-        // bar). A card's first section is named for the card where it is not one of these; the
-        // headings above stay only as EditorSectionStore keys of earlier builds, no card lists them.
+        // bar). A card's first section is named for the card where it is not one of these. Of
+        // the headings above, Global lists Look and Shape again (spec §3); the rest stay only as
+        // EditorSectionStore keys of earlier builds.
         SECTION_MORE_OPTIONS(Kind.MENU, R.string.editor_section_more_options, 0),
         SECTION_LAYOUT(Kind.MENU, R.string.editor_section_layout, 0),
         SECTION_APPEARANCE(Kind.MENU, R.string.editor_section_appearance, 0),
         SECTION_LINKS(Kind.MENU, R.string.editor_section_links, 0),
         SECTION_COLOURS(Kind.MENU, R.string.editor_section_colours, 0),
         SECTION_CLOCK_WEATHER(Kind.MENU, R.string.editor_section_clock_weather, 0),
+        // The six cards' sections (appearance-one-look spec §3): Global's Look (SECTION_LOOK),
+        // Fine-tune, Shape and Screen; Home's Widgets; the Terminal's Text, Panes and Effects;
+        // the Dock's Bars.
+        SECTION_FINE_TUNE(Kind.MENU, R.string.editor_section_fine_tune, 0),
+        SECTION_SCREEN(Kind.MENU, R.string.editor_section_screen, 0),
+        SECTION_WIDGETS(Kind.MENU, R.string.editor_section_widgets, 0),
+        SECTION_TEXT(Kind.MENU, R.string.editor_section_text, 0),
+        SECTION_PANES(Kind.MENU, R.string.editor_section_panes, 0),
+        SECTION_EFFECTS(Kind.MENU, R.string.editor_section_effects, 0),
+        SECTION_BARS(Kind.MENU, R.string.editor_section_bars, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
         HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),
         /**
@@ -388,14 +392,10 @@ public final class EditorRows {
     private static List<Spec> listed(@NonNull EditorCard card, @NonNull Offers offers) {
         switch (card) {
             case HOME: return HomeCard.rows(offers);
-            case WORKSPACE: return WorkspaceCard.rows(offers);
             case STATUS: return StatusBarCard.rows(offers);
             case TERMINAL: return TerminalCard.rows(offers);
             case DOCK: return DockCard.rows(offers);
             case KEYBOARD: return KeyboardCard.rows(offers);
-            case WIDGETS:
-            case SHEETS:
-                return GlassRows.appearance(new CardRows(), offers, 1).build();
             case APPEARANCE:
             default:
                 return GlobalCard.rows(offers);
@@ -538,7 +538,7 @@ public final class EditorRows {
      */
     public static int pageFor(@NonNull EditorCard card, @NonNull Row row) {
         int none = TermuxAppSharedPreferences.PAGE_ALL;
-        if (card == EditorCard.HOME || card == EditorCard.WORKSPACE || card == EditorCard.APPEARANCE)
+        if (card == EditorCard.HOME || card == EditorCard.APPEARANCE)
             return row == Row.LOOK || row.property() != null
                 ? TermuxAppSharedPreferences.PAGE_WALL : none;
         SurfaceProperty property = row.property();

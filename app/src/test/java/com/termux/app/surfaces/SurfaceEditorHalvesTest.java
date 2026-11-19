@@ -105,7 +105,7 @@ public class SurfaceEditorHalvesTest {
         model(editor).onValue(Row.VISIBLE, 0, false);
         assertFalse(layout.isShown(Element.APPS));
 
-        editor.present(EditorCard.WORKSPACE, null, null);
+        editor.present(EditorCard.TERMINAL, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         ElementsList.Host elements = elements(editor);
         assertFalse("the Elements list reads the dock hidden", elements.shown(Item.APPS_ROW));
@@ -121,7 +121,7 @@ public class SurfaceEditorHalvesTest {
     public void theElementsListAndTheStatusCardsEyeWriteOneValue() {
         LayoutEditorController layout = layoutEditor();
         SurfaceEditorController editor = open(PageKind.TERMINAL, layout);
-        assertEquals("the screen's card stands at peek", EditorCard.WORKSPACE, editor.shownCard());
+        assertEquals("the screen's card stands at peek", EditorCard.TERMINAL, editor.shownCard());
         ElementsList.Host elements = elements(editor);
         assertTrue(elements.shown(Item.STATUS_BAR));
         elements.setShown(Item.STATUS_BAR, false);
@@ -155,10 +155,7 @@ public class SurfaceEditorHalvesTest {
     public void theSlidersGlyphOpensTheElementsCard() {
         SurfaceEditorController editor = open(PageKind.TERMINAL);
         ElementsList.Host elements = elements(editor);
-        elements.open(Item.TERMINAL);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals(EditorCard.TERMINAL, editor.shownCard());
-        editor.present(EditorCard.WORKSPACE, null, null);
+        editor.present(EditorCard.TERMINAL, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         elements(editor).open(Item.SEARCH_FIELD);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();

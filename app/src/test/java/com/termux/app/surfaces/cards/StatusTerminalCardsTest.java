@@ -68,9 +68,9 @@ public class StatusTerminalCardsTest {
     public void theStatusBarCardReadsPositionGlassClockOptionsIndicators() {
         assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS,
             Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
-            Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-            Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_LINKS,
-            Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS), rows(StatusBarCard.rows(ALL)));
+            Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST,
+            Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
+            rows(StatusBarCard.rows(ALL)));
         List<Row> rows = rows(StatusBarCard.rows(ALL));
         assertFalse("the Visible switch is the header's eye", rows.contains(Row.VISIBLE));
         assertFalse("12 h · 24 h is the card's own pair", rows.contains(Row.CLOCK_12H));
@@ -78,11 +78,12 @@ public class StatusTerminalCardsTest {
 
     @Test
     public void theTerminalCardReadsGlassContrastTrailEffectAndFont() {
-        assertEquals(Arrays.asList(Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS,
-            Row.CURSOR_TRAIL, Row.EFFECT, Row.SPLIT_GAP, Row.MULTIPLEXER,
-            Row.AUTO_TILING, Row.FOCUS_GROWS, Row.SECTION_LAYOUT,
-            Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-            Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_LINKS, Row.LINK_FONT),
+        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.TEXT_SIZE, Row.CONTRAST, Row.LINK_FONT,
+            Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
+            Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_PANES,
+            Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
+            Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT, Row.SECTION_LAYOUT, Row.ELEMENTS,
+            Row.MINIMAL),
             rows(TerminalCard.rows(ALL)));
         assertFalse("no Screen effect where its shader does not run",
             rows(TerminalCard.rows(NONE)).contains(Row.EFFECT));

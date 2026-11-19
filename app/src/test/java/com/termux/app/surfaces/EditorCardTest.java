@@ -43,13 +43,16 @@ public class EditorCardTest {
         }
     }
 
+    /** Six cards (spec §3): the Workspace, Widgets and Menus and dialogs cards are gone. */
     @Test
-    public void onlyTheCardsHeldPerHalfOfferACopy() {
-        assertTrue(EditorCard.DOCK.perHalf());
-        assertTrue(EditorCard.STATUS.perHalf());
-        assertTrue(EditorCard.KEYBOARD.perHalf());
-        assertTrue(EditorCard.APPEARANCE.perHalf());
-        assertFalse(EditorCard.HOME.perHalf());
-        assertFalse(EditorCard.TERMINAL.perHalf());
+    public void theEditorHasSixCards() {
+        assertEquals(6, EditorCard.values().length);
+        assertTrue(EditorCard.HOME.isPageCard());
+        assertTrue(EditorCard.TERMINAL.isPageCard());
+        assertEquals(EditorCard.TERMINAL, EditorCard.forKey("workspace"));
+        assertEquals(EditorCard.TERMINAL, EditorCard.forKey("display"));
+        assertEquals(EditorCard.HOME, EditorCard.forKey("widgets"));
+        assertEquals(EditorCard.APPEARANCE, EditorCard.forKey("sheets"));
+        assertEquals(EditorCard.TERMINAL, EditorCard.forScreen(PageKind.TERMINAL));
     }
 }

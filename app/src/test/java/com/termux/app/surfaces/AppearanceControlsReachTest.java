@@ -160,8 +160,7 @@ public class AppearanceControlsReachTest {
 
     /** The card opened on {@code harness}'s editor; its model. */
     private EditorCardSheet.Model open(EditorTestHarness harness, EditorCard card) {
-        PageKind place = card == EditorCard.WIDGETS || card == EditorCard.HOME
-            ? PageKind.HOME : null;
+        PageKind place = card == EditorCard.HOME ? PageKind.HOME : null;
         harness.editor.present(card, place, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(card, harness.editor.shownCard());

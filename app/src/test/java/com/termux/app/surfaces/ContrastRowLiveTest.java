@@ -67,7 +67,7 @@ public class ContrastRowLiveTest {
 
     @Test
     public void theGlobalAndWorkspaceRowsAreOneSetting() {
-        SurfaceEditorController workspace = open(EditorCard.WORKSPACE);
+        SurfaceEditorController workspace = open(EditorCard.TERMINAL);
         model(workspace).onValue(Row.CONTRAST, 0, false);
         assertEquals(TerminalContrastLevel.SOFTER, preferences.getTerminalContrastLevel());
         // Done stores the draft; the next editor then opens on the store.
@@ -77,7 +77,7 @@ public class ContrastRowLiveTest {
 
         model(global).onValue(Row.CONTRAST, 2, false);
         global.done();
-        workspace = open(EditorCard.WORKSPACE);
+        workspace = open(EditorCard.TERMINAL);
         assertEquals(2, model(workspace).value(Row.CONTRAST));
     }
 

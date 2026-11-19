@@ -84,45 +84,39 @@ public class EditorCardSectionsTest {
             assertEquals(card + " › " + section, want.get(section), got.get(section));
     }
 
+    // Each card's sections and rows as the appearance-one-look spec §3 lists them; within a
+    // section the rows stand in EditorRows.Group order.
+
     @Test
-    public void customization() {
+    public void global() {
         check(EditorCard.APPEARANCE, expect(
-            "SECTION_APPEARANCE", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-                Row.TINT, Row.CORNERS, Row.MARGIN, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH,
-                Row.RIM),
+            "SECTION_LOOK", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT),
+            "SECTION_FINE_TUNE", Arrays.asList(Row.GRAIN, Row.GLASS_EDGE, Row.DEPTH,
+                Row.VIBRANCY, Row.RIM),
+            "SECTION_SHAPE", Arrays.asList(Row.STYLE, Row.CORNERS, Row.MARGIN),
             "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.WALLPAPER_COLOURS,
-                Row.TINT_HUE),
-            "SECTION_LAYOUT", Arrays.asList(Row.STATUS_POSITION, Row.DOCK_TYPE, Row.ELEMENTS),
-            "SECTION_MORE_OPTIONS", Arrays.asList(Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER),
-            "SECTION_LINKS", Arrays.asList(Row.LINK_SHEETS, Row.TOOL_COLOURS)));
+                Row.TINT_HUE, Row.TOOL_COLOURS),
+            "SECTION_SCREEN", Arrays.asList(Row.SHOW_WALLPAPER, Row.FULL_SCREEN)));
     }
 
     @Test
     public void home() {
         check(EditorCard.HOME, expect(
-            CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.HOME_ICON_SIZE,
-                Row.LABEL_SIZE, Row.PAGE_TRANSITION, Row.ICON_PACK),
+            CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
+                Row.HOME_ICON_SIZE, Row.PAGE_TRANSITION, Row.ICON_PACK),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
-                Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS),
+                Row.FOLDERS, Row.WALLPAPER_SCROLL),
+            "SECTION_WIDGETS", Arrays.asList(Row.GLASS_WIDGETS, Row.NUMERALS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
             // No glass: the chrome wears one look on every page (ADR 0031).
             "SECTION_APPEARANCE", Arrays.asList(Row.WALLPAPER_DIM),
-            "SECTION_LINKS", Arrays.asList(Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES,
-                Row.LINK_SHEETS)));
+            "SECTION_LINKS", Arrays.asList(Row.LINK_GESTURES, Row.LINK_PAGES)));
     }
 
     @Test
     public void homeUnderTheOverviewHasNoPagesLink() {
         Map<String, List<Row>> got = sections(EditorCard.HOME, new Offers(true, true, true, true));
-        assertEquals(Arrays.asList(Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_SHEETS),
-            got.get("SECTION_LINKS"));
-    }
-
-    @Test
-    public void workspace() {
-        check(EditorCard.WORKSPACE, expect(
-            "SECTION_APPEARANCE", Arrays.asList(Row.CONTRAST, Row.MINIMAL),
-            "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS)));
+        assertEquals(Arrays.asList(Row.LINK_GESTURES), got.get("SECTION_LINKS"));
     }
 
     @Test
@@ -131,7 +125,7 @@ public class EditorCardSectionsTest {
             CARD, Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS),
             "SECTION_CLOCK_WEATHER", Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT),
-            "SECTION_APPEARANCE", block(),
+            "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.FROST),
             "SECTION_LINKS", Arrays.asList(Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS)));
     }
 
@@ -141,22 +135,27 @@ public class EditorCardSectionsTest {
             CARD, Arrays.asList(Row.DOCK_TYPE, Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS),
             "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
                 Row.DOCK_MONOCHROME),
-            "SECTION_LAYOUT", Arrays.asList(Row.DOCK_BARS),
-            "SECTION_APPEARANCE", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-                Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.REFLECTION, Row.RIM,
-                Row.TINT_HUE),
-            "SECTION_LINKS", Arrays.asList(Row.LINK_SHEETS, Row.LINK_GLOBAL)));
+            "SECTION_BARS", Arrays.asList(Row.DOCK_BARS),
+            "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.FROST, Row.REFLECTION)));
     }
 
     @Test
     public void terminal() {
         check(EditorCard.TERMINAL, expect(
-            CARD, Arrays.asList(Row.TEXT_SIZE, Row.SPLIT_GAP, Row.CONTRAST,
-                Row.CURSOR_TRAIL, Row.EFFECT, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
-                Row.PANE_BORDERS),
-            "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
+            "SECTION_TEXT", Arrays.asList(Row.TEXT_SIZE, Row.CONTRAST, Row.LINK_FONT),
             "SECTION_APPEARANCE", block(),
-            "SECTION_LINKS", Arrays.asList(Row.LINK_FONT)));
+            "SECTION_PANES", Arrays.asList(Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
+                Row.FOCUS_GROWS, Row.PANE_BORDERS),
+            "SECTION_EFFECTS", Arrays.asList(Row.CURSOR_TRAIL, Row.EFFECT),
+            "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS, Row.MINIMAL)));
+    }
+
+    /** Under Use as Terminal only, Pages is the Terminal card's (Home's card is gone). */
+    @Test
+    public void terminalWithoutHomeLinksPages() {
+        Map<String, List<Row>> got = sections(EditorCard.TERMINAL,
+            new Offers(true, true, false, false));
+        assertEquals(Arrays.asList(Row.LINK_PAGES), got.get("SECTION_LINKS"));
     }
 
     @Test
@@ -164,16 +163,9 @@ public class EditorCardSectionsTest {
         check(EditorCard.KEYBOARD, expect(
             CARD, Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
                 Row.KEY_CORNERS, Row.BOTTOM_PADDING),
-            "SECTION_APPEARANCE", Arrays.asList(Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
-                Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
-                Row.DEPTH, Row.RIM, Row.TINT_HUE),
+            "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.OPACITY_LINK,
+                Row.KEY_OPACITY, Row.FROST),
             "SECTION_LINKS", Arrays.asList(Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)));
-    }
-
-    @Test
-    public void widgetsAndMenusAreAppearanceOnly() {
-        check(EditorCard.WIDGETS, expect("SECTION_APPEARANCE", block()));
-        check(EditorCard.SHEETS, expect("SECTION_APPEARANCE", block()));
     }
 
     @Test
@@ -181,12 +173,10 @@ public class EditorCardSectionsTest {
         for (EditorCard card : EditorCard.values()) {
             for (EditorRows.Spec spec : EditorRows.rows(card, ALL)) {
                 assertFalse(card + " " + spec.row, spec.row == Row.CHANGE_WALLPAPER
-                    || spec.row == Row.HINT_GLASS_MATERIAL || spec.row == Row.LINK_WIDGETS
-                    || spec.row == Row.STATUS_OPTIONS);
+                    || spec.row == Row.HINT_GLASS_MATERIAL || spec.row == Row.STATUS_OPTIONS);
                 if (EditorCardSheet.isSectionHeading(spec.row))
                     assertFalse(card + " " + spec.row, Arrays.asList(Row.SECTION_GLASS,
-                        Row.SECTION_SHAPE, Row.SECTION_MORE, Row.SECTION_GRID, Row.SECTION_LOOK,
-                        Row.SECTION_LABELS_FOLDERS, Row.SECTION_OPTIONS, Row.SECTION_WALLPAPER,
+                        Row.SECTION_MORE, Row.SECTION_GRID, Row.SECTION_LABELS_FOLDERS, Row.SECTION_OPTIONS, Row.SECTION_WALLPAPER,
                         Row.SECTION_COLOUR, Row.SECTION_GLASS_MATERIAL).contains(spec.row));
             }
         }

@@ -79,7 +79,7 @@ public final class AppearanceEditorEntry {
      * slide; anything else lands on the terminal.
      *
      * <pre>
-     *   openAppearanceSurface(EditorCard.WORKSPACE.key,
+     *   openAppearanceSurface(EditorCard.TERMINAL.key,
      *       AppearanceEditorEntry.terminalMenuPlace(currentWallPlace()), null);
      * </pre>
      */

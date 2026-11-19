@@ -87,7 +87,7 @@ public class EditorCardHeaderTest {
     public void thePillOpensTheOtherMainCard() {
         Fixture f = new Fixture(EditorCard.HOME, 1f);
         f.sheet.mainPill().getChildAt(2).performClick();
-        assertEquals(EditorCard.WORKSPACE, f.opened);
+        assertEquals(EditorCard.TERMINAL, f.opened);
     }
 
     @Test

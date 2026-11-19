@@ -25,11 +25,6 @@ public final class EditorChips {
         return card == null || card.slot == null ? null : card.slot.element;
     }
 
-    /** Whether a card is a page card (Home, Workspace). */
-    public static boolean isPageCard(@Nullable EditorCard card) {
-        return card == EditorCard.HOME || card == EditorCard.WORKSPACE;
-    }
-
     /** The cell {@code card}'s glass rows stand on. */
     @NonNull
     public static EditorChips openFor(@Nullable EditorCard card) {

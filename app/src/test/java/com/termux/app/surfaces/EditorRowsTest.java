@@ -57,11 +57,11 @@ public class EditorRowsTest {
     public void theDockCardOpensOnItsStyleItsBarsAndItsGlass() {
         assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
+        // Bars keep order and settings; Appearance holds the dock's own Opacity and Blur and
+        // Peek's Reflection (spec §3, Dock). No Links: Global is the pill's.
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
-            Row.DOCK_MONOCHROME,
-            Row.SECTION_LAYOUT, Row.DOCK_BARS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.REFLECTION, Row.RIM, Row.TINT_HUE,
-            Row.SECTION_LINKS, Row.LINK_SHEETS, Row.LINK_GLOBAL),
+            Row.DOCK_MONOCHROME, Row.SECTION_BARS, Row.DOCK_BARS, Row.SECTION_APPEARANCE,
+            Row.OPACITY, Row.FROST, Row.REFLECTION),
             EditorRows.tier(EditorCard.DOCK, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.DOCK, ALL);
         assertFalse("no dock-wide Style or Design rows", rows.contains(Row.STYLE)
@@ -73,9 +73,9 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS),
             EditorRows.tier(EditorCard.STATUS, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
-            Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM, Row.TINT_HUE,
-            Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
+            Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE,
+            Row.OPACITY, Row.FROST, Row.SECTION_LINKS, Row.CAMERA_CUTOUT,
+            Row.PINNED_NOTIFICATIONS),
             EditorRows.tier(EditorCard.STATUS, ALL, 3));
     }
 
@@ -83,9 +83,8 @@ public class EditorRowsTest {
     public void theKeyboardCardOpensOnItsTypeThenItsGlassWithTheOpacityLink() {
         assertEquals(Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
             Row.KEY_CORNERS, Row.BOTTOM_PADDING), EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.OPACITY_LINK,
-            Row.KEY_OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
-            Row.DEPTH, Row.RIM, Row.TINT_HUE, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
+        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.OPACITY, Row.OPACITY_LINK,
+            Row.KEY_OPACITY, Row.FROST, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 3));
     }
 
@@ -100,13 +99,15 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theTerminalCardHasNoPlaceOfItsOwn() {
-        assertEquals(Arrays.asList(Row.TEXT_SIZE, Row.SPLIT_GAP, Row.CONTRAST,
-            Row.CURSOR_TRAIL, Row.EFFECT, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
-            Row.PANE_BORDERS), EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT,
-            Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM, Row.TINT_HUE,
-            Row.SECTION_LINKS, Row.LINK_FONT), EditorRows.tier(EditorCard.TERMINAL, ALL, 3));
+    public void theTerminalCardHoldsTextItsGlassPanesEffectsAndLayout() {
+        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.TEXT_SIZE, Row.CONTRAST, Row.LINK_FONT),
+            EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
+        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
+            Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM, Row.TINT_HUE,
+            Row.SECTION_PANES, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
+            Row.PANE_BORDERS, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT,
+            Row.SECTION_LAYOUT, Row.ELEMENTS, Row.MINIMAL),
+            EditorRows.tier(EditorCard.TERMINAL, ALL, 3));
         List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
         assertFalse(all.contains(Row.VISIBLE));
     }
@@ -134,13 +135,14 @@ public class EditorRowsTest {
 
     @Test
     public void theHomeCardOpensOnHomesGridLookAndGlassAndItIsAlwaysTheHomeHalfs() {
-        assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.HOME_ICON_SIZE,
-            Row.LABEL_SIZE, Row.PAGE_TRANSITION, Row.ICON_PACK),
+        assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
+            Row.HOME_ICON_SIZE, Row.PAGE_TRANSITION, Row.ICON_PACK),
             EditorRows.tier(EditorCard.HOME, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
-            Row.PAGE_DOTS, Row.WALLPAPER_SCROLL, Row.FOLDERS, Row.NUMERALS, Row.GLASS_WIDGETS,
-            Row.SECTION_LAYOUT, Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.WALLPAPER_DIM,
-            Row.SECTION_LINKS, Row.LINK_GLOBAL, Row.LINK_GESTURES, Row.LINK_PAGES, Row.LINK_SHEETS),
+            Row.PAGE_DOTS, Row.FOLDERS, Row.WALLPAPER_SCROLL, Row.SECTION_WIDGETS,
+            Row.GLASS_WIDGETS, Row.NUMERALS, Row.SECTION_LAYOUT, Row.ELEMENTS,
+            Row.SECTION_APPEARANCE, Row.WALLPAPER_DIM, Row.SECTION_LINKS, Row.LINK_GESTURES,
+            Row.LINK_PAGES),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PageKind frame : PageKind.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
@@ -151,30 +153,32 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theGlobalCardOpensOnTheWallpaperThenTheColourAndKeepsTheGlassMaterial() {
-        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
-            Row.GRAIN, Row.TINT, Row.CORNERS, Row.MARGIN, Row.VIBRANCY, Row.GLASS_EDGE, Row.DEPTH,
-            Row.RIM),
+    public void theGlobalCardOpensOnTheLookAndKeepsTheRestOfTheGlassUnderFineTune() {
+        assertEquals(Arrays.asList(Row.SECTION_LOOK, Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(EditorRows.tier(EditorCard.APPEARANCE, ALL, 1),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
-        assertEquals(Arrays.asList(Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
-            Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.SECTION_LAYOUT, Row.STATUS_POSITION, Row.DOCK_TYPE, Row.ELEMENTS, Row.SECTION_MORE_OPTIONS,
-            Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER, Row.SECTION_LINKS, Row.LINK_SHEETS,
-            Row.TOOL_COLOURS),
+        assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.GRAIN, Row.GLASS_EDGE, Row.DEPTH,
+            Row.VIBRANCY, Row.RIM, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
+            Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.WALLPAPER_COLOURS, Row.TINT_HUE,
+            Row.TOOL_COLOURS, Row.SECTION_SCREEN, Row.SHOW_WALLPAPER, Row.FULL_SCREEN),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);
+        // Status position and Dock type are on their own cards; the Layout lists on the page
+        // cards (spec §3, Global).
         for (Row gone : new Row[] {Row.CHANGE_WALLPAPER, Row.MINIMAL, Row.ICON_PACK,
-            Row.TEXT_SIZE, Row.HINT_GLASS_MATERIAL})
-            assertFalse(gone + " is not Customization's", rows.contains(gone));
+            Row.TEXT_SIZE, Row.HINT_GLASS_MATERIAL, Row.STATUS_POSITION, Row.DOCK_TYPE,
+            Row.ELEMENTS})
+            assertFalse(gone + " is not Global's", rows.contains(gone));
     }
 
     @Test
     public void frostIsTheOneGlassSliderOnEveryCardWithGlass() {
         for (EditorCard card : EditorCard.values()) {
             List<Row> rows = rowsOf(card, ALL);
-            // The page cards have no glass: the chrome wears one look on every page (ADR 0031).
-            assertEquals(card + " has Frost", !EditorChips.isPageCard(card),
+            // Home has no glass: the chrome wears one look on every page (ADR 0031); the
+            // Terminal's glass is its panes'.
+            assertEquals(card + " has Frost", card != EditorCard.HOME,
                 rows.contains(Row.FROST));
         }
         // Grain is its own row since the look grid (ADR 0017); Blur stays Frost's.
@@ -231,8 +235,7 @@ public class EditorRowsTest {
             }
             // The spec's touch order puts Colour between the legend strip and Corners, and
             // Grain under More, so a card may hold several runs; it holds one at least.
-            if (card != EditorCard.WORKSPACE)
-                assertTrue(card + " has a slider", runs >= 1);
+            assertTrue(card + " has a slider", runs >= 1);
             for (int i = 0; i < rows.size(); i++) {
                 if (CardBody.shape(rows.get(i)) != CardBody.Shape.SLIDER_LINK)
                     continue;
@@ -257,9 +260,10 @@ public class EditorRowsTest {
         for (EditorCard card : EditorCard.values()) {
             for (Spec spec : EditorRows.rows(card, ALL)) {
                 // Pane borders and Icon pack open a subcard (›) inside their card's first
-                // section, as the spec puts them.
+                // section, and Font stands in the Terminal's Text, as the spec puts them.
                 if (spec.row.kind == Kind.LINK && spec.row != Row.KEYBOARD_THEME
-                        && spec.row != Row.PANE_BORDERS && spec.row != Row.ICON_PACK)
+                        && spec.row != Row.PANE_BORDERS && spec.row != Row.ICON_PACK
+                        && spec.row != Row.LINK_FONT)
                     assertEquals(card + ": a link to Settings is rare", 3, spec.tier);
             }
         }

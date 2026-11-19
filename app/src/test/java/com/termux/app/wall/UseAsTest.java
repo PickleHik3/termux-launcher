@@ -89,20 +89,21 @@ public class UseAsTest {
     @Test public void terminalOnlyHomeDoorsOpenTheEditorAtRest() {
         UseAs terminal = UseAs.TERMINAL;
         assertNull(UseAsCards.doorCard(terminal, EditorCard.HOME));
-        assertSame(EditorCard.WORKSPACE, UseAsCards.doorCard(terminal, EditorCard.WORKSPACE));
+        assertSame(EditorCard.TERMINAL, UseAsCards.doorCard(terminal, EditorCard.TERMINAL));
         assertSame(EditorCard.APPEARANCE, UseAsCards.doorCard(terminal, EditorCard.APPEARANCE));
         assertNull("never stands the editor on a Home page", terminal.editorPlace(PageKind.HOME));
         assertSame(PageKind.TERMINAL, terminal.editorPlace(PageKind.TERMINAL));
         assertEquals("settings-home hidden by terminal -> REST", terminal.doorLine("settings-home"));
     }
 
-    @Test public void theWorkspaceCardIsTheSameUnderTerminalOnly() {
-        // The Match row it lost under Terminal only retired with the halves (ADR 0015 §6).
-        List<EditorRows.Spec> home = EditorRows.rows(EditorCard.WORKSPACE,
+    @Test public void theTerminalCardGainsOnlyPagesUnderTerminalOnly() {
+        // Edit pages' usual door is Home's card: under Terminal only it stands on the Terminal's.
+        List<EditorRows.Spec> home = EditorRows.rows(EditorCard.TERMINAL,
             new EditorRows.Offers(true, true, true));
-        List<EditorRows.Spec> terminal = EditorRows.rows(EditorCard.WORKSPACE,
+        List<EditorRows.Spec> terminal = EditorRows.rows(EditorCard.TERMINAL,
             new EditorRows.Offers(true, true, false));
-        assertEquals(home.size(), terminal.size());
+        assertEquals(home.size() + 2, terminal.size());
+        assertEquals(EditorRows.Row.LINK_PAGES, terminal.get(terminal.size() - 1).row);
     }
 
     @Test public void choosingTerminalOnlyOnHomeMovesTheWall() {

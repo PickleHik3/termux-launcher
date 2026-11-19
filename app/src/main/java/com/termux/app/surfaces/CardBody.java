@@ -41,7 +41,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The Keyboard, Home, Global and Workspace cards' rows (editor-redesign §1 and §2), built from the
+ * The Keyboard, Home and Global cards' rows (editor-redesign §1 and §2), built from the
  * row kinds under {@code surfaces/rows}: section headers with their notes, glyph or word
  * segments, strips with their glyph on top (and the link between two of them), steppers, the
  * Look's preview tiles, a grid of option tiles, action rows, and the More chips. Rows of one kind
@@ -60,7 +60,7 @@ final class CardBody {
     /** Whether {@code card} is drawn with these rows. */
     static boolean redesigned(@NonNull EditorCard card) {
         return card == EditorCard.KEYBOARD || card == EditorCard.HOME
-            || card == EditorCard.APPEARANCE || card == EditorCard.WORKSPACE;
+            || card == EditorCard.APPEARANCE;
     }
 
     /**
@@ -121,6 +121,13 @@ final class CardBody {
             case SECTION_LINKS:
             case SECTION_COLOURS:
             case SECTION_CLOCK_WEATHER:
+            case SECTION_FINE_TUNE:
+            case SECTION_SCREEN:
+            case SECTION_WIDGETS:
+            case SECTION_TEXT:
+            case SECTION_PANES:
+            case SECTION_EFFECTS:
+            case SECTION_BARS:
                 return Shape.SECTION;
             case HINT_GLASS_MATERIAL:
                 return Shape.HINT;

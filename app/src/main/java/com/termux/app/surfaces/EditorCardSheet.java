@@ -70,6 +70,14 @@ final class EditorCardSheet {
 
     /** Where the values come from and where the touches go. */
     interface Model {
+        /**
+         * Whether the pill offers main card {@code card}: Home is gone under Use as Terminal
+         * only, where the pill reads Global · Terminal.
+         */
+        default boolean offersCard(@NonNull EditorCard card) {
+            return true;
+        }
+
         /** A slider's value, a segment's or chip's index, or 1/0 for a switch. */
         int value(@NonNull Row row);
         int from(@NonNull Row row);
@@ -135,15 +143,6 @@ final class EditorCardSheet {
             return null;
         }
 
-        /**
-         * The Applies to row of the card up (Global · Home · Workspace), or null where the card
-         * has none (appearance-cards-overhaul §1).
-         */
-        @Nullable
-        default Chip appliesToChip() { return null; }
-
-        /** The Applies to row picked option {@code index}. */
-        default void pickAppliesTo(int index) {}
 
         /** ⋮'s Reset words for the card up as it now stands, or null for those it opened with. */
         @Nullable
@@ -194,21 +193,20 @@ final class EditorCardSheet {
         /** The sheet came to rest: on a detent, or off screen. Once per motion. */
         default void onSheetSettled(int detent, float topPx) {}
 
-        /** A main card's pill chose {@code card} (Customization, Home or Workspace). */
+        /** A main card's pill chose {@code card} (Global, Home or Terminal). */
         default void onOpenCard(@NonNull EditorCard card) {}
 
         /** An element card's ← was tapped (a subcard's ← runs its own back instead). */
         default void onBack() {}
     }
 
-    /** The three main cards, in the header pill's order (overhaul §1). */
+    /** The three main cards, in the header pill's order: Global · Home · Terminal (spec §3). */
     static final EditorCard[] MAIN_CARDS = {EditorCard.APPEARANCE, EditorCard.HOME,
-        EditorCard.WORKSPACE};
+        EditorCard.TERMINAL};
 
     /** Whether {@code card} wears the main header (the pill) rather than an element's. */
     static boolean isMainCard(@NonNull EditorCard card) {
-        return card == EditorCard.APPEARANCE || card == EditorCard.HOME
-            || card == EditorCard.WORKSPACE;
+        return card == EditorCard.APPEARANCE || card.isPageCard();
     }
 
     static final int DETENT_HALF = 0;
@@ -249,31 +247,6 @@ final class EditorCardSheet {
     @NonNull private final FrameLayout mGrab;
     @NonNull private final ImageView mHeaderIcon;
     @NonNull private final TextView mTitle;
-    /**
-     * A card's Applies to row: its question (the row's name), its options and the one picked.
-     * The first option is the wide one (Global); any other reads narrowed.
-     */
-    public static final class Chip {
-        @NonNull public final CharSequence question;
-        @NonNull public final CharSequence[] labels;
-        public final int selected;
-
-        public Chip(@NonNull CharSequence question, @NonNull CharSequence[] labels, int selected) {
-            this.question = question;
-            this.labels = labels;
-            this.selected = selected;
-        }
-
-        /** Whether the chip stands on something narrower than its first option. */
-        public boolean narrowed() {
-            return selected > 0;
-        }
-
-        @NonNull public CharSequence label() {
-            return labels[Math.max(0, Math.min(labels.length - 1, selected))];
-        }
-    }
-
     /** Shows or hides the card's object; gone on a card whose object cannot be hidden. */
     @NonNull private final MaterialSwitch mEye;
     /** The ⋮ button: a menu holding the card's Reset. */
@@ -294,11 +267,6 @@ final class EditorCardSheet {
     /** The store's key for the card shown (the card, and its subcard where one stands). */
     @NonNull private String mSectionCard = "";
     @NonNull private final ScrollView mScroll;
-    /** The chips row under the header: Where it applies, then What it applies to. */
-    @NonNull private final LinearLayout mScopeSlot;
-    /** The Applies to row's connected group, Global · Home · Workspace. */
-    @NonNull private final MaterialButtonToggleGroup mAppliesGroup;
-    @NonNull private final TextView mAppliesLabel;
     @NonNull private final LinearLayout mRows;
     @NonNull private final Map<Row, RowViews> mRowViews = new EnumMap<>(Row.class);
     @Nullable private EditorCard mCard;
@@ -503,46 +471,6 @@ final class EditorCardSheet {
         mSections = new EditorSectionStore(context);
         bindHeaderDrag();
 
-        mScopeSlot = new LinearLayout(context);
-        mScopeSlot.setOrientation(LinearLayout.HORIZONTAL);
-        mScopeSlot.setGravity(Gravity.CENTER_VERTICAL);
-        mScopeSlot.setVisibility(View.GONE);
-        float dp = context.getResources().getDisplayMetrics().density;
-        mScopeSlot.setPadding(Math.round(CHIP_ROW_SIDE_DP * dp), Math.round(CHIP_ROW_TOP_DP * dp),
-            Math.round(CHIP_ROW_SIDE_DP * dp), Math.round(CHIP_ROW_BOTTOM_DP * dp));
-        mAppliesLabel = new TextView(context);
-        mAppliesLabel.setText(R.string.editor_applies_to);
-        mAppliesLabel.setTextColor(EditorViews.color(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant));
-        mAppliesLabel.setSingleLine(true);
-        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        labelParams.setMarginEnd(Math.round(CHIP_GAP_DP * dp));
-        mScopeSlot.addView(mAppliesLabel, labelParams);
-        mAppliesGroup = com.termux.app.surfaces.rows.SegmentRow.connectedGroup(context);
-        mAppliesGroup.setSingleSelection(true);
-        mAppliesGroup.setSelectionRequired(true);
-        mAppliesGroup.addOnButtonCheckedListener((group, id, checked) -> {
-            if (mRestating || !checked)
-                return;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                if (group.getChildAt(i).getId() == id) {
-                    Chip now = mModel.appliesToChip();
-                    if (now != null && now.selected != i) {
-                        mModel.pickAppliesTo(i);
-                        restate();
-                    }
-                    return;
-                }
-            }
-        });
-        mScopeSlot.addView(mAppliesGroup, new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        mAppliesGroup.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) ->
-            fitWhole(mAppliesGroup, appliesButtons(), false));
-        mColumn.addView(mScopeSlot, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
         mScroll = new SheetScrollView(context);
         mScroll.setClipToPadding(false);
         mScroll.setVerticalScrollBarEnabled(true);
@@ -662,7 +590,7 @@ final class EditorCardSheet {
      * {@code widthPx}: what the half detent would like to show whole.
      */
     int tierOneHeightPx(int widthPx) {
-        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP) + chipRowPx(widthPx);
+        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP);
         int spec = View.MeasureSpec.makeMeasureSpec(Math.max(1, widthPx), View.MeasureSpec.EXACTLY);
         int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         // The first section's title row counts with tier 1 under it.
@@ -676,16 +604,6 @@ final class EditorCardSheet {
         return height;
     }
 
-    /** The Where and What chip row's height at {@code widthPx}, or 0 where the card has none. */
-    private int chipRowPx(int widthPx) {
-        if (mScopeSlot.getVisibility() != View.VISIBLE)
-            return 0;
-        mScopeSlot.measure(
-            View.MeasureSpec.makeMeasureSpec(Math.max(1, widthPx), View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        return mScopeSlot.getMeasuredHeight();
-    }
-
     private static final Object TIER_ONE_TAG = new Object();
 
     /**
@@ -694,7 +612,7 @@ final class EditorCardSheet {
      * it the card would show no control whole.
      */
     int minHalfHeightPx(int widthPx) {
-        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP) + chipRowPx(widthPx);
+        int height = dp(HEADER_DP) + mNavInsetPx + dp(FOOT_CLEARANCE_DP);
         if (mRows.getChildCount() == 0)
             return height + dp(SLIDER_ROW_MIN_DP);
         int spec = View.MeasureSpec.makeMeasureSpec(Math.max(1, widthPx), View.MeasureSpec.EXACTLY);
@@ -771,6 +689,10 @@ final class EditorCardSheet {
         EditorViews.setVisible(mHeaderIcon, !main);
         EditorViews.setVisible(mTitle, !main);
         EditorViews.setVisible(mMainPill, main);
+        if (main) {
+            for (int i = 0; i < MAIN_CARDS.length; i++)
+                EditorViews.setVisible(mMainButtons.get(i), mModel.offersCard(MAIN_CARDS[i]));
+        }
         EditorViews.setVisible(mPhone, main);
         EditorViews.setVisible(mEye, !main && subcardTitle == 0 && card.hasEye());
         // A subcard's back names the card it returns to: "Back to Home", "Back to Terminal".
@@ -788,7 +710,6 @@ final class EditorCardSheet {
             mScroll.scrollTo(0, sameCard ? scrollY : 0);
         }
         restateEye();
-        restateScope();
         EditorViews.setText(mTitle, mContext.getString(titleRes));
         mSheet.setContentDescription(mContext.getString(titleRes));
         boolean wasShown = mShown;
@@ -926,7 +847,6 @@ final class EditorCardSheet {
         long labelsOut = EditorMotion.Use.LABEL_OUT.durationMs(reduced);
         ghost(mTitle, labelsOut);
         ghost(mHeaderIcon, labelsOut);
-        ghost(mScopeSlot, labelsOut);
         int count = mRows.getChildCount();
         if (count == 0)
             return;
@@ -959,7 +879,7 @@ final class EditorCardSheet {
     private void fadeInAfterSwap() {
         boolean reduced = ReducedMotion.isEnabled(mContext);
         long labelsAfter = EditorMotion.Use.LABEL_OUT.durationMs(reduced);
-        for (View label : new View[] {mTitle, mHeaderIcon, mScopeSlot}) {
+        for (View label : new View[] {mTitle, mHeaderIcon}) {
             label.animate().cancel();
             label.setAlpha(0f);
             label.animate().alpha(1f).setStartDelay(labelsAfter)
@@ -2286,71 +2206,8 @@ final class EditorCardSheet {
         for (RowViews views : mRowViews.values())
             restate(views);
         restateEye();
-        restateScope();
     }
 
-    /** The chips row: 4 dp over, 12 under, 16 at the sides; chips 40 high, 8 apart. */
-    static final int CHIP_ROW_TOP_DP = 4;
-    static final int CHIP_ROW_BOTTOM_DP = 12;
-    static final int CHIP_ROW_SIDE_DP = 16;
-    static final int CHIP_HEIGHT_DP = 40;
-    static final int CHIP_GAP_DP = 8;
-
-    /**
-     * The Applies to row read again: one connected button per option, the picked one checked;
-     * the row hides when the card has none.
-     */
-    private void restateScope() {
-        Chip chip = mModel.appliesToChip();
-        EditorViews.setVisible(mScopeSlot, chip != null);
-        if (chip == null)
-            return;
-        boolean was = mRestating;
-        mRestating = true;
-        try {
-            if (mAppliesGroup.getChildCount() != chip.labels.length) {
-                mAppliesGroup.removeAllViews();
-                for (int i = 0; i < chip.labels.length; i++) {
-                    MaterialButton button =
-                        com.termux.app.surfaces.rows.SegmentRow.connectedButton(mContext);
-                    button.setId(View.generateViewId());
-                    button.setMinWidth(0);
-                    button.setMinimumWidth(0);
-                    button.setSingleLine(true);
-                    button.setPaddingRelative(
-                        dp(com.termux.app.surfaces.rows.SegmentRow.FIT_PAD_DP),
-                        button.getPaddingTop(),
-                        dp(com.termux.app.surfaces.rows.SegmentRow.FIT_PAD_DP),
-                        button.getPaddingBottom());
-                    mAppliesGroup.addView(button, new LinearLayout.LayoutParams(0,
-                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-                }
-            }
-            boolean reworded = false;
-            for (int i = 0; i < chip.labels.length; i++) {
-                MaterialButton button = (MaterialButton) mAppliesGroup.getChildAt(i);
-                if (!TextUtils.equals(button.getText(), chip.labels[i])) {
-                    button.setText(chip.labels[i]);
-                    reworded = true;
-                }
-                if (i == chip.selected && !button.isChecked())
-                    mAppliesGroup.check(button.getId());
-            }
-            if (reworded)
-                com.termux.app.surfaces.rows.SegmentRow.weighByText(appliesButtons());
-            mAppliesGroup.setContentDescription(chip.question + ": " + chip.label());
-        } finally {
-            mRestating = was;
-        }
-    }
-
-    @NonNull
-    private List<MaterialButton> appliesButtons() {
-        List<MaterialButton> out = new ArrayList<>(mAppliesGroup.getChildCount());
-        for (int i = 0; i < mAppliesGroup.getChildCount(); i++)
-            out.add((MaterialButton) mAppliesGroup.getChildAt(i));
-        return out;
-    }
 
     /** labelLarge and labelMedium, the two sizes a header group's words stand at. */
     static final float GROUP_TEXT_SP = 14f;
@@ -2393,11 +2250,6 @@ final class EditorCardSheet {
         return mMainButtons;
     }
 
-    @VisibleForTesting
-    @NonNull
-    MaterialButtonToggleGroup appliesToGroup() {
-        return mAppliesGroup;
-    }
 
     /**
      * The eye read again: open while the object shows, struck through while it is hidden. Its

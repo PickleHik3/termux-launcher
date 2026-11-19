@@ -31,10 +31,11 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The Terminal card (editor-redesign §2, Terminal; no eye, the terminal cannot be hidden): the
- * glass and shape strip under its Glass header (Text size is the terminal's and the keyboard
- * labels', {@code text_size_percent}), Contrast as words, Cursor trail and Screen effect as preview
- * tiles (Screen effect only where its shader runs), and the Font chip.
+ * The Terminal card (appearance-one-look spec §3, Terminal; the Workspace card merged into it; no
+ * eye, the terminal cannot be hidden): Text (Text size, {@code text_size_percent}, Contrast as
+ * words, the Font link), the terminal's glass, Panes, Effects (Cursor trail and Screen effect as
+ * preview tiles, Screen effect only where its shader runs), and Layout, the rows the Terminal's
+ * pages show with Minimal layout.
  *
  * <p>{@link #rows} is the card's table and the pure policy below it maps stored values to the
  * tiles, so JVM tests hold both; {@link #view} builds the card's own rows over a {@link Host}.</p>
@@ -47,16 +48,17 @@ public final class TerminalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL);
-        if (offers.terminalEffect)
-            rows.tier(1, Row.EFFECT);
-        rows.tier(1, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
-                Row.FOCUS_GROWS)
-            .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS);
+            .tier(1, Row.SECTION_TEXT, Row.TEXT_SIZE, Row.CONTRAST, Row.LINK_FONT);
         com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
-            .tier(3, Row.SECTION_LINKS, Row.LINK_FONT);
+            .tier(3, Row.SECTION_PANES, Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER,
+                Row.AUTO_TILING, Row.FOCUS_GROWS)
+            .tier(3, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL);
+        if (offers.terminalEffect)
+            rows.tier(3, Row.EFFECT);
+        rows.tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS, Row.MINIMAL);
         // Under Terminal only the Home card, Edit pages' usual door, is gone: Pages is here.
-        if (!offers.homeShown && !offers.overviewUp) rows.tier(3, Row.LINK_PAGES);
+        if (!offers.homeShown && !offers.overviewUp)
+            rows.tier(3, Row.SECTION_LINKS, Row.LINK_PAGES);
         return rows.build();
     }
 

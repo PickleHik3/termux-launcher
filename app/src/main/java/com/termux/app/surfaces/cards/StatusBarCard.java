@@ -47,11 +47,11 @@ public final class StatusBarCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        EditorRows.CardRows rows = new EditorRows.CardRows()
+        return new EditorRows.CardRows()
             .tier(1, Row.STATUS_POSITION, Row.STATUS_INDICATORS)
             .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
-                Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT);
-        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
+                Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT)
+            .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST)
             .tier(3, Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS)
             .build();
     }

@@ -62,9 +62,8 @@
 
     <!-- The card menu: back on the Look, or the same look on the other half. -->
     <string name="appearance_reset_home">Reset Home</string>
-    <string name="appearance_reset_workspace">Reset Workspace</string>
     <string name="appearance_reset_status">Reset status bar</string>
-    <string name="appearance_reset_terminal">Reset terminal</string>
+    <string name="appearance_reset_terminal">Reset Terminal</string>
     <string name="appearance_reset_dock">Reset dock</string>
     <string name="appearance_reset_keyboard">Reset keyboard</string>
     <string name="appearance_reset_look">Reset surfaces</string>

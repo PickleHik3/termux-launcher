@@ -52,7 +52,7 @@ import android.app.Application;
 public class EditorCardBodyTest {
 
     private static final EditorCard[] CARDS = {EditorCard.KEYBOARD, EditorCard.HOME,
-        EditorCard.APPEARANCE, EditorCard.WORKSPACE};
+        EditorCard.APPEARANCE};
     private static final float[] SCALES = {1f, 1.3f};
 
     @After

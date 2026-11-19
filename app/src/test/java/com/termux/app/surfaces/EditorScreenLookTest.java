@@ -160,12 +160,9 @@ public class EditorScreenLookTest {
     }
 
     @Test
-    public void eachScreenCardsLookRowIsItsOwnHalfWhateverTheFrameShows() {
-        for (PageKind frame : PageKind.values()) {
+    public void homesLookRowIsItsOwnHalfWhateverTheFrameShows() {
+        for (PageKind frame : PageKind.values())
             assertEquals(TermuxAppSharedPreferences.PAGE_WALL, EditorRows.pageFor(EditorCard.HOME, Row.LOOK));
-            assertEquals(TermuxAppSharedPreferences.PAGE_WALL,
-                EditorRows.pageFor(EditorCard.WORKSPACE, Row.LOOK));
-        }
     }
 
     // ------------------------------------------------------------------------------- the checks

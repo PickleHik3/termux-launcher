@@ -26,31 +26,33 @@ public class GlassRowsTest {
         Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
         Row.DEPTH, Row.RIM, Row.TINT_HUE);
 
+    /** The terminal's glass card wears the whole Appearance block until #287 turns it into Background. */
     @Test
-    public void everyGlassCardWearsTheAppearanceBlock() {
-        for (EditorCard card : new EditorCard[] {EditorCard.DOCK, EditorCard.STATUS,
-                EditorCard.TERMINAL, EditorCard.WIDGETS,
-                EditorCard.SHEETS}) {
-            java.util.List<Row> rows = rowsOf(card, ALL);
-            int at = rows.indexOf(Row.SECTION_APPEARANCE);
-            assertTrue(card.toString(), at >= 0);
-            // In group order; a card's own rows (the Dock's Reflection) may stand among them.
-            java.util.List<Row> block = new java.util.ArrayList<>();
-            for (Row row : rows.subList(at, rows.size()))
-                if (BLOCK.contains(row) && block.size() < BLOCK.size()) block.add(row);
-            assertEquals(card.toString(), BLOCK, block);
-        }
+    public void theTerminalCardWearsTheAppearanceBlock() {
+        java.util.List<Row> rows = rowsOf(EditorCard.TERMINAL, ALL);
+        int at = rows.indexOf(Row.SECTION_APPEARANCE);
+        assertTrue(at >= 0);
+        java.util.List<Row> block = new java.util.ArrayList<>();
+        for (Row row : rows.subList(at, rows.size()))
+            if (BLOCK.contains(row) && block.size() < BLOCK.size()) block.add(row);
+        assertEquals(BLOCK, block);
     }
 
+    /**
+     * The status bar, the dock and the keyboard own Opacity and Blur only (ADR 0031 §2): their
+     * Appearance holds those two and the surface's own extras, never Grain, Tint or the rest.
+     */
     @Test
-    public void widgetsAndSheetsArePlainGlassCards() {
-        for (EditorCard card : new EditorCard[] {EditorCard.WIDGETS, EditorCard.SHEETS}) {
-            assertEquals(card.toString(), BLOCK, rowsOf(card, ALL));
-            assertFalse(card.hasEye());
+    public void theChromeCardsHoldOpacityAndBlurOnly() {
+        for (EditorCard card : new EditorCard[] {EditorCard.DOCK, EditorCard.STATUS,
+                EditorCard.KEYBOARD}) {
+            java.util.List<Row> rows = rowsOf(card, ALL);
+            assertTrue(card + " Opacity", rows.contains(Row.OPACITY));
+            assertTrue(card + " Blur", rows.contains(Row.FROST));
+            for (Row gone : new Row[] {Row.LOOK, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,
+                    Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.VIBRANCY, Row.LINK_GLASS_REFRACTION})
+                assertFalse(card + " " + gone, rows.contains(gone));
         }
-        assertEquals(LookGrid.Element.SHEETS, EditorChips.elementOf(EditorCard.SHEETS));
-        assertFalse(EditorRows.rows(EditorCard.HOME, ALL).toString().contains("LINK_WIDGETS"));
-        assertTrue(EditorRows.rows(EditorCard.APPEARANCE, ALL).toString().contains("LINK_SHEETS"));
     }
 
     @Test

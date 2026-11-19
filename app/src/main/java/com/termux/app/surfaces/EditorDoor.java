@@ -124,7 +124,6 @@ public enum EditorDoor {
             case SETTINGS_LOOK:
                 return EditorCard.APPEARANCE;
             case TERMINAL_SHEET_APPEARANCE:
-                return EditorCard.WORKSPACE;
             case SETTINGS_TERMINAL:
                 return EditorCard.TERMINAL;
             case SETTINGS_KEYBOARD:
@@ -137,10 +136,10 @@ public enum EditorDoor {
                 return EditorCard.STATUS;
             case EDITOR_PAGE_LABEL:
             case EDITOR_PAGE_SWIPE:
-                return onScreen == PageKind.HOME ? EditorCard.HOME : EditorCard.WORKSPACE;
+                return EditorCard.forScreen(onScreen == null ? PageKind.TERMINAL : onScreen);
             case PANE_CONTROLS:
-                // The Terminal or Display pane corner opens the Workspace (overhaul §1).
-                return EditorCard.WORKSPACE;
+                // The Terminal or Display pane corner opens the Terminal card.
+                return EditorCard.TERMINAL;
             case TERMINAL_CONTEXT_MENU:
             case LAUNCHERCTL:
                 return pageCard(onScreen);
@@ -172,7 +171,7 @@ public enum EditorDoor {
     /** The card of the screen {@code page} is on: Home's on Home, the Workspace's elsewhere. */
     @NonNull
     static EditorCard screenCard(@NonNull PageKind page) {
-        return page == PageKind.HOME ? EditorCard.HOME : EditorCard.WORKSPACE;
+        return EditorCard.forScreen(page);
     }
 
     /**
@@ -188,7 +187,7 @@ public enum EditorDoor {
         if (onScreen != null && card.standsOn(onScreen))
             return null;
         if (card == EditorCard.HOME) return PageKind.HOME;
-        if (card == EditorCard.TERMINAL || card == EditorCard.WORKSPACE) return PageKind.TERMINAL;
+        if (card == EditorCard.TERMINAL) return PageKind.TERMINAL;
         return null;
     }
 
