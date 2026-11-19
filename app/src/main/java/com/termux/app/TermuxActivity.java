@@ -5680,6 +5680,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private float mPeekCardRowsPx;
     private float mHomeRestCardRowsPx;
+    /** The rows' offset over the host when the reflection was last aimed. */
+    private float mPeekReflectionRowsPx;
     /** The rows' offset over the host the cut was last drawn at; a change re-cuts it. */
     private float mPeekDrawnRowsPx;
     /** The slab's cut, the card's and the one drawn, reused: the blend runs every frame. */
@@ -6029,6 +6031,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             rowAt[1] - hostAt[1] + mStackRenderer.rowsOverHostPx(),
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
         reflection.setFade(drawnPeekShare());
+        mPeekReflectionRowsPx = peekRowsOverHost();
+        reflection.setDrawnOffsetY(0f);
     }
 
     /** The reflection and its views let go, and the knob no longer heard; for the activity's end. */
@@ -7260,7 +7264,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!mDock.dockGlassDrawsEdge())
             host.setBackground(peekRimDrawable(drawnPeekCut(host, shown), host.getWidth(),
                 host.getHeight()));
-        if (mPeekReflection != null) mPeekReflection.setFade(drawnPeekShare());
+        if (mPeekReflection != null) {
+            mPeekReflection.setFade(drawnPeekShare());
+            mPeekReflection.setDrawnOffsetY(rows - mPeekReflectionRowsPx);
+        }
         rebuildBackdropGlassEffectForLens();
     }
 
@@ -8140,7 +8147,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the keyboard band's glass this pass, the theme's glass base where it does not (Solid, the
      * joined frame, a floating card, the keyboard down).
      */
+    // DIAG(stack-look): the stack's look as each pass applies it, logged on change; revert before merge.
+    @Nullable private String mDiagStackLook;
+
+    private void diagStackLook(@NonNull ChromeSpec state) {
+        if (!MotionLog.enabled || mPreferences == null) return;
+        int page = stackLookPage();
+        String look = "page=" + page + " barAlpha=" + state.barAlpha + " dockBlur="
+            + getEffectiveExtraKeysBlurRadius() + " kbOpacity=" + getInAppKeyboardBackgroundOpacityPercent()
+            + " kbTint=" + getInAppKeyboardTintStrengthPercent() + " kbGrain=" + getInAppKeyboardGrainPercent()
+            + " kbBlur=" + mPreferences.getInAppKeyboardBlurRadius(page)
+            + " kbBackdrop=" + getInAppKeyboardBackdropOpacityPercent()
+            + " unified=" + shouldUseUnifiedDefaultKeyboardGlassSurface(state)
+            + " travel=" + mKeyboardTravelSolidness + " kbShown=" + state.keyboardShown
+            + " crossing=" + mCrossing.crossing();
+        if (look.equals(mDiagStackLook)) return;
+        mDiagStackLook = look;
+        MotionLog.log("stack-look", look);
+    }
+
     private void applyInAppKeyboardSurfaceState(@NonNull ChromeSpec state) {
+        diagStackLook(state);
         mKeyboardBandAskedThisPass = false;
         Trace.beginSection("Chrome.kb.host");
         applyInAppKeyboardHostMaterial(state);

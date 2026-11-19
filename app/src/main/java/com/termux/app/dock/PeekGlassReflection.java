@@ -304,6 +304,19 @@ public final class PeekGlassReflection {
         }
     }
 
+    /**
+     * Moves the reflection on the host by {@code dy} from where it was last aimed: the rows have
+     * moved that far over the host since (the host shifted across a crossing), and the mirror
+     * stays under the icons. Its view's own translation, so nothing is recorded again.
+     */
+    public void setDrawnOffsetY(float dy) {
+        if (dy == mDrawnOffsetY) return;
+        mDrawnOffsetY = dy;
+        if (mHostView != null && mHostView.getTranslationY() != dy) mHostView.setTranslationY(dy);
+    }
+
+    private float mDrawnOffsetY;
+
     /** The fade last set ({@link #setFade}). */
     public float fade() {
         return mFade;
@@ -393,6 +406,8 @@ public final class PeekGlassReflection {
             int visibility = show ? View.VISIBLE : View.GONE;
             if (view.getVisibility() != visibility) view.setVisibility(visibility);
             if (view.getAlpha() != mFade) view.setAlpha(mFade);
+            if (view == mHostView && view.getTranslationY() != mDrawnOffsetY)
+                view.setTranslationY(mDrawnOffsetY);
             if (show) dress(view);
         }
     }

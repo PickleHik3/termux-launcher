@@ -152,6 +152,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      */
     private int mHeldSide = -1;
     private long mHeldUntilMs;
+    /** The host's layout top the crossing ran on; the hold ends once the host lays out anew. */
+    private int mHeldLayoutTop;
     /** The longest the arrival's rest top is held waiting for its layout. */
     private static final long HOLD_REST_TOP_MS = 600L;
     @Nullable private View mWatchedHost;
@@ -380,11 +382,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             mHostShiftPx = target - hostTop;
             mHeldSide = mToHome ? 0 : 1;
             mHeldUntilMs = now + HOLD_REST_TOP_MS;
+            mHeldLayoutTop = hostTop;
             return;
         }
         int front = mViews.frontIsHome() ? 0 : 1;
         float rest = mRestHostTop[front];
-        if (mHeldSide == front && !Float.isNaN(rest) && hostTop != rest && now < mHeldUntilMs) {
+        if (mHeldSide == front && !Float.isNaN(rest) && hostTop == mHeldLayoutTop
+            && hostTop != rest && now < mHeldUntilMs) {
             mHostShiftPx = rest - hostTop;
             if (com.termux.app.chrome.MotionLog.enabled)
                 com.termux.app.chrome.MotionLog.log("host-hold", "front=" + front + " rest=" + rest

@@ -50,4 +50,13 @@ public class PeekGlassReflectionFadeTest {
         View view = reflection.attachHost(host(), null);
         assertEquals(0.25f, view.getAlpha(), 1e-6f);
     }
+
+    @Test public void theMirrorFollowsTheRowsThroughItsViewsTranslation() {
+        PeekGlassReflection reflection = new PeekGlassReflection(2.625f);
+        View view = reflection.attachHost(host(), null);
+        reflection.setDrawnOffsetY(-175f);
+        assertEquals(-175f, view.getTranslationY(), 0f);
+        reflection.setDrawnOffsetY(0f);
+        assertEquals(0f, view.getTranslationY(), 0f);
+    }
 }
