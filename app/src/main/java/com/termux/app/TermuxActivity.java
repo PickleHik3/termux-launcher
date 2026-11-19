@@ -7252,7 +7252,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 + " ty=" + host.getTranslationY() + " rows=" + rows + " cutTop=" + cut[1]
                 + " cutL=" + cut[0] + " clip=" + host.getClipToOutline() + " provider="
                 + (host.getOutlineProvider() == mPeekOutline ? "peek" : "other")
-                + " vis=" + host.getVisibility() + " alpha=" + host.getAlpha());
+                + " vis=" + host.getVisibility() + " alpha=" + host.getAlpha() + " refl="
+                + (mPeekReflection == null ? "none" : mPeekReflection.diagState()));
         }
         // DIAG(peek-share): the blend's state as it leaves or reaches a rest; revert before merge.
         if (MotionLog.enabled && (was <= 0f || was >= 1f || share <= 0f || share >= 1f))

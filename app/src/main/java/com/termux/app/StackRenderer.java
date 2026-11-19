@@ -488,6 +488,19 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         writeContent();
         mViews.homeShare(mHasEnds ? StackScene.homeShare(mFromHome, mToHome, mEndsProgress)
             : mViews.frontIsHome() ? 1f : 0f);
+        // DIAG(kb-cut): the keyboard's motion and cut on each crossing frame; revert before merge.
+        if (mHasEnds && com.termux.app.chrome.MotionLog.enabled) {
+            View kb = mViews.view(R.id.inapp_keyboard_container);
+            com.termux.app.chrome.MotionLog.log("kb-cut", "p=" + mEndsProgress + " share="
+                + mEffective.keyboardSharePx + " travel=" + mEffective.dockTravelPx + " kbH="
+                + mGeometry.keyboardHeightPx + " foot=" + mGeometry.keyboardFootPx + " pad="
+                + mGeometry.stackPaddingBottomPx + " below=" + mGeometry.belowKeyboardInColumnPx
+                + " inColumn=" + mGeometry.keyboardInColumn + " clipped="
+                + mFrame.clipped[StackScene.V_KEYBOARD] + " clipBottom="
+                + mFrame.clipBottom[StackScene.V_KEYBOARD] + " containerTy="
+                + mFrame.ty[StackScene.V_CONTAINER] + " kbVis=" + (kb == null ? -1 : kb.getVisibility())
+                + " kbTop=" + mGeometry.keyboardTopPx + " containerH=" + mGeometry.containerHeightPx);
+        }
         if (guard != null) {
             // On a landing frame every change is counted: the scene at progress 1 is the rest.
             FrameGuards guards = mFrames.guards();

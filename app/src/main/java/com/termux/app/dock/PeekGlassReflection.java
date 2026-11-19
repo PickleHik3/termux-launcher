@@ -317,6 +317,14 @@ public final class PeekGlassReflection {
 
     private float mDrawnOffsetY;
 
+    /** DIAG(reflection): the host view's state; revert before merge. */
+    public String diagState() {
+        PeekReflectionView v = mHostView;
+        return "shown=" + mShown + " live=" + mLive + " alpha=" + mAlpha + " fade=" + mFade
+            + (v == null ? " view=none" : " vis=" + v.getVisibility() + " ty=" + v.getTranslationY()
+            + " a=" + v.getAlpha() + " parent=" + (v.getParent() != null) + " h=" + v.getHeight());
+    }
+
     /** The fade last set ({@link #setFade}). */
     public float fade() {
         return mFade;
