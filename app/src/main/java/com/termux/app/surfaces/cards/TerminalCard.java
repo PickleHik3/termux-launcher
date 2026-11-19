@@ -32,8 +32,8 @@ import java.util.List;
 
 /**
  * The Terminal card (appearance-one-look spec §3, Terminal; the Workspace card merged into it; no
- * eye, the terminal cannot be hidden): Text (Text size, {@code text_size_percent}, Contrast as
- * words, the Font link), the terminal's glass, Panes, Effects (Cursor trail and Screen effect as
+ * eye, the terminal cannot be hidden): Text (the terminal's Font size, Contrast as words, the
+ * Font link), the terminal's glass, Panes, Effects (Cursor trail and Screen effect as
  * preview tiles, Screen effect only where its shader runs), and Layout, the rows the Terminal's
  * pages show with Minimal layout.
  *
@@ -48,13 +48,14 @@ public final class TerminalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.SECTION_TEXT, Row.TEXT_SIZE, Row.CONTRAST, Row.LINK_FONT);
+            .tier(1, Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT);
         com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
             .tier(3, Row.SECTION_PANES, Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER,
                 Row.AUTO_TILING, Row.FOCUS_GROWS)
             .tier(3, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL);
+        // Screen events and Composite signal stand only while a Screen effect is on (shown).
         if (offers.terminalEffect)
-            rows.tier(3, Row.EFFECT);
+            rows.tier(3, Row.EFFECT, Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL);
         rows.tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS, Row.MINIMAL);
         // Under Terminal only the Home card, Edit pages' usual door, is gone: Pages is here.
         if (!offers.homeShown && !offers.overviewUp)

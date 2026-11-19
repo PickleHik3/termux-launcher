@@ -424,7 +424,7 @@ public class EditorCardSheetFitTest {
 
     @Test
     public void anInlineSegmentRowKeepsItsIconOffTheEdgeAndNoCheckMark() {
-        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
+        Fixture fixture = new Fixture(EditorCard.TERMINAL, 1f);
         fixture.layOut();
         com.google.android.material.button.MaterialButtonToggleGroup style = null;
         for (com.google.android.material.button.MaterialButtonToggleGroup group
@@ -435,8 +435,8 @@ public class EditorCardSheetFitTest {
                 break;
             }
         }
-        // Style became a picker rail; Rim is the Dock card's segment row beside its label.
-        assertTrue("the Dock card has a row of segments beside its label", style != null);
+        // Rim is the Terminal card's segment row beside its label (the terminal's glass).
+        assertTrue("the Terminal card has a row of segments beside its label", style != null);
         ViewGroup row = (ViewGroup) style.getParent();
         View icon = row.getChildAt(0);
         int[] at = new int[2];

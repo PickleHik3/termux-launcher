@@ -208,8 +208,15 @@ public class EditorCardBodyTest {
                 button.getText()))
                 assertEquals(Typeface.MONOSPACE, button.getTypeface());
         }
-        assertTrue(names.contains(f.themed.getString(R.string.editor_home_icon_default)));
         assertTrue(names.contains(f.themed.getString(R.string.appearance_folders_roomy)));
+        // Icon size is Global's Shape (spec §3).
+        Fixture global = new Fixture(EditorCard.APPEARANCE, 1f);
+        List<String> globalNames = new ArrayList<>();
+        for (MaterialButton button : views(global.sheet.rows(), MaterialButton.class)) {
+            CharSequence name = GlyphNames.of(button);
+            if (name != null) globalNames.add(name.toString());
+        }
+        assertTrue(globalNames.contains(f.themed.getString(R.string.editor_home_icon_default)));
     }
 
     // ------------------------------------------------------------------------------- the drive

@@ -102,6 +102,24 @@ public final class EditorRows {
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
         SPLIT_GAP(Kind.SLIDER, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
+        /** The terminal's own font size, in dp (the stored value is pixels, {@code fontsize}). */
+        FONT_SIZE(Kind.SLIDER, R.string.appearance_row_terminal_font_size,
+            R.drawable.ic_editor_text_size),
+        /** Screen events, shown while a Screen effect is on. */
+        SCREEN_EVENTS(Kind.SWITCH, R.string.settings_terminal_screen_events_title,
+            R.drawable.ic_symbol_tune),
+        /** Composite signal, shown while a Screen effect is on. */
+        COMPOSITE_SIGNAL(Kind.SWITCH, R.string.settings_terminal_retro_composite_title,
+            R.drawable.ic_symbol_tune),
+        /** The floating keyboard's width, % of the screen; shown while it floats. */
+        KEYBOARD_WIDTH(Kind.SLIDER, R.string.appearance_row_keyboard_width,
+            R.drawable.ic_ms_width),
+        /** The floating keyboard's height, % of the docked one's; shown while it floats. */
+        KEYBOARD_FLOAT_HEIGHT(Kind.SLIDER, R.string.appearance_row_keyboard_float_height,
+            R.drawable.ic_editor_height),
+        /** The split keyboard's gap, % of its width; shown while it is split. */
+        KEYBOARD_SPLIT_GAP(Kind.SLIDER, R.string.appearance_row_keyboard_split_gap,
+            R.drawable.ic_ms_space_bar),
         LABEL_SIZE(Kind.SEGMENTS, R.string.appearance_row_label_size, R.drawable.ic_editor_text_size),
         GLASS_WIDGETS(Kind.SWITCH, R.string.appearance_row_glass_widgets, R.drawable.ic_symbol_stacks),
         TWO_LINE(Kind.SWITCH, R.string.appearance_row_two_line, R.drawable.ic_editor_text_size),

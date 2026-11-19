@@ -55,7 +55,7 @@ public class EditorRowsTest {
 
     @Test
     public void theDockCardOpensOnItsStyleItsBarsAndItsGlass() {
-        assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS),
+        assertEquals(Arrays.asList(Row.DOCK_TYPE, Row.DOCK_APP_ICONS),
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         // Bars keep order and settings; Appearance holds the dock's own Opacity and Blur and
         // Peek's Reflection (spec §3, Dock). No Links: Global is the pill's.
@@ -82,7 +82,8 @@ public class EditorRowsTest {
     @Test
     public void theKeyboardCardOpensOnItsTypeThenItsGlassWithTheOpacityLink() {
         assertEquals(Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
-            Row.KEY_CORNERS, Row.BOTTOM_PADDING), EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
+            Row.KEY_CORNERS, Row.BOTTOM_PADDING, Row.KEYBOARD_WIDTH, Row.KEYBOARD_FLOAT_HEIGHT,
+            Row.KEYBOARD_SPLIT_GAP), EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.OPACITY, Row.OPACITY_LINK,
             Row.KEY_OPACITY, Row.FROST, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 3));
@@ -100,13 +101,14 @@ public class EditorRowsTest {
 
     @Test
     public void theTerminalCardHoldsTextItsGlassPanesEffectsAndLayout() {
-        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.TEXT_SIZE, Row.CONTRAST, Row.LINK_FONT),
+        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
             Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH, Row.RIM, Row.TINT_HUE,
             Row.SECTION_PANES, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
             Row.PANE_BORDERS, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT,
-            Row.SECTION_LAYOUT, Row.ELEMENTS, Row.MINIMAL),
+            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
+            Row.MINIMAL),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 3));
         List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
         assertFalse(all.contains(Row.VISIBLE));
@@ -114,8 +116,8 @@ public class EditorRowsTest {
 
     @Test
     public void theHomeCardHoldsOneTransitionRowOfFiveGlyphTilesInTheEnumsOrder() {
-        // Page transition closes the Home section (overhaul §2).
-        assertTrue(EditorRows.tier(EditorCard.HOME, ALL, 1).contains(Row.PAGE_TRANSITION));
+        // Page transition is Global's Screen (spec §3).
+        assertTrue(EditorRows.tier(EditorCard.APPEARANCE, ALL, 3).contains(Row.PAGE_TRANSITION));
         assertEquals(Kind.SEGMENTS, Row.PAGE_TRANSITION.kind);
         assertEquals(5, com.termux.app.launcher.home.HomePageTransition.values().length);
         assertEquals("slide", com.termux.app.launcher.home.HomePageTransition.values()[0].value);
@@ -136,8 +138,7 @@ public class EditorRowsTest {
     @Test
     public void theHomeCardOpensOnHomesGridLookAndGlassAndItIsAlwaysTheHomeHalfs() {
         assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
-            Row.HOME_ICON_SIZE, Row.PAGE_TRANSITION, Row.ICON_PACK),
-            EditorRows.tier(EditorCard.HOME, ALL, 1));
+            Row.ICON_PACK), EditorRows.tier(EditorCard.HOME, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
             Row.PAGE_DOTS, Row.FOLDERS, Row.WALLPAPER_SCROLL, Row.SECTION_WIDGETS,
             Row.GLASS_WIDGETS, Row.NUMERALS, Row.SECTION_LAYOUT, Row.ELEMENTS,
@@ -160,14 +161,15 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
         assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.GRAIN, Row.GLASS_EDGE, Row.DEPTH,
             Row.VIBRANCY, Row.RIM, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
-            Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.WALLPAPER_COLOURS, Row.TINT_HUE,
-            Row.TOOL_COLOURS, Row.SECTION_SCREEN, Row.SHOW_WALLPAPER, Row.FULL_SCREEN),
+            Row.HOME_ICON_SIZE, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
+            Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_SCREEN,
+            Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN, Row.PAGE_TRANSITION),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);
         // Status position and Dock type are on their own cards; the Layout lists on the page
         // cards (spec §3, Global).
         for (Row gone : new Row[] {Row.CHANGE_WALLPAPER, Row.MINIMAL, Row.ICON_PACK,
-            Row.TEXT_SIZE, Row.HINT_GLASS_MATERIAL, Row.STATUS_POSITION, Row.DOCK_TYPE,
+            Row.FONT_SIZE, Row.HINT_GLASS_MATERIAL, Row.STATUS_POSITION, Row.DOCK_TYPE,
             Row.ELEMENTS})
             assertFalse(gone + " is not Global's", rows.contains(gone));
     }

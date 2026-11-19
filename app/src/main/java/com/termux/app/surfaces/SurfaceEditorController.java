@@ -2880,6 +2880,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         R.drawable.ic_symbol_dock_peek_glass};
 
     /** The keyboard's forms, as the Type segments name them. */
+    /** The keyboard's shapes in percent: Settings › Keyboard › Size's ranges. */
+    static final int KEYBOARD_WIDTH_MIN = 35;
+    static final int KEYBOARD_FLOAT_HEIGHT_MIN = 60;
+    static final int KEYBOARD_FLOAT_HEIGHT_MAX = 160;
+    static final int KEYBOARD_SPLIT_GAP_MAX = 45;
+
     private static final PlaceLayout.KeyboardForm[] FORMS = {PlaceLayout.KeyboardForm.DOCKED,
         PlaceLayout.KeyboardForm.FLOATING, PlaceLayout.KeyboardForm.SPLIT};
 
@@ -3332,6 +3338,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 LayoutEditorController layout = mHost.layoutEditor();
                 return layout != null && layout.dockStyle() == DockStyle.PEEK_GLASS;
             }
+            // The Screen effect's two switches stand while an effect is on.
+            if (row == Row.SCREEN_EVENTS || row == Row.COMPOSITE_SIGNAL) {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs != null && !com.termux.app.terminal.PaneRetroStyle.NONE.id()
+                    .equals(prefs.getTerminalRetroEffect());
+            }
+            // The keyboard's floating shape stands while it floats, the gap while it is split.
+            if (row == Row.KEYBOARD_WIDTH || row == Row.KEYBOARD_FLOAT_HEIGHT
+                    || row == Row.KEYBOARD_SPLIT_GAP) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                PlaceLayout.KeyboardForm form = layout == null ? null : layout.keyboardForm();
+                return row == Row.KEYBOARD_SPLIT_GAP ? form == PlaceLayout.KeyboardForm.SPLIT
+                    : form == PlaceLayout.KeyboardForm.FLOATING;
+            }
             return true;
         }
 
@@ -3768,6 +3788,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case FORM:
                 if (layout != null && value >= 0 && value < FORMS.length)
                     layout.setKeyboardForm(FORMS[value]);
+                // Width, Floating height and Split gap stand by the type.
+                if (mSheet != null) mSheet.restate();
                 break;
             case LOOK:
                 writeLook(value, dragging);
@@ -4563,6 +4585,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         prefs.setTerminalRetroEffect(id);
         mHost.applyTerminalMotionLook();
+        // Screen events and Composite signal stand while an effect is on.
+        if (mSheet != null) mSheet.restate();
         syncDirty();
     }
 
@@ -6509,9 +6533,29 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     ? 1 : 0;
             case TINT_HUE:
                 return indexOf(tintHueValues(), prefs.getSurfaceGlassTintHue(), 0);
+            case FONT_SIZE:
+                return clamp(Math.round(prefs.getFontSize() / density()), cardRowFrom(row),
+                    cardRowTo(row));
+            case SCREEN_EVENTS:
+                return prefs.isTerminalScreenEventsEnabled() ? 1 : 0;
+            case COMPOSITE_SIGNAL:
+                return prefs.isTerminalRetroCompositeEnabled() ? 1 : 0;
+            case KEYBOARD_WIDTH:
+                return Math.round(prefs.getInAppKeyboardFloatingWidthScale() * 100f);
+            case KEYBOARD_FLOAT_HEIGHT:
+                return Math.round(prefs.getInAppKeyboardFloatingHeightScale() * 100f);
+            case KEYBOARD_SPLIT_GAP:
+                return Math.round(prefs.getInAppKeyboardSplitGapFraction() * 100f);
             default:
                 return 0;
         }
+    }
+
+    /** The terminal's font size range in dp: {@code getDefaultFontSizes}' min and max. */
+    private int[] fontSizeRangeDp() {
+        int[] bounds = TermuxAppSharedPreferences.getDefaultFontSizes(mHost.context());
+        int min = Math.max(1, Math.round(bounds[1] / density()));
+        return new int[] {min, Math.max(min, Math.round(bounds[2] / density()))};
     }
 
     private int cardRowFrom(@NonNull Row row) {
@@ -6522,6 +6566,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS;
             case HOME_ROWS:
                 return TermuxPreferenceConstants.TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS;
+            case FONT_SIZE:
+                return fontSizeRangeDp()[0];
+            // The keyboard's shapes in percent, the ranges Settings › Keyboard › Size had.
+            case KEYBOARD_WIDTH: return KEYBOARD_WIDTH_MIN;
+            case KEYBOARD_FLOAT_HEIGHT: return KEYBOARD_FLOAT_HEIGHT_MIN;
             default:
                 return 0;
         }
@@ -6540,7 +6589,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case TINT_HUE:
                 return 2;
             case WALLPAPER_DIM:
+            case KEYBOARD_WIDTH:
                 return 100;
+            case FONT_SIZE:
+                return fontSizeRangeDp()[1];
+            case KEYBOARD_FLOAT_HEIGHT: return KEYBOARD_FLOAT_HEIGHT_MAX;
+            case KEYBOARD_SPLIT_GAP: return KEYBOARD_SPLIT_GAP_MAX;
             default:
                 return 1;
         }
@@ -6548,8 +6602,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @NonNull
     private String cardRowReadout(@NonNull Row row, int value) {
-        if (row == Row.BOTTOM_PADDING)
+        if (row == Row.BOTTOM_PADDING || row == Row.FONT_SIZE)
             return getString(R.string.appearance_readout_dp, value);
+        if (row == Row.KEYBOARD_WIDTH || row == Row.KEYBOARD_FLOAT_HEIGHT
+                || row == Row.KEYBOARD_SPLIT_GAP)
+            return getString(R.string.appearance_readout_percent, value);
         return String.valueOf(value);
     }
 
@@ -6750,6 +6807,44 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 AppearanceSettingsStore.putBoolean(context, "use_system_wallpaper", value != 0);
                 settingsWritten();
                 break;
+            case FONT_SIZE: {
+                int px = Math.round(clamp(value, cardRowFrom(row), cardRowTo(row)) * density());
+                if (prefs.getFontSize() != px) {
+                    prefs.setFontSize(px);
+                    requestPreview(SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL);
+                }
+                syncDirty();
+                break;
+            }
+            case SCREEN_EVENTS:
+                prefs.setTerminalScreenEventsEnabled(value != 0);
+                mHost.applyTerminalMotionLook();
+                syncDirty();
+                break;
+            case COMPOSITE_SIGNAL:
+                prefs.setTerminalRetroCompositeEnabled(value != 0);
+                mHost.applyTerminalMotionLook();
+                syncDirty();
+                break;
+            case KEYBOARD_WIDTH:
+            case KEYBOARD_FLOAT_HEIGHT:
+            case KEYBOARD_SPLIT_GAP: {
+                float fraction = clamp(value, cardRowFrom(row), cardRowTo(row)) / 100f;
+                if (row == Row.KEYBOARD_WIDTH)
+                    prefs.setInAppKeyboardFloatingWidthScale(fraction);
+                else if (row == Row.KEYBOARD_FLOAT_HEIGHT)
+                    prefs.setInAppKeyboardFloatingHeightScale(fraction);
+                else
+                    prefs.setInAppKeyboardSplitGapFraction(fraction);
+                // The keyboard reads its shapes again on release, as Settings' page had it on
+                // the way back: a drag would rebuild its rows every step.
+                TermuxInAppKeyboard keyboard = keyboard();
+                if (!dragging && keyboard != null)
+                    keyboard.onPreferencesReloaded();
+                positionTargets();
+                syncDirty();
+                break;
+            }
             case TINT_HUE: {
                 String[] values = tintHueValues();
                 String id = values[clamp(value, 0, values.length - 1)];

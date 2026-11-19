@@ -87,6 +87,14 @@ final class AppearanceSnapshot {
     private final String mTrailStyle;
     private final boolean mTrailEnabled;
     private final String mRetroEffect;
+    /** The rows #286 moved onto the cards: the terminal's font size and effect switches, and
+     * the floating keyboard's shapes (this orientation's). */
+    private final int mFontSize;
+    private final boolean mScreenEvents;
+    private final boolean mRetroComposite;
+    private final float mKeyboardFloatingWidth;
+    private final float mKeyboardFloatingHeight;
+    private final float mKeyboardSplitGap;
     private final String mClockStyle;
     private final String mClockAlignment;
     /**
@@ -164,6 +172,12 @@ final class AppearanceSnapshot {
         mTrailStyle = prefs.getTerminalCursorTrailStyle();
         mTrailEnabled = prefs.isTerminalCursorTrailEnabled();
         mRetroEffect = prefs.getTerminalRetroEffect();
+        mFontSize = prefs.getFontSize();
+        mScreenEvents = prefs.isTerminalScreenEventsEnabled();
+        mRetroComposite = prefs.isTerminalRetroCompositeEnabled();
+        mKeyboardFloatingWidth = prefs.getInAppKeyboardFloatingWidthScale();
+        mKeyboardFloatingHeight = prefs.getInAppKeyboardFloatingHeightScale();
+        mKeyboardSplitGap = prefs.getInAppKeyboardSplitGapFraction();
         mClockStyle = prefs.getTopPaneClockStyle();
         mClockAlignment = prefs.getTopPaneClockAlignment();
         mStatusSwitches = statusSwitches(prefs);
@@ -266,6 +280,12 @@ final class AppearanceSnapshot {
         prefs.setTerminalCursorTrailStyle(mTrailStyle);
         prefs.setTerminalCursorTrailEnabled(mTrailEnabled);
         prefs.setTerminalRetroEffect(mRetroEffect);
+        prefs.setFontSize(mFontSize);
+        prefs.setTerminalScreenEventsEnabled(mScreenEvents);
+        prefs.setTerminalRetroCompositeEnabled(mRetroComposite);
+        prefs.setInAppKeyboardFloatingWidthScale(mKeyboardFloatingWidth);
+        prefs.setInAppKeyboardFloatingHeightScale(mKeyboardFloatingHeight);
+        prefs.setInAppKeyboardSplitGapFraction(mKeyboardSplitGap);
         prefs.setTopPaneClockStyle(mClockStyle);
         prefs.setTopPaneClockAlignment(mClockAlignment);
         restoreStatusSwitches(prefs, mStatusSwitches);
@@ -303,6 +323,9 @@ final class AppearanceSnapshot {
             .append('|').append(mDockButtonCount).append('|').append(mDim).append('|').append(mSoft)
             .append('|').append(mContrast).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
+            .append('|').append(mFontSize).append('|').append(mScreenEvents)
+            .append('|').append(mRetroComposite).append('|').append(mKeyboardFloatingWidth)
+            .append('|').append(mKeyboardFloatingHeight).append('|').append(mKeyboardSplitGap)
             .append('|').append(mClockAlignment)
             .append('|').append(java.util.Arrays.toString(mStatusSwitches))
             .append('|').append(mHalfKeys).append('|').append(mGridCells)

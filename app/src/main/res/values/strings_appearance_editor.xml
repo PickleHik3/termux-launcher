@@ -82,7 +82,11 @@
     <string name="appearance_row_margin">Margin</string>
     <string name="appearance_row_depth">Depth</string>
     <string name="appearance_row_search_field">Search field</string>
-    <string name="appearance_row_text_size">Font size</string>
+    <string name="appearance_row_text_size">Text size</string>
+    <string name="appearance_row_terminal_font_size">Font size</string>
+    <string name="appearance_row_keyboard_width">Width</string>
+    <string name="appearance_row_keyboard_float_height">Floating height</string>
+    <string name="appearance_row_keyboard_split_gap">Split gap</string>
     <string name="appearance_row_contrast">Contrast</string>
     <string name="appearance_row_cursor_trail">Cursor trail</string>
     <string name="appearance_row_effect">Effect</string>
