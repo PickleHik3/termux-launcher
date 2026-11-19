@@ -77,6 +77,7 @@ public final class TaiManager {
     private final TaiModelManagement modelManagement = new TaiModelManagement(this);
     private final TaiBenchHost benchHost = new TaiBenchHost(this);
     private final TaiImages images = new TaiImages(this);
+    private final TaiDepthRuns depth = new TaiDepthRuns(this);
     private final TaiSpeech speech = new TaiSpeech(this);
     /** Total device RAM, detected once; {@code -1} until first use, {@code 0} when unknown. */
     private volatile long deviceMemoryBytes = -1L;
@@ -146,6 +147,11 @@ public final class TaiManager {
     @NonNull
     public TaiImages images() {
         return images;
+    }
+
+    @NonNull
+    public TaiDepthRuns depth() {
+        return depth;
     }
 
     @NonNull

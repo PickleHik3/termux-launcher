@@ -23,15 +23,17 @@ final class SceneSource {
     private final int mRateHz;
     @NonNull private final File mFile;
     @Nullable private final File mChannel0;
+    @Nullable private final File mChannel1;
     @NonNull private final SceneLayerView.Spec mSpec;
     private final boolean mVideo;
 
     private SceneSource(@NonNull String key, int rateHz, @NonNull File file, @Nullable File channel0,
-                        @NonNull SceneLayerView.Spec spec, boolean video) {
+                        @Nullable File channel1, @NonNull SceneLayerView.Spec spec, boolean video) {
         mKey = key;
         mRateHz = rateHz;
         mFile = file;
         mChannel0 = channel0;
+        mChannel1 = channel1;
         mSpec = spec;
         mVideo = video;
     }
@@ -52,15 +54,16 @@ final class SceneSource {
             if (!video.isFile()) return null;
             // The file name is in the key: a version finishing swaps the layer to it.
             String key = motion.format() + "@" + video.getName();
-            return new SceneSource(key, videoRateHz, video, null,
+            return new SceneSource(key, videoRateHz, video, null, null,
                 new SceneLayerView.Spec(key, video, false), true);
         }
         if (motion.kind == WallpaperMotion.Kind.SHADER && meta != null) {
             File source = ShaderStore.sourceFile(context, motion.id);
             File channel0 = ShaderStore.textureFile(context, motion.id, meta);
+            File channel1 = ShaderStore.depthFile(context, motion.id, meta);
             String key = motion.format();
-            return new SceneSource(key, meta.rateHz, source, channel0,
-                new SceneLayerView.Spec(key, source, channel0, meta.quality, false), false);
+            return new SceneSource(key, meta.rateHz, source, channel0, channel1,
+                new SceneLayerView.Spec(key, source, channel0, channel1, meta.quality, false), false);
         }
         return null;
     }
@@ -96,6 +99,6 @@ final class SceneSource {
                 ? VideoStill.render(mFile, widthPx, heightPx) : null;
         }
         String text = ShaderStore.readText(mFile);
-        return text == null ? null : SceneStill.render(text, mChannel0, widthPx, heightPx, look);
+        return text == null ? null : SceneStill.render(text, mChannel0, mChannel1, widthPx, heightPx, look);
     }
 }

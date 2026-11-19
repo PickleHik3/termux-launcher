@@ -36,6 +36,8 @@ public final class ShaderInputs {
     public int pointerCount;
     @NonNull public final float[] offset = new float[2];
     public float pageOffset, battery = 1f, keyboard, dark;
+    /** tlTouchAge: seconds since the finger lifted; 0 while down; {@link SceneTouch#AGE_BEFORE_TOUCH} before a touch. */
+    public float touchAge = SceneTouch.AGE_BEFORE_TOUCH;
     /** tlColor0..2: accent, surface, on-surface, three floats each. */
     @NonNull public final float[] colors = new float[9];
     /** iChannelResolution: (w, h, 1) per channel, zero for an empty one. */

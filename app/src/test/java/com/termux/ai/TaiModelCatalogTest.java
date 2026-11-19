@@ -344,8 +344,8 @@ public class TaiModelCatalogTest {
     }
 
     @Test
-    public void theWallpaperVisionModelsAreNotInTheCatalogue() {
-        for (String id : new String[] {"depth-anything-3-small", "depth-anything-v2-small", "segformer-b0-ade20k", "u2net"}) {
+    public void theSceneAndCutOutModelsAreNotInTheCatalogue() {
+        for (String id : new String[] {"segformer-b0-ade20k", "u2net"}) {
             assertNull(id, TaiModelCatalog.get(id));
         }
     }
@@ -356,5 +356,28 @@ public class TaiModelCatalogTest {
         assertEquals("gemma-4-e4b-it-litert-lm", TaiSettings.migrateBuiltInModelId("Gemma-4-E4B-it"));
         assertEquals("functiongemma-270m-mobile-actions-litert-lm", TaiSettings.migrateBuiltInModelId("MobileActions-270M"));
         assertEquals("user-model", TaiSettings.migrateBuiltInModelId("user-model"));
+    }
+
+    @Test
+    public void depthModels_arePinnedToolEntriesAndInNoList() {
+        TaiModelCatalog.CatalogEntry da3 = TaiModelCatalog.get(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID);
+        TaiModelCatalog.CatalogEntry v2 = TaiModelCatalog.get(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID);
+        assertNotNull(da3);
+        assertNotNull(v2);
+        assertEquals(55_035_456L, da3.sizeBytes);
+        assertEquals("e170369a72ba1bba7486a4d2de555639fccd0595a9bb5b5349f7733ed4aebd1f", da3.sha256);
+        assertEquals("depth-anything-3", da3.architecture);
+        assertEquals(27_733_680L, v2.sizeBytes);
+        assertEquals("f74509422e4a9270a354b249a9193abdd4903354be63701262238a7f4b869611", v2.sha256);
+        assertEquals("depth-anything-v2", v2.architecture);
+        for (TaiModelCatalog.CatalogEntry entry : new TaiModelCatalog.CatalogEntry[] {da3, v2}) {
+            assertEquals("Apache-2.0", entry.license);
+            assertTrue(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION));
+            assertFalse(TaiModelCatalog.entries().containsKey(entry.modelId));
+            assertFalse(TaiModelCatalog.chatEntries().containsKey(entry.modelId));
+            assertFalse(TaiModelCatalog.embeddingEntries().containsKey(entry.modelId));
+            assertFalse(TaiModelCatalog.speechEntries().containsKey(entry.modelId));
+            assertFalse(TaiModelCatalog.ttsEntries().containsKey(entry.modelId));
+        }
     }
 }

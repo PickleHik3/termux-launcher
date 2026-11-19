@@ -71,14 +71,15 @@ public final class SceneStill {
     }
 
     /**
-     * @param channel0 the iChannel0 image, or null for none
+     * @param channel0 the iChannel0 image (the photo), or null for none
+     * @param channel1 the iChannel1 image (its depth image), or null for none
      * @param look     tlDark and tlColor0..2, or null to leave them 0
      * @return a mutable software ARGB_8888 bitmap, or null below API 29 or when the shader does not build
      * @throws IllegalStateException when the GPU could not draw it
      */
     @WorkerThread
     @Nullable
-    public static Bitmap render(@NonNull String source, @Nullable File channel0, int widthPx, int heightPx,
+    public static Bitmap render(@NonNull String source, @Nullable File channel0, @Nullable File channel1, int widthPx, int heightPx,
                                 @Nullable ShaderLook look) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null;
         int[] size = fitSize(widthPx, heightPx);
@@ -96,7 +97,8 @@ public final class SceneStill {
             } catch (GlShader.CompileException e) {
                 return null;
             }
-            if (channel0 != null) gl.setChannel(0, new ImageChannel(channel0));
+            if (channel0 != null) gl.setChannel(0, ImageChannel.photo(channel0));
+            if (channel1 != null) gl.setChannel(1, ImageChannel.depth(channel1));
             ShaderInputs in = new ShaderInputs();
             in.setDate(System.currentTimeMillis());
             in.pageOffset = 0f;

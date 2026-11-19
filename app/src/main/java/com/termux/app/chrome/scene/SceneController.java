@@ -90,6 +90,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
     @NonNull private final Host mHost;
     @NonNull private final int[] mLoc = new int[2];
     @Nullable private SceneLayerView mLayer;
+    private float mPageOffset;
     private boolean mAttached;
     @Nullable private SceneInvalTrace mInvalTrace;
     /** The persisted choice as of the last attach or {@link #refresh}; read here, never per touch. */
@@ -191,8 +192,10 @@ public final class SceneController implements LatencyProbe.CommitListener {
             // Re-read on every refresh: an edit of the shader in use keeps the same motion string.
             mMeta = ShaderStore.readMeta(mActivity, motion.id);
             File texture = ShaderStore.textureFile(mActivity, motion.id, mMeta);
+            File depth = ShaderStore.depthFile(mActivity, motion.id, mMeta);
             mStoredStamp = new ShaderStamp(ShaderStore.sourceFile(mActivity, motion.id).lastModified(),
-                mMeta.texture, texture == null ? 0L : texture.lastModified(), mMeta.quality, mMeta.rateHz);
+                mMeta.texture, texture == null ? 0L : texture.lastModified(),
+                mMeta.depth, depth == null ? 0L : depth.lastModified(), mMeta.quality, mMeta.rateHz);
         } else {
             mMeta = null;
             mStoredStamp = null;
@@ -320,7 +323,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (path != null && !path.trim().isEmpty()) {
             path = path.trim();
             if (path.equals(mDebugGaveUp)) return null;
-            return new SceneLayerView.Spec("file:" + path, new File(path), null,
+            return new SceneLayerView.Spec("file:" + path, new File(path), null, null,
                 ShaderSafety.Quality.HALF, true);
         }
         String videoPath = VIDEO_FILE.get(now);
@@ -435,6 +438,13 @@ public final class SceneController implements LatencyProbe.CommitListener {
         return hz == 15 || hz == 60 ? hz : SceneFramePolicy.DEFAULT_RATE_HZ;
     }
 
+    /** {@code tlPageOffset}, 0..1, for the layer now and any layer installed later. */
+    public void setPageOffset(float offset) {
+        mPageOffset = offset;
+        SceneLayerView layer = mLayer;
+        if (layer != null) layer.setPageOffset(offset);
+    }
+
     private void installLayer(@NonNull SceneLayerView.Spec spec) {
         SceneLayerView layer = new SceneLayerView(mActivity, spec, mHost::lazyMode,
             reason -> onLayerReverted(spec, reason));
@@ -444,6 +454,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
         watchPower();
         layer.setPowerHold(mPowerHold);
         pushLook(layer);
+        layer.setPageOffset(mPageOffset);
         mContainer.addView(layer, Math.max(0, index), lp);
         mContainer.addOnLayoutChangeListener(mPlace);
         place();

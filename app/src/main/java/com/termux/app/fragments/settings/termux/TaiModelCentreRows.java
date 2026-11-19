@@ -380,6 +380,21 @@ final class TaiModelCentreRows {
         return images;
     }
 
+    /**
+     * The installed depth models, by name: the Model centre's "Wallpaper depth" group. They are the
+     * vision tools the chat list leaves out ({@link TaiModelSpec#isVisionTool}), so a model is in
+     * exactly one of the two.
+     */
+    @NonNull
+    static List<TaiModelSpec> depthModels(@NonNull Collection<TaiModelSpec> installed) {
+        List<TaiModelSpec> depth = new ArrayList<>();
+        for (TaiModelSpec spec : installed) {
+            if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION)) depth.add(spec);
+        }
+        Collections.sort(depth, (a, b) -> a.displayName.compareToIgnoreCase(b.displayName));
+        return depth;
+    }
+
     /** The family an image model's recorded type names: "Stable Diffusion 1.5", "Taiyi" or "Sana". */
     @NonNull
     static String imageFamily(@Nullable String architecture) {
