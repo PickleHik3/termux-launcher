@@ -123,6 +123,14 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
         return dim;
     }
 
+    /** {@link ChromeRenderer.Surfaces#paneGlassSlabs}: the panes are glass slabs. */
+    boolean paneSlabs;
+
+    @Override
+    public boolean paneGlassSlabs() {
+        return paneSlabs;
+    }
+
     /** {@link ChromeRenderer.Surfaces#wallpaperHintColor}; transparent for none. */
     int wallpaperHint = 0;
 

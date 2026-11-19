@@ -2076,6 +2076,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return groundUnderRect(screenRect);
         }
 
+        @Override public boolean paneGlassSlabs() {
+            return isTerminalPaneGlassActive();
+        }
+
         @Override public int wallpaperHintColor() {
             return resolveWallpaperHintColor();
         }
@@ -4209,11 +4213,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withTintStrength(mPreferences.getDockTintStrength(restingPage()))
             // Every edge of this sheet is the screen's own. The gathered light, which every side
             // takes a share of, would run a glow round the screen, so all four are seams.
-            .withSeams(com.termux.app.chrome.ChromeEdgeRule.ALL);
+            .withSeams(com.termux.app.chrome.ChromeEdgeRule.ALL)
+            // The page's ground over the frame, as the bars and the dock draw it (#283).
+            .withGround(true);
         // Wrapped so the apps row's band can be left out where it wears Lens beads; with no band
         // it draws the sheet whole (FrameBandCutDrawable).
-        mFrameGutterDrawable = new com.termux.app.dock.FrameBandCutDrawable(
-            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop));
+        Drawable frameStack = com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
+            backdrop);
+        com.termux.app.chrome.GroundUnderGlass.bind(frameStack, body);
+        mFrameGutterDrawable = new com.termux.app.dock.FrameBandCutDrawable(frameStack);
         body.setBackground(mFrameGutterDrawable);
         growFrameGlassUnderSystemBars(body);
         body.setVisibility(View.VISIBLE);
@@ -6447,10 +6455,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A card under Floating, with its whole rim. Docked it joins the frame below the
             // keyboard: its top is a join and the rest is the screen's edge, so it draws none.
             .withRim(arrangement().floating())
-            .withSlice(1f, true);
-        under.setBackground(new com.termux.app.chrome.RoundedSheetDrawable(
-            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
-                getResources().getDisplayMetrics().density, backdrop),
+            .withSlice(1f, true)
+            // The page's ground over the frame, as the bars and the dock draw it (#283).
+            .withGround(true);
+        Drawable underStack = com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
+            getResources().getDisplayMetrics().density, backdrop);
+        // Its ground is drawn on the card: the rounded sheet passes no callbacks on.
+        com.termux.app.chrome.GroundUnderGlass.bind(underStack, under);
+        under.setBackground(new com.termux.app.chrome.RoundedSheetDrawable(underStack,
             com.termux.app.dock.UnderKeyboardBand.sideInsetPx(dock), radiusPx));
     }
 
@@ -7673,6 +7685,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.OnGlass.Resolution band = ok ? mStatusBar.resolvedStatusBand() : null;
         if (ok) System.arraycopy(mTopEndHere.inks, 0, mTopEndThere.inks, 0,
             mTopEndHere.inks.length);
+        // The bar's glass shows the ground beneath it (#283): toward a page whose ground differs,
+        // the arriving end is inked over that ground, read now and recording nothing, so the
+        // inks cross with the wall to what the landing measures.
+        if (ok && com.termux.app.chrome.GlassGround.ON) {
+            int thereGround = groundOfWallPage(there.kind);
+            if (thereGround != groundOfWallPage(here.kind))
+                mStatusBar.probeStatusInks(mTopEndThere.inks, thereGround);
+        }
         mTopEndHere.inksResolved = ok;
         mTopEndThere.inksResolved = ok;
         mStatusBar.applySessionsBand(band);
@@ -7836,7 +7856,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : com.termux.app.chrome.ChromeEdgeRule.ALL & ~modelRim)
             .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
                 Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)))
-            .withBand(band);
+            .withBand(band)
+            // The page's ground over the frame, as the bars and the dock draw it (#283).
+            .withGround(true);
     }
 
     /**
@@ -8227,10 +8249,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     rest.bottom, otherLook)) continue;
             int lookId = lookIdOf(other);
             int[] rows = new int[com.termux.app.chrome.ChromeInk.FACE_ROWS];
-            int otherTone = mChrome.ink().probeEitherToneUnderGlass(
-                com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
-                mPreferences.getAppBarOpacity(lookId) / 100f,
-                mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)), rows);
+            float otherOpacity = mPreferences.getAppBarOpacity(lookId) / 100f;
+            int otherTint = mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId));
+            // The keyboard's glass shows the page's ground (#283): the arriving page's faces are
+            // measured over its own, so the legends blend to what the landing measures there.
+            int otherTone = com.termux.app.chrome.GlassGround.ON
+                ? mChrome.ink().probeEitherToneUnderGlass(
+                    com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD, otherOpacity, otherTint,
+                    rows, groundOfWallPage(kind))
+                : mChrome.ink().probeEitherToneUnderGlass(
+                    com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD, otherOpacity, otherTint,
+                    rows);
             if (otherTone == 0) continue;
             store.record(legibilityKey(other), com.termux.app.glass.LegibilityBand.KEYBOARD,
                 rest.left, rest.top, rest.right, rest.bottom, otherLook,
@@ -8709,8 +8738,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 Drawable held = mKeyboardHostBackground.reuse(key);
                 if (held != null) return held;
             }
-            Drawable built = new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(
-                mChrome.glass(), spec, density, backdrop));
+            Drawable stack = com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density,
+                backdrop);
+            // Its ground is drawn on the host: the layout-neutral wrapper passes no callbacks on.
+            com.termux.app.chrome.GroundUnderGlass.bind(stack, surfaceHost);
+            Drawable built = new LayoutNeutralDrawable(stack);
             if (keep) mKeyboardHostBackground.hold(key, built);
             return built;
         } finally {
@@ -9668,6 +9700,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                @NonNull Bitmap frame, @NonNull Rect frameRect,
                                                int blurRadiusDp) {
         android.graphics.drawable.Drawable live = liveDockPicture(backdrop, blurRadiusDp);
+        // The page's ground over the dock's picture, stored or Live (#283). A Live picture does
+        // not carry the strip's dim: on pong (round 2) the dock and the keyboard rows it holds
+        // kept Home's luma over a Terminal dimmed 50 while their ground was left to it.
+        syncDockGround(backdrop, false);
         if (live != null) {
             // Live blur: the picture records what is beneath the dock; it is aimed by the recording.
             if (backdrop.getDrawable() != live) backdrop.setImageDrawable(live);
@@ -9684,6 +9720,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The surface moved or the geometry changed, or this would not have run: re-aim now, since
         // a view whose ancestor moved is not redrawn on its own.
         backdrop.invalidate();
+    }
+
+    /** Prototype #283: the ground drawn in the dock backdrop's overlay; null until first needed. */
+    @Nullable private com.termux.app.chrome.GroundUnderGlass mDockGround;
+
+    /**
+     * Prototype #283 ({@link com.termux.app.chrome.GlassGround}): the dock's backdrop wears the
+     * page's ground in its overlay, over its frost filter's output and under its refraction, and
+     * rides the strip so a seam crossing beneath redraws it. {@code carried}: its picture is Live
+     * and holds the strip already.
+     */
+    private void syncDockGround(@NonNull ImageView backdrop, boolean carried) {
+        if (!com.termux.app.chrome.GlassGround.ON) return;
+        if (mDockGround == null) {
+            com.termux.app.chrome.GroundUnderGlass ground =
+                new com.termux.app.chrome.GroundUnderGlass(backdrop, "dock-keyboard");
+            mDockGround = ground;
+            backdrop.getOverlay().add(ground);
+            ground.setBounds(0, 0, backdrop.getWidth(), backdrop.getHeight());
+            backdrop.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
+                ground.setBounds(0, 0, r - l, b - t));
+            ground.attach();
+        }
+        mDockGround.setCarried(carried);
     }
 
     @Nullable
@@ -13849,7 +13909,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int dockLegibilityLook(@NonNull com.termux.app.wall.PageRef page) {
         if (mPreferences == null) return 0;
         int look = lookIdOf(page);
-        return mPreferences.getAppBarOpacity(look) * 131 + mPreferences.getDockTintStrength(look);
+        int dress = mPreferences.getAppBarOpacity(look) * 131 + mPreferences.getDockTintStrength(look);
+        // Prototype #283: the dock's glass shows the page's ground, so its face moves with it.
+        return com.termux.app.chrome.GlassGround.ON
+            ? dress * 31 + groundOfWallPage(page.kind) : dress;
     }
 
     /** The store stands down while a crossing runs; read from the crossing itself, so it cannot stick. */
@@ -13883,9 +13946,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!store.needsMeasure(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
                     rest.left, rest.top, rest.right, rest.bottom, look)) continue;
             int lookId = lookIdOf(other);
-            int there = mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, rest,
-                mPreferences.getAppBarOpacity(lookId) / 100f,
-                mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId)));
+            float opacity = mPreferences.getAppBarOpacity(lookId) / 100f;
+            int tint = mChrome.glass().tintBase(mPreferences.getDockTintStrength(lookId));
+            // Prototype #283: measured over the arriving page's ground, which its dock shows.
+            int there = com.termux.app.chrome.GlassGround.ON
+                ? mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, rest, opacity, tint,
+                    groundOfWallPage(kind))
+                : mChrome.ink().faceUnderGlass(GlassBackdropCache.Band.DOCK, rest, opacity, tint);
             if (Color.alpha(there) == 0) continue;
             store.recordFace(legibilityKey(other), com.termux.app.glass.LegibilityBand.DOCK,
                 rest.left, rest.top, rest.right, rest.bottom, look, there);
@@ -13969,6 +14036,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mKeyboardBlendOn;
 
     private void legendBlend(float share) {
+        // The bar's inks over each page's ground cross on the same share (#283).
+        mTopStackRenderer.setInkShare(share);
         if (mLegendBlendOn) {
             applyExtraKeysInk(com.termux.app.glass.LegibilityBlend.color(mLegendInkHere,
                 mLegendInkThere, share));

@@ -275,4 +275,24 @@ public class TopStackSceneTest {
         assertEquals(StackScene.sideSlide(Side.HOME, Side.HOME, Side.TERMINAL, 0.4f, W) - 250f,
             f.homeChipsTx, 0f);
     }
+
+    /** #283: the inks cross on the crossing's end share when one is set, else on the look's. */
+    @Test
+    public void inksFollowTheirOwnShareWhenGiven() {
+        TopStackScene.Frame f = new TopStackScene.Frame();
+        TopStackScene.End from = end(Side.HOME, PlaceLayout.Edge.TOP, 7, true, PALE, 1);
+        TopStackScene.End to = end(Side.TERMINAL, PlaceLayout.Edge.TOP, 7, true, DARK, 2);
+        TopStackScene.at(from, to, 0.2f, 0.2f, W, Float.NaN, false, 0.75f, f);
+        for (int i = 0; i < TopStackScene.INK_COUNT; i++) {
+            assertEquals(com.termux.app.chrome.StackMaterial.mixArgb(from.inks[i], to.inks[i],
+                0.75f), f.inks[i]);
+        }
+        assertEquals(com.termux.app.place.SeamFade.share(0.2f), f.lookShare, 0f);
+        TopStackScene.at(from, to, 0.2f, 0.2f, W, Float.NaN, false, 1f, f);
+        for (int i = 0; i < TopStackScene.INK_COUNT; i++) assertEquals(to.inks[i], f.inks[i]);
+        TopStackScene.Frame g = new TopStackScene.Frame();
+        TopStackScene.at(from, to, 0.2f, 0.2f, W, Float.NaN, false, Float.NaN, g);
+        TopStackScene.at(from, to, 0.2f, 0.2f, W, Float.NaN, false, f);
+        for (int i = 0; i < TopStackScene.INK_COUNT; i++) assertEquals(g.inks[i], f.inks[i]);
+    }
 }

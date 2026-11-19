@@ -62,6 +62,8 @@ public final class TopStackRenderer {
     private boolean mCrossing;
     private boolean mStripHereShown;
     private float mProgress;
+    /** The inks' own share toward the other end (the crossing's end share); NaN follows the look. */
+    private float mInkShare = Float.NaN;
     /** The page's fraction, which the chips' slide follows (the look follows {@link #mProgress}). */
     private float mSlide;
     /** The chips' clip as last written (never read back from the view: reading allocates). */
@@ -161,6 +163,7 @@ public final class TopStackRenderer {
         mLandingPending = false;
         mProgress = 0f;
         mSlide = 0f;
+        mInkShare = Float.NaN;
         mRideX = Float.NaN;
         mRideWearsTo = false;
         requestApply();
@@ -179,6 +182,17 @@ public final class TopStackRenderer {
         if (mProgress == p && mSlide == slide) return;
         mProgress = p;
         mSlide = slide;
+        requestApply();
+    }
+
+    /**
+     * The inks' share toward the other end, the crossing's end share
+     * ({@code SeamCrossing.Answers#endShare}): the bar's inks over each page's ground cross with
+     * the wall, as the dock's legends do. Set only while a crossing runs.
+     */
+    public void setInkShare(float share) {
+        if (!mCrossing || share == mInkShare) return;
+        mInkShare = share;
         requestApply();
     }
 
@@ -246,7 +260,8 @@ public final class TopStackRenderer {
         if (guard != null) guard.check();
         boolean riding = mCrossing && !Float.isNaN(mRideX) && !TopStackScene.shared(mFrom, mTo);
         if (mCrossing) {
-            TopStackScene.at(mFrom, mTo, mProgress, mSlide, mWidth, mRideX, mRideWearsTo, mFrame);
+            TopStackScene.at(mFrom, mTo, mProgress, mSlide, mWidth, mRideX, mRideWearsTo,
+                mInkShare, mFrame);
         } else {
             TopStackScene.rest(mRest, mWidth, mFrame);
         }

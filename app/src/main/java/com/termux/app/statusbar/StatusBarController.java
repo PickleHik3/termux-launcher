@@ -1335,6 +1335,11 @@ public final class StatusBarController {
         mWidgets.bindTopStackInks();
     }
 
+    /** {@link StatusBarWidgets#probeStatusInks}: the arriving end over its own ground, recording nothing. */
+    public boolean probeStatusInks(@NonNull int[] out, int pageGround) {
+        return mWidgets.probeStatusInks(out, pageGround);
+    }
+
     /** {@link StatusBarWidgets#resolveStatusInks}: a crossing's ends, measured once at begin. */
     public boolean resolveStatusInks(@NonNull int[] out) {
         return mWidgets.resolveStatusInks(out);
