@@ -2381,8 +2381,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     private void diagKeyboardPockets(float p, float k, boolean scrimAround) {
         if (!com.termux.app.chrome.MotionLog.enabled || mHostLayout == null) return;
-        // The springs never land exactly on 1 (Spring.tick has no snap): within 0.002 is at rest.
-        if ((p > 0.002f && p < 0.998f) || (k > 0.002f && k < 0.998f)) return;
+        if ((p > 0f && p < 1f) || (k > 0f && k < 1f)) return;
         FrameLayout host = mHostLayout;
         android.graphics.drawable.Drawable bg = host.getBackground();
         android.graphics.RectF hole = bg instanceof AppDrawerScrimDrawable
@@ -2394,7 +2393,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (card != null) card.getLocationOnScreen(cardAt);
         android.view.ViewParent hostParent = host.getParent();
         View kbContainer = mKeyboardView;
-        String state = "p=" + (p >= 0.998f ? "1" : "0") + " k=" + (k >= 0.998f ? "1" : "0")
+        String state = "p=" + (p >= 1f ? "1" : "0") + " k=" + (k >= 1f ? "1" : "0")
             + " around=" + scrimAround
             + " cardFrame=" + (mKeyboardCardFrame == null ? "null" : mKeyboardCardFrame.left + ","
                 + mKeyboardCardFrame.top + "," + mKeyboardCardFrame.right + ","
