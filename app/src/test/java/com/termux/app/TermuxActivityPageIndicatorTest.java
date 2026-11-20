@@ -278,7 +278,7 @@ public class TermuxActivityPageIndicatorTest {
     }
 
     @Test
-    public void thePageBeingShownIsTheAccentAndTheRestAreItMutedOnEveryEdge() {
+    public void thePageBeingShownIsTheAccentAndTheRestAreTheNeutralInkMutedOnEveryEdge() {
         for (Edge edge : Edge.values()) {
             TermuxActivity activity = inflate();
             standOn(activity, edge);
@@ -293,25 +293,10 @@ public class TermuxActivityPageIndicatorTest {
                 255, Color.alpha(active));
             assertEquals(edge + ": which is the strip's own accent",
                 strip.getAccentColor() & 0x00FFFFFF, active & 0x00FFFFFF);
-            assertEquals(edge + ": the ticks at rest are the same colour",
-                active & 0x00FFFFFF, resting & 0x00FFFFFF);
+            assertEquals(edge + ": the capsules at rest are the neutral ink, not the accent",
+                0x00FFFFFF, resting & 0x00FFFFFF);
             assertEquals(edge + ": muted",
                 Math.round(255f * PageTickStrip.INACTIVE_ALPHA), Color.alpha(resting));
         }
-    }
-
-    @Test
-    public void theMostUsedPagesTickKeepsItsOwnWarmTint() {
-        TermuxActivity activity = inflate();
-        PageTickStripView strip = activity.findViewById(R.id.apps_bar_indicator_band);
-        assertNotNull("the dock's own band is the strip now", strip);
-        strip.setAccentColor(Color.rgb(0x34, 0x5C, 0xA8));
-        strip.setPages(3, 2f, 2);
-        assertEquals(PageTickStrip.DYNAMIC_TICK_COLOR & 0x00FFFFFF,
-            strip.tickColorAt(2) & 0x00FFFFFF);
-        assertEquals(strip.getAccentColor() & 0x00FFFFFF, strip.tickColorAt(0) & 0x00FFFFFF);
-        // A dynamic page out of range is no dynamic page at all.
-        strip.setPages(2, 0f, 7);
-        assertEquals(-1, strip.getDynamicPageIndex());
     }
 }

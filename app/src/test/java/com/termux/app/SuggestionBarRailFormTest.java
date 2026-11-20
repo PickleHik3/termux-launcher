@@ -327,7 +327,6 @@ public class SuggestionBarRailFormTest {
         rail.setPageTicksListener(writer::write);
 
         assertEquals("the row's two ticks", 2, ticks.getPageCount());
-        assertEquals("the second the most-used page's", 1, ticks.getDynamicPageIndex());
         assertEquals(View.VISIBLE, ticks.getVisibility());
         assertEquals("the pins on show", 0f, ticks.getPagePosition(), 0.001f);
 

@@ -223,11 +223,12 @@ public class DockSurfaceSpecLayoutTest {
 
     @Test
     public void theDashesStandASmallGapOverTheSlab() {
+        // The capsules are 5dp thick in the same band, so the air either side is what is left.
         for (boolean alone : new boolean[] {false, true}) {
             DockLayout tray = DockLayoutPolicy.compute(inputs(true, alone, true,
                 DockLayoutPolicy.sizePreset(2)).surface(DockSurfaceSpec.GLASS_TRAY).build());
             float gap = PageTickStrip.edgeGapPx(tray.slabTopInsetPx, DENSITY);
-            assertTrue("alone=" + alone + ": " + gap, gap >= 1.5f * DENSITY && gap <= 4f * DENSITY);
+            assertTrue("alone=" + alone + ": " + gap, gap >= 0.5f * DENSITY && gap <= 4f * DENSITY);
         }
     }
 

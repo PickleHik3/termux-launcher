@@ -29373,7 +29373,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }, (FrameLayout) findViewById(R.id.page_switch_layer));
         // The dock's capsules dim while the bar slides (the dock strip's slice listens here).
-        mPageBar.setSlidingListener(sliding -> { });
+        mPageBar.setSlidingListener(sliding -> mPageTicks.setDimmed(sliding));
         mPageSwitchKey = new com.termux.app.wall.pageswitch.PageSwitchKeyOwner(mPageBar,
             this::extraKeysPageTotal, this::extraKeysPageAt);
         // Rows built before the switcher existed take the key's owner and glyph now.

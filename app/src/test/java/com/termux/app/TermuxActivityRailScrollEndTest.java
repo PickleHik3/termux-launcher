@@ -205,7 +205,6 @@ public class TermuxActivityRailScrollEndTest {
             ticks.getWidth());
         assertTrue("and the rail's length", ticks.getHeight() > 0);
         assertEquals("the pins and the most-used apps", 2, ticks.getPageCount());
-        assertEquals("the second warm", 1, ticks.getDynamicPageIndex());
         assertEquals(0f, ticks.getPagePosition(), 0.001f);
         assertTrue("the strip paints its ticks at rest", paintedPixels(ticks) > 0);
 

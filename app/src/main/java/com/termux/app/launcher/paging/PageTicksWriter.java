@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 public final class PageTicksWriter {
     @Nullable private PageTickStripView strip;
     @Nullable private PageTicks last;
+    private boolean dimmed;
 
     /**
      * Points the writer at {@code next}. The strip being put down is reset first, so a band that
@@ -24,12 +25,14 @@ public final class PageTicksWriter {
         PageTickStripView previous = strip;
         strip = next;
         if (previous != null) {
-            previous.setPages(1, 0f, -1);
+            previous.setPages(1, 0f);
+            previous.setDimmed(false);
             if (com.termux.app.chrome.MotionLog.enabled && previous.getVisibility() == View.VISIBLE)
                 com.termux.app.chrome.MotionLog.log("ticks-shown", "shown=false unbound by="
                     + caller()); // DIAG(ticks-shown)
             previous.setVisibility(View.INVISIBLE);
         }
+        if (strip != null) strip.setDimmed(dimmed);
         if (last != null) writeTo(strip, last);
     }
 
@@ -37,6 +40,15 @@ public final class PageTicksWriter {
     public void write(@NonNull PageTicks ticks) {
         last = ticks;
         writeTo(strip, ticks);
+    }
+
+    /**
+     * Dims or restores the bound strip while the page bar slides. A strip put down by {@link #bind}
+     * is restored there, and one bound later starts from the last state told here.
+     */
+    public void setDimmed(boolean dimmed) {
+        this.dimmed = dimmed;
+        if (strip != null) strip.setDimmed(dimmed);
     }
 
     /** The strip being written, or null while there is none. */
@@ -60,7 +72,7 @@ public final class PageTicksWriter {
         target.setVerticalForm(ticks.vertical);
         target.setGlassInk(ticks.glassBackdrop, ticks.glassInk);
         target.setAccentColor(ticks.accentColor);
-        target.setPages(ticks.pages, ticks.position, ticks.warmIndex);
+        target.setPages(ticks.pages, ticks.position);
         // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
         // gained a page would otherwise grow by it and shove the terminal.
         int visibility = ticks.shown ? View.VISIBLE : View.INVISIBLE;

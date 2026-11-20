@@ -9890,8 +9890,8 @@ public final class SuggestionBarView extends GridLayout
         int accent = resolvePageIndicatorAccentColor();
         if (!azPages && railCarriesMostUsed()) {
             // The rail's two pages are the pins and the most-used apps after them in one column:
-            // the same two ticks a row shows, the second warm, lit by the scroll, not a page turn.
-            return new PageTicks(2, railScrollPagePosition(), 1, true, vertical,
+            // the same two ticks a row shows, lit by the scroll, not a page turn.
+            return new PageTicks(2, railScrollPagePosition(), true, vertical,
                 glassBackdrop, glassInk, accent);
         }
         int pages = azPages ? getAzVisiblePageCount()
@@ -9900,7 +9900,7 @@ public final class SuggestionBarView extends GridLayout
             : (overflow ? getPinnedVisualPagePosition() : 0f);
         // Not shown is INVISIBLE rather than GONE (the writer's): the band the ticks hold is the
         // row's own air, and a row that gained a page would otherwise grow by it.
-        return new PageTicks(pages, position, azPages ? -1 : getPinnedDynamicPageIndex(),
+        return new PageTicks(pages, position,
             overflow, vertical, glassBackdrop, glassInk, accent);
     }
 

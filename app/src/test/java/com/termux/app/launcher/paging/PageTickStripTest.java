@@ -124,9 +124,26 @@ public class PageTickStripTest {
         // Continuous across a swipe: halfway between two pages they share the difference.
         assertEquals(PageTickStrip.alphaFor(0.5f),
             (PageTickStrip.alphaFor(0f) + PageTickStrip.alphaFor(1f)) * 0.5f, 0.0001f);
+    }
 
-        // The most-used page's own tint sleeps while it is not the page being shown.
-        assertEquals(1f, PageTickStrip.dynamicDampFor(1f), 0.0001f);
-        assertTrue(PageTickStrip.dynamicDampFor(0f) < 1f);
+    @Test
+    public void theCapsulesAreTheMocksNumbers() {
+        assertEquals(28f, PageTickStrip.ACTIVE_LENGTH_DP, 0f);
+        assertEquals(10f, PageTickStrip.INACTIVE_LENGTH_DP, 0f);
+        assertEquals(5f, PageTickStrip.THICKNESS_DP, 0f);
+        assertEquals(6f, PageTickStrip.GAP_DP, 0f);
+        assertEquals("a full cap", 2.5f, PageTickStrip.CORNER_RADIUS_DP, 0f);
+        assertEquals("the band the dock reserves is unchanged", 9f, PageTickStrip.BAND_DP, 0f);
+        assertEquals(0.5f, PageTickStrip.INACTIVE_ALPHA, 0f);
+    }
+
+    @Test
+    public void whileTheBarSlidesTheCurrentCapsuleKeepsFortyFivePercentAndTheOthersAQuarter() {
+        float activeRest = PageTickStrip.alphaFor(1f);
+        float otherRest = PageTickStrip.alphaFor(0f);
+        assertEquals(0.45f, activeRest * PageTickStrip.dimFactor(1f), 0.0001f);
+        assertEquals(0.25f, otherRest * PageTickStrip.dimFactor(0f), 0.0001f);
+        float mid = PageTickStrip.dimFactor(0.5f);
+        assertTrue(mid < PageTickStrip.dimFactor(0f) && mid > PageTickStrip.dimFactor(1f));
     }
 }

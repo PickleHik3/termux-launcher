@@ -16,7 +16,7 @@ import com.termux.app.chrome.OnGlass;
 import com.termux.app.place.EdgeStackView;
 
 /**
- * The page indicator a pinned-apps row carries off the dock: a short strip of ticks that rides with
+ * The page indicator a pinned-apps row carries off the dock: a short strip of capsules that rides with
  * the row, lying down under it on the top edge and standing beside it on a rail.
  *
  * <p>On the dock itself the ticks are drawn by {@code LauncherAzGestureFxView}, which paints them
@@ -34,7 +34,6 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
     @NonNull private final RectF tick = new RectF();
     private int pageCount = 1;
     private float pagePosition;
-    private int dynamicPageIndex = -1;
     private boolean verticalForm;
     private int accentColor = 0xFFFFFFFF;
     /**
@@ -47,8 +46,7 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
     private int glassInkColor = Color.TRANSPARENT;
     private int activeInk;
     private int restingInk;
-    private int dynamicActiveInk;
-    private int dynamicRestingInk;
+    private boolean dimmed;
 
     public PageTickStripView(@NonNull Context context) {
         this(context, null);
@@ -71,7 +69,7 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
     }
 
     /**
-     * The colour the active page's tick is drawn in; the rest of them are the same colour muted.
+     * The colour the active page's capsule is drawn in; the rest are the band's neutral ink, muted.
      *
      * <p>It is the launcher's gesture accent, and nothing is done to it here any more. It used to
      * be lifted first — saturation to at least 0.42, value to at least 0.78, then boosted again —
@@ -109,48 +107,53 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
     }
 
     /**
-     * The four inks the ticks morph between: the accent and the most-used page's warm tint, each at
-     * the page being shown and at rest.
+     * The two inks the capsules morph between: the accent for the page being shown, and the band's
+     * neutral ink (the chrome's own, not a faded accent) for the rest.
      *
-     * <p>The active tick says which page you are on, so it is a meaningful graphic and takes
-     * {@link OnGlass#TARGET_LARGE_TEXT}. A tick at rest says only that there is another page there,
-     * so it takes {@link OnGlass#TARGET_DECORATION} — and it keeps its muted look by asking for it
-     * as an <em>alpha</em>, {@link PageTickStrip#INACTIVE_ALPHA}, which {@link GlassInk#legible}
-     * raises only if 40% of a tick cannot clear 2.0 on this band. The mute is a preference; the
-     * floor is not.</p>
+     * <p>The active capsule says which page you are on, so it is a meaningful graphic and takes
+     * {@link OnGlass#TARGET_LARGE_TEXT}. A capsule at rest says only that there is another page
+     * there, so it takes {@link OnGlass#TARGET_DECORATION} and keeps its muted look by asking for
+     * it as an <em>alpha</em>, {@link PageTickStrip#INACTIVE_ALPHA}, which {@link GlassInk#legible}
+     * raises only if that cannot clear the floor on this band.</p>
      */
     private void resolveInks() {
         if (Color.alpha(glassBackdrop) == 0) return;
-        boolean pale = GlassInk.isPaleSide(
-            Color.alpha(glassInkColor) == 0 ? accentColor : glassInkColor, glassBackdrop);
+        int neutralSeed = Color.alpha(glassInkColor) == 0 ? accentColor : glassInkColor;
+        boolean pale = GlassInk.isPaleSide(neutralSeed, glassBackdrop);
         int restingAlpha = Math.round(255f * PageTickStrip.INACTIVE_ALPHA);
         activeInk = GlassInk.legibleOn(glassBackdrop, accentColor, pale,
-            OnGlass.TARGET_LARGE_TEXT, 0xE8);
-        restingInk = GlassInk.legibleOn(glassBackdrop, accentColor, pale,
+            OnGlass.TARGET_LARGE_TEXT, 0xFF);
+        restingInk = GlassInk.legibleOn(glassBackdrop, neutralSeed, pale,
             OnGlass.TARGET_DECORATION, restingAlpha);
-        dynamicActiveInk = GlassInk.legibleOn(glassBackdrop, PageTickStrip.DYNAMIC_TICK_COLOR, pale,
-            OnGlass.TARGET_LARGE_TEXT, 0xE8);
-        dynamicRestingInk = GlassInk.legibleOn(glassBackdrop, PageTickStrip.DYNAMIC_TICK_COLOR,
-            pale, OnGlass.TARGET_DECORATION, restingAlpha);
     }
 
-    /** The colour one tick is drawn in at this fractional page position, alpha included. */
+    /** The colour one capsule is drawn in at this fractional page position, alpha included. */
     public int tickColorAt(int page) {
         float proximity = PageTickStrip.proximity(page, pagePosition);
-        boolean dynamic = page == dynamicPageIndex;
         if (Color.alpha(glassBackdrop) == 0) {
-            // Nothing measured yet: the accent, faded by proximity, exactly as before this round.
-            float alpha = PageTickStrip.alphaFor(proximity);
-            int color = dynamic ? PageTickStrip.DYNAMIC_TICK_COLOR : accentColor;
-            if (dynamic) alpha *= PageTickStrip.dynamicDampFor(proximity);
-            int opacity = Math.max(0, Math.min(255, Math.round(255f * alpha)));
-            return (color & 0x00FFFFFF) | (opacity << 24);
+            // Nothing measured yet: the chrome's ink (white before it has one) at rest, the
+            // accent at the page being shown.
+            int neutral = Color.alpha(glassInkColor) == 0 ? 0xFFFFFFFF : glassInkColor;
+            int rest = (neutral & 0x00FFFFFF)
+                | (Math.round(255f * PageTickStrip.INACTIVE_ALPHA) << 24);
+            return blend(rest, accentColor | 0xFF000000, proximity);
         }
-        // The morph is between two resolved inks rather than between two alphas: a fade towards
-        // nothing is a fade towards the band, and the band is what the ticks were losing to.
-        float mix = dynamic ? proximity * PageTickStrip.dynamicDampFor(proximity) : proximity;
-        return blend(dynamic ? dynamicRestingInk : restingInk,
-            dynamic ? dynamicActiveInk : activeInk, mix);
+        return blend(restingInk, activeInk, proximity);
+    }
+
+    /**
+     * Dims the capsules while the page bar slides (draw-time only): the current one to
+     * {@link PageTickStrip#DIMMED_ACTIVE_FACTOR} of its alpha, the others to
+     * {@link PageTickStrip#DIMMED_INACTIVE_FACTOR} of theirs.
+     */
+    public void setDimmed(boolean dimmed) {
+        if (this.dimmed == dimmed) return;
+        this.dimmed = dimmed;
+        invalidate();
+    }
+
+    public boolean isDimmed() {
+        return dimmed;
     }
 
     private static int blend(int from, int to, float amount) {
@@ -169,28 +172,14 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
      * @return whether anything changed, so the caller can skip an invalidate it does not need
      */
     public boolean setPages(int pageCount, float position) {
-        return setPages(pageCount, position, -1);
-    }
-
-    /**
-     * As {@link #setPages(int, float)}, plus which page (if any) is the dynamic "most-used" one,
-     * whose tick carries its own warm tint instead of the accent.
-     */
-    public boolean setPages(int pageCount, float position, int dynamicPage) {
         int count = Math.max(1, pageCount);
         float bounded = Math.max(0f, Math.min(position, count - 1f));
-        int dynamic = dynamicPage >= 0 && dynamicPage < count ? dynamicPage : -1;
-        if (this.pageCount == count && this.dynamicPageIndex == dynamic
+        if (this.pageCount == count
             && Math.abs(this.pagePosition - bounded) < 0.001f) return false;
         this.pageCount = count;
         this.pagePosition = bounded;
-        this.dynamicPageIndex = dynamic;
         invalidate();
         return true;
-    }
-
-    public int getDynamicPageIndex() {
-        return dynamicPageIndex;
     }
 
     public int getPageCount() {
@@ -223,10 +212,16 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
         float gap = PageTickStrip.gapPx(lengths, stripLengthPx, density);
         float[] centers = PageTickStrip.centersPx(lengths, gap, stripLengthPx);
         float thickness = PageTickStrip.THICKNESS_DP * density;
-        float radius = thickness * 0.5f;
+        float radius = PageTickStrip.CORNER_RADIUS_DP * density;
         float across = (verticalForm ? getWidth() : getHeight()) * 0.5f;
         for (int page = 0; page < centers.length; page++) {
-            tickPaint.setColor(tickColorAt(page));
+            int color = tickColorAt(page);
+            if (dimmed) {
+                float factor = PageTickStrip.dimFactor(PageTickStrip.proximity(page, pagePosition));
+                color = (color & 0x00FFFFFF)
+                    | (Math.round(Color.alpha(color) * factor) << 24);
+            }
+            tickPaint.setColor(color);
             float half = lengths[page] * 0.5f;
             if (verticalForm) {
                 tick.set(across - radius, centers[page] - half, across + radius, centers[page] + half);

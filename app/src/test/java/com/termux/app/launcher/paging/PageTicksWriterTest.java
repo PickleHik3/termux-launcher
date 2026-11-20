@@ -1,8 +1,10 @@
 package com.termux.app.launcher.paging;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Context;
@@ -24,26 +26,25 @@ public class PageTicksWriterTest {
 
     private final Context context = RuntimeEnvironment.getApplication();
 
-    private static PageTicks ticks(int pages, float position, int warm, boolean shown) {
-        return new PageTicks(pages, position, warm, shown, false, 0, 0, 0xFF112233);
+    private static PageTicks ticks(int pages, float position, boolean shown) {
+        return new PageTicks(pages, position, shown, false, 0, 0, 0xFF112233);
     }
 
     @Test
-    public void theBoundStripIsToldPagesPositionWarmIndexAndVisibility() {
+    public void theBoundStripIsToldPagesPositionAndVisibility() {
         PageTickStripView strip = new PageTickStripView(context);
         PageTicksWriter writer = new PageTicksWriter();
         writer.bind(strip);
 
-        writer.write(ticks(3, 1.5f, 2, true));
+        writer.write(ticks(3, 1.5f, true));
 
         assertSame(strip, writer.bound());
         assertEquals(3, strip.getPageCount());
         assertEquals(1.5f, strip.getPagePosition(), 0.001f);
-        assertEquals(2, strip.getDynamicPageIndex());
         assertEquals(View.VISIBLE, strip.getVisibility());
         assertEquals(0xFF112233, strip.getAccentColor());
 
-        writer.write(ticks(1, 0f, -1, false));
+        writer.write(ticks(1, 0f, false));
         assertEquals(View.INVISIBLE, strip.getVisibility());
     }
 
@@ -53,7 +54,7 @@ public class PageTicksWriterTest {
         PageTickStripView second = new PageTickStripView(context);
         PageTicksWriter writer = new PageTicksWriter();
         writer.bind(first);
-        writer.write(ticks(4, 2f, -1, true));
+        writer.write(ticks(4, 2f, true));
 
         writer.bind(second);
 
@@ -70,10 +71,31 @@ public class PageTicksWriterTest {
         PageTickStripView strip = new PageTickStripView(context);
         PageTicksWriter writer = new PageTicksWriter();
         writer.bind(strip);
-        writer.write(ticks(3, 1f, -1, true));
+        writer.write(ticks(3, 1f, true));
         writer.bind(null);
         assertNull(writer.bound());
         assertEquals(1, strip.getPageCount());
         assertEquals(View.INVISIBLE, strip.getVisibility());
+    }
+
+    @Test
+    public void theDimIsToldToTheBoundStripAndNeverOutlivesItsBinding() {
+        PageTickStripView first = new PageTickStripView(context);
+        PageTickStripView second = new PageTickStripView(context);
+        PageTicksWriter writer = new PageTicksWriter();
+        writer.bind(first);
+        writer.setDimmed(true);
+        assertTrue(first.isDimmed());
+
+        writer.bind(second);
+        assertFalse("a strip put down is no longer dimmed", first.isDimmed());
+        assertTrue("the strip bound mid-slide takes the slide's dim", second.isDimmed());
+
+        writer.setDimmed(false);
+        assertFalse(second.isDimmed());
+
+        writer.setDimmed(true);
+        writer.bind(null);
+        assertFalse(second.isDimmed());
     }
 }
