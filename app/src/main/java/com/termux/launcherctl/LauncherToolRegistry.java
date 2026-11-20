@@ -273,7 +273,10 @@ public final class LauncherToolRegistry {
                 TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,
                 TOOL_SESSION_CLOSE_CURRENT,
                 // The pill says it: listening, then what became of the text.
-                TOOL_VOICE_DICTATE));
+                TOOL_VOICE_DICTATE,
+                // The drawer coming up is the read-out; its name on the pill sat over the
+                // drawer's own search field (developer, 2026-11-20).
+                TOOL_APP_OPEN_APP_DRAWER));
 
         /**
          * Categories whose every tool acts on the focused pane: its text, selection, URLs,
