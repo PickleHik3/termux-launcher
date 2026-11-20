@@ -258,6 +258,8 @@ public class WindowChipGlassWiringTest {
 
         @Nullable @Override public TermuxAppSharedPreferences preferences() { return null; }
 
+        @Override public boolean adaptiveLegibility() { return true; }
+
         @Override public float dpToPx(float dp) { return dp; }
 
         @Override public int glassBaseColor() { return GLASS_LIGHT; }

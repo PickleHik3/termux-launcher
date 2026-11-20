@@ -494,6 +494,21 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (refreshVeil()) invalidate();
     }
 
+    /**
+     * Sets the even-out matrix of a slab with no veil source (a Home widget's card): the frame is
+     * drawn through it ahead of the frost. Re-dressed only when the numbers moved. While a veil
+     * source is set, that source owns the matrix and this is overwritten on its next refresh.
+     */
+    public void setEvenOut(@Nullable android.graphics.ColorMatrix matrix) {
+        if (java.util.Arrays.equals(matrix == null ? null : matrix.getArray(),
+                mEvenOut == null ? null : mEvenOut.getArray())) {
+            return;
+        }
+        mEvenOut = matrix;
+        applyFrameFilter(mFilterKeptBrightness);
+        invalidate();
+    }
+
     /** The veil this slab is drawn with right now, for tests and the departure card. */
     public int veilColor() {
         return mVeilColor;
@@ -557,6 +572,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             evenOut = mVeilSource.paneGlassEvenOut(mVeilRect, this);
         } else {
             mVeilRect.setEmpty();
+            // No source: a matrix set by hand (setEvenOut) stands.
+            if (mVeilSource == null) evenOut = mEvenOut;
         }
         boolean evenOutMoved = !java.util.Arrays.equals(
             evenOut == null ? null : evenOut.getArray(), mEvenOut == null ? null : mEvenOut.getArray());

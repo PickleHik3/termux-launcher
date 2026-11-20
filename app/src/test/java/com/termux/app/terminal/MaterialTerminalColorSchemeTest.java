@@ -854,9 +854,9 @@ public class MaterialTerminalColorSchemeTest {
     }
 
     /**
-     * With the Debugging switch off the glass floors do not apply: a glass ground is held to
-     * today's floors (the only safe ones on an unbounded mean ground), and the palette differs
-     * from the one the switch-on build solves for the same ground.
+     * With the glass floors off (terminal Opacity 0%) a glass ground is held to today's floors
+     * (the only safe ones on an unbounded mean ground), and the palette differs from the one the
+     * floors-on build solves for the same ground.
      */
     @Test
     public void withTheSwitchOffTheGlassFloorsDoNotApply() {

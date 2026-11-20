@@ -4426,20 +4426,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, TERMUX_APP.DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED);
     }
 
-    public boolean isGlassEvenOutEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_GLASS_EVEN_OUT_ENABLED, TERMUX_APP.DEFAULT_VALUE_GLASS_EVEN_OUT_ENABLED);
-    }
-
     public boolean isMotionLogEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_MOTION_LOG_ENABLED, TERMUX_APP.DEFAULT_VALUE_MOTION_LOG_ENABLED);
     }
 
     public void setMotionLogEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_MOTION_LOG_ENABLED, value, false);
-    }
-
-    public void setGlassEvenOutEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_GLASS_EVEN_OUT_ENABLED, value, false);
     }
 
     public void setTerminalDynamicColorsEnabled(boolean value) {
@@ -4457,6 +4449,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         TerminalContrastLevel level = TerminalContrastLevel.from(value == null ? "" : value);
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL,
             level.value, false);
+    }
+
+    public boolean isAdaptiveLegibility() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_ADAPTIVE_LEGIBILITY,
+            TERMUX_APP.DEFAULT_VALUE_ADAPTIVE_LEGIBILITY);
+    }
+
+    public void setAdaptiveLegibility(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_ADAPTIVE_LEGIBILITY, value, false);
     }
 
     /** The shipped theme templates the user has turned on, by template id. */

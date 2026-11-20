@@ -95,7 +95,8 @@ public class EditorCardSectionsTest {
                 Row.VIBRANCY, Row.RIM),
             "SECTION_SHAPE", Arrays.asList(Row.STYLE, Row.CORNERS, Row.MARGIN,
                 Row.HOME_ICON_SIZE),
-            "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.WALLPAPER_COLOURS,
+            "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
+                Row.WALLPAPER_COLOURS,
                 Row.TINT_HUE, Row.TOOL_COLOURS),
             "SECTION_SCREEN", Arrays.asList(Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN,
                 Row.PAGE_TRANSITION)));
@@ -143,7 +144,8 @@ public class EditorCardSectionsTest {
     @Test
     public void terminal() {
         check(EditorCard.TERMINAL, expect(
-            "SECTION_TEXT", Arrays.asList(Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT),
+            "SECTION_TEXT", Arrays.asList(Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
+                Row.LINK_FONT),
             "SECTION_BACKGROUND", Arrays.asList(Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
                 Row.WALLPAPER_DIM),
             "SECTION_PANES", Arrays.asList(Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,

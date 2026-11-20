@@ -1,6 +1,7 @@
 package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -79,6 +80,26 @@ public class ContrastRowLiveTest {
         global.done();
         terminal = open(EditorCard.TERMINAL);
         assertEquals(2, model(terminal).value(Row.CONTRAST));
+    }
+
+    @Test
+    public void adaptiveLegibilityIsOneSettingOnBothCardsAndDiscardPutsItBack() {
+        SurfaceEditorController global = open(EditorCard.APPEARANCE);
+        int before = paletteRefreshes;
+        model(global).onValue(Row.ADAPTIVE_LEGIBILITY, 1, false);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertTrue(preferences.isAdaptiveLegibility());
+        assertTrue("the palette is rebuilt with the change", paletteRefreshes > before);
+        assertTrue("the session is dirty",
+            (Boolean) ReflectionHelpers.callInstanceMethod(global, "isDirty"));
+        ReflectionHelpers.callInstanceMethod(global, "revertToEntry");
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertFalse("Discard puts it back", preferences.isAdaptiveLegibility());
+
+        model(global).onValue(Row.ADAPTIVE_LEGIBILITY, 1, false);
+        global.done();
+        SurfaceEditorController terminal = open(EditorCard.TERMINAL);
+        assertEquals(1, model(terminal).value(Row.ADAPTIVE_LEGIBILITY));
     }
 
     private SurfaceEditorController open(EditorCard card) {

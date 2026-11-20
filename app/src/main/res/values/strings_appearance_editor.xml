@@ -96,6 +96,8 @@
     <string name="appearance_row_keyboard_float_height">Floating height</string>
     <string name="appearance_row_keyboard_split_gap">Split gap</string>
     <string name="appearance_row_contrast">Contrast</string>
+    <string name="appearance_row_adaptive_legibility">Adaptive legibility</string>
+    <string name="appearance_row_adaptive_legibility_note">Each item adjusts its glass and text to the wallpaper behind it.</string>
     <string name="appearance_row_cursor_trail">Cursor trail</string>
     <string name="appearance_row_effect">Effect</string>
     <string name="appearance_row_split_gap">Inner gap</string>

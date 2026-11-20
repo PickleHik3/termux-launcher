@@ -3030,6 +3030,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
                         / (float) Control.TEXT_SIZE.step) * Control.TEXT_SIZE.step);
                 case CONTRAST: return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
+                case ADAPTIVE_LEGIBILITY: return prefs.isAdaptiveLegibility() ? 1 : 0;
                 case SPLIT_GAP: return Control.SPLIT_GAP.clamp(prefs.getTerminalPaneGap());
                 case LABEL_SIZE:
                     return indexOf(LABEL_SIZES, AppearanceSettingsStore.getString(context,
@@ -3293,6 +3294,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return getString(clockStyleLabel(prefs.getTopPaneClockStyle()));
                 case GLASS_WIDGETS:
                     return getString(R.string.appearance_glass_widgets_note);
+                case ADAPTIVE_LEGIBILITY:
+                    return getString(R.string.appearance_row_adaptive_legibility_note);
                 case VISIBLE:
                     return null;
                 default:
@@ -3770,6 +3773,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case DEPTH: writeGlassDepth(value); break;
             case TEXT_SIZE: writeTextSize(value); break;
             case CONTRAST: writeLegibility(value); break;
+            case ADAPTIVE_LEGIBILITY: writeAdaptiveLegibility(value != 0); break;
             case SPLIT_GAP: writeSplitGap(value); break;
             case LABEL_SIZE:
                 writeHomeString(HomeSettings.KEY_LABEL_SIZE, LABEL_SIZES[clamp(value, 0, 2)]);
@@ -4593,6 +4597,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (level.equals(prefs.getTerminalContrastLevel().value))
             return;
         prefs.setTerminalContrastLevel(level);
+        mHost.refreshTerminalPalette();
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
+        syncDirty();
+    }
+
+    /** Adaptive legibility, applied and previewed like Contrast. */
+    private void writeAdaptiveLegibility(boolean on) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        if (on == prefs.isAdaptiveLegibility())
+            return;
+        prefs.setAdaptiveLegibility(on);
         mHost.refreshTerminalPalette();
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
         syncDirty();

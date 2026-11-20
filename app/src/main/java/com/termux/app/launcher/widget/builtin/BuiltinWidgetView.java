@@ -877,6 +877,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
         int fill = lift;
         boolean rim = false;
         int ground = style.card;
+        if (slab != null && (ink == null || !glassWorn)) slab.setEvenOut(null);
         if (ink != null && getWidth() > 0 && getHeight() > 0) {
             com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, inkLocation,
                 inkRootLocation);
@@ -889,6 +890,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
             com.termux.app.chrome.OnGlass.Resolution answer = ink.widgetInk(inkRect, body,
                 style.card, style.onSurfaceVariant, style.primary);
             ground = answer.surface;
+            if (slab != null) slab.setEvenOut(glassWorn ? ink.widgetEvenOut(inkRect) : null);
             if (glassWorn) fill = com.termux.app.chrome.OnGlass.stackAlpha(lift, answer.veil);
             else rim = BuiltinWidgetGlass.edgeRimWanted(style.card, ink.widgetWallpaper(inkRect));
         }

@@ -98,6 +98,14 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
         return legibility;
     }
 
+    /** Adaptive legibility as the preferences would answer it; on, so tests measure each rect. */
+    boolean adaptive = true;
+
+    @Override
+    public boolean adaptiveLegibility() {
+        return adaptive;
+    }
+
     @Override
     public int orientation() {
         return orientation;

@@ -101,7 +101,8 @@ public class EditorRowsTest {
 
     @Test
     public void theTerminalCardHoldsTextItsBackgroundPanesEffectsAndLayout() {
-        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT),
+        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST,
+            Row.ADAPTIVE_LEGIBILITY, Row.LINK_FONT),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY,
             Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
@@ -162,7 +163,7 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.GRAIN, Row.GLASS_EDGE, Row.DEPTH,
             Row.VIBRANCY, Row.RIM, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
             Row.HOME_ICON_SIZE, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
-            Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_SCREEN,
+            Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_SCREEN,
             Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN, Row.PAGE_TRANSITION),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);

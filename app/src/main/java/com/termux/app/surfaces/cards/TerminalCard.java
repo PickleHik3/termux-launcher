@@ -49,7 +49,8 @@ public final class TerminalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT)
+            .tier(1, Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
+                Row.LINK_FONT)
             // The Terminal's Background (ADR 0031 §4): never Global's, no preset, no reset arrow.
             .tier(3, Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
                 Row.WALLPAPER_DIM)

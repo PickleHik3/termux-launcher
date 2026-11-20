@@ -2062,15 +2062,6 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED = true;
 
-        /**
-         * Whether a glass terminal pane's wallpaper lightness is evened out (ADR 0014, wave 2).
-         * Off restores the mean-ground drawing for before/after shots; removed one release after
-         * wave 2 ships.
-         */
-        public static final String KEY_GLASS_EVEN_OUT_ENABLED = "glass_even_out_enabled";
-
-        public static final boolean DEFAULT_VALUE_GLASS_EVEN_OUT_ENABLED = true;
-
         /** Whether motion events are logged (tag TermuxMotion and the in-memory ring buffer). */
         public static final String KEY_MOTION_LOG_ENABLED = "motion_log_enabled";
 
@@ -2088,6 +2079,11 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_CONTRAST_LEVEL = "terminal_contrast_level";
 
         public static final String DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL = "default";
+
+        /** Whether each glass item measures the wallpaper behind itself instead of the one measurement of the whole picture (#297). */
+        public static final String KEY_ADAPTIVE_LEGIBILITY = "adaptive_legibility";
+
+        public static final boolean DEFAULT_VALUE_ADAPTIVE_LEGIBILITY = false;
 
         /**
          * Defines the key for which shipped theme templates the user has turned on, as a set of

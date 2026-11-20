@@ -232,7 +232,6 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
             if (app == null || key == null) return;
             switch (key) {
                 case "terminal_view_key_logging_enabled": app.setTerminalViewKeyLoggingEnabled(value); break;
-                case "glass_even_out_enabled": app.setGlassEvenOutEnabled(value); break;
                 case "motion_log_enabled":
                     app.setMotionLogEnabled(value);
                     com.termux.app.chrome.MotionLog.setEnabled(value);
@@ -247,7 +246,6 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
             if (app == null || key == null) return fallback;
             switch (key) {
                 case "terminal_view_key_logging_enabled": return app.isTerminalViewKeyLoggingEnabled();
-                case "glass_even_out_enabled": return app.isGlassEvenOutEnabled();
                 case "motion_log_enabled": return app.isMotionLogEnabled();
                 case "plugin_error_notifications_enabled": return app.arePluginErrorNotificationsEnabled(false);
                 case "crash_report_notifications_enabled": return app.areCrashReportNotificationsEnabled(false);

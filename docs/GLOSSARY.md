@@ -581,6 +581,15 @@ _ADR 0031 (accepted, not yet built): goes, with the Applies to row that replaced
 
 ### Look and motion
 
+**Adaptive legibility**:
+The switch beside Contrast on the Global and Terminal cards (one stored value, off by default).
+Off, the wallpaper's lightness range and ink are measured once from the whole still picture and
+every glass item (panes, Home floats, widgets, dock, keyboard, status bar, strip) takes its
+correction and ink tone from that one measurement, so moving an item changes nothing about it.
+On, each item measures the wallpaper behind itself (ADR 0014, amendment of 2026-11-20;
+`LegibilityScope`).
+_Avoid_: even-out (in user-facing text), per-item contrast
+
 **Backdrop layers**:
 A Live glass surface's backdrop, at rest and while the pages move alike, as a short stack of
 pictures that each refresh on their own trigger: the **ground** (the stored pre-blurred wallpaper

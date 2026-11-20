@@ -93,6 +93,7 @@ final class AppearanceSnapshot {
         TERMUX_APP.KEY_TERMINAL_BG_BLUR, TERMUX_APP.KEY_TERMINAL_WALLPAPER_DIM};
     private final boolean mSoft;
     private final String mContrast;
+    private final boolean mAdaptiveLegibility;
     private final String mTrailStyle;
     private final boolean mTrailEnabled;
     private final String mRetroEffect;
@@ -181,6 +182,7 @@ final class AppearanceSnapshot {
             mTerminalBackground[i] = rawInt(prefs, TERMINAL_BACKGROUND_KEYS[i]);
         mSoft = SoftWallpaper.isOn(prefs);
         mContrast = prefs.getTerminalContrastLevel().value;
+        mAdaptiveLegibility = prefs.isAdaptiveLegibility();
         mTrailStyle = prefs.getTerminalCursorTrailStyle();
         mTrailEnabled = prefs.isTerminalCursorTrailEnabled();
         mRetroEffect = prefs.getTerminalRetroEffect();
@@ -291,6 +293,7 @@ final class AppearanceSnapshot {
             restoreInt(prefs, TERMINAL_BACKGROUND_KEYS[i], mTerminalBackground[i]);
         SoftWallpaper.set(prefs, mSoft);
         prefs.setTerminalContrastLevel(mContrast);
+        prefs.setAdaptiveLegibility(mAdaptiveLegibility);
         prefs.setTerminalCursorTrailStyle(mTrailStyle);
         prefs.setTerminalCursorTrailEnabled(mTrailEnabled);
         prefs.setTerminalRetroEffect(mRetroEffect);
@@ -336,7 +339,7 @@ final class AppearanceSnapshot {
             .append('|').append(mKeyRadiusRaw).append('|').append(mKeySpacingRaw)
             .append('|').append(mDockButtonCount).append('|').append(mDim).append('|').append(mSoft)
             .append('|').append(java.util.Arrays.toString(mTerminalBackground))
-            .append('|').append(mContrast).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)
+            .append('|').append(mContrast).append('|').append(mAdaptiveLegibility).append('|').append(mTrailStyle).append('|').append(mTrailEnabled)
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mFontSize).append('|').append(mScreenEvents)
             .append('|').append(mRetroComposite).append('|').append(mKeyboardFloatingWidth)

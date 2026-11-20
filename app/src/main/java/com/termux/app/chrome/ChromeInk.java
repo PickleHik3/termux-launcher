@@ -271,8 +271,20 @@ public final class ChromeInk {
         return (int) Math.round(k * 100d);
     }
 
-    /** Null while the Debugging switch is off or nobody owns a palette: today's mean ground. */
+    /** Null while nobody owns a palette or the terminal Opacity is 0%: today's mean ground. */
     @Nullable private EvenOutPolicy mEvenOutPolicy;
+
+    /**
+     * The stage the palette's owner keeps even while the panes draw none (terminal Opacity 0):
+     * what a surface with an Opacity of its own (the widget glass) evens out at. Null falls back
+     * to {@link #mEvenOutPolicy}.
+     */
+    @Nullable private EvenOutPolicy mEvenOutStage;
+
+    /** Sets {@link #mEvenOutStage}; the widgets re-derive on their next dress pass. */
+    public void setEvenOutStage(@Nullable EvenOutPolicy stage) {
+        mEvenOutStage = stage;
+    }
 
     /**
      * Turns the even-out stage on for terminal panes (a policy) or off (null). Off is today's
@@ -588,6 +600,18 @@ public final class ChromeInk {
     private boolean mModeRead;
 
     @NonNull private final Rect mTmpSampleRect = new Rect();
+    @NonNull private final Rect mTmpLightnessRegion = new Rect();
+
+    /** Adaptive legibility as {@link #readMode} last read it: each item measures its own rect. */
+    private boolean mAdaptive;
+    @Nullable private Rect mWholePictureOverride;
+
+    /** Stands in for the resident frame's rect as the whole picture; tests only. */
+    @VisibleForTesting
+    void setWholePictureForTest(@Nullable Rect whole) {
+        mWholePictureOverride = whole == null ? null : new Rect(whole);
+        mCache.forgetWholePicture();
+    }
     @NonNull private final int[] mTmpLocation = new int[2];
     @NonNull private final int[] mTmpRootLocation = new int[2];
     @NonNull private final int[] mTmpRootScratch = new int[2];
@@ -599,6 +623,16 @@ public final class ChromeInk {
         mBlurCache = blurCache;
         mOnVeilChanged = onVeilChanged;
         mCache.setFreeze(this::measuringStopped);
+        mCache.setScope(new GlassBackdropCache.Scope() {
+            @Override public boolean adaptive() {
+                return mAdaptive;
+            }
+
+            @NonNull @Override public Rect wholePicture() {
+                return mWholePictureOverride != null ? mWholePictureOverride
+                    : mBlurCache.frameRectRef();
+            }
+        });
         mCache.setSampler(new GlassBackdropCache.Sampler() {
             @Override public int sampleWallpaper(@NonNull Rect screenRect) {
                 return ChromeInk.this.sampleWallpaper(screenRect, DEFAULT_FRAME);
@@ -782,7 +816,9 @@ public final class ChromeInk {
      * <p>Memoised on the pane's rect, one entry per pane, so a split window's panes do not take
      * turns re-sampling each other's wallpaper; any input moving, the rect moving, or
      * {@link #invalidate} re-derives it. A pane asked about before the wallpaper is readable is
-     * answered on the mode's nominal glass and asks again next time, like every band.</p>
+     * answered on the mode's nominal glass and asks again next time, like every band. What it
+     * reads is the measured rect: the whole picture, or the pane's own rect while Adaptive
+     * legibility is on.</p>
      *
      * @param rootRect the pane's laid-out rect, in the root container's untransformed space
      * @param tint the pane's tint as drawn, alpha included (the user's terminal opacity); may be
@@ -1052,6 +1088,12 @@ public final class ChromeInk {
         int graphicInk;
         double textTarget;
         double graphicTarget;
+        /** The even-out stage the card was solved on, null for none; part of the answer's identity. */
+        @Nullable EvenOutPolicy stage;
+        int strength;
+        @Nullable Polarity current;
+        /** The correction the card's glass is drawn through, null for none. */
+        @Nullable android.graphics.ColorMatrix evenOut;
         @Nullable OnGlass.Resolution resolution;
     }
 
@@ -1061,7 +1103,8 @@ public final class ChromeInk {
 
     /**
      * One Home widget's answer ({@link GlassBackdropCache.Band#WIDGET}): the veil its card lays
-     * over its body so the card's inks read on what is behind this widget, at 4.5:1 for body and
+     * over its body so the card's inks read on the wallpaper measured for it (the whole picture, or the rect behind
+     * this widget while Adaptive legibility is on), at 4.5:1 for body and
      * label and 3:1 for hero numerals and graphics, both scaled by the legibility level
      * ({@link OnGlass#resolveWidget}).
      *
@@ -1084,24 +1127,61 @@ public final class ChromeInk {
     public OnGlass.Resolution widget(@NonNull Rect rootRect, @ColorInt int body,
                                      @ColorInt int veilColor, @ColorInt int textInk,
                                      @ColorInt int graphicInk) {
+        return widget(rootRect, body, veilColor, textInk, graphicInk, 0);
+    }
+
+    /**
+     * {@link #widget(Rect, int, int, int, int)} for a card whose glass has an Opacity of its own:
+     * with the terminal's even-out stage on and a strength above 0 at that Opacity
+     * ({@link #evenOutStrengthPercent}), the glass is drawn through the same legibility
+     * correction a terminal pane has (ceilings solved at the body-text target, the page's
+     * polarity as the side to keep), the veil is solved on the corrected wallpaper, and the matrix
+     * is kept in the answer for {@link #widgetEvenOutMatrix}. The shorter form is 0: no
+     * correction, the answer of a caller that does not draw one.
+     */
+    @NonNull
+    public OnGlass.Resolution widget(@NonNull Rect rootRect, @ColorInt int body,
+                                     @ColorInt int veilColor, @ColorInt int textInk,
+                                     @ColorInt int graphicInk, int ownOpacityPercent) {
         readMode();
         int dim = dimUnder(rootRect);
         double textTarget = mLevel.target(OnGlass.TARGET_BODY_TEXT);
         double graphicTarget = mLevel.target(OnGlass.TARGET_LARGE_TEXT);
         WidgetAnswer answer = widgetSample(rootRect);
-        if (answer.answered && answer.resolution != null && answer.dim == dim
+        // The stage as the palette's owner keeps it, so a terminal at Opacity 0 (whose panes draw
+        // none) leaves the widgets on their own Opacity, as it leaves a band with its own.
+        EvenOutPolicy terminal = mEvenOutStage != null ? mEvenOutStage : mEvenOutPolicy;
+        int strength = terminal == null ? 0 : evenOutStrengthPercent(ownOpacityPercent);
+        Polarity current = strength > 0 ? polarity() : null;
+        boolean samePolicy = strength == answer.strength && current == answer.current
+            && (strength == 0 || terminal.sameStage(answer.stage));
+        if (answer.answered && answer.resolution != null && answer.dim == dim && samePolicy
                 && answer.body == body && answer.veilColor == veilColor
                 && answer.textInk == textInk && answer.graphicInk == graphicInk
                 && Double.compare(answer.textTarget, textTarget) == 0
                 && Double.compare(answer.graphicTarget, graphicTarget) == 0) {
             return answer.resolution;
         }
-        int under = OnGlass.backdrop(answer.wallpaper, dim, Color.TRANSPARENT);
+        android.graphics.ColorMatrix matrix = null;
+        if (strength > 0) {
+            double target = LegibilityLevel.of(terminal.level).target(OnGlass.TARGET_BODY_TEXT);
+            matrix = mapEvenOut(null, new EvenOutPolicy(terminal.level,
+                EvenOut.ceilingForTarget(target, Polarity.PALE_INK),
+                EvenOut.ceilingForTarget(target, Polarity.DARK_INK), current, strength),
+                rootRect, dim, body, false);
+        }
+        int wallpaper = matrix == null || Color.alpha(answer.wallpaper) == 0 ? answer.wallpaper
+            : EvenOutMatrix.applyTo(matrix, answer.wallpaper);
+        int under = OnGlass.backdrop(wallpaper, dim, Color.TRANSPARENT);
         OnGlass.Resolution resolution = OnGlass.resolveWidget(under, body, textInk, textTarget,
             graphicInk, graphicTarget, veilColor);
         // Answered for good only once the wallpaper was really read; a nominal answer asks again.
         answer.answered = answer.sampled;
         answer.resolution = resolution;
+        answer.stage = strength > 0 ? terminal : null;
+        answer.strength = strength;
+        answer.current = current;
+        answer.evenOut = matrix;
         answer.dim = dim;
         answer.body = body;
         answer.veilColor = veilColor;
@@ -1113,7 +1193,19 @@ public final class ChromeInk {
     }
 
     /**
-     * What a Home widget at {@code rootRect} stands on before its own card: the wallpaper under
+     * The legibility correction the widget at {@code rootRect} was last answered with
+     * ({@link #widget(Rect, int, int, int, int, int)}), measuring nothing; null while it has none.
+     * A slab draws its frame through it; the veil was solved on the same corrected wallpaper.
+     */
+    @Nullable
+    public android.graphics.ColorMatrix widgetEvenOutMatrix(@NonNull Rect rootRect) {
+        WidgetAnswer answer = mWidgets.get(rootRect);
+        return answer == null ? null : answer.evenOut;
+    }
+
+    /**
+     * What a Home widget at {@code rootRect} stands on before its own card: the measured
+     * wallpaper (the whole picture unless Adaptive legibility is on, then the rect's own) under
      * Home's ground, opaque. Shares the widget's one sample with {@link #widget}; the card's rim
      * is decided against it ({@link OnGlass#cardShowsEdge}) and a Bare widget's ink on it.
      * Home's ground, never the ground under the rect now: the rect is where the widget is laid
@@ -1132,7 +1224,8 @@ public final class ChromeInk {
      * the one sampler; {@link Color#TRANSPARENT} while nothing can be read there. For text drawn
      * straight on the wallpaper (editor-redesign §8: Home's labels, the page dots, the empty
      * page's hint), which keeps its own answer against {@link #wallpaperGeneration} rather than
-     * crowding the widgets' memo.
+     * crowding the widgets' memo. Read through the legibility scope ({@link LegibilityScope}):
+     * the one cached whole-picture measurement unless Adaptive legibility is on, then the rect's own.
      */
     @ColorInt
     public int wallpaperSample(@NonNull Rect rootRect) {
@@ -1162,6 +1255,7 @@ public final class ChromeInk {
     /** The shared frames went: everything measured from them is stale. */
     public void framesCleared() {
         mFramesGeneration++;
+        mCache.forgetWholePicture();
         invalidate();
     }
 
@@ -2924,10 +3018,20 @@ public final class ChromeInk {
         int dim = mSurfaces.wallpaperDimColor();
         int hint = mSurfaces.wallpaperHintColor();
         LegibilityLevel level = mSurfaces.legibilityLevel();
+        boolean adaptive = mSurfaces.adaptiveLegibility();
         if (mModeRead && base == mBaseColor && accent == mAccentColor && dim == mDimColor
-                && hint == mHintColor && level == mLevel) {
+                && hint == mHintColor && level == mLevel && adaptive == mAdaptive) {
             return;
         }
+        boolean scopeMoved = mModeRead && adaptive != mAdaptive;
+        boolean otherMoved = !mModeRead || base != mBaseColor || accent != mAccentColor
+            || dim != mDimColor || hint != mHintColor || level != mLevel;
+        // The picture's statistic is of the raw wallpaper: only the scheme (the frames may bake
+        // its tint) re-measures it. The dim and the level are applied after it, and the dim may
+        // move on a page change, which must cost no new read.
+        boolean schemeMoved = !mModeRead || base != mBaseColor || accent != mAccentColor
+            || hint != mHintColor;
+        mAdaptive = adaptive;
         mBaseColor = base;
         mAccentColor = accent;
         mDimColor = dim;
@@ -2939,7 +3043,15 @@ public final class ChromeInk {
         // this round: no flash, and no crash. Without the description, bare text over a light
         // wallpaper kept the dark theme's pale ink (editor-redesign §8).
         mCache.setFallbackWallpaper(WallpaperInk.fallbackWallpaper(base, hint));
-        invalidate(false);
+        if (schemeMoved) mCache.forgetWholePicture();
+        invalidate(!otherMoved);
+        if (scopeMoved) {
+            // The wallpaper every correction reads from changed (a rect or the whole picture):
+            // the panes' and surfaces' answers are stale, and the palette is rebuilt from them.
+            mEvenOutGeneration++;
+            if (mOnPaneGroundChanged != null) mOnPaneGroundChanged.run();
+            if (mOnVeilChanged != null) mOnVeilChanged.run();
+        }
     }
 
     @NonNull
@@ -3041,16 +3153,12 @@ public final class ChromeInk {
             if (frame == null || frame.isRecycled()) return GlassBackdropCache.UNREADABLE;
             Rect frameRect = mBlurCache.frameRectRef();
             if (frameRect.isEmpty()) return GlassBackdropCache.UNREADABLE;
-            float scaleX = frame.getWidth() / (float) frameRect.width();
-            float scaleY = frame.getHeight() / (float) frameRect.height();
-            mTmpSampleRect.set(
-                Math.round((screenRect.left - frameRect.left) * scaleX),
-                Math.round((screenRect.top - frameRect.top) * scaleY),
-                Math.round((screenRect.right - frameRect.left) * scaleX),
-                Math.round((screenRect.bottom - frameRect.top) * scaleY));
+            LegibilityScope.frameRegion(screenRect, frameRect, frame.getWidth(), frame.getHeight(),
+                mTmpSampleRect);
+            int grid = LegibilityScope.gridFor(screenRect, frameRect);
             int raw = readableInSoftware(frame.getConfig())
-                ? GlassBackdropCache.sampleBitmapRegion(frame, mTmpSampleRect)
-                : sampleThroughSoftwareCopy(frame, mTmpSampleRect);
+                ? GlassBackdropCache.sampleBitmapRegion(frame, mTmpSampleRect, grid)
+                : sampleThroughSoftwareCopy(frame, mTmpSampleRect, grid);
             if (Color.alpha(raw) == 0) return GlassBackdropCache.UNREADABLE;
             return frostColor(raw);
         } catch (Throwable ignored) {
@@ -3073,23 +3181,20 @@ public final class ChromeInk {
             if (frame == null || frame.isRecycled()) return null;
             Rect frameRect = mBlurCache.frameRectRef();
             if (frameRect.isEmpty()) return null;
-            float scaleX = frame.getWidth() / (float) frameRect.width();
-            float scaleY = frame.getHeight() / (float) frameRect.height();
-            Rect region = new Rect(
-                Math.round((screenRect.left - frameRect.left) * scaleX),
-                Math.round((screenRect.top - frameRect.top) * scaleY),
-                Math.round((screenRect.right - frameRect.left) * scaleX),
-                Math.round((screenRect.bottom - frameRect.top) * scaleY));
+            Rect region = mTmpLightnessRegion;
+            LegibilityScope.frameRegion(screenRect, frameRect, frame.getWidth(), frame.getHeight(),
+                region);
+            int grid = LegibilityScope.gridFor(screenRect, frameRect);
             if (readableInSoftware(frame.getConfig())) {
-                return GlassBackdropCache.sampleBitmapLightness(frame, region);
+                return GlassBackdropCache.sampleBitmapLightness(frame, region, grid);
             }
             int left = Math.max(0, region.left);
             int top = Math.max(0, region.top);
             int right = Math.min(frame.getWidth(), region.right);
             int bottom = Math.min(frame.getHeight(), region.bottom);
             if (right <= left || bottom <= top) return null;
-            int width = Math.min(GlassBackdropCache.SAMPLE_GRID, right - left);
-            int height = Math.min(GlassBackdropCache.SAMPLE_GRID, bottom - top);
+            int width = Math.min(grid, right - left);
+            int height = Math.min(grid, bottom - top);
             Bitmap scratch = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             try {
                 android.graphics.Canvas canvas = new android.graphics.Canvas(scratch);
@@ -3097,7 +3202,7 @@ public final class ChromeInk {
                     new Rect(0, 0, width, height),
                     new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
                 return GlassBackdropCache.sampleBitmapLightness(scratch,
-                    new Rect(0, 0, width, height));
+                    new Rect(0, 0, width, height), grid);
             } finally {
                 scratch.recycle();
             }
@@ -3148,14 +3253,15 @@ public final class ChromeInk {
      * scaled, into a small software bitmap and averaged from there.
      */
     @ColorInt
-    private static int sampleThroughSoftwareCopy(@NonNull Bitmap source, @NonNull Rect region) {
+    private static int sampleThroughSoftwareCopy(@NonNull Bitmap source, @NonNull Rect region,
+                                                 int grid) {
         int left = Math.max(0, region.left);
         int top = Math.max(0, region.top);
         int right = Math.min(source.getWidth(), region.right);
         int bottom = Math.min(source.getHeight(), region.bottom);
         if (right <= left || bottom <= top) return GlassBackdropCache.UNREADABLE;
-        int width = Math.min(GlassBackdropCache.SAMPLE_GRID, right - left);
-        int height = Math.min(GlassBackdropCache.SAMPLE_GRID, bottom - top);
+        int width = Math.min(grid, right - left);
+        int height = Math.min(grid, bottom - top);
         Bitmap scratch = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         try {
             android.graphics.Canvas canvas = new android.graphics.Canvas(scratch);
