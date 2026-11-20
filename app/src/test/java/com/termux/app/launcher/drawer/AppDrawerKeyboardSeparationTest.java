@@ -487,6 +487,23 @@ public class AppDrawerKeyboardSeparationTest {
         assertEquals(1f, (float) ReflectionHelpers.getField(spring, "target"), 0f);
     }
 
+    @Test public void floatingKeyboardUpAtThePullIsNotSentAwayByAListDrag() {
+        floating();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(content, "mSearchRevealRequested", true);
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(controller, "mKeyboardUpAtPull", true);
+        reveal(1f);
+
+        controller.onListDragHidesKeyboard();
+
+        Object spring = ReflectionHelpers.getField(controller, "mReveal");
+        assertEquals(1f, (float) ReflectionHelpers.getField(spring, "target"), 0f);
+        assertFalse((boolean) ReflectionHelpers.getField(content, "mKeyboardDismissedByScroll"));
+    }
+
     /**
      * Palette, "App drawer", Docked with the Terminal's keyboard up (pong, 2026-11-20): the plane
      * rose from the bottom over the extra keys and the top rows while the reveal caught up, and the
@@ -536,12 +553,21 @@ public class AppDrawerKeyboardSeparationTest {
     @Test public void keyboardStaysUpPolicy() {
         // Docked, built-in keyboard up at the pull: it stays.
         assertTrue(AppDrawerKeyboardSeparation.keyboardStaysUp(false, false, false, true));
-        // Raised by the drawer's own search (down at the pull), Floating, a system keyboard or a
-        // text-field search: the reveal keeps it.
+        // Floating, up at the pull: it stays too; the panel rests above it.
+        assertTrue(AppDrawerKeyboardSeparation.keyboardStaysUp(true, false, false, true));
+        // Raised by the drawer's own search (down at the pull), either style, a system keyboard or
+        // a text-field search: the reveal keeps it.
         assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(false, false, false, false));
-        assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(true, false, false, true));
+        assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(true, false, false, false));
+        assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(true, true, false, true));
         assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(false, true, false, true));
         assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(false, false, true, true));
+        assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(true, false, true, true));
+
+        // Floating's panel above a keyboard that stays: one gap above its top, never below the
+        // panel's own bottom, so the close's shrinking panel is not pulled down over the keys.
+        assertEquals(700f, AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(900f, 724f, 24f), 0f);
+        assertEquals(400f, AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(400f, 724f, 24f), 0f);
 
         assertEquals(1f, AppDrawerKeyboardSeparation.revealTarget(true, false, true, 0f), 0f);
         assertEquals(1f, AppDrawerKeyboardSeparation.revealTarget(true, true, true, 0f), 0f);
