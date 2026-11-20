@@ -1338,8 +1338,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @NonNull
     private EditorRows.Offers offers() {
+        // The edited place's own arrangement: the Dock card's dock rows need an apps row on it.
+        LayoutEditorController layout = mHost.layoutEditor();
+        PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+        boolean appsRow = arranged == null
+            || com.termux.app.place.PlaceChromePolicy.appsRowShown(arranged);
         return new EditorRows.Offers(mHost.isGlassRefractionActive(), PaneRetroEffect.available(),
-            useAs().showsHomePage(), mHost.isPageOverviewOpen(), refractionOff().userCanChange());
+            useAs().showsHomePage(), mHost.isPageOverviewOpen(), refractionOff().userCanChange(),
+            appsRow);
     }
 
     /**
