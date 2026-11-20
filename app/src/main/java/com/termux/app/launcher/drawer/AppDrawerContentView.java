@@ -773,7 +773,9 @@ public final class AppDrawerContentView extends FrameLayout
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
-            stopPresentationMotion();
+            // The drawer is closing, not torn down: what it shows stays until it is gone
+            // (resetDrawerFx), or Back blanks the card to "Nothing here yet" for the whole close.
+            stopPresentationMotion(true);
             stopOverpullSpring();
             mPolicy.disarm();
             // A scrub left in flight is a finger's worth of state on a surface that has stopped
@@ -923,6 +925,11 @@ public final class AppDrawerContentView extends FrameLayout
      * gate. The vertical grid has no motion of its own here.
      */
     private void stopPresentationMotion() {
+        stopPresentationMotion(false);
+    }
+
+    /** @param keepContent a closing drawer: the categories keep their tiles until it is gone */
+    private void stopPresentationMotion(boolean keepContent) {
         switch (mViewType) {
             case HORIZONTAL:
                 cancelNestedClose();
@@ -930,7 +937,8 @@ public final class AppDrawerContentView extends FrameLayout
                 break;
             case CATEGORIES:
                 cancelNestedClose();
-                mCategoryView.reset();
+                if (keepContent) mCategoryView.stopForClose();
+                else mCategoryView.reset();
                 break;
             case VERTICAL:
                 break;
