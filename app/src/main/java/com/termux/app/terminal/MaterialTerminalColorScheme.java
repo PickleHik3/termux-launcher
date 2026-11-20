@@ -243,7 +243,7 @@ public final class MaterialTerminalColorScheme {
         ChromeInk.Polarity natural = naturalPolarity(seeds.surface);
         boolean glass = Color.alpha(ground) != 0;
         // The glass floors belong to the even-out stage: only over a bounded band are they safe.
-        // With the Debugging switch off the ground is the unbounded mean and today's floors hold.
+        // With the glass floors off (terminal Opacity 0%) the ground is the unbounded mean and today's floors hold.
         boolean glassFloors = glass && sGlassFloors;
         ChromeInk.Polarity ink = !glass ? natural
             : decided && current != null ? current
@@ -320,7 +320,7 @@ public final class MaterialTerminalColorScheme {
         return holdingPale ? ChromeInk.Polarity.DARK_INK : ChromeInk.Polarity.PALE_INK;
     }
 
-    /** Whether glass grounds use the glass floors; the Debugging switch, set by the host. */
+    /** Whether glass grounds use the glass floors; on while the terminal Opacity evens the panes out, set by the host. */
     private static volatile boolean sGlassFloors = true;
 
     /**
@@ -1189,7 +1189,7 @@ public final class MaterialTerminalColorScheme {
         for (int attr : PALETTE_ATTRS) {
             result = 31 * result + MaterialColors.getColor(context, attr, 0);
         }
-        // The glass floors follow the Debugging switch, so flipping it must rebuild the palette.
+        // The glass floors follow the terminal Opacity, so crossing 0% must rebuild the palette.
         return 31 * (31 * result + level.ordinal()) + (sGlassFloors ? 1 : 0);
     }
 

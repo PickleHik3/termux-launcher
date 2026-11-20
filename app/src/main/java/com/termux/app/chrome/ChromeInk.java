@@ -271,7 +271,7 @@ public final class ChromeInk {
         return (int) Math.round(k * 100d);
     }
 
-    /** Null while the Debugging switch is off or nobody owns a palette: today's mean ground. */
+    /** Null while nobody owns a palette or the terminal Opacity is 0%: today's mean ground. */
     @Nullable private EvenOutPolicy mEvenOutPolicy;
 
     /**

@@ -1285,8 +1285,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // that ink, and judging the ink again there flips it (see decidedInk).
                 com.termux.app.chrome.ChromeInk.Polarity band = mHost.terminalBandPolarity();
                 com.termux.app.chrome.ChromeInk.Polarity leaning = decidedInk(band, ground);
-                // The glass floors follow the Debugging switch, read before the build.
-                MaterialTerminalColorScheme.setGlassFloors(mHost.preferences().isGlassEvenOutEnabled());
+                // The glass floors are on while the panes are evened out, set before the build.
+                MaterialTerminalColorScheme.setGlassFloors(true);
                 props = MaterialTerminalColorScheme.create(mContext, level, ground, leaning,
                     band != null);
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);

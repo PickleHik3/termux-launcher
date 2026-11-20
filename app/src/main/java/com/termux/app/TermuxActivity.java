@@ -4503,18 +4503,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public int paneGlassGeneration() {
                 if (mChrome == null) return 0;
-                // The switch and the level are what moves the policy while no pane is re-dressed
-                // (the Debugging toggle); a theme change re-dresses the panes itself. Two cached
-                // preference reads, and the policy is rebuilt only when one of them moved.
-                boolean enabled = mPreferences != null && mPreferences.isGlassEvenOutEnabled();
+                // The level and the Opacity are what move the policy while no pane is re-dressed;
+                // a theme change re-dresses the panes itself. Two cached preference reads, and the
+                // policy is rebuilt only when one of them moved.
                 com.termux.shared.termux.settings.preferences.TerminalContrastLevel level =
                     mPreferences != null
                         ? com.termux.app.chrome.LegibilityLevel.terminalContrast(mPreferences) : null;
                 int strength = evenOutStrengthNow();
-                if (enabled != mEvenOutSwitchSeen || level != mEvenOutLevelSeen
+                if (level != mEvenOutLevelSeen
                         || strength != mEvenOutStrengthSeen) {
                     mEvenOutStrengthSeen = strength;
-                    mEvenOutSwitchSeen = enabled;
                     mEvenOutLevelSeen = level;
                     updateEvenOutPolicy();
                 }
@@ -23584,17 +23582,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private int[] mEvenOutSeeds;
     /** The theme's seeds key, dropped on a configuration change (night mode, dynamic colour). */
     @Nullable private int[] mEvenOutSeedsKey;
-    private boolean mEvenOutSwitchSeen;
     @Nullable private com.termux.shared.termux.settings.preferences.TerminalContrastLevel mEvenOutLevelSeen;
     @Nullable private com.termux.app.chrome.EvenOut.Ceiling[] mEvenOutCeilings;
     /** The policy last handed to the pane band, reused while nothing it carries has changed. */
     @Nullable private com.termux.app.chrome.ChromeInk.EvenOutPolicy mEvenOutPolicy;
 
     /**
-     * Tells the pane band whether to even the wallpaper out and to what (ADR 0014): the Debugging
-     * switch, the Contrast level, and the recipe ceilings for that level and the theme's seeds
-     * (kept per both, since the recipe palette they come from reads the theme). Off is null, which
-     * is today's mean ground and today's floors exactly. The policy object is kept and re-handed
+     * Tells the pane band how to even the wallpaper out (ADR 0014): the Contrast level, and the
+     * recipe ceilings for that level and the theme's seeds (kept per both, since the recipe palette
+     * they come from reads the theme), at the terminal Opacity's strength. The policy object is kept and re-handed
      * while level, ceilings and the palette's current polarity are unchanged, so a veil query that
      * changes nothing costs nothing downstream.
      */
@@ -23608,15 +23604,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void updateEvenOutPolicy() {
         if (mChrome == null) return;
         int strength = evenOutStrengthNow();
-        boolean switchOn = mPreferences != null && mPreferences.isGlassEvenOutEnabled();
-        boolean enabled = switchOn && strength > 0;
-        com.termux.app.terminal.MaterialTerminalColorScheme.setGlassFloors(enabled);
-        if (!switchOn) {
-            mEvenOutPolicy = null;
-            mChrome.ink().setEvenOutPolicy(null);
-            updateBandEvenOutPolicies();
-            return;
-        }
+        com.termux.app.terminal.MaterialTerminalColorScheme.setGlassFloors(strength > 0);
         com.termux.shared.termux.settings.preferences.TerminalContrastLevel level =
             com.termux.app.chrome.LegibilityLevel.terminalContrast(mPreferences);
         // The theme's seeds, read once per theme: asked on every dock and nav-strip frost request.
@@ -23646,7 +23634,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // The stage is kept at a terminal Opacity of 0 too (strength 0): the panes draw none, and
         // a band with an Opacity of its own still evens out at its own strength.
-        mChrome.ink().setEvenOutPolicy(enabled ? kept : null);
+        mChrome.ink().setEvenOutPolicy(strength > 0 ? kept : null);
         updateBandEvenOutPolicies();
     }
 

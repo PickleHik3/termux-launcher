@@ -72,7 +72,7 @@ public interface PaneSurfaceStyle {
     }
     /**
      * A token that changes whenever what {@link #paneGlassEvenOut} answers may have changed
-     * without any pane moving (the Debugging switch, the Contrast level, a re-measure). A laid-out
+     * without any pane moving (the Opacity, the Contrast level, a re-measure). A laid-out
      * pane polls it in onDraw, a plain int compare, and re-asks when it moved.
      */
     default int paneGlassGeneration() {
