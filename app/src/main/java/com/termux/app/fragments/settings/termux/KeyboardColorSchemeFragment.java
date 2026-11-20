@@ -33,13 +33,10 @@ import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.color.MaterialColors;
 import com.termux.app.notice.AppNotice;
-import com.termux.app.place.PlaceLayoutStore;
-import com.termux.app.place.PlaceOrientation;
 import com.termux.R;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardLayoutSource;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
-import com.termux.app.terminal.inappkeyboard.KeyboardLayoutFiles;
 import com.termux.app.terminal.inappkeyboard.LauncherKeyboardLayouts;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -51,12 +48,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import juloo.keyboard2.Config;
 import juloo.keyboard2.Keyboard2View;
-import juloo.keyboard2.KeyboardData;
-import juloo.keyboard2.KeyValue;
-import juloo.keyboard2.LayoutModifier;
-import juloo.keyboard2.Pointers;
 import juloo.keyboard2.Theme;
 
 /** Interactive swatch-based, per-key keyboard color scheme editor. */
@@ -185,6 +177,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         // The card carries its own params, so the gap above it is not thrown away.
         View card = buildPaletteCard(context);
         root.addView(card, card.getLayoutParams());
+        root.addView(buildLayoutsRow(context));
         selectRole(KEY_FILL_INDEX);
         createSwatches();
 
@@ -268,30 +261,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
     /** (Re)creates the preview keyboard; Config is immutable, so a new typeface needs a new view. */
     private void rebuildPreview() {
         android.content.Context context = requireContext();
-        Config.Builder config = new Config.Builder(getResources(), new Config.IKeyEventHandler() {
-            @Override public void key_down(KeyValue value, boolean isSwipe) {}
-            @Override public void key_up(KeyValue value, Pointers.Modifiers modifiers) {}
-            @Override public void mods_changed(Pointers.Modifiers modifiers) {}
-            @Override public void suggestion_entered(String text) {}
-        });
-        config.hapticEnabled = false;
-        config.keySoundEnabled = false;
-        config.labelFont = previewLabelFont(context, mPreferences.getInAppKeyboardFontPath());
-        config.symbolFont = com.termux.shared.termux.font.NerdFontSpans.typeface(context);
-        mKeyboard = new Keyboard2View(context, config.build(), buildPreviewPalette(context));
-        // The layout the user types on (or the one picked in the ring row), so every key can be painted.
-        KeyboardData previewLayout = InAppKeyboardLayoutSource.load(getResources(),
-            KeyboardLayoutFiles.defaultHome(), mShownLayoutId,
-            InAppKeyboardLayoutSource.textLayoutOptions(mPreferences.getInAppKeyboardExtraKeys()));
-        if (previewLayout != null)
-            mKeyboard.setKeyboard(previewLayout);
-        // The height is the layout's, in the orientation the phone is being held in.
-        mKeyboard.setHeightScale(new PlaceLayoutStore(mPreferences).keyboardHeightScale(
-            PlaceOrientation.of(getResources().getConfiguration())));
-        mKeyboard.setKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
-        float radiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
-        mKeyboard.setKeyCornerRadiusOverride(radiusDp < 0f ? -1f : dpFloat(radiusDp));
-        mKeyboard.setKeyColorOverrides(mScheme.resolvedOverrides());
+        mKeyboard = KeyboardPreviewFactory.create(context, mPreferences, mScheme, mShownLayoutId);
         mKeyboard.setOnKeyPaintListener(keyId -> {
             // The Background chip assigns through swatch taps alone; a key tap paints nothing.
             if (mPaintingBackground)
@@ -304,24 +274,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mPreviewHolder.addView(mKeyboard, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.CENTER_HORIZONTAL));
-    }
-
-    /** The face the keyboard itself would use: the picked file, else the bundled symbols font. */
-    @Nullable
-    private static Typeface previewLabelFont(@NonNull android.content.Context context,
-                                             @Nullable String fontPath) {
-        if (fontPath != null && !fontPath.isEmpty()) {
-            File file = new File(fontPath);
-            if (file.isFile()) {
-                try {
-                    Typeface typeface = com.termux.shared.termux.font.FileTypefaces.load(file);
-                    if (typeface != null && !Typeface.DEFAULT.equals(typeface)) return typeface;
-                } catch (RuntimeException ignored) {
-                    // Falls through to the bundled face, like the keyboard does.
-                }
-            }
-        }
-        return com.termux.shared.termux.font.NerdFontSpans.typeface(context);
     }
 
     /**
@@ -448,15 +400,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
     /** Glass preview palette: the imported palette when active, then the background override. */
     @NonNull
     private Theme.Palette buildPreviewPalette(@NonNull android.content.Context context) {
-        String theme = mPreferences.getInAppKeyboardTheme();
-        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, theme,
-            com.termux.app.chrome.GlassLook.of(mPreferences));
-        if (mScheme.shouldApplyImportedPalette(theme))
-            palette = mScheme.applyToPalette(palette);
-        // Production paints this color into the activity's glass backdrop behind a transparent
-        // keyboard; the preview has no backdrop, so its palette carries the color itself.
-        Integer background = mScheme.resolvedKeyboardBackground();
-        return background == null ? palette : withKeyboardBackground(palette, background);
+        return KeyboardPreviewFactory.palette(context, mPreferences, mScheme);
     }
 
     /** Copy of a palette with only the keyboard background replaced. */
@@ -701,6 +645,41 @@ public class KeyboardColorSchemeFragment extends Fragment {
         R.drawable.ic_keyboard_color_role_secondary_bottom,
         R.drawable.ic_keyboard_color_role_background
     };
+
+    /** A plain row at the foot of the page that opens the Layouts page. */
+    @NonNull
+    private View buildLayoutsRow(@NonNull android.content.Context context) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(dp(8), dp(12), dp(8), dp(12));
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        if (context.getTheme().resolveAttribute(
+                android.R.attr.selectableItemBackground, ripple, true))
+            row.setBackgroundResource(ripple.resourceId);
+        row.setClickable(true);
+        TextView title = new TextView(context);
+        title.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_BodyLarge);
+        title.setText(R.string.settings_keyboard_layouts_title);
+        row.addView(title);
+        TextView summary = new TextView(context);
+        summary.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
+        summary.setTextColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY));
+        summary.setText(R.string.settings_keyboard_layouts_summary);
+        row.addView(summary);
+        row.setOnClickListener(view -> {
+            if (getActivity() instanceof com.termux.app.activities.SettingsActivity)
+                ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
+                    KeyboardLayoutsFragment.class, R.string.settings_keyboard_layouts_title, null);
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(GAP_DP);
+        row.setLayoutParams(params);
+        return row;
+    }
 
     /**
      * One scrollable line of chips under the preview, one per ring layout; tapping one swaps the
