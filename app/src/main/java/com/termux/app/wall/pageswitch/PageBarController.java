@@ -95,7 +95,7 @@ public final class PageBarController implements PageBarView.Entry {
     }
 
     /** The page changes here and only here: the tick, then the move. */
-    @Override public void chosen(@NonNull PageSwitchModel.Target target) {
+    @Override public void chosen(@NonNull PageBarModel.Target target) {
         mHaptics.committed();
         PageSwitchTargets.carryOut(target, mHost);
     }

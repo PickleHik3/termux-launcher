@@ -23,7 +23,6 @@ import androidx.appcompat.widget.AppCompatTextView;
 import com.termux.app.page.PageKind;
 import com.termux.app.wall.pageswitch.PageGlyphPainter;
 import com.termux.app.wall.pageswitch.PageGlyphSource;
-import com.termux.app.wall.pageswitch.PageSwitchModel;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.font.NerdFontSpans;
 

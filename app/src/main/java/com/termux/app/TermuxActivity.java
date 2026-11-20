@@ -29537,7 +29537,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int front = com.termux.app.x11.DisplayWindowName.frontIndex(mDisplayServer.windows().size(),
                 mDisplayServer.activeWindow());
             if (front >= 0 && front < items.size()) {
-                String title = com.termux.app.wall.pageswitch.PageSwitchModel.plainLabel(
+                String title = com.termux.app.wall.pageswitch.PageBarModel.plainLabel(
                     items.get(front).label);
                 in.displayTitle = title.equals(getString(R.string.launcher_entry_display))
                     ? null : title;

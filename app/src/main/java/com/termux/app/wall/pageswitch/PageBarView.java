@@ -59,7 +59,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         /** The finger crossed to another slot or member: the tick. */
         void focusCrossed();
         /** A tap or a release chose this target. */
-        void chosen(@NonNull PageSwitchModel.Target target);
+        void chosen(@NonNull PageBarModel.Target target);
         /** A slide began or ended; the dock's capsules dim while it runs. */
         void slidingChanged(boolean sliding);
     }

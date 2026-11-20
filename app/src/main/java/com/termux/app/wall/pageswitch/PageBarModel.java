@@ -14,10 +14,36 @@ import java.util.List;
  * order ({@code WallPages.stops}), so Home pages may sit between Terminal windows and Display
  * pages. The Terminal page is one entry per window, or one entry that starts a shell when it has
  * none. Pure: the activity fills an {@link Input} from the wall and the windows; the bar draws the
- * answer and hands a chosen entry's {@link PageSwitchModel.Target} to
+ * answer and hands a chosen entry's {@link Target} to
  * {@link PageSwitchTargets#carryOut}.
  */
 public final class PageBarModel {
+
+    /** What releasing on a cell does. */
+    public enum Action {
+        /** Close the bar: the cell is where the user already is. */
+        CLOSE,
+        /** Go to the page {@link Target#pageId}. */
+        GO_PAGE,
+        /** Go to the Terminal page at window {@link Target#index}; -1 is its current window. */
+        GO_TERMINAL
+    }
+
+    public static final class Target {
+        @NonNull public final Action action;
+        public final int pageId;
+        public final int index;
+
+        Target(@NonNull Action action, int pageId, int index) {
+            this.action = action;
+            this.pageId = pageId;
+            this.index = index;
+        }
+
+        @Override public String toString() {
+            return action + "(page=" + pageId + ",index=" + index + ")";
+        }
+    }
 
     /** One page of the wall, in wall order. */
     public static final class Page {
@@ -60,10 +86,10 @@ public final class PageBarModel {
         public final boolean current;
         /** A window you would return to when the wall is on another page; a folded Terminal tap goes here. */
         public final boolean returnTo;
-        @NonNull public final PageSwitchModel.Target target;
+        @NonNull public final Target target;
 
         Entry(@NonNull PageKind kind, int number, @NonNull String label, boolean current,
-              boolean returnTo, @NonNull PageSwitchModel.Target target) {
+              boolean returnTo, @NonNull Target target) {
             this.kind = kind;
             this.number = number;
             this.label = label;
@@ -100,6 +126,25 @@ public final class PageBarModel {
     /** The current entry, or -1 when the wall is on none of them. */
     public int currentIndex() {
         return mCurrentIndex;
+    }
+
+    /**
+     * A window's name for the bar: the window bar's label without its icon code points, which
+     * need the symbol font the bar's text is not drawn in. Whatever is left, trimmed; the label
+     * itself when nothing is.
+     */
+    @NonNull
+    public static String plainLabel(@NonNull String label) {
+        StringBuilder out = new StringBuilder(label.length());
+        for (int i = 0; i < label.length(); ) {
+            int cp = label.codePointAt(i);
+            i += Character.charCount(cp);
+            boolean icon = (cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000
+                || (cp >= 0xFE00 && cp <= 0xFE0F) || cp == 0x200D;
+            if (!icon) out.appendCodePoint(cp);
+        }
+        String plain = out.toString().trim();
+        return plain.isEmpty() ? label : plain;
     }
 
     @NonNull
@@ -143,28 +188,28 @@ public final class PageBarModel {
         int count = in.windowNames.size();
         if (count == 0) {
             out.add(entry(in, p, 0, onPage, false, onPage
-                ? new PageSwitchModel.Target(PageSwitchModel.Action.CLOSE, p.id, -1)
-                : new PageSwitchModel.Target(PageSwitchModel.Action.GO_TERMINAL, p.id, -1)));
+                ? new Target(Action.CLOSE, p.id, -1)
+                : new Target(Action.GO_TERMINAL, p.id, -1)));
             return;
         }
         for (int w = 0; w < count; w++) {
             boolean current = onPage && w == in.currentWindow;
             String name = in.windowNames.get(w);
-            String plain = name == null || name.isEmpty() ? null : PageSwitchModel.plainLabel(name);
+            String plain = name == null || name.isEmpty() ? null : plainLabel(name);
             out.add(new Entry(PageKind.TERMINAL, w + 1,
                 label(in, PageKind.TERMINAL, w + 1, plain), current, w == in.currentWindow,
-                new PageSwitchModel.Target(current ? PageSwitchModel.Action.CLOSE
-                    : PageSwitchModel.Action.GO_TERMINAL, p.id, w)));
+                new Target(current ? Action.CLOSE
+                    : Action.GO_TERMINAL, p.id, w)));
         }
     }
 
-    private static PageSwitchModel.Target pageTarget(int id, boolean current) {
-        return new PageSwitchModel.Target(
-            current ? PageSwitchModel.Action.CLOSE : PageSwitchModel.Action.GO_PAGE, id, -1);
+    private static Target pageTarget(int id, boolean current) {
+        return new Target(
+            current ? Action.CLOSE : Action.GO_PAGE, id, -1);
     }
 
     private static Entry entry(Input in, Page p, int number, boolean current, boolean returnTo,
-                               PageSwitchModel.Target target) {
+                               Target target) {
         return new Entry(p.kind, number, label(in, p.kind, number, p.name), current, returnTo, target);
     }
 

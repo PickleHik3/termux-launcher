@@ -6,7 +6,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.page.PageKind;
-import com.termux.app.wall.pageswitch.PageSwitchModel.Action;
+import com.termux.app.wall.pageswitch.PageBarModel.Action;
 import com.termux.app.wall.pageswitch.PageSwitchModel.Cell;
 import com.termux.app.wall.pageswitch.PageSwitchModel.Input;
 
@@ -215,7 +215,7 @@ public class PageSwitchModelTest {
     }
 
     @Test public void plainLabelDropsIconCodePointsButNeverEmpties() {
-        assertEquals("htop", PageSwitchModel.plainLabel(" htop"));
-        assertEquals("", PageSwitchModel.plainLabel(""));
+        assertEquals("htop", PageBarModel.plainLabel(" htop"));
+        assertEquals("", PageBarModel.plainLabel(""));
     }
 }

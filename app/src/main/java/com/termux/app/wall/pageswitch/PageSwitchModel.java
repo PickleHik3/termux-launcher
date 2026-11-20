@@ -25,32 +25,6 @@ public final class PageSwitchModel {
         return ROW.indexOf(kind);
     }
 
-    /** What releasing on a cell does. */
-    public enum Action {
-        /** Close the panel: the cell is where the user already is. */
-        CLOSE,
-        /** Go to the page {@link Target#pageId}. */
-        GO_PAGE,
-        /** Go to the Terminal page at window {@link Target#index}; -1 is its current window. */
-        GO_TERMINAL
-    }
-
-    public static final class Target {
-        @NonNull public final Action action;
-        public final int pageId;
-        public final int index;
-
-        Target(@NonNull Action action, int pageId, int index) {
-            this.action = action;
-            this.pageId = pageId;
-            this.index = index;
-        }
-
-        @Override public String toString() {
-            return action + "(page=" + pageId + ",index=" + index + ")";
-        }
-    }
-
     public static final class Cell {
         @NonNull public final PageKind kind;
         /** 1-based within its kind for Home and Terminal; 0 for Assistant and Display. */
@@ -61,10 +35,10 @@ public final class PageSwitchModel {
         @NonNull public final String fullName;
         /** Where the user is. */
         public final boolean current;
-        @NonNull public final Target target;
+        @NonNull public final PageBarModel.Target target;
 
         Cell(@NonNull PageKind kind, int number, @Nullable String title, @NonNull String fullName,
-             boolean current, @NonNull Target target) {
+             boolean current, @NonNull PageBarModel.Target target) {
             this.kind = kind;
             this.number = number;
             this.title = title;
@@ -167,25 +141,6 @@ public final class PageSwitchModel {
         return homePageIds.get(0);
     }
 
-    /**
-     * A window's name for the panel: the window bar's label without its icon code points, which
-     * need the symbol font the panel's text is not drawn in. Whatever is left, trimmed; the label
-     * itself when nothing is.
-     */
-    @NonNull
-    public static String plainLabel(@NonNull String label) {
-        StringBuilder out = new StringBuilder(label.length());
-        for (int i = 0; i < label.length(); ) {
-            int cp = label.codePointAt(i);
-            i += Character.charCount(cp);
-            boolean icon = (cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000
-                || (cp >= 0xFE00 && cp <= 0xFE0F) || cp == 0x200D;
-            if (!icon) out.appendCodePoint(cp);
-        }
-        String plain = out.toString().trim();
-        return plain.isEmpty() ? label : plain;
-    }
-
     @NonNull
     public static PageSwitchModel build(@NonNull Input in) {
         List<Cell> cells = new ArrayList<>();
@@ -195,8 +150,8 @@ public final class PageSwitchModel {
                 String name = i < in.homePageLabels.size() ? in.homePageLabels.get(i) : null;
                 boolean current = in.currentKind == PageKind.HOME && id == in.currentPageId;
                 cells.add(cell(in, PageKind.HOME, i + 1, name, current,
-                    current ? new Target(Action.CLOSE, id, -1)
-                        : new Target(Action.GO_PAGE, id, -1)));
+                    current ? new PageBarModel.Target(PageBarModel.Action.CLOSE, id, -1)
+                        : new PageBarModel.Target(PageBarModel.Action.GO_PAGE, id, -1)));
             }
         }
         if (in.terminalPageId >= 0) {
@@ -204,15 +159,15 @@ public final class PageSwitchModel {
             boolean onTerminal = in.currentKind == PageKind.TERMINAL;
             if (count == 0) {
                 cells.add(cell(in, PageKind.TERMINAL, 1, null, onTerminal,
-                    onTerminal ? new Target(Action.CLOSE, in.terminalPageId, -1)
-                        : new Target(Action.GO_TERMINAL, in.terminalPageId, -1)));
+                    onTerminal ? new PageBarModel.Target(PageBarModel.Action.CLOSE, in.terminalPageId, -1)
+                        : new PageBarModel.Target(PageBarModel.Action.GO_TERMINAL, in.terminalPageId, -1)));
             }
             for (int i = 0; i < count; i++) {
                 boolean current = onTerminal && i == in.currentTerminalWindow;
                 cells.add(cell(in, PageKind.TERMINAL, i + 1,
-                    plainLabel(in.terminalWindowLabels.get(i)), current,
-                    current ? new Target(Action.CLOSE, in.terminalPageId, i)
-                        : new Target(Action.GO_TERMINAL, in.terminalPageId, i)));
+                    PageBarModel.plainLabel(in.terminalWindowLabels.get(i)), current,
+                    current ? new PageBarModel.Target(PageBarModel.Action.CLOSE, in.terminalPageId, i)
+                        : new PageBarModel.Target(PageBarModel.Action.GO_TERMINAL, in.terminalPageId, i)));
             }
         }
         if (in.assistantPageId >= 0) {
@@ -227,11 +182,11 @@ public final class PageSwitchModel {
     private static Cell pageCell(Input in, PageKind kind, int pageId, @Nullable String title) {
         boolean current = pageId == in.currentPageId;
         return cell(in, kind, 0, title, current, current
-            ? new Target(Action.CLOSE, pageId, -1) : new Target(Action.GO_PAGE, pageId, -1));
+            ? new PageBarModel.Target(PageBarModel.Action.CLOSE, pageId, -1) : new PageBarModel.Target(PageBarModel.Action.GO_PAGE, pageId, -1));
     }
 
     private static Cell cell(Input in, PageKind kind, int number, @Nullable String title,
-                             boolean current, Target target) {
+                             boolean current, PageBarModel.Target target) {
         String shownTitle = title == null || title.isEmpty() ? null : title;
         StringBuilder name = new StringBuilder(in.kindNames[rowIndex(kind)]);
         if (number > 0) name.append(' ').append(number);

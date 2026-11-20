@@ -8,7 +8,7 @@ import com.termux.app.page.PageKind;
 import com.termux.app.wall.pageswitch.PageBarModel.Entry;
 import com.termux.app.wall.pageswitch.PageBarModel.Input;
 import com.termux.app.wall.pageswitch.PageBarModel.Page;
-import com.termux.app.wall.pageswitch.PageSwitchModel.Action;
+import com.termux.app.wall.pageswitch.PageBarModel.Action;
 
 import org.junit.Test;
 
