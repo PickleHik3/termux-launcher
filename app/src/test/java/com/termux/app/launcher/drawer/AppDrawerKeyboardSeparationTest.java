@@ -94,6 +94,41 @@ public class AppDrawerKeyboardSeparationTest {
         assertEquals(frame.top, content.top, 1e-3f);
     }
 
+    /**
+     * One owner for the card: the content rect the keyboard decision lays the grid and the A–Z
+     * strip out in is the rectangle the plane comes to rest on, keyboard down and keyboard up. Before
+     * the fix the content was laid out for the bezel-to-bezel sheet (keyboard down) and at the
+     * sheet's sides (keyboard up), wider than the card, so the card clipped the right column and the
+     * strip.
+     */
+    @Test public void dockedPlaneAndContentRestOnTheSameCard() {
+        ReflectionHelpers.setField(controller, "mRoundedStyle", false);
+        host.marginPx = 21f;
+        host.paneCornerRadiusPx = 55f;
+        host.sheetsBandPx = 90;
+        ReflectionHelpers.setField(controller, "mOpenRect",
+            ReflectionHelpers.callInstanceMethod(controller, "resolveOpenRect"));
+
+        for (float k : new float[] {0f, 1f}) {
+            reveal(k);
+            applyFrame(1f);
+
+            Frame frame = plane.getFrame();
+            Frame content = ReflectionHelpers.callInstanceMethod(controller, "contentRect");
+            assertEquals("left at k " + k, 21f, frame.left, 1e-3f);
+            assertEquals("right at k " + k, WIDTH - 21f, frame.right, 1e-3f);
+            assertEquals("top at k " + k, 21f, frame.top, 1e-3f);
+            assertEquals("bottom at k " + k, k == 0f ? HEIGHT - 90f - 21f : KEYBOARD_TOP - 21f,
+                frame.bottom, 1e-3f);
+            assertEquals("content left at k " + k, frame.left, content.left, 1e-3f);
+            assertEquals("content right at k " + k, frame.right, content.right, 1e-3f);
+            assertEquals("content top at k " + k, frame.top, content.top, 1e-3f);
+            assertEquals("content bottom at k " + k, frame.bottom, content.bottom, 1e-3f);
+            assertEquals("the pane's corners at k " + k, 55f,
+                (float) ReflectionHelpers.getField(controller, "mCurrentRadiusPx"), 1e-3f);
+        }
+    }
+
     @Test public void dockedCardMovesWithTheRevealWithNoStep() {
         docked();
         host.paneCornerRadiusPx = 55f;
@@ -530,18 +565,20 @@ public class AppDrawerKeyboardSeparationTest {
         assertEquals(HEIGHT - 62f - 125f, sized, 1e-3f);
     }
 
-    @Test public void keyboardDownLeavesThePlaneAsItWas() {
-        docked();
+    /** Keyboard down, Docked's plane stays a card: Margin all round, the pane's corners. */
+    @Test public void keyboardDownLeavesThePlaneOnItsCard() {
+        ReflectionHelpers.setField(controller, "mRoundedStyle", false);
         host.paneGapPx = 26f;
         host.paneCornerRadiusPx = 55f;
+        host.marginPx = 21f;
+        ReflectionHelpers.setField(controller, "mOpenRect",
+            ReflectionHelpers.callInstanceMethod(controller, "resolveOpenRect"));
         reveal(0f);
 
         applyFrame(1f);
 
-        Frame frame = plane.getFrame();
-        assertEquals(HEIGHT + 40f, frame.bottom, 1e-3f);
-        assertEquals(-40f, frame.top, 1e-3f);
-        assertEquals(40f, (float) ReflectionHelpers.getField(controller, "mCurrentRadiusPx"), 1e-3f);
+        assertEquals(new Frame(21f, 21f, WIDTH - 21f, HEIGHT - 21f), plane.getFrame());
+        assertEquals(55f, (float) ReflectionHelpers.getField(controller, "mCurrentRadiusPx"), 1e-3f);
     }
 
     @Test public void bottomInsetMaths() {
@@ -587,6 +624,25 @@ public class AppDrawerKeyboardSeparationTest {
     private void applyFrame(float p) {
         ReflectionHelpers.callInstanceMethod(controller, "applyFrame",
             ReflectionHelpers.ClassParameter.from(float.class, p));
+    }
+
+    @Test
+    public void dockedCardRestFrameAndBottom() {
+        // Margin in from the sides, below the status inset and above the navigation band.
+        assertEquals(new Frame(20f, 120f, 980f, 2290f),
+            AppDrawerKeyboardSeparation.dockedCardRestFrame(1000f, 2400f, 100f, 90f, 20f));
+        // No Margin given: the card is the space between the bars.
+        assertEquals(new Frame(0f, 100f, 1000f, 2310f),
+            AppDrawerKeyboardSeparation.dockedCardRestFrame(1000f, 2400f, 100f, 90f, -1f));
+        // The bottom: the rest bottom at 0, the gap above the keyboard at 1, linear between.
+        assertEquals(2290f, AppDrawerKeyboardSeparation.cardBottomPx(2290f, 1700f, 20f, 0f), 0f);
+        assertEquals(1680f, AppDrawerKeyboardSeparation.cardBottomPx(2290f, 1700f, 20f, 1f), 0f);
+        assertEquals(1985f, AppDrawerKeyboardSeparation.cardBottomPx(2290f, 1700f, 20f, 0.5f),
+            1e-3f);
+        // The card's corners: the pane's under Docked, the drawer's own under Floating or with none.
+        assertEquals(55f, AppDrawerKeyboardSeparation.openRadiusPx(false, 40f, 55f), 0f);
+        assertEquals(40f, AppDrawerKeyboardSeparation.openRadiusPx(true, 40f, 55f), 0f);
+        assertEquals(40f, AppDrawerKeyboardSeparation.openRadiusPx(false, 40f, -1f), 0f);
     }
 
     @Test

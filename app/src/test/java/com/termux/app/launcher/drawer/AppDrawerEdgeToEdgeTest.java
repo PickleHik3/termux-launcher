@@ -26,13 +26,9 @@ import org.robolectric.util.ReflectionHelpers;
 import org.robolectric.util.ReflectionHelpers.ClassParameter;
 
 /**
- * The open drawer as one sheet from the physical top edge to the physical bottom edge.
- *
- * <p>Two rectangles, and the whole change is that they stopped being the same one: the plane runs
- * past the system bars so no other material frames it, the content stays inside them so nothing of
- * the grid is under a bar. The two strips that used to frame it are dealt with separately — the
- * status-bar inset strip is covered by z-order and fades with the pane it continues, the under-pill
- * strip lives on the decor and can only be faded.
+ * The open drawer's rectangles on a host bled to the physical edges: Docked opens to a card of its
+ * own inside the system bars and lays its content out in that card; Floating keeps its panel inside
+ * the bars. The status-bar inset strip is covered by z-order and fades with the pane it continues.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -47,6 +43,8 @@ public class AppDrawerEdgeToEdgeTest {
     private static final int NAV_INSET_PX = 110;
     private static final int DOCK_INSET_PX = 16;
     private static final float OPEN_RADIUS_PX = 28f;
+    /** Margin, the air the terminal pane leaves at the screen's sides. */
+    private static final float MARGIN_PX = 24f;
 
     private View mRoot;
     private FakeAppDrawerHost mHost;
@@ -73,8 +71,15 @@ public class AppDrawerEdgeToEdgeTest {
         ReflectionHelpers.setField(mController, "mOpenRadiusPx", OPEN_RADIUS_PX);
     }
 
-    @Test public void theOpenRectRunsPastBothSystemBarsAndTheContentRectDoesNot() {
+    /**
+     * Docked's drawer is a card of its own with the keyboard down too: Margin in from the sides,
+     * Margin below the status bar and Margin above the navigation band. Before, the plane ran past
+     * both bezels (one radius beyond each) and the content was laid out for that sheet, so the card
+     * the keyboard made later clipped a grid and an A–Z strip laid out for the screen.
+     */
+    @Test public void dockedOpensToACardAndLaysItsContentOutInIt() {
         ReflectionHelpers.setField(mController, "mRoundedStyle", false);
+        mHost.marginPx = MARGIN_PX;
 
         View host = mRoot.findViewById(R.id.app_drawer_host);
         assertEquals("the bled host is the whole screen", HEIGHT_PX, host.getHeight());
@@ -82,58 +87,37 @@ public class AppDrawerEdgeToEdgeTest {
         Frame open = openRect();
         Frame content = contentBaseRect(open);
 
-        // Past the top bezel by one radius and past the bottom by one, which is how a single-radius
-        // outline clip is made to show square corners where the sheet meets the screen edge.
-        assertEquals(-OPEN_RADIUS_PX, open.top, 0.5f);
-        assertEquals(HEIGHT_PX + OPEN_RADIUS_PX, open.bottom, 0.5f);
-        assertEquals(DOCK_INSET_PX, open.left, 0.5f);
-        assertEquals(WIDTH_PX - DOCK_INSET_PX, open.right, 0.5f);
-
-        // The grid keeps the two bars as padding: it starts exactly at the status inset and ends
-        // exactly at the navigation inset, which is where it sat before the plane was bled.
-        assertEquals(STATUS_INSET_PX, content.top, 0.5f);
-        assertEquals(HEIGHT_PX - NAV_INSET_PX + OPEN_RADIUS_PX, content.bottom, 0.5f);
-        assertEquals(open.left, content.left, 0.5f);
-        assertEquals(open.right, content.right, 0.5f);
+        assertEquals(MARGIN_PX, open.left, 0.5f);
+        assertEquals(WIDTH_PX - MARGIN_PX, open.right, 0.5f);
+        assertEquals(STATUS_INSET_PX + MARGIN_PX, open.top, 0.5f);
+        assertEquals(HEIGHT_PX - NAV_INSET_PX - MARGIN_PX, open.bottom, 0.5f);
+        // The grid, its labels and the strip are laid out in the card itself.
+        assertEquals(open, content);
     }
 
-    /**
-     * The same two rectangles in screen coordinates, with and without the bleed: the plane grew by
-     * exactly the two insets and the content did not move by a pixel.
-     */
-    @Test public void theContentKeepsTheEdgesItHadBeforeTheHostWasBled() {
+    /** An unbled host (insets never arrived) starts the card Margin from its own top. */
+    @Test public void anUnbledHostStartsTheCardMarginFromItsTop() {
         ReflectionHelpers.setField(mController, "mRoundedStyle", false);
-        // The bled host starts at the physical top edge; the plain one starts below the status bar,
-        // so every rectangle below is converted to screen coordinates before being compared.
-        Frame bledOpen = openRect();
-        Frame bledContent = contentBaseRect(bledOpen);
-
+        mHost.marginPx = MARGIN_PX;
         bleedDrawerHost(0);
         layOutRoot();
-        Frame plainOpen = openRect();
-        Frame plainContent = contentBaseRect(plainOpen);
 
-        assertEquals("the plane gained the status inset at the top, plus the squared corner",
-            STATUS_INSET_PX + OPEN_RADIUS_PX, (plainOpen.top + STATUS_INSET_PX) - bledOpen.top, 0.5f);
-        assertEquals("an unbled host keeps the rectangle the drawer has always had",
-            0f, plainOpen.top, 0.5f);
-        assertEquals("the bottom is the screen's edge either way: the band is the host's, not a bleed",
-            0f, bledOpen.bottom - (plainOpen.bottom + STATUS_INSET_PX), 0.5f);
-        assertEquals("the grid's top edge did not move",
-            plainContent.top + STATUS_INSET_PX, bledContent.top, 0.5f);
-        assertEquals("nor its bottom",
-            plainContent.bottom + STATUS_INSET_PX, bledContent.bottom, 0.5f);
+        Frame open = openRect();
+
+        assertEquals(MARGIN_PX, open.top, 0.5f);
+        assertEquals(open, contentBaseRect(open));
     }
 
-    /** A host whose band is 0 (the system keyboard is up) is not shortened at the bottom. */
-    @Test public void withNoBandTheDockedRectsEndTogether() {
+    /** A host whose band is 0 (the system keyboard is up) ends the card Margin above its bottom. */
+    @Test public void withNoBandTheDockedCardEndsMarginAboveTheBottom() {
         ReflectionHelpers.setField(mController, "mRoundedStyle", false);
+        mHost.marginPx = MARGIN_PX;
         mHost.sheetsBandPx = 0;
 
         Frame open = openRect();
         Frame content = contentBaseRect(open);
 
-        assertEquals(HEIGHT_PX + OPEN_RADIUS_PX, open.bottom, 0.5f);
+        assertEquals(HEIGHT_PX - MARGIN_PX, open.bottom, 0.5f);
         assertEquals(open.bottom, content.bottom, 0.5f);
     }
 

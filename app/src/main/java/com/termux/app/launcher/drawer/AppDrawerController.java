@@ -1210,7 +1210,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame base = resolveContentBaseRect(mOpenRect);
         if (base == null) return null;
         if (mReveal.target <= 0f || !hasRevealableKeyboard()) return base;
-        float bottom = pinTopPx() - planeGapPx();
+        // The plane's bottom where the reveal is going: the same function applyFrame reads with the
+        // reveal's value, so the content ends where the plane comes to rest.
+        float bottom = AppDrawerKeyboardSeparation.cardBottomPx(base.bottom, pinTopPx(),
+            planeGapPx(), mReveal.target);
         // Docked's card starts below the status bar: the search field starts with it.
         float top = AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f)
             ? Math.max(base.top, dockedCardTopPx()) : base.top;
@@ -1461,20 +1464,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * which is what makes it the one thing the host layout listener may safely recompute while the
      * drawer is open.
      *
-     * <p>The top edge is the host's own, not the status bar's bottom: the plane swallows the bar,
-     * which leaves through {@link AppDrawerStatusBandChoreography} instead of standing over the
-     * drawer under the backdrop tint.
+     * <p><b>Docked: a card of its own.</b> The host is laid out with negative vertical margins that
+     * give back what {@code fitsSystemWindows} padded the root by, and Docked's drawer stands inside
+     * that bled host as a card ({@link AppDrawerKeyboardSeparation#dockedCardRestFrame}): Margin in
+     * from the sides, below the status bar and above the navigation band, keyboard up or down. A
+     * keyboard only moves its bottom; its width never changes, so the grid is laid out once per
+     * open. The launcher's own status bar leaves through {@link AppDrawerStatusBandChoreography}.
      *
-     * <p><b>One sheet, bezel to bezel.</b> The host is laid out with negative vertical margins that
-     * give back exactly what {@code fitsSystemWindows} padded the root by, so in the default style
-     * the open rect runs from the physical top edge to the physical bottom edge and the two strips
-     * that used to frame the drawer — the status-bar inset strip above it, the under-pill strip
-     * below — are covered rather than left standing in their own materials. The grid does not
-     * follow: {@link #resolveContentBaseRect} pulls it back inside the bars.
-     *
-     * <p>The rounded style keeps today's rectangle. There the dock is a floating capsule inside the
-     * system bars, neither strip is drawn at all, and a drawer that ran under the bezel would be
-     * answering a question that style never asks.
+     * <p>The rounded style keeps its panel inside the system bars, the dock's outer margin in from
+     * the sides.
      *
      * @return null when the host has not laid out; callers keep the rect they already had
      */
@@ -1483,48 +1481,29 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         FrameLayout host = mHostLayout;
         if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return null;
         host.getLocationOnScreen(mHostLocation);
+        if (!mRoundedStyle) {
+            return AppDrawerKeyboardSeparation.dockedCardRestFrame(host.getWidth(),
+                host.getHeight(), hostBleedTopPx(), sheetsBandPx(), mHost.searchKeyboardMarginPx());
+        }
         // The drawer keeps the dock's outer margin rather than inventing one — same preference,
         // same edge. The horizontal lerp is carried by the plane rect itself, whose seed left/right
-        // are the dock's and whose open left/right are this inset. Horizontal is never bled: a side
-        // navigation bar in landscape is a column the dock already stays out of.
+        // are the dock's and whose open left/right are this inset.
         int dockInsetPx = mHost.dockLayout().horizontalInsetPx;
         float inset = AppDrawerTransitionGeometry.resolveInsetPx(dockInsetPx, dockInsetPx, 1f);
-        // Square corners at whichever edge touches the bezel, expressed by pushing that edge one
-        // radius past the screen: Outline clipping is a single-radius round rect, and a Path clip
-        // would cost the cheap outline clip for corners nobody can see.
-        float cornerBleed = mRoundedStyle ? 0f : mOpenRadiusPx;
-        float topBleed = hostBleedTopPx();
-        // The top is squared only when the host was actually bled to the bezel. A host whose insets
-        // never arrived keeps the rectangle it has always had, rather than growing half a corner
-        // into a status strip it does not reach the top of.
-        float top = mRoundedStyle ? topBleed : (topBleed > 0f ? -cornerBleed : 0f);
-        float bottom = mRoundedStyle
-            ? host.getHeight() - sheetsBandPx()
-            : host.getHeight() + cornerBleed;
-        return new Frame(inset, top, host.getWidth() - inset, bottom);
+        return new Frame(inset, hostBleedTopPx(), host.getWidth() - inset,
+            host.getHeight() - sheetsBandPx());
     }
 
     /**
-     * The rectangle the grid and the search field are laid out in: the open rect pulled back inside
-     * the system bars, so nothing of the content is ever under one. Only the glass goes edge to
-     * edge; the rows sit exactly where they sat when the plane stopped at the host's own edges.
-     *
-     * <p>Derived from the open rect on every call rather than captured beside it: the two must
-     * never be able to disagree, and this runs off the per-frame path — the insets, a reveal
-     * retarget, a host relayout — and not on it.
-     *
-     * <p>The rounded style and an unbled host both answer with the open rect itself: there is no
-     * bleed to give back in the first case and none was taken in the second.
+     * The rectangle the grid, the A–Z strip and the search field are laid out in with the keyboard
+     * down: the open rect itself, under both Styles, so the content is sized for the card or panel
+     * that shows it and never for a larger rectangle the glass then clips.
      *
      * @return null when there is no open rect yet
      */
     @Nullable
     private Frame resolveContentBaseRect(@Nullable Frame openRect) {
-        FrameLayout host = mHostLayout;
-        if (openRect == null) return null;
-        if (mRoundedStyle || host == null) return openRect;
-        return new Frame(openRect.left, hostBleedTopPx(), openRect.right,
-            host.getHeight() - sheetsBandPx() + mOpenRadiusPx);
+        return openRect;
     }
 
     /**
@@ -1923,21 +1902,17 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /**
      * How far the content ends above the card's usable bottom, for the rectangle it is laid out in.
-     * A rect shorter than the keyboard-down base is a keyboard being up (in-app or system), and the
-     * card then ends where the rect does; keyboard down, the card runs to the screen bottom under
-     * the gesture inset. Read at the keyboard decision with the rest of the content's layout, never
+     * A rect shorter than the keyboard-down base is a keyboard being up (in-app or system). Under
+     * both Styles the card ends where the rect does, above the navigation band, so nothing of it
+     * runs under a bar. Read at the keyboard decision with the rest of the content's layout, never
      * per frame of the reveal.
      */
     @VisibleForTesting
     int resolveContentBottomInsetPx(@NonNull AppDrawerContentView content, @NonNull Frame rect) {
         Frame base = resolveContentBaseRect(mOpenRect);
-        FrameLayout host = mHostLayout;
         boolean keyboardUp = base != null && rect.bottom < base.bottom;
-        boolean runsUnderNav = !mRoundedStyle && host != null;
-        float cardBottom = keyboardUp || !runsUnderNav ? rect.bottom : host.getHeight();
-        float navInset = runsUnderNav ? sheetsBandPx() : 0f;
-        return Math.round(AppDrawerContentInsetPolicy.contentBottomInsetPx(rect.bottom, cardBottom,
-            navInset, keyboardUp, content.contentInsetPx()));
+        return Math.round(AppDrawerContentInsetPolicy.contentBottomInsetPx(rect.bottom, rect.bottom,
+            0f, keyboardUp, content.contentInsetPx()));
     }
 
     private void applyContentMetrics(@NonNull AppDrawerContentView content, @NonNull Frame rect,
@@ -2116,18 +2091,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // whether a keyboard exists.
         float k = revealFraction();
         if (lowering) k = AppDrawerKeyboardLowering.reveal(k, p);
+        // Docked's card wears the pane's corners all round, keyboard up or down.
         mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
-            mOpenRadiusPx, p);
+            AppDrawerKeyboardSeparation.openRadiusPx(mRoundedStyle, mOpenRadiusPx,
+                mHost.searchKeyboardCornerRadiusPx()), p);
         boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(k,
             mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (k > 0f) {
             float pinTop = pinTopPx() + keyboardExit;
-            float bottom = AppDrawerTransitionGeometry.resolveSearchPlaneBottom(frame.bottom,
-                pinTop, planeGapPx(), k);
+            float bottom = AppDrawerKeyboardSeparation.cardBottomPx(frame.bottom, pinTop,
+                planeGapPx(), k);
             if (AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f)) {
-                // Docked's plane becomes a card of its own as the keyboard comes up: Margin in
-                // from the sides, below the status bar and above the keyboard card, the pane's
-                // corners all round.
+                // Docked's open rect is already the card, so at rest only its bottom moves. Early in
+                // an open the seed (the dock) is pulled into the card by the reveal: with the
+                // keyboard staying up the plane is a card above it from the first frame.
                 mCurrentRadiusPx = AppDrawerKeyboardSeparation.revealRadiusPx(false,
                     mCurrentRadiusPx, mHost.searchKeyboardCornerRadiusPx(), k);
                 frame = AppDrawerKeyboardSeparation.dockedCardFrame(frame,

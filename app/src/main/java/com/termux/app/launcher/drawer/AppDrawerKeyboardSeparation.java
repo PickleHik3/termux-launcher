@@ -67,6 +67,45 @@ final class AppDrawerKeyboardSeparation {
     }
 
     /**
+     * Docked's card with the keyboard down: the rectangle the plane opens to and the content is laid
+     * out in, so the grid, its labels and the A–Z strip are sized for the card and never for the
+     * screen. Margin in from the sides, its top at {@link #dockedCardTopPx}, its bottom Margin above
+     * where the Docked frame ends (the top of the navigation band the host reaches through). A
+     * keyboard only ever moves the bottom up from here ({@link #cardBottomPx}).
+     *
+     * @param statusInsetPx the status bar's inset the host reaches through (0 when it does not)
+     * @param bottomBandPx  the navigation band at the bottom the host reaches through
+     * @param marginPx      Margin; a negative value means the host gave none
+     */
+    static AppDrawerTransitionGeometry.Frame dockedCardRestFrame(float hostWidthPx,
+            float hostHeightPx, float statusInsetPx, float bottomBandPx, float marginPx) {
+        float m = Math.max(0f, marginPx);
+        float top = dockedCardTopPx(statusInsetPx, marginPx);
+        float bottom = Math.max(top, hostHeightPx - Math.max(0f, bottomBandPx) - m);
+        return new AppDrawerTransitionGeometry.Frame(m, top, Math.max(m, hostWidthPx - m), bottom);
+    }
+
+    /**
+     * The card's bottom at reveal {@code k}: its keyboard-down bottom at 0, {@code gapPx} above the
+     * keyboard's top at 1. The one owner of the number two phases read: the content rect at the
+     * keyboard decision (the reveal's target) and the plane on every frame of the reveal (its value),
+     * so the content ends where the plane comes to rest.
+     */
+    static float cardBottomPx(float restBottomPx, float keyboardTopPx, float gapPx, float reveal) {
+        return AppDrawerTransitionGeometry.resolveSearchPlaneBottom(restBottomPx, keyboardTopPx,
+            gapPx, reveal);
+    }
+
+    /**
+     * The plane's corner radius once open: Docked's card takes the terminal pane's corners all
+     * round, keyboard up or down; Floating keeps the drawer's own. A negative pane radius means none
+     * was given and the drawer's own is kept.
+     */
+    static float openRadiusPx(boolean rounded, float drawerRadiusPx, float paneRadiusPx) {
+        return revealRadiusPx(rounded, drawerRadiusPx, paneRadiusPx, 1f);
+    }
+
+    /**
      * Docked's plane at reveal {@code k}: the bezel-to-bezel sheet at 0, at 1 a card standing
      * Margin in from the left and right edges, its top at {@code topPx}
      * ({@link #dockedCardTopPx}) and its bottom at {@code bottomPx}. An edge already further in
