@@ -6338,7 +6338,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // glass short by the rail's whole band, all of it on the right. A standing Peek card
             // spans the screen as it does Docked and cuts its own sides (dockFloatsIn).
             DockLayout dock = mDock.appliedDockLayout();
-            int horizontalMargin = mDock.dockFloatsIn(dock.capsule) ? dock.horizontalInsetPx : 0;
+            int horizontalMargin = com.termux.app.dock.DockHostBounds.sideMarginPx(
+                mDock.dockFloatsIn(dock.capsule), dock.horizontalInsetPx);
             targetLeftMargin = horizontalMargin;
             targetRightMargin = horizontalMargin;
         }
@@ -17685,8 +17686,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * else, which is every arrangement that shipped.
      */
     private int dockGlassTopInsetPx() {
-        return (mStatusBarOnDockPlank ? 0 : mStatusBar.bottomStatusBandPx())
-            + mDock.appliedDockLayout().slabTopInsetPx + mLaneSlackPx;
+        return com.termux.app.dock.DockHostBounds.topInsetPx(
+            mStatusBarOnDockPlank ? 0 : mStatusBar.bottomStatusBandPx(),
+            mDock.appliedDockLayout().slabTopInsetPx, mLaneSlackPx);
     }
 
     /**

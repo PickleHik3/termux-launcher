@@ -79,8 +79,10 @@ public final class LayoutFixtures {
         @NonNull public final PlaceLayout home;
         /** The terminal's tiled panes. */
         public final int paneCount;
-        /** Home's Dock design; the Terminal's is the tray. */
+        /** Home's Dock design; the Terminal's is the tray unless {@link #withDesign} set it. */
         @NonNull public final DockStyle homeDesign;
+        /** The Terminal's Dock design. */
+        @NonNull public final DockStyle terminalDesign;
 
         Fixture(@NonNull String name, int widthPx, int heightPx, @NonNull PlaceLayout window,
                 int paneCount) {
@@ -95,10 +97,12 @@ public final class LayoutFixtures {
             this.home = HOME;
             this.paneCount = paneCount;
             this.homeDesign = DockStyle.GLASS_TRAY;
+            this.terminalDesign = DockStyle.GLASS_TRAY;
         }
 
-        private Fixture(@NonNull Fixture of, @NonNull DockStyle homeDesign) {
-            this.name = of.name + " (Home " + homeDesign + ")";
+        private Fixture(@NonNull Fixture of, @NonNull DockStyle homeDesign,
+                        @NonNull DockStyle terminalDesign, @NonNull String name) {
+            this.name = name;
             this.widthPx = of.widthPx;
             this.heightPx = of.heightPx;
             this.density = of.density;
@@ -109,12 +113,20 @@ public final class LayoutFixtures {
             this.home = of.home;
             this.paneCount = of.paneCount;
             this.homeDesign = homeDesign;
+            this.terminalDesign = terminalDesign;
         }
 
         /** This fixture with Home's dock in {@code design}. */
         @NonNull
         public Fixture withHomeDesign(@NonNull DockStyle design) {
-            return new Fixture(this, design);
+            return new Fixture(this, design, terminalDesign,
+                name + " (Home " + design + ")");
+        }
+
+        /** This fixture with the one Dock design both sides wear, as the setting is global. */
+        @NonNull
+        public Fixture withDesign(@NonNull DockStyle design) {
+            return new Fixture(this, design, design, name + " (" + design + ")");
         }
 
         public boolean floatingKeyboard() {
@@ -142,7 +154,7 @@ public final class LayoutFixtures {
 
         private Half half(@NonNull PlaceLayout layout, boolean dockFloating) {
             return Half.builder(layout).floating(dockFloating).dockHeightScale(1.95f)
-                .design(layout == home ? homeDesign : DockStyle.GLASS_TRAY).build();
+                .design(layout == home ? homeDesign : terminalDesign).build();
         }
 
         /** The device's dock snapshot with {@code rows}' rows standing, on {@code arrangement}. */
@@ -244,6 +256,15 @@ public final class LayoutFixtures {
 
     public static final List<Fixture> ALL = Collections.unmodifiableList(Arrays.asList(
         PONG, TL16, FLOATING_KEYBOARD, STATUS_BOTTOM, SPLIT_PANE));
+
+    /** Every fixture in each of the four Dock designs, worn on both sides (one setting). */
+    @NonNull
+    public static List<Fixture> allDesigns() {
+        List<Fixture> out = new ArrayList<>();
+        for (Fixture fixture : ALL)
+            for (DockStyle design : DockStyle.CHOICES) out.add(fixture.withDesign(design));
+        return out;
+    }
 
     /** {@link #ALL} as JUnit's {@code Parameterized} wants them, named by {@link Fixture#name}. */
     @NonNull
