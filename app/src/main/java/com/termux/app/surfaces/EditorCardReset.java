@@ -66,6 +66,7 @@ final class EditorCardReset {
                 break;
             case TERMINAL:
                 prefs.setTerminalContrastLevel(TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL);
+                prefs.setAdaptiveLegibility(TERMUX_APP.DEFAULT_VALUE_ADAPTIVE_LEGIBILITY);
                 prefs.setTerminalCursorTrailEnabled(TERMUX_APP.DEFAULT_TERMINAL_CURSOR_TRAIL);
                 prefs.setTerminalCursorTrailStyle(TERMUX_APP.DEFAULT_TERMINAL_CURSOR_TRAIL_STYLE);
                 prefs.setTerminalRetroEffect(TERMUX_APP.DEFAULT_TERMINAL_RETRO_EFFECT);

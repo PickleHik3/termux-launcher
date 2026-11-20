@@ -43,6 +43,7 @@ public final class GlassReset {
                              int stop) {
         clearGrid(prefs.getSharedPreferences());
         prefs.setTerminalContrastLevel(TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL);
+        prefs.setAdaptiveLegibility(TERMUX_APP.DEFAULT_VALUE_ADAPTIVE_LEGIBILITY);
         if (AppearanceSettingsStore.getBoolean(context, KEY_DYNAMIC_COLOUR, false))
             AppearanceSettingsStore.putBoolean(context, KEY_DYNAMIC_COLOUR, false);
         SurfacePresets.Preset look = AppearanceLooks.presetForStop(

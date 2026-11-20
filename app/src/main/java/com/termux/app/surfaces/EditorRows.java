@@ -99,6 +99,9 @@ public final class EditorRows {
             R.drawable.ic_symbol_dock_peek_glass),
         TEXT_SIZE(Kind.SLIDER, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
+        /** One switch on the Global and Terminal cards: each item corrects itself to the wallpaper behind it. */
+        ADAPTIVE_LEGIBILITY(Kind.SWITCH, R.string.appearance_row_adaptive_legibility,
+            R.drawable.ic_editor_contrast),
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
         SPLIT_GAP(Kind.SLIDER, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),

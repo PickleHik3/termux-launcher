@@ -78,7 +78,8 @@ public class StatusTerminalCardsTest {
 
     @Test
     public void theTerminalCardReadsBackgroundContrastTrailEffectAndFont() {
-        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.LINK_FONT,
+        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
+            Row.LINK_FONT,
             Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
             Row.SECTION_PANES,
             Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
