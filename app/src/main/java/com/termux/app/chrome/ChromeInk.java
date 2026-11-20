@@ -3062,7 +3062,8 @@ public final class ChromeInk {
                 Math.round((screenRect.top - frameRect.top) * scaleY),
                 Math.round((screenRect.right - frameRect.left) * scaleX),
                 Math.round((screenRect.bottom - frameRect.top) * scaleY));
-            int raw = readableInSoftware(frame.getConfig())
+            // A published HARDWARE frame reads through its sampling copy (HardwareFrame).
+            int raw = HardwareFrame.readable(frame) != null
                 ? GlassBackdropCache.sampleBitmapRegion(frame, mTmpSampleRect)
                 : sampleThroughSoftwareCopy(frame, mTmpSampleRect);
             if (Color.alpha(raw) == 0) return GlassBackdropCache.UNREADABLE;
@@ -3094,7 +3095,7 @@ public final class ChromeInk {
                 Math.round((screenRect.top - frameRect.top) * scaleY),
                 Math.round((screenRect.right - frameRect.left) * scaleX),
                 Math.round((screenRect.bottom - frameRect.top) * scaleY));
-            if (readableInSoftware(frame.getConfig())) {
+            if (HardwareFrame.readable(frame) != null) {
                 return GlassBackdropCache.sampleBitmapLightness(frame, region);
             }
             int left = Math.max(0, region.left);

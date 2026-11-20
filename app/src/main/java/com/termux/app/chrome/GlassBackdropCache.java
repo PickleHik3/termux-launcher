@@ -549,10 +549,20 @@ public final class GlassBackdropCache {
         }
     }
 
-    /** The grid of ARGB pixels over {@code region}, or null for a recycled bitmap or empty region. */
+    /**
+     * The grid of ARGB pixels over {@code region}, or null for a recycled bitmap or empty region.
+     * A {@code HARDWARE} frame is read through its small sampling copy ({@link HardwareFrame}),
+     * over the same part of the picture; one with no copy reads as nothing.
+     */
     @Nullable
-    private static int[] readGrid(@Nullable Bitmap bitmap, @NonNull Rect region) {
-        if (bitmap == null || bitmap.isRecycled()) return null;
+    private static int[] readGrid(@Nullable Bitmap frame, @NonNull Rect frameRegion) {
+        Bitmap bitmap = HardwareFrame.readable(frame);
+        if (bitmap == null) return null;
+        Rect region = frameRegion;
+        if (bitmap != frame) {
+            region = new Rect();
+            HardwareFrame.mapToReadable(frame, bitmap, frameRegion, region);
+        }
         int left = Math.max(0, region.left);
         int top = Math.max(0, region.top);
         int right = Math.min(bitmap.getWidth(), region.right);
