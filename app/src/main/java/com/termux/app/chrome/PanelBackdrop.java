@@ -309,6 +309,16 @@ public final class PanelBackdrop {
         }
     }
 
+    /**
+     * What stands beneath the open panel was decided anew without the panel moving (the drawer's
+     * keyboard going away under its card): a Snapshot panel takes its picture again now, of the
+     * scene its {@link Scene} poses, so the glass never shows what was beneath before. Live
+     * refreshes on its own; a shut panel takes nothing.
+     */
+    public void retake() {
+        if (mKind == PanelBackdropPolicy.Kind.SNAPSHOT) takeSnapshot();
+    }
+
     /** Software Snapshots taken since this backdrop was made. */
     @VisibleForTesting
     int snapshotsTaken() {

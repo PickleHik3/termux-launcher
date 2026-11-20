@@ -129,6 +129,37 @@ public class AppDrawerKeyboardSeparationTest {
         }
     }
 
+    /**
+     * The ghost: the plane's Snapshot was posed with the keyboard up, and when the keyboard went
+     * the card's bottom came down over a picture of it. The keyboard-gone retake poses the open
+     * scene with the keyboard all the way down, then puts the real frame back.
+     */
+    @Test public void theKeyboardGoneRetakePosesTheCardAtItsKeyboardDownBottom() {
+        ReflectionHelpers.setField(controller, "mRoundedStyle", false);
+        host.marginPx = 21f;
+        ReflectionHelpers.setField(controller, "mOpenRect",
+            ReflectionHelpers.callInstanceMethod(controller, "resolveOpenRect"));
+        ReflectionHelpers.setField(controller, "mEngaged", true);
+        ReflectionHelpers.setField(ReflectionHelpers.getField(controller, "mProgress"), "value", 1f);
+        reveal(1f);
+        applyFrame(1f);
+        com.termux.app.chrome.PanelBackdrop.Scene scene =
+            ReflectionHelpers.getField(controller, "mSettledScene");
+
+        ReflectionHelpers.setField(controller, "mPosingKeyboardGone", true);
+        scene.beforeSnapshot();
+        assertEquals("posed keyboard down", HEIGHT - 21f, plane.getFrame().bottom, 1e-3f);
+        assertTrue((Boolean) ReflectionHelpers.getField(controller, "mBackdropKeyboardGone"));
+        scene.afterSnapshot();
+        ReflectionHelpers.setField(controller, "mPosingKeyboardGone", false);
+        assertEquals("the real frame back", KEYBOARD_TOP - 21f, plane.getFrame().bottom, 1e-3f);
+
+        // A Snapshot posed at the target with the keyboard up shows it again.
+        scene.beforeSnapshot();
+        scene.afterSnapshot();
+        assertFalse((Boolean) ReflectionHelpers.getField(controller, "mBackdropKeyboardGone"));
+    }
+
     @Test public void dockedCardMovesWithTheRevealWithNoStep() {
         docked();
         host.paneCornerRadiusPx = 55f;

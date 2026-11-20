@@ -104,6 +104,22 @@ public class PanelBackdropSoftwareSnapshotTest {
         assertNotNull(mSurface.getDrawable());
     }
 
+    /**
+     * The drawer's keyboard went away under its card: the scene beneath changed while the panel
+     * rested, and the picture is taken again at once rather than showing the old keyboard as a
+     * ghost through the glass. A shut panel takes none.
+     */
+    @Test
+    public void aRetakeTakesOneNowAndNoneWhenShut() {
+        assertTrue(mBackdrop.open(20f));
+        assertEquals(1, mBackdrop.snapshotsTaken());
+        mBackdrop.retake();
+        assertEquals(2, mBackdrop.snapshotsTaken());
+        mBackdrop.close();
+        mBackdrop.retake();
+        assertEquals(2, mBackdrop.snapshotsTaken());
+    }
+
     @Test
     public void movingTakesNoneAndComingToRestTakesOne() {
         assertTrue(mBackdrop.open(20f));

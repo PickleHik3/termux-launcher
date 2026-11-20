@@ -930,7 +930,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 if (!mEngaged || mCapturingSettledScene) return;
                 mCapturingSettledScene = true;
                 mHeldReveal = mReveal.value;
-                mReveal.value = mReveal.target;
+                mReveal.value = mPosingKeyboardGone ? 0f : mReveal.target;
+                mBackdropKeyboardGone = mReveal.value <= 0f;
                 applyFrame(1f);
             }
 
@@ -1110,6 +1111,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         float hidden = AppDrawerKeyboardScrollHide.hiddenFraction(mKeyboardScrollPx,
             dp(AppDrawerKeyboardScrollHide.THRESHOLD_DP), keyboard.heightPx);
         if (hidden <= 0f) return;
+        // The card's bottom starts down over where the keyboard stood.
+        if (!mKeyboardScrollHolding) retakeBackdropForKeyboardGone();
         mKeyboardScrollHolding = true;
         float k = 1f - hidden;
         mReveal.value = k;
@@ -1169,6 +1172,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mReveal.target = 0f;
         applyContentInsets();
         applyFrame(mProgress.value);
+        retakeBackdropForKeyboardGone();
         kick();
     }
 
@@ -1182,9 +1186,33 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             content != null && hasRevealableKeyboard(), mOpen, keyboardStaysUp(),
             content == null ? 0f : content.getRevealFraction());
         if (mReveal.target == target) return;
+        boolean keyboardGoing = target < mReveal.target;
         mReveal.target = target;
         applyContentInsets();
+        if (keyboardGoing) retakeBackdropForKeyboardGone();
         kick();
+    }
+
+    /** The plane's last Snapshot was posed with no keyboard revealed ({@link #mSettledScene}). */
+    private boolean mBackdropKeyboardGone;
+    /** True for the length of a keyboard-gone retake: the scene poses the keyboard all the way down. */
+    private boolean mPosingKeyboardGone;
+
+    /**
+     * The keyboard is going from under the open card, whose bottom now comes down over where it
+     * stood: a Snapshot picture taken with the keyboard up would show it through the glass there, a
+     * ghost of the screen before. Taken again once, at the decision (or as a scroll starts to hold
+     * it down), of the open scene with the keyboard gone. Live refreshes on its own.
+     */
+    private void retakeBackdropForKeyboardGone() {
+        com.termux.app.chrome.PanelBackdrop backdrop = mBackdrop;
+        if (backdrop == null || !mOpen || !mEngaged || mBackdropKeyboardGone) return;
+        mPosingKeyboardGone = true;
+        try {
+            backdrop.retake();
+        } finally {
+            mPosingKeyboardGone = false;
+        }
     }
 
     /**
