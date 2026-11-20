@@ -877,6 +877,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = mContent;
         boolean fxMoving = content != null
             && content.advanceDrawerFx(mProgress.value, dt, reducedMotion);
+        boolean gateMoving = stepContentGate(dt);
         applyFrame(mProgress.value);
         payPendingTextFieldFocus();
         // The !mDragging guard is the single most dangerous line in this slice. Before B-3 the loop
@@ -893,7 +894,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             onClosed(true, false);
             return;
         }
-        if (moving || revealMoving || fxMoving || mTextFieldFocusPending) kick();
+        if (moving || revealMoving || fxMoving || gateMoving || mTextFieldFocusPending) kick();
         // The plane's picture stands still while the plane moves (a Snapshot is taken on the open
         // and once more when the plane comes to rest open; Live refreshes only when what is beneath
         // it changes). Scrub and rope frames deliberately do not move it: they move content above
@@ -2073,6 +2074,34 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mBackdrop.close();
             blur.setVisibility(View.GONE);
         }
+        // The content waits for the picture under it (AppDrawerContentGate).
+        startContentGate(!pictured || mBackdrop.pictureUp());
+    }
+
+    /** The content's share of the material: see {@link AppDrawerContentGate}. */
+    private float mContentGate = 1f;
+    private float mContentGateElapsedS;
+
+    @VisibleForTesting
+    void startContentGate(boolean materialUp) {
+        mContentGate = materialUp ? 1f : 0f;
+        mContentGateElapsedS = 0f;
+        AppDrawerPlaneView plane = mPlane;
+        if (plane != null) plane.setContentGate(mContentGate);
+        if (!materialUp) kick();
+    }
+
+    /** One frame of the gate; true while it still needs frames. */
+    @VisibleForTesting
+    boolean stepContentGate(float dtS) {
+        if (mContentGate >= 1f) return false;
+        mContentGateElapsedS += dtS;
+        com.termux.app.chrome.PanelBackdrop backdrop = mBackdrop;
+        mContentGate = AppDrawerContentGate.step(mContentGate,
+            backdrop == null || backdrop.pictureUp(), mContentGateElapsedS, dtS);
+        AppDrawerPlaneView plane = mPlane;
+        if (plane != null) plane.setContentGate(mContentGate);
+        return mContentGate < 1f;
     }
 
     // ------------------------------------------------------------------ per-frame
@@ -2630,6 +2659,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mHostLayout.setVisibility(View.INVISIBLE);
             }
             if (mBackdrop != null) mBackdrop.close();
+            startContentGate(true);
             if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
             ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
             if (frost != null) {

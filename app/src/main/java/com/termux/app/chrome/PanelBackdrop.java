@@ -319,6 +319,18 @@ public final class PanelBackdrop {
         if (mKind == PanelBackdropPolicy.Kind.SNAPSHOT) takeSnapshot();
     }
 
+    /**
+     * Whether the panel's picture is up: false only while a Snapshot panel still waits for its
+     * first picture (the GPU one lands a few frames after it is asked for). Live, the stored frame
+     * and a shut panel have nothing to wait for.
+     */
+    public boolean pictureUp() {
+        if (mKind != PanelBackdropPolicy.Kind.SNAPSHOT) return true;
+        Drawable drawable = mSurface.getDrawable();
+        return !(drawable instanceof SnapshotDrawable)
+            || ((SnapshotDrawable) drawable).mBitmap != null;
+    }
+
     /** Software Snapshots taken since this backdrop was made. */
     @VisibleForTesting
     int snapshotsTaken() {
