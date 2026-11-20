@@ -77,6 +77,21 @@ public class AppDrawerContentCategoriesTest {
         provider.invalidate();
     }
 
+    /**
+     * Back on an open drawer (pong, 2026-11-20): the drawer stops taking touches at once, but the
+     * card keeps its categories while it closes; "Nothing here yet" flashed in for the whole close.
+     */
+    @Test public void aClosingDrawerKeepsItsCategoriesUntilItIsGone() {
+        AppDrawerCategoryView view = content.getCategoryView();
+        int tiles = view.getTileAdapter().getItemCount();
+        assertTrue(tiles > 0);
+        content.setInteractive(false);
+        layout();
+        assertEquals(View.GONE, view.getEmptyState().getVisibility());
+        assertEquals(View.VISIBLE, view.getOverview().getVisibility());
+        assertEquals(tiles, view.getTileAdapter().getItemCount());
+    }
+
     @Test public void theEmptyStateWaitsForTheCatalogueAndShowsOnceItIsTrulyEmpty() {
         AppDrawerCategoryView view = content.getCategoryView();
         view.setCatalogueLoaded(false);
