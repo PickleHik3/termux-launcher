@@ -101,6 +101,15 @@ public final class ChromeRenderer {
             return LegibilityLevel.of(preferences());
         }
 
+        /**
+         * Whether each glass item measures the wallpaper behind itself ("Adaptive legibility");
+         * off, every item reads the one measurement of the whole picture ({@link LegibilityScope}).
+         */
+        default boolean adaptiveLegibility() {
+            TermuxAppSharedPreferences p = preferences();
+            return p != null && p.isAdaptiveLegibility();
+        }
+
         float dpToPx(float dp);
 
         // ---- theme values the glass material is mixed from
