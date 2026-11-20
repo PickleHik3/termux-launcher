@@ -2140,6 +2140,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         }
         plane.setFrame(frame, mCurrentRadiusPx, p);
         if (mGlass != null) mGlass.invalidateOutline();
+        applyRopeVisibleBottom(frame, k);
 
         // Inverted standardized dim: the scene behind the drawer (terminal, dock) darkens with
         // the drawer's own spring while the glass keeps its opacity. setBackgroundColor reuses
@@ -2183,6 +2184,21 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (target != null) target.setDrawerTransitionProgress(p);
         // Not the settled-scene capture's p = 1: that is a picture of the open drawer, not a frame.
         if (!mCapturingSettledScene) mHost.onDrawerSheetFraction(handoff, p);
+    }
+
+    /**
+     * The A–Z strip's letters spread over the part of the card above its moving bottom. The content
+     * is laid out once, at the keyboard decision, for where the card comes to rest; while the reveal
+     * carries the bottom there, the strip redistributes in draw from
+     * {@link AppDrawerRopeMetrics#visibleTrackHeightPx}, so no layout runs per frame. Without a
+     * reveal nothing cuts it: the open's own motion never squeezes the letters.
+     */
+    private void applyRopeVisibleBottom(@NonNull Frame frame, float reveal) {
+        AppDrawerContentView content = mContent;
+        Frame rect = mContentRect;
+        if (content == null) return;
+        content.setRopeVisibleBottomPx(reveal > 0f && rect != null
+            ? frame.bottom - rect.top : Float.POSITIVE_INFINITY);
     }
 
     /**
