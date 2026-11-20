@@ -48,6 +48,21 @@ public class AppDrawerPagesSwipeHidesKeyboardTest {
         assertEquals(0, dragStarts);
     }
 
+    /**
+     * A touch on the A–Z strip (a scrub or a tap) is browsing too: it sends the same cue a list drag
+     * does, once per touch, so the card grows the way it does for a scroll. The controller keeps a
+     * keyboard that was up before the drawer opened (keyboardStaysUp).
+     */
+    @Test public void aTouchOnTheLetterStripHidesTheKeyboardOncePerTouch() {
+        content.setViewType(AppDrawerViewType.VERTICAL);
+        content.onScrubLetterChanged('A');
+        content.onScrubLetterChanged('B');
+        assertEquals(1, dragStarts);
+        content.onScrubEnded();
+        content.onScrubLetterChanged('C');
+        assertEquals(2, dragStarts);
+    }
+
     private void dispatchPagerScrollState(int state) throws Exception {
         Field pagerField = AppDrawerContentView.class.getDeclaredField("mHorizontalPager");
         pagerField.setAccessible(true);

@@ -609,6 +609,20 @@ public final class AppDrawerCategoryView extends ViewGroup
         cancelGesture();
     }
 
+    /**
+     * Stops the category transition for a drawer on its way out and keeps the tiles: the card keeps
+     * what it shows until it is gone, then {@link #reset} empties it.
+     */
+    public void stopForClose() {
+        clickGate.suppress();
+        expansion.teardown();
+        expansionSpring.reset(0f);
+        detailAdapter.releaseAttached(detailList);
+        selectedBucket = null;
+        finishAtOverview();
+        cancelGesture();
+    }
+
     public void reset() {
         clickGate.suppress();
         expansion.teardown();

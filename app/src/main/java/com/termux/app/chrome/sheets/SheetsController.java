@@ -483,8 +483,13 @@ public final class SheetsController {
                 mDrawerRaisedKeyboardClaimed = false;
             } else if (!wasUp) {
                 mHost.raiseDisplayFrameKeyboard();
-                mDrawerRaisedKeyboard = true;
-                mDrawerRaisedKeyboardClaimed = false;
+                // Up before the drawer was pulled, it stays the Terminal's: the close leaves it.
+                if (com.termux.app.x11.DisplayKeyboardRoute.drawerOwnsRaise(wasUp,
+                        mAppDrawerController != null
+                            && mAppDrawerController.keyboardWasUpAtPull())) {
+                    mDrawerRaisedKeyboard = true;
+                    mDrawerRaisedKeyboardClaimed = false;
+                }
             }
             // Raised after the pull, the keyboard was not among the bands the drawer measured;
             // it measures them again so the reveal can bring it up through the plane.
