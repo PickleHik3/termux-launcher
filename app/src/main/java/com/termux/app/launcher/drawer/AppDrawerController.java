@@ -2152,18 +2152,23 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
             AppDrawerKeyboardSeparation.openRadiusPx(mRoundedStyle, mOpenRadiusPx,
                 mHost.searchKeyboardCornerRadiusPx()), p);
-        // The drawer's own keyboard sent away under the open card is gone at once: no loose keys
-        // sliding down behind and below the card, no hole in the dim where it stood. Only the
-        // card's bottom follows the reveal down.
-        boolean keyboardLeaving = !lowering && mImePinTopPx <= 0f
-            && AppDrawerKeyboardSeparation.keyboardLeaving(mOpen, mKeyboardScrollHolding,
-                mReveal.target, k);
-        boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(keyboardLeaving ? 0f : k,
+        // Docked's open drawer slides its own keyboard as a card (never faded: see
+        // AppDrawerKeyboardSeparation.keyboardSlidePx), and the card's bottom rides one gap above
+        // the keyboard's live top. A close, a lowering close and Floating keep the band recipe.
+        boolean keyboardSlides = mOpen && !lowering && k > 0f && mKeyboardBand != null
+            && AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f);
+        float keyboardSlidePx = keyboardSlides
+            ? AppDrawerKeyboardSeparation.keyboardSlidePx(mHostLayout.getHeight(),
+                mKeyboardBand.topPx, k)
+            : 0f;
+        boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(k,
             mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (k > 0f) {
             float pinTop = pinTopPx() + keyboardExit;
-            float bottom = AppDrawerKeyboardSeparation.cardBottomPx(frame.bottom, pinTop,
-                planeGapPx(), k);
+            float bottom = keyboardSlides
+                ? AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(frame.bottom,
+                    pinTop + keyboardSlidePx, planeGapPx())
+                : AppDrawerKeyboardSeparation.cardBottomPx(frame.bottom, pinTop, planeGapPx(), k);
             if (AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f)) {
                 // Docked's open rect is already the card, so at rest only its bottom moves. Early in
                 // an open the seed (the dock) is pulled into the card by the reveal: with the
@@ -2185,7 +2190,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             // the dim runs on below and around its card instead, with the card cut out of it (the
             // scrim's hole, below): the plane never reaches below this clip, so the clip only ever
             // decided the dim's extent.
-            if (scrimAroundKeyboard || keyboardLeaving) {
+            if (scrimAroundKeyboard) {
                 if (mHostClipped) {
                     mHostLayout.setClipBounds(null);
                     mHostClipped = false;
@@ -2235,9 +2240,10 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // The built-in keyboard's bands come back with the reveal only when they are what is being
         // revealed; under a system keyboard they stay where the plane pushed them.
         applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f
-                : AppDrawerKeyboardSeparation.bandRevealFraction(keyboardStaysUp(),
-                    keyboardLeaving, k),
+                : AppDrawerKeyboardSeparation.bandRevealFraction(keyboardStaysUp(), k),
             stackOffset, keyboardExit, lowering);
+        // Docked's own keyboard: its whole card, at full opacity, slid as one.
+        if (keyboardSlides) applyBand(mKeyboardView, keyboardSlidePx, 0f, 1f);
         // After the bands: the hole follows the keyboard card where this frame has put it.
         if (scrimAroundKeyboard) applyKeyboardScrim(p);
         diagKeyboardPockets(p, k, scrimAroundKeyboard);

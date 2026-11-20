@@ -198,22 +198,36 @@ final class AppDrawerKeyboardSeparation {
 
     /**
      * The reveal the keyboard's bands are choreographed at: identity (1) while the keyboard stays
-     * up, so the plane never pushes it down or fades it; none (0, put away) once the open drawer
-     * has sent its keyboard away ({@link #keyboardLeaving}), so it never slides down as loose keys
-     * behind and below the card; else the spring's {@code reveal}.
+     * up, so the plane never pushes it down or fades it, else the spring's {@code reveal}.
      */
-    static float bandRevealFraction(boolean staysUp, boolean leaving, float reveal) {
-        if (staysUp) return 1f;
-        return leaving ? 0f : reveal;
+    static float bandRevealFraction(boolean staysUp, float reveal) {
+        return staysUp ? 1f : reveal;
     }
 
     /**
-     * Whether the open drawer's own keyboard is on its way out under the card: a scroll is holding
-     * it down, or the reveal's target is 0 while the reveal is still above it. Only the card's
-     * bottom follows the reveal down then; the keyboard itself is gone at once.
+     * Docked's own keyboard (the one the drawer's search raised) comes and goes as a card: never
+     * faded, slid by this much below its resting top, from 0 at reveal 1 to off the bottom of the
+     * screen at reveal 0. It keeps its whole card look on the way (the drawer's sheet glass and
+     * dim it wears, its own rounded top); a fade of the container is what thinned the glass out
+     * under its keys and read as loose keys.
+     *
+     * @param hostHeightPx  the screen's bottom, in host coordinates
+     * @param keyboardTopPx the keyboard's resting top
      */
-    static boolean keyboardLeaving(boolean open, boolean scrollHolding, float target,
-                                   float reveal) {
-        return open && reveal > 0f && (scrollHolding || target <= 0f);
+    static float keyboardSlidePx(float hostHeightPx, float keyboardTopPx, float reveal) {
+        return Math.max(0f, hostHeightPx - keyboardTopPx)
+            * (1f - AppDrawerTransitionGeometry.clamp01(reveal));
+    }
+
+    /**
+     * Docked's card bottom over a keyboard sliding as a card: one gap above the keyboard's live top,
+     * never below its keyboard-down bottom. Read with the keyboard where {@link #keyboardSlidePx}
+     * puts it on this frame, so the two edges move on the same frames with no timing of their own;
+     * at reveal 1 it is {@link #cardBottomPx} at 1, at reveal 0 the rest bottom, so the content rect
+     * (laid out at the reveal's target) still ends where the card comes to rest.
+     */
+    static float cardBottomOverKeyboardPx(float restBottomPx, float keyboardLiveTopPx,
+                                          float gapPx) {
+        return Math.min(restBottomPx, keyboardLiveTopPx - gapPx);
     }
 }
