@@ -484,4 +484,24 @@ public class PaneGlassBackdropViewTest {
         backdrop.setVeilHeld(false);
         assertEquals(atRest, source.veilAsks);
     }
+
+    /** A widget's slab has no veil source: the matrix set by hand survives the dress pass. */
+    @Test
+    public void aHandSetEvenOutSurvivesNoVeilSource() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        ColorFilter plain = backdrop.frameFilterForTest();
+        ColorMatrix matrix = new ColorMatrix();
+        matrix.setScale(0.8f, 0.8f, 0.8f, 1f);
+
+        backdrop.setEvenOut(matrix);
+        ColorFilter evened = backdrop.frameFilterForTest();
+        assertTrue(evened != plain);
+
+        backdrop.setVeilSource(null);
+        assertSame(evened, backdrop.frameFilterForTest());
+
+        backdrop.setEvenOut(null);
+        assertSame(plain, backdrop.frameFilterForTest());
+    }
 }

@@ -275,6 +275,18 @@ public final class ChromeInk {
     @Nullable private EvenOutPolicy mEvenOutPolicy;
 
     /**
+     * The stage the palette's owner keeps even while the panes draw none (terminal Opacity 0):
+     * what a surface with an Opacity of its own (the widget glass) evens out at. Null falls back
+     * to {@link #mEvenOutPolicy}.
+     */
+    @Nullable private EvenOutPolicy mEvenOutStage;
+
+    /** Sets {@link #mEvenOutStage}; the widgets re-derive on their next dress pass. */
+    public void setEvenOutStage(@Nullable EvenOutPolicy stage) {
+        mEvenOutStage = stage;
+    }
+
+    /**
      * Turns the even-out stage on for terminal panes (a policy) or off (null). Off is today's
      * behaviour exactly: no statistics are read, no matrix is built, the pane band's ground is the
      * mean of its panes. A change of stage re-measures every pane and tells the ground listener so
@@ -1076,6 +1088,12 @@ public final class ChromeInk {
         int graphicInk;
         double textTarget;
         double graphicTarget;
+        /** The even-out stage the card was solved on, null for none; part of the answer's identity. */
+        @Nullable EvenOutPolicy stage;
+        int strength;
+        @Nullable Polarity current;
+        /** The correction the card's glass is drawn through, null for none. */
+        @Nullable android.graphics.ColorMatrix evenOut;
         @Nullable OnGlass.Resolution resolution;
     }
 
@@ -1109,24 +1127,61 @@ public final class ChromeInk {
     public OnGlass.Resolution widget(@NonNull Rect rootRect, @ColorInt int body,
                                      @ColorInt int veilColor, @ColorInt int textInk,
                                      @ColorInt int graphicInk) {
+        return widget(rootRect, body, veilColor, textInk, graphicInk, 0);
+    }
+
+    /**
+     * {@link #widget(Rect, int, int, int, int)} for a card whose glass has an Opacity of its own:
+     * with the terminal's even-out stage on and a strength above 0 at that Opacity
+     * ({@link #evenOutStrengthPercent}), the glass is drawn through the same legibility
+     * correction a terminal pane has (ceilings solved at the body-text target, the page's
+     * polarity as the side to keep), the veil is solved on the corrected wallpaper, and the matrix
+     * is kept in the answer for {@link #widgetEvenOutMatrix}. The shorter form is 0: no
+     * correction, the answer of a caller that does not draw one.
+     */
+    @NonNull
+    public OnGlass.Resolution widget(@NonNull Rect rootRect, @ColorInt int body,
+                                     @ColorInt int veilColor, @ColorInt int textInk,
+                                     @ColorInt int graphicInk, int ownOpacityPercent) {
         readMode();
         int dim = dimUnder(rootRect);
         double textTarget = mLevel.target(OnGlass.TARGET_BODY_TEXT);
         double graphicTarget = mLevel.target(OnGlass.TARGET_LARGE_TEXT);
         WidgetAnswer answer = widgetSample(rootRect);
-        if (answer.answered && answer.resolution != null && answer.dim == dim
+        // The stage as the palette's owner keeps it, so a terminal at Opacity 0 (whose panes draw
+        // none) leaves the widgets on their own Opacity, as it leaves a band with its own.
+        EvenOutPolicy terminal = mEvenOutStage != null ? mEvenOutStage : mEvenOutPolicy;
+        int strength = terminal == null ? 0 : evenOutStrengthPercent(ownOpacityPercent);
+        Polarity current = strength > 0 ? polarity() : null;
+        boolean samePolicy = strength == answer.strength && current == answer.current
+            && (strength == 0 || terminal.sameStage(answer.stage));
+        if (answer.answered && answer.resolution != null && answer.dim == dim && samePolicy
                 && answer.body == body && answer.veilColor == veilColor
                 && answer.textInk == textInk && answer.graphicInk == graphicInk
                 && Double.compare(answer.textTarget, textTarget) == 0
                 && Double.compare(answer.graphicTarget, graphicTarget) == 0) {
             return answer.resolution;
         }
-        int under = OnGlass.backdrop(answer.wallpaper, dim, Color.TRANSPARENT);
+        android.graphics.ColorMatrix matrix = null;
+        if (strength > 0) {
+            double target = LegibilityLevel.of(terminal.level).target(OnGlass.TARGET_BODY_TEXT);
+            matrix = mapEvenOut(null, new EvenOutPolicy(terminal.level,
+                EvenOut.ceilingForTarget(target, Polarity.PALE_INK),
+                EvenOut.ceilingForTarget(target, Polarity.DARK_INK), current, strength),
+                rootRect, dim, body, false);
+        }
+        int wallpaper = matrix == null || Color.alpha(answer.wallpaper) == 0 ? answer.wallpaper
+            : EvenOutMatrix.applyTo(matrix, answer.wallpaper);
+        int under = OnGlass.backdrop(wallpaper, dim, Color.TRANSPARENT);
         OnGlass.Resolution resolution = OnGlass.resolveWidget(under, body, textInk, textTarget,
             graphicInk, graphicTarget, veilColor);
         // Answered for good only once the wallpaper was really read; a nominal answer asks again.
         answer.answered = answer.sampled;
         answer.resolution = resolution;
+        answer.stage = strength > 0 ? terminal : null;
+        answer.strength = strength;
+        answer.current = current;
+        answer.evenOut = matrix;
         answer.dim = dim;
         answer.body = body;
         answer.veilColor = veilColor;
@@ -1135,6 +1190,17 @@ public final class ChromeInk {
         answer.textTarget = textTarget;
         answer.graphicTarget = graphicTarget;
         return resolution;
+    }
+
+    /**
+     * The legibility correction the widget at {@code rootRect} was last answered with
+     * ({@link #widget(Rect, int, int, int, int, int)}), measuring nothing; null while it has none.
+     * A slab draws its frame through it; the veil was solved on the same corrected wallpaper.
+     */
+    @Nullable
+    public android.graphics.ColorMatrix widgetEvenOutMatrix(@NonNull Rect rootRect) {
+        WidgetAnswer answer = mWidgets.get(rootRect);
+        return answer == null ? null : answer.evenOut;
     }
 
     /**

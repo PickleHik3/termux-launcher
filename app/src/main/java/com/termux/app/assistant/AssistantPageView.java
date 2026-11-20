@@ -130,12 +130,14 @@ public class AssistantPageView extends PaneContentFrame implements Page, TypingP
     private void measureInk(boolean slab, float radiusPx, @NonNull AssistantUi.Palette dressed) {
         com.termux.app.chrome.WidgetInkSource ink = inkSource(style);
         int color = AssistantInk.NO_VEIL;
+        if (!slab || ink == null) glass.setEvenOut(null);
         if (slab && ink != null && style != null && getWidth() > 0 && getHeight() > 0) {
             com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, inkLocation, inkRootLocation);
             inkRect.set(inkLocation[0], inkLocation[1], inkLocation[0] + getWidth(),
                 inkLocation[1] + getHeight());
             color = ink.widgetInk(inkRect, style.paneGlassTintColor(),
                 AssistantInk.veilColor(dressed), dressed.onSurfaceVariant, dressed.primary).veil;
+            glass.setEvenOut(ink.widgetEvenOut(inkRect));
         }
         if (color == veilColor && radiusPx == veilRadiusPx) return;
         veilColor = color;

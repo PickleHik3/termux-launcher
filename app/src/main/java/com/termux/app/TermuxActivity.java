@@ -23635,6 +23635,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The stage is kept at a terminal Opacity of 0 too (strength 0): the panes draw none, and
         // a band with an Opacity of its own still evens out at its own strength.
         mChrome.ink().setEvenOutPolicy(strength > 0 ? kept : null);
+        mChrome.ink().setEvenOutStage(kept);
         updateBandEvenOutPolicies();
     }
 

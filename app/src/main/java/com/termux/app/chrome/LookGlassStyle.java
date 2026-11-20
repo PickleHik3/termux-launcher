@@ -145,7 +145,12 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     @Override @NonNull public OnGlass.Resolution widgetInk(@NonNull Rect rootRect, int body,
                                                            int veilColor, int textInk,
                                                            int graphicInk) {
-        return mChrome.ink().widget(rootRect, body, veilColor, textInk, graphicInk);
+        return mChrome.ink().widget(rootRect, body, veilColor, textInk, graphicInk,
+            spec().opacityPercent);
+    }
+
+    @Override @Nullable public android.graphics.ColorMatrix widgetEvenOut(@NonNull Rect rootRect) {
+        return mChrome.ink().widgetEvenOutMatrix(rootRect);
     }
 
     @Override public int widgetWallpaper(@NonNull Rect rootRect) {
