@@ -254,7 +254,7 @@ public final class RestCards {
         // DOCK or PEEK: the host's glass.
         if (hostLaidOut) {
             if (peekStands) {
-                addPeek(rest, layout, dock, hostTop, hostBottom, w, h, shift, density);
+                addPeek(rest, layout, dock, hostTop, hostBottom, columnTop, w, h, shift, density);
             } else if (floats) {
                 addFloatingDock(layout, pass, rest, dock, hostTop, hostBottom, sideMargin, w,
                     shift, cornersPx, unified);
@@ -316,14 +316,14 @@ public final class RestCards {
 
     /**
      * The Peek card: cut at the apps row's icon line, inset from the screen's sides, running on
-     * past the screen's bottom (this box ends at it). {@code hostBottom} is where the rows stand.
+     * past the screen's bottom (this box ends at it). {@code rowsBottom} is where the rows stand:
+     * the keyboard column's top, even while the host runs on over the keyboard.
      */
     private void addPeek(@NonNull Rest rest, @NonNull PlaceLayout layout, @NonNull DockLayout dock,
-                         float hostTop, float hostBottom, int w, int h, float shift,
-                         float density) {
+                         float hostTop, float hostBottom, float rowsBottom, int w, int h,
+                         float shift, float density) {
         // The apps band's top: bands at and below the apps row, up from where the rows stand.
         List<Element> over = EdgeStackPolicy.overKeyboard(layout);
-        float rowsBottom = hostBottom;
         float below = 0f;
         float appsBand = 0f;
         boolean found = false;
@@ -340,7 +340,7 @@ public final class RestCards {
             // The apps row stands under the keyboard: its bands stand on the sheet's bottom.
             List<Element> underBands = EdgeStackPolicy.underKeyboard(layout);
             rowsBottom = mLaidOut[StackView.UNDER.ordinal()] != null
-                ? mLaidOut[StackView.UNDER.ordinal()].bottom : hostBottom;
+                ? mLaidOut[StackView.UNDER.ordinal()].bottom : rowsBottom;
             below = 0f;
             for (Element e : underBands) {
                 int band = bandPx(e, dock, rest.pass);
