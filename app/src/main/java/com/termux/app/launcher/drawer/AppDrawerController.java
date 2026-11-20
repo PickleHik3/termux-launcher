@@ -2183,6 +2183,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             stackOffset, keyboardExit, lowering);
         // After the bands: the hole follows the keyboard card where this frame has put it.
         if (scrimAroundKeyboard) applyKeyboardScrim(p);
+        diagKeyboardPockets(p, k, scrimAroundKeyboard);
         applyStatusBand(p);
         mHost.setHomeContentAlpha(AppDrawerHomeCoverPolicy.homeAlpha(p));
 
@@ -2276,6 +2277,62 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     @VisibleForTesting
     static boolean scrimRunsAroundKeyboard(float reveal, boolean systemIme, boolean cardMeasured) {
         return reveal > 0f && !systemIme && cardMeasured;
+    }
+
+    /** DIAG(kb-pocket): the last state logged, so a line is written only when it changes. */
+    @Nullable private String mPocketDiagLast;
+
+    /**
+     * DIAG(kb-pocket): what dims the pockets beside the keyboard card's top corners: whether the
+     * scrim runs round the keyboard, the card frame it was measured from, the hole and its radius,
+     * the host's clip and background, and where the host and the keyboard card stand on screen.
+     * Logged at p and k of 0 or 1 only, one line per change, with six caller frames. Revert
+     * before merge.
+     */
+    private void diagKeyboardPockets(float p, float k, boolean scrimAround) {
+        if (!com.termux.app.chrome.MotionLog.enabled || mHostLayout == null) return;
+        if ((p > 0f && p < 1f) || (k > 0f && k < 1f)) return;
+        FrameLayout host = mHostLayout;
+        android.graphics.drawable.Drawable bg = host.getBackground();
+        android.graphics.RectF hole = bg instanceof AppDrawerScrimDrawable
+            ? ((AppDrawerScrimDrawable) bg).getHole() : null;
+        int[] at = new int[2];
+        host.getLocationOnScreen(at);
+        View card = mKeyboardCardView;
+        int[] cardAt = new int[2];
+        if (card != null) card.getLocationOnScreen(cardAt);
+        android.view.ViewParent hostParent = host.getParent();
+        View kbContainer = mKeyboardView;
+        String state = "p=" + (p >= 1f ? "1" : "0") + " k=" + (k >= 1f ? "1" : "0")
+            + " around=" + scrimAround
+            + " cardFrame=" + (mKeyboardCardFrame == null ? "null" : mKeyboardCardFrame.left + ","
+                + mKeyboardCardFrame.top + "," + mKeyboardCardFrame.right + ","
+                + mKeyboardCardFrame.bottom)
+            + " hole=" + (hole == null ? "null" : hole.toShortString())
+            + " r=" + (bg instanceof AppDrawerScrimDrawable
+                ? ((AppDrawerScrimDrawable) bg).effectiveRadiusPx() : -1f)
+            + " hostClip=" + host.getClipBounds()
+            + " hostBg=" + (bg == null ? "null" : bg.getClass().getSimpleName())
+            + " host=" + at[0] + "," + at[1] + " " + host.getWidth() + "x" + host.getHeight()
+            + "@a" + host.getAlpha()
+            + " hostParent=" + (hostParent == null ? "null" : hostParent.getClass().getSimpleName())
+            + " card=" + (card == null ? "null" : cardAt[0] + "," + cardAt[1] + " "
+                + card.getWidth() + "x" + card.getHeight() + " vis=" + card.getVisibility())
+            + " kbView=" + (kbContainer == null ? "null" : "vis=" + kbContainer.getVisibility()
+                + " ty=" + kbContainer.getTranslationY() + " z=" + kbContainer.getZ()
+                + " parent=" + (kbContainer.getParent() == null ? "null"
+                    : kbContainer.getParent().getClass().getSimpleName()))
+            + " hostZ=" + host.getZ()
+            + " stays=" + keyboardStaysUp() + " upAtPull=" + mKeyboardUpAtPull
+            + " imePin=" + mImePinTopPx + " rounded=" + mRoundedStyle;
+        if (state.equals(mPocketDiagLast)) return;
+        mPocketDiagLast = state;
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        StringBuilder by = new StringBuilder();
+        for (int i = 1; i < Math.min(st.length, 7); i++)
+            by.append(st[i].getMethodName()).append(':').append(st[i].getLineNumber()).append(' ');
+        com.termux.app.chrome.MotionLog.log("kb-pocket", "up="
+            + android.os.SystemClock.uptimeMillis() + " " + state + " by=" + by);
     }
 
     /** The dim over the whole host, the keyboard card cut out where this frame has put it. */
