@@ -147,9 +147,14 @@ public final class SettingsSearchResults {
 
     private void hideOwnRows(@NonNull PreferenceScreen screen) {
         if (!mOwnRows.isEmpty()) return;
+        // Rows above the field stay (the root's process-limit notice). The list rebinds every row
+        // on a change and re-anchors on the focused field by its old position, so a hidden row
+        // above it would put the results header in the field's place and scroll the field away.
+        boolean belowField = false;
         for (int i = 0; i < screen.getPreferenceCount(); i++) {
             Preference row = screen.getPreference(i);
-            if (row instanceof SettingsSearchPreference || KEY_RESULTS.equals(row.getKey())) continue;
+            if (row instanceof SettingsSearchPreference) belowField = true;
+            if (!belowField || row instanceof SettingsSearchPreference || KEY_RESULTS.equals(row.getKey())) continue;
             mOwnRows.add(row);
             mOwnVisible.add(row.isVisible());
             row.setVisible(false);
