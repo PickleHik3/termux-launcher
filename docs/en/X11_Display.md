@@ -235,7 +235,7 @@ asking, which pins the keyboard until you put it down again.
 
 The launcher runs one PulseAudio server for everything: terminal sessions, Linux apps from the
 drawer and proot distros. It needs `pulseaudio`, which "Set up Linux apps" installs
-(`pkg install pulseaudio` does too), and two switches under **Settings › Terminal › Linux apps ›
+(`pkg install pulseaudio` does too), and two switches under **Settings › General ›
 Audio** control it, both on by default.
 
 - **Sound.** The server starts with your first terminal or Linux app and keeps running when you
