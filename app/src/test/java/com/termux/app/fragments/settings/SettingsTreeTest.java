@@ -180,4 +180,17 @@ public class SettingsTreeTest {
             SettingsTree.redirect(PAGES + "HomePreferencesFragment", "app_launcher_start_in"));
         assertEquals(R.xml.home_preferences, SettingsTree.find(PAGES + "HomePreferencesFragment").xmlRes);
     }
+
+    @Test
+    public void soundRowsAreOnGeneralNotOnLinuxApps() {
+        Context context = RuntimeEnvironment.getApplication();
+        PreferenceScreen general = new PreferenceManager(context).inflateFromResource(context,
+            SettingsTree.find(PAGES + "GeneralPreferencesFragment").xmlRes, null);
+        PreferenceScreen linuxApps = new PreferenceManager(context).inflateFromResource(context,
+            SettingsTree.find(PAGES + "X11DisplayPreferencesFragment").xmlRes, null);
+        for (String key : new String[] {"launcher_sound", "launcher_media_controls", "launcher_sound_status"}) {
+            assertNotNull(key + " on General", general.findPreference(key));
+            assertEquals(key + " not on Linux apps", null, linuxApps.findPreference(key));
+        }
+    }
 }

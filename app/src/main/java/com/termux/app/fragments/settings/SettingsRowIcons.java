@@ -113,7 +113,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_folder, "gui_apps_starter_files");
         key(R.drawable.ic_ms_developer_board, "x11_gpu", "status_widget_cpu");
         key(R.drawable.ic_ms_apps, "display", "x11_drawer_apps");
-        key(R.drawable.ic_ms_volume_up, "launcher_sound");
+        key(R.drawable.ic_ms_volume_up, "launcher_sound", "launcher_sound_status");
         key(R.drawable.ic_ms_play_circle, "launcher_media_controls");
         key(R.drawable.ic_ms_install_desktop, "x11_gui_apps_setup");
         key(R.drawable.ic_ms_tune, "x11_apps");
@@ -170,7 +170,6 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_push_pin, "app_launcher_default_buttons", "essential_notification_rules_manage");
         key(R.drawable.ic_ms_star, "app_launcher_most_used_page");
         key(R.drawable.ic_ms_grid_view, "app_launcher_drawer_layout");
-        key(R.drawable.ic_ms_desktop_windows, "linux_apps_in_drawer");
         key(R.drawable.ic_ms_search, "app_launcher_sub_search");
         key(R.drawable.ic_ms_tag, "app_launcher_input_char");
         key(R.drawable.ic_ms_rocket_launch, "app_launcher_drawer_open_only_match");

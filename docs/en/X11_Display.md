@@ -129,8 +129,9 @@ edition that package can't be installed beside the launcher's, and isn't needed.
   terminal window or on Home; only the picture is put away.
 - **Options.** **Settings → Linux apps** holds them: its own rows, then four pages. A
   running display picks a change up at once.
-  - On the page itself: **Show Linux apps in drawer**, **Set up Linux apps**, **Hidden Linux
-    apps** and **Window manager**.
+  - On the page itself, under **Apps**: **Set up Linux apps** and **Per-app settings**; under
+    **Desktop**: **Start with**; and under **Advanced**: **Graphics acceleration** and
+    **Window manager**.
   - **Input**: **Touch**, **Use Android keyboard**, **Keyboard pops up** and **Share the clipboard**.
   - **Resolution and scaling**: **Resolution**, **Scale**, **Fixed size** or **Custom size**,
     **Scaling** (filtering) and **Display density**.
@@ -235,7 +236,7 @@ asking, which pins the keyboard until you put it down again.
 
 The launcher runs one PulseAudio server for everything: terminal sessions, Linux apps from the
 drawer and proot distros. It needs `pulseaudio`, which "Set up Linux apps" installs
-(`pkg install pulseaudio` does too), and two switches under **Settings › Terminal › Linux apps ›
+(`pkg install pulseaudio` does too), and two switches under **Settings › General ›
 Audio** control it, both on by default.
 
 - **Sound.** The server starts with your first terminal or Linux app and keeps running when you
@@ -337,7 +338,7 @@ Two things make this work:
   Windows fill the display to its rounded corners, as on any rounded desktop, so a terminal that
   wants its first and last cells clear of the arcs pads its own window (`window_padding_width` in
   kitty, `window.padding` in alacritty).
-- **Show Linux apps in drawer**, in **Settings → Linux apps**, can be switched off if
+- **Show Linux apps in drawer**, in **Settings → Apps**, can be switched off if
   you would rather start apps from a shell.
 
 When an app is started from the drawer, the launcher exports the GPU settings from the table

@@ -35,8 +35,6 @@
     <string name="settings_dock_header">Dock</string>
     <string name="settings_drawer_header">Drawer</string>
     <string name="settings_app_drawer_grid_title">Grid</string>
-    <string name="settings_apps_linux_apps_link_title">Linux apps in the drawer</string>
-    <string name="settings_apps_linux_apps_link_summary">Show, hide and set them up</string>
 
     <string name="settings_terminal_sub_windows_title">Windows &amp; panes</string>
     <string name="settings_terminal_sub_windows_summary">Key hints and program control</string>
@@ -116,7 +114,7 @@
 
     <!-- Display overview and subpages -->
     <string name="settings_x11_group_configure">Configure</string>
-    <string name="settings_x11_group_support">Startup and support</string>
+    <string name="settings_x11_group_advanced">Advanced</string>
     <string name="settings_x11_group_keyboard">Keyboard</string>
     <string name="settings_x11_group_clipboard">Clipboard</string>
     <string name="settings_x11_group_resolution">Resolution</string>

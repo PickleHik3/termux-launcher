@@ -52,8 +52,9 @@ Whether scripts may open panes is covered on [launcherctl](LauncherCtl.md).
 
 ### Linux apps
 
-"Desktop apps, their windows and how they start": **Show Linux apps in drawer**, **Set up Linux
-apps**, **Hidden Linux apps**, **Window manager**, then the **Input**, **Resolution and scaling**,
+"Desktop apps, their windows and how they start": **Set up Linux
+apps** and **Per-app settings**, **Start with**, the **Input** and **Resolution and scaling**
+pages, then under **Advanced** the **Graphics acceleration** row, **Window manager** and the
 **Startup** and **Fixes** pages. There is nothing to switch on: the display starts when a Linux app
 asks for it. Builds made without the display leave this row out. See
 [The Linux display](X11_Display.md) and [Linux apps from a distro](Linux_Apps_From_A_Distro.md).

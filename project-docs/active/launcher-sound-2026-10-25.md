@@ -35,7 +35,7 @@ launcher-owned server for everything, and adds Android media integration on top.
    that module fails to load does it load `module-sles-sink`. No setting.
 3. **Restart at once, capped.** The launcher waits on the server process (no polling), and on
    exit restarts it immediately. After 3 exits within 60 s it stops retrying and shows a one-line
-   notice on the Linux apps page; the next need tries again.
+   notice on the General page; the next need tries again.
 4. **Everyone finds the same server.**
    - Every terminal session and Linux app gets `PULSE_SERVER`.
    - Termux-side clients started outside a session (ssh, Termux:Widget, run-command, services) find
@@ -51,7 +51,7 @@ launcher-owned server for everything, and adds Android media integration on top.
    the distro and writes an `asound.conf` pointing the default device at PulseAudio.
 7. **Step aside for a user's own setup.** If `~/.config/pulse` holds files the launcher did not
    write, or a server the user configured is already answering, the launcher starts nothing,
-   writes nothing, and the Linux apps page says it is using the user's own setup.
+   writes nothing, and the General page says it is using the user's own setup.
 8. **Replace a stock server.** A server some client autospawned, with no user configuration, is
    not a user's setup: it is stopped and the launcher's started in its place.
 
@@ -89,11 +89,11 @@ launcher-owned server for everything, and adds Android media integration on top.
 
 ### Settings
 
-13. **Two switches** on the Linux apps page, both on by default:
+13. **Two switches** on the General page, both on by default:
     - **Sound** — the launcher-run server. Off: stop the server and bus at once, remove the
       launcher's drop-ins, stop handing addresses to new sessions.
     - **Media controls** — notification and audio focus; greyed out while Sound is off.
-    The page also shows the step-aside state ("using your own setup") and the restart-cap notice.
+    The group also shows the step-aside state ("using your own setup") and the restart-cap notice.
 
 14. **The server survives a service stop.** Its runtime directory (its socket) is
    `$PREFIX/var/run/termux-launcher/sound`, not the tmp, because the service empties `$TMPDIR` on

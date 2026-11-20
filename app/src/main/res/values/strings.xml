@@ -578,7 +578,7 @@
     <string name="settings_x11_gpu_outcome_skipped">Not tried on this chip</string>
     <string name="settings_x11_gpu_outcome_unavailable">Not available to install here</string>
     <string name="settings_x11_gpu_not_measured">Not measured yet</string>
-    <string name="settings_x11_apps_title">Apps</string>
+    <string name="settings_x11_apps_title">Per-app settings</string>
     <string name="settings_x11_apps_summary">Choose graphics, touch and scale for each app.</string>
     <string name="settings_x11_apps_loading">Loading your Linux apps…</string>
     <string name="settings_x11_apps_empty">No Linux apps installed yet.</string>

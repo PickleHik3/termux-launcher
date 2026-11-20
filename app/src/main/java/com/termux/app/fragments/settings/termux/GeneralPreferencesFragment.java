@@ -37,6 +37,7 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
         getPreferenceManager().setPreferenceDataStore(new BehaviorDataStore(context));
         setPreferencesFromResource(R.xml.general_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
+        LauncherSoundRows.bind(this);
         // Start in's choices follow Use as the moment it moves: no Home under Terminal only.
         Preference useAs = findPreference(KEY_USE_AS);
         if (useAs != null) useAs.setOnPreferenceChangeListener((row, value) -> {
@@ -164,6 +165,7 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
     public void onResume() {
         super.onResume();
         if (getActivity() != null) getActivity().setTitle(R.string.settings_section_general);
+        LauncherSoundRows.updateStatus(this);
         Context context = getContext();
         if (context != null) offerStartIn(com.termux.app.settings.UseAsSetting.read(context));
         Preference transition = context == null ? null
@@ -184,7 +186,10 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
-    /** Keyboard vibration belongs to the keyboard's store; everything else to the launcher's. */
+    /**
+     * Keyboard vibration belongs to the keyboard's store, Sound and Media controls to the sound
+     * server's; everything else to the launcher's.
+     */
     private static final class BehaviorDataStore extends PreferenceDataStore {
         private static final String KEY_KEYBOARD_HAPTICS = "in_app_keyboard_haptics_enabled";
         @NonNull private final Context context;
@@ -200,6 +205,7 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
         @Override
         public void putBoolean(@Nullable String key, boolean value) {
             if (KEY_KEYBOARD_HAPTICS.equals(key)) keyboard.putBoolean(key, value);
+            else if (LauncherSoundRows.isSoundKey(key)) LauncherSoundRows.putBoolean(context, key, value);
             else style.putBoolean(key, value);
         }
 
@@ -218,8 +224,9 @@ public class GeneralPreferencesFragment extends MaterialPreferenceFragment {
 
         @Override
         public boolean getBoolean(@Nullable String key, boolean defValue) {
-            return KEY_KEYBOARD_HAPTICS.equals(key) ? keyboard.getBoolean(key, defValue)
-                : style.getBoolean(key, defValue);
+            if (KEY_KEYBOARD_HAPTICS.equals(key)) return keyboard.getBoolean(key, defValue);
+            if (LauncherSoundRows.isSoundKey(key)) return LauncherSoundRows.getBoolean(context, key, defValue);
+            return style.getBoolean(key, defValue);
         }
     }
 }

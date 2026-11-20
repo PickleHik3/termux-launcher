@@ -332,9 +332,9 @@ More in [The Linux display](X11_Display.md).
 ## Linux apps from a distro do not show or do not open
 
 - **No Linux apps in the drawer at all.** Either nothing is installed yet (use **Settings
-  → Linux apps → Set up Linux apps**), or **Show Linux apps in drawer** is off. Check too that the
+  → Linux apps → Set up Linux apps**), or **Show Linux apps in drawer** (Settings → Apps) is off. Check too that the
   distro was installed by `proot-distro` 5.x.
-- **One app is missing.** Look in **Hidden Linux apps** first. Otherwise the app has no menu entry
+- **One app is missing.** Look in **Per-app settings** first. Otherwise the app has no menu entry
   of its own: command-line programs usually have none. Write the entry yourself; see
   [Writing an entry yourself](Linux_Apps_From_A_Distro.md#writing-an-entry-yourself).
 - **An app opens and closes again, or nothing happens.** Most often a fresh distro missing fonts;
