@@ -147,6 +147,28 @@ public final class PageBarModel {
         return plain.isEmpty() ? label : plain;
     }
 
+    /**
+     * The kind the page switcher key's cap shows: the page the wall is on, or the Terminal when
+     * it is on none of the entries.
+     */
+    @NonNull public PageKind capKind() {
+        return mCurrentIndex < 0 ? PageKind.TERMINAL : mEntries.get(mCurrentIndex).kind;
+    }
+
+    /**
+     * The number on the cap. Home: the current Home page's place. Terminal: the window you would
+     * return to, whichever page is in front; 0 with no windows. 0 for Assistant and Display.
+     */
+    public int capNumber() {
+        PageKind kind = capKind();
+        if (kind == PageKind.HOME) return mEntries.get(mCurrentIndex).number;
+        if (kind != PageKind.TERMINAL) return 0;
+        for (Entry e : mEntries) {
+            if (e.kind == PageKind.TERMINAL && e.returnTo) return e.number;
+        }
+        return 0;
+    }
+
     @NonNull
     public static PageBarModel build(@NonNull Input in) {
         int displays = 0;

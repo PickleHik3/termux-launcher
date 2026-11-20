@@ -62,6 +62,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         void chosen(@NonNull PageBarModel.Target target);
         /** A slide began or ended; the dock's capsules dim while it runs. */
         void slidingChanged(boolean sliding);
+        /** A touch ended in a tap, a commit or a cancel (after {@link #chosen} when it chose). */
+        void touchEnded();
     }
 
     private static final long ENTER_MS = 120L;
@@ -100,6 +102,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     @Nullable private PaneSurfaceStyle mLook;
     private boolean mGlassShown;
     private boolean mStream;
+    /** The bar is popped over the extra keys: the key's finger is fed in, and only leaving above cancels. */
+    private boolean mKeyEntry;
+    private boolean mFixedInk;
+    @ColorInt private int mFixedInkColor = Color.WHITE;
+    @ColorInt private int mFixedAccent = Color.WHITE;
     private boolean mSliding;
     /** 0 at rest, 1 fully sliding; the tween between. */
     private float mEnter;
@@ -147,6 +154,27 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         if (entry != null && isAttachedToWindow()) entry.addHitArea(this);
     }
 
+    /** The bar as the extra-keys key pops it up; set once, before it has a width. */
+    public void setKeyEntry(boolean keyEntry) {
+        if (mKeyEntry == keyEntry) return;
+        mKeyEntry = keyEntry;
+        rebuild();
+    }
+
+    /**
+     * Ink and accent for a bar with no Home ground to measure (the key's pop-up): used as they
+     * are, and the fallback fill and outline are drawn in them.
+     */
+    public void setFixedInk(@ColorInt int ink, @ColorInt int accent) {
+        if (mFixedInk && mFixedInkColor == ink && mFixedAccent == accent) return;
+        mFixedInk = true;
+        mFixedInkColor = ink;
+        mFixedAccent = accent;
+        mInk.ink = ink;
+        mInk.accent = accent;
+        invalidate();
+    }
+
     /**
      * Takes the model; rebuilds the fold and layout only when it differs from the one held, and
      * invalidates only when something drawn changed.
@@ -176,7 +204,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             mFold = PageBarFold.fold(entries, PageBarLayout.maxSlots(mDensity, width));
             int slots = mFold.slots.size();
             mLayout = new PageBarLayout(mDensity, width, slots);
-            mSlide = new PageBarSlide(mLayout, mFold, entries, mTouchSlop, false);
+            mSlide = new PageBarSlide(mLayout, mFold, entries, mTouchSlop, mKeyEntry);
             if (mCenters.length != slots) {
                 mCenters = new float[slots];
                 mScales = new float[slots];
@@ -289,6 +317,16 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             layout.pillHeightPx() / 2f);
         mGlassShown = shown;
         if (shown) mGlass.invalidateOutline();
+        if (mFixedInk) {
+            mInk.ground = Color.TRANSPARENT;
+            mInk.veil = Color.TRANSPARENT;
+            mInk.ink = mFixedInkColor;
+            mInk.accent = mFixedAccent;
+            PageBarBubbleView popBubble = mBubble;
+            if (popBubble != null) popBubble.dress(mLook);
+            invalidate();
+            return;
+        }
         int accent = mEntry == null ? Color.WHITE : mEntry.accent();
         mInk.ground = Color.TRANSPARENT;
         mInk.veil = Color.TRANSPARENT;
@@ -384,33 +422,78 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
 
     @Override
     public boolean onTouchEvent(@NonNull MotionEvent event) {
-        PageBarSlide slide = mSlide;
-        Entry entry = mEntry;
-        if (slide == null || entry == null) return false;
+        if (mSlide == null || mEntry == null) return false;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                if (entry.isSuppressed() || !inPill(event.getX(), event.getY())) return false;
-                slide.down(event.getX(), event.getY());
-                mStream = true;
+                if (mEntry.isSuppressed() || !inPill(event.getX(), event.getY())) return false;
+                beginTouch(event.getX(), event.getY());
                 // The Home pager must not page on this touch.
                 if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
                 return true;
             case MotionEvent.ACTION_MOVE:
-                if (!mStream) return false;
-                onResult(slide, slide.move(event.getX(), event.getY()));
-                return true;
             case MotionEvent.ACTION_UP:
-                if (!mStream) return false;
-                onResult(slide, slide.up(event.getX(), event.getY()));
-                mStream = false;
-                return true;
             case MotionEvent.ACTION_CANCEL:
-                if (mStream) onResult(slide, slide.cancel());
-                mStream = false;
+                if (!mStream) return false;
+                step(event.getActionMasked(), event.getX(), event.getY());
                 return true;
             default:
                 return mStream;
         }
+    }
+
+    private void beginTouch(float x, float y) {
+        PageBarSlide slide = mSlide;
+        if (slide == null) return;
+        slide.down(x, y);
+        mStream = true;
+    }
+
+    private PageBarSlide.Result step(int action, float x, float y) {
+        PageBarSlide slide = mSlide;
+        if (slide == null) return PageBarSlide.Result.NONE;
+        PageBarSlide.Result result;
+        if (action == MotionEvent.ACTION_MOVE) {
+            result = slide.move(x, y);
+        } else if (action == MotionEvent.ACTION_UP) {
+            result = slide.up(x, y);
+            mStream = false;
+        } else {
+            result = slide.cancel();
+            mStream = false;
+        }
+        onResult(slide, result);
+        return result;
+    }
+
+    /**
+     * The key entry's finger, in this view's coordinates: the popup's owner feeds the stream the
+     * key took. A down starts a press wherever it lands (the finger is on the key, below the pill).
+     */
+    @NonNull
+    PageBarSlide.Result feed(int action, float x, float y) {
+        if (action == MotionEvent.ACTION_DOWN) {
+            beginTouch(x, y);
+            return PageBarSlide.Result.NONE;
+        }
+        return mStream ? step(action, x, y) : PageBarSlide.Result.NONE;
+    }
+
+    /** Whether a slide has begun (the finger moved on past the slop) in the touch being fed. */
+    boolean isSliding() {
+        return mSliding;
+    }
+
+    /** Ends the touch being fed with nothing chosen and no callbacks: a release on the key itself. */
+    void abandon() {
+        cancelStream();
+    }
+
+    /** Puts the bar away: the touch, the slide and the bubble, all given back. */
+    void release() {
+        cancelStream();
+        mEnterAnim.cancel();
+        mEnter = 0f;
+        hideBubble();
     }
 
     private void onResult(@NonNull PageBarSlide slide, @NonNull PageBarSlide.Result result) {
@@ -423,9 +506,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
                 if (entry != null && model != null && slide.entryIndex() >= 0) {
                     entry.chosen(model.entries().get(slide.entryIndex()).target);
                 }
+                if (entry != null) entry.touchEnded();
                 return;
             case CANCEL:
                 endSlide();
+                if (entry != null) entry.touchEnded();
                 return;
             default:
                 break;

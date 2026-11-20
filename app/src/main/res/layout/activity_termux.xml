@@ -1239,9 +1239,9 @@
             android:clipChildren="false"
             android:clipToPadding="false" />
 
-        <!-- The page switch panel's layer: full size, no background, and not clickable while the
-             panel is away. PageSwitchController raises the panel in it and takes touches only
-             while the panel stays open after a tap. -->
+        <!-- The page switcher key's layer: full size, no background, and not clickable while the
+             bar is away. PageBarController raises the key's page bar in it and takes touches only
+             while the bar stays open after a tap. -->
         <FrameLayout
             android:id="@+id/page_switch_layer"
             android:layout_width="match_parent"

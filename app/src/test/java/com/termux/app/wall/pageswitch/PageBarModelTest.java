@@ -148,4 +148,48 @@ public class PageBarModelTest {
         Input in = wall("HT", 1);
         assertEquals(-1, PageBarModel.build(in).currentIndex());
     }
+
+    @Test public void capShowsTheCurrentHomePageAndItsNumber() {
+        Input in = wall("HHT", 1);
+        in.currentPageId = 2;
+        in.currentWindow = 0;
+        PageBarModel m = PageBarModel.build(in);
+        assertEquals(PageKind.HOME, m.capKind());
+        assertEquals(2, m.capNumber());
+    }
+
+    @Test public void capShowsTheWindowYouWouldReturnToWhenOnAnotherPage() {
+        Input in = wall("HT", 3);
+        in.currentPageId = 1;
+        in.currentWindow = 1;
+        PageBarModel m = PageBarModel.build(in);
+        assertEquals(PageKind.HOME, m.capKind());
+        in.currentPageId = 2;
+        m = PageBarModel.build(in);
+        assertEquals(PageKind.TERMINAL, m.capKind());
+        assertEquals(2, m.capNumber());
+    }
+
+    @Test public void capOfAssistantAndDisplayHasNoNumber() {
+        Input in = wall("HDA", 0);
+        in.currentPageId = 3;
+        PageBarModel m = PageBarModel.build(in);
+        assertEquals(PageKind.ASSISTANT, m.capKind());
+        assertEquals(0, m.capNumber());
+    }
+
+    @Test public void capFallsBackToTheTerminalWhenTheWallIsOnNoEntry() {
+        Input in = wall("HT", 2);
+        in.currentPageId = 99;
+        in.currentWindow = 1;
+        PageBarModel m = PageBarModel.build(in);
+        assertEquals(PageKind.TERMINAL, m.capKind());
+        assertEquals(2, m.capNumber());
+    }
+
+    @Test public void plainLabelDropsIconCodePointsButNeverEmpties() {
+        assertEquals("htop", PageBarModel.plainLabel("\uE000 htop"));
+        assertEquals("", PageBarModel.plainLabel(""));
+        assertEquals("\uE000", PageBarModel.plainLabel("\uE000"));
+    }
 }
