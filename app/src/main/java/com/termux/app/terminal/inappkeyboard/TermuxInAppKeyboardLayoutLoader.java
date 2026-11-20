@@ -195,9 +195,8 @@ public final class TermuxInAppKeyboardLayoutLoader {
             throw new IOException("layout exceeds " + MAX_LAYOUT_BYTES + " bytes");
 
         byte[] bytes = readBounded(mLayoutFile);
-        KeyboardData parsed = KeyboardData.load_string_exn(
-            new String(bytes, StandardCharsets.UTF_8));
-        return LayoutModifier.modify(parsed, mLayoutOptions, mResources);
+        return InAppKeyboardLayoutSource.parseText(mResources,
+            new String(bytes, StandardCharsets.UTF_8), mLayoutOptions);
     }
 
     private KeyboardData loadBundled() {
