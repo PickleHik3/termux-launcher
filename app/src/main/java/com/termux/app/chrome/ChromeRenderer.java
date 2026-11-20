@@ -453,7 +453,13 @@ public final class ChromeRenderer {
      * landing frame, never in it, so the pass this books falls on a frame where nothing moves.
      */
     public void settleEvenOut() {
-        if (mInk.releaseEvenOut()) requestSync(SCOPE_APPLY_THIS_FRAME | SCOPE_ACCESSORY_RENDER);
+        if (!mInk.releaseEvenOut()) return;
+        Trace.beginSection("Chrome.settleEvenOut");
+        try {
+            requestSync(SCOPE_APPLY_THIS_FRAME | SCOPE_ACCESSORY_RENDER);
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /** Whether {@link #holdEvenOut} is in force and not yet settled. */
