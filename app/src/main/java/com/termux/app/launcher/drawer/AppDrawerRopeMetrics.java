@@ -13,8 +13,9 @@ import androidx.annotation.NonNull;
  * <p><b>The clamps are the point.</b> The same 27 letters have to fit a ~1500px track on a 1080p
  * phone and a ~2100px one at 1440p, where an unclamped slot would put a 24dp letter on screen, and
  * still be legible on a short track — a landscape plane, or a split-screen one — where the honest
- * answer is a slot smaller than the glyph would like. So the slot is capped from above and the glyph
- * is clamped from both sides and then held inside its slot, which keeps adjacent letters from
+ * answer is a slot smaller than the glyph would like. The slots always share the whole track, so
+ * the letters run from the grid's top to the card's bottom at every card height; the glyph is
+ * clamped from both sides and then held inside its slot, which keeps adjacent letters from
  * overlapping at the small end and keeps them from reading as a heading list at the large end.
  *
  * <p>{@link #indexForY} carries {@link #LETTER_SLOT_HYSTERESIS_RATIO}, the same value and the same
@@ -28,8 +29,6 @@ public final class AppDrawerRopeMetrics {
     public static final float COLUMN_WIDTH_DP = 30f;
     /** Padding above and below the track, so the first and last letters are not against the edges. */
     public static final float TRACK_INSET_DP = 10f;
-    /** Ceiling on a slot: 27 letters over a 1440p plane would otherwise get 24dp each. */
-    public static final float MAX_SLOT_DP = 26f;
     /** Share of a slot a glyph may take before the letters read as one block. */
     public static final float GLYPH_SLOT_FRACTION = 0.62f;
     /** Glyph bounds. The floor is the smallest legible letter; the ceiling matches the dock's row. */
@@ -57,7 +56,7 @@ public final class AppDrawerRopeMetrics {
     public float columnWidthPx;
     /** Top of the first slot. */
     public float trackTopPx;
-    /** {@link #slotHeightPx} times {@link #letterCount}; the track is centred in the space given. */
+    /** {@link #slotHeightPx} times {@link #letterCount}: the whole space given, less the insets. */
     public float trackHeightPx;
     public float slotHeightPx;
     /** Text size for a glyph, never larger than its slot. */
@@ -117,9 +116,10 @@ public final class AppDrawerRopeMetrics {
         // On a very short track the fixed inset would eat the whole thing, so it gives way first.
         float insetPx = Math.min(TRACK_INSET_DP * d, height * 0.25f);
         float usablePx = Math.max(0f, height - (insetPx * 2f));
-        float slotHeightPx = Math.min(MAX_SLOT_DP * d, usablePx / count);
-        float trackHeightPx = slotHeightPx * count;
-        float trackTopPx = insetPx + ((usablePx - trackHeightPx) * 0.5f);
+        // Evenly over the whole track, A at its top and the last letter at its bottom.
+        float slotHeightPx = usablePx / count;
+        float trackHeightPx = usablePx;
+        float trackTopPx = insetPx;
         float glyphTextSizePx = Math.min(MAX_GLYPH_DP * d,
             Math.max(MIN_GLYPH_DP * d, slotHeightPx * GLYPH_SLOT_FRACTION));
         // The floor must never win by enough to overlap the neighbouring letter.

@@ -73,23 +73,21 @@ public class AppDrawerRopeMetricsTest {
     }
 
     @Test
-    public void aTallTrackCapsTheSlotAndTheGlyphAndCentresWhatIsLeft() {
+    public void aTallTrackCapsTheGlyphAndSpreadsTheLettersOverAllOfIt() {
         // 1440p, 27 letters over 2100px: the glyph ceiling is the binding constraint.
         AppDrawerRopeMetrics tall = AppDrawerRopeMetrics.resolve(2100f, ALL_LETTERS, 3.5f);
         assertEquals(AppDrawerRopeMetrics.MAX_GLYPH_DP * 3.5f, tall.glyphTextSizePx, EPS);
         assertTrue(tall.slotHeightPx > tall.glyphTextSizePx);
-        assertTrue(tall.slotHeightPx <= AppDrawerRopeMetrics.MAX_SLOT_DP * 3.5f);
         assertTrue(tall.trackTopPx + tall.trackHeightPx <= 2100f);
 
-        // A tablet-height track hits the slot ceiling instead, and the shorter track is then centred
-        // in the space rather than stretched or left at the top.
+        // The letters run from the grid's top to the card's bottom at every height: no slot
+        // ceiling leaving an empty band above A and below Z (the keyboard-down card on pong).
         AppDrawerRopeMetrics tablet = AppDrawerRopeMetrics.resolve(2600f, ALL_LETTERS, 2f);
         float inset = AppDrawerRopeMetrics.TRACK_INSET_DP * 2f;
-        assertEquals(AppDrawerRopeMetrics.MAX_SLOT_DP * 2f, tablet.slotHeightPx, EPS);
         float usable = 2600f - (inset * 2f);
-        assertEquals(inset + ((usable - tablet.trackHeightPx) * 0.5f), tablet.trackTopPx, EPS);
-        float bottomGap = 2600f - (tablet.trackTopPx + tablet.trackHeightPx);
-        assertEquals(tablet.trackTopPx, bottomGap, EPS);
+        assertEquals(usable / ALL_LETTERS, tablet.slotHeightPx, EPS);
+        assertEquals(inset, tablet.trackTopPx, EPS);
+        assertEquals(2600f - inset, tablet.trackTopPx + tablet.trackHeightPx, EPS);
     }
 
     @Test
@@ -120,9 +118,10 @@ public class AppDrawerRopeMetricsTest {
         assertEquals(ALL_LETTERS, AppDrawerRopeMetrics.resolve(TRACK_HEIGHT, 40, DENSITY).letterCount);
         assertEquals(1, AppDrawerRopeMetrics.resolve(TRACK_HEIGHT, 0, DENSITY).letterCount);
         assertEquals(1, AppDrawerRopeMetrics.resolve(TRACK_HEIGHT, -3, DENSITY).letterCount);
-        // Fewer letters means taller slots up to the ceiling, not a stretched track.
+        // Fewer letters spread over the same track, evenly.
         AppDrawerRopeMetrics few = AppDrawerRopeMetrics.resolve(TRACK_HEIGHT, 6, DENSITY);
-        assertEquals(AppDrawerRopeMetrics.MAX_SLOT_DP * DENSITY, few.slotHeightPx, EPS);
+        float inset = AppDrawerRopeMetrics.TRACK_INSET_DP * DENSITY;
+        assertEquals((TRACK_HEIGHT - inset * 2f) / 6f, few.slotHeightPx, EPS);
         assertEquals(6, few.letterCount);
     }
 
