@@ -27,8 +27,8 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.RestCards.CardId;
 import com.termux.app.place.RestCards.StackView;
-import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.wall.PageRef;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
@@ -306,7 +306,9 @@ public class RestCardsParityTest {
         StackLayout.Input pass = f.pass(page, up, floating);
         PlaceLayout layout = f.layoutOf(page);
         RestCards.Rest rest = new RestCards.Rest(pass, page, f.widthPx, f.heightPx, f.density,
-            f.extraKeysRowPx, f.keyboardLaidOutPx());
+            f.extraKeysRowPx, f.keyboardLaidOutPx(),
+            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false, f.density),
+            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, f.density));
         rest.statusOnDockPlank = statusOnPlank(layout);
         RestCards cards = RestCards.of(rest);
         Views v = views(page, up, floating, pass);

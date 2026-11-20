@@ -4,7 +4,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-
 import com.termux.app.dock.DockGeometry;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.PeekGlassGeometry;
@@ -13,6 +12,7 @@ import com.termux.app.place.ChromeShape.EdgeKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.RestCards.CardId;
 import com.termux.app.place.RestCards.StackView;
+import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.wall.PageRef;
 
 import org.junit.Test;
@@ -26,7 +26,9 @@ public class RestCardsTest {
     private static RestCards rest(LayoutFixtures.Fixture f, PageRef page, boolean up,
                                   boolean floating) {
         return RestCards.of(new RestCards.Rest(f.pass(page, up, floating), page, f.widthPx,
-            f.heightPx, f.density, f.extraKeysRowPx, f.keyboardLaidOutPx()));
+            f.heightPx, f.density, f.extraKeysRowPx, f.keyboardLaidOutPx(),
+            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false, f.density),
+            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, f.density)));
     }
 
     private static DockLayout dock(LayoutFixtures.Fixture f, PageRef page, boolean up,

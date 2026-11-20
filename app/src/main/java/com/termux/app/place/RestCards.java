@@ -19,7 +19,6 @@ import com.termux.app.place.ChromeShape.EdgeKind;
 import com.termux.app.place.ChromeShape.PieceId;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
-import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.wall.PageRef;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
@@ -54,7 +53,7 @@ import java.util.List;
  *   <li>The apps band's top: the rows stand on the keyboard column's top, each band at its
  *       {@link DockLayout} height (apps: its bar, Search field, Wall strip and page ticks).</li>
  *   <li>The Docked shape model's thicknesses: the bands' heights above, the status bar's
- *       {@link StatusBarEdgeGeometry#thicknessPx}, the keyboard's laid-out height.</li>
+ *       the top status bar's thickness (a plain input on {@link Rest}), the keyboard's laid-out height.</li>
  *   <li>The lane slack and the flush padding: slack is read from the two layouts' rests; flush
  *       padding is whatever the pass carries (the fixtures stand none).</li>
  * </ul>
@@ -78,6 +77,9 @@ public final class RestCards {
         final float density;
         final int measuredExtraKeysRowPx;
         final int measuredKeyboardPx;
+        /** The top status bar's thickness, Docked and Floating, as the status bar's geometry sizes it. */
+        final int statusThicknessDockedPx;
+        final int statusThicknessFloatingPx;
         /** The keyboard wears the dock's glass material, so Docked it is one surface with it. */
         public boolean keyboardGlassShared = true;
         /** A bottom status bar is a band of the dock's plank, not a bar with a sheet of its own. */
@@ -89,7 +91,8 @@ public final class RestCards {
          */
         public Rest(@NonNull StackLayout.Input pass, @NonNull PageRef page, int screenWidthPx,
                     int screenHeightPx, float density, int measuredExtraKeysRowPx,
-                    int measuredKeyboardPx) {
+                    int measuredKeyboardPx, int statusThicknessDockedPx,
+                    int statusThicknessFloatingPx) {
             this.pass = pass;
             this.page = page;
             this.screenWidthPx = screenWidthPx;
@@ -97,6 +100,12 @@ public final class RestCards {
             this.density = density;
             this.measuredExtraKeysRowPx = measuredExtraKeysRowPx;
             this.measuredKeyboardPx = measuredKeyboardPx;
+            this.statusThicknessDockedPx = statusThicknessDockedPx;
+            this.statusThicknessFloatingPx = statusThicknessFloatingPx;
+        }
+
+        int statusThicknessPx(boolean floating) {
+            return floating ? statusThicknessFloatingPx : statusThicknessDockedPx;
         }
     }
 
@@ -280,10 +289,9 @@ public final class RestCards {
                            int w, int h, float density) {
         ChromeShape.Piece piece = shape == null ? null : shape.piece(PieceId.STATUS);
         if (piece == null) return;
-        int thickness = StatusBarEdgeGeometry.thicknessPx(Edge.TOP, floating, false, density);
-        StatusBarEdgeGeometry.Frame frame = StatusBarEdgeGeometry.frame(Edge.TOP, w, h,
-            thickness, 0);
-        Box box = new Box(frame.left, frame.top, frame.right, frame.bottom);
+        // A top row spans the width and takes its thickness off the screen's top.
+        Box box = new Box(0, 0, Math.max(0, w),
+            Math.min(Math.max(0, h), Math.max(0, rest.statusThicknessPx(floating))));
         mLaidOut[StackView.STATUS_BAR.ordinal()] = box;
         mCards.add(new Card(CardId.STATUS, StackView.STATUS_BAR, box, piece.corners,
             piece.kind(Edge.TOP), piece.kind(Edge.BOTTOM), piece.kind(Edge.LEFT),
@@ -462,8 +470,7 @@ public final class RestCards {
                                        float cornersPx) {
         StackLayout.Input pass = rest.pass;
         boolean floating = style == LayoutStyle.FLOATING;
-        float status = StatusBarEdgeGeometry.thicknessPx(Edge.TOP, floating, false,
-            rest.density);
+        float status = rest.statusThicknessPx(floating);
         float apps = bandPx(Element.APPS, dock, pass);
         float az = bandPx(Element.AZ, dock, pass);
         float keys = bandPx(Element.EXTRA_KEYS, dock, pass);

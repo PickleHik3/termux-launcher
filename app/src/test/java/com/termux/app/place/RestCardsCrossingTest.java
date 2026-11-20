@@ -2,7 +2,6 @@ package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -17,6 +16,7 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.RestCards.Card;
 import com.termux.app.place.RestCards.CardId;
 import com.termux.app.place.RestCards.StackView;
+import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.wall.PageRef;
 
 import org.junit.Test;
@@ -195,7 +195,9 @@ public class RestCardsCrossingTest {
     private static RestCards rest(LayoutFixtures.Fixture f, PageRef page, boolean up,
                                   boolean floating) {
         return RestCards.of(new RestCards.Rest(f.pass(page, up, floating), page, f.widthPx,
-            f.heightPx, f.density, f.extraKeysRowPx, f.keyboardLaidOutPx()));
+            f.heightPx, f.density, f.extraKeysRowPx, f.keyboardLaidOutPx(),
+            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false, f.density),
+            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, f.density)));
     }
 
     @Nullable
