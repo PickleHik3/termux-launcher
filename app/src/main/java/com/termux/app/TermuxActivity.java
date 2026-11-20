@@ -8334,7 +8334,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The frost under the bed is up only while this pass dresses the host as the Display
         // page's glass; every other pass (keyboard down, another page, floating, mid-blend) takes
         // it away, so it can never outlive the material it belongs to.
-        if (!dressInAppKeyboardHost(state)) releaseKeyboardFrost();
+        com.termux.app.wall.PageRef arriving = keyboardArrivalOf(state.keyboardShown);
+        boolean frosts = arriving != null ? dressArrivingKeyboardHost(arriving)
+            : dressInAppKeyboardHost(state);
+        if (!frosts) releaseKeyboardFrost();
+    }
+
+    /**
+     * The page a crossing arrives at when, under Floating, the keyboard host is dressed as that
+     * page's rest shows it (KeyboardMaterialPolicy#dressedShown), so the keyboard rises in the
+     * arriving rest's own card rather than bare until the landing makes it visible. Null on every
+     * other pass, which dresses the host from its own state.
+     */
+    @Nullable
+    private com.termux.app.wall.PageRef keyboardArrivalOf(boolean liveShown) {
+        if (liveShown || !mCrossing.crossing()) return null;
+        com.termux.app.page.PageKind other = mCrossing.seam().other();
+        if (other == null) return null;
+        boolean arrives = chromeRestOf(other).keyboardReveal() > 0f;
+        if (!KeyboardMaterialPolicy.dressedShown(false, arrives,
+            arrangementOf(com.termux.app.wall.PageRef.TERMINAL).floating())) return null;
+        return endpointPageOf(other);
+    }
+
+    /**
+     * The keyboard host dressed as {@code arriving}'s rest shows it: the one dress ladder
+     * ({@link #dressInAppKeyboardHost}) run with the keyboard shown under that page's look
+     * ({@link #mLookIdOverride}), so it builds what the rest's own pass builds, held under the
+     * same key, and that pass finds it and changes nothing. Built once as the crossing begins
+     * ({@link #beginKeyboardLookBlend}); a pass on the way finds the same held glass, and the look
+     * blend crossing to it is put back up. True when the bed frosts the display.
+     */
+    private boolean dressArrivingKeyboardHost(@NonNull com.termux.app.wall.PageRef arriving) {
+        boolean frosts;
+        mLookIdOverride = lookIdOf(arriving);
+        try {
+            ChromeSpec state = buildChromeSpec();
+            frosts = dressInAppKeyboardHost(new ChromeSpec(state.toolbarShown, true,
+                mKeyboardGeometry.measureHeightPx(), state.blurEnabled, state.appsRowEnabled,
+                state.azRowEnabled, state.extraKeysRowEnabled, state.barAlpha,
+                state.blurRadiusDp));
+        } finally {
+            mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+        }
+        com.termux.app.chrome.CrossfadeDrawable blend = mKeyboardLookBlend;
+        View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+        if (blend != null && mKeyboardLookBlendArrives && surfaceHost != null
+            && mKeyboardHostInner != null && mKeyboardHostInner == blend.there())
+            setKeyboardHostBackground(surfaceHost, blend);
+        return frosts;
     }
 
     /** {@link #applyInAppKeyboardHostMaterial}'s dressing; true when the bed frosts the display. */
@@ -8760,8 +8808,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Everything GlassStack.build reads that is not the spec: the backdrop instance,
                 // the band's baked veil and even-out, and the colours and look the factory
                 // resolves for the glass layers.
+                // The band's even-out as the build bakes it: measured first, and keyed by the
+                // band's own token, so another band measured again (the dock, at a landing)
+                // does not read as a new keyboard glass.
+                if (spec.band != null) mChrome.ink().bandEvenOutMatrix(spec.band, null);
                 key = com.termux.app.chrome.HeldBackground.key("glass", spec, backdrop, density,
-                    mChrome.glass().bandVeil(spec.band), mChrome.ink().evenOutGeneration(),
+                    mChrome.glass().bandVeil(spec.band), spec.band == null ? -1
+                        : mChrome.ink().bandEvenOutChanges(spec.band),
                     resolveAccessoryGlassBaseColor(), resolveDockAccentColor(),
                     mChrome.glass().look(spec.tintStrengthPercent));
                 Drawable held = mKeyboardHostBackground.reuse(key);
@@ -8809,10 +8862,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             MotionLog.log("kb-host", "now=" + (d == null ? "null" : d.getClass().getSimpleName())
                 + " crossing=" + mCrossing.crossing() + " look=" + stackLookPage() + " by=" + by);
         }
-        if (!mKeyboardHostBackground.holds(background)) mKeyboardHostBackground.release();
+        if (!mKeyboardHostBackground.holds(background) && !keyboardBlendHoldsArrival(background))
+            mKeyboardHostBackground.release();
         mKeyboardHostInner = background;
         // Under an open drawer the host wears the sheet's glass over this (KeyboardSheetSkin).
         surfaceHost.setBackground(mKeyboardSheet.dress(background));
+    }
+
+    /**
+     * Whether {@code background} is the Floating look blend whose arriving end is the held glass:
+     * that end stays held while the blend shows it, so the landing puts it up and the rest's own
+     * pass reuses it rather than building the same glass again.
+     */
+    private boolean keyboardBlendHoldsArrival(@Nullable Drawable background) {
+        com.termux.app.chrome.CrossfadeDrawable blend = mKeyboardLookBlend;
+        return mKeyboardLookBlendDressed && blend != null && background == blend
+            && mKeyboardHostBackground.holds(blend.there());
     }
 
     /**
@@ -14274,6 +14339,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Whether the keyboard look blend arrives at a keyboard (else the keyboard's material goes). */
     private boolean mKeyboardLookBlendArrives;
+    /** Whether its arriving end is Floating's own card, dressed by the ladder and held. */
+    private boolean mKeyboardLookBlendDressed;
 
     /**
      * The keyboard host's material across a look-apart crossing toward a page whose rest shows the
@@ -14286,6 +14353,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void beginKeyboardLookBlend(@NonNull com.termux.app.wall.PageRef there) {
         mKeyboardLookBlend = null;
+        mKeyboardLookBlendDressed = false;
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
         if (surfaceHost == null || mPreferences == null) return;
         mKeyboardLookBlendArrives = chromeRestOf(there.kind).keyboardReveal() > 0f;
@@ -14296,6 +14364,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (here == null) return;
             mKeyboardLookBlend = new com.termux.app.chrome.CrossfadeDrawable(here,
                 new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT), 0f);
+            setKeyboardHostBackground(surfaceHost, mKeyboardLookBlend);
+            return;
+        }
+        if (KeyboardMaterialPolicy.dressedShown(false, true,
+                arrangementOf(com.termux.app.wall.PageRef.TERMINAL).floating())) {
+            // Floating: the arriving end is the keyboard's own card as the arriving rest dresses
+            // it, through the one dress ladder (its Style, corners and material), built once here.
+            Drawable here = surfaceHost.getBackground();
+            if (!dressArrivingKeyboardHost(there)) releaseKeyboardFrost();
+            Drawable arrival = mKeyboardHostInner;
+            if (arrival == null) return;
+            mKeyboardLookBlendDressed = true;
+            mKeyboardLookBlend = new com.termux.app.chrome.CrossfadeDrawable(
+                here != null ? here : new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT),
+                arrival, 0f);
             setKeyboardHostBackground(surfaceHost, mKeyboardLookBlend);
             return;
         }

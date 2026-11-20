@@ -1588,6 +1588,8 @@ public final class ChromeInk {
         @Nullable android.graphics.ColorMatrix matrix;
         /** The side last mapped on; the next measure keeps it while it can still be reached. */
         @Nullable Polarity polarity;
+        /** Moves each time {@link #matrix} does, and only then ({@link #bandEvenOutChanges}). */
+        int changes;
         /** {@link #rowWallpapers} through {@link #matrix}; scratch, rewritten on every ask. */
         @NonNull final int[] rows = new int[FACE_ROWS];
     }
@@ -1612,6 +1614,7 @@ public final class ChromeInk {
             memo.measured = false;
             if (policy == null && memo.matrix != null) {
                 memo.matrix = null;
+                memo.changes++;
                 changedEvenOut();
             }
         }
@@ -1672,6 +1675,17 @@ public final class ChromeInk {
         return mapEvenOut(mBandEvenOut.get(band), policy, mTmpEvenOutRect, dim, tint, true);
     }
 
+    /**
+     * A token that moves when {@code band}'s own even-out matrix does, and never for another
+     * band's: what a surface that bakes this band's matrix into its glass keys its build on.
+     * {@link #evenOutGeneration} moves for every band, so a landing where only the dock was
+     * measured again read as a new keyboard glass.
+     */
+    public int bandEvenOutChanges(@NonNull GlassBackdropCache.Band band) {
+        BandEvenOut memo = mBandEvenOut.get(band);
+        return memo == null ? 0 : memo.changes;
+    }
+
     /** Whether {@code band} has an even-out to draw through ({@link #setBandEvenOutPolicy}). */
     public boolean hasBandEvenOut(@NonNull GlassBackdropCache.Band band) {
         return mBandEvenOutPolicies.containsKey(band);
@@ -1721,7 +1735,10 @@ public final class ChromeInk {
         memo.dim = dim;
         memo.tint = tint;
         memo.matrix = matrix;
-        if (moved) changedEvenOut();
+        if (moved) {
+            memo.changes++;
+            changedEvenOut();
+        }
         return matrix;
     }
 
