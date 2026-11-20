@@ -95,6 +95,38 @@ public class AppDrawerKeyboardSeparationTest {
     }
 
     /**
+     * Pull from Home and every close (pong, card3/open f018–f024, card3/midclose): while p moved,
+     * Docked's plane lerped from the full-width dock to the card, so the drag and the close showed
+     * a full-width sheet with square corners running to the screen's bottom, which snapped to the
+     * card at the release. In every frame of the motion it is now the rest card's sides, corners
+     * and bottom, its top rising from the dock's.
+     */
+    @Test public void dockedPullAndCloseFramesAreTheRestCard() {
+        ReflectionHelpers.setField(controller, "mRoundedStyle", false);
+        host.marginPx = 21f;
+        host.paneCornerRadiusPx = 55f;
+        host.sheetsBandPx = 90;
+        ReflectionHelpers.setField(controller, "mSeedRadiusPx", 0f);
+        Frame rest = ReflectionHelpers.callInstanceMethod(controller, "resolveOpenRect");
+        ReflectionHelpers.setField(controller, "mOpenRect", rest);
+        reveal(0f);
+
+        float prevTop = Float.MAX_VALUE;
+        for (float p : new float[] {0.02f, 0.2f, 0.5f, 0.8f, 1f}) {
+            applyFrame(p);
+            Frame f = plane.getFrame();
+            assertEquals("left at p " + p, rest.left, f.left, 1e-3f);
+            assertEquals("right at p " + p, rest.right, f.right, 1e-3f);
+            assertEquals("bottom at p " + p, rest.bottom, f.bottom, 1e-3f);
+            assertTrue("top rises at p " + p, f.top <= prevTop && f.top >= rest.top);
+            assertEquals("the card's corners at p " + p, 55f,
+                (float) ReflectionHelpers.getField(controller, "mCurrentRadiusPx"), 1e-3f);
+            prevTop = f.top;
+        }
+        assertEquals(rest.top, plane.getFrame().top, 1e-3f);
+    }
+
+    /**
      * One owner for the card: the content rect the keyboard decision lays the grid and the A–Z
      * strip out in is the rectangle the plane comes to rest on, keyboard down and keyboard up. Before
      * the fix the content was laid out for the bezel-to-bezel sheet (keyboard down) and at the
@@ -301,19 +333,23 @@ public class AppDrawerKeyboardSeparationTest {
         assertEquals(30f, scrim.effectiveRadiusPx(), 1e-3f);
     }
 
-    @Test public void dockedUnderTheSystemKeyboardKeepsTheFullWidthPlane() {
-        docked();
+    /** Docked under the system keyboard is the card too, ending its own gap above the keyboard. */
+    @Test public void dockedUnderTheSystemKeyboardIsTheCardAboveIt() {
+        ReflectionHelpers.setField(controller, "mRoundedStyle", false);
         host.marginPx = 21f;
         host.paneCornerRadiusPx = 55f;
+        ReflectionHelpers.setField(controller, "mOpenRect",
+            ReflectionHelpers.callInstanceMethod(controller, "resolveOpenRect"));
         ReflectionHelpers.setField(controller, "mImePinTopPx", 1500f);
         reveal(1f);
 
         applyFrame(1f);
 
         Frame frame = plane.getFrame();
-        assertEquals(0f, frame.left, 1e-3f);
-        assertEquals(WIDTH, frame.right, 1e-3f);
-        assertTrue(frame.top < 0f);
+        assertEquals(21f, frame.left, 1e-3f);
+        assertEquals(WIDTH - 21f, frame.right, 1e-3f);
+        assertEquals(21f, frame.top, 1e-3f);
+        assertTrue(frame.bottom < 1500f && frame.bottom > 1450f);
     }
 
     @Test public void keyboardDownFloatingDimIsThePlainColour() {

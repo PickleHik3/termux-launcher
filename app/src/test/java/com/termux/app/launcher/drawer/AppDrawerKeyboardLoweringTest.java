@@ -99,7 +99,9 @@ public class AppDrawerKeyboardLoweringTest {
         docked();
         host.closeLowersKeyboard = true;
         startClose();
-        assertDockAndKeyboardLeaveTogether();
+        // Docked's plane stays the card to the end: its top lands on the dock's, its bottom on the
+        // card's keyboard-down rest (no full-width sheet shrinking into the dock).
+        assertDockAndKeyboardLeaveTogether(HEIGHT - 21f);
     }
 
     /** A Back or fling close: the drawer is no longer open and the reveal is on its way down. */
@@ -152,6 +154,10 @@ public class AppDrawerKeyboardLoweringTest {
     // ------------------------------------------------------------------ helpers
 
     private void assertDockAndKeyboardLeaveTogether() {
+        assertDockAndKeyboardLeaveTogether(REST_DOCK.bottom);
+    }
+
+    private void assertDockAndKeyboardLeaveTogether(float planeBottomAtRest) {
         float previousDockTop = -Float.MAX_VALUE;
         for (float p : CLOSE) {
             applyFrame(p);
@@ -171,7 +177,7 @@ public class AppDrawerKeyboardLoweringTest {
         assertEquals(REST_DOCK.top, dockTop(), 1e-3f);
         Frame frame = plane.getFrame();
         assertEquals(REST_DOCK.top, frame.top, 1e-3f);
-        assertEquals(REST_DOCK.bottom, frame.bottom, 1e-3f);
+        assertEquals(planeBottomAtRest, frame.bottom, 1e-3f);
     }
 
     private float dockTop() {
@@ -184,8 +190,9 @@ public class AppDrawerKeyboardLoweringTest {
 
     private void docked() {
         ReflectionHelpers.setField(controller, "mRoundedStyle", false);
+        host.marginPx = 21f;
         ReflectionHelpers.setField(controller, "mOpenRect",
-            new Frame(0f, -40f, WIDTH, HEIGHT + 40f));
+            ReflectionHelpers.callInstanceMethod(controller, "resolveOpenRect"));
     }
 
     private void floating() {

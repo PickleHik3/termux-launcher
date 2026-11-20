@@ -2148,10 +2148,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // whether a keyboard exists.
         float k = revealFraction();
         if (lowering) k = AppDrawerKeyboardLowering.reveal(k, p);
-        // Docked's card wears the pane's corners all round, keyboard up or down.
-        mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
-            AppDrawerKeyboardSeparation.openRadiusPx(mRoundedStyle, mOpenRadiusPx,
-                mHost.searchKeyboardCornerRadiusPx()), p);
+        // Docked's card wears the pane's corners all round in every frame, the pull and the close
+        // included; Floating's panel grows its radius from the capsule's.
+        float openRadiusPx = AppDrawerKeyboardSeparation.openRadiusPx(mRoundedStyle,
+            mOpenRadiusPx, mHost.searchKeyboardCornerRadiusPx());
+        mCurrentRadiusPx = mRoundedStyle
+            ? AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx, openRadiusPx, p)
+            : openRadiusPx;
         // Docked's open drawer slides its own keyboard as a card (never faded: see
         // AppDrawerKeyboardSeparation.keyboardSlidePx), and the card's bottom rides one gap above
         // the keyboard's live top. A close, a lowering close and Floating keep the band recipe.
@@ -2163,27 +2166,33 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             : 0f;
         boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(k,
             mImePinTopPx > 0f, mKeyboardCardFrame != null);
+        if (!mRoundedStyle) {
+            // Docked is the card in every frame, at rest and through the pull, the release, a
+            // cancelled pull and every close: the card's sides and corners, its bottom where the
+            // keyboard puts it now (one gap above the keyboard's live top while it slides, else
+            // the keyboard-down rest), only its top moving with p from the dock's toward the
+            // card's. One owner, dockedCardFrame at full reveal, for every phase.
+            float rest = openRect.bottom;
+            float bottom = rest;
+            if (k > 0f) {
+                float pinTop = pinTopPx() + keyboardExit;
+                bottom = keyboardSlides
+                    ? AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(rest,
+                        pinTop + keyboardSlidePx, planeGapPx())
+                    : AppDrawerKeyboardSeparation.cardBottomPx(rest, pinTop, planeGapPx(), k);
+            }
+            frame = AppDrawerKeyboardSeparation.dockedCardFrame(frame, mHostLayout.getWidth(),
+                mHost.searchKeyboardMarginPx(), dockedCardTopPx(), bottom, 1f);
+        } else if (k > 0f) {
+            float bottom = AppDrawerKeyboardSeparation.cardBottomPx(frame.bottom,
+                pinTopPx() + keyboardExit, planeGapPx(), k);
+            frame = new Frame(frame.left,
+                AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
+                    mCurrentRadiusPx),
+                frame.right, bottom);
+        }
         if (k > 0f) {
             float pinTop = pinTopPx() + keyboardExit;
-            float bottom = keyboardSlides
-                ? AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(frame.bottom,
-                    pinTop + keyboardSlidePx, planeGapPx())
-                : AppDrawerKeyboardSeparation.cardBottomPx(frame.bottom, pinTop, planeGapPx(), k);
-            if (AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f)) {
-                // Docked's open rect is already the card, so at rest only its bottom moves. Early in
-                // an open the seed (the dock) is pulled into the card by the reveal: with the
-                // keyboard staying up the plane is a card above it from the first frame.
-                mCurrentRadiusPx = AppDrawerKeyboardSeparation.revealRadiusPx(false,
-                    mCurrentRadiusPx, mHost.searchKeyboardCornerRadiusPx(), k);
-                frame = AppDrawerKeyboardSeparation.dockedCardFrame(frame,
-                    mHostLayout.getWidth(), mHost.searchKeyboardMarginPx(), dockedCardTopPx(),
-                    bottom, k);
-            } else {
-                frame = new Frame(frame.left,
-                    AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
-                        mCurrentRadiusPx),
-                    frame.right, bottom);
-            }
             // The scene dim is the host's background and the host covers the whole screen, keyboard
             // included. Clipped to the edge the reveal is uncovering, so the keyboard comes back at
             // its own brightness rather than under the drawer's shade. Around the built-in keyboard
