@@ -175,9 +175,15 @@ public class AppDrawerAppCellView extends LinearLayout {
             iconParams.height = iconPx;
             icon.setLayoutParams(iconParams);
         }
-        int gap = Math.round(AppDrawerGridMetrics.LABEL_GAP_DP
-            * getResources().getDisplayMetrics().density);
-        if (label.getPaddingTop() != gap) label.setPadding(0, gap, 0, 0);
+        float density = getResources().getDisplayMetrics().density;
+        int gap = Math.round(AppDrawerGridMetrics.LABEL_GAP_DP * density);
+        // Air inside the cell on both sides: neighbouring labels never touch, and the outer
+        // columns' labels stand off the card's edge.
+        int side = Math.round(AppDrawerGridMetrics.labelSideInsetPx(density));
+        if (label.getPaddingTop() != gap || label.getPaddingLeft() != side
+            || label.getPaddingRight() != side) {
+            label.setPadding(side, gap, side, 0);
+        }
     }
 
     /**
