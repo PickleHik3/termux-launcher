@@ -37,6 +37,16 @@ public class ShaderPreludeTest {
     }
 
     @Test
+    public void touchAgeIsDeclaredOnlyWhenTheTextNamesIt() {
+        ShaderPrelude.Uniform age = ShaderPrelude.UNIFORMS[ShaderPrelude.TL_TOUCH_AGE];
+        assertEquals("tlTouchAge", age.name);
+        assertEquals("float", age.type);
+        assertFalse(ShaderPrelude.build(SHADERTOY).source.contains("tlTouchAge"));
+        String named = "void mainImage(out vec4 c, in vec2 f) { c = vec4(tlTouchAge); }\n";
+        assertTrue(ShaderPrelude.build(named).source.contains("uniform float tlTouchAge;"));
+    }
+
+    @Test
     public void mainImageCompilesAsEs3WithAGeneratedMain() {
         ShaderPrelude.Built b = ShaderPrelude.build(SHADERTOY);
         assertEquals(ShaderPrelude.Flavour.ES3_MAIN_IMAGE, b.flavour);

@@ -68,13 +68,14 @@ public class SceneSourceTest {
 
     @Test
     public void shaderWithMetaPlaysItsFiles() {
-        ShaderStore.Meta meta = new ShaderStore.Meta("Tunnel", ShaderSafety.Quality.QUARTER, 60, "tex.png");
+        ShaderStore.Meta meta = new ShaderStore.Meta("Tunnel", ShaderSafety.Quality.QUARTER, 60, "tex.png", "dep.png");
         SceneSource source = SceneSource.resolve(mContext, WallpaperMotion.shader("tunnel"), 30, meta);
         assertNotNull(source);
         assertEquals("shader:tunnel", source.key());
         assertEquals(source.key(), source.spec().key);
         assertEquals(ShaderStore.sourceFile(mContext, "tunnel"), source.spec().source);
         assertEquals(ShaderStore.textureFile(mContext, "tunnel", meta), source.spec().channel0);
+        assertEquals(ShaderStore.depthFile(mContext, "tunnel", meta), source.spec().channel1);
         assertEquals(ShaderSafety.Quality.QUARTER, source.spec().quality);
         assertNull(source.spec().video);
         assertEquals(60, source.rateHz());

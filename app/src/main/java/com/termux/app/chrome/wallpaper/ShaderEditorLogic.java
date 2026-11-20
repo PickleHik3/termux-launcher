@@ -116,7 +116,26 @@ public final class ShaderEditorLogic {
         if (d.isNew || d.isExample || !inUse || savedSource == null || savedMeta == null) return true;
         return !d.source.equals(savedSource) || !d.name.equals(savedMeta.name)
             || d.quality != savedMeta.quality || d.rateHz != savedMeta.rateHz
-            || !java.util.Objects.equals(d.texture, savedMeta.texture);
+            || !java.util.Objects.equals(d.texture, savedMeta.texture)
+            || !java.util.Objects.equals(d.depth, savedMeta.depth);
+    }
+
+    /**
+     * The depth image the draft keeps once its photo changed or went: one made from the old photo
+     * goes (null), one picked by hand stays and is flagged "may not match" by the page.
+     */
+    @Nullable
+    public static String depthAfterPhotoChange(@Nullable String depth) {
+        return com.termux.app.chrome.scene.ShaderStore.isMadeDepth(depth) ? null : depth;
+    }
+
+    /**
+     * The file to delete now that the draft no longer uses {@code name}: the file itself when it
+     * was not saved with the shader, null when it is the saved one (that goes on Apply).
+     */
+    @Nullable
+    public static String unsavedFileToDrop(@Nullable String name, @Nullable String savedName) {
+        return name != null && !name.equals(savedName) ? name : null;
     }
 
     /** Whether "Too heavy at this quality" shows above the knobs. */

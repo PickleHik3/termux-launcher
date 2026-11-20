@@ -22,8 +22,9 @@ import java.nio.charset.StandardCharsets;
  *
  * <pre>
  * files/wallpaper/shaders/&lt;id&gt;/source.glsl   the user's text, as pasted
- * files/wallpaper/shaders/&lt;id&gt;/meta.json     {"name", "quality": full|half|quarter, "rate": 15|30|60, "texture": file name or absent}
- * files/wallpaper/shaders/&lt;id&gt;/&lt;texture&gt;     the iChannel0 image, when one is picked
+ * files/wallpaper/shaders/&lt;id&gt;/meta.json     {"name", "quality": full|half|quarter, "rate": 15|30|60, "texture": file name or absent, "depth": file name or absent}
+ * files/wallpaper/shaders/&lt;id&gt;/&lt;texture&gt;     the iChannel0 image (the photo), when one is picked
+ * files/wallpaper/shaders/&lt;id&gt;/&lt;depth&gt;       the iChannel1 image (its depth image), when there is one
  * files/wallpaper/motion-pending            written on apply, cleared after 3 s of drawing
  * </pre>
  *
@@ -43,6 +44,8 @@ public final class ShaderStore {
      * reaches the scene's preference listener.
      */
     public static final String KEY_MOTION_APPLIED_AT = "wallpaper_motion_applied_at";
+    /** The name a depth image made on the phone is written under, inside the shader's folder. */
+    public static final String MADE_DEPTH_FILE = "made-depth.png";
     /** A shader or meta file longer than this is not read (a pasted shader is a few KB). */
     static final long MAX_TEXT_BYTES = 1L << 20;
 
@@ -55,18 +58,21 @@ public final class ShaderStore {
         public final int rateHz;
         /** The iChannel0 image's file name inside the shader's folder, or null. */
         @Nullable public final String texture;
+        /** The iChannel1 (depth) image's file name inside the shader's folder, or null. */
+        @Nullable public final String depth;
 
         public Meta(@NonNull String name, @NonNull ShaderSafety.Quality quality, int rateHz,
-                    @Nullable String texture) {
+                    @Nullable String texture, @Nullable String depth) {
             this.name = name;
             this.quality = quality;
             this.rateHz = rateHz == 15 || rateHz == 60 ? rateHz : 30;
             this.texture = WallpaperMotion.safeName(texture) ? texture : null;
+            this.depth = WallpaperMotion.safeName(depth) ? depth : null;
         }
 
         @NonNull
         public static Meta defaults(@NonNull String name) {
-            return new Meta(name, ShaderSafety.Quality.HALF, 30, null);
+            return new Meta(name, ShaderSafety.Quality.HALF, 30, null, null);
         }
 
         @NonNull
@@ -76,7 +82,8 @@ public final class ShaderStore {
                 JSONObject o = new JSONObject(json);
                 return new Meta(o.optString("name", fallbackName),
                     ShaderSafety.Quality.parse(o.optString("quality", "half")),
-                    o.optInt("rate", 30), o.has("texture") ? o.optString("texture", null) : null);
+                    o.optInt("rate", 30), o.has("texture") ? o.optString("texture", null) : null,
+                    o.has("depth") ? o.optString("depth", null) : null);
             } catch (JSONException e) {
                 return defaults(fallbackName);
             }
@@ -90,6 +97,7 @@ public final class ShaderStore {
                 o.put("quality", quality.key());
                 o.put("rate", rateHz);
                 if (texture != null) o.put("texture", texture);
+                if (depth != null) o.put("depth", depth);
                 return o.toString(2);
             } catch (JSONException e) {
                 throw new IllegalStateException(e);
@@ -122,6 +130,17 @@ public final class ShaderStore {
     @Nullable
     public static File textureFile(@NonNull Context context, @NonNull String id, @NonNull Meta meta) {
         return meta.texture == null ? null : new File(shaderDir(context, id), meta.texture);
+    }
+
+    /** The shader's iChannel1 (depth) image, or null when it has none. */
+    @Nullable
+    public static File depthFile(@NonNull Context context, @NonNull String id, @NonNull Meta meta) {
+        return meta.depth == null ? null : new File(shaderDir(context, id), meta.depth);
+    }
+
+    /** Whether {@code name} is the file a depth image made on the phone is written under. */
+    public static boolean isMadeDepth(@Nullable String name) {
+        return MADE_DEPTH_FILE.equals(name);
     }
 
     @WorkerThread
@@ -210,7 +229,7 @@ public final class ShaderStore {
         return out;
     }
 
-    /** Removes the shader's folder: source, settings and texture. */
+    /** Removes the shader's folder: source, settings, photo and depth image. */
     @WorkerThread
     public static void delete(@NonNull Context context, @NonNull String id) {
         File dir = shaderDir(context, id);
@@ -227,15 +246,42 @@ public final class ShaderStore {
 
     /**
      * Copies the picked image into the shader's folder as its iChannel0 texture and returns the
-     * file name to store in {@link Meta#texture}. The previous texture file goes.
+     * file name to store in {@link Meta#texture}. The previous texture file goes. The stored name
+     * is never the shader's depth image ({@code depthName}) nor {@link #MADE_DEPTH_FILE}.
      *
      * @param displayName the picked file's name, used (cleaned) as the stored name
      */
     @WorkerThread
     @NonNull
     public static String importTexture(@NonNull Context context, @NonNull String id, @NonNull android.net.Uri uri,
-                                       @Nullable String displayName, @Nullable String previous) throws IOException {
-        String name = textureName(displayName);
+                                       @Nullable String displayName, @Nullable String previous,
+                                       @Nullable String depthName) throws IOException {
+        return importImage(context, id, uri, textureName(displayName), "photo-", previous, depthName);
+    }
+
+    /**
+     * Copies the picked image into the shader's folder as its iChannel1 depth image and returns the
+     * file name to store in {@link Meta#depth}. The previous depth file goes. The stored name is
+     * never the photo's ({@code photoName}) nor {@link #MADE_DEPTH_FILE}.
+     */
+    @WorkerThread
+    @NonNull
+    public static String importDepth(@NonNull Context context, @NonNull String id, @NonNull android.net.Uri uri,
+                                     @Nullable String displayName, @Nullable String previousDepth,
+                                     @Nullable String photoName) throws IOException {
+        return importImage(context, id, uri, textureName(displayName), "depth-", previousDepth, photoName);
+    }
+
+    /** The one copy: the cleaned name, prefixed when it would take the other image's name. */
+    @NonNull
+    private static String importImage(@NonNull Context context, @NonNull String id, @NonNull android.net.Uri uri,
+                                      @NonNull String cleaned, @NonNull String clashPrefix,
+                                      @Nullable String previous, @Nullable String other) throws IOException {
+        String name = cleaned;
+        if (name.equals(other) || isMadeDepth(name)) {
+            int keep = Math.min(name.length(), 64 - clashPrefix.length());
+            name = textureName(clashPrefix + name.substring(name.length() - keep));
+        }
         File dir = shaderDir(context, id);
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot make " + dir);
         File target = new File(dir, name);
@@ -255,7 +301,7 @@ public final class ShaderStore {
         return name;
     }
 
-    /** Deletes the texture file {@code name} of shader {@code id}. */
+    /** Deletes the image file {@code name} (photo or depth) of shader {@code id}. */
     @WorkerThread
     public static void removeTexture(@NonNull Context context, @NonNull String id, @Nullable String name) {
         if (name == null || !WallpaperMotion.safeName(name)) return;
@@ -274,7 +320,8 @@ public final class ShaderStore {
         }
         String n = b.toString();
         if (n.length() > 64) n = n.substring(n.length() - 64);
-        if (n.isEmpty() || n.startsWith(".") || n.equals(SOURCE_FILE) || n.equals(META_FILE) || n.endsWith(".tmp")) {
+        if (n.isEmpty() || n.startsWith(".") || n.equals(SOURCE_FILE) || n.equals(META_FILE) || n.equals(MADE_DEPTH_FILE)
+            || n.endsWith(".tmp")) {
             return "texture";
         }
         return WallpaperMotion.safeName(n) ? n : "texture";

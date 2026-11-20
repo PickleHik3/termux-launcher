@@ -268,6 +268,57 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         return image.isActive();
     }
 
+    /** The depth run in flight, if any; at most one, and none is kept once it ends. */
+    private final Object depthLock = new Object();
+    @Nullable private DepthMaker depthRun;
+
+    /**
+     * One depth image, off every router lock: the graph is registered as {@link TaiResidency.Kind#VISION}
+     * (busy) for the run only and deregistered in {@code finally}, and the maker is dropped with it.
+     * A second call while one runs answers {@link #CODE_DEPTH_BUSY}.
+     */
+    @NonNull
+    public DepthMaker.Result makeDepth(@NonNull TaiModelSpec spec, @NonNull File photo, @NonNull File model,
+                                       boolean distance, @NonNull File out, @NonNull DepthMaker.Progress progress) {
+        DepthMaker maker = new DepthMaker();
+        synchronized (depthLock) {
+            if (depthRun != null) {
+                return new DepthMaker.Result(false, false, CODE_DEPTH_BUSY, "A depth image is already being made.");
+            }
+            depthRun = maker;
+        }
+        residency.register(TaiResidency.Entry.vision(spec));
+        residency.setBusy(TaiResidency.Kind.VISION, spec.id, true);
+        try {
+            return maker.make(photo, model, distance, out, progress);
+        } finally {
+            residency.deregister(TaiResidency.Kind.VISION, spec.id);
+            synchronized (depthLock) {
+                depthRun = null;
+            }
+        }
+    }
+
+    /** Stops the depth run in flight; false when none is running. */
+    public boolean cancelDepth() {
+        DepthMaker maker;
+        synchronized (depthLock) {
+            maker = depthRun;
+        }
+        if (maker == null) return false;
+        maker.cancel();
+        return true;
+    }
+
+    public boolean isDepthActive() {
+        synchronized (depthLock) {
+            return depthRun != null;
+        }
+    }
+
+    /** Refused because another depth run holds the one graph slot. */
+    static final String CODE_DEPTH_BUSY = "depth_busy";
+
     // Each embedding runtime serializes embed() and close() on its own monitor, so a running batch
     // finishes before unload() can close it. No router lock here: status and cancel never queue
     // behind an embedding batch.

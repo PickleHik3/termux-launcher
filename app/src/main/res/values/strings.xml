@@ -1798,6 +1798,9 @@
         <string name="tai_centre_image_header">Image generation</string>
         <string name="tai_centre_image_sub">Draws pictures from a description</string>
         <string name="tai_centre_kind_image">image</string>
+        <string name="tai_centre_depth_header">Wallpaper depth</string>
+        <string name="tai_centre_depth_sub">Tells a photo wallpaper which parts are near</string>
+        <string name="tai_centre_kind_depth">depth</string>
         <string name="tai_centre_voice_output_header">Voice output</string>
         <string name="tai_centre_voice_output_sub">Hear text read aloud on the phone</string>
         <string name="tai_centre_kind_voice">voice</string>

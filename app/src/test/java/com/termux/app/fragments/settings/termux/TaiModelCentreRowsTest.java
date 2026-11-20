@@ -304,6 +304,22 @@ public class TaiModelCentreRowsTest {
     }
 
     @Test
+    public void depthModelsFormTheirOwnGroupAndOtherModelsStayOut() {
+        com.termux.ai.TaiModelSpec chat = new com.termux.ai.TaiModelSpec("qwen", "Qwen", "Imported local model", "imported",
+            "/models/qwen/config.json", "x", GB, new java.util.LinkedHashSet<>(Arrays.asList(com.termux.ai.TaiModelSpec.CAPABILITY_TEXT_CHAT)), false, null,
+            com.termux.ai.TaiModelSpec.BACKEND_MNN_LLM, com.termux.ai.TaiModelSpec.FORMAT_MNN, null, null, 4096, 0, null);
+        com.termux.ai.TaiModelSpec depth = new com.termux.ai.TaiModelSpec("depth-anything-v2-small", "Depth Anything V2 Small",
+            "Depth for photo wallpapers", "catalog", "/models/depth/m.tflite", "x", GB,
+            new java.util.LinkedHashSet<>(Arrays.asList(com.termux.ai.TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION)), false, null,
+            com.termux.ai.TaiModelSpec.BACKEND_LITERT_LM, com.termux.ai.TaiModelSpec.FORMAT_LITERTLM, null, null, 128, 0, null);
+        java.util.List<com.termux.ai.TaiModelSpec> found = TaiModelCentreRows.depthModels(
+            Arrays.asList(chat, depth, image("sana", "Sana", "sana")));
+        assertEquals(1, found.size());
+        assertEquals("depth-anything-v2-small", found.get(0).id);
+        assertTrue(TaiModelCentreRows.depthModels(Arrays.asList(chat)).isEmpty());
+    }
+
+    @Test
     public void needsTokenOnlyForSignInFailures() {
         assertTrue(TaiModelCentreRows.needsToken("gated_model_requires_auth"));
         assertTrue(TaiModelCentreRows.needsToken("This model is gated on Hugging Face. Save a Hugging Face token after accepting the model terms."));
