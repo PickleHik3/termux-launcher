@@ -14080,11 +14080,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A pass on the way dressed the host again: what it put up is the blend's end on the
             // side it was dressed for, so the material keeps crossing instead of standing whole.
             View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+            // Under Floating a pass that took the keyboard's card off (its state with no keyboard
+            // shown) dressed the end with no keyboard, which the blend already crosses from or to,
+            // so the blend goes back up as it was. Docked keeps the host as the pass left it.
             Drawable now = surfaceHost == null ? null : surfaceHost.getBackground();
-            if (now != null && now != keyboardBlend) {
-                keyboardBlend = mKeyboardLookBlendArrives
-                    ? new com.termux.app.chrome.CrossfadeDrawable(keyboardBlend.here(), now, share)
-                    : new com.termux.app.chrome.CrossfadeDrawable(now, keyboardBlend.there(), share);
+            com.termux.app.chrome.CrossfadeDrawable next = surfaceHost == null ? null
+                : com.termux.app.chrome.CrossfadeDrawable.afterPass(keyboardBlend, now,
+                    mKeyboardLookBlendArrives,
+                    !arrangementOf(com.termux.app.wall.PageRef.TERMINAL).floating(), share);
+            if (next != null && next != now) {
+                keyboardBlend = next;
                 mKeyboardLookBlend = keyboardBlend;
                 setKeyboardHostBackground(surfaceHost, keyboardBlend);
             }

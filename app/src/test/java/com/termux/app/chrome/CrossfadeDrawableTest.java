@@ -2,6 +2,8 @@ package com.termux.app.chrome;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -124,5 +126,42 @@ public class CrossfadeDrawableTest {
         blend.draw(canvas);
         assertEquals(4, blend.here().getBounds().width());
         assertEquals(4, blend.there().getBounds().width());
+    }
+
+    /**
+     * 4a9d2d180's re-wrap skipped a pass that put up nothing: under Floating the keyboard host
+     * went bare mid-crossing and the blend ran on detached. The blend now goes back up as it was.
+     */
+    @Test
+    public void underFloatingAPassThatPutUpNothingPutsTheBlendBack() {
+        ColorDrawable home = new ColorDrawable(Color.TRANSPARENT);
+        ColorDrawable card = new ColorDrawable(Color.GRAY);
+        CrossfadeDrawable blend = new CrossfadeDrawable(home, card, 0.4f);
+        assertSame("arriving", blend, CrossfadeDrawable.afterPass(blend, null, true, false, 0.5f));
+        assertSame("leaving", blend, CrossfadeDrawable.afterPass(blend, null, false, false, 0.5f));
+        assertSame("the blend still up is kept", blend,
+            CrossfadeDrawable.afterPass(blend, blend, true, false, 0.5f));
+    }
+
+    @Test
+    public void dockedKeepsTheHostAsAPassThatPutUpNothingLeftIt() {
+        CrossfadeDrawable blend = new CrossfadeDrawable(new ColorDrawable(Color.BLACK),
+            new ColorDrawable(Color.GRAY), 0.4f);
+        assertNull(CrossfadeDrawable.afterPass(blend, null, true, true, 0.5f));
+    }
+
+    @Test
+    public void aPassThatDressedTheHostIsTheEndOnItsSide() {
+        ColorDrawable here = new ColorDrawable(Color.BLACK);
+        ColorDrawable there = new ColorDrawable(Color.GRAY);
+        ColorDrawable now = new ColorDrawable(Color.WHITE);
+        CrossfadeDrawable blend = new CrossfadeDrawable(here, there, 0.4f);
+        CrossfadeDrawable arriving = CrossfadeDrawable.afterPass(blend, now, true, false, 0.5f);
+        assertSame(here, arriving.here());
+        assertSame(now, arriving.there());
+        assertEquals(0.5f, arriving.share(), 0f);
+        CrossfadeDrawable leaving = CrossfadeDrawable.afterPass(blend, now, false, true, 0.5f);
+        assertSame(now, leaving.here());
+        assertSame(there, leaving.there());
     }
 }
