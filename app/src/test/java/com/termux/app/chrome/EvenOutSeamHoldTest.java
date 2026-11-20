@@ -123,18 +123,25 @@ public class EvenOutSeamHoldTest {
      * Pong 2026-11-20: the first crossing after a start had no kept even-out for the page it was
      * arriving on, so the dock wore the left page's through the landing. The arriving page's is
      * worked out as the crossing begins, over that page's ground, held or not, and equals what the
-     * page's own rest then measures; the band's own matrix is untouched.
+     * page's own rest then measures; the band's own matrix is untouched. The crossing has frozen
+     * measuring by the time it begins (pong r4: the read answered nothing and the dock blended
+     * toward the frost alone, [1.310 1.151 1.355 | 0]), so the work-out reads past the freeze.
      */
     @Test
     public void theArrivingPagesEvenOutIsWorkedOutOverItsGroundWithoutHistory() {
         int terminalGround = 0x73000000;
+        boolean[] crossing = {false};
+        chrome.ink().setMeasureFreeze(() -> crossing[0]);
         ColorMatrix atRest = chrome.ink().bandEvenOutMatrix(DOCK, new Rect(HOME));
         assertNotNull(atRest);
         idle();
+        crossing[0] = true;
         chrome.holdEvenOut();
         ColorMatrix arriving = chrome.ink().bandEvenOutMatrixOver(DOCK, new Rect(HOME),
             terminalGround);
-        assertNotNull(arriving);
+        assertNotNull("frozen, the arriving end is still worked out, not left to the frost",
+            arriving);
+        crossing[0] = false;
         assertFalse("the Terminal's ground evens out differently", same(atRest, arriving));
         assertSame("the band keeps the matrix it stands on", atRest,
             chrome.ink().lastBandEvenOutMatrix(DOCK));

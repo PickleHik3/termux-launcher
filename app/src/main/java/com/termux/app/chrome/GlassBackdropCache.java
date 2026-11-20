@@ -270,7 +270,17 @@ public final class GlassBackdropCache {
     /** {@link Sampler#sampleLightness}, remembered nowhere; null when there is nothing to read. */
     @Nullable
     public Lightness sampleLightnessUncached(@NonNull Rect rect) {
-        if (mSampler == null || rect.isEmpty() || frozen()) return null;
+        if (frozen()) return null;
+        return sampleLightnessPastFreeze(rect);
+    }
+
+    /**
+     * {@link #sampleLightnessUncached} even while frozen: the one read a crossing asks for as it
+     * begins (the arriving page's even-out, by then already frozen), never one per frame.
+     */
+    @Nullable
+    public Lightness sampleLightnessPastFreeze(@NonNull Rect rect) {
+        if (mSampler == null || rect.isEmpty()) return null;
         return mSampler.sampleLightness(rect);
     }
 

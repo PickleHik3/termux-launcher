@@ -14113,10 +14113,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The dock's frost as {@code there}'s rest will wear it: kept from that rest when it stood on
-     * the same ground and wallpaper, else measured now over {@code there}'s ground under the dock
-     * as it stands. Its matrix is left in {@link #mDockFilterAtMatrix}. Null when nothing can be
-     * measured.
+     * The dock's frost as {@code there}'s rest will wear it. Kept from that rest when it stood on
+     * the same ground, wallpaper frames and dress: measured there, it carries that rest's own
+     * geometry (with the keyboard up the unified glass is far taller than Home's dock row), which
+     * nothing measured from here can. Else, on the first crossing toward a page, worked out now
+     * over {@code there}'s ground under the dock as laid out, with the travel's translation of the
+     * stack taken out (a keyboard the arriving page wants is already laid out up by then). Its
+     * matrix is left in {@link #mDockFilterAtMatrix}. Null when nothing can be measured.
      */
     @Nullable
     private android.graphics.ColorFilter dockFrostFilterAt(@NonNull com.termux.app.wall.PageRef there) {
@@ -14126,21 +14129,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences != null ? mPreferences.getAppBarOpacity(lookId) : 100);
         android.graphics.ColorFilter filter = frost;
         if (mChrome != null) {
+            updateEvenOutPolicy();
             int ground = groundOfWallPage(there.kind);
-            int generation = mChrome.ink().wallpaperGeneration();
-            DockFilterKept kept = mDockFilterAtRest.get(lookId);
-            mDiagDockFilterKept = kept != null && kept.ground == ground
-                && kept.generation == generation && kept.matrix != null;
-            if (mDiagDockFilterKept) {
-                mDockFilterAtMatrix = kept.matrix;
-                return kept.filter;
+            int frames = mChrome.ink().framesGeneration();
+            int dress = dockFilterDress(lookId);
+            android.graphics.ColorFilter kept = mDockFilterAtRest.filter(lookId, ground, frames, dress);
+            mDiagDockFilterKept = kept != null;
+            if (kept != null) {
+                mDockFilterAtMatrix = mDockFilterAtRest.matrix(lookId, ground, frames, dress);
+                return kept;
             }
             View surfaceHost = findViewById(R.id.accessory_surface_host);
             if (surfaceHost == null || !dockEvenOutRect(surfaceHost)) return null;
-            updateEvenOutPolicy();
-            filter = com.termux.app.chrome.GlassFilters.withEvenOut(
-                mChrome.ink().bandEvenOutMatrixOver(com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
-                    mDockEvenOutRect, ground), frost);
+            View stack = findViewById(R.id.accessory_stack_container);
+            if (stack != null) mDockEvenOutRect.offset(0, -Math.round(stack.getTranslationY()));
+            android.graphics.ColorMatrix evenOut = mChrome.ink().bandEvenOutMatrixOver(
+                com.termux.app.chrome.GlassBackdropCache.Band.DOCK, mDockEvenOutRect, ground);
+            // A band that evens out and read nothing has no arriving end: the frost alone would
+            // be a wrong one, so the crossing blends nothing and its rest measures as before.
+            if (evenOut == null && mChrome.ink().hasBandEvenOut(
+                    com.termux.app.chrome.GlassBackdropCache.Band.DOCK)) return null;
+            filter = com.termux.app.chrome.GlassFilters.withEvenOut(evenOut, frost);
         }
         mDockFilterAtMatrix = com.termux.app.chrome.GlassFilters.matrixOf(filter);
         return mDockFilterAtMatrix == null ? null : filter;
@@ -23727,40 +23736,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return filter;
     }
 
-    /** One look's dock frost as its rest last wore it, with the ground and wallpaper it stood on. */
-    private static final class DockFilterKept {
-        @Nullable android.graphics.ColorFilter filter;
-        @Nullable android.graphics.ColorMatrix matrix;
-        int ground;
-        int generation;
-    }
+    /** Each look's dock frost as its own rest last wore it, by look page id. */
+    @NonNull private final com.termux.app.chrome.DockFilterKeep<android.graphics.ColorFilter,
+        android.graphics.ColorMatrix> mDockFilterAtRest = new com.termux.app.chrome.DockFilterKeep<>();
 
-    /** Each look's dock frost as last worked out at rest, by look page id. */
-    private final android.util.SparseArray<DockFilterKept> mDockFilterAtRest =
-        new android.util.SparseArray<>();
-
-    /** Keeps {@code filter} as the stack look's frost at rest; nothing when it already is. */
+    /** Keeps {@code filter} as the stack look's frost at rest; nothing new when it already is. */
     private void keepDockFilterAtRest(@Nullable android.graphics.ColorFilter filter) {
         if (filter == null || mChrome == null) return;
         int look = stackLookPage();
         int ground = groundOfWallPage(stackDressPage());
-        int generation = mChrome.ink().wallpaperGeneration();
-        DockFilterKept kept = mDockFilterAtRest.get(look);
-        if (kept != null && kept.filter == filter) {
-            kept.ground = ground;
-            kept.generation = generation;
+        int frames = mChrome.ink().framesGeneration();
+        int dress = dockFilterDress(look);
+        if (mDockFilterAtRest.holds(look, filter)) {
+            mDockFilterAtRest.restamp(look, ground, frames, dress);
             return;
         }
         android.graphics.ColorMatrix matrix = com.termux.app.chrome.GlassFilters.matrixOf(filter);
-        if (matrix == null) return;
-        if (kept == null) {
-            kept = new DockFilterKept();
-            mDockFilterAtRest.put(look, kept);
-        }
-        kept.filter = filter;
-        kept.matrix = matrix;
-        kept.ground = ground;
-        kept.generation = generation;
+        if (matrix != null) mDockFilterAtRest.keep(look, filter, matrix, ground, frames, dress);
+    }
+
+    /**
+     * What the dock's frost depends on beyond the ground, the wallpaper and the rest's geometry:
+     * the look's Opacity and the even-out stage (one object until its inputs change).
+     */
+    private int dockFilterDress(int look) {
+        int opacity = mPreferences != null ? mPreferences.getAppBarOpacity(look) : 100;
+        return opacity * 31 + System.identityHashCode(mEvenOutPolicy);
     }
 
     @Nullable

@@ -1149,6 +1149,24 @@ public final class ChromeInk {
         return OnGlass.backdrop(mCache.fallbackWallpaper(), mDimColor, Color.TRANSPARENT);
     }
 
+    /**
+     * Moves only when the shared pre-blurred frames go ({@link #framesCleared}): the wallpaper
+     * itself changed. Unlike {@link #wallpaperGeneration}, a page change, whose new ground
+     * invalidates every answer, leaves it where it was, so what a page's rest kept can be
+     * recognised when the wall comes back to it.
+     */
+    public int framesGeneration() {
+        return mFramesGeneration;
+    }
+
+    /** The shared frames went: everything measured from them is stale. */
+    public void framesCleared() {
+        mFramesGeneration++;
+        invalidate();
+    }
+
+    private int mFramesGeneration;
+
     /** Moves on every {@link #invalidate}: a new wallpaper, palette, dim or mode. */
     public int wallpaperGeneration() {
         readMode();
@@ -1527,8 +1545,10 @@ public final class ChromeInk {
      * {@link #bandEvenOutMatrix} as {@code band} would measure it under {@code screenRect} standing
      * on {@code pageGround}, another page's ground: the even-out the dock wears at the page a
      * crossing is arriving on, worked out as the crossing begins. Measures past a hold
-     * ({@link #holdEvenOut}) and keeps nothing: the band's own matrix, side and inks are
-     * untouched. Null as {@link #bandEvenOutMatrix} is.
+     * ({@link #holdEvenOut}) and past the crossing's freeze, which is already on by then (a read
+     * blocked by it answered null, and the dock blended toward the frost alone: pong r4), and
+     * keeps nothing: the band's own matrix, side and inks are untouched. Null as
+     * {@link #bandEvenOutMatrix} is.
      */
     @Nullable
     public android.graphics.ColorMatrix bandEvenOutMatrixOver(
@@ -1541,7 +1561,12 @@ public final class ChromeInk {
         BandGlass glass = glassFor(band);
         int dim = dimHidden(glass) ? Color.TRANSPARENT : pageGround;
         int tint = OnGlass.withAlpha(baseOf(glass), ChromePolicy.dockGlassBaseAlpha(glass.opacity));
-        return mapEvenOut(mBandEvenOut.get(band), policy, mTmpEvenOutRect, dim, tint);
+        return mapEvenOut(mBandEvenOut.get(band), policy, mTmpEvenOutRect, dim, tint, true);
+    }
+
+    /** Whether {@code band} has an even-out to draw through ({@link #setBandEvenOutPolicy}). */
+    public boolean hasBandEvenOut(@NonNull GlassBackdropCache.Band band) {
+        return mBandEvenOutPolicies.containsKey(band);
     }
 
     /**
@@ -1576,7 +1601,7 @@ public final class ChromeInk {
             mEvenOutHeldMoved = true;
             return memo.matrix;
         }
-        android.graphics.ColorMatrix matrix = mapEvenOut(memo, policy, rootRect, dim, tint);
+        android.graphics.ColorMatrix matrix = mapEvenOut(memo, policy, rootRect, dim, tint, false);
         Polarity mapped = mMappedPolarity;
         if (mapped != null) memo.polarity = mapped;
         boolean moved = !java.util.Arrays.equals(matrix == null ? null : matrix.getArray(),
@@ -1596,15 +1621,17 @@ public final class ChromeInk {
      * The even-out of a band over {@code rootRect} standing on {@code dim} wearing {@code tint},
      * seeded with the side {@code memo} was last mapped on. Writes nothing but
      * {@link #mMappedPolarity}: the side it mapped on, null when the wallpaper there is unread
-     * (and the answer null).
+     * (and the answer null). {@code pastFreeze} reads the wallpaper while a crossing has the
+     * cache frozen.
      */
     @Nullable
     private android.graphics.ColorMatrix mapEvenOut(@Nullable BandEvenOut memo,
                                                     @NonNull EvenOutPolicy policy,
                                                     @NonNull Rect rootRect, @ColorInt int dim,
-                                                    @ColorInt int tint) {
+                                                    @ColorInt int tint, boolean pastFreeze) {
         mMappedPolarity = null;
-        GlassBackdropCache.Lightness lightness = mCache.sampleLightnessUncached(rootRect);
+        GlassBackdropCache.Lightness lightness = pastFreeze
+            ? mCache.sampleLightnessPastFreeze(rootRect) : mCache.sampleLightnessUncached(rootRect);
         if (lightness == null) return null;
         // As the pane does: the limit is met on the composited ground (frost, dim, the band's
         // base layer at its opacity), and a side the chain cannot reach is not chosen over one
