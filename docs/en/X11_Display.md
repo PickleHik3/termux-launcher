@@ -129,8 +129,9 @@ edition that package can't be installed beside the launcher's, and isn't needed.
   terminal window or on Home; only the picture is put away.
 - **Options.** **Settings → Linux apps** holds them: its own rows, then four pages. A
   running display picks a change up at once.
-  - On the page itself: **Set up Linux apps**, **Hidden Linux
-    apps** and **Window manager**.
+  - On the page itself, under **Apps**: **Set up Linux apps** and **Per-app settings**; under
+    **Desktop**: **Start with**; and under **Advanced**: **Graphics acceleration** and
+    **Window manager**.
   - **Input**: **Touch**, **Use Android keyboard**, **Keyboard pops up** and **Share the clipboard**.
   - **Resolution and scaling**: **Resolution**, **Scale**, **Fixed size** or **Custom size**,
     **Scaling** (filtering) and **Display density**.

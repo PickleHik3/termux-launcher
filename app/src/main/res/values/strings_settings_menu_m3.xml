@@ -114,7 +114,7 @@
 
     <!-- Display overview and subpages -->
     <string name="settings_x11_group_configure">Configure</string>
-    <string name="settings_x11_group_support">Startup and support</string>
+    <string name="settings_x11_group_advanced">Advanced</string>
     <string name="settings_x11_group_keyboard">Keyboard</string>
     <string name="settings_x11_group_clipboard">Clipboard</string>
     <string name="settings_x11_group_resolution">Resolution</string>
