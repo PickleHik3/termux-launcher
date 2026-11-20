@@ -125,6 +125,15 @@ public final class WidgetPaneFrame extends PaneContentFrame
         syncLookWorn();
     }
 
+    /** The page bar's pill holds the blur frame while it is dressed in glass. */
+    private boolean mBarGlassWanted;
+
+    @Override public void setBarGlassWanted(boolean wanted) {
+        if (mBarGlassWanted == wanted) return;
+        mBarGlassWanted = wanted;
+        syncLookWorn();
+    }
+
     @Override public void removeGlassWidget(
             @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget) {
         mGlassWidgets.remove(widget);
@@ -200,8 +209,9 @@ public final class WidgetPaneFrame extends PaneContentFrame
     private void syncLookWorn() {
         com.termux.app.chrome.LookGlassStyle look = mStyle == null ? null : mStyle.lookGlass();
         if (look == null) return;
-        boolean worn = false;
+        boolean worn = mBarGlassWanted;
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets) {
+            if (worn) break;
             if (widget.wantsGlassFrame()) {
                 worn = true;
                 break;

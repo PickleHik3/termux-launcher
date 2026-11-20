@@ -176,6 +176,11 @@ public abstract class BuiltinWidgetView extends FrameLayout
         /** {@code widget} is live on this page, or its switch flipped; idempotent. */
         void addGlassWidget(@NonNull BuiltinWidgetView widget);
         void removeGlassWidget(@NonNull BuiltinWidgetView widget);
+        /**
+         * The page bar's pill wants the Look's blur frame too, with no glass widget on the page
+         * (it is not a widget); idempotent.
+         */
+        default void setBarGlassWanted(boolean wanted) {}
         /** Whether Live blur is in effect now. */
         default boolean liveBlur() { return false; }
         /**

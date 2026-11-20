@@ -121,6 +121,23 @@ public final class PaneGlass {
     public static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
                                 @Nullable PaneGlassBackdropView backdrop,
                                 float requestedRadiusPx, boolean terminalPane) {
+        return apply(style, frame, backdrop, requestedRadiusPx, terminalPane, true);
+    }
+
+    /**
+     * {@link #apply(PaneSurfaceStyle, View, PaneGlassBackdropView, float)} for a small slab whose
+     * radius is its own (the page bar's capsule and bubble): {@code requestedRadiusPx} is used as
+     * given, not capped against {@code frame}'s size.
+     */
+    public static boolean applyAtRadius(@Nullable PaneSurfaceStyle style, @NonNull View frame,
+                                        @Nullable PaneGlassBackdropView backdrop,
+                                        float requestedRadiusPx) {
+        return apply(style, frame, backdrop, requestedRadiusPx, false, false);
+    }
+
+    private static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
+                                 @Nullable PaneGlassBackdropView backdrop,
+                                 float requestedRadiusPx, boolean terminalPane, boolean capRadius) {
         if (backdrop == null) return false;
         if (!isActive(style)) {
             backdrop.setVeilSource(null);
@@ -134,8 +151,8 @@ public final class PaneGlass {
         }
         // Against the frame's own size, not the window's: after four or five splits a pane is a
         // few rows tall and the window's radius would be half of it.
-        float radiusPx = PaneShape.radiusForBounds(requestedRadiusPx,
-            frame.getWidth(), frame.getHeight());
+        float radiusPx = capRadius ? PaneShape.radiusForBounds(requestedRadiusPx,
+            frame.getWidth(), frame.getHeight()) : requestedRadiusPx;
         backdrop.setGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
             style.paneGlassTintColor(), style.paneGlassGrainLayer(),
             style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter(),

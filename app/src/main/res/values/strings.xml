@@ -508,6 +508,10 @@
     <string name="page_switch_terminal">Terminal</string>
     <string name="page_switch_assistant">Assistant</string>
     <string name="page_switch_display">Display</string>
+    <plurals name="page_bar_folded">
+        <item quantity="one">%1$s, %2$d page</item>
+        <item quantity="other">%1$s, %2$d pages</item>
+    </plurals>
     <string name="launcher_media_next">Next</string>
     <string name="launcher_media_previous">Previous</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
