@@ -2187,8 +2187,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             frame = AppDrawerKeyboardSeparation.dockedCardFrame(frame, mHostLayout.getWidth(),
                 mHost.searchKeyboardMarginPx(), dockedCardTopPx(), bottom, 1f);
         } else if (k > 0f) {
-            float bottom = AppDrawerKeyboardSeparation.cardBottomPx(frame.bottom,
-                pinTopPx() + keyboardExit, planeGapPx(), k);
+            // A keyboard that stays is a fixed floor: the panel rests one gap above it and, on the
+            // way to and from the capsule, never reaches below its own frame.
+            float bottom = keyboardStaysUp()
+                ? AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(frame.bottom,
+                    pinTopPx() + keyboardExit, planeGapPx())
+                : AppDrawerKeyboardSeparation.cardBottomPx(frame.bottom,
+                    pinTopPx() + keyboardExit, planeGapPx(), k);
             frame = new Frame(frame.left,
                 AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
                     mCurrentRadiusPx),

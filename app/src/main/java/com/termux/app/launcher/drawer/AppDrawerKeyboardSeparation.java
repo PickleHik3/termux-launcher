@@ -165,15 +165,16 @@ final class AppDrawerKeyboardSeparation {
 
 
     /**
-     * Whether the built-in keyboard keeps its place for the drawer's whole open and close: Docked's
-     * card, with the keyboard up before the drawer was pulled (the Terminal's keyboard, as when the
-     * palette opens the drawer). It is not the drawer's to take down or bring back, so it neither
+     * Whether the built-in keyboard keeps its place for the drawer's whole open and close: under
+     * either dock style, with the keyboard up before the drawer was pulled (the Terminal's
+     * keyboard, as when the palette opens the drawer). Under Floating the panel rests above it
+     * ({@link #cardBottomOverKeyboardPx}). A system keyboard is a window of its own, never this. It is not the drawer's to take down or bring back, so it neither
      * dips under the plane nor goes with the close, and the drawer card closes as one card above it.
      * A keyboard the drawer's own search raised (down at the pull) keeps the reveal.
      */
     static boolean keyboardStaysUp(boolean rounded, boolean imePinned, boolean textFieldSearch,
                                    boolean keyboardUpAtPull) {
-        return dockedCard(rounded, imePinned) && !textFieldSearch && keyboardUpAtPull;
+        return !imePinned && !textFieldSearch && keyboardUpAtPull;
     }
 
     /**
@@ -205,7 +206,7 @@ final class AppDrawerKeyboardSeparation {
     }
 
     /**
-     * Docked's own keyboard (the one the drawer's search raised) comes and goes as a card: never
+     * The drawer's own keyboard under either dock style (the one the drawer's search raised) comes and goes as a card: never
      * faded, slid by this much below its resting top, from 0 at reveal 1 to off the bottom of the
      * screen at reveal 0. It keeps its whole card look on the way (the drawer's sheet glass and
      * dim it wears, its own rounded top); a fade of the container is what thinned the glass out
