@@ -198,9 +198,22 @@ final class AppDrawerKeyboardSeparation {
 
     /**
      * The reveal the keyboard's bands are choreographed at: identity (1) while the keyboard stays
-     * up, so the plane never pushes it down or fades it, else the spring's {@code reveal}.
+     * up, so the plane never pushes it down or fades it; none (0, put away) once the open drawer
+     * has sent its keyboard away ({@link #keyboardLeaving}), so it never slides down as loose keys
+     * behind and below the card; else the spring's {@code reveal}.
      */
-    static float bandRevealFraction(boolean staysUp, float reveal) {
-        return staysUp ? 1f : reveal;
+    static float bandRevealFraction(boolean staysUp, boolean leaving, float reveal) {
+        if (staysUp) return 1f;
+        return leaving ? 0f : reveal;
+    }
+
+    /**
+     * Whether the open drawer's own keyboard is on its way out under the card: a scroll is holding
+     * it down, or the reveal's target is 0 while the reveal is still above it. Only the card's
+     * bottom follows the reveal down then; the keyboard itself is gone at once.
+     */
+    static boolean keyboardLeaving(boolean open, boolean scrollHolding, float target,
+                                   float reveal) {
+        return open && reveal > 0f && (scrollHolding || target <= 0f);
     }
 }

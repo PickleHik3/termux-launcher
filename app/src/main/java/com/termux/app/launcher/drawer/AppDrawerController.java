@@ -2123,7 +2123,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
             AppDrawerKeyboardSeparation.openRadiusPx(mRoundedStyle, mOpenRadiusPx,
                 mHost.searchKeyboardCornerRadiusPx()), p);
-        boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(k,
+        // The drawer's own keyboard sent away under the open card is gone at once: no loose keys
+        // sliding down behind and below the card, no hole in the dim where it stood. Only the
+        // card's bottom follows the reveal down.
+        boolean keyboardLeaving = !lowering && mImePinTopPx <= 0f
+            && AppDrawerKeyboardSeparation.keyboardLeaving(mOpen, mKeyboardScrollHolding,
+                mReveal.target, k);
+        boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(keyboardLeaving ? 0f : k,
             mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (k > 0f) {
             float pinTop = pinTopPx() + keyboardExit;
@@ -2150,7 +2156,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             // the dim runs on below and around its card instead, with the card cut out of it (the
             // scrim's hole, below): the plane never reaches below this clip, so the clip only ever
             // decided the dim's extent.
-            if (scrimAroundKeyboard) {
+            if (scrimAroundKeyboard || keyboardLeaving) {
                 if (mHostClipped) {
                     mHostLayout.setClipBounds(null);
                     mHostClipped = false;
@@ -2200,7 +2206,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // The built-in keyboard's bands come back with the reveal only when they are what is being
         // revealed; under a system keyboard they stay where the plane pushed them.
         applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f
-                : AppDrawerKeyboardSeparation.bandRevealFraction(keyboardStaysUp(), k),
+                : AppDrawerKeyboardSeparation.bandRevealFraction(keyboardStaysUp(),
+                    keyboardLeaving, k),
             stackOffset, keyboardExit, lowering);
         // After the bands: the hole follows the keyboard card where this frame has put it.
         if (scrimAroundKeyboard) applyKeyboardScrim(p);

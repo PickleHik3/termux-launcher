@@ -383,6 +383,37 @@ public class AppDrawerKeyboardSeparationTest {
         assertEquals(1f, keyboard.getAlpha(), 0f);
     }
 
+    /**
+     * The keyboard leaving under the open card (pong, 2026-11-20): for about three frames its bare
+     * keys slid down and faded behind and below the card, no material behind them. Once the drawer
+     * has sent its keyboard away it is gone at once, the dim runs whole (no hole, no clip), and only
+     * the card's bottom follows the reveal down.
+     */
+    @Test public void aKeyboardTheDrawerSentAwayIsGoneAtOnceWhileTheCardFollows() {
+        ReflectionHelpers.setField(controller, "mRoundedStyle", false);
+        host.marginPx = 21f;
+        ReflectionHelpers.setField(controller, "mOpenRect",
+            ReflectionHelpers.callInstanceMethod(controller, "resolveOpenRect"));
+        View keyboard = new View(plane.getContext());
+        ReflectionHelpers.setField(controller, "mKeyboardView", keyboard);
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame",
+            new Frame(0f, KEYBOARD_TOP, WIDTH, HEIGHT));
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        Object spring = ReflectionHelpers.getField(controller, "mReveal");
+        ReflectionHelpers.setField(spring, "value", 0.5f);
+        ReflectionHelpers.setField(spring, "target", 0f);
+
+        applyFrame(1f);
+
+        assertEquals("no loose keys", 0f, keyboard.getAlpha(), 0f);
+        FrameLayout root = (FrameLayout) ReflectionHelpers.getField(controller, "mHostLayout");
+        assertNull("the dim is not cut short", root.getClipBounds());
+        assertFalse("no hole where the keyboard was",
+            root.getBackground() instanceof AppDrawerScrimDrawable);
+        // The card's bottom still follows the reveal: halfway between above-keyboard and rest.
+        assertEquals(((KEYBOARD_TOP - 21f) + (HEIGHT - 21f)) / 2f, plane.getFrame().bottom, 1e-3f);
+    }
+
     @Test public void dockedKeyboardUpAtThePullKeepsTheRevealThroughTheClose() {
         docked();
         AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
@@ -477,8 +508,17 @@ public class AppDrawerKeyboardSeparationTest {
         assertEquals(0f, AppDrawerKeyboardSeparation.revealTarget(true, false, false, 1f), 0f);
         assertEquals(1f, AppDrawerKeyboardSeparation.revealTarget(true, true, false, 1f), 0f);
 
-        assertEquals(1f, AppDrawerKeyboardSeparation.bandRevealFraction(true, 0.2f), 0f);
-        assertEquals(0.2f, AppDrawerKeyboardSeparation.bandRevealFraction(false, 0.2f), 0f);
+        assertEquals(1f, AppDrawerKeyboardSeparation.bandRevealFraction(true, false, 0.2f), 0f);
+        assertEquals(1f, AppDrawerKeyboardSeparation.bandRevealFraction(true, true, 0.2f), 0f);
+        assertEquals(0.2f, AppDrawerKeyboardSeparation.bandRevealFraction(false, false, 0.2f), 0f);
+        assertEquals(0f, AppDrawerKeyboardSeparation.bandRevealFraction(false, true, 0.2f), 0f);
+
+        // Leaving: open, still revealed, and sent away (target 0) or held down by a scroll.
+        assertTrue(AppDrawerKeyboardSeparation.keyboardLeaving(true, false, 0f, 0.4f));
+        assertTrue(AppDrawerKeyboardSeparation.keyboardLeaving(true, true, 0.4f, 0.4f));
+        assertFalse(AppDrawerKeyboardSeparation.keyboardLeaving(true, false, 1f, 0.4f));
+        assertFalse(AppDrawerKeyboardSeparation.keyboardLeaving(false, false, 0f, 0.4f));
+        assertFalse(AppDrawerKeyboardSeparation.keyboardLeaving(true, false, 0f, 0f));
     }
 
     @Test public void draggingTheListSendsTheBuiltInKeyboardAwayAndKeepsTheQuery() {
