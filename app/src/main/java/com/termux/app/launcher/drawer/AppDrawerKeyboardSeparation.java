@@ -88,7 +88,10 @@ final class AppDrawerKeyboardSeparation {
         float right = AppDrawerTransitionGeometry.lerp(frame.right,
             Math.min(frame.right, hostWidthPx - m), k);
         float top = AppDrawerTransitionGeometry.lerp(frame.top, Math.max(frame.top, topPx), k);
-        return new AppDrawerTransitionGeometry.Frame(left, top, right, bottomPx);
+        // A seed that reaches below the card's bottom (the dock beside the keyboard, early in an
+        // open that starts revealed) is a card of no height on that bottom, never one turned over.
+        return new AppDrawerTransitionGeometry.Frame(left, Math.min(top, bottomPx), right,
+            bottomPx);
     }
 
     /** The plane's bottom edge with the keyboard fully revealed, in host coordinates. */
@@ -141,6 +144,15 @@ final class AppDrawerKeyboardSeparation {
         if (!revealable) return 0f;
         if (staysUp) return 1f;
         return open ? AppDrawerTransitionGeometry.clamp01(contentFraction) : 0f;
+    }
+
+    /**
+     * The reveal an open starts from: already at its target while the keyboard stays up
+     * ({@link #keyboardStaysUp}), so the plane is a card above the keyboard from the first frame and
+     * never a sheet that rises over the keys and then shortens off them; else where it is.
+     */
+    static float revealAtOpen(boolean staysUp, float target, float current) {
+        return staysUp ? target : current;
     }
 
     /**

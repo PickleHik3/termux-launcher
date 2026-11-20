@@ -2,6 +2,7 @@ package com.termux.app.launcher.drawer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -346,6 +347,52 @@ public class AppDrawerKeyboardSeparationTest {
 
         Object spring = ReflectionHelpers.getField(controller, "mReveal");
         assertEquals(1f, (float) ReflectionHelpers.getField(spring, "target"), 0f);
+    }
+
+    /**
+     * Palette, "App drawer", Docked with the Terminal's keyboard up (pong, 2026-11-20): the plane
+     * rose from the bottom over the extra keys and the top rows while the reveal caught up, and the
+     * pockets beside the keyboard card's top corners stayed bare. From the first frame the plane is
+     * a card above the keyboard card and the dim runs round the keyboard.
+     */
+    @Test public void dockedKeyboardUpAtThePullOpensAsACardAboveItFromTheFirstFrame() {
+        docked();
+        host.marginPx = 21f;
+        host.keyboardCardRadiusPx = 30f;
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mKeyboardUpAtPull", true);
+        ReflectionHelpers.setField(controller, "mKeyboardCardFrame",
+            new Frame(0f, KEYBOARD_TOP, WIDTH, HEIGHT));
+        // The engage: the reveal comes in at 0 from the last close.
+        reveal(0f);
+        ReflectionHelpers.callInstanceMethod(controller, "retargetReveal");
+        ReflectionHelpers.callInstanceMethod(controller, "startRevealForOpen");
+
+        FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
+        for (int i = 0; i <= 20; i++) {
+            float p = i / 20f;
+            applyFrame(p);
+            Frame frame = plane.getFrame();
+            assertTrue("bottom at p " + p + ": " + frame.bottom,
+                frame.bottom <= KEYBOARD_TOP - 21f + 1e-3f);
+            assertTrue("top at p " + p, frame.top <= frame.bottom);
+            assertNull("clip at p " + p, root.getClipBounds());
+            assertTrue("dim at p " + p, root.getBackground() instanceof AppDrawerScrimDrawable);
+            assertNotNull(((AppDrawerScrimDrawable) root.getBackground()).getHole());
+        }
+    }
+
+    @Test public void revealAtOpenAndASeedBelowTheCard() {
+        assertEquals(1f, AppDrawerKeyboardSeparation.revealAtOpen(true, 1f, 0f), 0f);
+        assertEquals(0f, AppDrawerKeyboardSeparation.revealAtOpen(false, 1f, 0f), 0f);
+        assertEquals(0.4f, AppDrawerKeyboardSeparation.revealAtOpen(false, 1f, 0.4f), 0f);
+        // A seed lower than the card's bottom is a card of no height there, never turned over.
+        Frame f = AppDrawerKeyboardSeparation.dockedCardFrame(
+            new Frame(0f, 1700f, WIDTH, 1760f), WIDTH, 21f, 120f, 1680f, 1f);
+        assertEquals(1680f, f.top, 0f);
+        assertEquals(1680f, f.bottom, 0f);
     }
 
     @Test public void keyboardStaysUpPolicy() {

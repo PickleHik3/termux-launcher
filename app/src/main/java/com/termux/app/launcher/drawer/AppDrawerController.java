@@ -1874,6 +1874,21 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // this hidden until the sprout has actually reached it.
         content.setVisibility(View.VISIBLE);
         retargetReveal();
+        startRevealForOpen();
+    }
+
+    /**
+     * Docked's keyboard that was up at the pull stays up: the reveal starts at its target, so the
+     * plane comes in as a card above the keyboard card and the dim runs round the keyboard from the
+     * first frame. See {@link AppDrawerKeyboardSeparation#revealAtOpen}.
+     */
+    @VisibleForTesting
+    void startRevealForOpen() {
+        float start = AppDrawerKeyboardSeparation.revealAtOpen(keyboardStaysUp(), mReveal.target,
+            mReveal.value);
+        if (start == mReveal.value) return;
+        mReveal.value = start;
+        mReveal.vel = 0f;
     }
 
     /** Reconfigures the existing content tree; never enters styling/accessory/activity paths. */
