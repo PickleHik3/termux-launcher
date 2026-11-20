@@ -8,12 +8,13 @@ import androidx.annotation.NonNull;
  *
  * <p>All pure so they can be tested without a view tree:
  * <ul>
- *   <li>the gap between the plane's bottom and the keyboard's top — under Docked, Margin: the
- *       plane becomes a card of its own, Margin in from the screen's sides, Margin below the
- *       status bar and Margin above the keyboard card, with the wallpaper round it; under
+ *   <li>Docked's card — the plane is a card of its own, keyboard up or down: Margin in from the
+ *       screen's sides, Margin below the status bar and Margin above the navigation band or the
+ *       keyboard card, with the wallpaper round it; the keyboard moves only its bottom;</li>
+ *   <li>the gap between the plane's bottom and the keyboard's top — under Docked, Margin; under
  *       Floating the pane gap;</li>
- *   <li>the plane's corner radius — under Docked the card's four corners take the terminal pane's
- *       corners as the keyboard comes up; under Floating the panel keeps its own all round;</li>
+ *   <li>the plane's corner radius — under Docked the card's four corners are the terminal pane's;
+ *       under Floating the panel keeps its own all round;</li>
  *   <li>the under-pill strip's opacity — the drawer fades the strip out as its glass arrives under
  *       it, but once the keyboard is revealed the plane stops above the keyboard and the strip
  *       under the pill is the keyboard's glass run on, exactly as on the Terminal.</li>
@@ -106,11 +107,12 @@ final class AppDrawerKeyboardSeparation {
     }
 
     /**
-     * Docked's plane at reveal {@code k}: the bezel-to-bezel sheet at 0, at 1 a card standing
-     * Margin in from the left and right edges, its top at {@code topPx}
-     * ({@link #dockedCardTopPx}) and its bottom at {@code bottomPx}. An edge already further in
-     * than that (the seed, early in the open) is left where it is, so the card only ever moves an
-     * edge inward.
+     * Docked's plane at reveal {@code k} while the plane is still growing from its seed: the frame
+     * as it is at 0, at 1 pulled into the card (Margin in from the left and right edges, its top at
+     * {@code topPx}, {@link #dockedCardTopPx}), its bottom at {@code bottomPx}. Once open the frame
+     * already is the card ({@link #dockedCardRestFrame}) and only the bottom moves; early in an open
+     * whose keyboard stays up it is what makes the plane a card above the keyboard from the first
+     * frame. An edge already further in than the card's is left where it is.
      *
      * @param frame the plane's frame before the reveal
      * @param hostWidthPx the host's width, whose right edge Margin is measured from
