@@ -623,7 +623,6 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             return false;
 
         int save = canvas.save();
-        com.termux.app.chrome.DiagSwMask.note("paneBand.clipPath", canvas, getBandClipPath()); // DIAG(sw-mask)
         canvas.clipPath(getBandClipPath());
         // Top and bottom bands: one rect per run of equal-coloured columns, directly above/below
         // where those columns' own cells sit, so a coloured status bar or a solid full-screen app
@@ -720,7 +719,6 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         if (child != mContent || !drawPaddingFillBand(canvas))
             return super.drawChild(canvas, child, drawingTime);
         int save = canvas.save();
-        com.termux.app.chrome.DiagSwMask.note("paneBand.clipPath", canvas, getBandClipPath()); // DIAG(sw-mask)
         canvas.clipPath(getBandClipPath());
         try {
             return super.drawChild(canvas, child, drawingTime);
@@ -762,12 +760,10 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         }
         if (Color.alpha(mBezelFill) > 0) {
             mBezelFillPaint.setColor(mBezelFill);
-            com.termux.app.chrome.DiagSwMask.note("paneBezel", canvas, mBezelPath); // DIAG(sw-mask)
             canvas.drawPath(mBezelPath, mBezelFillPaint);
         }
         // Lit at the top and shaded at the bottom, over the fill; the screen's own lip shadow is
         // the effect's recess (PaneRetroEffect#RECESS_SHADE).
-        com.termux.app.chrome.DiagSwMask.note("paneBezel", canvas, mBezelPath); // DIAG(sw-mask)
         canvas.drawPath(mBezelPath, mBezelShadePaint);
     }
 

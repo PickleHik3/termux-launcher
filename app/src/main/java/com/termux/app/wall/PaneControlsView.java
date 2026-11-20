@@ -834,7 +834,6 @@ public final class PaneControlsView extends View {
         if (arc > 0f) {
             mPath.reset();
             mPath.addRoundRect(mClip, arc, arc, Path.Direction.CW);
-            com.termux.app.chrome.DiagSwMask.note("paneTab.clipPath", canvas, mPath); // DIAG(sw-mask)
             canvas.clipPath(mPath);
         } else {
             canvas.clipRect(mClip);
@@ -857,7 +856,6 @@ public final class PaneControlsView extends View {
         mPaint.setStrokeCap(Paint.Cap.ROUND);
         mPaint.setStrokeJoin(Paint.Join.ROUND);
         mPaint.setColor(ColorUtils.setAlphaComponent(primary, Math.round(225f * mProgress)));
-        com.termux.app.chrome.DiagSwMask.note("paneTab.drawPath", canvas, mPath); // DIAG(sw-mask)
         canvas.drawPath(mPath, mPaint);
 
         int alpha = Math.round(255f * mProgress);
@@ -901,7 +899,6 @@ public final class PaneControlsView extends View {
      */
     private void drawMaterial(@NonNull Canvas canvas, int surface, float radiusPx) {
         int save = canvas.save();
-        com.termux.app.chrome.DiagSwMask.note("paneTab.clipPath", canvas, mPath); // DIAG(sw-mask)
         canvas.clipPath(mPath);
         GlassRefraction.Program program = mProgram;
         // A software canvas refuses a RuntimeShader outright: a RealtimeBlurView drawing the
