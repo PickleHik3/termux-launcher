@@ -2418,13 +2418,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             + " imePin=" + mImePinTopPx + " rounded=" + mRoundedStyle;
         if (state.equals(mPocketDiagLast)) return;
         mPocketDiagLast = state;
-        if (k >= 0.998f && mKeyboardCardFrame != null) {
-            // At rest open: the pocket and the gap above the card; at the open's first frame
-            // (p = 0): the pocket before the drawer has changed anything.
-            boolean open = p >= 0.998f;
-            diagPocketViews(host, open ? "pocket-open" : "pocket-p0", 10);
-            if (open) diagPocketViews(host, "gap-open", -10);
-        }
+        if (p >= 0.998f && k >= 0.998f && mKeyboardCardFrame != null) diagPocketViews(host);
         StackTraceElement[] st = new Throwable().getStackTrace();
         StringBuilder by = new StringBuilder();
         for (int i = 1; i < Math.min(st.length, 7); i++)
@@ -2439,26 +2433,22 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * translation and Z, so the one painting the pocket can be named. One line per settled open.
      * Revert before merge.
      */
-    private void diagPocketViews(@NonNull View host, @NonNull String where, int dy) {
+    private void diagPocketViews(@NonNull View host) {
         Frame card = mKeyboardCardFrame;
         if (card == null) return;
         int[] at = new int[2];
         host.getLocationOnScreen(at);
         int px = Math.round(card.left) + 8 + at[0];
-        int py = Math.round(card.top) + dy + at[1];
+        int py = Math.round(card.top) + 10 + at[1];
         StringBuilder out = new StringBuilder();
-        diagPocketWalk(host.getRootView(), px, py, out, at, 0, false);
+        diagPocketWalk(host.getRootView(), px, py, out, at, 0);
         com.termux.app.chrome.MotionLog.log("kb-pocket-views", "up="
-            + android.os.SystemClock.uptimeMillis() + " " + where + " at=" + px + "," + py + " "
-            + out);
+            + android.os.SystemClock.uptimeMillis() + " at=" + px + "," + py + " " + out);
     }
 
     private void diagPocketWalk(@NonNull View view, int px, int py, @NonNull StringBuilder out,
-                                @NonNull int[] at, int depth, boolean hiddenAbove) {
-        // Hidden views (not VISIBLE, alpha 0, or under such a parent) are listed too, marked
-        // HIDDEN: what normally fills the pocket may be what the drawer hides.
-        boolean hidden = hiddenAbove || view.getVisibility() != View.VISIBLE
-            || view.getAlpha() <= 0f;
+                                @NonNull int[] at, int depth) {
+        if (view.getVisibility() != View.VISIBLE || view.getAlpha() <= 0f) return;
         view.getLocationOnScreen(at);
         boolean holds = px >= at[0] && px < at[0] + view.getWidth()
             && py >= at[1] && py < at[1] + view.getHeight();
@@ -2466,9 +2456,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         android.graphics.drawable.Drawable img = view instanceof android.widget.ImageView
             ? ((android.widget.ImageView) view).getDrawable() : null;
         boolean draws = bg != null || img != null
-            || !(view instanceof android.view.ViewGroup)
-            // A group that clips what it holds (app_drawer_glass) decides what its children show.
-            || view.getClipToOutline() || view.getClipBounds() != null;
+            || !(view instanceof android.view.ViewGroup);
         if (holds && draws) {
             String name;
             try {
@@ -2477,8 +2465,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             } catch (RuntimeException e) {
                 name = "?";
             }
-            out.append("[d").append(depth).append(hidden ? " HIDDEN " : " ").append(name)
-                .append(' ')
+            out.append("[d").append(depth).append(' ').append(name).append(' ')
                 .append(view.getClass().getSimpleName())
                 .append(" bg=").append(bg == null ? "null" : bg.getClass().getSimpleName()
                     + (bg instanceof android.graphics.drawable.ColorDrawable
@@ -2492,14 +2479,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 .append(view.getWidth()).append('x').append(view.getHeight())
                 .append(" clipOut=").append(view.getClipToOutline())
                 .append(" clip=").append(view.getClipBounds())
-                .append(" vis=").append(view.getVisibility())
                 .append("] ");
         }
         if (!(view instanceof android.view.ViewGroup)) return;
         android.view.ViewGroup group = (android.view.ViewGroup) view;
         // Children may draw outside their parent (clipChildren false): walked whatever the hit.
         for (int i = 0; i < group.getChildCount(); i++)
-            diagPocketWalk(group.getChildAt(i), px, py, out, at, depth + 1, hidden);
+            diagPocketWalk(group.getChildAt(i), px, py, out, at, depth + 1);
     }
 
     /** The dim over the whole host, the keyboard card cut out where this frame has put it. */
