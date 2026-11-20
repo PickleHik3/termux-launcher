@@ -52,6 +52,15 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
 
     private float mRequestedRadiusPx;
     private boolean mClipToShape;
+    /**
+     * Whether the frame is in its own layer because its press rig tips it, and clips to its
+     * shape in its own draw rather than through its outline ({@link PaneTiltClip}).
+     */
+    private boolean mTiltLayered;
+    /** Whether {@link #mTiltLayered} put the layer on, so only this frame takes it off. */
+    private boolean mOwnsTiltLayer;
+    /** The outline as a path, for the clip the frame draws itself while tipped. */
+    private final Path mTiltClipPath = new Path();
     /** Width of the border drawn on this frame's foreground, 0 while it wears none. */
     private float mRimStrokePx;
     private View mContent;
@@ -324,7 +333,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         mRequestedRadiusPx = requestedRadiusPx;
         mClipToShape = clipToShape;
         setOutlineProvider(clipToShape ? mShapeOutline : ViewOutlineProvider.BOUNDS);
-        setClipToOutline(clipToShape);
+        syncTiltClip(true);
         invalidateOutline();
         mBandClipPathDirty = true;
         mBezelPathDirty = true;
@@ -443,7 +452,83 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     }
 
     @Override
+    public void setRotation(float rotation) {
+        super.setRotation(rotation);
+        syncTiltClip(false);
+    }
+
+    @Override
+    public void setRotationX(float rotationX) {
+        super.setRotationX(rotationX);
+        syncTiltClip(false);
+    }
+
+    @Override
+    public void setRotationY(float rotationY) {
+        super.setRotationY(rotationY);
+        syncTiltClip(false);
+    }
+
+    /**
+     * Puts the frame in its own layer while it is tipped and clips to its shape there, or back on
+     * its outline at rest ({@link PaneTiltClip}). {@code force} re-applies the outline clip after
+     * the shape changed, even when the layer stays as it was.
+     */
+    private void syncTiltClip(boolean force) {
+        boolean layered = PaneTiltClip.layered(mClipToShape, getRotation(), getRotationX(),
+            getRotationY());
+        if (layered == mTiltLayered && !force)
+            return;
+        boolean changed = layered != mTiltLayered;
+        mTiltLayered = layered;
+        if (layered && getLayerType() == LAYER_TYPE_NONE) {
+            setLayerType(LAYER_TYPE_HARDWARE, null);
+            mOwnsTiltLayer = true;
+        } else if (!layered && mOwnsTiltLayer) {
+            setLayerType(LAYER_TYPE_NONE, null);
+            mOwnsTiltLayer = false;
+        }
+        boolean byOutline = PaneTiltClip.clipsByOutline(mClipToShape, layered);
+        if (getClipToOutline() != byOutline)
+            setClipToOutline(byOutline);
+        if (changed)
+            invalidate();
+    }
+
+    /** Whether the frame is in its tipped layer, clipping itself; for tests. */
+    @androidx.annotation.VisibleForTesting
+    boolean tiltLayered() {
+        return mTiltLayered;
+    }
+
+    /**
+     * Clips {@code canvas} to the outline ({@link #mShapeOutline}'s round rect) while the frame
+     * clips itself; the save count to restore to, or -1 when it clips nothing here.
+     */
+    private int clipToShapeInDraw(Canvas canvas) {
+        if (!PaneTiltClip.clipsInDraw(mClipToShape, mTiltLayered))
+            return -1;
+        int height = visibleHeight();
+        float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), height);
+        mTiltClipPath.rewind();
+        mTiltClipPath.addRoundRect(0f, 0f, getWidth(), height, radius, radius, Path.Direction.CW);
+        int save = canvas.save();
+        canvas.clipPath(mTiltClipPath);
+        return save;
+    }
+
+    @Override
     public void onDrawForeground(Canvas canvas) {
+        int clip = clipToShapeInDraw(canvas);
+        try {
+            drawForegroundRim(canvas);
+        } finally {
+            if (clip >= 0) canvas.restoreToCount(clip);
+        }
+    }
+
+    /** The rim, broken over the camera's gap when there is one. */
+    private void drawForegroundRim(Canvas canvas) {
         if (mTravelBottomInsetPx > 0)
             fitForegroundToTravelInset();
         if (mTopGapEndPx <= mTopGapStartPx) {
@@ -613,7 +698,12 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (mContent instanceof TerminalView) ((TerminalView) mContent).computeEdgeColorsIfEnabled();
-        super.dispatchDraw(canvas);
+        int clip = clipToShapeInDraw(canvas);
+        try {
+            super.dispatchDraw(canvas);
+        } finally {
+            if (clip >= 0) canvas.restoreToCount(clip);
+        }
     }
 
     /**
