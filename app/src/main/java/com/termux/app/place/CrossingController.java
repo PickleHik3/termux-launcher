@@ -750,7 +750,14 @@ public final class CrossingController {
         if (other == null || other == mCrossing.seam().other()) return;
         // A landing's re-dress still waiting for its post is had before a new crossing reads
         // the halves' dresses.
-        if (!mCrossing.crossing()) mHost.flushLandingRestyle();
+        if (!mCrossing.crossing()) {
+            Trace.beginSection("Seam.flushLanding");
+            mHost.flushLandingRestyle();
+            Trace.endSection();
+        }
+        // Each step of a crossing's first frame is its own section (Seam.<step>), so a trace
+        // names what a slow swipe start spent its time in.
+        Trace.beginSection("Seam.ends");
         PlaceOrientation orientation = mHost.currentPlaceOrientation();
         PlaceLayout committed = mHost.committedArrangement().layout();
         ResolvedArrangement otherArrangement = mHost.arrangementOf(other);
@@ -769,15 +776,19 @@ public final class CrossingController {
         com.termux.app.dock.DockLayout hereRest;
         com.termux.app.dock.DockLayout thereRest;
         com.termux.app.dock.DockGeometry.Snapshot rests = null;
+        Trace.endSection();
         if (begins) {
+            Trace.beginSection("Seam.rests");
             rests = mHost.dockSnapshot(committed, mHost.lastWallPage());
             hereRest = com.termux.app.dock.DockGeometry.compute(rests.restOf(herePage));
             thereRest = com.termux.app.dock.DockGeometry.compute(rests.restOf(therePage));
+            Trace.endSection();
         } else {
             hereRest = mCrossing.heldRest(herePage);
             thereRest = mCrossing.heldRest(therePage);
             if (hereRest == null || thereRest == null) return;
         }
+        Trace.beginSection("Seam.endpoints");
         boolean otherHome = therePage.isHome();
         // A keyboard in the stack, not one floating in a frame of its own: the committed half's
         // as it is up now, the other's as it wants one on arrival.
@@ -798,31 +809,43 @@ public final class CrossingController {
         boolean pagesSlide = mHost.paneWallController() == null
             || mHost.paneWallController().wall().pageTransition()
                 == com.termux.app.launcher.home.HomePageTransition.SLIDE;
+        Trace.endSection();
+        Trace.beginSection("Seam.begin");
         mCrossing.begin(here, there,
             com.termux.app.place.SeamCrossing.Stage.of(mHost.dockBeads() != null, mHost.frameStandsDown(),
                 mHost.isSplitPanesEnabled(), pagesSlide),
             hereRest, thereRest, mHost.arrangementRevision());
+        Trace.endSection();
+        Trace.beginSection("Seam.topStack");
         mHost.beginTopStack(herePage, therePage, committed, otherLayout);
+        Trace.endSection();
         if (!begins) return;
+        Trace.beginSection("Seam.blends");
         // What differs by page and not by look crosses with the wall (syncEndBlend).
         mEndBlendShare = Float.NaN;
         mHost.endLegendBlend();
         mHost.legibilityCrossingBegan();
         if (mCrossing.seam().endsBlend()) mHost.beginLegendBlend(herePage, therePage);
         mHost.beginTopBandFade(herePage, therePage);
+        Trace.endSection();
         // From here to the landing the chrome travels over the wallpaper: its bands keep the
         // even-out they stand on, so the ground moving under them asks for no whole apply each
         // frame. The landing lets it go after its own frame (runLandingSettle).
         if (mHost.chrome() != null) mHost.chrome().holdEvenOut();
         // Toward Home, the grid is given the room Home's dock leaves it at rest now, so it is laid
         // out at its final size for the slide rather than re-measured at the landing.
-        if (otherHome && rests != null)
+        if (otherHome && rests != null) {
+            Trace.beginSection("Seam.homeGrid");
             applyArrivingHomeGridReserve(rests, therePage, thereRest, otherArrangement);
+            Trace.endSection();
+        }
         // From Home, the bar takes off Home's dress for the Terminal's while it is still hidden,
         // before any pass lays it out over Home.
         if (mCrossing.seam().barTakesTerminalDressFirst()) {
+            Trace.beginSection("Seam.terminalBar");
             mHost.refreshTerminalWindowBar();
             mHost.chrome().requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+            Trace.endSection();
         }
     }
 
