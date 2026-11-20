@@ -26,6 +26,31 @@ public class AppDrawerRopeMetricsTest {
         AppDrawerRopeMetrics.resolve(TRACK_HEIGHT, ALL_LETTERS, DENSITY);
 
     @Test
+    public void theTrackSpansOnlyWhatThePlaneShowsOfTheColumn() {
+        // Nothing cuts it: the whole column.
+        assertEquals(1000f, AppDrawerRopeMetrics.visibleTrackHeightPx(1000f, 100f,
+            Float.POSITIVE_INFINITY), EPS);
+        // The card's bottom across it: the part above.
+        assertEquals(500f, AppDrawerRopeMetrics.visibleTrackHeightPx(1000f, 100f, 600f), EPS);
+        // Below the column, or above its top: clamped.
+        assertEquals(1000f, AppDrawerRopeMetrics.visibleTrackHeightPx(1000f, 100f, 2000f), EPS);
+        assertEquals(0f, AppDrawerRopeMetrics.visibleTrackHeightPx(1000f, 100f, 50f), EPS);
+    }
+
+    @Test
+    public void resizingInPlaceMatchesAFreshResolve() {
+        AppDrawerRopeMetrics metrics = AppDrawerRopeMetrics.resolve(TRACK_HEIGHT, ALL_LETTERS,
+            DENSITY);
+        metrics.resizeTo(TRACK_HEIGHT / 3f);
+        AppDrawerRopeMetrics fresh = AppDrawerRopeMetrics.resolve(TRACK_HEIGHT / 3f, ALL_LETTERS,
+            DENSITY);
+        assertEquals(fresh.trackTopPx, metrics.trackTopPx, EPS);
+        assertEquals(fresh.slotHeightPx, metrics.slotHeightPx, EPS);
+        assertEquals(fresh.glyphTextSizePx, metrics.glyphTextSizePx, EPS);
+        assertEquals(fresh.letterCount, metrics.letterCount);
+    }
+
+    @Test
     public void columnWidthIsTheOnlyNumberTheGridNeedsBeforeAnyLettersExist() {
         assertEquals(AppDrawerRopeMetrics.COLUMN_WIDTH_DP * DENSITY,
             AppDrawerRopeMetrics.resolveColumnWidthPx(DENSITY), EPS);

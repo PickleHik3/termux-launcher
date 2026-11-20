@@ -2323,6 +2323,15 @@ public final class AppDrawerContentView extends FrameLayout
         return mCategoryView;
     }
 
+    /**
+     * The plane's visible bottom in this view's coordinates while the keyboard's reveal moves the
+     * card's bottom; {@code +∞} when nothing cuts the content. The A–Z strip spaces its letters
+     * over what is above it, per frame, by redraw alone.
+     */
+    public void setRopeVisibleBottomPx(float bottomPx) {
+        mColumn.setVisibleBottomPx(bottomPx);
+    }
+
     /** @return the A-Z column, whose touch stream and geometry the drawer's tests drive directly */
     @NonNull
     public AppDrawerRopeColumnView getRopeColumn() {
