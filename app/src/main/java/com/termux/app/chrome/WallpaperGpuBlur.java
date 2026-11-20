@@ -49,7 +49,7 @@ final class WallpaperGpuBlur {
 
     /**
      * {@code source} blurred at {@code blurRadius} (a RenderEffect radius) on a
-     * {@code width} x {@code height} frame, as a mutable software ARGB_8888 bitmap.
+     * {@code width} x {@code height} frame, as an immutable software ARGB_8888 bitmap.
      *
      * @return null only when the thread was interrupted (the worker shutting down)
      * @throws GpuBlurException or any runtime exception when the GPU did not deliver the frame
@@ -113,7 +113,9 @@ final class WallpaperGpuBlur {
             if (wrapped == null) {
                 throw new GpuBlurException("could not wrap the frame's buffer");
             }
-            Bitmap result = wrapped.copy(Bitmap.Config.ARGB_8888, true);
+            // Immutable, so the RenderThread uploads it once rather than per draw (FramePublication);
+            // a vibrancy bake only reads it.
+            Bitmap result = wrapped.copy(Bitmap.Config.ARGB_8888, false);
             if (result == null) {
                 throw new GpuBlurException("could not copy the frame to software");
             }
