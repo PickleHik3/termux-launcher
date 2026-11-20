@@ -69,6 +69,24 @@ public class EditorRowsTest {
     }
 
     @Test
+    public void theDockCardKeepsTheDockRowsOnlyWhereAnAppsRowIsShown() {
+        EditorRows.Offers noAppsRow =
+            new EditorRows.Offers(true, true, true, false, false, false);
+        List<Row> rows = rowsOf(EditorCard.DOCK, noAppsRow);
+        for (Row row : new Row[] {Row.DOCK_TYPE, Row.DOCK_APP_ICONS, Row.SECTION_MORE_OPTIONS,
+            Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME})
+            assertFalse(row + " stands without an apps row", rows.contains(row));
+        // No empty section: Bars and Appearance are the card's own and stay, headers with rows.
+        assertEquals(Arrays.asList(Row.SECTION_BARS, Row.DOCK_BARS, Row.SECTION_APPEARANCE,
+            Row.OPACITY, Row.FROST, Row.REFLECTION), rows);
+
+        EditorRows.Offers appsRow = new EditorRows.Offers(true, true, true, false, false, true);
+        assertEquals(rowsOf(EditorCard.DOCK, ALL), rowsOf(EditorCard.DOCK, appsRow));
+        assertTrue(rowsOf(EditorCard.DOCK, appsRow).contains(Row.DOCK_TYPE));
+        assertTrue(rowsOf(EditorCard.DOCK, appsRow).contains(Row.DOCK_MONOCHROME));
+    }
+
+    @Test
     public void theStatusBarCardOpensOnItsPlaceAndStrip() {
         assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS),
             EditorRows.tier(EditorCard.STATUS, ALL, 1));

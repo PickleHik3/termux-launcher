@@ -391,6 +391,12 @@ public final class EditorRows {
         }
 
         /**
+         * Whether the place being edited shows an apps row (the dock): the Dock card's design,
+         * icons and icon options stand only where it does. True with no session to ask.
+         */
+        public final boolean appsRow;
+
+        /**
          * Whether Depth and Edge are out for a setting the user can change (Glass refraction off,
          * Reduce idle activity on, a wallpaper not set from the launcher): the Appearance block
          * then links to that setting.
@@ -399,6 +405,12 @@ public final class EditorRows {
 
         public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown,
                       boolean overviewUp, boolean refractionLink) {
+            this(glassEdge, terminalEffect, homeShown, overviewUp, refractionLink, true);
+        }
+
+        public Offers(boolean glassEdge, boolean terminalEffect, boolean homeShown,
+                      boolean overviewUp, boolean refractionLink, boolean appsRow) {
+            this.appsRow = appsRow;
             this.refractionLink = refractionLink;
             this.overviewUp = overviewUp;
             this.glassEdge = glassEdge;
