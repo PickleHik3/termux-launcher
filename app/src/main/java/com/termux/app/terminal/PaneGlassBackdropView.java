@@ -1114,6 +1114,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         int save = canvas.save();
         if (mCornerMaskRadiusPx > 0f) {
             // Everything outside the rounded page, which is exactly the four arcs.
+            com.termux.app.chrome.DiagSwMask.note("cornerMask.clipPath", canvas, cornerMaskPath(width, height)); // DIAG(sw-mask)
             canvas.clipPath(cornerMaskPath(width, height));
         } else if (mRadiusPx > 0f) {
             mClipRect.set(0f, 0f, width, height);

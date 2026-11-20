@@ -352,6 +352,7 @@ final class ChipWatermarkDrawable extends Drawable {
         float cy = mRect.centerY();
 
         int save = canvas.save();
+        com.termux.app.chrome.DiagSwMask.note("chipClip.clipPath", canvas, mOutline); // DIAG(sw-mask)
         canvas.clipPath(mOutline);
         if (hasIcon) {
             mIconSource.set(0, 0, mIcon.getWidth(), mIcon.getHeight());

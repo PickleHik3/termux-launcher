@@ -87,6 +87,7 @@ public final class RoundedSheetDrawable extends Drawable {
     public void draw(@NonNull Canvas canvas) {
         if (mSourceBounds.isEmpty()) return;
         int save = canvas.save();
+        com.termux.app.chrome.DiagSwMask.note("roundedSheet.clipPath", canvas, mClip); // DIAG(sw-mask)
         canvas.clipPath(mClip);
         mSource.draw(canvas);
         canvas.restoreToCount(save);

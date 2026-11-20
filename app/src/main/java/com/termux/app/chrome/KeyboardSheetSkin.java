@@ -175,6 +175,7 @@ public final class KeyboardSheetSkin {
             if (mInner != null) {
                 if (mTopRadius > 0f) {
                     int clip = canvas.save();
+                    com.termux.app.chrome.DiagSwMask.note("keyboardCard.clipPath", canvas, mCard); // DIAG(sw-mask)
                     canvas.clipPath(mCard);
                     mInner.draw(canvas);
                     canvas.restoreToCount(clip);
