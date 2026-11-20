@@ -2080,6 +2080,11 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL = "default";
 
+        /** Whether each glass item measures the wallpaper behind itself instead of the one measurement of the whole picture (#297). */
+        public static final String KEY_ADAPTIVE_LEGIBILITY = "adaptive_legibility";
+
+        public static final boolean DEFAULT_VALUE_ADAPTIVE_LEGIBILITY = false;
+
         /**
          * Defines the key for which shipped theme templates the user has turned on, as a set of
          * template ids. Templates the user drops into ~/.termux/theme-templates are not listed here:

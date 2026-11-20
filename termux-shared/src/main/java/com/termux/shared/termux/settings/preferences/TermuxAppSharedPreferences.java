@@ -4451,6 +4451,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             level.value, false);
     }
 
+    public boolean isAdaptiveLegibility() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_ADAPTIVE_LEGIBILITY,
+            TERMUX_APP.DEFAULT_VALUE_ADAPTIVE_LEGIBILITY);
+    }
+
+    public void setAdaptiveLegibility(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_ADAPTIVE_LEGIBILITY, value, false);
+    }
+
     /** The shipped theme templates the user has turned on, by template id. */
     @NonNull
     public java.util.Set<String> getThemeTemplatesEnabled() {
