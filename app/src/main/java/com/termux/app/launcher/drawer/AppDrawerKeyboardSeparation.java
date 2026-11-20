@@ -119,4 +119,35 @@ final class AppDrawerKeyboardSeparation {
         return Math.min(frameTopPx, -radiusPx);
     }
 
+
+    /**
+     * Whether the built-in keyboard keeps its place for the drawer's whole open and close: Docked's
+     * card, with the keyboard up before the drawer was pulled (the Terminal's keyboard, as when the
+     * palette opens the drawer). It is not the drawer's to take down or bring back, so it neither
+     * dips under the plane nor goes with the close, and the drawer card closes as one card above it.
+     * A keyboard the drawer's own search raised (down at the pull) keeps the reveal.
+     */
+    static boolean keyboardStaysUp(boolean rounded, boolean imePinned, boolean textFieldSearch,
+                                   boolean keyboardUpAtPull) {
+        return dockedCard(rounded, imePinned) && !textFieldSearch && keyboardUpAtPull;
+    }
+
+    /**
+     * The reveal spring's target: none without a keyboard to reveal, all of it while the keyboard
+     * stays up ({@link #keyboardStaysUp}), open or closing, else the content's ask while open.
+     */
+    static float revealTarget(boolean revealable, boolean open, boolean staysUp,
+                              float contentFraction) {
+        if (!revealable) return 0f;
+        if (staysUp) return 1f;
+        return open ? AppDrawerTransitionGeometry.clamp01(contentFraction) : 0f;
+    }
+
+    /**
+     * The reveal the keyboard's bands are choreographed at: identity (1) while the keyboard stays
+     * up, so the plane never pushes it down or fades it, else the spring's {@code reveal}.
+     */
+    static float bandRevealFraction(boolean staysUp, float reveal) {
+        return staysUp ? 1f : reveal;
+    }
 }

@@ -1103,7 +1103,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         }
         AppDrawerAccessoryChoreography.Band keyboard = mKeyboardBand;
         // Only a keyboard the reveal has up: one still rising, or one already going, is left be.
-        if (keyboard == null || !hasRevealableKeyboard()
+        // One that was up before the drawer opened is the Terminal's and stays where it is.
+        if (keyboard == null || !hasRevealableKeyboard() || keyboardStaysUp()
             || (!mKeyboardScrollHolding && mReveal.target < 1f)) return;
         mKeyboardScrollPx = AppDrawerKeyboardScrollHide.accumulate(mKeyboardScrollPx, dy);
         float hidden = AppDrawerKeyboardScrollHide.hiddenFraction(mKeyboardScrollPx,
@@ -1138,7 +1139,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHost.dismissSearchSystemKeyboard();
             return;
         }
-        if (!hasRevealableKeyboard() || mReveal.target <= 0f) return;
+        if (!hasRevealableKeyboard() || keyboardStaysUp() || mReveal.target <= 0f) return;
         finishKeyboardScrollAway();
     }
 
@@ -1177,8 +1178,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     private void retargetReveal() {
         AppDrawerContentView content = mContent;
-        float target = content != null && mOpen && hasRevealableKeyboard()
-            ? AppDrawerTransitionGeometry.clamp01(content.getRevealFraction()) : 0f;
+        float target = AppDrawerKeyboardSeparation.revealTarget(
+            content != null && hasRevealableKeyboard(), mOpen, keyboardStaysUp(),
+            content == null ? 0f : content.getRevealFraction());
         if (mReveal.target == target) return;
         mReveal.target = target;
         applyContentInsets();
@@ -1580,6 +1582,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             ? (resting ? restingFrameOf(mExtraKeysView) : frameOf(mExtraKeysView)) : null;
         Frame keyboard = isBandVisible(mKeyboardView)
             ? (resting ? restingFrameOf(mKeyboardView) : frameOf(mKeyboardView)) : null;
+        // Read at the pull only: a keyboard the search raises later is the drawer's, not this.
+        if (!resting) mKeyboardUpAtPull = keyboard != null;
         // The card inside the keyboard band, at the band's resting place: the Floating scrim's hole
         // adds the band's live translation to it each frame.
         mKeyboardCardView = mHost.findView(R.id.inapp_keyboard_view_host);
@@ -2174,8 +2178,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         // The built-in keyboard's bands come back with the reveal only when they are what is being
         // revealed; under a system keyboard they stay where the plane pushed them.
-        applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f : k, stackOffset,
-            keyboardExit, lowering);
+        applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f
+                : AppDrawerKeyboardSeparation.bandRevealFraction(keyboardStaysUp(), k),
+            stackOffset, keyboardExit, lowering);
         // After the bands: the hole follows the keyboard card where this frame has put it.
         if (scrimAroundKeyboard) applyKeyboardScrim(p);
         applyStatusBand(p);
@@ -2198,6 +2203,23 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (!hasRevealableKeyboard()) return 0f;
         return AppDrawerTransitionGeometry.clamp01(mReveal.value);
     }
+
+    /**
+     * Whether the built-in keyboard keeps its place for the whole open and close: see
+     * {@link AppDrawerKeyboardSeparation#keyboardStaysUp}.
+     */
+    private boolean keyboardStaysUp() {
+        return AppDrawerKeyboardSeparation.keyboardStaysUp(mRoundedStyle, mImePinTopPx > 0f,
+            mTextFieldSearch, mKeyboardUpAtPull);
+    }
+
+    /** Whether the built-in keyboard was up when the drawer was pulled; false once it is shut. */
+    public boolean keyboardWasUpAtPull() {
+        return mEngaged && mKeyboardUpAtPull;
+    }
+
+    /** Set at the pull's band capture: the built-in keyboard was up before the drawer opened. */
+    private boolean mKeyboardUpAtPull;
 
     private boolean hasRevealableKeyboard() {
         if (mImePinTopPx > 0f) return true;
@@ -2412,6 +2434,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             stopAwaitingRaisedKeyboard();
             mRaisedKeyboardDockRect = null;
             mLowering = false;
+            mKeyboardUpAtPull = false;
             applyAlpha(mAccessorySurface, 1f);
             applyGroupTranslationY(mDockLiftGroup, 0f);
             applyGroupAlpha(mDockRowFadeGroup, 1f);

@@ -301,6 +301,73 @@ public class AppDrawerKeyboardSeparationTest {
             ((android.graphics.drawable.ColorDrawable) root.getBackground()).getColor());
     }
 
+    @Test public void dockedKeyboardUpAtThePullNeitherDipsNorFadesWhileTheRevealCatchesUp() {
+        docked();
+        host.marginPx = 21f;
+        View keyboard = new View(plane.getContext());
+        ReflectionHelpers.setField(controller, "mKeyboardView", keyboard);
+        ReflectionHelpers.setField(controller, "mKeyboardUpAtPull", true);
+        // The open is done and the reveal spring has not caught up yet: the plane alone waits.
+        reveal(0f);
+
+        applyFrame(1f);
+
+        assertEquals(0f, keyboard.getTranslationY(), 0f);
+        assertEquals(1f, keyboard.getAlpha(), 0f);
+    }
+
+    @Test public void dockedKeyboardUpAtThePullKeepsTheRevealThroughTheClose() {
+        docked();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mKeyboardUpAtPull", true);
+        ReflectionHelpers.setField(controller, "mOpen", false);
+        reveal(1f);
+
+        ReflectionHelpers.callInstanceMethod(controller, "retargetReveal");
+
+        // The close keeps the card above the keyboard: no full-bleed plane over it.
+        Object spring = ReflectionHelpers.getField(controller, "mReveal");
+        assertEquals(1f, (float) ReflectionHelpers.getField(spring, "target"), 0f);
+    }
+
+    @Test public void dockedKeyboardUpAtThePullIsNotSentAwayByAListDrag() {
+        docked();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(content, "mSearchRevealRequested", true);
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(controller, "mKeyboardUpAtPull", true);
+        reveal(1f);
+
+        controller.onListDragHidesKeyboard();
+
+        Object spring = ReflectionHelpers.getField(controller, "mReveal");
+        assertEquals(1f, (float) ReflectionHelpers.getField(spring, "target"), 0f);
+    }
+
+    @Test public void keyboardStaysUpPolicy() {
+        // Docked, built-in keyboard up at the pull: it stays.
+        assertTrue(AppDrawerKeyboardSeparation.keyboardStaysUp(false, false, false, true));
+        // Raised by the drawer's own search (down at the pull), Floating, a system keyboard or a
+        // text-field search: the reveal keeps it.
+        assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(false, false, false, false));
+        assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(true, false, false, true));
+        assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(false, true, false, true));
+        assertFalse(AppDrawerKeyboardSeparation.keyboardStaysUp(false, false, true, true));
+
+        assertEquals(1f, AppDrawerKeyboardSeparation.revealTarget(true, false, true, 0f), 0f);
+        assertEquals(1f, AppDrawerKeyboardSeparation.revealTarget(true, true, true, 0f), 0f);
+        assertEquals(0f, AppDrawerKeyboardSeparation.revealTarget(false, true, true, 1f), 0f);
+        assertEquals(0f, AppDrawerKeyboardSeparation.revealTarget(true, false, false, 1f), 0f);
+        assertEquals(1f, AppDrawerKeyboardSeparation.revealTarget(true, true, false, 1f), 0f);
+
+        assertEquals(1f, AppDrawerKeyboardSeparation.bandRevealFraction(true, 0.2f), 0f);
+        assertEquals(0.2f, AppDrawerKeyboardSeparation.bandRevealFraction(false, 0.2f), 0f);
+    }
+
     @Test public void draggingTheListSendsTheBuiltInKeyboardAwayAndKeepsTheQuery() {
         floating();
         AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
