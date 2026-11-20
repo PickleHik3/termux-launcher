@@ -1524,6 +1524,27 @@ public final class ChromeInk {
     }
 
     /**
+     * {@link #bandEvenOutMatrix} as {@code band} would measure it under {@code screenRect} standing
+     * on {@code pageGround}, another page's ground: the even-out the dock wears at the page a
+     * crossing is arriving on, worked out as the crossing begins. Measures past a hold
+     * ({@link #holdEvenOut}) and keeps nothing: the band's own matrix, side and inks are
+     * untouched. Null as {@link #bandEvenOutMatrix} is.
+     */
+    @Nullable
+    public android.graphics.ColorMatrix bandEvenOutMatrixOver(
+            @NonNull GlassBackdropCache.Band band, @NonNull Rect screenRect,
+            @ColorInt int pageGround) {
+        EvenOutPolicy policy = mBandEvenOutPolicies.get(band);
+        if (policy == null) return null;
+        readMode();
+        toRootSpace(screenRect, mTmpEvenOutRect);
+        BandGlass glass = glassFor(band);
+        int dim = dimHidden(glass) ? Color.TRANSPARENT : pageGround;
+        int tint = OnGlass.withAlpha(baseOf(glass), ChromePolicy.dockGlassBaseAlpha(glass.opacity));
+        return mapEvenOut(mBandEvenOut.get(band), policy, mTmpEvenOutRect, dim, tint);
+    }
+
+    /**
      * {@code band}'s matrix as last measured, measuring nothing: a Glass drag's tick keeps it
      * until the release's pass re-measures. Null while the band has no even-out.
      */
@@ -1555,33 +1576,14 @@ public final class ChromeInk {
             mEvenOutHeldMoved = true;
             return memo.matrix;
         }
-        GlassBackdropCache.Lightness lightness = mCache.sampleLightnessUncached(rootRect);
-        android.graphics.ColorMatrix matrix = null;
-        if (lightness != null) {
-            // As the pane does: the limit is met on the composited ground (frost, dim, the band's
-            // base layer at its opacity), and a side the chain cannot reach is not chosen over one
-            // it can. One band, one voter; it keeps the side it was mapped on while that reaches.
-            EvenOut.Chain chain = compositeChain(lightness.meanColor, dim, tint);
-            double shortPale = EvenOut.shortfall(lightness, policy.pale, Polarity.PALE_INK,
-                policy.level, chain);
-            double shortDark = EvenOut.shortfall(lightness, policy.dark, Polarity.DARK_INK,
-                policy.level, chain);
-            // The side it was mapped on is kept only while the palette wears the same ink: a band
-            // first measured before the scheme loaded must not hold that launch's guess (#228).
-            boolean sameInk = memo.policy != null && memo.policy.current == policy.current;
-            Polarity polarity = onePolarity(sameInk && memo.polarity != null ? memo.polarity
-                : policy.current, shortPale, shortDark);
-            boolean pale = polarity == Polarity.PALE_INK;
-            EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
-                pale ? policy.pale : policy.dark, polarity, policy.level, chain);
-            matrix = EvenOutMatrix.of(mapping.toward(policy.strengthPercent / 100d));
-            memo.polarity = polarity;
-        }
+        android.graphics.ColorMatrix matrix = mapEvenOut(memo, policy, rootRect, dim, tint);
+        Polarity mapped = mMappedPolarity;
+        if (mapped != null) memo.polarity = mapped;
         boolean moved = !java.util.Arrays.equals(matrix == null ? null : matrix.getArray(),
             memo.matrix == null ? null : memo.matrix.getArray());
         memo.rect.set(rootRect);
         memo.generation = mCache.generation();
-        memo.measured = lightness != null;
+        memo.measured = mapped != null;
         memo.policy = policy;
         memo.dim = dim;
         memo.tint = tint;
@@ -1589,6 +1591,44 @@ public final class ChromeInk {
         if (moved) changedEvenOut();
         return matrix;
     }
+
+    /**
+     * The even-out of a band over {@code rootRect} standing on {@code dim} wearing {@code tint},
+     * seeded with the side {@code memo} was last mapped on. Writes nothing but
+     * {@link #mMappedPolarity}: the side it mapped on, null when the wallpaper there is unread
+     * (and the answer null).
+     */
+    @Nullable
+    private android.graphics.ColorMatrix mapEvenOut(@Nullable BandEvenOut memo,
+                                                    @NonNull EvenOutPolicy policy,
+                                                    @NonNull Rect rootRect, @ColorInt int dim,
+                                                    @ColorInt int tint) {
+        mMappedPolarity = null;
+        GlassBackdropCache.Lightness lightness = mCache.sampleLightnessUncached(rootRect);
+        if (lightness == null) return null;
+        // As the pane does: the limit is met on the composited ground (frost, dim, the band's
+        // base layer at its opacity), and a side the chain cannot reach is not chosen over one
+        // it can. One band, one voter; it keeps the side it was mapped on while that reaches.
+        EvenOut.Chain chain = compositeChain(lightness.meanColor, dim, tint);
+        double shortPale = EvenOut.shortfall(lightness, policy.pale, Polarity.PALE_INK,
+            policy.level, chain);
+        double shortDark = EvenOut.shortfall(lightness, policy.dark, Polarity.DARK_INK,
+            policy.level, chain);
+        // The side it was mapped on is kept only while the palette wears the same ink: a band
+        // first measured before the scheme loaded must not hold that launch's guess (#228).
+        boolean sameInk = memo != null && memo.policy != null
+            && memo.policy.current == policy.current;
+        Polarity polarity = onePolarity(sameInk && memo.polarity != null ? memo.polarity
+            : policy.current, shortPale, shortDark);
+        boolean pale = polarity == Polarity.PALE_INK;
+        EvenOut.Mapping mapping = EvenOut.mapThrough(lightness,
+            pale ? policy.pale : policy.dark, polarity, policy.level, chain);
+        mMappedPolarity = polarity;
+        return EvenOutMatrix.of(mapping.toward(policy.strengthPercent / 100d));
+    }
+
+    /** The side {@link #mapEvenOut} last mapped on; scratch, main thread only. */
+    @Nullable private Polarity mMappedPolarity;
 
     /**
      * A band's polarity on its own: {@code current} when it can reach its limit with room, else the

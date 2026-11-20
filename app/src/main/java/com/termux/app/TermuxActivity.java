@@ -6869,7 +6869,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * from the frame's own callbacks runs once that frame's traversal has been handed off.
      */
     private void postLandingSettle() {
-        if (mHalfRestyleFrom == null && (mChrome == null || !mChrome.isEvenOutHeld())) return;
+        if (mHalfRestyleFrom == null && (mChrome == null || !mChrome.isEvenOutHeld())
+            && mDockFilterPlan.phase() != com.termux.app.chrome.DockFilterPlan.Phase.LANDED) return;
         View root = getWindow().getDecorView();
         root.removeCallbacks(mLandingSettleRunnable);
         root.post(mLandingSettleRunnable);
@@ -6887,6 +6888,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // no ease outlives the crossing.
         if (!mCrossing.crossing()) mStatusBar.resetStatusMarginEase();
         if (mChrome != null && !mCrossing.crossing()) mChrome.settleEvenOut();
+        // The dock's frost stood on the landed end through the landing's frame; from here a pass
+        // measures it where it rests, and one is booked so the measure does not wait for one.
+        if (mDockFilterPlan.phase() == com.termux.app.chrome.DockFilterPlan.Phase.LANDED) {
+            mDockFilterPlan.settle(mCrossing.crossing());
+            if (mChrome != null
+                && mDockFilterPlan.phase() == com.termux.app.chrome.DockFilterPlan.Phase.REST)
+                mChrome.requestSync(com.termux.app.chrome.ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        }
     }
 
     /**
@@ -13980,7 +13989,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         endLegendBlend();
         if (mChrome == null) return;
         beginKeyboardLookBlend(there);
-        beginDockGroundBlend(there);
+        beginDockGroundBlend(here, there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);
         long thereKey = legibilityKey(there);
@@ -14045,14 +14054,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTilesInkBlendOn) mDock.tilesInkBlend(share);
         if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.setInkBlend(share);
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.setGlassBlend(share);
-        if (mDockFilterBlendOn && mDockFilterHere != null && mDockFilterThere != null
-                && share != mDockFilterShare) {
-            mDockFilterShare = share;
-            mDockFilterNow = com.termux.app.chrome.GlassFilters.blend(mDockFilterHere,
-                mDockFilterThere, share);
-            ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
-            if (backdrop != null) backdrop.setColorFilter(mDockFilterNow);
-        }
+        if (mDockFilterPlan.step(share)) dockGroundBlend(share);
         com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
         if (keyboardBlend != null) {
             // A pass on the way dressed the host again: what it put up is the blend's end on the
@@ -14073,36 +14075,159 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The dock's frost across a crossing: the even-out each page's dock measured over the ground
      * under its own rest (the wallpaper there, and the page's dim where the dock has no frame),
-     * from the one up now to the arriving page's as it was last measured there. The look is one
-     * on every page (ADR 0031); the ground is not.
+     * from the one up now to the arriving page's. The arriving end is what its rest kept when that
+     * still stands on the same ground and wallpaper, else worked out now over the arriving page's
+     * ground, so the first crossing after a start blends too. The look is one on every page
+     * (ADR 0031); the ground is not. {@link #mDockFilterPlan} says which end stands from here to
+     * the next rest.
      */
-    private void beginDockGroundBlend(@NonNull com.termux.app.wall.PageRef there) {
-        mDockFilterBlendOn = false;
-        mDockFilterNow = null;
+    private void beginDockGroundBlend(@NonNull com.termux.app.wall.PageRef here,
+                                      @NonNull com.termux.app.wall.PageRef there) {
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
-        android.graphics.ColorMatrix filterHere = backdrop == null ? null
-            : com.termux.app.chrome.GlassFilters.matrixOf(backdrop.getColorFilter());
-        android.graphics.ColorMatrix filterThere = mDockFilterAtRest.get(lookIdOf(there));
+        android.graphics.ColorFilter up = backdrop == null ? null : backdrop.getColorFilter();
+        android.graphics.ColorMatrix filterHere = dockFilterMatrixUp(up);
+        android.graphics.ColorFilter thereUp = dockFrostFilterAt(there);
+        android.graphics.ColorMatrix filterThere = thereUp == null ? null : mDockFilterAtMatrix;
+        mDockFilterAtMatrix = null;
         // DIAG(dock-filter): both ends of the frost blend; revert before merge.
         if (MotionLog.enabled)
             MotionLog.log("dock-filter", "begin here=" + matrixDiag(filterHere) + " there="
-                + matrixDiag(filterThere) + " thereId=" + lookIdOf(there));
-        if (filterHere != null && filterThere != null
-            && !java.util.Arrays.equals(filterHere.getArray(), filterThere.getArray())) {
-            mDockFilterHere = filterHere;
-            mDockFilterThere = filterThere;
-            mDockFilterShare = 0f;
-            mDockFilterNow = backdrop.getColorFilter();
-            mDockFilterBlendOn = true;
+                + matrixDiag(filterThere) + " thereId=" + lookIdOf(there)
+                + " kept=" + mDiagDockFilterKept);
+        boolean ends = filterHere != null && filterThere != null;
+        mDockFilterPlan.begin(lookIdOf(here), lookIdOf(there), ends);
+        java.util.Arrays.fill(mDockFilterSteps, null);
+        if (!ends) {
+            mDockFilterHere = null;
+            mDockFilterThere = null;
+            mDockFilterHereUp = null;
+            mDockFilterThereUp = null;
+            mDockFilterNow = null;
+            return;
         }
+        mDockFilterHere = filterHere;
+        mDockFilterThere = filterThere;
+        mDockFilterHereUp = up;
+        mDockFilterThereUp = thereUp;
+        mDockFilterNow = up;
     }
 
-    /** The dock frost at each end of a crossing, and the one drawn now. */
+    /**
+     * The dock's frost as {@code there}'s rest will wear it: kept from that rest when it stood on
+     * the same ground and wallpaper, else measured now over {@code there}'s ground under the dock
+     * as it stands. Its matrix is left in {@link #mDockFilterAtMatrix}. Null when nothing can be
+     * measured.
+     */
+    @Nullable
+    private android.graphics.ColorFilter dockFrostFilterAt(@NonNull com.termux.app.wall.PageRef there) {
+        mDockFilterAtMatrix = null;
+        int lookId = lookIdOf(there);
+        android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
+            mPreferences != null ? mPreferences.getAppBarOpacity(lookId) : 100);
+        android.graphics.ColorFilter filter = frost;
+        if (mChrome != null) {
+            int ground = groundOfWallPage(there.kind);
+            int generation = mChrome.ink().wallpaperGeneration();
+            DockFilterKept kept = mDockFilterAtRest.get(lookId);
+            mDiagDockFilterKept = kept != null && kept.ground == ground
+                && kept.generation == generation && kept.matrix != null;
+            if (mDiagDockFilterKept) {
+                mDockFilterAtMatrix = kept.matrix;
+                return kept.filter;
+            }
+            View surfaceHost = findViewById(R.id.accessory_surface_host);
+            if (surfaceHost == null || !dockEvenOutRect(surfaceHost)) return null;
+            updateEvenOutPolicy();
+            filter = com.termux.app.chrome.GlassFilters.withEvenOut(
+                mChrome.ink().bandEvenOutMatrixOver(com.termux.app.chrome.GlassBackdropCache.Band.DOCK,
+                    mDockEvenOutRect, ground), frost);
+        }
+        mDockFilterAtMatrix = com.termux.app.chrome.GlassFilters.matrixOf(filter);
+        return mDockFilterAtMatrix == null ? null : filter;
+    }
+
+    /** {@link #dockFrostFilterAt}'s matrix; read at once by the crossing's begin. */
+    @Nullable private android.graphics.ColorMatrix mDockFilterAtMatrix;
+    private boolean mDiagDockFilterKept; // DIAG(dock-filter)
+
+    /**
+     * The matrix of {@code up}, the dock frost up now: one of the frost filters, or one this
+     * crossing's ends or blend put up.
+     */
+    @Nullable
+    private android.graphics.ColorMatrix dockFilterMatrixUp(@Nullable android.graphics.ColorFilter up) {
+        android.graphics.ColorMatrix matrix = com.termux.app.chrome.GlassFilters.matrixOf(up);
+        if (matrix != null || up == null || up != mDockFilterNow) return matrix;
+        if (up == mDockFilterHereUp && mDockFilterHere != null)
+            return new android.graphics.ColorMatrix(mDockFilterHere);
+        if (up == mDockFilterThereUp && mDockFilterThere != null)
+            return new android.graphics.ColorMatrix(mDockFilterThere);
+        return new android.graphics.ColorMatrix(mDockFilterBlend);
+    }
+
+    /**
+     * The dock's frost at the crossing's {@code share}: an end's own filter at either end, else the
+     * step's blend, built once per step per crossing.
+     */
+    private void dockGroundBlend(float share) {
+        android.graphics.ColorMatrix here = mDockFilterHere;
+        android.graphics.ColorMatrix there = mDockFilterThere;
+        if (here == null || there == null) return;
+        android.graphics.ColorFilter filter;
+        if (share <= 0f) {
+            filter = mDockFilterHereUp;
+        } else if (share >= 1f) {
+            filter = mDockFilterThereUp;
+        } else {
+            float[] a = here.getArray();
+            float[] b = there.getArray();
+            for (int i = 0; i < mDockFilterBlend.length; i++)
+                mDockFilterBlend[i] = a[i] + (b[i] - a[i]) * share;
+            int step = Math.max(0, Math.min(mDockFilterSteps.length - 1,
+                Math.round(share * com.termux.app.place.SeamCrossing.END_STEPS)));
+            filter = mDockFilterSteps[step];
+            if (filter == null) {
+                filter = new android.graphics.ColorMatrixColorFilter(mDockFilterBlend);
+                mDockFilterSteps[step] = filter;
+            }
+        }
+        setDockFilterNow(filter);
+    }
+
+    /** Puts {@code filter} up as the dock's frost the plan stands on. */
+    private void setDockFilterNow(@Nullable android.graphics.ColorFilter filter) {
+        mDockFilterNow = filter;
+        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+        if (backdrop != null && filter != null && backdrop.getColorFilter() != filter)
+            backdrop.setColorFilter(filter);
+    }
+
+    /**
+     * The crossing lands on {@code there}'s end ({@code onThere}) or back where it began: the dock
+     * keeps that end's frost until a pass can measure where it rests (DockFilterPlan).
+     */
+    private void landDockGroundBlend(boolean onThere) {
+        if (mDockFilterPlan.phase() != com.termux.app.chrome.DockFilterPlan.Phase.CROSSING) return;
+        mDockFilterPlan.land(onThere);
+        if (mDockFilterPlan.standsOnEnds())
+            setDockFilterNow(onThere ? mDockFilterThereUp : mDockFilterHereUp);
+    }
+
+    /** Which page's even-out the dock's glass wears, from a crossing's begin to the next rest. */
+    @NonNull private final com.termux.app.chrome.DockFilterPlan mDockFilterPlan =
+        new com.termux.app.chrome.DockFilterPlan();
+    /** The dock frost at each end of a crossing, as matrices and as the filters put up. */
     @Nullable private android.graphics.ColorMatrix mDockFilterHere;
     @Nullable private android.graphics.ColorMatrix mDockFilterThere;
+    @Nullable private android.graphics.ColorFilter mDockFilterHereUp;
+    @Nullable private android.graphics.ColorFilter mDockFilterThereUp;
+    /** The frost the plan has up now; null while the dock measures live. */
     @Nullable private android.graphics.ColorFilter mDockFilterNow;
-    private float mDockFilterShare;
-    private boolean mDockFilterBlendOn;
+    /** The blend's last step, entry by entry; scratch reused across crossings. */
+    @NonNull private final float[] mDockFilterBlend = new float[20];
+    /** Each step's blend filter for the crossing under way, built the first time it is reached. */
+    @NonNull private final android.graphics.ColorFilter[] mDockFilterSteps =
+        new android.graphics.ColorFilter[com.termux.app.place.SeamCrossing.END_STEPS + 1];
 
     /** DIAG(dock-filter): a matrix's gains and offsets, for the log. */
     @NonNull
@@ -14164,9 +14289,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPromptInkBlendOn = false;
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.endGlassBlend();
         mKeyboardBlendOn = false;
-        // The landing's pass measures the arriving frost afresh; what the blend left up stands
-        // until then.
-        mDockFilterBlendOn = false;
+        // The dock's frost lands on the end the crossing reached (the settle names it first when
+        // it lands; any other end of the blend lands by its share) and stands there until a pass
+        // can measure where it rests (DockFilterPlan#measures).
+        landDockGroundBlend(mDockFilterPlan.share() >= 0.5f);
         com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
         mKeyboardLookBlend = null;
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
@@ -23584,26 +23710,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private android.graphics.ColorFilter dockFrostFilter(@Nullable View surfaceHost) {
-        // Across a crossing the frost is the blend's (beginDockGroundBlend): a pass on the way
-        // re-measures nothing the eye would see change.
-        if (mDockFilterBlendOn && mDockFilterNow != null) {
+        // Across a crossing, and from its landing until the glass can be measured where it rests,
+        // the frost is the plan's (beginDockGroundBlend): a pass on the way re-measures nothing,
+        // and a landing's pass does not put up the held or the left page's even-out.
+        if (mDockFilterNow != null && !mDockFilterPlan.measures(stackLookPage(),
+                mCrossing.crossing(), mChrome != null && mChrome.isEvenOutHeld())) {
             if (mChrome != null)
                 mChrome.ink().noteBandFrame(com.termux.app.chrome.GlassBackdropCache.Band.DOCK, true);
             return mDockFilterNow;
         }
+        mDockFilterNow = null;
         android.graphics.ColorFilter filter = measureDockFrostFilter(surfaceHost);
         // Each page's frost as it stands at rest, for a crossing toward it to blend into.
-        if (surfaceHost != null && !mCrossing.crossing()) {
-            android.graphics.ColorMatrix matrix =
-                com.termux.app.chrome.GlassFilters.matrixOf(filter);
-            if (matrix != null) mDockFilterAtRest.put(stackLookPage(), matrix);
-        }
+        if (surfaceHost != null && mDockFilterPlan.keepsAtRest(mCrossing.crossing()))
+            keepDockFilterAtRest(filter);
         return filter;
     }
 
-    /** Each look's dock frost matrix as last worked out at rest, by look page id. */
-    private final android.util.SparseArray<android.graphics.ColorMatrix> mDockFilterAtRest =
+    /** One look's dock frost as its rest last wore it, with the ground and wallpaper it stood on. */
+    private static final class DockFilterKept {
+        @Nullable android.graphics.ColorFilter filter;
+        @Nullable android.graphics.ColorMatrix matrix;
+        int ground;
+        int generation;
+    }
+
+    /** Each look's dock frost as last worked out at rest, by look page id. */
+    private final android.util.SparseArray<DockFilterKept> mDockFilterAtRest =
         new android.util.SparseArray<>();
+
+    /** Keeps {@code filter} as the stack look's frost at rest; nothing when it already is. */
+    private void keepDockFilterAtRest(@Nullable android.graphics.ColorFilter filter) {
+        if (filter == null || mChrome == null) return;
+        int look = stackLookPage();
+        int ground = groundOfWallPage(stackDressPage());
+        int generation = mChrome.ink().wallpaperGeneration();
+        DockFilterKept kept = mDockFilterAtRest.get(look);
+        if (kept != null && kept.filter == filter) {
+            kept.ground = ground;
+            kept.generation = generation;
+            return;
+        }
+        android.graphics.ColorMatrix matrix = com.termux.app.chrome.GlassFilters.matrixOf(filter);
+        if (matrix == null) return;
+        if (kept == null) {
+            kept = new DockFilterKept();
+            mDockFilterAtRest.put(look, kept);
+        }
+        kept.filter = filter;
+        kept.matrix = matrix;
+        kept.ground = ground;
+        kept.generation = generation;
+    }
 
     @Nullable
     private android.graphics.ColorFilter measureDockFrostFilter(@Nullable View surfaceHost) {
@@ -23617,14 +23775,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return com.termux.app.chrome.GlassFilters.withEvenOut(mChrome.ink().lastBandEvenOutMatrix(
                 com.termux.app.chrome.GlassBackdropCache.Band.DOCK), frost);
         }
-        if (surfaceHost.getWidth() <= 0 || surfaceHost.getHeight() <= 0) return frost;
+        if (!dockEvenOutRect(surfaceHost)) return frost;
         updateEvenOutPolicy();
+        return com.termux.app.chrome.GlassFilters.withEvenOut(mChrome.ink().bandEvenOutMatrix(
+            com.termux.app.chrome.GlassBackdropCache.Band.DOCK, mDockEvenOutRect), frost);
+    }
+
+    /** Sets {@link #mDockEvenOutRect} to {@code surfaceHost} on screen; false before it is laid out. */
+    private boolean dockEvenOutRect(@NonNull View surfaceHost) {
+        if (surfaceHost.getWidth() <= 0 || surfaceHost.getHeight() <= 0) return false;
         surfaceHost.getLocationOnScreen(mDockEvenOutLocation);
         mDockEvenOutRect.set(mDockEvenOutLocation[0], mDockEvenOutLocation[1],
             mDockEvenOutLocation[0] + surfaceHost.getWidth(),
             mDockEvenOutLocation[1] + surfaceHost.getHeight());
-        return com.termux.app.chrome.GlassFilters.withEvenOut(mChrome.ink().bandEvenOutMatrix(
-            com.termux.app.chrome.GlassBackdropCache.Band.DOCK, mDockEvenOutRect), frost);
+        return true;
     }
 
     /**
@@ -25398,6 +25562,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // plainly, as that end wears it.
             Trace.beginSection("Settle.fades");
             endTopBandFade();
+            // The dock's frost lands on the page the wall did, whatever share the blend last saw.
+            landDockGroundBlend(page != left);
             mCrossingController.endEndBlend();
             Trace.endSection();
             // A stack dressed for the landed half on the way: the landed frame already shows what

@@ -119,6 +119,34 @@ public class EvenOutSeamHoldTest {
         assertFalse("released, the band takes the ground it rests on", same(atRest, landed));
     }
 
+    /**
+     * Pong 2026-11-20: the first crossing after a start had no kept even-out for the page it was
+     * arriving on, so the dock wore the left page's through the landing. The arriving page's is
+     * worked out as the crossing begins, over that page's ground, held or not, and equals what the
+     * page's own rest then measures; the band's own matrix is untouched.
+     */
+    @Test
+    public void theArrivingPagesEvenOutIsWorkedOutOverItsGroundWithoutHistory() {
+        int terminalGround = 0x73000000;
+        ColorMatrix atRest = chrome.ink().bandEvenOutMatrix(DOCK, new Rect(HOME));
+        assertNotNull(atRest);
+        idle();
+        chrome.holdEvenOut();
+        ColorMatrix arriving = chrome.ink().bandEvenOutMatrixOver(DOCK, new Rect(HOME),
+            terminalGround);
+        assertNotNull(arriving);
+        assertFalse("the Terminal's ground evens out differently", same(atRest, arriving));
+        assertSame("the band keeps the matrix it stands on", atRest,
+            chrome.ink().lastBandEvenOutMatrix(DOCK));
+        assertFalse("working it out books nothing", chrome.isCommitPending());
+
+        chrome.settleEvenOut();
+        idle();
+        surfaces.frontGround = terminalGround;
+        assertTrue("the arriving page's rest measures what the crossing began with",
+            same(arriving, chrome.ink().bandEvenOutMatrix(DOCK, new Rect(HOME))));
+    }
+
     @Test
     public void aSettleWithNothingHeldOffItsGroundBooksNothing() {
         ColorMatrix atRest = chrome.ink().bandEvenOutMatrix(DOCK, new Rect(HOME));
