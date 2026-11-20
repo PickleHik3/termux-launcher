@@ -275,11 +275,18 @@ _Avoid_: place (the retired word for Home, Terminal and Display as three pages),
 _ADR 0015 (proposed): a page is a Home page, the Terminal page or a Display page, and each follows **Global** or detaches its own look values._
 _ADR 0030 (accepted, not yet built): every Home page and every window (terminal, display, Assistant) is a page of one contract and names its **side**; a window is a page of the Terminal._
 
+**Page bar**:
+The glass pill above the dock on Home: one glyph per page in the wall's order (a stacked glyph with
+a count where neighbouring pages of one kind fold), the current page in the accent, and the dock's
+page capsules under it. Tap a glyph, or slide along it and let go; the glyph under the finger rides
+in a round bubble with the page's name. The page switcher key pops the same bar up for one use.
+Spec: `project-docs/active/page-glyph-switcher-2026-11-16.md` ("Page bar"). Code:
+`com.termux.app.wall.pageswitch` (`PageBar*`).
+_Avoid_: glyph row, page panel, dots, ticks (the retired versions), scrubber
+
 **Page switcher**:
-One switcher with two entry points: the **glyph row** under the Home grid (Home, Terminal, Assistant,
-Display) and the optional page switcher key on the extra-keys bar. It opens a full-width panel with
-one cell per page; tap a cell, or touch and slide and let go on one, to go there. Spec:
-`project-docs/active/page-glyph-switcher-2026-11-16.md`. Code: `com.termux.app.wall.pageswitch`.
+The page switcher key: an optional key on the extra-keys bar whose cap shows the current page's
+glyph; it pops up the **page bar**.
 _Avoid_: dot, picker, places dock (the retired space-bar version), nav button, floating button
 
 **Pane**:

@@ -38,10 +38,17 @@ shell window and sends the Home button to its first window.
 (Older versions had a usage mode and three places, Widgets, Terminal and Display, on a pane wall.
 Home and the Terminal replace them.)
 
-### Page switcher
+### Page bar
 
-The glyph row under the Home grid, and the optional page switcher key on the extra-keys bar,
-switch pages: tap to open the panel and tap a page, or touch and slide and let go on one.
+The pill above the dock holds one glyph per page, in the order you swipe through them; the page
+you are on is in the accent. Tap a glyph to go there, or slide along the pill: the page under your
+finger grows into a bubble with its name, and letting go takes you there. Slide back to where you
+started, or off the pill, to stay put. When there are more pages than fit, neighbouring pages of
+one kind share one stacked glyph with a count; slide over it to pick one. The small capsules under
+the pill show the dock's pages when it has more than one.
+
+The optional page switcher key on the extra-keys bar pops the same bar up above the keys for one
+use. Settings › Home › Page indicator turns the bar off.
 
 ## App icons on Home
 

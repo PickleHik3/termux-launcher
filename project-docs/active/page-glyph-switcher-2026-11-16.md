@@ -84,7 +84,8 @@ Built on branch feat/page-glyph-switcher; device checks owed in `project-docs/de
 ## Page bar (decided 2026-11-20, replaces the glyph row and the panel)
 
 Grilled with the developer on 2026-11-20 against the mock "Page bar — glyph directions"
-(artboard "As decided 2026-11-20"). Not built yet. What the code has today is above; this section
+(artboard "As decided 2026-11-20"). Built on branch feat/page-bar (#298); device checks owed in
+`project-docs/device-checks.md`. What the code has today is above; this section
 says what replaces it.
 
 - **One switcher.** Home's four-glyph row and the per-page panel both go. In their place is one
