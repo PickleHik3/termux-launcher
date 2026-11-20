@@ -142,10 +142,16 @@ public final class PageBarLayout {
         layoutFor(lo, centers, scales);
         if (t > 0f && hi != lo) {
             layoutFor(hi, mScratchCenters, mScratchScales);
+            // Between two focus slots both glyphs are neighbours: each blends at the neighbour's
+            // size, and only the one nearer the finger leaves the row for the bubble, so no glyph
+            // passes through a shrunken size on its way.
+            scales[lo] = NEIGHBOUR_SCALE;
+            mScratchScales[hi] = NEIGHBOUR_SCALE;
             for (int i = 0; i < mSlotCount; i++) {
                 centers[i] += (mScratchCenters[i] - centers[i]) * t;
                 scales[i] += (mScratchScales[i] - scales[i]) * t;
             }
+            scales[Math.round(f)] = 0f;
         }
         for (int i = 0; i < mSlotCount; i++) {
             float rest = restCenterX(i);

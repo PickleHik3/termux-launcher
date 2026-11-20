@@ -118,8 +118,15 @@ public class PageBarLayoutTest {
         l.slidePositions(2.25f, 1f, cm, sm);
         for (int i = 0; i < 7; i++) {
             assertEquals(c[i] + (c2[i] - c[i]) * 0.25f, cm[i], EPS);
+            if (i == 2 || i == 3) continue;
             assertEquals(s[i] + (s2[i] - s[i]) * 0.25f, sm[i], EPS);
         }
+        // The glyph nearer the finger is in the bubble; the other stays a full-size neighbour.
+        assertEquals(0f, sm[2], EPS);
+        assertEquals(PageBarLayout.NEIGHBOUR_SCALE, sm[3], EPS);
+        l.slidePositions(2.75f, 1f, cm, sm);
+        assertEquals(PageBarLayout.NEIGHBOUR_SCALE, sm[2], EPS);
+        assertEquals(0f, sm[3], EPS);
     }
 
     @Test public void enterBlendsRestIntoTheSlideLayout() {
