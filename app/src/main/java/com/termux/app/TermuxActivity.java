@@ -8618,6 +8618,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mKeyboardSheet.engaged() != wasEngaged && host != null)
             host.setBackground(mKeyboardSheet.dress(mKeyboardHostInner));
         if (f <= 0f && mKeyboardSheet.sheet() != null) mKeyboardSheet.setSheet(null, 0);
+        diagKeyboardSheet(host, drawerFraction, f);
+    }
+
+    /** DIAG(kb-sheet): the last state logged, so a line is written only when it changes. */
+    @Nullable private String mKbSheetDiagLast;
+
+    /**
+     * DIAG(kb-sheet): whether the keyboard card wears the drawer's glass under the open drawer:
+     * the skin's state, what the host's background actually is, and what sits around it. One
+     * line per change, with six caller frames. Revert before merge.
+     */
+    private void diagKeyboardSheet(@Nullable View host, float drawerFraction, float f) {
+        if (!MotionLog.enabled) return;
+        Drawable bg = host == null ? null : host.getBackground();
+        Drawable dressed = mKeyboardSheet.dress(mKeyboardHostInner);
+        View column = findViewById(R.id.accessory_surface_host);
+        View container = findViewById(R.id.inapp_keyboard_container);
+        View keys = host instanceof ViewGroup && ((ViewGroup) host).getChildCount() > 0
+            ? ((ViewGroup) host).getChildAt(0) : null;
+        String state = "f=" + (f >= 1f ? "1" : f > 0f ? "mid" : "0")
+            + " engaged=" + mKeyboardSheet.engaged()
+            + " sheet=" + (mKeyboardSheet.sheet() == null ? "null"
+                : mKeyboardSheet.sheet().getClass().getSimpleName())
+            + " shown=" + isInAppKeyboardShown()
+            + " card=" + mKeyboardSurfaceDressedAsCard
+            + " bg=" + (bg == null ? "null" : bg.getClass().getSimpleName())
+            + " bgIsDressed=" + (bg == dressed)
+            + " inner=" + (mKeyboardHostInner == null ? "null"
+                : mKeyboardHostInner.getClass().getSimpleName())
+            + " host=" + (host == null ? "null" : host.getWidth() + "x" + host.getHeight()
+                + "@a" + host.getAlpha() + " vis=" + host.getVisibility()
+                + " outline=" + host.getClipToOutline())
+            + " keys=" + (keys == null ? "null" : keys.getClass().getSimpleName()
+                + " keysBg=" + (keys.getBackground() == null ? "null"
+                    : keys.getBackground().getClass().getSimpleName()))
+            + " container=" + (container == null ? "null" : "a" + container.getAlpha()
+                + " ty=" + container.getTranslationY())
+            + " surface=" + (column == null ? "null" : "a" + column.getAlpha()
+                + " vis=" + column.getVisibility()
+                + " bg=" + (column.getBackground() == null ? "null"
+                    : column.getBackground().getClass().getSimpleName()))
+            + " topR=" + keyboardTopRadiusPx();
+        if (state.equals(mKbSheetDiagLast)) return;
+        mKbSheetDiagLast = state;
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        StringBuilder by = new StringBuilder();
+        for (int k = 2; k < Math.min(st.length, 8); k++)
+            by.append(st[k].getMethodName()).append(':').append(st[k].getLineNumber()).append(' ');
+        MotionLog.log("kb-sheet", "up=" + android.os.SystemClock.uptimeMillis()
+            + " drawerF=" + drawerFraction + " " + state + " by=" + by);
     }
 
     /**
