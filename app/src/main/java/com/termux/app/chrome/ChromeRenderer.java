@@ -492,7 +492,7 @@ public final class ChromeRenderer {
      */
     private void onBlurFramesCleared() {
         mLedger.markFrostDirty();
-        mInk.invalidate();
+        mInk.framesCleared();
     }
 
     /** One low-priority thread: decodes and blurs are sequential, and never on the main thread. */
