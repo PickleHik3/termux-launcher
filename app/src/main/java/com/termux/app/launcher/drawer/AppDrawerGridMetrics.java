@@ -34,6 +34,16 @@ public final class AppDrawerGridMetrics {
     public static final float LABEL_GAP_DP = 6f;
     /** Padding under the label, so two rows do not read as one block. */
     public static final float ROW_BOTTOM_DP = 10f;
+    /**
+     * Air a label keeps inside its own cell on each side, so two long names never touch and the
+     * outer columns stand off the card's edge. Every layout's cell label reads it.
+     */
+    public static final float LABEL_SIDE_INSET_DP = 4f;
+
+    /** {@link #LABEL_SIDE_INSET_DP} in pixels. */
+    public static float labelSideInsetPx(float density) {
+        return LABEL_SIDE_INSET_DP * (density > 0f ? density : 1f);
+    }
 
     /** Columns across the plane, always within {@link #MIN_COLUMNS}..{@link #MAX_COLUMNS}. */
     public final int columns;
