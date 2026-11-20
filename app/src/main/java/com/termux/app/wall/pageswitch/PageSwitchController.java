@@ -13,13 +13,13 @@ import androidx.annotation.Nullable;
 import java.util.List;
 
 /**
- * The page switcher, whichever entry point opened it. An entry (the glyph row on Home, the
- * extra-keys key) feeds it the finger in raw screen coordinates; it places the panel over or above
+ * The page switcher panel, opened by the extra-keys key (Home's page bar is {@link PageBarController}).
+ * An entry (the key) feeds it the finger in raw screen coordinates; it places the panel over or above
  * the entry's anchor, runs the {@link PageSwitchGesture}, and changes the page only on a commit.
  * After a tap the panel stays open and the overlay layer takes the touches itself until a cell is
  * chosen or the panel is dismissed.
  */
-public final class PageSwitchController implements PageGlyphRowView.Entry {
+public final class PageSwitchController {
 
     public interface Host extends PageSwitchTargets.Navigator {
         @NonNull PageSwitchModel.Input snapshot();
@@ -85,12 +85,10 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
         hide();
     }
 
-    @Override
     public void addHitArea(@NonNull PageSwitchHitArea area) {
         if (!mHitAreas.contains(area)) mHitAreas.add(area);
     }
 
-    @Override
     public void removeHitArea(@NonNull PageSwitchHitArea area) {
         mHitAreas.remove(area);
     }
@@ -117,7 +115,6 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
 
     // ---- Entry points, in raw screen coordinates ----------------------------------------------
 
-    @Override
     public boolean entryDown(float rawX, float rawY, int anchorTopRaw, int anchorBottomRaw,
                              boolean overAnchor) {
         if (mHost.isSuppressed()) return false;
@@ -155,14 +152,12 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
         return true;
     }
 
-    @Override
     public void entryMove(float rawX, float rawY) {
         if (!mOpen) return;
         mGesture.move(rawX - mPanelLeftRaw, rawY - mPanelTopRaw);
         pushState();
     }
 
-    @Override
     public void entryUp(float rawX, float rawY) {
         if (!mOpen) return;
         float x = rawX - mPanelLeftRaw;
@@ -181,7 +176,6 @@ public final class PageSwitchController implements PageGlyphRowView.Entry {
         }
     }
 
-    @Override
     public void entryCancel() {
         if (!mOpen) return;
         mGesture.cancel();

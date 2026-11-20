@@ -2376,6 +2376,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.app.wall.pageswitch.PageGlyphSource.install(mPageGlyphProvider);
         attachPageSwitch();
+        attachPageBar();
         // Before this activity builds anything that reads the catalogue: a snapshot already held
         // by the process singleton may predate an install made while no activity was listening.
         com.termux.app.launcher.data.LauncherAppDataProvider heldProvider =
@@ -2833,7 +2834,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mHomePillStream = false;
             // The page switcher's entry points and open panel take their stream whole, ahead of
             // the seam's swipe and the surface long-press.
-            if (mPageSwitch != null && mPageSwitch.claimsTouch(ev)) return super.dispatchTouchEvent(ev);
+            // Both asked every event: each keeps its own stream's state.
+            boolean pageBarStream = mPageBar != null && mPageBar.claimsTouch(ev);
+            boolean pageSwitchStream = mPageSwitch != null && mPageSwitch.claimsTouch(ev);
+            if (pageBarStream || pageSwitchStream) return super.dispatchTouchEvent(ev);
             if (!pillStream && mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);
@@ -29352,11 +29356,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @Override public boolean isSuppressed() {
-                    return mSurfaceEditor.isActive() || mLayoutEditor.isActive()
-                        || mSheets.isAppDrawerEngaged() || mSheets.isCommandPaletteOpen()
-                        || isLayerOpen() || (mPageOverview != null && mPageOverview.isOpen())
-                        || setupWizardComesFirst()
-                        || (mSetupWizard != null && mSetupWizard.isCardSheetShowing());
+                    return pageSwitchSuppressed();
                 }
 
                 @Override public int panelAccent() {
@@ -29378,6 +29378,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (page != null) page.setKeyTouchOwner(mPageSwitchKey);
         }
         refreshPageSwitcherKey();
+    }
+
+    /** Whether something covers the wall (an editor, the drawer, a sheet, first-run setup): the switcher and the page bar take no touch. */
+    private boolean pageSwitchSuppressed() {
+        return mSurfaceEditor.isActive() || mLayoutEditor.isActive()
+            || mSheets.isAppDrawerEngaged() || mSheets.isCommandPaletteOpen()
+            || isLayerOpen() || (mPageOverview != null && mPageOverview.isOpen())
+            || setupWizardComesFirst()
+            || (mSetupWizard != null && mSetupWizard.isCardSheetShowing());
+    }
+
+    /** Home's page bar: its owner answers the bar's questions and claims its touch. */
+    @Nullable private com.termux.app.wall.pageswitch.PageBarController mPageBar;
+
+    private void attachPageBar() {
+        if (mPageBar != null) return;
+        final com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator nav = pageSwitchNavigator();
+        mPageBar = new com.termux.app.wall.pageswitch.PageBarController(this,
+            new com.termux.app.wall.pageswitch.PageBarController.Host() {
+                @Override public void goToPage(int pageId) { nav.goToPage(pageId); }
+                @Override public void showTerminalWindow(int index) { nav.showTerminalWindow(index); }
+                @Override public void goToTerminal() { nav.goToTerminal(); }
+
+                @Override public boolean hapticsEnabled() {
+                    return mPreferences != null && mPreferences.isAppHapticsEnabled();
+                }
+
+                @Override public boolean isReducedMotionEnabled() {
+                    return TermuxActivity.this.isReducedMotionEnabled();
+                }
+
+                @Override public boolean isSuppressed() {
+                    return pageSwitchSuppressed();
+                }
+
+                @Override public int accent() {
+                    // The A-Z bar's accent: the scheme's primary.
+                    return resolveAzGestureAccentColor();
+                }
+            });
+        // The dock's capsules dim while the bar slides (the dock strip's slice listens here).
+        mPageBar.setSlidingListener(sliding -> { });
     }
 
     /** The extra-keys bar's page switcher key: its touch, its hit area and its plain click. */
@@ -29418,9 +29460,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Gives Home's glyph row the pages the wall has now; called when a page settles or the list changes. */
     private void refreshPageGlyphs() {
         if (mWidgetPaneController != null) {
-            mWidgetPaneController.setPageSwitchEntry(mPageSwitch);
-            mWidgetPaneController.setPageGlyphs(com.termux.app.wall.pageswitch.PageSwitchModel.build(
-                pageSwitchSnapshot()));
+            mWidgetPaneController.setPageBarEntry(mPageBar);
+            mWidgetPaneController.setPageBar(pageBarModel());
         }
         refreshPageSwitcherKey();
     }
@@ -29508,8 +29549,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return in;
     }
 
+    /**
+     * The wall's pages as the page bar shows them, right now: in wall order, with the Terminal's
+     * windows and their own names (null while unnamed).
+     */
+    @NonNull
+    private com.termux.app.wall.pageswitch.PageBarModel pageBarModel() {
+        com.termux.app.wall.pageswitch.PageBarModel.Input in =
+            new com.termux.app.wall.pageswitch.PageBarModel.Input();
+        java.util.List<com.termux.app.wall.pageswitch.PageBarModel.Page> pages =
+            new java.util.ArrayList<>();
+        for (com.termux.app.wall.WallPages.Page page : wallPages().pages()) {
+            pages.add(new com.termux.app.wall.pageswitch.PageBarModel.Page(page.id, page.kind,
+                page.name == null || page.name.isEmpty() ? null : page.name));
+        }
+        in.pages = pages;
+        java.util.List<String> windowNames = new java.util.ArrayList<>();
+        if (mPaneController != null) {
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
+                rowWindows();
+            for (int i = 0; i < windows.size(); i++) {
+                windowNames.add(mPaneController.windowName(windows.get(i)));
+            }
+        }
+        in.windowNames = windowNames;
+        in.currentWindow = windowNames.isEmpty() ? -1 : rowCurrentIndex();
+        in.currentPageId = mPaneWallController == null ? -1 : mPaneWallController.currentPageId();
+        in.displayRunning = mDisplayServer.isRunning();
+        in.homeOffered = useAs().showsHomePage();
+        in.kindNames = new String[] {getString(R.string.page_switch_home),
+            getString(R.string.page_switch_terminal), getString(R.string.page_switch_display),
+            getString(R.string.page_switch_assistant)};
+        return com.termux.app.wall.pageswitch.PageBarModel.build(in);
+    }
+
     /** What a chosen cell does on the wall. */
-    // Read by the page switch panel and the glyph row.
+    // Read by the page switch panel and the page bar.
     @NonNull
     private com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator pageSwitchNavigator() {
         return new com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator() {

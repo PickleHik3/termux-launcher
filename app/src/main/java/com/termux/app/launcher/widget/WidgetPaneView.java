@@ -28,8 +28,9 @@ import com.termux.R;
 import com.termux.app.AnimationSpeed;
 import com.termux.app.launcher.home.HomeGestures;
 import com.termux.app.launcher.home.HomePageIndicator;
-import com.termux.app.wall.pageswitch.PageGlyphRowView;
-import com.termux.app.wall.pageswitch.PageSwitchModel;
+import com.termux.app.wall.pageswitch.PageBarLayout;
+import com.termux.app.wall.pageswitch.PageBarModel;
+import com.termux.app.wall.pageswitch.PageBarView;
 import com.termux.app.launcher.home.HomePageTransition;
 import com.termux.app.wall.SettleSpring;
 
@@ -38,13 +39,6 @@ import java.util.List;
 /** The widget grid's own body, a page of the pane wall; it has no authority over the wall or the terminal's geometry. */
 public final class WidgetPaneView extends FrameLayout
         implements com.termux.app.chrome.LiveBackdrop.Container {
-    /**
-     * The page glyphs' band under the grid: its height, its air to the pane's edge, and to the
-     * grid. The row view fills the whole band, so a touch anywhere in it reaches the glyphs.
-     */
-    private static final int DOTS_HEIGHT_DP = 14;
-    private static final int DOTS_BOTTOM_MARGIN_DP = 4;
-    private static final int DOTS_GAP_DP = 4;
     /** How far two fingers must close in before a pinch opens the page overview. */
     private static final float PINCH_COMMIT_DP = 48f;
 
@@ -201,10 +195,10 @@ public final class WidgetPaneView extends FrameLayout
     private final TextView emptyMessage;
     private final TextView notice;
     private final WidgetPickerSheetView picker;
-    private final PageGlyphRowView dots;
-    /** The empty page's hint and the page glyphs stand on the wallpaper: their ink follows it. */
+    /** The page bar: the band under the grid ({@link PageBarLayout#bandHeightDp}), the pill in it. */
+    private final PageBarView dots;
+    /** The empty page's hint stands on the wallpaper: its ink follows it. */
     private final HomeLabelInk hintInk = new HomeLabelInk();
-    private final HomeLabelInk dotsInk = new HomeLabelInk();
     private final Runnable hideNotice;
     private final int touchSlop;
     private final int doubleTapSlop;
@@ -327,9 +321,7 @@ public final class WidgetPaneView extends FrameLayout
             LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
         addView(empty, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-        dots = new PageGlyphRowView(context); dots.setId(R.id.widget_page_dots);
-        dots.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        dots.setWallpaperInk(dotsInk::wallpaper);
+        dots = new PageBarView(context); dots.setId(R.id.widget_page_dots);
         LayoutParams dotsParams = new LayoutParams(LayoutParams.MATCH_PARENT, bandHeightPx(density()),
             Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         dotsParams.bottomMargin = 0;
@@ -513,10 +505,7 @@ public final class WidgetPaneView extends FrameLayout
             hintInk.wallpaperUnder(emptyMessage, source);
             hintInk.apply(emptyMessage, false, getResources().getDisplayMetrics().density);
         }
-        if (dots.getVisibility() == VISIBLE) {
-            int before = dotsInk.wallpaper();
-            if (dotsInk.wallpaperUnder(dots, source) != before) dots.invalidate();
-        }
+        if (dots.getVisibility() == VISIBLE) dots.redress();
     }
 
     /** Every Home icon and folder under {@code parent}; widgets' own trees are not walked. */
@@ -569,12 +558,11 @@ public final class WidgetPaneView extends FrameLayout
     }
 
     /**
-     * How far above the pane's bottom the grid ends: the dock's band, then the page dots' band
-     * (kept whether or not the dots show, so adding a page does not shrink every cell).
+     * How far above the pane's bottom the grid ends: the dock's band, then the page bar's band
+     * (kept whether or not the bar shows, so adding a page does not shrink every cell).
      */
     static int gridBottomInsetPx(int dockReservePx, float density) {
-        return Math.max(0, dockReservePx)
-            + Math.round((DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP) * density);
+        return Math.max(0, dockReservePx) + bandHeightPx(density);
     }
 
     /**
@@ -964,21 +952,21 @@ public final class WidgetPaneView extends FrameLayout
     }
 
 
-    /** The page glyphs' state: what the wall has pages for, and where the user is. */
-    public void setPageGlyphs(@Nullable PageSwitchModel model) {
+    /** The page bar's pages: what the wall has, in its order, and where the user is. */
+    public void setPageBar(@Nullable PageBarModel model) {
         dots.setModel(model);
     }
 
-    /** Where a touch on the glyph row goes: the page switch panel. */
-    public void setPageSwitchEntry(@Nullable PageGlyphRowView.Entry entry) {
+    /** Where a touch on the page bar goes. */
+    public void setPageBarEntry(@Nullable PageBarView.Entry entry) {
         dots.setEntry(entry);
     }
 
     private float density() { return getResources().getDisplayMetrics().density; }
 
-    /** The glyph row's height: the whole band under the grid, less the dock's reserve. */
-    private static int bandHeightPx(float density) {
-        return Math.round((DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP) * density);
+    /** The page bar's height: the whole band under the grid, less the dock's reserve. */
+    static int bandHeightPx(float density) {
+        return Math.round(PageBarLayout.bandHeightDp() * density);
     }
 
     /** Updates the indicator and, after a committed swipe, slides the new page's content in. */

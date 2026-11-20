@@ -639,14 +639,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         folderDensity = density;
     }
 
-    /** The page glyphs under the grid: what the wall has pages for and where the user is. */
-    public void setPageGlyphs(@Nullable com.termux.app.wall.pageswitch.PageSwitchModel model) {
-        pane.setPageGlyphs(model);
+    /** The page bar under the grid: what the wall has pages for and where the user is. */
+    public void setPageBar(@Nullable com.termux.app.wall.pageswitch.PageBarModel model) {
+        pane.setPageBar(model);
     }
 
-    /** Where a touch on the glyph row goes. */
-    public void setPageSwitchEntry(@Nullable com.termux.app.wall.pageswitch.PageGlyphRowView.Entry entry) {
-        pane.setPageSwitchEntry(entry);
+    /** Where a touch on the page bar goes. */
+    public void setPageBarEntry(@Nullable com.termux.app.wall.pageswitch.PageBarView.Entry entry) {
+        pane.setPageBarEntry(entry);
     }
 
     /** The glyphs under the grid, or none (Settings › Home › Page indicator). */
