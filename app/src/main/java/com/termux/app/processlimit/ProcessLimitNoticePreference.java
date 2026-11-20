@@ -13,8 +13,8 @@ import com.termux.R;
 
 /**
  * The Settings root's place for the process-limit card. The row is always there and takes no
- * height while there is no card: the root's search hides and restores rows by the visibility it
- * found, so a row that came and went by itself would come back wrong after a search.
+ * height while there is no card. It sits above the search field, and the root's search leaves
+ * rows above the field alone: a row that came or went there would move the field while it is typed in.
  */
 @Keep
 public final class ProcessLimitNoticePreference extends Preference {
