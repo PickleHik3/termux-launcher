@@ -1012,7 +1012,26 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      * frame instead of leaving the frame out, which left the departing pane bare.
      */
     static boolean drawsPlainOnSoftware(boolean hasProgram, boolean hardwareCanvas) {
-        return hasProgram && !hardwareCanvas;
+        return drawsPlainOnSoftware(hasProgram, hardwareCanvas, false);
+    }
+
+    /**
+     * {@link #drawsPlainOnSoftware(boolean, boolean)} for a frame that may be held in GPU memory:
+     * a software canvas cannot draw a {@code HARDWARE} frame at all, so with or without a program
+     * it takes the plain draw, which reads the frame's software sampling copy.
+     */
+    static boolean drawsPlainOnSoftware(boolean hasProgram, boolean hardwareCanvas,
+                                        boolean hardwareFrame) {
+        return !hardwareCanvas && (hasProgram || hardwareFrame);
+    }
+
+    private static boolean isHardware(@Nullable Bitmap bitmap) {
+        return bitmap != null && bitmap.getConfig() == Bitmap.Config.HARDWARE;
+    }
+
+    /** Whether the frame is drawn through its own paint: on the GPU always, else only plain and software. */
+    static boolean drawsOnPaint(boolean hasProgram, boolean hardwareCanvas, boolean hardwareFrame) {
+        return hardwareCanvas || (!hasProgram && !hardwareFrame);
     }
 
     @Nullable private BitmapShader mSoftShader;
@@ -1024,14 +1043,21 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     private void drawFramePlain(@NonNull Canvas canvas, int width, int height) {
         Bitmap frame = mFrame;
         if (frame == null) return;
-        if (mSoftShader == null || mSoftShaderFrame != frame) {
-            mSoftShader = new BitmapShader(frame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-            mSoftShaderFrame = frame;
+        // A HARDWARE frame is drawn from its small software copy, scaled back up to the frame.
+        Bitmap readable = com.termux.app.chrome.HardwareFrame.readable(frame);
+        if (readable == null) return;
+        if (mSoftShader == null || mSoftShaderFrame != readable) {
+            mSoftShader = new BitmapShader(readable, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+            mSoftShaderFrame = readable;
         }
         GlassAnchor.place(this, mPlacement);
         mAim.set(mPlacement.toScreen, mFrameRect, frame.getWidth(), frame.getHeight(),
             mParallax == null ? 0f : mParallax.offsetPx());
         mAim.shaderMatrix(mSoftMatrix);
+        if (readable != frame) {
+            mSoftMatrix.preScale(frame.getWidth() / (float) readable.getWidth(),
+                frame.getHeight() / (float) readable.getHeight());
+        }
         mSoftShader.setLocalMatrix(mSoftMatrix);
         mSoftPaint.setShader(mSoftShader);
         mSoftPaint.setColorFilter(GlassFilters.undimmed(
@@ -1104,12 +1130,16 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         boolean live = mCornerMaskRadiusPx <= 0f && drawLive(canvas, width, height);
         if (com.termux.app.chrome.MotionLog.enabled) diagRoute(live, canvas); // DIAG(slab-route)
         if (!live) retireLiveNode(canvas);
+        // Any frame the paint may sample held in GPU memory keeps a software canvas off the paint.
+        boolean hardwareFrame = isHardware(mFrame) || isHardware(mPreviousFrame)
+            || isHardware(mClearFrame);
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
-                && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated())) {
+                && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated(),
+                    hardwareFrame)) {
             drawFramePlain(canvas, width, height);
         }
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
-                && (mProgram == null || canvas.isHardwareAccelerated())) {
+                && drawsOnPaint(mProgram != null, canvas.isHardwareAccelerated(), hardwareFrame)) {
             BitmapShader aimShader = mFrameShader;
             Bitmap aimFrame = mFrame;
             Rect aimRect = mFrameRect;
