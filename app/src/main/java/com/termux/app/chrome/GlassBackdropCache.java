@@ -330,17 +330,6 @@ public final class GlassBackdropCache {
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
     }
 
-    /**
-     * {@link #sampleUncached(Rect)} at {@code rect} itself whatever the scope: for text drawn
-     * straight on the wallpaper, which is not one of the shared items. Frozen reads nothing.
-     */
-    @ColorInt
-    public int sampleOwnRect(@NonNull Rect rect) {
-        if (mSampler == null || rect.isEmpty() || frozen()) return UNREADABLE;
-        int read = mSampler.sampleWallpaper(rect);
-        return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
-    }
-
     /** {@link Sampler#sampleLightness}, remembered nowhere; null when there is nothing to read. */
     @Nullable
     public Lightness sampleLightnessUncached(@NonNull Rect rect) {

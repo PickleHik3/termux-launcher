@@ -151,18 +151,9 @@ public class GlassBackdropCacheScopeTest {
         assertEquals(GlassBackdropCache.UNREADABLE, cache.sampleUncached(new Rect(0, 0, 10, 10)));
         assertEquals(GlassBackdropCache.UNREADABLE,
             cache.sampleUncached(new Rect(0, 0, 10, 10), 12));
-        assertEquals(GlassBackdropCache.UNREADABLE, cache.sampleOwnRect(new Rect(0, 0, 10, 10)));
         assertNull(cache.sampleLightnessUncached(new Rect(0, 0, 10, 10)));
         cache.wallpaperUnder(GlassBackdropCache.Band.DOCK, new Rect(0, 0, 10, 10));
         assertEquals(0, meanReads.size() + radiusReads.size() + lightnessReads.size());
-    }
-
-    @Test
-    public void ownRectReadsTheItemInSharedMode() {
-        Rect item = new Rect(0, 0, 10, 10);
-        assertEquals(ITEM_COLOR, cache.sampleOwnRect(item));
-        assertEquals(1, meanReads.size());
-        assertEquals(item, meanReads.get(0));
     }
 
     @Test

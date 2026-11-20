@@ -1224,12 +1224,13 @@ public final class ChromeInk {
      * the one sampler; {@link Color#TRANSPARENT} while nothing can be read there. For text drawn
      * straight on the wallpaper (editor-redesign §8: Home's labels, the page dots, the empty
      * page's hint), which keeps its own answer against {@link #wallpaperGeneration} rather than
-     * crowding the widgets' memo.
+     * crowding the widgets' memo. Read through the legibility scope ({@link LegibilityScope}):
+     * the one cached whole-picture measurement unless Adaptive legibility is on, then the rect's own.
      */
     @ColorInt
     public int wallpaperSample(@NonNull Rect rootRect) {
         readMode();
-        int read = mCache.sampleOwnRect(rootRect);
+        int read = mCache.sampleUncached(rootRect);
         if (Color.alpha(read) == 0) return Color.TRANSPARENT;
         return OnGlass.backdrop(read, dimUnder(rootRect), Color.TRANSPARENT);
     }

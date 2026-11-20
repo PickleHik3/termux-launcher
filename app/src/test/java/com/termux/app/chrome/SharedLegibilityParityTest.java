@@ -146,6 +146,18 @@ public class SharedLegibilityParityTest {
     }
 
     @Test
+    public void sharedBareTextAtDifferentRectsGivesTheSameInk() {
+        assertEquals(ink.wallpaperSample(LEFT), ink.wallpaperSample(RIGHT));
+        assertNotEquals("it read something", Color.TRANSPARENT, ink.wallpaperSample(LEFT));
+    }
+
+    @Test
+    public void adaptiveBareTextStillFollowsItsRect() {
+        surfaces.adaptive = true;
+        assertNotEquals(ink.wallpaperSample(LEFT), ink.wallpaperSample(RIGHT));
+    }
+
+    @Test
     public void sharedBandsAtDifferentRectsGiveTheSameInk() {
         OnGlass.Resolution left = ink.onGlass(GlassBackdropCache.Band.DOCK, LEFT,
             0xFF101010, 0xFFF0F0F0, OnGlass.TARGET_BODY_TEXT);
@@ -174,10 +186,5 @@ public class SharedLegibilityParityTest {
         OnGlass.Resolution adaptive = pane(LEFT, key);
         assertNotEquals(generation, ink.evenOutGeneration());
         assertDifferent(shared, adaptive);
-    }
-
-    @Test
-    public void textOnTheWallpaperKeepsReadingItsOwnRect() {
-        assertNotEquals(ink.wallpaperSample(LEFT), ink.wallpaperSample(RIGHT));
     }
 }
