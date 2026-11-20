@@ -79,3 +79,25 @@ Amendment (2026-11-17): **The correction is measured at rest and kept per page.*
 correction per page and band, measured at the page's rest position and measured again only when the
 wallpaper, the palette, light or dark, or the band's rest rectangle changes. A crossing blends two
 stored values and measures nothing. The strength still follows the terminal's Opacity as above.
+
+Amendment (2026-11-20): **One measurement of the whole wallpaper is the default; Adaptive legibility
+is the per-item mode.** Measuring under each item made a widget or a Home float change its glass and
+its ink when it was moved, and one Home float over a bright patch changed the palette of every pane.
+The developer found that surprising: people do not expect what they place to change. So:
+
+- By default the lightness range and the ink are measured once from the whole still wallpaper
+  picture, and every text-bearing surface (panes, Home floats, widgets, dock, keyboard, status bar,
+  strip) takes its legibility correction, its ink tone and, for the terminal, its palette ground
+  from that one measurement. Any item's own range lies inside the whole picture's, so the floors
+  still hold. It is measured again only when the wallpaper or the scheme changes; a moving wallpaper
+  is measured from its still picture and never while it moves.
+- **Adaptive legibility** (Global and Terminal cards, one stored value, off by default) puts each
+  item back on the wallpaper behind itself. This replaces "Contrast is the one legibility knob":
+  Contrast still sets the floors and the width, the switch sets where the ground is measured.
+- Every install moves to the shared default, upgraded ones too.
+- Widget glass takes the correction in both modes (it had none), scaled by the widget glass's own
+  Opacity by the rule the terminal uses. Bare widgets take the shared ink in the default mode; the
+  10-27 amendment above describes them only with Adaptive legibility on.
+- The Developer switch "Even out glass" is removed.
+- Known gap, not fixed by this: with Adaptive legibility on, the sampler does not follow the
+  wallpaper's scroll between Home pages.
