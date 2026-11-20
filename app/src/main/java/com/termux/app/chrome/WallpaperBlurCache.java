@@ -327,8 +327,7 @@ public final class WallpaperBlurCache {
             try {
                 if (bitmap == null && mSource.decode != null) {
                     try {
-                        // Decoded here, so owned here: it may be handed out as radius 0.
-                        bitmap = FramePublication.frozen(mSource.decode.call());
+                        bitmap = mSource.decode.call();
                     } catch (Exception e) {
                         bitmap = null;
                     }
@@ -794,9 +793,7 @@ public final class WallpaperBlurCache {
                 // radius 0 is the wallpaper itself.
                 if (GlassVibrancy.bakes(blurRadiusDp, vibrancy)
                     || GlassFrameTint.bakes(blurRadiusDp, frameTint))
-                    return FramePublication.frozen(
-                        GlassVibrancy.baked(blurredBitmap, vibrancy, frameTint));
-                return FramePublication.frozen(blurredBitmap);
+                    return GlassVibrancy.baked(blurredBitmap, vibrancy, frameTint);
             }
             return blurredBitmap;
         } finally {
@@ -814,9 +811,6 @@ public final class WallpaperBlurCache {
                        int orientation, boolean managedSource, int systemWallpaperId,
                        long managedLastModified, long managedLength) {
         if (blurredBitmap == capture.bitmap()) capture.handedOut = true;
-        // Finished immutable on the worker (FramePublication) and never written again: radius 0,
-        // the capture, is only read by the blurs still in flight.
-        FramePublication.publish(blurredBitmap);
         mByRadius.put(blurRadiusDp, blurredBitmap);
         long now = mClockMs.getAsLong();
         while (true) {
