@@ -1686,6 +1686,46 @@ public final class ChromeInk {
         return memo == null ? 0 : memo.changes;
     }
 
+    /**
+     * {@code band} stands on {@link #bandEvenOutMatrixOver}'s answer from here: the even-out its
+     * glass wears at the page a crossing arrives on, worked out past the crossing's freeze over
+     * {@code pageGround} where the band is laid out, and kept as the band's own matrix. It is kept
+     * against the ground under the band now, so the reads until the landing (the travel's hold
+     * keeps it too) find it; the settle after the landing measures the band where it rests and
+     * moves it only if that differs. Books nothing: the caller builds the glass next. Nothing is
+     * kept when the wallpaper there reads nothing.
+     */
+    public void standBandEvenOutOver(@NonNull GlassBackdropCache.Band band,
+                                     @NonNull Rect screenRect, @ColorInt int pageGround) {
+        EvenOutPolicy policy = mBandEvenOutPolicies.get(band);
+        if (policy == null) return;
+        readMode();
+        toRootSpace(screenRect, mTmpEvenOutRect);
+        BandGlass glass = glassFor(band);
+        boolean framed = dimHidden(glass);
+        int tint = OnGlass.withAlpha(baseOf(glass), ChromePolicy.dockGlassBaseAlpha(glass.opacity));
+        BandEvenOut memo = mBandEvenOut.get(band);
+        if (memo == null) {
+            memo = new BandEvenOut();
+            mBandEvenOut.put(band, memo);
+        }
+        android.graphics.ColorMatrix matrix = mapEvenOut(memo, policy, mTmpEvenOutRect,
+            framed ? Color.TRANSPARENT : pageGround, tint, true);
+        Polarity mapped = mMappedPolarity;
+        if (mapped == null) return;
+        boolean moved = !java.util.Arrays.equals(matrix == null ? null : matrix.getArray(),
+            memo.matrix == null ? null : memo.matrix.getArray());
+        memo.polarity = mapped;
+        memo.rect.set(mTmpEvenOutRect);
+        memo.generation = mCache.generation();
+        memo.measured = true;
+        memo.policy = policy;
+        memo.dim = groundDim(framed, dimUnder(mTmpEvenOutRect));
+        memo.tint = tint;
+        memo.matrix = matrix;
+        if (moved) memo.changes++;
+    }
+
     /** Whether {@code band} has an even-out to draw through ({@link #setBandEvenOutPolicy}). */
     public boolean hasBandEvenOut(@NonNull GlassBackdropCache.Band band) {
         return mBandEvenOutPolicies.containsKey(band);

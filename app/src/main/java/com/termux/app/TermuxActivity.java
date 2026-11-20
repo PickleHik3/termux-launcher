@@ -14073,8 +14073,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                   @NonNull com.termux.app.wall.PageRef there) {
         endLegendBlend();
         if (mChrome == null) return;
-        beginKeyboardLookBlend(there);
+        // The plan's begin first: it works out the arriving keyboard's even-out the keyboard's
+        // arriving card is then built on.
         beginDockGroundBlend(here, there);
+        beginKeyboardLookBlend(there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);
         long thereKey = legibilityKey(there);
@@ -14186,6 +14188,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 + " kept=" + mDiagDockFilterKept);
         boolean ends = filterHere != null && filterThere != null;
         mDockFilterPlan.begin(lookIdOf(here), lookIdOf(there), ends);
+        standKeyboardEvenOutAt(there);
         java.util.Arrays.fill(mDockFilterSteps, null);
         if (!ends) {
             mDockFilterHere = null;
@@ -14244,6 +14247,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockFilterAtMatrix = com.termux.app.chrome.GlassFilters.matrixOf(filter);
         return mDockFilterAtMatrix == null ? null : filter;
     }
+
+    /**
+     * Floating's keyboard card toward a rest that shows it, under the same plan as the dock's
+     * frost: its band's even-out is worked out once as the crossing begins, past the crossing's
+     * freeze, over the arriving page's ground where the card is laid out and under that page's
+     * look ({@link com.termux.app.chrome.ChromeInk#standBandEvenOutOver}). The card is built on
+     * it next ({@link #beginKeyboardLookBlend}); the travel's hold keeps it through the landing,
+     * and the landing's settle measures the band where it rests. Docked's keyboard has no card.
+     */
+    private void standKeyboardEvenOutAt(@NonNull com.termux.app.wall.PageRef there) {
+        if (mChrome == null || !KeyboardMaterialPolicy.dressedShown(false,
+                chromeRestOf(there.kind).keyboardReveal() > 0f,
+                arrangementOf(com.termux.app.wall.PageRef.TERMINAL).floating())) return;
+        View host = findViewById(R.id.inapp_keyboard_view_host);
+        if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return;
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(host, mKeyboardArrivalRect,
+            mKeyboardArrivalAt, mKeyboardArrivalParentAt);
+        mLookIdOverride = lookIdOf(there);
+        try {
+            updateEvenOutPolicy();
+            mChrome.ink().standBandEvenOutOver(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
+                mKeyboardArrivalRect, groundOfWallPage(there.kind));
+        } finally {
+            mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+        }
+    }
+
+    /** {@link #standKeyboardEvenOutAt}'s scratch; main thread only. */
+    @NonNull private final Rect mKeyboardArrivalRect = new Rect();
+    @NonNull private final int[] mKeyboardArrivalAt = new int[2];
+    @NonNull private final int[] mKeyboardArrivalParentAt = new int[2];
 
     /** {@link #dockFrostFilterAt}'s matrix; read at once by the crossing's begin. */
     @Nullable private android.graphics.ColorMatrix mDockFilterAtMatrix;

@@ -1,8 +1,11 @@
 package com.termux.app.chrome;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.graphics.Color;
@@ -49,10 +52,11 @@ public class KeyboardArrivalKeyTest {
     private static final Rect DOCK_PILL = new Rect(21, 1500, 1059, 1598);
 
     private ChromeRenderer chrome;
+    private FakeChromeSurfaces surfaces;
 
     @Before
     public void setUp() {
-        FakeChromeSurfaces surfaces = new FakeChromeSurfaces(RuntimeEnvironment.getApplication());
+        surfaces = new FakeChromeSurfaces(RuntimeEnvironment.getApplication());
         surfaces.dim = Color.TRANSPARENT;
         chrome = new ChromeRenderer(surfaces, null);
         int dark = 0xFF2A3140;
@@ -126,5 +130,48 @@ public class KeyboardArrivalKeyTest {
         // The keyboard over other ground: its own matrix moves, and so does its token.
         chrome.ink().bandEvenOutMatrix(KEYBOARD, new Rect(DOCK_HOME));
         assertNotEquals(before, chrome.ink().bandEvenOutChanges(KEYBOARD));
+    }
+
+    private static boolean same(@Nullable ColorMatrix a, @Nullable ColorMatrix b) {
+        return java.util.Arrays.equals(a == null ? null : a.getArray(),
+            b == null ? null : b.getArray());
+    }
+
+    /**
+     * The arriving card is built after the crossing froze measuring (6dfc8da11's diagnosis for the
+     * dock): a plain read then answers nothing and the card wore no even-out until the rest put it
+     * back. Under the dock's plan the band's arriving even-out is worked out past the freeze over
+     * the arriving page's ground, the card's own reads keep it through the travel, and the rest
+     * measures the same matrix, so its token does not move and the card is not built again.
+     */
+    @Test
+    public void theArrivingKeyboardsEvenOutIsWorkedOutPastTheFreezeAndTheRestKeepsIt() {
+        int terminalGround = 0x73000000;
+        boolean[] crossing = {false};
+        chrome.ink().setMeasureFreeze(() -> crossing[0]);
+        crossing[0] = true;
+        ColorMatrix frozen = chrome.ink().bandEvenOutMatrix(KEYBOARD, new Rect(KEYS));
+        assertEquals("frozen, a plain read answers nothing", null, frozen);
+
+        chrome.ink().standBandEvenOutOver(KEYBOARD, new Rect(KEYS), terminalGround);
+        ColorMatrix stood = chrome.ink().lastBandEvenOutMatrix(KEYBOARD);
+        assertNotNull("past the freeze the arriving end is worked out", stood);
+        assertFalse("standing books nothing", chrome.isCommitPending());
+        int token = chrome.ink().bandEvenOutChanges(KEYBOARD);
+        assertTrue("the card's own read before the hold keeps it",
+            same(stood, chrome.ink().bandEvenOutMatrix(KEYBOARD, new Rect(KEYS))));
+        chrome.holdEvenOut();
+        assertTrue("held through the travel",
+            same(stood, chrome.ink().bandEvenOutMatrix(KEYBOARD, new Rect(KEYS))));
+
+        // Landed on the Terminal: the freeze and the hold go, the band measures where it rests.
+        crossing[0] = false;
+        surfaces.frontGround = terminalGround;
+        chrome.settleEvenOut();
+        idle();
+        assertTrue("the rest measures what the crossing began with",
+            same(stood, chrome.ink().bandEvenOutMatrix(KEYBOARD, new Rect(KEYS))));
+        assertEquals("so the card's key is unchanged", token,
+            chrome.ink().bandEvenOutChanges(KEYBOARD));
     }
 }
