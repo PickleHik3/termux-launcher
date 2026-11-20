@@ -84,9 +84,19 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return closeLowersKeyboard;
     }
 
-    /** The terminal pane's gap and corner radius; negative means the host gives none. */
+    /** The terminal pane's gap, corner radius and Margin; negative means the host gives none. */
     float paneGapPx = -1f;
     float paneCornerRadiusPx = -1f;
+    float marginPx = -1f;
+    float keyboardCardRadiusPx;
+
+    @Override public float searchKeyboardMarginPx() {
+        return marginPx;
+    }
+
+    @Override public float inAppKeyboardCardRadiusPx() {
+        return keyboardCardRadiusPx;
+    }
 
     @Override public float searchKeyboardGapPx() {
         return paneGapPx;

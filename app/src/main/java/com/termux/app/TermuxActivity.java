@@ -8584,9 +8584,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The clip the keyboard host's outline takes: {@link #fullScreenKeyboardClip}. The curve an
-     * open drawer gives a Docked keyboard's top ({@link KeyboardSheetLook}) is drawn by the host's
-     * background, not cut here, so the glass can run on outside it.
+     * The clip the keyboard host's outline takes: {@link #fullScreenKeyboardClip}.
      */
     @Nullable
     private com.termux.app.chrome.LiveChromeShape.Clip keyboardOutlineClip(@NonNull View surfaceHost) {
@@ -8601,32 +8599,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * One frame of the drawer's motion, as the keyboard sees it ({@link KeyboardSheetLook}): the
-     * sheet's glass over its own at the drawer's fraction, and the top corners following. A
-     * compare per frame at rest; the glass is built when the drawer first reaches the keyboard and
-     * let go when it leaves, and the outline is touched only when the radius moves.
+     * drawer's dim and glass over its own at the drawer's fraction. A compare per frame at rest;
+     * the glass is built when the drawer first reaches the keyboard and let go when it leaves. The
+     * card's shape is its own throughout: its outline is never touched here.
      */
-    private void onKeyboardSheetFraction(float drawerFraction, float radiusPx, float progress) {
+    private void onKeyboardSheetFraction(float drawerFraction, float progress) {
         View host = findViewById(R.id.inapp_keyboard_view_host);
         float f = host == null ? 0f : com.termux.app.chrome.KeyboardSheetLook.glassFraction(
             isInAppKeyboardShown(), drawerFraction);
         if (f <= 0f && !mKeyboardSheet.engaged() && mKeyboardSheet.sheet() == null) return;
         boolean wasEngaged = mKeyboardSheet.engaged();
         if (f > 0f && mKeyboardSheet.sheet() == null) {
-            mKeyboardSheet.setSheet(buildKeyboardSheetGlass(host, radiusPx),
-                (int) Math.ceil(radiusPx));
+            float top = keyboardTopRadiusPx();
+            mKeyboardSheet.setSheet(buildKeyboardSheetGlass(host, top), (int) Math.ceil(top));
         }
         mKeyboardSheet.setFraction(f);
         mKeyboardSheet.setDim(com.termux.app.chrome.KeyboardSheetLook.dimAlpha(f, progress));
         if (mKeyboardSheet.engaged() != wasEngaged && host != null)
             host.setBackground(mKeyboardSheet.dress(mKeyboardHostInner));
         if (f <= 0f && mKeyboardSheet.sheet() != null) mKeyboardSheet.setSheet(null, 0);
-        // The curve is drawn by the host's background (KeyboardSheetSkin), not cut by its outline,
-        // so what lies outside it is the sheet's glass; the outline is not touched per frame.
-        com.termux.app.chrome.LiveChromeShape.Clip own = host == null
-            ? null : fullScreenKeyboardClip(host, mKeyboardBaseClip);
-        float ownTop = own == null ? 0f : Math.max(own.topLeft, own.topRight);
-        mKeyboardSheet.setCardTopRadius(com.termux.app.chrome.KeyboardSheetLook.topRadiusPx(
-            mKeyboardSurfaceDressedAsCard, ownTop, radiusPx, mKeyboardSheet.fraction()));
+    }
+
+    /**
+     * The radius of the keyboard card's top corners, px: a Floating card's, or the top of Docked's
+     * slice of the frame. Read off the clip the host's outline was given, so it is the shape
+     * already on screen.
+     */
+    private float keyboardTopRadiusPx() {
+        com.termux.app.chrome.LiveChromeShape.Clip clip = mKeyboardBaseClip;
+        return clip == null ? 0f : Math.max(0f, Math.max(clip.topLeft, clip.topRight));
     }
 
     /** The sheet's glass at the keyboard's place: Global's, at the sheets' opacity floor. */
@@ -20007,8 +20008,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mSheets.bottomBandPx();
         }
 
-        @Override public void onDrawerSheetFraction(float fraction, float radiusPx, float progress) {
-            onKeyboardSheetFraction(fraction, radiusPx, progress);
+        @Override public void onDrawerSheetFraction(float fraction, float progress) {
+            onKeyboardSheetFraction(fraction, progress);
         }
 
         @Override public boolean inAppKeyboardShown() {
@@ -20043,10 +20044,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public float inAppKeyboardCardRadiusPx() {
-            // The radius the keyboard surface is clipped to (applyInAppKeyboardSurface).
-            if (!isInAppKeyboardCapsule()) return 0f;
+            // The radius the keyboard surface is clipped to (applyInAppKeyboardSurface); Docked's
+            // slice is cut round at its top corners only.
+            if (!isInAppKeyboardCapsule()) return keyboardTopRadiusPx();
             com.termux.app.chrome.LiveChromeShape.Clip clip = chromeClipOf(KEYBOARD_PIECES);
             return clip != null ? clip.radius : mDock.resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
+        }
+
+        @Override public float searchKeyboardMarginPx() {
+            // Margin, the air the terminal pane leaves at the screen's sides.
+            return layoutMarginPx(com.termux.app.place.SeamDress.Surface.FRAME);
         }
 
         @Override public float searchKeyboardCornerRadiusPx() {

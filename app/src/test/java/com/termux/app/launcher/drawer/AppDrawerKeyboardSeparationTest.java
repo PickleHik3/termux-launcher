@@ -69,20 +69,48 @@ public class AppDrawerKeyboardSeparationTest {
 
     // ------------------------------------------------------------------ the plane's bottom
 
-    @Test public void dockedPlaneRunsSquareDownToTheKeyboardSheet() {
+    @Test public void dockedPlaneIsACardMarginInFromTheEdgesAndAboveTheKeyboard() {
         docked();
-        host.paneGapPx = 26f;
+        host.paneGapPx = 11f;
         host.paneCornerRadiusPx = 55f;
+        host.marginPx = 21f;
         reveal(1f);
 
         applyFrame(1f);
 
         Frame frame = plane.getFrame();
-        // The keyboard wears the drawer's sheet glass (KeyboardSheetLook): no gap, no corner.
-        assertEquals(KEYBOARD_TOP, frame.bottom, 1e-3f);
-        assertEquals(0f, (float) ReflectionHelpers.getField(controller, "mCurrentRadiusPx"), 1e-3f);
-        // Still off the bezel at the top, so no top corner shows.
-        assertTrue(frame.top <= 0f);
+        // Margin's air at both sides, the top and above the keyboard card: the wallpaper shows.
+        assertEquals(21f, frame.left, 1e-3f);
+        assertEquals(WIDTH - 21f, frame.right, 1e-3f);
+        assertEquals(21f, frame.top, 1e-3f);
+        assertEquals(KEYBOARD_TOP - 21f, frame.bottom, 1e-3f);
+        // The pane's corners, all four showing.
+        assertEquals(55f, (float) ReflectionHelpers.getField(controller, "mCurrentRadiusPx"), 1e-3f);
+        // The content ends where the card does, so nothing is drawn behind the keyboard or in the gap.
+        Frame content = ReflectionHelpers.callInstanceMethod(controller, "contentRect");
+        assertEquals(frame.bottom, content.bottom, 1e-3f);
+    }
+
+    @Test public void dockedCardMovesWithTheRevealWithNoStep() {
+        docked();
+        host.paneCornerRadiusPx = 55f;
+        host.marginPx = 21f;
+        Frame prev = null;
+        float prevRadius = 40f;
+        for (int i = 0; i <= 20; i++) {
+            reveal(i / 20f);
+            applyFrame(1f);
+            Frame f = plane.getFrame();
+            float r = ReflectionHelpers.getField(controller, "mCurrentRadiusPx");
+            if (prev != null) {
+                assertTrue("left " + i, f.left >= prev.left && f.left - prev.left <= 1.06f);
+                assertTrue("right " + i, f.right <= prev.right && prev.right - f.right <= 1.06f);
+                assertTrue("top " + i, f.top >= prev.top && f.top - prev.top <= 3.06f);
+                assertTrue("radius " + i, Math.abs(r - prevRadius) <= 0.76f);
+            }
+            prev = f;
+            prevRadius = r;
+        }
     }
 
     @Test public void floatingPanelEndsOnePaneGapAboveTheKeyboardCardWithItsOwnCorners() {
@@ -183,8 +211,10 @@ public class AppDrawerKeyboardSeparationTest {
         assertEquals(KEYBOARD_TOP - 11f, plane.getFrame().bottom, 1e-3f);
     }
 
-    @Test public void dockedDimStillStopsAtTheKeyboardTop() {
+    @Test public void dockedDimRunsRoundTheKeyboardCardsTopCorners() {
         docked();
+        host.marginPx = 21f;
+        host.keyboardCardRadiusPx = 30f;
         ReflectionHelpers.setField(controller, "mKeyboardCardFrame",
             new Frame(0f, KEYBOARD_TOP, WIDTH, HEIGHT));
         reveal(1f);
@@ -192,9 +222,29 @@ public class AppDrawerKeyboardSeparationTest {
         applyFrame(1f);
 
         FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
-        assertEquals(new android.graphics.Rect(0, 0, WIDTH, Math.round(KEYBOARD_TOP)),
-            root.getClipBounds());
-        assertFalse(root.getBackground() instanceof AppDrawerScrimDrawable);
+        // The dim covers the sides, the gap and the pockets beside the keyboard's top corners ...
+        assertNull(root.getClipBounds());
+        assertTrue(root.getBackground() instanceof AppDrawerScrimDrawable);
+        AppDrawerScrimDrawable scrim = (AppDrawerScrimDrawable) root.getBackground();
+        // ... with the keyboard cut out, run one radius past the screen so only its top is round.
+        assertEquals(new android.graphics.RectF(0f, KEYBOARD_TOP, WIDTH, HEIGHT + 30f),
+            scrim.getHole());
+        assertEquals(30f, scrim.effectiveRadiusPx(), 1e-3f);
+    }
+
+    @Test public void dockedUnderTheSystemKeyboardKeepsTheFullWidthPlane() {
+        docked();
+        host.marginPx = 21f;
+        host.paneCornerRadiusPx = 55f;
+        ReflectionHelpers.setField(controller, "mImePinTopPx", 1500f);
+        reveal(1f);
+
+        applyFrame(1f);
+
+        Frame frame = plane.getFrame();
+        assertEquals(0f, frame.left, 1e-3f);
+        assertEquals(WIDTH, frame.right, 1e-3f);
+        assertTrue(frame.top < 0f);
     }
 
     @Test public void keyboardDownFloatingDimIsThePlainColour() {
@@ -210,11 +260,10 @@ public class AppDrawerKeyboardSeparationTest {
         FrameLayout root = ReflectionHelpers.getField(controller, "mHostLayout");
         assertNull(root.getClipBounds());
         assertTrue(root.getBackground() instanceof android.graphics.drawable.ColorDrawable);
-        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 0f, false, true));
-        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(false, 1f, false, true));
-        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 1f, true, true));
-        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(true, 1f, false, false));
-        assertTrue(AppDrawerController.scrimRunsAroundKeyboard(true, 0.2f, false, true));
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(0f, false, true));
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(1f, true, true));
+        assertFalse(AppDrawerController.scrimRunsAroundKeyboard(1f, false, false));
+        assertTrue(AppDrawerController.scrimRunsAroundKeyboard(0.2f, false, true));
     }
 
     /**
@@ -425,12 +474,35 @@ public class AppDrawerKeyboardSeparationTest {
     }
 
     @Test
-    public void dockedInAppKeyboardMeetsThePlaneWithNoGapAndNoCorner() {
-        assertEquals(0f, AppDrawerKeyboardSeparation.planeGapPx(false, false, 12f), 0f);
-        assertEquals(12f, AppDrawerKeyboardSeparation.planeGapPx(true, false, 12f), 0f);
-        assertEquals(12f, AppDrawerKeyboardSeparation.planeGapPx(false, true, 12f), 0f);
-        assertEquals(40f, AppDrawerKeyboardSeparation.dockedSheetRadiusPx(false, 40f, 0f), 0f);
-        assertEquals(0f, AppDrawerKeyboardSeparation.dockedSheetRadiusPx(false, 40f, 1f), 0f);
-        assertEquals(40f, AppDrawerKeyboardSeparation.dockedSheetRadiusPx(true, 40f, 1f), 0f);
+    public void dockedCardPolicy() {
+        // Docked over the built-in keyboard leaves Margin; Floating and a system keyboard their gap.
+        assertEquals(21f, AppDrawerKeyboardSeparation.planeGapPx(false, false, 12f, 21f), 0f);
+        assertEquals(0f, AppDrawerKeyboardSeparation.planeGapPx(false, false, 12f, -1f), 0f);
+        assertEquals(12f, AppDrawerKeyboardSeparation.planeGapPx(true, false, 12f, 21f), 0f);
+        assertEquals(12f, AppDrawerKeyboardSeparation.planeGapPx(false, true, 12f, 21f), 0f);
+        assertTrue(AppDrawerKeyboardSeparation.dockedCard(false, false));
+        assertFalse(AppDrawerKeyboardSeparation.dockedCard(true, false));
+        assertFalse(AppDrawerKeyboardSeparation.dockedCard(false, true));
+
+        Frame sheet = new Frame(0f, -40f, 1000f, 2440f);
+        // Reveal 0: the sheet as it was, but for the bottom it is given.
+        Frame at0 = AppDrawerKeyboardSeparation.dockedCardFrame(sheet, 1000f, 20f, 2440f, 0f);
+        assertEquals(0f, at0.left, 0f);
+        assertEquals(1000f, at0.right, 0f);
+        assertEquals(-40f, at0.top, 0f);
+        // Halfway, then Margin in on three sides.
+        Frame half = AppDrawerKeyboardSeparation.dockedCardFrame(sheet, 1000f, 20f, 2000f, 0.5f);
+        assertEquals(10f, half.left, 1e-4f);
+        assertEquals(990f, half.right, 1e-4f);
+        assertEquals(-10f, half.top, 1e-4f);
+        assertEquals(2000f, half.bottom, 0f);
+        Frame card = AppDrawerKeyboardSeparation.dockedCardFrame(sheet, 1000f, 20f, 1700f, 1f);
+        assertEquals(20f, card.left, 0f);
+        assertEquals(980f, card.right, 0f);
+        assertEquals(20f, card.top, 0f);
+        // An edge already further in (the seed, early in the open) is never moved out.
+        Frame seed = new Frame(0f, 1560f, 1000f, 1720f);
+        assertEquals(1560f,
+            AppDrawerKeyboardSeparation.dockedCardFrame(seed, 1000f, 20f, 1700f, 1f).top, 0f);
     }
 }

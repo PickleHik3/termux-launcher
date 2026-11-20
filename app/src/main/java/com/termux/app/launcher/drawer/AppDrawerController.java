@@ -156,6 +156,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         }
 
         /**
+         * Margin, in px: the air Docked's drawer card leaves at the screen's sides and top and above
+         * the built-in keyboard. Negative means none. See {@link AppDrawerKeyboardSeparation}.
+         */
+        default float searchKeyboardMarginPx() {
+            return -1f;
+        }
+
+        /**
          * Whether the built-in keyboard is up. It stands laid out while it is down, below the
          * screen and clipped by the stack's one writer, so its view being laid out says nothing:
          * a keyboard that is down has no band for the drawer to choreograph.
@@ -165,8 +173,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         }
 
         /**
-         * The built-in keyboard card's corner radius, in px, for the hole the Floating scrim cuts
-         * around it; 0 for a square card.
+         * The built-in keyboard card's corner radius, in px, for the hole the scrim cuts around
+         * it: a Floating card's, or the top corners of Docked's slice; 0 for a square card.
          */
         default float inAppKeyboardCardRadiusPx() {
             return 0f;
@@ -174,11 +182,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
         /**
          * The drawer's glass handoff, once per frame of its motion: 0 shut, 1 once the plane's own
-         * glass has taken over (the dock's glass is gone by then), the plane's corner radius in
-         * px, and the drawer's progress (which sets its dim). The built-in keyboard under an open drawer wears the sheet's glass and corners at
-         * this fraction ({@code KeyboardSheetLook}); it asks no animator of its own.
+         * glass has taken over (the dock's glass is gone by then), and the drawer's progress (which
+         * sets its dim). The built-in keyboard under an open drawer wears the sheet's glass and dim
+         * at this fraction ({@code KeyboardSheetLook}); it asks no animator of its own.
          */
-        default void onDrawerSheetFraction(float fraction, float radiusPx, float progress) {}
+        default void onDrawerSheetFraction(float fraction, float progress) {}
 
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
@@ -1200,7 +1208,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Frame base = resolveContentBaseRect(mOpenRect);
         if (base == null) return null;
         if (mReveal.target <= 0f || !hasRevealableKeyboard()) return base;
-        float bottom = pinTopPx() - revealGapPx();
+        float bottom = pinTopPx() - planeGapPx();
         if (bottom >= base.bottom) return base;
         return new Frame(base.left, base.top, base.right, Math.max(base.top, bottom));
     }
@@ -2088,27 +2096,29 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (lowering) k = AppDrawerKeyboardLowering.reveal(k, p);
         mCurrentRadiusPx = AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx,
             mOpenRadiusPx, p);
-        boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(mRoundedStyle, k,
+        boolean scrimAroundKeyboard = scrimRunsAroundKeyboard(k,
             mImePinTopPx > 0f, mKeyboardCardFrame != null);
         if (k > 0f) {
             float pinTop = pinTopPx() + keyboardExit;
-            // Docked's plane runs down to the keyboard's sheet, square and with no gap, so the
-            // two read as one sheet; the top stays pushed past the bezel.
-            if (mImePinTopPx <= 0f) {
-                mCurrentRadiusPx = AppDrawerKeyboardSeparation.dockedSheetRadiusPx(
-                    mRoundedStyle, mCurrentRadiusPx, k);
+            float bottom = AppDrawerTransitionGeometry.resolveSearchPlaneBottom(frame.bottom,
+                pinTop, planeGapPx(), k);
+            if (AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f)) {
+                // Docked's plane becomes a card of its own as the keyboard comes up: Margin in
+                // from the sides and top and above the keyboard card, the pane's corners all round.
+                mCurrentRadiusPx = AppDrawerKeyboardSeparation.revealRadiusPx(false,
+                    mCurrentRadiusPx, mHost.searchKeyboardCornerRadiusPx(), k);
+                frame = AppDrawerKeyboardSeparation.dockedCardFrame(frame,
+                    mHostLayout.getWidth(), mHost.searchKeyboardMarginPx(), bottom, k);
+            } else {
+                frame = new Frame(frame.left,
+                    AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
+                        mCurrentRadiusPx),
+                    frame.right, bottom);
             }
-            frame = new Frame(frame.left,
-                AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
-                    mCurrentRadiusPx),
-                frame.right,
-                AppDrawerTransitionGeometry.resolveSearchPlaneBottom(frame.bottom, pinTop,
-                    AppDrawerKeyboardSeparation.planeGapPx(mRoundedStyle, mImePinTopPx > 0f,
-                        revealGapPx()), k));
             // The scene dim is the host's background and the host covers the whole screen, keyboard
             // included. Clipped to the edge the reveal is uncovering, so the keyboard comes back at
-            // its own brightness rather than under the drawer's shade. Under Floating the dim runs
-            // on below and around the keyboard card instead, with the card cut out of it (the
+            // its own brightness rather than under the drawer's shade. Around the built-in keyboard
+            // the dim runs on below and around its card instead, with the card cut out of it (the
             // scrim's hole, below): the plane never reaches below this clip, so the clip only ever
             // decided the dim's extent.
             if (scrimAroundKeyboard) {
@@ -2169,7 +2179,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerDockChoreographyTarget target = mDockTarget;
         if (target != null) target.setDrawerTransitionProgress(p);
         // Not the settled-scene capture's p = 1: that is a picture of the open drawer, not a frame.
-        if (!mCapturingSettledScene) mHost.onDrawerSheetFraction(handoff, mOpenRadiusPx, p);
+        if (!mCapturingSettledScene) mHost.onDrawerSheetFraction(handoff, p);
     }
 
     /**
@@ -2205,6 +2215,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return AppDrawerKeyboardSeparation.revealGapPx(mHost.searchKeyboardGapPx(), mCapturedGapPx);
     }
 
+    /** The air the plane ends above the keyboard: {@link AppDrawerKeyboardSeparation#planeGapPx}. */
+    private float planeGapPx() {
+        return AppDrawerKeyboardSeparation.planeGapPx(mRoundedStyle, mImePinTopPx > 0f,
+            revealGapPx(), mHost.searchKeyboardMarginPx());
+    }
+
     /** The captured keyboard top; the plane covers the terminal extra-keys band above this edge. */
     private float capturedPinTopPx() {
         AppDrawerAccessoryChoreography.Band keyboard = mKeyboardBand;
@@ -2220,13 +2236,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /**
      * Whether the scene dim runs below and around the keyboard rather than stopping at its top:
-     * under Floating (the keyboard is a card of its own), while the built-in keyboard is being
-     * revealed, once its card has been measured. Docked keeps the clip at the keyboard's top.
+     * while the built-in keyboard is being revealed, once its card has been measured, under either
+     * Style. The keyboard card's own corners then show the dimmed wallpaper the drawer card stands
+     * on, not the bare one. A system keyboard keeps the clip at its top.
      */
     @VisibleForTesting
-    static boolean scrimRunsAroundKeyboard(boolean rounded, float reveal, boolean systemIme,
-                                           boolean cardMeasured) {
-        return rounded && reveal > 0f && !systemIme && cardMeasured;
+    static boolean scrimRunsAroundKeyboard(float reveal, boolean systemIme, boolean cardMeasured) {
+        return reveal > 0f && !systemIme && cardMeasured;
     }
 
     /** The dim over the whole host, the keyboard card cut out where this frame has put it. */
@@ -2249,7 +2265,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             float dy = mKeyboardView == null ? 0f : mKeyboardView.getTranslationY();
             mScrimHoleScratch.set(card.left, card.top + dy, card.right, card.bottom + dy);
         }
-        mScrim.setHole(mScrimHoleScratch, mHost.inAppKeyboardCardRadiusPx());
+        float radius = mHost.inAppKeyboardCardRadiusPx();
+        // Docked's keyboard runs off the bottom of the screen with square corners there: the hole
+        // runs one radius past it, so only its top corners are cut round.
+        if (!mRoundedStyle) mScrimHoleScratch.bottom += Math.max(0f, radius);
+        mScrim.setHole(mScrimHoleScratch, radius);
     }
 
     /**
@@ -2393,7 +2413,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHost.setHomeContentAlpha(1f);
             AppDrawerDockChoreographyTarget target = mDockTarget;
             if (target != null) target.setDrawerTransitionProgress(0f);
-            mHost.onDrawerSheetFraction(0f, mOpenRadiusPx, 0f);
+            mHost.onDrawerSheetFraction(0f, 0f);
             if (mHostLayout != null) {
                 mHostLayout.setAlpha(1f);
                 mHostLayout.setVisibility(View.INVISIBLE);
