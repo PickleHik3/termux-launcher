@@ -34,4 +34,13 @@ final class CommandPaletteShape {
         float radius = seedPx + (openPx - seedPx) * p;
         return Math.max(0f, Math.min(radius, Math.max(0f, frameHeightPx) / 2f));
     }
+
+    /**
+     * Whether running {@code toolName} drops the palette where it stands rather than reversing the
+     * sprout: a tool that opens the app drawer, whose card stands over the keyboard from its first
+     * frame, while the reversed sprout shrinks the palette down over the keys into the space bar.
+     */
+    static boolean dismissesInPlace(@androidx.annotation.Nullable String toolName) {
+        return TerminalActionDispatcher.TOOL_APP_OPEN_APP_DRAWER.equals(toolName);
+    }
 }

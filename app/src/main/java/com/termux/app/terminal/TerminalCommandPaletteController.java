@@ -1987,7 +1987,10 @@ public final class TerminalCommandPaletteController
         mStats.recordRun(CommandPaletteActionStats.keyFor(entry));
         rememberPick();
         playTick();
+        // The drawer's card is up over the keyboard from its first frame; a reversed sprout would
+        // shrink the palette down across the keys under it (CommandPaletteShape.dismissesInPlace).
         collapse();
+        if (CommandPaletteShape.dismissesInPlace(entry.toolName)) dismissImmediately();
         // Home's own rows need the wall, which the dispatcher does not reach.
         if (CommandPaletteHomeSet.runHostAction(entry, mHomeHost)) return;
         JSONObject result = TerminalActionDispatcher.getInstance().execute(entry.toolName,
