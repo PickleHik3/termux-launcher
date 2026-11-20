@@ -708,8 +708,9 @@ public final class AppDrawerContentView extends FrameLayout
         void onListScrollIdle();
 
         /**
-         * The finger began dragging a list (past touch slop): the user is browsing, not typing,
-         * so the search keyboard goes. Never sent for a tap, a scrub, or the search field.
+         * The finger began dragging a list (past touch slop) or touched the A–Z strip: the user is
+         * browsing, not typing, so the search keyboard goes. Never sent for a tap on a cell or the
+         * search field.
          */
         default void onListDragStarted() {}
     }
@@ -1632,8 +1633,17 @@ public final class AppDrawerContentView extends FrameLayout
         return mColumnWidthPx;
     }
 
+    /** This touch on the strip has already sent the keyboard its cue; cleared when it ends. */
+    private boolean mScrubSentKeyboard;
+
     @Override
     public void onScrubLetterChanged(char letter) {
+        // The first letter of a touch on the strip is browsing: the keyboard goes the way a list
+        // drag sends it (the controller keeps one that was up before the drawer opened).
+        if (!mScrubSentKeyboard) {
+            mScrubSentKeyboard = true;
+            notifyListDragStarted();
+        }
         mScrubLetter = letter;
         int position = mSectionIndex.firstPositionForLetter(letter);
         if (position >= 0 && position < mAdapter.getItemCount()) {
@@ -1658,6 +1668,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Override
     public void onScrubEnded() {
+        mScrubSentKeyboard = false;
         // The letter is kept until the fade reaches zero, so the cells that were dim fade back
         // rather than snapping. The scroll position is kept too: where the letter put the grid is
         // where the user asked for it to be.
