@@ -393,8 +393,12 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
         GlassRefraction.Program program = mProgram;
         // A software canvas refuses a RuntimeShader outright: a RealtimeBlurView drawing the
         // window into its bitmap is one. That pass only feeds another view's blur, so the frame
-        // is left out of it rather than drawn and thrown.
-        if (program != null && !canvas.isHardwareAccelerated()) return;
+        // is left out of it rather than drawn and thrown. A frame held in GPU memory
+        // (HardwareFrame) is refused the same way, and sits the pass out the same way.
+        if (!canvas.isHardwareAccelerated() && (program != null
+                || frame.getConfig() == Bitmap.Config.HARDWARE
+                || (mPreviousFrame != null
+                    && mPreviousFrame.getConfig() == Bitmap.Config.HARDWARE))) return;
         aim(mAim, mFrameRect, frame.getWidth(), frame.getHeight(), mOrigin[0], mOrigin[1], offsetPx);
         if (program != null) {
             // The same aim, as uniforms: the program samples the frame by its own pixels.

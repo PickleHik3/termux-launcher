@@ -1426,6 +1426,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** True while every terminal pane is a glass slab with its own physics. */
     private boolean mTerminalGlassActive = false;
+    /** Whether the blur cache publishes its frames in GPU memory; on unless debug.tl.hw_frames is 0. */
+    private static final com.termux.terminal.DebugSwitch HARDWARE_FRAMES =
+        new com.termux.terminal.DebugSwitch("debug.tl.hw_frames", true,
+            com.termux.terminal.DebugSwitch.SYSTEM_PROPERTIES);
     /** The blur frame the panes are painting from; kept out of the cache's recycler. */
     @Nullable private Bitmap mPaneGlassFrame;
     /** The clear frame the panes' bent edges show (edge clarity); kept out of the recycler too. */
@@ -2165,6 +2169,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Nullable @Override public com.termux.app.chrome.WallpaperBlurCache.FrameCapture beginCapture(
                 @NonNull Rect frameRect, @NonNull View wallpaperFrame) {
             return beginWallpaperFrameCapture(frameRect, wallpaperFrame);
+        }
+
+        @Override public boolean publishesHardwareFrames() {
+            // The glass draws the frames as textures uploaded once (HardwareFrame); the switch
+            // (setprop debug.tl.hw_frames 0) puts the software frames back for a comparison,
+            // from the next frame the cache bakes.
+            return HARDWARE_FRAMES.isOn(android.os.SystemClock.uptimeMillis());
         }
 
         @Override public boolean isFrameInUse(@Nullable Bitmap frame) {
@@ -31619,8 +31630,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             frameRect = com.termux.app.chrome.scene.LiveSceneFrame.rect();
             parallaxPx = 0f;
         } else {
-            frame = obtainTerminalPaneGlassFrame();
-            if (frame == null || frame.isRecycled()) return null;
+            // The card's canvas is software, which a HARDWARE frame cannot reach: it takes the
+            // frame's small software copy, and the matrix below scales it up to the frame rect.
+            frame = com.termux.app.chrome.HardwareFrame.readable(obtainTerminalPaneGlassFrame());
+            if (frame == null) return null;
             frameRect = mChrome.blurCache().frameRectRef();
             parallaxPx = mWallpaperParallax.offsetPx();
         }

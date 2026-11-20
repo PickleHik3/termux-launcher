@@ -903,9 +903,11 @@ public final class PaneControlsView extends View {
         GlassRefraction.Program program = mProgram;
         // A software canvas refuses a RuntimeShader outright: a RealtimeBlurView drawing the
         // window into its bitmap is one. That pass only feeds another view's blur, so the tab
-        // gives it the scrim alone rather than a draw that throws.
+        // gives it the scrim alone rather than a draw that throws. A frame held in GPU memory
+        // (HardwareFrame) is refused the same way.
         boolean frosted = mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null
-            && (program == null || canvas.isHardwareAccelerated());
+            && (canvas.isHardwareAccelerated()
+                || (program == null && mFrostFrame.getConfig() != Bitmap.Config.HARDWARE));
         if (frosted) {
             aimFrost(mFrostFrame);
             if (program != null) {

@@ -505,7 +505,7 @@ public final class ChromeInk {
         BandGlass glass = glassFor(band);
         if (glass.framed == framed) return false;
         glass.framed = framed;
-        if (mOnVeilChanged != null) mOnVeilChanged.run();
+        askApply("Ink.askApply.bandFrame");
         return true;
     }
 
@@ -554,6 +554,20 @@ public final class ChromeInk {
     }
     /** Run when a band's veil demand changes, so the surface that draws it is rebuilt. */
     @Nullable private final Runnable mOnVeilChanged;
+
+    /**
+     * Runs {@link #mOnVeilChanged} inside a section naming why ({@code Ink.askApply.<why>}): each
+     * one books a whole apply of the chrome, so a trace says which change booked it.
+     */
+    private void askApply(@NonNull String section) {
+        if (mOnVeilChanged == null) return;
+        android.os.Trace.beginSection(section);
+        try {
+            mOnVeilChanged.run();
+        } finally {
+            android.os.Trace.endSection();
+        }
+    }
 
     @NonNull private final Map<GlassBackdropCache.Band, BandGlass> mGlass =
         new EnumMap<>(GlassBackdropCache.Band.class);
@@ -1801,7 +1815,7 @@ public final class ChromeInk {
     /** A band's matrix moved: its frame is re-dressed and its ink re-solved on the next pass. */
     private void changedEvenOut() {
         mEvenOutGeneration++;
-        if (mOnVeilChanged != null) mOnVeilChanged.run();
+        askApply("Ink.askApply.evenOut");
     }
 
     /**
@@ -1983,7 +1997,7 @@ public final class ChromeInk {
             // plain render pass: a render pass can decline to run a successor when nothing it
             // tracks went dirty, and a veil dirties none of it — which is how a resolved veil used
             // to be resolved every pass and drawn in none of them.
-            if (mOnVeilChanged != null) mOnVeilChanged.run();
+            askApply("Ink.askApply.veil");
         }
         return resolved;
     }
@@ -3085,7 +3099,7 @@ public final class ChromeInk {
         // A new or moved vote can move the mean past the hysteresis band. Nothing is recomputed
         // here — polarity() reads the votes — but the chrome drawn before the change has to be
         // redrawn, and that is the same pass a veil change asks for.
-        if (mOnVeilChanged != null && previous == null && mVotes.size() > 1) mOnVeilChanged.run();
+        if (previous == null && mVotes.size() > 1) askApply("Ink.askApply.vote");
     }
 
     @ColorInt
@@ -3156,7 +3170,7 @@ public final class ChromeInk {
             LegibilityScope.frameRegion(screenRect, frameRect, frame.getWidth(), frame.getHeight(),
                 mTmpSampleRect);
             int grid = LegibilityScope.gridFor(screenRect, frameRect);
-            int raw = readableInSoftware(frame.getConfig())
+            int raw = HardwareFrame.readable(frame) != null
                 ? GlassBackdropCache.sampleBitmapRegion(frame, mTmpSampleRect, grid)
                 : sampleThroughSoftwareCopy(frame, mTmpSampleRect, grid);
             if (Color.alpha(raw) == 0) return GlassBackdropCache.UNREADABLE;
@@ -3185,7 +3199,7 @@ public final class ChromeInk {
             LegibilityScope.frameRegion(screenRect, frameRect, frame.getWidth(), frame.getHeight(),
                 region);
             int grid = LegibilityScope.gridFor(screenRect, frameRect);
-            if (readableInSoftware(frame.getConfig())) {
+            if (HardwareFrame.readable(frame) != null) {
                 return GlassBackdropCache.sampleBitmapLightness(frame, region, grid);
             }
             int left = Math.max(0, region.left);
