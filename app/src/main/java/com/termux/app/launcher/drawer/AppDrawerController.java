@@ -1209,8 +1209,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (base == null) return null;
         if (mReveal.target <= 0f || !hasRevealableKeyboard()) return base;
         float bottom = pinTopPx() - planeGapPx();
-        if (bottom >= base.bottom) return base;
-        return new Frame(base.left, base.top, base.right, Math.max(base.top, bottom));
+        // Docked's card starts below the status bar: the search field starts with it.
+        float top = AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f)
+            ? Math.max(base.top, dockedCardTopPx()) : base.top;
+        if (bottom >= base.bottom && top == base.top) return base;
+        return new Frame(base.left, top, base.right, Math.max(top, Math.min(base.bottom, bottom)));
     }
 
     private boolean isReducedMotion() {
@@ -2104,11 +2107,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 pinTop, planeGapPx(), k);
             if (AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f)) {
                 // Docked's plane becomes a card of its own as the keyboard comes up: Margin in
-                // from the sides and top and above the keyboard card, the pane's corners all round.
+                // from the sides, below the status bar and above the keyboard card, the pane's
+                // corners all round.
                 mCurrentRadiusPx = AppDrawerKeyboardSeparation.revealRadiusPx(false,
                     mCurrentRadiusPx, mHost.searchKeyboardCornerRadiusPx(), k);
                 frame = AppDrawerKeyboardSeparation.dockedCardFrame(frame,
-                    mHostLayout.getWidth(), mHost.searchKeyboardMarginPx(), bottom, k);
+                    mHostLayout.getWidth(), mHost.searchKeyboardMarginPx(), dockedCardTopPx(),
+                    bottom, k);
             } else {
                 frame = new Frame(frame.left,
                     AppDrawerKeyboardSeparation.revealPlaneTopPx(mRoundedStyle, frame.top,
@@ -2213,6 +2218,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private float revealGapPx() {
         if (mImePinTopPx > 0f) return dp(IME_GAP_DP);
         return AppDrawerKeyboardSeparation.revealGapPx(mHost.searchKeyboardGapPx(), mCapturedGapPx);
+    }
+
+    /** Docked's card top: {@link AppDrawerKeyboardSeparation#dockedCardTopPx}. */
+    private float dockedCardTopPx() {
+        return AppDrawerKeyboardSeparation.dockedCardTopPx(hostBleedTopPx(),
+            mHost.searchKeyboardMarginPx());
     }
 
     /** The air the plane ends above the keyboard: {@link AppDrawerKeyboardSeparation#planeGapPx}. */

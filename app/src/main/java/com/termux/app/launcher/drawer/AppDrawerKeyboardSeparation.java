@@ -9,8 +9,9 @@ import androidx.annotation.NonNull;
  * <p>All pure so they can be tested without a view tree:
  * <ul>
  *   <li>the gap between the plane's bottom and the keyboard's top — under Docked, Margin: the
- *       plane becomes a card of its own, Margin in from the screen's sides and top and Margin
- *       above the keyboard card, with the wallpaper round it; under Floating the pane gap;</li>
+ *       plane becomes a card of its own, Margin in from the screen's sides, Margin below the
+ *       status bar and Margin above the keyboard card, with the wallpaper round it; under
+ *       Floating the pane gap;</li>
  *   <li>the plane's corner radius — under Docked the card's four corners take the terminal pane's
  *       corners as the keyboard comes up; under Floating the panel keeps its own all round;</li>
  *   <li>the under-pill strip's opacity — the drawer fades the strip out as its glass arrives under
@@ -54,25 +55,39 @@ final class AppDrawerKeyboardSeparation {
     }
 
     /**
+     * The top of Docked's card: Margin below the status bar's inset, where a terminal pane's card
+     * starts below the bar, so the system's status icons stand on the wallpaper, not on the card.
+     * The content starts there too ({@code contentRect}).
+     *
+     * @param statusInsetPx the status bar's inset the host reaches through (0 when it does not)
+     * @param marginPx Margin; a negative value means the host gave none
+     */
+    static float dockedCardTopPx(float statusInsetPx, float marginPx) {
+        return Math.max(0f, statusInsetPx) + Math.max(0f, marginPx);
+    }
+
+    /**
      * Docked's plane at reveal {@code k}: the bezel-to-bezel sheet at 0, at 1 a card standing
-     * Margin in from the left, right and top edges, its bottom given by {@code bottomPx}. An edge
-     * already further in than that (the seed, early in the open) is left where it is, so the card
-     * only ever moves an edge inward.
+     * Margin in from the left and right edges, its top at {@code topPx}
+     * ({@link #dockedCardTopPx}) and its bottom at {@code bottomPx}. An edge already further in
+     * than that (the seed, early in the open) is left where it is, so the card only ever moves an
+     * edge inward.
      *
      * @param frame the plane's frame before the reveal
      * @param hostWidthPx the host's width, whose right edge Margin is measured from
      * @param marginPx Margin; a negative value means the host gave none
+     * @param topPx the card's top at full reveal
      * @param bottomPx the plane's bottom at this reveal
      */
     static AppDrawerTransitionGeometry.Frame dockedCardFrame(
             @NonNull AppDrawerTransitionGeometry.Frame frame,
-            float hostWidthPx, float marginPx, float bottomPx, float reveal) {
+            float hostWidthPx, float marginPx, float topPx, float bottomPx, float reveal) {
         float k = AppDrawerTransitionGeometry.clamp01(reveal);
         float m = Math.max(0f, marginPx);
         float left = AppDrawerTransitionGeometry.lerp(frame.left, Math.max(frame.left, m), k);
         float right = AppDrawerTransitionGeometry.lerp(frame.right,
             Math.min(frame.right, hostWidthPx - m), k);
-        float top = AppDrawerTransitionGeometry.lerp(frame.top, Math.max(frame.top, m), k);
+        float top = AppDrawerTransitionGeometry.lerp(frame.top, Math.max(frame.top, topPx), k);
         return new AppDrawerTransitionGeometry.Frame(left, top, right, bottomPx);
     }
 

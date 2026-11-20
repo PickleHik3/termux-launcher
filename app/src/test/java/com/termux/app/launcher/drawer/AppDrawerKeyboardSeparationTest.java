@@ -86,9 +86,11 @@ public class AppDrawerKeyboardSeparationTest {
         assertEquals(KEYBOARD_TOP - 21f, frame.bottom, 1e-3f);
         // The pane's corners, all four showing.
         assertEquals(55f, (float) ReflectionHelpers.getField(controller, "mCurrentRadiusPx"), 1e-3f);
-        // The content ends where the card does, so nothing is drawn behind the keyboard or in the gap.
+        // The content ends where the card does, so nothing is drawn behind the keyboard or in the
+        // gap, and starts where it does.
         Frame content = ReflectionHelpers.callInstanceMethod(controller, "contentRect");
         assertEquals(frame.bottom, content.bottom, 1e-3f);
+        assertEquals(frame.top, content.top, 1e-3f);
     }
 
     @Test public void dockedCardMovesWithTheRevealWithNoStep() {
@@ -484,25 +486,31 @@ public class AppDrawerKeyboardSeparationTest {
         assertFalse(AppDrawerKeyboardSeparation.dockedCard(true, false));
         assertFalse(AppDrawerKeyboardSeparation.dockedCard(false, true));
 
+        // The card's top: Margin below the status bar's inset; no inset, Margin from the top.
+        assertEquals(120f, AppDrawerKeyboardSeparation.dockedCardTopPx(100f, 20f), 0f);
+        assertEquals(20f, AppDrawerKeyboardSeparation.dockedCardTopPx(0f, 20f), 0f);
+        assertEquals(100f, AppDrawerKeyboardSeparation.dockedCardTopPx(100f, -1f), 0f);
+
         Frame sheet = new Frame(0f, -40f, 1000f, 2440f);
         // Reveal 0: the sheet as it was, but for the bottom it is given.
-        Frame at0 = AppDrawerKeyboardSeparation.dockedCardFrame(sheet, 1000f, 20f, 2440f, 0f);
+        Frame at0 = AppDrawerKeyboardSeparation.dockedCardFrame(sheet, 1000f, 20f, 120f, 2440f, 0f);
         assertEquals(0f, at0.left, 0f);
         assertEquals(1000f, at0.right, 0f);
         assertEquals(-40f, at0.top, 0f);
-        // Halfway, then Margin in on three sides.
-        Frame half = AppDrawerKeyboardSeparation.dockedCardFrame(sheet, 1000f, 20f, 2000f, 0.5f);
+        // Halfway, then Margin in at the sides and the top below the status bar.
+        Frame half = AppDrawerKeyboardSeparation.dockedCardFrame(sheet, 1000f, 20f, 120f, 2000f,
+            0.5f);
         assertEquals(10f, half.left, 1e-4f);
         assertEquals(990f, half.right, 1e-4f);
-        assertEquals(-10f, half.top, 1e-4f);
+        assertEquals(40f, half.top, 1e-4f);
         assertEquals(2000f, half.bottom, 0f);
-        Frame card = AppDrawerKeyboardSeparation.dockedCardFrame(sheet, 1000f, 20f, 1700f, 1f);
+        Frame card = AppDrawerKeyboardSeparation.dockedCardFrame(sheet, 1000f, 20f, 120f, 1700f, 1f);
         assertEquals(20f, card.left, 0f);
         assertEquals(980f, card.right, 0f);
-        assertEquals(20f, card.top, 0f);
+        assertEquals(120f, card.top, 0f);
         // An edge already further in (the seed, early in the open) is never moved out.
         Frame seed = new Frame(0f, 1560f, 1000f, 1720f);
-        assertEquals(1560f,
-            AppDrawerKeyboardSeparation.dockedCardFrame(seed, 1000f, 20f, 1700f, 1f).top, 0f);
+        assertEquals(1560f, AppDrawerKeyboardSeparation.dockedCardFrame(seed, 1000f, 20f, 120f,
+            1700f, 1f).top, 0f);
     }
 }
