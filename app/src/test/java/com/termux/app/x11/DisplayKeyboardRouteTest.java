@@ -11,6 +11,17 @@ import org.junit.Test;
 public class DisplayKeyboardRouteTest {
 
     @Test
+    public void theDrawerOwnsOnlyAKeyboardThatWasDownAtThePullAndAtTheAsk() {
+        // Search-on-open from Home: down at the pull, down at the ask. The drawer raised it.
+        assertEquals(true, DisplayKeyboardRoute.drawerOwnsRaise(false, false));
+        // The Terminal's keyboard, up at the pull (the palette's App drawer): never the drawer's,
+        // even when it reads as down for a moment at the ask.
+        assertEquals(false, DisplayKeyboardRoute.drawerOwnsRaise(false, true));
+        assertEquals(false, DisplayKeyboardRoute.drawerOwnsRaise(true, true));
+        assertEquals(false, DisplayKeyboardRoute.drawerOwnsRaise(true, false));
+    }
+
+    @Test
     public void withTheSettingOffNothingChanges() {
         assertEquals(Target.BUILT_IN, DisplayKeyboardRoute.decide(false, true, true, true));
         assertEquals(Target.BUILT_IN, DisplayKeyboardRoute.decide(false, false, false, true));
