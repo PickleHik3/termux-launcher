@@ -80,3 +80,40 @@ above the dock's line in both).
 ## Status
 
 Built on branch feat/page-glyph-switcher; device checks owed in `project-docs/device-checks.md`.
+
+## Page bar (decided 2026-11-20, replaces the glyph row and the panel)
+
+Grilled with the developer on 2026-11-20 against the mock "Page bar — glyph directions"
+(artboard "As decided 2026-11-20"). Not built yet. What the code has today is above; this section
+says what replaces it.
+
+- **One switcher.** Home's four-glyph row and the per-page panel both go. In their place is one
+  pill above the dock: the page bar. It is the resting indicator and the scrubber.
+- **One glyph per page, in the wall's own order** (`WallPages`), not grouped by kind as
+  `PageSwitchModel.ROW` does now. Equal slots.
+- **Current page:** its glyph in the accent. No text capsule at rest.
+- **Display:** a glyph only while a display is running; no mark inside the monitor.
+- **Tap** a glyph: go to that page. **Slide** along the pill: the glyph under the finger lifts at
+  2x into a separate round bubble above the pill, with the page's name over it; its two neighbours
+  grow to 1.25x and the row shifts aside, as drawn; the current page's accent fades until release
+  or cancel. The pill's outline never changes (no bulge: outlines stay convex). The page changes
+  **on release only**; sliding back to the start cancels.
+- **Finger to page** is read from the rest slots by one pure policy, since the drawn glyphs move.
+- **Bubble label:** the page's or window's own name when it has one, else kind and number
+  ("Home 1", "Terminal 2"). One line, ellipsized.
+- **When pages do not fit:** neighbouring pages of one kind fold into one stacked glyph with a
+  count; sliding over it steps through them in the bubble. Windows fold first. No scrolling, no
+  shrinking.
+- **Where:** Home only. The Terminal's opt-in page switcher key pops the same bar up over the
+  keyboard for one use.
+- **Dock pages:** the tick strip (`PageTickStripView`) is replaced by the mock's capsules under
+  the pill: the current dock page wide and in the accent, the others small and neutral, all dimmed
+  while sliding. The most-used page has no colour of its own.
+- **Setting:** the existing Home page indicator setting keeps its key; its default now means the
+  page bar, and it can still be turned off.
+- **Ink:** glyphs and capsules take the legibility ink for the pill's ground (#297), not fixed
+  colours.
+- **Screen readers:** every glyph is a labelled button (today's row is hidden from them).
+
+Open while building: which page moves `WallPages` permits (so which interleavings the fold rule
+must handle), the pill's height against Home's grid, and its place under each dock style.
