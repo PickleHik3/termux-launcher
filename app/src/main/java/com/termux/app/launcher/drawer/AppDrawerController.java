@@ -2155,14 +2155,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mCurrentRadiusPx = mRoundedStyle
             ? AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx, openRadiusPx, p)
             : openRadiusPx;
-        // Docked slides the drawer's own keyboard as a card (never faded: see
+        // Either style slides the drawer's own keyboard as a card (never faded: see
         // AppDrawerKeyboardSeparation.keyboardSlidePx), open or closing, and the card's bottom
         // rides one gap above the keyboard's live top. A lowering close drives the same slide
         // through its own reveal (AppDrawerKeyboardLowering.reveal), so the keyboard leaves on the
         // close's frames; its exit is that slide, never added to it. A keyboard that was up before
-        // the pull stays where it is, and Floating keeps the band recipe.
+        // the pull stays where it is. A system keyboard keeps the band recipe.
         boolean keyboardSlides = k > 0f && mKeyboardBand != null && !keyboardStaysUp()
-            && AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f);
+            && mImePinTopPx <= 0f;
         float keyboardSlidePx = keyboardSlides
             ? AppDrawerKeyboardSeparation.keyboardSlidePx(mHostLayout.getHeight(),
                 mKeyboardBand.topPx, k)
@@ -2189,9 +2189,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         } else if (k > 0f) {
             // A keyboard that stays is a fixed floor: the panel rests one gap above it and, on the
             // way to and from the capsule, never reaches below its own frame.
-            float bottom = keyboardStaysUp()
+            float bottom = keyboardStaysUp() || keyboardSlides
                 ? AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(frame.bottom,
-                    pinTopPx() + keyboardExit, planeGapPx())
+                    pinTopPx() + (keyboardSlides ? keyboardSlidePx : keyboardExit), planeGapPx())
                 : AppDrawerKeyboardSeparation.cardBottomPx(frame.bottom,
                     pinTopPx() + keyboardExit, planeGapPx(), k);
             frame = new Frame(frame.left,
@@ -2259,7 +2259,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f
                 : AppDrawerKeyboardSeparation.bandRevealFraction(keyboardStaysUp(), k),
             stackOffset, keyboardExit, lowering);
-        // Docked's own keyboard: its whole card, at full opacity, slid as one.
+        // The drawer's own keyboard: its whole card, at full opacity, slid as one.
         if (keyboardSlides) applyBand(mKeyboardView, keyboardSlidePx, 0f, 1f);
         // After the bands: the hole follows the keyboard card where this frame has put it.
         if (scrimAroundKeyboard) applyKeyboardScrim(p);
