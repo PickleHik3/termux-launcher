@@ -2155,10 +2155,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mCurrentRadiusPx = mRoundedStyle
             ? AppDrawerTransitionGeometry.resolveRadiusPx(mSeedRadiusPx, openRadiusPx, p)
             : openRadiusPx;
-        // Docked's open drawer slides its own keyboard as a card (never faded: see
-        // AppDrawerKeyboardSeparation.keyboardSlidePx), and the card's bottom rides one gap above
-        // the keyboard's live top. A close, a lowering close and Floating keep the band recipe.
-        boolean keyboardSlides = mOpen && !lowering && k > 0f && mKeyboardBand != null
+        // Docked slides the drawer's own keyboard as a card (never faded: see
+        // AppDrawerKeyboardSeparation.keyboardSlidePx), open or closing, and the card's bottom
+        // rides one gap above the keyboard's live top. A lowering close drives the same slide
+        // through its own reveal (AppDrawerKeyboardLowering.reveal), so the keyboard leaves on the
+        // close's frames; its exit is that slide, never added to it. A keyboard that was up before
+        // the pull stays where it is, and Floating keeps the band recipe.
+        boolean keyboardSlides = k > 0f && mKeyboardBand != null && !keyboardStaysUp()
             && AppDrawerKeyboardSeparation.dockedCard(mRoundedStyle, mImePinTopPx > 0f);
         float keyboardSlidePx = keyboardSlides
             ? AppDrawerKeyboardSeparation.keyboardSlidePx(mHostLayout.getHeight(),
@@ -2175,11 +2178,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             float rest = openRect.bottom;
             float bottom = rest;
             if (k > 0f) {
-                float pinTop = pinTopPx() + keyboardExit;
                 bottom = keyboardSlides
                     ? AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(rest,
-                        pinTop + keyboardSlidePx, planeGapPx())
-                    : AppDrawerKeyboardSeparation.cardBottomPx(rest, pinTop, planeGapPx(), k);
+                        pinTopPx() + keyboardSlidePx, planeGapPx())
+                    : AppDrawerKeyboardSeparation.cardBottomPx(rest, pinTopPx() + keyboardExit,
+                        planeGapPx(), k);
             }
             frame = AppDrawerKeyboardSeparation.dockedCardFrame(frame, mHostLayout.getWidth(),
                 mHost.searchKeyboardMarginPx(), dockedCardTopPx(), bottom, 1f);

@@ -104,6 +104,34 @@ public class AppDrawerKeyboardLoweringTest {
         assertDockAndKeyboardLeaveTogether(HEIGHT - 21f);
     }
 
+    /**
+     * Back close on pong (card4/back f011–f026): the drawer's own keyboard faded while it dropped,
+     * its keys translucent over bare wallpaper. Through a Docked close it now stays opaque in its
+     * card, slid by the open drawer's slide (keyboardSlidePx) on the close's own frames, with the
+     * card's bottom one gap above its live top (cardBottomOverKeyboardPx).
+     */
+    @Test public void dockedCloseSlidesTheDrawersKeyboardAwayInItsCard() {
+        docked();
+        host.closeLowersKeyboard = true;
+        startClose();
+        float previousSlide = -1f;
+        for (float p : CLOSE) {
+            if (p < AppDrawerController.GLASS_FADE_END) break;
+            applyFrame(p);
+            float k = AppDrawerKeyboardLowering.reveal(1f, p);
+            float slide = AppDrawerKeyboardSeparation.keyboardSlidePx(HEIGHT, KEYBOARD_TOP, k);
+            if (k <= 0f) continue;
+            assertEquals("opaque at p=" + p, 1f, keyboard.getAlpha(), 0f);
+            assertEquals("slid at p=" + p, slide, keyboard.getTranslationY(), 1e-3f);
+            assertTrue("following the close at p=" + p, slide >= previousSlide);
+            previousSlide = slide;
+            Frame frame = plane.getFrame();
+            assertEquals("the card rides on it at p=" + p,
+                AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(HEIGHT - 21f,
+                    KEYBOARD_TOP + slide, 21f), frame.bottom, 1e-3f);
+        }
+    }
+
     /** A Back or fling close: the drawer is no longer open and the reveal is on its way down. */
     @Test public void aSettlingCloseLandsTheDockAtRestToo() {
         floating();
