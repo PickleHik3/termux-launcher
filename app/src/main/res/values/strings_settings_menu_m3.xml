@@ -35,8 +35,6 @@
     <string name="settings_dock_header">Dock</string>
     <string name="settings_drawer_header">Drawer</string>
     <string name="settings_app_drawer_grid_title">Grid</string>
-    <string name="settings_apps_linux_apps_link_title">Linux apps in the drawer</string>
-    <string name="settings_apps_linux_apps_link_summary">Show, hide and set them up</string>
 
     <string name="settings_terminal_sub_windows_title">Windows &amp; panes</string>
     <string name="settings_terminal_sub_windows_summary">Key hints and program control</string>

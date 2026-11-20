@@ -87,7 +87,7 @@ A distro installs menu entries for helpers and viewers you may never open by han
 and it leaves the drawer. It is one app at a time, not a whole distro, and it holds across
 restarts. Your Android apps are not in this list.
 
-**Show Linux apps in drawer**, on the same page, turns them all off if you would rather start
+**Show Linux apps in drawer**, under **Settings → Apps**, turns them all off if you would rather start
 everything from a shell.
 
 Only distros installed by `proot-distro` **5.x** are read. An older installation keeps its distros

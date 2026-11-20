@@ -332,11 +332,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                     // picks the change up without having to be left and come back to.
                     notifyDisplay(key);
                     break;
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
-                    launcher.setX11DrawerAppsEnabled(value);
-                    com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context)
-                        .refreshAsync(null, null);
-                    break;
                 default:
                     break;
             }
@@ -359,8 +354,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                     return launcher.isX11AndroidKeyboardEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT:
                     return launcher.isX11KeyboardFollowsTextEnabled();
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
-                    return launcher.isX11DrawerAppsEnabled();
                 default:
                     return defValue;
             }

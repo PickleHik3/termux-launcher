@@ -52,7 +52,7 @@ Whether scripts may open panes is covered on [launcherctl](LauncherCtl.md).
 
 ### Linux apps
 
-"Desktop apps, their windows and how they start": **Show Linux apps in drawer**, **Set up Linux
+"Desktop apps, their windows and how they start": **Set up Linux
 apps**, **Hidden Linux apps**, **Window manager**, then the **Input**, **Resolution and scaling**,
 **Startup** and **Fixes** pages. There is nothing to switch on: the display starts when a Linux app
 asks for it. Builds made without the display leave this row out. See

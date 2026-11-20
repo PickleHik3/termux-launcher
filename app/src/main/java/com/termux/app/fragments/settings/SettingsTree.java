@@ -445,6 +445,8 @@ public final class SettingsTree {
                         return "X11DisplayStartupPreferencesFragment";
                     case "x11_legacy_drawing": case "x11_force_bgra":
                         return "X11DisplayTroubleshootingPreferencesFragment";
+                    case "x11_drawer_apps":
+                        return "LauncherPreferencesFragment";
                     default:
                         // The Linux apps rows sit on this page itself now.
                         return null;

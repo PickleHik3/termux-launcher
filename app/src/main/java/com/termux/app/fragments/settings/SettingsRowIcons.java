@@ -170,7 +170,6 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_push_pin, "app_launcher_default_buttons", "essential_notification_rules_manage");
         key(R.drawable.ic_ms_star, "app_launcher_most_used_page");
         key(R.drawable.ic_ms_grid_view, "app_launcher_drawer_layout");
-        key(R.drawable.ic_ms_desktop_windows, "linux_apps_in_drawer");
         key(R.drawable.ic_ms_search, "app_launcher_sub_search");
         key(R.drawable.ic_ms_tag, "app_launcher_input_char");
         key(R.drawable.ic_ms_rocket_launch, "app_launcher_drawer_open_only_match");

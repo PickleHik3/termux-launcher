@@ -196,11 +196,11 @@ public class SettingsFragmentAliasesTest {
     @Test
     public void linuxAppsIsTheOldDisplaySectionWithItsAppsOnTop() {
         PreferenceScreen linux = screen(launch(X11DisplayPreferencesFragment.class));
-        assertNotNull(linux.findPreference("x11_drawer_apps"));
+        assertNull("the drawer switch is on Apps now", linux.findPreference("x11_drawer_apps"));
         assertNotNull(linux.findPreference("x11_window_manager"));
         assertNotNull(linux.findPreference("x11_sub_input"));
         assertNull("its rows are on this page now", linux.findPreference("x11_sub_linux_apps"));
         assertNotNull("the apps come first",
-            ((androidx.preference.PreferenceGroup) linux.getPreference(0)).findPreference("x11_drawer_apps"));
+            ((androidx.preference.PreferenceGroup) linux.getPreference(0)).findPreference("x11_gui_apps_setup"));
     }
 }

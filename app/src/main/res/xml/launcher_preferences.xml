@@ -28,12 +28,11 @@
             app:title="@string/settings_apps_sub_search_title"
             app:summary="@string/settings_apps_sub_search_summary"
             app:fragment="com.termux.app.fragments.settings.termux.LauncherSearchPreferencesFragment" />
-        <!-- Opens the Linux apps section; hidden in a build made without the X server. -->
-        <Preference
-            app:key="linux_apps_in_drawer"
-            app:persistent="false"
-            app:title="@string/settings_apps_linux_apps_link_title"
-            app:summary="@string/settings_apps_linux_apps_link_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
+        <!-- Hidden in a build made without the X server (LauncherPreferencesFragment). -->
+        <SwitchPreferenceCompat
+            app:key="x11_drawer_apps"
+            app:title="@string/settings_x11_drawer_apps_title"
+            app:summary="@string/settings_x11_drawer_apps_summary"
+            android:defaultValue="true" />
     </PreferenceCategory>
 </PreferenceScreen>
