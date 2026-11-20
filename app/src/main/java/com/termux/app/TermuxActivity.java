@@ -8588,7 +8588,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private com.termux.app.chrome.LiveChromeShape.Clip keyboardOutlineClip(@NonNull View surfaceHost) {
-        return fullScreenKeyboardClip(surfaceHost, mKeyboardBaseClip);
+        return fullScreenKeyboardClip(surfaceHost, com.termux.app.chrome.KeyboardSheetLook.outline(
+            mKeyboardBaseClip, mKeyboardSheet.engaged()));
     }
 
     /** What the keyboard host wears over its own material while the drawer is open. */
@@ -8601,7 +8602,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * One frame of the drawer's motion, as the keyboard sees it ({@link KeyboardSheetLook}): the
      * drawer's dim and glass over its own at the drawer's fraction. A compare per frame at rest;
      * the glass is built when the drawer first reaches the keyboard and let go when it leaves. The
-     * card's shape is its own throughout: its outline is never touched here.
+     * card's shape is its own throughout, except that a Docked slice stands as a card of its own
+     * (its top rounded at its own top) while it wears the sheet: {@link
+     * com.termux.app.chrome.KeyboardSheetLook#outline}.
      */
     private void onKeyboardSheetFraction(float drawerFraction, float progress) {
         View host = findViewById(R.id.inapp_keyboard_view_host);
@@ -8615,8 +8618,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mKeyboardSheet.setFraction(f);
         mKeyboardSheet.setDim(com.termux.app.chrome.KeyboardSheetLook.dimAlpha(f, progress));
-        if (mKeyboardSheet.engaged() != wasEngaged && host != null)
+        if (mKeyboardSheet.engaged() != wasEngaged && host != null) {
             host.setBackground(mKeyboardSheet.dress(mKeyboardHostInner));
+            // The card's top moves to the keyboard's own while it wears the sheet, and back.
+            if (host.getOutlineProvider() == mKeyboardOutline
+                && mKeyboardOutline.setClip(keyboardOutlineClip(host)))
+                host.invalidateOutline();
+        }
         if (f <= 0f && mKeyboardSheet.sheet() != null) mKeyboardSheet.setSheet(null, 0);
         diagKeyboardSheet(host, drawerFraction, f);
     }

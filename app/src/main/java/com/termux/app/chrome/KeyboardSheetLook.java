@@ -34,4 +34,16 @@ public final class KeyboardSheetLook {
         int full = com.termux.app.GlassBackdropTint.colorFor(drawerProgress) >>> 24;
         return Math.round(full * Math.min(1f, fraction));
     }
+
+    /**
+     * The keyboard host's clip while it wears the sheet: Docked's slice of the frame starts at the
+     * extra keys' top, which the drawer hides, so the keyboard stands as its own card with its top
+     * corners rounded at its own top (the drawer's dim runs round them). Its own clip otherwise.
+     */
+    @androidx.annotation.Nullable
+    public static LiveChromeShape.Clip outline(@androidx.annotation.Nullable LiveChromeShape.Clip own,
+                                               boolean wearsSheet) {
+        if (!wearsSheet || own == null) return own;
+        return LiveChromeShape.ownTop(own);
+    }
 }

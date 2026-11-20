@@ -175,6 +175,19 @@ public final class LiveChromeShape {
     }
 
     /**
+     * {@code clip} cut off at the view's own top, its top corners rounded there at the card's top
+     * radius: a slice of a card whose pieces above it are not drawn standing as a card of its own.
+     * The same clip when it already starts at the view's top.
+     */
+    @NonNull
+    public static Clip ownTop(@NonNull Clip clip) {
+        if (clip.reachTop <= 0) return clip;
+        float top = Math.max(clip.topLeft, clip.topRight);
+        return new Clip(clip.reachLeft, 0, clip.reachRight, clip.reachBottom, top, top,
+            clip.bottomRight, clip.bottomLeft, clip.perCorner);
+    }
+
+    /**
      * {@code clip} with its top and bottom corners rounded at least to {@code topPx} and
      * {@code bottomPx}: a screen corner it stands in (FullScreenCornerPolicy). The same clip
      * when neither asks for more.
