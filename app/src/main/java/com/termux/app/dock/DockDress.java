@@ -231,6 +231,12 @@ final class DockDress {
         return mHost.dockRows().wornSurface(dockSurfaceSpec(), mHost.seam().committedDesign() != null);
     }
 
+    /** The slab the Terminal's card wears: its page's design's, with no Peek card standing. */
+    @NonNull
+    com.termux.app.dock.DockSurfaceSpec terminalSlabSpec() {
+        return dockSurfaceSpec(com.termux.app.page.PageKind.TERMINAL).forCard(null);
+    }
+
     /** The slab the dock wears on {@code page}: its Dock design's. */
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec(

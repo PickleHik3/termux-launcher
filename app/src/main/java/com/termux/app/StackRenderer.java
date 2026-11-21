@@ -653,6 +653,14 @@ public final class StackRenderer implements DockPlankController.SlabSink {
 
     /** Whether the plank's host tilt goes to the Terminal's card: apart, the Terminal in front. */
     private boolean keysCardTilts() {
+        return keysCardStands();
+    }
+
+    /**
+     * Whether the Terminal's extra-keys card is the dock's slab now: the cards stand apart and
+     * the Terminal is in front. The plank's tilt, its specular and its rim glow follow it.
+     */
+    public boolean keysCardStands() {
         return mApart && !mViews.frontIsHome() && mViews.view(R.id.extra_keys_card) != null;
     }
 
