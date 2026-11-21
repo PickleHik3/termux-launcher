@@ -35,9 +35,8 @@ public final class HomeFloatPolicy {
     /**
      * The shape a Home float is born with in a room not measured yet: a window, never the whole
      * room. {@link #BIRTH_WIDTH_FRAC} of the room's width, centred, its top {@link #BIRTH_TOP_FRAC}
-     * down, and its bottom on the room's bottom; the keyboard that comes up with it shrinks it to
-     * sit above the keyboard rather than covering its lower rows ({@link #keyboardRoom}), as it
-     * does any float; with the keyboard down it ends Home's Margin above the dock.
+     * down, and its bottom on the room's bottom. Once the room is measured the birth rect is
+     * {@link #birthFrac(Rect, int, int, int, int, int, int)}'s.
      * Maximise still fills the whole room ({@link FloatTitlebarPolicy#fullRoom}).
      */
     @NonNull
@@ -47,33 +46,52 @@ public final class HomeFloatPolicy {
     }
 
     /**
-     * {@link #birthFrac()} in a room {@code roomWidthPx} by {@code roomHeightPx}: never narrower
-     * than {@code minWidthPx}, still centred, and never shorter than {@code minHeightPx} or the
-     * titlebar's band {@code titlebarBandPx}, its top coming up toward the room's top to keep that
-     * height, so the titlebar always lies wholly in the room. A room smaller than the least size
-     * gives the whole room on that axis. A room not measured yet (zero size) gives
-     * {@link #birthFrac()}.
+     * A new Home float's rect, as fractions of {@code room} (the float layer's pixels): the upper
+     * part of the room, filling what stays free when the keyboard is up. It is
+     * {@link #BIRTH_WIDTH_FRAC} of the room's width and centred, so its left edge stands a side gap
+     * from the layer's edge; its top stands that same gap under {@code edgeTopPx} (the status
+     * bar's lower edge, or the room's top where no bar is above it); its bottom stands
+     * {@code gapPx} above {@code keyboardTopPx}, the top of the keyboard raised, whether or not the
+     * keyboard is up at the moment. A negative {@code keyboardTopPx} (no in-app keyboard laid out,
+     * a system keyboard not shown yet) is a top that cannot be known: the bottom is the room's
+     * vertical middle.
+     *
+     * <p>Never narrower than {@code minWidthPx} (still centred), nor shorter than
+     * {@code minHeightPx} or the titlebar's band {@code titlebarBandPx}: the bottom goes down for
+     * that height, and past the room's bottom the top comes up instead, so the titlebar always
+     * lies wholly in the room. A room smaller than the least size gives the whole room on that
+     * axis. A room not measured yet gives {@link #birthFrac()}.
      */
     @NonNull
-    public static RectF birthFrac(int roomWidthPx, int roomHeightPx, int minWidthPx,
-                                  int minHeightPx, int titlebarBandPx) {
-        if (roomWidthPx <= 0 || roomHeightPx <= 0) return birthFrac();
-        float minWidth = Math.min(roomWidthPx, Math.max(1, minWidthPx));
-        float width = Math.min(roomWidthPx, Math.max(minWidth, BIRTH_WIDTH_FRAC * roomWidthPx));
-        float left = (roomWidthPx - width) / 2f;
-        float minHeight = Math.min(roomHeightPx,
-            Math.max(1, Math.max(minHeightPx, titlebarBandPx)));
-        float top = Math.max(0f, Math.min(BIRTH_TOP_FRAC * roomHeightPx, roomHeightPx - minHeight));
-        return new RectF(left / roomWidthPx, top / roomHeightPx, (left + width) / roomWidthPx, 1f);
+    public static RectF birthFrac(@NonNull Rect room, int edgeTopPx, int keyboardTopPx, int gapPx,
+                                  int minWidthPx, int minHeightPx, int titlebarBandPx) {
+        int roomWidth = room.width();
+        int roomHeight = room.height();
+        if (roomWidth <= 0 || roomHeight <= 0) return birthFrac();
+        float minWidth = Math.min(roomWidth, Math.max(1, minWidthPx));
+        float width = Math.min(roomWidth, Math.max(minWidth, BIRTH_WIDTH_FRAC * roomWidth));
+        float left = room.left + (roomWidth - width) / 2f;
+        float sideGap = left;
+        float minHeight = Math.min(roomHeight, Math.max(1, Math.max(minHeightPx, titlebarBandPx)));
+        float top = Math.max(room.top, edgeTopPx + sideGap);
+        float bottom = keyboardTopPx >= 0 ? keyboardTopPx - Math.max(0, gapPx)
+            : room.top + roomHeight / 2f;
+        bottom = Math.min(room.bottom, bottom);
+        if (bottom - top < minHeight) {
+            bottom = Math.min(room.bottom, top + minHeight);
+            top = bottom - minHeight;
+        }
+        return new RectF((left - room.left) / roomWidth, (top - room.top) / roomHeight,
+            (left + width - room.left) / roomWidth, (bottom - room.top) / roomHeight);
     }
 
     /** The small step right a float born over another takes, beside the step down its titlebar sets. */
     public static final int CASCADE_STEP_RIGHT_DP = 16;
 
     /**
-     * The shape a new Home float is born with, as fractions of a room {@code roomWidthPx} by
-     * {@code roomHeightPx}: a window ({@link #birthFrac(int, int, int, int, int)}, with
-     * {@code stepDownPx} as the titlebar's band) on a page that shows no float, else
+     * The rect a new Home float opens at, as fractions of a room {@code roomWidthPx} by
+     * {@code roomHeightPx}: {@code birth}, the first position
+     * ({@link #birthFrac(Rect, int, int, int, int, int, int)}), on a page that shows no float, else
      * cascaded off {@code under}, the topmost float shown there. The cascade keeps {@code under}'s
      * size and steps {@code stepDownPx} down (the titlebar's band, so the titlebar under it stays in
      * sight) and {@code stepRightPx} right, clamped to the room: a float that runs past the room's
@@ -82,12 +100,11 @@ public final class HomeFloatPolicy {
      * A room not measured yet (zero size) gives {@link #birthFrac()}.
      */
     @NonNull
-    public static RectF cascadeFrac(@Nullable RectF under, int roomWidthPx, int roomHeightPx,
-                                    int stepRightPx, int stepDownPx, int minWidthPx,
-                                    int minHeightPx) {
+    public static RectF cascadeFrac(@Nullable RectF under, @NonNull RectF birth, int roomWidthPx,
+                                    int roomHeightPx, int stepRightPx, int stepDownPx,
+                                    int minWidthPx, int minHeightPx) {
         if (roomWidthPx <= 0 || roomHeightPx <= 0) return birthFrac();
-        if (under == null)
-            return birthFrac(roomWidthPx, roomHeightPx, minWidthPx, minHeightPx, stepDownPx);
+        if (under == null) return new RectF(birth);
         float[] x = cascadeSpan(under.left * roomWidthPx, under.right * roomWidthPx, roomWidthPx,
             stepRightPx, minWidthPx);
         float[] y = cascadeSpan(under.top * roomHeightPx, under.bottom * roomHeightPx, roomHeightPx,
@@ -104,6 +121,19 @@ public final class HomeFloatPolicy {
         float from = Math.max(0f, Math.min(start + Math.max(0, stepPx), roomPx - min));
         float to = Math.max(from + min, Math.min(roomPx, from + size));
         return new float[]{from, to};
+    }
+
+    /**
+     * The top of the keyboard raised, in the float layer's pixels, as far as it is known now: where
+     * it stands while it is up ({@code liveTopPx}, negative while it is down), else the rise
+     * {@code rememberedRisePx} (its top's distance from the layer's bottom) it last showed in this
+     * orientation, else -1: not known before it shows.
+     */
+    public static int raisedKeyboardTopPx(int liveTopPx, int rememberedRisePx,
+                                          boolean sameOrientation, int layerHeightPx) {
+        if (liveTopPx >= 0) return liveTopPx;
+        if (rememberedRisePx <= 0 || !sameOrientation || layerHeightPx <= 0) return -1;
+        return Math.max(0, layerHeightPx - rememberedRisePx);
     }
 
     /**
@@ -204,25 +234,29 @@ public final class HomeFloatPolicy {
 
     /**
      * The room a Home float shaped {@code frac} is laid out in while the keyboard may be up, in the
-     * layer's pixels. With the keyboard up and its top ({@code keyboardTopPx}) above the float's
-     * bottom, it is the room in which {@code frac} lands on {@link #keyboardShape}'s rect: the float
-     * keeps its own top and ends at the keyboard, or, with too little of it left above the
-     * keyboard, rises to stand on the keyboard at {@code minHeightPx}. Any float clear of the
-     * keyboard, and every float while it is down, keeps the whole room. The float's fractions stay
-     * those of the whole room: the keyboard is no resize, and closing it gives the shape back.
+     * layer's pixels. Only the focused float ({@code focused}) makes room: with the keyboard up
+     * and the line {@code gapPx} above its top ({@code keyboardTopPx}) above the float's bottom, it
+     * is the room in which {@code frac} lands on {@link #keyboardShape}'s rect: the float keeps
+     * its own top and sides and ends at that line, or, with too little of it left above the line,
+     * rises to stand on it at {@code minHeightPx}. Any float clear of the line, every unfocused
+     * float, and every float while the keyboard is down, keeps the whole room. The float's
+     * fractions stay those of the whole room: the keyboard is no resize, the shrink is only the
+     * rect shown, and closing the keyboard gives the stored shape back.
      */
     @NonNull
     public static Rect keyboardRoom(@NonNull Rect room, @Nullable RectF frac, boolean keyboardUp,
-                                    int keyboardTopPx, int minHeightPx) {
-        if (frac == null || !keyboardUp || keyboardTopPx >= room.bottom || room.height() <= 0)
+                                    boolean focused, int keyboardTopPx, int gapPx,
+                                    int minHeightPx) {
+        int line = keyboardTopPx - Math.max(0, gapPx);
+        if (frac == null || !keyboardUp || !focused || room.height() <= 0)
             return new Rect(room);
         float span = frac.bottom - frac.top;
         if (span <= 0f) return new Rect(room);
         int top = room.top + Math.round(frac.top * room.height());
         int bottom = room.top + Math.round(frac.bottom * room.height());
-        if (keyboardTopPx >= bottom) return new Rect(room);
+        if (line >= bottom) return new Rect(room);
         Rect shaped = keyboardShape(new Rect(room.left, top, room.right, bottom), room,
-            keyboardTopPx, minHeightPx);
+            Math.max(0, line), minHeightPx);
         int height = Math.max(1, Math.round(shaped.height() / span));
         // Laid out at this room's top + round(frac.top * height): exactly the shape's top.
         int roomTop = shaped.top - Math.round(frac.top * height);
@@ -231,12 +265,12 @@ public final class HomeFloatPolicy {
 
     /**
      * Where a float laid out at {@code floatPx} (the layer's pixels, inside {@code room}) stands
-     * while the keyboard, whose top is {@code keyboardTopPx} (negative while it is down), is up:
-     * it keeps its own top and its bottom comes up to the keyboard's top, so its titlebar stays
-     * where it was. Where that would leave it shorter than {@code minHeightPx} (or than it already
-     * was), it keeps that height instead and rises until it stands on the keyboard, never past
-     * the room's top: a room too short above the keyboard for even that leaves it all the room
-     * there is. A keyboard below the float changes nothing.
+     * while the keyboard's line {@code keyboardTopPx} (negative while it is down) holds: it keeps
+     * its own top and its bottom comes up to the line, so its titlebar stays where it was. Where
+     * that would leave it shorter than {@code minHeightPx} (or than it already was), it keeps that
+     * height instead and rises until it stands on the line, never past the room's top: a room too
+     * short above the line for even that leaves it all the room there is. A line below the float
+     * changes nothing.
      */
     @NonNull
     public static Rect keyboardShape(@NonNull Rect floatPx, @NonNull Rect room, int keyboardTopPx,
