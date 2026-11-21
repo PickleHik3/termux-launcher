@@ -492,6 +492,12 @@ public class TerminalPaneController {
     private int mHomeDockTopOnScreenPx = Integer.MAX_VALUE;
     private int mHomeKeyboardTopOnScreenPx = -1;
     /**
+     * Where the in-app keyboard will stand when raised, on screen, the same edge as
+     * {@link #mHomeKeyboardTopOnScreenPx} (the top of the stack it raises), or -1 with no in-app
+     * keyboard laid out: a system keyboard's height is not known before it shows.
+     */
+    private int mHomePredictedKeyboardTopOnScreenPx = -1;
+    /**
      * How far the keyboard's top stood above the float layer's bottom the last time it was up,
      * and whether the layer was landscape then: where a float born with the keyboard down aims
      * its bottom. Zero until the keyboard has been up.
@@ -3967,6 +3973,19 @@ public class TerminalPaneController {
      */
     public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
                                          int keyboardTopOnScreenPx, int marginPx) {
+        setHomeFloatObstructions(roomTopOnScreenPx, dockTopOnScreenPx, keyboardTopOnScreenPx,
+            marginPx, -1);
+    }
+
+    /**
+     * The same, with where the in-app keyboard will stand once raised
+     * ({@code predictedKeyboardTopOnScreenPx}, -1 when unknown), which a float born with the
+     * keyboard down aims its bottom at.
+     */
+    public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
+                                         int keyboardTopOnScreenPx, int marginPx,
+                                         int predictedKeyboardTopOnScreenPx) {
+        mHomePredictedKeyboardTopOnScreenPx = predictedKeyboardTopOnScreenPx;
         int margin = Math.max(0, marginPx);
         boolean roomMoved = roomTopOnScreenPx != mHomeRoomTopOnScreenPx
             || dockTopOnScreenPx != mHomeDockTopOnScreenPx || margin != mHomeFloatMarginPx;
@@ -4129,7 +4148,13 @@ public class TerminalPaneController {
         if (layer == null) return -1;
         boolean sameOrientation = mRaisedKeyboardLandscape
             == HomeFloatPolicy.isLandscape(layer.getWidth(), layer.getHeight());
-        return HomeFloatPolicy.raisedKeyboardTopPx(homeKeyboardTopInLayerPx(),
+        int predicted = -1;
+        if (mHomePredictedKeyboardTopOnScreenPx >= 0) {
+            int[] onScreen = new int[2];
+            layer.getLocationOnScreen(onScreen);
+            predicted = Math.max(0, mHomePredictedKeyboardTopOnScreenPx - onScreen[1]);
+        }
+        return HomeFloatPolicy.raisedKeyboardTopPx(homeKeyboardTopInLayerPx(), predicted,
             mRaisedKeyboardRisePx, sameOrientation, layer.getHeight());
     }
 

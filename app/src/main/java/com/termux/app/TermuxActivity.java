@@ -28776,6 +28776,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mHomeFloatImePushPx);
         int keyboardTop = KeyboardOverlayPolicy.homeKeyboardTopPx(mHomeFloatKeyboardShown,
             mHomeFloatImePushPx, stackBottom, mHomeFloatStackPx);
+        // The in-app keyboard's height is laid out whether or not it is up: where it will stand
+        // is the stack's top with the keys added to it, the same edge keyboardTop is while up.
+        int predictedKeyboardTop = keyboardTop >= 0 || mKeyboardDownLaidOutPx <= 0 ? -1
+            : Math.max(0, stackBottom - mHomeFloatStackPx - mKeyboardDownLaidOutPx);
         root.getLocationOnScreen(at);
         int roomTop = at[1];
         androidx.core.view.WindowInsetsCompat insets =
@@ -28799,7 +28803,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The floats breathe Home's Margin inside all that, the same air as the widget grid's
         // rim: Home's own, read explicitly, since floats are laid out while a window is in front.
         mPaneController.setHomeFloatObstructions(roomTop, dockTop, keyboardTop,
-            Math.round(dpToPx(homeMarginDp())));
+            Math.round(dpToPx(homeMarginDp())), predictedKeyboardTop);
     }
 
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */

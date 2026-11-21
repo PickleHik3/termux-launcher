@@ -184,15 +184,19 @@ public class HomeFloatTest {
     @Test
     public void birthWithTheKeyboardDownStandsWhereTheRaisedKeyboardWillBe() {
         RectF up = HomeFloatPolicy.birthFrac(PORTRAIT_ROOM, 246, 1300, GAP, 360, 270, 105);
-        int raised = HomeFloatPolicy.raisedKeyboardTopPx(-1, 600, true, 1900);
+        int raised = HomeFloatPolicy.raisedKeyboardTopPx(-1, -1, 600, true, 1900);
         assertEquals("the rise it last had, from the layer's bottom", 1300, raised);
         assertEquals("the same rect with the keyboard down", up,
             HomeFloatPolicy.birthFrac(PORTRAIT_ROOM, 246, raised, GAP, 360, 270, 105));
         assertEquals("live wins over what was remembered", 1250,
-            HomeFloatPolicy.raisedKeyboardTopPx(1250, 600, true, 1900));
+            HomeFloatPolicy.raisedKeyboardTopPx(1250, 1400, 600, true, 1900));
         assertEquals("never up in this orientation", -1,
-            HomeFloatPolicy.raisedKeyboardTopPx(-1, 600, false, 1900));
-        assertEquals("never up at all", -1, HomeFloatPolicy.raisedKeyboardTopPx(-1, 0, true, 1900));
+            HomeFloatPolicy.raisedKeyboardTopPx(-1, -1, 600, false, 1900));
+        assertEquals("never up at all", -1, HomeFloatPolicy.raisedKeyboardTopPx(-1, -1, 0, true, 1900));
+        assertEquals("the in-app keyboard's known height beats what was remembered", 1400,
+            HomeFloatPolicy.raisedKeyboardTopPx(-1, 1400, 600, true, 1900));
+        assertEquals("known even in another orientation", 1400,
+            HomeFloatPolicy.raisedKeyboardTopPx(-1, 1400, 0, false, 1900));
     }
 
     @Test
@@ -352,6 +356,20 @@ public class HomeFloatTest {
             params.topMargin + params.height, 1);
         assertEquals("under the status bar's edge by the side gap", ROOM_TOP + params.leftMargin,
             params.topMargin, 1);
+    }
+
+    @Test
+    public void aFloatBornBeforeAnyKeyboardEndsWhereTheInAppKeyboardWillStand() {
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, -1, 0, 700);
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        FrameLayout.LayoutParams params =
+            (FrameLayout.LayoutParams) containerOf(window).getLayoutParams();
+        assertEquals("a small gap above the predicted top, not the room's middle",
+            700 - keyboardGap(), params.topMargin + params.height, 1);
+        // The keyboard rising there leaves it as it is.
+        int height = params.height;
+        mController.setHomeFloatObstructions(ROOM_TOP, DOCK_TOP, 700, 0, -1);
+        assertEquals(height, containerOf(window).getLayoutParams().height);
     }
 
     @Test

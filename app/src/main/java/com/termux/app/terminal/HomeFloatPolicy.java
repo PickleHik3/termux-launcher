@@ -156,13 +156,16 @@ public final class HomeFloatPolicy {
 
     /**
      * The top of the keyboard raised, in the float layer's pixels, as far as it is known now: where
-     * it stands while it is up ({@code liveTopPx}, negative while it is down), else the rise
+     * it stands while it is up ({@code liveTopPx}, negative while it is down), else where the
+     * in-app keyboard, whose height is known before it shows, will stand ({@code predictedTopPx},
+     * negative when there is none: a system keyboard), else the rise
      * {@code rememberedRisePx} (its top's distance from the layer's bottom) it last showed in this
      * orientation, else -1: not known before it shows.
      */
-    public static int raisedKeyboardTopPx(int liveTopPx, int rememberedRisePx,
+    public static int raisedKeyboardTopPx(int liveTopPx, int predictedTopPx, int rememberedRisePx,
                                           boolean sameOrientation, int layerHeightPx) {
         if (liveTopPx >= 0) return liveTopPx;
+        if (predictedTopPx >= 0) return predictedTopPx;
         if (rememberedRisePx <= 0 || !sameOrientation || layerHeightPx <= 0) return -1;
         return Math.max(0, layerHeightPx - rememberedRisePx);
     }
