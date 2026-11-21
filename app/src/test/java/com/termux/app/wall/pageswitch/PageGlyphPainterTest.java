@@ -24,9 +24,11 @@ import org.robolectric.annotation.GraphicsMode;
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class PageGlyphPainterTest {
 
-    private static final int[] NUMBERS = {1, 2, 12};
+    private static final int[] NUMBERS = {1, 2, 7, 9, 10, 12, 88, 99};
     /** A twentieth of a unit, for the digits' overshoot and the outline's float error. */
     private static final float SLACK = 0.05f;
+    /** A lone digit's cap height, in units of the glyph's 24: over a quarter of it. */
+    private static final float MIN_CAP_UNITS = 6.5f;
     private static final float[] DENSITIES = {2f, 2.625f, 3f, 3.5f};
 
     /** The distance from ({@code x}, {@code y}) to the rect, 0 inside it. */
@@ -55,7 +57,7 @@ public class PageGlyphPainterTest {
                 float unit = size / PageGlyphSlots.VIEWPORT;
                 for (int n : NUMBERS) {
                     String text = Integer.toString(n);
-                    float capHeight = -1f;
+                    float textSize = -1f;
                     for (PageKind kind : PageKind.values()) {
                         painter.placeNumber(kind, n, layout);
                         paint.setTextSize(layout[2] * unit);
@@ -64,8 +66,12 @@ public class PageGlyphPainterTest {
                         glyph.computeBounds(ink, false);
                         // Back to units, where the outline lives.
                         ink.set(ink.left / unit, ink.top / unit, ink.right / unit, ink.bottom / unit);
-                        if (capHeight < 0f) capHeight = layout[2];
-                        assertEquals(kind + " " + n, capHeight, layout[2], 1e-4f);
+                        if (textSize < 0f) textSize = layout[2];
+                        assertEquals(kind + " " + n, textSize, layout[2], 1e-4f);
+                        if (n < 10) {
+                            assertTrue(kind + " " + n + " cap height " + ink.height(),
+                                ink.height() >= MIN_CAP_UNITS - SLACK);
+                        }
                         PathMeasure measure = new PathMeasure(painter.outline(kind), false);
                         do {
                             float length = measure.getLength();
@@ -84,13 +90,22 @@ public class PageGlyphPainterTest {
         }
     }
 
-    @Test public void oneAndTwelveStandOneCapHeight() {
+    @Test public void aLoneDigitStandsLargerThanTwoAndEachCountOneSize() {
         PageGlyphPainter painter = new PageGlyphPainter();
         float[] one = new float[3];
-        float[] twelve = new float[3];
+        float[] two = new float[3];
         painter.placeNumber(PageKind.HOME, 1, one);
-        painter.placeNumber(PageKind.TERMINAL, 12, twelve);
-        assertEquals(one[2], twelve[2], 1e-4f);
+        painter.placeNumber(PageKind.TERMINAL, 12, two);
+        assertTrue(one[2] + " vs " + two[2], one[2] > two[2] * 1.2f);
+        for (int n = 1; n < 10; n++) {
+            painter.placeNumber(PageKind.TERMINAL, n, two);
+            assertEquals(one[2], two[2], 1e-4f);
+        }
+        painter.placeNumber(PageKind.HOME, 10, one);
+        for (int n = 10; n < 100; n++) {
+            painter.placeNumber(PageKind.TERMINAL, n, two);
+            assertEquals(one[2], two[2], 1e-4f);
+        }
     }
 
     @Test public void displayAndAssistantShowNoNumber() {
