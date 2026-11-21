@@ -97,6 +97,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     @Nullable private PageBarSlide mSlide;
     private float[] mCenters = new float[0];
     private float[] mScales = new float[0];
+    private boolean[] mFolded = new boolean[0];
     @NonNull private String[] mSlotLabels = new String[0];
     @Nullable private PageBarBubbleView mBubble;
     @Nullable private BuiltinWidgetView.GlassSource mSource;
@@ -213,7 +214,9 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             if (mCenters.length != slots) {
                 mCenters = new float[slots];
                 mScales = new float[slots];
+                mFolded = new boolean[slots];
             }
+            for (int i = 0; i < slots; i++) mFolded[i] = mFold.slots.get(i).folded();
             mSlotLabels = new String[slots];
             for (int i = 0; i < slots; i++) mSlotLabels[i] = labelOf(mFold.slots.get(i), entries);
         }
@@ -407,7 +410,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             canvas.drawRoundRect(mRect, height / 2f, height / 2f, mStroke);
         }
         boolean lifted = mEnter > 0f;
-        if (lifted) layout.slidePositions(mFocusFloat, mEnter, mCenters, mScales);
+        if (lifted) layout.slidePositions(mFocusFloat, mEnter, mCenters, mScales, mFolded);
         float cy = top + height / 2f;
         float glyph = layout.glyphPx();
         List<PageBarFold.Slot> slots = fold.slots;

@@ -1,6 +1,7 @@
 package com.termux.app.wall.pageswitch;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 /**
  * The page bar's geometry in px, for one pane width, density and slot count. The pill is centred
@@ -49,6 +50,7 @@ public final class PageBarLayout {
     private final float mPillLeft;
     private final float[] mScratchCenters;
     private final float[] mScratchScales;
+    private boolean[] mFolded;
 
     /** Home's bar: the pill hugs its glyphs, each slot at most {@link #MAX_SLOT_DP}. */
     public PageBarLayout(float density, float paneWidthPx, int slotCount) {
@@ -164,6 +166,16 @@ public final class PageBarLayout {
      */
     public void slidePositions(float focusFloat, float enter, @NonNull float[] centers,
                                @NonNull float[] scales) {
+        slidePositions(focusFloat, enter, centers, scales, null);
+    }
+
+    /**
+     * As above; {@code folded[i]} (null: none) marks a folded slot, whose plates reach past its
+     * glyph, so a neighbour clamped at the pill's end keeps them inside the pill too.
+     */
+    public void slidePositions(float focusFloat, float enter, @NonNull float[] centers,
+                               @NonNull float[] scales, @Nullable boolean[] folded) {
+        mFolded = folded;
         float f = Math.max(0f, Math.min(mSlotCount - 1, focusFloat));
         int lo = (int) Math.floor(f);
         int hi = Math.min(mSlotCount - 1, lo + 1);
@@ -208,9 +220,15 @@ public final class PageBarLayout {
      * {@code end}, which keeps its rest centre unless it is the neighbour itself.
      */
     private void spread(float[] centers, float[] scales, int end, int nb, float nbX) {
-        float half = glyphPx() * NEIGHBOUR_SCALE / 2f;
+        float unit = glyphPx() * NEIGHBOUR_SCALE / PageBarGlyphPainter.GLYPH_UNITS;
+        float half = PageBarGlyphPainter.GLYPH_UNITS * unit / 2f;
+        boolean stack = mFolded != null && nb < mFolded.length && mFolded[nb];
         float pillRight = mPillLeft + pillWidthPx();
-        float x = Math.max(mPillLeft + half, Math.min(pillRight - half, nbX));
+        float minX = mPillLeft + half
+            + (stack ? PageBarGlyphPainter.STACK_OVERHANG_LEFT * unit : 0f);
+        float maxX = pillRight - half
+            - (stack ? PageBarGlyphPainter.STACK_OVERHANG_RIGHT * unit : 0f);
+        float x = Math.max(minX, Math.min(maxX, nbX));
         centers[nb] = x;
         scales[nb] = NEIGHBOUR_SCALE;
         if (end == nb) return;

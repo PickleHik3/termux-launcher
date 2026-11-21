@@ -105,6 +105,20 @@ public class PageBarLayoutTest {
         assertEquals(24.5f + 371f - 22f * 1.25f / 2f, c[6], EPS);
     }
 
+    @Test public void aFoldedEndNeighbourKeepsItsPlatesInsideThePill() {
+        PageBarLayout l = seven();
+        boolean[] folded = new boolean[7];
+        folded[6] = true;
+        l.slidePositions(5f, 1f, c, s, folded);
+        float unit = 1.25f;
+        float pillRight = 24.5f + 371f;
+        float reach = (11f + PageBarGlyphPainter.STACK_OVERHANG_RIGHT) * unit;
+        assertEquals(pillRight, c[6] + reach, EPS);
+        // Unfolded, the same slot sits further out.
+        l.slidePositions(5f, 1f, c, s);
+        assertEquals(pillRight - 11f * unit, c[6], EPS);
+    }
+
     @Test public void focusOnAnEndDrawsNothingThereAndOnlyOneNeighbour() {
         PageBarLayout l = seven();
         l.slidePositions(0f, 1f, c, s);
