@@ -320,7 +320,11 @@ public final class PeekGlassReflection {
     /** DIAG(reflection): the host view's state; revert before merge. */
     public String diagState() {
         PeekReflectionView v = mHostView;
-        return "shown=" + mShown + " live=" + mLive + " alpha=" + mAlpha + " fade=" + mFade
+        PeekGlassGeometry.Card card = mCard; // DIAG(two-cards)
+        return "shown=" + mShown + " held=" + mHeld + " live=" + mLive + " alpha=" + mAlpha
+            + " fade=" + mFade
+            + (card == null ? " card=none" : " axis=" + card.mirrorAxisY + " cardTop=" + card.top
+                + " depth=" + card.reflectionDepth() + " rowDy=" + mRowDy)
             + (v == null ? " view=none" : " vis=" + v.getVisibility() + " ty=" + v.getTranslationY()
             + " a=" + v.getAlpha() + " parent=" + (v.getParent() != null) + " h=" + v.getHeight());
     }
