@@ -38,6 +38,17 @@ public final class InAppKeyboardLayoutSource {
         return storedActive != null && ring.contains(storedActive) ? storedActive : ring.get(0);
     }
 
+    /**
+     * The text layout to show again after the process was restored. A layout the ring no longer
+     * carries (removed in Settings while the keyboard was away) gives way to the active one, so
+     * a restored keyboard never shows a layout its own list has dropped.
+     */
+    @NonNull
+    public static String restoredTextLayoutId(@NonNull List<String> ring, @NonNull String saved,
+                                              @NonNull String active) {
+        return ring.contains(saved) ? saved : active;
+    }
+
     /** The bundled resource behind {@code id}; the launcher QWERTY for ids with none. */
     public static int bundledResId(@NonNull Resources resources, @Nullable String id) {
         LauncherKeyboardLayouts.Layout layout = LauncherKeyboardLayouts.find(resources, id);

@@ -95,4 +95,13 @@ public class InAppKeyboardLayoutSourceTest {
             assertTrue(id + " rows", Arrays.equals(keysPerRow(live), keysPerRow(preview)));
         }
     }
+
+    @Test
+    public void aRestoredLayoutTheRingDroppedGivesWayToTheActiveOne() {
+        java.util.List<String> ring = java.util.Arrays.asList("main", "latn_qwerty_es");
+        org.junit.Assert.assertEquals("latn_qwerty_es",
+            InAppKeyboardLayoutSource.restoredTextLayoutId(ring, "latn_qwerty_es", "main"));
+        org.junit.Assert.assertEquals("main", InAppKeyboardLayoutSource.restoredTextLayoutId(
+            java.util.Collections.singletonList("main"), "latn_qwerty_es", "main"));
+    }
 }

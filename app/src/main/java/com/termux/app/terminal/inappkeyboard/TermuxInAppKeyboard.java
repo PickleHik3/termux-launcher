@@ -325,8 +325,13 @@ public final class TermuxInAppKeyboard {
         reloadLayoutRing(false);
         mSelectedLayoutId = mActiveTextLayoutId;
         if (state != null) {
-            mSelectedLayoutId = normalizeLayoutId(
+            String saved = normalizeLayoutId(
                 state.getString(STATE_SELECTED_LAYOUT, mActiveTextLayoutId));
+            // The modal pads are not ring entries; every text layout answers to the ring.
+            mSelectedLayoutId = LAYOUT_NUMERIC.equals(saved) || LAYOUT_GREEK_MATH.equals(saved)
+                ? saved
+                : InAppKeyboardLayoutSource.restoredTextLayoutId(mLayoutRing, saved,
+                    mActiveTextLayoutId);
             if (mEnabled && state.containsKey(STATE_VISIBLE))
                 mVisible = state.getBoolean(STATE_VISIBLE);
             else if (mEnabled)
