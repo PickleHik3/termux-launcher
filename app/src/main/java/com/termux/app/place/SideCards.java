@@ -110,10 +110,22 @@ public final class SideCards {
      */
     public static float laneTyPx(int lane, boolean apart, float homeDropPx, int terminalLiftPx,
                                  float terminalShare) {
+        return laneTyPx(lane, apart, homeDropPx, terminalLiftPx, terminalShare, 0f, 0f);
+    }
+
+    /**
+     * {@link #laneTyPx(int, boolean, float, int, float)} with the keyboard's cover on Home
+     * (#309): Home's lane stands {@code coverHomePx} lower still, so its rows stand at their
+     * keyboard-down rect, and the stack's lane {@code coverSharedPx} (Home's share of that drop),
+     * which it carries for the front page; the Terminal's lane rides the keyboard and gets none.
+     * While the cards do not stand apart the layers carry the cover and every lane is 0.
+     */
+    public static float laneTyPx(int lane, boolean apart, float homeDropPx, int terminalLiftPx,
+                                 float terminalShare, float coverHomePx, float coverSharedPx) {
         if (!apart) return 0f;
-        if (lane == StackLanes.HOME) return homeDropPx;
+        if (lane == StackLanes.HOME) return homeDropPx + coverHomePx;
         if (lane == StackLanes.TERMINAL) return -Math.max(0, terminalLiftPx);
-        return -columnLiftPx(true, terminalLiftPx, terminalShare);
+        return -columnLiftPx(true, terminalLiftPx, terminalShare) + coverSharedPx;
     }
 
     /**

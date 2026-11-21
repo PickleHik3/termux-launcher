@@ -351,6 +351,19 @@ public class SideCardsParityTest {
     }
 
     /**
+     * The keyboard's cover on Home (#309) joins the lanes: Home's lane its whole cover drop on
+     * top of its own, the stack's lane Home's share of it, the Terminal's lane none; not apart,
+     * the layers carry the cover and every lane stays 0.
+     */
+    @Test public void theCoverDropsHomesLaneAndTheStacksShareAndNotTheTerminals() {
+        assertEquals(7f + 40f, SideCards.laneTyPx(StackLanes.HOME, true, 7f, 5, 0.5f, 40f, 20f), 0f);
+        assertEquals(-5f, SideCards.laneTyPx(StackLanes.TERMINAL, true, 7f, 5, 0.5f, 40f, 20f), 0f);
+        assertEquals(-2.5f + 20f, SideCards.laneTyPx(StackLanes.STACK, true, 7f, 5, 0.5f, 40f, 20f), 0f);
+        for (int lane : new int[] {StackLanes.STACK, StackLanes.HOME, StackLanes.TERMINAL})
+            assertEquals(0f, SideCards.laneTyPx(lane, false, 7f, 5, 0.5f, 40f, 20f), 0f);
+    }
+
+    /**
      * The lanes' numbers have one owner (SideCards#laneTyPx): Home's lane draws its drop and the
      * Terminal's its lift at every share of the scene, so neither moves at a landing; only the
      * stack's own lane and the keyboard's column, the front page's, follow the share, and the

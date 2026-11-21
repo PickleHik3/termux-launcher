@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.page.Side;
 import com.termux.app.place.EdgeStackView;
+import com.termux.app.place.HomeKeyboardCover;
 import com.termux.app.place.Element;
 import com.termux.app.place.StackEnd;
 import com.termux.app.place.StackGeometry;
@@ -164,6 +165,19 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     /** The cards stand apart, and Home's drop while they do ({@link #setSidesApart}). */
     private boolean mApart;
     private float mHomeDropPx;
+    /**
+     * Home's rows are covered by the keyboard ({@link #setHomeCover}) and what the system keyboard
+     * takes from the root's room; the drops, below, are this frame's numbers from them.
+     */
+    private boolean mHomeCovered;
+    private int mSystemImeTakePx;
+    private float mCoverHomeDropPx;
+    private float mCoverSharedDropPx;
+    /** The keyboard's drawn top in the container's pixels while it shows height, else NaN. */
+    private float mCoverKeyboardTopPx = Float.NaN;
+    /** The cut last written to each lane host's clip, and to which view; 0 for none. */
+    private final int[] mWrittenLaneCut = new int[LANE_HOST_IDS.length];
+    private final View[] mWrittenLaneCutView = new View[LANE_HOST_IDS.length];
     /** The motion last published to the host's glass anchor, and whether one is. */
     private boolean mHostMotionSet;
     private float mHostMotionX = Float.NaN;
@@ -498,6 +512,20 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mRestHostTop[front] = hostTop;
     }
 
+    /**
+     * Whether Home's rows are covered by the keyboard instead of lifted by it (#309), and what the
+     * system keyboard takes from the root's room (its padding), which Home's stack stands back
+     * down by. Written by the activity at rest; the defaults draw as before. A write only on a
+     * change.
+     */
+    public void setHomeCover(boolean homeRowsCovered, int systemImeTakePx) {
+        int take = Math.max(0, systemImeTakePx);
+        if (mHomeCovered == homeRowsCovered && mSystemImeTakePx == take) return;
+        mHomeCovered = homeRowsCovered;
+        mSystemImeTakePx = take;
+        requestApply();
+    }
+
     /** One rest change or chrome commit at rest: written unless another surface owns the stack. */
     public void applyAtRest() {
         if (mViews.othersOwnStack()) return;
@@ -542,8 +570,21 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         if (mGeometry.layerPresent[StackGeometry.HOST])
             shiftHost(mGeometry.layerTopPx[StackGeometry.HOST]);
 
+        // Home's cover (#309): the rows stand at their keyboard-down rect whatever the keyboard
+        // does, and the system keyboard does not raise Home's stack.
+        final boolean covered = mHomeCovered;
+        final int keyboardPx = mGeometry.keyboardPresent && mGeometry.keyboardInColumn
+            ? mGeometry.keyboardHeightPx : 0;
+        final float coverShare = mEffective.keyboardSharePx;
+        mCoverHomeDropPx = covered ? HomeKeyboardCover.rowsDropPx(false, keyboardPx, coverShare)
+            : 0f;
+        mCoverSharedDropPx = HomeKeyboardCover.sharedDropPx(homeShare, mCoverHomeDropPx);
+        mCoverKeyboardTopPx = covered && keyboardPx > 0 && coverShare < keyboardPx
+            ? mGeometry.keyboardTopPx : Float.NaN;
+        final float imeStand = homeShare * HomeKeyboardCover.imeStandPx(!covered,
+            mSystemImeTakePx, 0, mEffective.imeLiftPx);
         boolean containerMoved = writeTy(StackScene.V_CONTAINER, container,
-            mFrame.ty[StackScene.V_CONTAINER] + plankTy(PLANK_CONTAINER));
+            mFrame.ty[StackScene.V_CONTAINER] + imeStand + plankTy(PLANK_CONTAINER));
         writePlank(StackScene.V_CONTAINER, container, PLANK_CONTAINER, 0f);
         containerMoved |= writeClip(StackScene.V_CONTAINER, container);
         if (containerMoved) {
@@ -566,8 +607,19 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             boolean host = i == StackGeometry.HOST;
             // Home's drop: the host and the A-Z effect layers, not the rows (their hosts carry it).
             float drop = mApart && i != StackGeometry.ROWS ? mHomeDropPx : 0f;
-            layersMoved |= writeTy(v, layer, mFrame.ty[v] + drop
-                + (host ? (keysTilt ? 0f : plankTy(PLANK_HOST)) + mHostShiftPx : 0f));
+            // The cover's drop: apart, Home's own layers its whole drop and the rows (whose hosts
+            // carry it) none; else every layer Home's share of it.
+            float cover = mApart ? (i == StackGeometry.ROWS ? 0f : mCoverHomeDropPx)
+                : mCoverSharedDropPx;
+            float layerTy = mFrame.ty[v] + drop + cover
+                + (host ? (keysTilt ? 0f : plankTy(PLANK_HOST)) + mHostShiftPx : 0f);
+            layersMoved |= writeTy(v, layer, layerTy);
+            if (cover > 0f && !Float.isNaN(mCoverKeyboardTopPx)) {
+                int h = mGeometry.layerHeightPx[i];
+                StackScene.addBottomCut(mFrame, v, mGeometry.layerWidthPx[i], h,
+                    mGeometry.displayHeightPx, HomeKeyboardCover.coverCutPx(
+                        mGeometry.layerTopPx[i] + h + layerTy, mCoverKeyboardTopPx));
+            }
             if (host) {
                 float txWas = layer.getTranslationX();
                 writePlank(v, layer, keysTilt ? PLANK_NONE : PLANK_HOST, hostTx);
@@ -607,6 +659,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             if (keyboard instanceof com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout) {
                 ((com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout) keyboard)
                     .setTouchRefused(mViews.keyboardDownLaidOutPx() > 0);
+                // On Home the keyboard is over the dock: no touch of its box falls through.
+                ((com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout) keyboard)
+                    .setCoversBelow(covered && mViews.frontIsHome()
+                        && mViews.keyboardDownLaidOutPx() <= 0);
             }
         }
         View body = mViews.view(R.id.terminal_background);
@@ -657,7 +713,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                 int lane = stack.getLane(host);
                 // Home's lane its drop, the Terminal's its lift, both whichever page is in front.
                 wantTy = com.termux.app.place.SideCards.laneTyPx(lane, mApart, mHomeDropPx,
-                    mTerminalLiftPx, mTerminalShare);
+                    mTerminalLiftPx, mTerminalShare, mCoverHomeDropPx, mCoverSharedDropPx);
                 if (lane != StackLanes.STACK) {
                     want = mFrame.sideTx[(lane == StackLanes.HOME ? Side.HOME : Side.TERMINAL)
                         .ordinal()];
@@ -680,6 +736,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                     mViews.laneMoved(host);
                 }
             }
+            writeLaneCut(i, host, lane(stack, host), wantTy);
             if (mWrittenLaneTx[i] == want) continue;
             mWrittenLaneTx[i] = want;
             if (host.getTranslationX() == want) continue;
@@ -688,6 +745,48 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             mViews.laneMoved(host);
         }
         if (cardLaneMoved) invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
+    }
+
+    private static int lane(@NonNull EdgeStackView stack, @NonNull View host) {
+        return host.getParent() == stack ? stack.getLane(host) : StackLanes.STACK;
+    }
+
+    /**
+     * While the cards stand apart, the lane host the keyboard covers is cut at the keyboard's top
+     * ({@link HomeKeyboardCover#coverCutPx}) the way the layers are, in the host's own pixels; the
+     * cut goes with the drop. Written only on a change.
+     */
+    private void writeLaneCut(int i, @NonNull View host, int lane, float laneTy) {
+        int cut = 0;
+        float drop = lane == StackLanes.HOME ? mCoverHomeDropPx
+            : lane == StackLanes.STACK ? mCoverSharedDropPx : 0f;
+        if (mApart && drop > 0f && !Float.isNaN(mCoverKeyboardTopPx)
+            && host.getParent() instanceof View) {
+            View rows = (View) host.getParent();
+            int h = host.getHeight();
+            cut = HomeKeyboardCover.coverCutPx(rows.getTop() + mFrame.ty[StackScene.V_ROWS]
+                + host.getTop() + h + laneTy, mCoverKeyboardTopPx);
+        }
+        if (host != mWrittenLaneCutView[i]) {
+            mWrittenLaneCutView[i] = host;
+            mWrittenLaneCut[i] = -1;
+        }
+        if (mWrittenLaneCut[i] == cut) return;
+        if (mWrittenLaneCut[i] == -1 && cut == 0) {
+            mWrittenLaneCut[i] = 0;
+            return;
+        }
+        mWrittenLaneCut[i] = cut;
+        if (cut <= 0) {
+            host.setClipBounds(null);
+        } else {
+            int w = Math.max(1, host.getWidth());
+            int h = host.getHeight();
+            mTmpClip.set(-w, -Math.max(h, mGeometry.displayHeightPx), 2 * w, Math.max(0, h - cut));
+            host.setClipBounds(mTmpClip);
+        }
+        mWriteCount++;
+        mViews.laneMoved(host);
     }
 
     /**
