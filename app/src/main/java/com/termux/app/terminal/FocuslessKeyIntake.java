@@ -3,7 +3,10 @@ package com.termux.app.terminal;
 import android.view.KeyEvent;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.inappkeyboard.FieldEditor;
+import com.termux.app.terminal.inappkeyboard.FieldKeys;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 import juloo.keyboard2.KeyValue;
@@ -28,14 +31,33 @@ import juloo.keyboard2.KeyValue;
  */
 public abstract class FocuslessKeyIntake implements TerminalKeyEventHandler.KeyValueInterceptor {
 
-    @NonNull private final ClipboardText mClipboardSource;
+    @NonNull private final FieldEditor mFieldEditor;
 
     protected FocuslessKeyIntake() {
         this(() -> null);
     }
 
     protected FocuslessKeyIntake(@NonNull ClipboardText clipboardSource) {
-        mClipboardSource = clipboardSource;
+        mFieldEditor = new FieldEditor(clipboardSource);
+    }
+
+    /**
+     * The text the in-app keyboard's editing keys act on now (copy, cut, paste, select all, undo,
+     * redo and their Ctrl chords), or null when there is none and they do nothing.
+     */
+    @Nullable
+    protected FieldEditor.Field editableField() {
+        return null;
+    }
+
+    /** A Ctrl or Alt chord this editor gives a meaning of its own; it goes to {@link #onText}. */
+    protected boolean ownsChord(@NonNull String text, boolean ctrl, boolean alt) {
+        return false;
+    }
+
+    /** A new edit begins: the last one's undo history and select-all go. */
+    protected final void resetFieldEdits() {
+        mFieldEditor.reset();
     }
 
     public abstract boolean isActive();
@@ -61,6 +83,16 @@ public abstract class FocuslessKeyIntake implements TerminalKeyEventHandler.KeyV
     public final boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                            boolean shift) {
         if (!isActive()) return false;
+        if (FieldKeys.classify(value, ctrl, alt) == FieldKeys.Kind.CHORD) {
+            String text = value.getKind() == KeyValue.Kind.Char
+                ? String.valueOf(value.getChar()) : value.getString();
+            if (ownsChord(text, ctrl, alt)) {
+                onText(text, ctrl, alt);
+                return true;
+            }
+        }
+        // Edits, chords and tool keys follow the one field rule; what is left is this editor's.
+        if (mFieldEditor.handle(editableField(), value, ctrl, alt, shift)) return true;
         switch (value.getKind()) {
             case Char:
                 onText(String.valueOf(value.getChar()), ctrl, alt);
@@ -72,8 +104,6 @@ public abstract class FocuslessKeyIntake implements TerminalKeyEventHandler.KeyV
                 switch (value.getEditing()) {
                     case SPACE_BAR: onText(" ", ctrl, alt); break;
                     case BACKSPACE: onBackspace(); break;
-                    case PASTE:
-                    case PASTE_PLAIN: pasteClipboard(); break;
                     default: break;
                 }
                 break;
@@ -94,13 +124,6 @@ public abstract class FocuslessKeyIntake implements TerminalKeyEventHandler.KeyV
                 break;
         }
         return true;
-    }
-
-    /** Inserts the clipboard text, sanitized for a single-line field, through {@link #onText}. */
-    private void pasteClipboard() {
-        String text = mClipboardSource.read();
-        if (text != null && !text.isEmpty())
-            onText(PasteText.sanitizeSingleLine(text), false, false);
     }
 
     /** @return true when the stroke was claimed by the active editor. */
