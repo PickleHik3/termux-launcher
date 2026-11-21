@@ -3782,6 +3782,10 @@
     <string name="setup_card_page_switcher_step">Add the key to your extra keys</string>
     <string name="setup_card_page_switcher_add">Add</string>
     <string name="setup_card_page_switcher_not_now">Not now</string>
+    <string name="setup_card_page_indicator_name">Page indicator is now a key</string>
+    <string name="setup_card_page_indicator_description">The page indicator at the screen edge is gone. Switch pages from the page bar on Home, or add the Page switcher key to your extra keys to switch from anywhere.</string>
+    <string name="setup_card_page_indicator_step">Add the Page switcher key</string>
+    <string name="setup_card_page_indicator_open">Open extra keys</string>
     <string name="setup_card_guide_name">Learn the basics</string>
     <string name="setup_card_guide_description">Short chapters for this setup.</string>
     <string name="setup_card_guide_step">Explore your chapters</string>
