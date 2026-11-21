@@ -72,7 +72,7 @@ final class StatusBarWidgets {
         if (shown && mark.getTag() == null) {
             mark.setTag("wired");
             mark.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-            mark.setIconGlyph(com.termux.app.statusbar.StatusNotificationsMark.GLYPH);
+            mark.setIconResource(R.drawable.ic_rl_bell);
         }
         if (shown)
             mark.setValue(com.termux.app.statusbar.StatusNotificationsMark.label(count));

@@ -157,13 +157,17 @@ public class ExtraKeysLayoutModelTest {
         ExtraKeysConstants.ExtraKeyDisplayMap map =
             ExtraKeysInfo.getCharDisplayMapForStyle("default");
 
-        // nf-md-keyboard_outline, drawn with the bundled symbols face.
-        assertEquals("\uDB82\uDD7B", ExtraKeyButton.resolveDisplay("KEYBOARD", null, map));
-        assertEquals("←", ExtraKeyButton.resolveDisplay("LEFT", null, map));
+        String keyboard = com.termux.shared.termux.extrakeys.ExtraKeyIcons.string(
+            com.termux.shared.termux.extrakeys.ExtraKeyIcons.KEYBOARD);
+        // The Roundline keyboard icon, a registered code point.
+        assertEquals(keyboard, ExtraKeyButton.resolveDisplay("KEYBOARD", null, map));
+        assertEquals(com.termux.shared.termux.extrakeys.ExtraKeyIcons.string(
+            com.termux.shared.termux.extrakeys.ExtraKeyIcons.ARROW_LEFT),
+            ExtraKeyButton.resolveDisplay("LEFT", null, map));
         // An explicit display always wins, exactly as in the live row.
         assertEquals("exit", ExtraKeyButton.resolveDisplay("KEYBOARD", "exit", map));
         // Macros resolve token by token and stay joined by spaces.
-        assertEquals("CTRL \uDB82\uDD7B", ExtraKeyButton.resolveDisplay("CTRL KEYBOARD", null, map));
+        assertEquals("CTRL " + keyboard, ExtraKeyButton.resolveDisplay("CTRL KEYBOARD", null, map));
         // Nothing in the map: the spec itself, which is what the edit panel is for.
         assertEquals("tool:workspace.picker",
             ExtraKeyButton.resolveDisplay("tool:workspace.picker", null, map));

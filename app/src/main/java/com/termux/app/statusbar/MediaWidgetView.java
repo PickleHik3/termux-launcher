@@ -273,7 +273,7 @@ public final class MediaWidgetView extends View {
         float box = dp(boxDp), playBox = dp(playBoxDp), gap = dp(gapDp), glyph = dp(glyphDp);
         float x = left;
         setRect(mPreviousRect, x, centerY, box);
-        drawGlyph(canvas, R.drawable.ic_media_skip_previous, mPreviousRect, glyph, alpha,
+        drawGlyph(canvas, R.drawable.ic_rl_skip_previous, mPreviousRect, glyph, alpha,
             mPressedTarget == TARGET_PREVIOUS);
         x += box + gap;
 
@@ -284,12 +284,12 @@ public final class MediaWidgetView extends View {
             ? ColorUtils.blendARGB(mPrimaryContainer, mOnPrimaryContainer, .12f)
             : mPrimaryContainer);
         canvas.drawCircle(mPlayPauseRect.centerX(), mPlayPauseRect.centerY(), playBox / 2f, mFillPaint);
-        drawGlyph(canvas, playing ? R.drawable.ic_media_pause : R.drawable.ic_media_play_arrow,
+        drawGlyph(canvas, playing ? R.drawable.ic_rl_pause : R.drawable.ic_rl_play,
             mPlayPauseRect, glyph, 255, false, mOnPrimaryContainer);
         x += playBox + gap;
 
         setRect(mNextRect, x, centerY, box);
-        drawGlyph(canvas, R.drawable.ic_media_skip_next, mNextRect, glyph, alpha,
+        drawGlyph(canvas, R.drawable.ic_rl_skip_next, mNextRect, glyph, alpha,
             mPressedTarget == TARGET_NEXT);
     }
 

@@ -861,8 +861,8 @@ public class HelpPresentationTest {
             "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         assertEquals("Split", HelpCopy.keyLabel(activity, keys.getMatrix()[0][0]));
         assertEquals("new window", HelpCopy.keyLabel(activity, keys.getMatrix()[0][0].getPopup()));
-        assertEquals(keys.getMatrix()[0][1].getDisplay(),
-            HelpCopy.keyLabel(activity, keys.getMatrix()[0][1]));
+        // LEFT draws an icon by default, which is no label: it reads by its key name.
+        assertEquals("LEFT", HelpCopy.keyLabel(activity, keys.getMatrix()[0][1]));
     }
 
     @Test public void emptyWidgetRegionUsesGridMetrics() {
