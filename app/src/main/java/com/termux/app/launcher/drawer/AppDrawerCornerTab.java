@@ -118,8 +118,6 @@ final class AppDrawerCornerTab {
         float slop = ViewConfiguration.get(view.getContext()).getScaledTouchSlop();
         int corner = mPolicy.down(mDownX, mDownY, view.getWidth(), view.getHeight(),
             view.getResources().getDisplayMetrics().density, chromeOwns, slop);
-        android.util.Log.d("DrawerCorner", "down x=" + mDownX + " y=" + mDownY + " w=" + view.getWidth()
-            + " h=" + view.getHeight() + " chrome=" + chromeOwns + " corner=" + corner); // DIAG
         if (corner != CornerZones.NONE) {
             mHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
         }
@@ -152,9 +150,7 @@ final class AppDrawerCornerTab {
     }
 
     private void onHoldElapsed() {
-        boolean held = mPolicy.holdElapsed();
-        android.util.Log.d("DrawerCorner", "hold elapsed claimed=" + held); // DIAG
-        if (!held) return;
+        if (!mPolicy.holdElapsed()) return;
         mHost.cancelContent(mDownX, mDownY);
         Haptics.tick(mHost.view(), HapticFeedbackConstants.LONG_PRESS);
         ViewParent parent = mHost.view().getParent();
@@ -167,7 +163,6 @@ final class AppDrawerCornerTab {
     }
 
     private void showAt(int corner) {
-        android.util.Log.d("DrawerCorner", "show corner=" + corner); // DIAG
         PaneControlsView tab = ensureTab();
         tab.show(corner);
     }
