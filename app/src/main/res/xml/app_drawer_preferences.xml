@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Icon size and columns are segmented rows: Auto is the sizing the drawer always had, the
-     numbers are the steps. Columns hide for Categories. A Rows row (Horizontal
-     only) waits for a fifth segment in the pill. -->
+     numbers are the steps. Columns hide for Categories; Rows shows for Horizontal only. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <com.termux.app.fragments.settings.SegmentedPillPreference
@@ -24,6 +23,13 @@
         android:defaultValue="auto"
         app:entries="@array/app_launcher_drawer_columns_entries"
         app:entryValues="@array/app_launcher_drawer_columns_values" />
+
+    <com.termux.app.fragments.settings.SegmentedPillPreference
+        app:key="app_launcher_drawer_rows"
+        app:title="@string/settings_drawer_rows_title"
+        android:defaultValue="auto"
+        app:entries="@array/app_launcher_drawer_rows_entries"
+        app:entryValues="@array/app_launcher_drawer_rows_values" />
 
     <com.termux.app.fragments.settings.SegmentedPillPreference
         app:key="app_launcher_drawer_az_side"

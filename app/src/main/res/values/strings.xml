@@ -791,7 +791,7 @@
     <string name="settings_drawer_rows_title">Rows</string>
     <string name="settings_drawer_grid_auto">Auto</string>
     <string name="settings_drawer_icon_size_small">Small</string>
-    <string name="settings_drawer_icon_size_default">Default</string>
+    <string name="settings_drawer_icon_size_medium">Medium</string>
     <string name="settings_drawer_icon_size_large">Large</string>
     <string name="settings_drawer_az_side_title">A–Z strip</string>
     <string name="settings_drawer_az_side_left">Left</string>

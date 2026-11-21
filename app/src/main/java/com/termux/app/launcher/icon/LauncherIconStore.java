@@ -34,10 +34,10 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 public final class LauncherIconStore {
 
     /**
-     * The largest artwork worth keeping. The drawer grid clamps its icons to
-     * {@code AppDrawerGridMetrics.MAX_ICON_DP} (48dp) and the dock rail asks for 38dp, so on any
-     * ordinary density this is comfortably above every size anything renders at; a request beyond
-     * it upscales slightly rather than failing. At 284x284 an {@code ARGB_8888} icon costs 323 KB
+     * The largest artwork worth keeping. The drawer grid draws its icons at 48dp on Auto and at
+     * most 60dp at the largest Icon size step, and the dock rail asks for 38dp, so up to a density
+     * of 3.2 this covers every size anything renders at; a request beyond it (60dp at 3.5x or 4x)
+     * upscales slightly rather than failing. At 284x284 an {@code ARGB_8888} icon costs 323 KB
      * and at 192x192 it costs 147 KB, which is the difference between a budget that holds a
      * catalogue and one that thrashes through it.
      */

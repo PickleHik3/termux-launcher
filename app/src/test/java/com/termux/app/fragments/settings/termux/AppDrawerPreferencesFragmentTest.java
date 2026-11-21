@@ -34,11 +34,10 @@ public class AppDrawerPreferencesFragmentTest {
             TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE);
         assertNotNull(view);
         assertEquals(4, view.segmentCount());
-        // Auto and Home's three sizes; Auto and 4 to 6; Auto and 3 to 6.
+        // Auto and Home's three sizes; Auto and 4 to 6; Auto and 3 to 5.
         assertEquals(4, ((SegmentedPillPreference) fragment.findPreference(ICON_SIZE)).segmentCount());
         assertEquals(4, ((SegmentedPillPreference) fragment.findPreference(COLUMNS)).segmentCount());
-        // Rows (Auto and 3 to 6) needs five segments; the pill holds four.
-        assertNull(fragment.findPreference(ROWS));
+        assertEquals(4, ((SegmentedPillPreference) fragment.findPreference(ROWS)).segmentCount());
         // The keys the settings once had stay gone.
         for (String removed : new String[] {
             "app_launcher_drawer_icon_size_dp",
@@ -58,13 +57,16 @@ public class AppDrawerPreferencesFragmentTest {
             TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE);
         androidx.preference.Preference columns = fragment.findPreference(COLUMNS);
         androidx.preference.Preference iconSize = fragment.findPreference(ICON_SIZE);
+        androidx.preference.Preference rows = fragment.findPreference(ROWS);
         String[] types = {"default", "vertical", "horizontal", "categories"};
         boolean[] columnsShown = {true, true, true, false};
+        boolean[] rowsShown = {false, false, true, false};
         for (int i = 0; i < types.length; i++) {
             // The live change: the listener is fired before the value is stored.
             assertTrue(view.getOnPreferenceChangeListener()
                 .onPreferenceChange(view, types[i]));
             assertEquals(types[i], columnsShown[i], columns.isVisible());
+            assertEquals(types[i], rowsShown[i], rows.isVisible());
             assertTrue(types[i], iconSize.isVisible());
         }
     }
