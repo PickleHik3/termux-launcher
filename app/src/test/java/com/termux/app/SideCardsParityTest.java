@@ -159,10 +159,42 @@ public class SideCardsParityTest {
             @Override public boolean terminalFlushAllowed() { return f.paneCount <= 1; }
             @Override public boolean statusOnDockPlank() { return false; }
             @Override public boolean keyboardGlassShared() { return true; }
-            @Override public void sidesApart(boolean apart, int homeDropPx) {
-                renderer.setSidesApart(apart, homeDropPx);
+            @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) {
+                renderer.setSidesApart(apart, homeDropPx, terminalLiftPx);
             }
         };
+    }
+
+    /**
+     * The container's inner box has one owner while apart: no padding at either rest, the
+     * Terminal's flush inset carried as its own lift, so the column stands where the padding
+     * stood it (padding + lift is the pass's inset) and Home's pinned card stands on the
+     * container's true bottom whichever page is in front.
+     */
+    @Test public void whileApartTheContainerPadsNothingAndTheTerminalCarriesItsInset() {
+        int lifted = 0;
+        for (Fixture f : LayoutFixtures.cardFixtures()) {
+            for (PageRef page : new PageRef[] {PageRef.HOME, PageRef.TERMINAL}) {
+                for (boolean up : new boolean[] {false, true}) {
+                    for (boolean floating : new boolean[] {false, true}) {
+                        String label = f.name + " " + page + " kb=" + up + " floating=" + floating;
+                        SideCardsController controller = new SideCardsController(
+                            hostOf(f, page, up, floating, rendererFor(page.isHome())));
+                        controller.update(f.pass(page, up, floating));
+                        int inset = f.settle(page, up, floating).flushBottomInsetPx;
+                        boolean apart = controller.apart();
+                        int padding = controller.containerPaddingPx(inset);
+                        int lift = controller.terminalSideLiftPx();
+                        assertEquals(label, apart ? 0 : inset, padding);
+                        assertEquals(label, apart && !page.isHome() ? inset : 0, lift);
+                        // Where the column stood: the padding it stood on, or the lift.
+                        assertEquals(label, apart && page.isHome() ? 0 : inset, padding + lift);
+                        if (lift > 0) lifted++;
+                    }
+                }
+            }
+        }
+        assertTrue("some Terminal rests stand a lift", lifted > 0);
     }
 
     @Test public void everyFixtureTheControllerAndTheRendererAgreeWithTheRule() {
@@ -399,7 +431,7 @@ public class SideCardsParityTest {
             @Override public boolean terminalFlushAllowed() { return false; }
             @Override public boolean statusOnDockPlank() { return false; }
             @Override public boolean keyboardGlassShared() { return true; }
-            @Override public void sidesApart(boolean apart, int homeDropPx) { }
+            @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) { }
         });
         controller.update(f.pass(PageRef.HOME, false, true));
         assertFalse(controller.apart());

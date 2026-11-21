@@ -367,12 +367,27 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * in front.
      */
     public void setSidesApart(boolean apart, float homeDropPx) {
+        setSidesApart(apart, homeDropPx, 0);
+    }
+
+    /**
+     * {@link #setSidesApart(boolean, float)} with the Terminal side's lift
+     * ({@code SideCards#terminalSideLiftPx}): the flush inset the keyboard column's margin
+     * carries in place of the container's padding while apart. The keyboard's cut counts it as it
+     * counted the padding, so the keyboard hides where it did.
+     */
+    public void setSidesApart(boolean apart, float homeDropPx, int terminalLiftPx) {
         float drop = apart ? homeDropPx : 0f;
-        if (mApart == apart && mHomeDropPx == drop) return;
+        int lift = apart ? Math.max(0, terminalLiftPx) : 0;
+        if (mApart == apart && mHomeDropPx == drop && mTerminalLiftPx == lift) return;
         mApart = apart;
         mHomeDropPx = drop;
+        mTerminalLiftPx = lift;
         requestApply();
     }
+
+    /** The Terminal side's lift while apart ({@link #setSidesApart(boolean, float, int)}). */
+    private int mTerminalLiftPx;
 
     /** DIAG(two-cards): front/from/to, the renderer's drop and offsets, then the controller's view fields. */
     private void diagTwoCards(@NonNull String phase) {
@@ -764,7 +779,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         ViewGroup.LayoutParams params = container.getLayoutParams();
         g.containerHeightPx = params != null && params.height > 0 ? params.height
             : Math.max(0, container.getHeight());
-        g.stackPaddingBottomPx = container.getPaddingBottom();
+        // While apart the flush inset is the column's margin, not the padding: counted the same.
+        g.stackPaddingBottomPx = container.getPaddingBottom() + mTerminalLiftPx;
         for (int i = 0; i < StackGeometry.LAYER_COUNT; i++) {
             View layer = mViews.view(LAYER_IDS[i]);
             g.layerPresent[i] = layer != null;

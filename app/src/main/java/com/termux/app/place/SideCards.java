@@ -77,6 +77,27 @@ public final class SideCards {
     }
 
     /**
+     * The container's bottom padding: none while the cards stand apart, so its inner box is the
+     * same at both rests and Home's card, pinned to its bottom, stands at Home's rest whichever
+     * page is in front; else the pass's flush inset ({@code StackLayout.Result#flushBottomInsetPx}).
+     */
+    public static int containerPaddingPx(int flushBottomInsetPx, boolean apart) {
+        return apart ? 0 : Math.max(0, flushBottomInsetPx);
+    }
+
+    /**
+     * How far the Terminal's side stands above the container's inner box while the cards stand
+     * apart: the flush inset the container no longer pads (the lower half of the Terminal's flush
+     * padding), carried by the keyboard column's bottom margin, so the Terminal's column, rows and
+     * extra-keys card stand where they stood over the padding. 0 otherwise, and 0 while Home is in
+     * front (its pass stands no flush padding). Like {@link #homeSideDropPx}, a number of one
+     * side's rest: it moves with the Terminal's keyboard at rest, never in a crossing.
+     */
+    public static int terminalSideLiftPx(int flushBottomInsetPx, boolean apart) {
+        return apart ? Math.max(0, flushBottomInsetPx) : 0;
+    }
+
+    /**
      * Whether a side's own rest has its keyboard up: the live keyboard while that side is in
      * front, its own rest's answer otherwise (Home's is down unless its keyboard is always on or
      * remembered). The one answer the rest pass lays the other side out with and a crossing's end

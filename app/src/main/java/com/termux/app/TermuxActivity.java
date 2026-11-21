@@ -10983,7 +10983,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public boolean statusOnDockPlank() { return mStatusBarOnDockPlank; }
             @Override public boolean keyboardGlassShared() { return isInAppKeyboardGlassSurface(); }
-            @Override public void sidesApart(boolean apart, int homeDropPx) { mStackRenderer.setSidesApart(apart, homeDropPx); }
+            @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) {
+                mStackRenderer.setSidesApart(apart, homeDropPx, terminalLiftPx);
+            }
         });
 
     /** The glass element of the Terminal's extra-keys card, one more Live entry while it is on screen. */
@@ -18219,7 +18221,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             0, mBottomKeptPx, dockFoot, stack.bottomMarginPx, stack.flushBottomInsetPx,
             inAppKeyboardFootApplies(isInAppKeyboardCapsule()));
         mDockFootPx = bottomInsets.dockFootPx;
-        applyDockFootLayout(accessoryStackContainer, bottomInsets);
+        // Home's card and the Terminal's extra-keys card, from one answer at rest (a live crossing
+        // lays neither out), before the container's padding and the column's margin: while they
+        // stand apart the container pads nothing and the column carries the Terminal's lift.
+        boolean sideCardsMoved = !mCrossing.crossing() && mSideCards.update(stackIn);
+        applyDockFootLayout(accessoryStackContainer, bottomInsets,
+            mSideCards.terminalSideLiftPx());
         int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
         // The in-app keyboard stays laid out while it is down: the container is as tall as
         // the keyboard-up stack, and the scene translates it down (StackScene#keyboardTranslationPx).
@@ -18250,7 +18257,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             stack.stackHeightPx + bottomInsets.containerExtraPx(), keyboardDownPx, laneSlackPx);
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
         // taller glass instead of hugging its bottom edge.
-        int flushBottomInsetPx = bottomInsets.stackPaddingPx;
+        int flushBottomInsetPx = mSideCards.containerPaddingPx(bottomInsets.stackPaddingPx);
         boolean flushInsetChanged = accessoryStackContainer.getPaddingBottom() != flushBottomInsetPx;
         if (flushInsetChanged) {
             accessoryStackContainer.setPadding(
@@ -18259,10 +18266,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 accessoryStackContainer.getPaddingRight(),
                 flushBottomInsetPx);
         }
-        // Home's card and the Terminal's extra-keys card, from one answer at rest: the container
-        // keeps the Terminal's margin at both rests while they stand apart.
-        // At rest only: a live crossing lays neither card out.
-        if (!mCrossing.crossing() && mSideCards.update(stackIn)) applyAccessorySurfaceBounds(state);
+        // The container keeps the Terminal's margin at both rests while the cards stand apart.
+        if (sideCardsMoved) applyAccessorySurfaceBounds(state);
         if (mHostLookRevisionApplied != mSideCards.hostLookRevision()) {
             // The host's dress page moved (Home's rest took it over, or gave it back): its glass
             // is built once for the new dress, a rest-time step that no crossing runs.
@@ -18808,14 +18813,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the dock's glass host leaves the column for the container's bottom edge while it owns the
      * foot: the one surface from the row's top to the screen's bottom (ADR 0018 §1).
      */
+    /** @param terminalLiftPx the Terminal side's lift the column stands on ({@code SideCards#terminalSideLiftPx}) */
     private void applyDockFootLayout(@NonNull View container,
-                                     @NonNull com.termux.app.place.BottomInsets insets) {
+                                     @NonNull com.termux.app.place.BottomInsets insets,
+                                     int terminalLiftPx) {
         applyDeckBands();
         View column = container.findViewById(R.id.accessory_keyboard_column);
         if (column != null && column.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) column.getLayoutParams();
-            if (params.bottomMargin != insets.keyboardColumnMarginPx) {
-                params.bottomMargin = insets.keyboardColumnMarginPx;
+            int margin = insets.keyboardColumnMarginPx + Math.max(0, terminalLiftPx);
+            if (params.bottomMargin != margin) {
+                params.bottomMargin = margin;
                 column.setLayoutParams(params);
             }
         }

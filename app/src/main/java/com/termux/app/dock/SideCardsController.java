@@ -71,8 +71,8 @@ public final class SideCardsController {
         boolean terminalFlushAllowed();
         boolean statusOnDockPlank();
         boolean keyboardGlassShared();
-        /** The renderer's side numbers: whether the cards stand apart and Home's drop. */
-        void sidesApart(boolean apart, int homeDropPx);
+        /** The renderer's side numbers: whether the cards stand apart, Home's drop, the Terminal's lift. */
+        void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx);
     }
 
     @NonNull private final Host mHost;
@@ -81,6 +81,7 @@ public final class SideCardsController {
     private boolean mApart;
     private int mContainerMarginPx;
     private int mHomeDropPx;
+    private int mTerminalLiftPx;
     private boolean mHostPinned;
     private int mHostLeftPx;
     private int mHostRightPx;
@@ -162,8 +163,8 @@ public final class SideCardsController {
     /**
      * Pins the glass host to the container's bottom at Home's rest: the answer's side margins and
      * height, and the gap above the container's bottom edge. {@code containerPaddingBottomPx} is
-     * the container's own padding, which the pin stands above; where the host runs to the
-     * container's bottom that padding is 0 (BottomInsets), so the gap is never negative.
+     * the container's own padding, which the pin stands above: 0 while pinned (apart, the
+     * container pads nothing: {@link #containerPaddingPx}), so the gap is never negative.
      *
      * @return whether a field changed (the caller then sets the params)
      */
@@ -240,9 +241,26 @@ public final class SideCardsController {
         mHostHeightPx = height;
         mHostAboveContainerBottomPx = above;
 
+        mTerminalLiftPx = apart ? answer.terminalSideLiftPx() : 0;
         applyKeysCard(answer);
-        mHost.sidesApart(apart, drop);
+        mHost.sidesApart(apart, drop, mTerminalLiftPx);
         return moved;
+    }
+
+    /**
+     * The container's bottom padding ({@link com.termux.app.place.SideCards#containerPaddingPx}):
+     * none while apart, else {@code flushBottomInsetPx}, the pass's.
+     */
+    public int containerPaddingPx(int flushBottomInsetPx) {
+        return com.termux.app.place.SideCards.containerPaddingPx(flushBottomInsetPx, mApart);
+    }
+
+    /**
+     * What the keyboard column's bottom margin stands higher by: the Terminal side's lift while
+     * apart ({@link com.termux.app.place.SideCards#terminalSideLiftPx}), else 0.
+     */
+    public int terminalSideLiftPx() {
+        return mTerminalLiftPx;
     }
 
     private static boolean sameLook(@Nullable RestCards.HostLook a, @Nullable RestCards.HostLook b) {

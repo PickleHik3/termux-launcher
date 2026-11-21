@@ -247,6 +247,7 @@ public final class RestCards {
     private boolean mApart;
     private int mContainerMarginPx;
     private int mHomeDropPx;
+    private int mTerminalLiftPx;
     /** How the host dresses its card at this rest (the Home half's, once adopted); null for the Terminal's. */
     @Nullable private HostLook mHostLook;
 
@@ -280,7 +281,17 @@ public final class RestCards {
         answer.mContainerMarginPx = SideCards.containerMarginPx(homeMargin, terminalMargin, true,
             frontHome);
         answer.mHomeDropPx = drop;
+        answer.mTerminalLiftPx = frontHome ? 0 : SideCards.terminalSideLiftPx(
+            StackLayout.layout(rest.pass, new DockGeometry()).flushBottomInsetPx, true);
         return answer;
+    }
+
+    /**
+     * How far the Terminal's side stands above the container's inner box at this rest
+     * ({@link SideCards#terminalSideLiftPx}); 0 unless apart with the Terminal in front.
+     */
+    public int terminalSideLiftPx() {
+        return mTerminalLiftPx;
     }
 
     /**
