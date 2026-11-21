@@ -36,7 +36,7 @@ public class LauncherAppDataProviderTerminalEntryTest {
 
     @Before public void setUp() {
         context = RuntimeEnvironment.getApplication();
-        ReflectionHelpers.setStaticField(LauncherAppDataProvider.class, "instance", null);
+        LauncherAppDataProvider.resetForTest();
     }
 
     @Test public void terminalResolvesBeforeAnyCatalogueIsLoaded() {

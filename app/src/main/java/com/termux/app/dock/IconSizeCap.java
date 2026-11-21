@@ -154,6 +154,11 @@ public final class IconSizeCap {
         sPublishListener = listener;
     }
 
+    /** Drops {@code listener} if it is still the one told, leaving a newer owner's in place. */
+    public static void clearPublishListener(@androidx.annotation.NonNull Runnable listener) {
+        if (sPublishListener == listener) sPublishListener = null;
+    }
+
     /** The cap last published; {@link IconSize#XL} (no cap) before the launcher measured one. */
     @NonNull
     public static IconSize published() {

@@ -67,7 +67,7 @@ public class SuggestionBarDrawerTileTest {
         };
 
     @Before public void setUp() {
-        ReflectionHelpers.setStaticField(LauncherAppDataProvider.class, "instance", null);
+        LauncherAppDataProvider.resetForTest();
         activity = Robolectric.buildActivity(Activity.class).setup().get();
         // The catalogue scan has finished before any test pins an app: its callback clears the
         // row's resolved-app cache, so one landing later drops the pins the test just filled.

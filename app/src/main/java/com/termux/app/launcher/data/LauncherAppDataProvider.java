@@ -126,9 +126,33 @@ public final class LauncherAppDataProvider {
         // Home draws IconSizeCap.effective(layout size, published cap): the cap is published after
         // layout and the layout size can change on its own, so both re-run the policy, off the
         // layout pass, coalesced.
-        com.termux.app.dock.IconSizeCap.setPublishListener(this::scheduleIconSizeRefresh);
-        com.termux.app.place.layout.LayoutStore.shared(context)
-            .addListener(layouts -> scheduleIconSizeRefresh());
+        com.termux.app.dock.IconSizeCap.setPublishListener(publishListener);
+        com.termux.app.place.layout.LayoutStore.shared(context).addListener(layoutListener);
+    }
+
+    private final Runnable publishListener = this::scheduleIconSizeRefresh;
+    private final com.termux.app.place.layout.LayoutStore.Listener layoutListener =
+        layouts -> scheduleIconSizeRefresh();
+
+    /**
+     * Test-only: drops the shared instance and the listeners it registered, so a test that
+     * builds a fresh provider leaves none behind on a dead one. The app keeps one for the process.
+     */
+    @androidx.annotation.VisibleForTesting
+    public static synchronized void resetForTest() {
+        if (instance == null) return;
+        instance.stopWatchingIconSizes();
+        instance = null;
+    }
+
+    private void stopWatchingIconSizes() {
+        context.getSharedPreferences(
+            com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(iconSizeListener);
+        com.termux.app.dock.IconSizeCap.clearPublishListener(publishListener);
+        com.termux.app.place.layout.LayoutStore.shared(context).removeListener(layoutListener);
+        iconSizeHandler.removeCallbacks(iconSizeRefresh);
+        executor.shutdown();
     }
 
     private final android.os.Handler iconSizeHandler =
