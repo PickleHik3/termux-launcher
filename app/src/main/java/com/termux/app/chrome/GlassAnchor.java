@@ -254,6 +254,18 @@ public final class GlassAnchor {
         motion.y = dy;
     }
 
+    /** The x {@link #setMotion} published for {@code view}, 0 when none. */
+    public static float motionX(@NonNull View view) {
+        Object tag = view.getTag(R.id.glass_anchor_motion);
+        return tag instanceof Motion ? ((Motion) tag).x : 0f;
+    }
+
+    /** The y {@link #setMotion} published for {@code view}, 0 when none. */
+    public static float motionY(@NonNull View view) {
+        Object tag = view.getTag(R.id.glass_anchor_motion);
+        return tag instanceof Motion ? ((Motion) tag).y : 0f;
+    }
+
     /** Withdraw {@link #setMotion}: the anchor is the laid-out position again. */
     public static void clearMotion(@NonNull View view) {
         view.setTag(R.id.glass_anchor_motion, null);
