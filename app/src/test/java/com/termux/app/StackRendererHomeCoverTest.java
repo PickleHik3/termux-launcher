@@ -105,6 +105,62 @@ public class StackRendererHomeCoverTest {
         }
     }
 
+    /**
+     * While the cards stand apart Home's card (the host) is laid out at its keyboard-down rect,
+     * here the Peek card running past the rows to the container's bottom, and Home's lane holds
+     * its rows. At every reveal the host is drawn the lane's offset lower and cut at the same
+     * place, the keyboard's top, so no glass of the dock shows above the keyboard.
+     */
+    @Test public void apartHomesHostIsDrawnAndCutLikeHomesLane() {
+        Context context = RuntimeEnvironment.getApplication();
+        com.termux.app.place.EdgeStackView rowStack =
+            new com.termux.app.place.EdgeStackView(context);
+        rowStack.setEdge(com.termux.app.place.PlaceLayout.Edge.BOTTOM);
+        View homeRow = new FrameLayout(context);
+        homeRow.setId(com.termux.app.dock.SideRowViews.id(com.termux.app.place.Element.AZ,
+            com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST));
+        rowStack.addView(homeRow);
+        rowStack.setLane(homeRow, com.termux.app.place.StackLanes.HOME);
+        mContainer.removeView(mRows);
+        mContainer.addView(rowStack);
+        rowStack.layout(0, 0, WIDTH, STACK);
+        homeRow.layout(0, 0, WIDTH, STACK);
+        // Home's card at its keyboard-down rect: over the rows and on to the container's bottom.
+        mHost.layout(0, 0, WIDTH, STACK + KEYBOARD);
+        mViews.put(R.id.accessory_row_stack, rowStack);
+        mViews.put(homeRow.getId(), homeRow);
+        final float drop = 16f;
+        mFrontHome = true;
+        mRenderer.setSidesApart(true, drop);
+        mRenderer.setHomeCover(true, 0);
+        for (float reveal : new float[] {0f, 0.5f, 1f}) {
+            mDownPx = Math.round((1f - reveal) * KEYBOARD);
+            mRenderer.apply();
+            String label = "reveal=" + reveal;
+            float cover = KEYBOARD - mDownPx;
+            assertEquals(label + " the lane", drop + cover, homeRow.getTranslationY(), 0f);
+            assertEquals(label + " the host, the lane's offset", homeRow.getTranslationY(),
+                mHost.getTranslationY(), 0f);
+            Rect hostClip = mHost.getClipBounds();
+            Rect laneClip = homeRow.getClipBounds();
+            if (mDownPx == KEYBOARD) {
+                assertNull(label + " keyboard down: nothing under it", hostClip);
+                continue;
+            }
+            assertNotNull(label, hostClip);
+            assertNotNull(label, laneClip);
+            // Where each stops being drawn, in the container's pixels: at the keyboard's top,
+            // or nowhere when all of it stands under the keyboard.
+            float hostTop = mHost.getTop() + mHost.getTranslationY();
+            float laneTop = rowStack.getTop() + rowStack.getTranslationY() + homeRow.getTop()
+                + homeRow.getTranslationY();
+            assertEquals(label + " the host is cut at the keyboard's top",
+                Math.max(hostTop, STACK), hostTop + hostClip.bottom, 0.5f);
+            assertEquals(label + " the lane is cut at the keyboard's top",
+                Math.max(laneTop, STACK), laneTop + laneClip.bottom, 0.5f);
+        }
+    }
+
     @Test public void theTerminalsStackIsAsBefore() {
         mFrontHome = false;
         mRenderer.setHomeCover(true, 0);
