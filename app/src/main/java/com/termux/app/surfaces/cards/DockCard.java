@@ -425,10 +425,7 @@ public final class DockCard {
     private static PreviewTilesRow.Tile glyphTile(@NonNull Context context, int glyph, int word) {
         android.widget.ImageView preview = new android.widget.ImageView(context);
         preview.setImageResource(glyph);
-        // The Roundline glyphs are white; the control ink is what the old vectors tinted themselves.
-        preview.setImageTintList(android.content.res.ColorStateList.valueOf(
-            com.google.android.material.color.MaterialColors.getColor(context,
-                androidx.appcompat.R.attr.colorControlNormal, android.graphics.Color.GRAY)));
+        // The tile row tints the glyph with its name's ink (PreviewTilesRow).
         preview.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         return new PreviewTilesRow.Tile(context.getString(word), preview);
     }
