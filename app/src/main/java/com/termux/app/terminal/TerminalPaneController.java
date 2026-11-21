@@ -3747,25 +3747,24 @@ public class TerminalPaneController {
     /**
      * The shape a float born on Home page {@code page} takes: a window inside the room
      * ({@link HomeFloatPolicy#birthFrac(Rect, int, int, int, int, int, int)}) on a page that shows
-     * no float, else stepped off the topmost one shown there (wherever the user left it) by its
-     * titlebar's band, so a second float never hides the first one's titlebar, and back at the
-     * first position once the step would pass the room's bottom
-     * ({@link HomeFloatPolicy#cascadeFrac}). Read before the new float joins the floats.
+     * no float, else the first position of the stepping sequence no float shown there stands on
+     * ({@link HomeFloatPolicy#openingFrac}), whatever order the floats were raised in, so a new
+     * float never hides another's titlebar. Read before the new float joins the floats.
      */
     @NonNull
     private RectF homeFloatBirthFrac(int pageIndex) {
         int page = homePageIdAt(pageIndex);
-        RectF under = null;
-        for (int i = mHomeFloats.size() - 1; i >= 0 && under == null; i--) {
-            Window other = mHomeFloats.get(i);
-            if (other.active != null && HomeFloatPolicy.shownOn(other.homePageId, other.minimised, page))
-                under = other.active.floatFrac;
+        List<RectF> shown = new ArrayList<>();
+        for (Window other : mHomeFloats) {
+            if (other.active != null && other.active.floatFrac != null
+                && HomeFloatPolicy.shownOn(other.homePageId, other.minimised, page))
+                shown.add(other.active.floatFrac);
         }
         Rect room = homeFloatRoom();
         RectF birth = HomeFloatPolicy.birthFrac(room, homeFloatEdgeTopPx(),
             raisedKeyboardTopInLayerPx(), keyboardGapPx(),
             dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), titlebarBandPx());
-        return HomeFloatPolicy.cascadeFrac(under, birth, room.width(), room.height(),
+        return HomeFloatPolicy.openingFrac(shown, birth, room.width(), room.height(),
             dp(HomeFloatPolicy.CASCADE_STEP_RIGHT_DP), titlebarBandPx());
     }
 

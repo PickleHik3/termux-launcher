@@ -115,6 +115,46 @@ public final class HomeFloatPolicy {
     }
 
     /**
+     * How near (px) a float's top-left must be to a stepping position for the position to count as
+     * taken.
+     */
+    public static final int TAKEN_TOLERANCE_PX = 2;
+
+    /**
+     * The rect a new Home float opens at, whatever the order the floats on the page were raised
+     * in: the first position of the stepping sequence ({@code birth}, then each
+     * {@link #cascadeFrac} step, right clamp and bottom wrap included) whose top-left no float in
+     * {@code shown} (the rects of the floats shown on that page, as stored) stands on, within
+     * {@link #TAKEN_TOLERANCE_PX}. A float closed or moved away frees its position. With every
+     * position up to the wrap taken, the float opens at {@code birth}. A room not measured yet
+     * gives {@link #birthFrac()}.
+     */
+    @NonNull
+    public static RectF openingFrac(@NonNull java.util.List<RectF> shown, @NonNull RectF birth,
+                                    int roomWidthPx, int roomHeightPx, int stepRightPx,
+                                    int stepDownPx) {
+        if (roomWidthPx <= 0 || roomHeightPx <= 0) return birthFrac();
+        RectF at = new RectF(birth);
+        // Every step is a band lower, so the sequence reaches the wrap in a bounded number of steps.
+        for (int i = 0; i <= roomHeightPx; i++) {
+            if (!standsOn(shown, at, roomWidthPx, roomHeightPx)) return at;
+            RectF next = cascadeFrac(at, birth, roomWidthPx, roomHeightPx, stepRightPx, stepDownPx);
+            if (next.equals(birth)) break;
+            at = next;
+        }
+        return new RectF(birth);
+    }
+
+    private static boolean standsOn(@NonNull java.util.List<RectF> shown, @NonNull RectF at,
+                                    int roomWidthPx, int roomHeightPx) {
+        for (RectF other : shown) {
+            if (Math.abs(other.left - at.left) * roomWidthPx <= TAKEN_TOLERANCE_PX
+                && Math.abs(other.top - at.top) * roomHeightPx <= TAKEN_TOLERANCE_PX) return true;
+        }
+        return false;
+    }
+
+    /**
      * The top of the keyboard raised, in the float layer's pixels, as far as it is known now: where
      * it stands while it is up ({@code liveTopPx}, negative while it is down), else the rise
      * {@code rememberedRisePx} (its top's distance from the layer's bottom) it last showed in this

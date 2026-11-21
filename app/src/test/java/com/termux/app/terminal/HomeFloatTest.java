@@ -262,6 +262,40 @@ public class HomeFloatTest {
     }
 
     @Test
+    public void aNewFloatTakesTheFirstFreePositionWhicheverFloatHasFocus() {
+        Rect room = PORTRAIT_ROOM;
+        int w = room.width();
+        int h = room.height();
+        RectF birth = HomeFloatPolicy.birthFrac(room, 246, 1300, GAP, 360, 270, 105);
+        RectF p2 = HomeFloatPolicy.cascadeFrac(birth, birth, w, h, 48, 105);
+        RectF p3 = HomeFloatPolicy.cascadeFrac(p2, birth, w, h, 48, 105);
+        java.util.List<RectF> none = new java.util.ArrayList<>();
+        assertEquals(birth, HomeFloatPolicy.openingFrac(none, birth, w, h, 48, 105));
+        // Floats in any order of focus: the order of the list never matters.
+        assertEquals(p2, HomeFloatPolicy.openingFrac(java.util.Arrays.asList(birth), birth, w, h, 48, 105));
+        assertEquals(p3, HomeFloatPolicy.openingFrac(java.util.Arrays.asList(birth, p2), birth, w, h, 48, 105));
+        assertEquals(p3, HomeFloatPolicy.openingFrac(java.util.Arrays.asList(p2, birth), birth, w, h, 48, 105));
+        // The middle one closed: its position is free again.
+        assertEquals(p2, HomeFloatPolicy.openingFrac(java.util.Arrays.asList(birth, p3), birth, w, h, 48, 105));
+        // A float the user moved away does not block the place it left.
+        RectF moved = new RectF(p2);
+        moved.offset(.2f, .1f);
+        assertEquals(p2, HomeFloatPolicy.openingFrac(java.util.Arrays.asList(birth, moved), birth, w, h, 48, 105));
+        // A float within a couple of px still blocks it.
+        RectF near = new RectF(p2);
+        near.offset(1f / w, 1f / h);
+        assertEquals(p3, HomeFloatPolicy.openingFrac(java.util.Arrays.asList(birth, near), birth, w, h, 48, 105));
+        // Every position taken up to the wrap: the birth rect.
+        java.util.List<RectF> all = new java.util.ArrayList<>();
+        RectF at = birth;
+        do {
+            all.add(at);
+            at = HomeFloatPolicy.cascadeFrac(at, birth, w, h, 48, 105);
+        } while (!at.equals(birth));
+        assertEquals(birth, HomeFloatPolicy.openingFrac(all, birth, w, h, 48, 105));
+    }
+
+    @Test
     public void steppingInLandscapeAndInARoomAtTheLeastSize() {
         Rect room = LANDSCAPE_ROOM;
         int w = room.width();
