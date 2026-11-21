@@ -70,6 +70,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     @Nullable private AppDrawerPickupDelegate pickupDelegate;
     @NonNull private final LauncherAppEntry[] launchEntries = new LauncherAppEntry[LAUNCH_ICON_COUNT];
     @NonNull private AppDrawerAppCellView.ClickGate clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
+    private boolean editOutline;
     private float tileLeft;
     private float tileSide;
     /** Label band inside the tile's top: the icon square starts below it. */
@@ -209,7 +210,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         View.OnClickListener expand = view -> {
             AppDrawerCategoryBucket current = this.bucket;
             ExpansionListener currentListener = expansionListener;
-            if (!this.clickGate.suppressCellClick() && current != null && currentListener != null)
+            if (!this.clickGate.suppressCellClick() && current != null && currentListener != null
+                && !AppDrawerContentView.isEditingAround(this))
                 currentListener.onExpandRequested(current, this);
         };
         heading.setOnClickListener(expand);
@@ -239,7 +241,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
                 icon.setContentDescription(entry.label);
                 icon.setOnClickListener(view -> {
                     SuggestionBarView currentDock = this.dock;
-                    if (!this.clickGate.suppressCellClick() && currentDock != null)
+                    if (!this.clickGate.suppressCellClick() && currentDock != null
+                        && !AppDrawerContentView.isEditingAround(this))
                         currentDock.launchEntryFromDrawer(view, entry);
                 });
                 // A long press reuses the dock's Material app-context popup (Category row instead
@@ -447,6 +450,31 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         float bottom = tileHeight();
         canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, bottom, radius, radius, fillPaint);
         canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, bottom, radius, radius, strokePaint);
+        if (editOutline) {
+            // The card's own stroke, restated in the drawer's ink: no animation, no per-frame state.
+            int stroke = strokePaint.getColor();
+            strokePaint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+                heading.getCurrentTextColor(), AppDrawerAppCellView.EDIT_OUTLINE_ALPHA));
+            canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, bottom, radius, radius,
+                strokePaint);
+            strokePaint.setColor(stroke);
+        }
+    }
+
+    /** Edit mode's outline on or off; one invalidate when it changes. */
+    public void setEditOutline(boolean on) {
+        if (editOutline == on) return;
+        editOutline = on;
+        invalidate();
+    }
+
+    public boolean hasEditOutline() {
+        return editOutline;
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        setEditOutline(AppDrawerContentView.isEditingAround(this));
     }
 
     public float tileLeft() { return tileLeft; }

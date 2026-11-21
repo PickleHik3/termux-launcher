@@ -775,6 +775,40 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     @Override
+    public int gridColumnIndex() {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        return preferences == null ? 0 : AppDrawerGridChoices.indexOf(
+            AppDrawerGridChoices.COLUMN_VALUES, preferences.getAppLauncherDrawerColumns());
+    }
+
+    @Override
+    public int gridRowIndex() {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        return preferences == null ? 0 : AppDrawerGridChoices.indexOf(
+            AppDrawerGridChoices.ROW_VALUES, preferences.getAppLauncherDrawerRows());
+    }
+
+    /**
+     * The corner tab's grid-size wheels write the preferences the Drawer layout page writes, then
+     * the open drawer takes the new grid in place (a reload would close it, and with it edit mode).
+     */
+    @Override
+    public void onGridSizeChosen(int columnIndex, int rowIndex) {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        if (preferences == null) return;
+        preferences.setAppLauncherDrawerColumns(
+            AppDrawerGridChoices.valueAt(AppDrawerGridChoices.COLUMN_VALUES, columnIndex));
+        if (rowIndex >= 0) {
+            preferences.setAppLauncherDrawerRows(
+                AppDrawerGridChoices.valueAt(AppDrawerGridChoices.ROW_VALUES, rowIndex));
+        }
+        AppDrawerLayoutConfig config = AppDrawerLayoutConfig.from(preferences);
+        if (config.equals(mLayoutConfig)) return;
+        mLayoutConfig = config;
+        applyLayoutConfig();
+    }
+
+    @Override
     public void onSearchDismissRequested() {
         // Esc and Back arrive here through the key channels, which the terminal's client runs
         // before the activity's onBackPressed can walk its hierarchy — so this is the only place

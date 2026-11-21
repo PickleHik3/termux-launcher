@@ -128,7 +128,27 @@ public final class AppDrawerContentView extends FrameLayout
         default void onCornerSettingsRequested() {
         }
 
+        /** The stop the stored column count stands on, in {@link AppDrawerGridChoices#COLUMN_VALUES}. */
+        default int gridColumnIndex() {
+            return 0;
+        }
+
+        /** The stop the stored row count stands on, in {@link AppDrawerGridChoices#ROW_VALUES}. */
+        default int gridRowIndex() {
+            return 0;
+        }
+
+        /**
+         * The grid-size wheels moved to these stops; {@code rowIndex} is -1 where the type has no
+         * rows to choose. The same preferences the Drawer layout page writes.
+         */
+        default void onGridSizeChosen(int columnIndex, int rowIndex) {
+        }
+
     }
+
+    /** The search bar's alpha while the drawer is edited: still there, plainly not for typing. */
+    private static final float SEARCH_DIMMED_ALPHA = 0.38f;
 
     /** Ceiling on the damped overpull, in dp. The raw pull is unbounded; the travel is not. */
     public static final float OVERPULL_MAX_DP = 96f;
@@ -207,7 +227,23 @@ public final class AppDrawerContentView extends FrameLayout
             }
 
             @NonNull @Override public AppDrawerEditModel editModel() {
-                return AppDrawerEditModel.OFF;
+                return mEditModel;
+            }
+
+            @Override public void enterEdit() {
+                AppDrawerContentView.this.enterEdit(AppDrawerEditModel.Entry.CORNER_BUTTON);
+            }
+
+            @Override public void leaveEdit() {
+                AppDrawerContentView.this.leaveEdit(AppDrawerEditModel.Leave.TICK);
+            }
+
+            @Override public void openGridSize(@NonNull android.graphics.RectF tab) {
+                showGridSizePopup(tab);
+            }
+
+            @NonNull @Override public String gridSizeText() {
+                return gridSizeTabText();
             }
 
             @NonNull @Override public AppDrawerViewType viewType() {
@@ -235,6 +271,9 @@ public final class AppDrawerContentView extends FrameLayout
                 return holdTabGlass(wanted);
             }
         });
+    @Nullable private com.termux.app.launcher.widget.WidgetGridSizePopup mGridSizePopup;
+    /** Edit mode, owned here: one value for the whole drawer, never stored. */
+    @NonNull private AppDrawerEditModel mEditModel = AppDrawerEditModel.OFF;
     private float mCardCornerRadiusPx;
     /** The corner tab is holding the card's glass; the switch may not be. */
     private boolean mTabGlassWanted;
@@ -904,6 +943,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
+            leaveEdit(AppDrawerEditModel.Leave.DRAWER_CLOSED);
             mCornerTab.reset();
             // The drawer is closing, not torn down: what it shows stays until it is gone
             // (resetDrawerFx), or Back blanks the card to "Nothing here yet" for the whole close.
@@ -1219,7 +1259,9 @@ public final class AppDrawerContentView extends FrameLayout
                                   @NonNull AppDrawerSection section) {
         dismissContextPopups();
         cancelCellLongPresses();
-        mCornerTab.reset();
+        setEditModel(mEditModel.onViewTypeChanged(mViewType, viewType));
+        // Default's sections share one edit session: the pinned tab stays across the swap.
+        if (!mEditModel.isEditing()) mCornerTab.reset();
         stopPresentationMotion();
         // Default's Apps page keeps the Categories tiles bound beside it; leaving them bound under
         // another type would hold their previews for nothing.
@@ -1244,6 +1286,7 @@ public final class AppDrawerContentView extends FrameLayout
         mSection = section;
         applyViewType();
         submitVisibleResults(true);
+        mCornerTab.refreshButtons();
     }
 
     /**
@@ -1716,10 +1759,123 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** One internal hierarchy; one press performs at most one action. */
     public boolean handleBackInDrawer() {
-        // The corner tab is the top-most thing on the card, so the press goes to it first.
-        if (mCornerTab.dismiss()) return true;
+        boolean editing = mEditModel.isEditing();
+        // The corner tab is the top-most thing on the card, so the press goes to it first; while
+        // editing it is pinned open and the first rung is leaving edit mode instead.
+        if (!editing && mCornerTab.dismiss()) return true;
+        boolean expanded = categoryTilesShown()
+            && mCategoryView.expansionState() != AppDrawerCategoryExpansionModel.State.OVERVIEW;
+        if (AppDrawerEditModel.backStep(true, editing, hasQuery(), expanded)
+            == AppDrawerEditModel.BackStep.LEAVE_EDIT) {
+            leaveEdit(AppDrawerEditModel.Leave.BACK);
+            return true;
+        }
         if (clearQueryIfPresent()) return true;
         return collapseCategoryIfNeeded();
+    }
+
+    // ------------------------------------------------------------------ edit mode
+
+    public boolean isEditing() {
+        return mEditModel.isEditing();
+    }
+
+    /** Enters edit mode; the corner tab swaps to the editing buttons and stays open. */
+    public void enterEdit(@NonNull AppDrawerEditModel.Entry entry) {
+        setEditModel(AppDrawerEditModel.enter(entry));
+    }
+
+    public void leaveEdit(@NonNull AppDrawerEditModel.Leave reason) {
+        setEditModel(mEditModel.leave(reason));
+    }
+
+    /** Applies what the model says to the views, once per change. */
+    private void setEditModel(@NonNull AppDrawerEditModel next) {
+        AppDrawerEditModel previous = mEditModel;
+        if (previous == next) return;
+        mEditModel = next;
+        if (!next.isEditing()) dismissGridSizePopup();
+        AppDrawerSearchController search = mSearch;
+        if (search != null) search.setInputEnabled(next.searchEnabled());
+        mPill.setAlpha(next.searchDimmed() ? SEARCH_DIMMED_ALPHA : 1f);
+        applyEditOutlines(this, next.outlinesVisible());
+        mCornerTab.onEditModelChanged();
+    }
+
+    @NonNull
+    private String[] gridLabels(@NonNull String[] values) {
+        String[] labels = new String[values.length];
+        for (int i = 0; i < values.length; i++) {
+            labels[i] = AppDrawerGridChoices.AUTO.equals(values[i])
+                ? getResources().getString(com.termux.R.string.settings_drawer_grid_auto) : values[i];
+        }
+        return labels;
+    }
+
+    /** The grid-size button's text: columns, and rows where the type has them. */
+    @NonNull
+    private String gridSizeTabText() {
+        Callbacks callbacks = mCallbacks;
+        String[] columnLabels = gridLabels(AppDrawerGridChoices.COLUMN_VALUES);
+        int column = callbacks == null ? 0 : callbacks.gridColumnIndex();
+        String columns = columnLabels[Math.max(0, Math.min(columnLabels.length - 1, column))];
+        if (!AppDrawerGridChoices.showsRows(mViewType)) return columns;
+        String[] rowLabels = gridLabels(AppDrawerGridChoices.ROW_VALUES);
+        int row = callbacks == null ? 0 : callbacks.gridRowIndex();
+        String rows = rowLabels[Math.max(0, Math.min(rowLabels.length - 1, row))];
+        return getResources().getString(com.termux.R.string.app_drawer_corner_grid_size_tab,
+            columns, rows);
+    }
+
+    /** The wheels, hanging off the tab; each stop writes the preferences and the grid re-lays. */
+    private void showGridSizePopup(@NonNull android.graphics.RectF tab) {
+        dismissGridSizePopup();
+        Callbacks callbacks = mCallbacks;
+        if (callbacks == null) return;
+        boolean rows = AppDrawerGridChoices.showsRows(mViewType);
+        mGridSizePopup = com.termux.app.launcher.widget.WidgetGridSizePopup.show(this, tab,
+            com.termux.app.launcher.widget.WidgetGridSizePopup.WheelSpec.choices(
+                gridLabels(AppDrawerGridChoices.COLUMN_VALUES), callbacks.gridColumnIndex()),
+            rows ? com.termux.app.launcher.widget.WidgetGridSizePopup.WheelSpec.choices(
+                gridLabels(AppDrawerGridChoices.ROW_VALUES), callbacks.gridRowIndex()) : null,
+            (columnIndex, rowIndex) -> {
+                Callbacks current = mCallbacks;
+                if (current == null) return;
+                current.onGridSizeChosen(columnIndex, rows ? rowIndex : -1);
+                mCornerTab.refreshButtons();
+            });
+    }
+
+    private void dismissGridSizePopup() {
+        if (mGridSizePopup != null) {
+            mGridSizePopup.dismiss();
+            mGridSizePopup = null;
+        }
+    }
+
+    /** One pass over the attached cells and tiles; recycled ones read the state when they attach. */
+    private static void applyEditOutlines(@NonNull ViewGroup group, boolean on) {
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child instanceof AppDrawerAppCellView) {
+                ((AppDrawerAppCellView) child).setEditOutline(on);
+            } else if (child instanceof AppDrawerCategoryTileView) {
+                ((AppDrawerCategoryTileView) child).setEditOutline(on);
+            } else if (child instanceof ViewGroup) {
+                applyEditOutlines((ViewGroup) child, on);
+            }
+        }
+    }
+
+    /** True while the drawer {@code view} sits in is being edited; read at a tap, never per frame. */
+    static boolean isEditingAround(@NonNull View view) {
+        for (android.view.ViewParent parent = view.getParent(); parent != null;
+             parent = parent.getParent()) {
+            if (parent instanceof AppDrawerContentView) {
+                return ((AppDrawerContentView) parent).mEditModel.isEditing();
+            }
+        }
+        return false;
     }
 
     /**
@@ -2216,11 +2372,13 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Override
     public void onSearchPillClear() {
+        if (!mEditModel.searchEnabled()) return;
         clearQueryIfPresent();
     }
 
     @Override
     public void onSearchPillTapped() {
+        if (!mEditModel.searchEnabled()) return;
         requestSearchKeyboard();
     }
 
@@ -3191,6 +3349,7 @@ public final class AppDrawerContentView extends FrameLayout
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        leaveEdit(AppDrawerEditModel.Leave.DRAWER_CLOSED);
         mCornerTab.reset();
         stopOverpullSpring();
         endSectionStream();

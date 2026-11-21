@@ -460,7 +460,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
     }
 
     /** The tick, in the same hand-drawn family the panes' own close and maximise marks use. */
-    private static void drawTickMark(@NonNull Canvas canvas, @NonNull RectF button,
+    public static void drawTickMark(@NonNull Canvas canvas, @NonNull RectF button,
                                      @NonNull Paint paint, float density) {
         float cx = button.centerX();
         float cy = button.centerY();
