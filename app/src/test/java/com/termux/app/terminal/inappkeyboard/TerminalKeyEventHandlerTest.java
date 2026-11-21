@@ -28,6 +28,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import juloo.keyboard2.KeyModifier;
 import juloo.keyboard2.KeyValue;
 import juloo.keyboard2.Pointers;
 
@@ -857,7 +858,7 @@ public class TerminalKeyEventHandlerTest {
         find.handleCodePoint('b', false);
         assertFieldFollowsTheRule(find, () -> find.model().query(), clip, false);
 
-        mHandler.key_up(KeyValue.makeCharKey('v'), mods(KeyValue.Modifier.CTRL));
+        ctrl('v');
         assertTrue("Ctrl+V left the query for the copy mode",
             find.model().mode() != com.termux.app.terminal.find.TerminalFindModel.Mode.TYPING);
         assertTrue(mTerminal.codePoints.isEmpty());
@@ -925,12 +926,98 @@ public class TerminalKeyEventHandlerTest {
             + mHost.selectAlls);
     }
 
+    /**
+     * Typed "se", then latched Ctrl + a, then x: the field holds "x", as the developer typed it on
+     * pong. Then Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z and Ctrl+Shift+Z on that text, each struck the way
+     * the keyboard strikes it ({@link #strike}).
+     */
+    private void assertCtrlChordsEditTypedText(TerminalKeyEventHandler.KeyValueInterceptor field,
+                                               java.util.function.Supplier<String> text,
+                                               FieldEditorTest.Clip clip) {
+        mHandler.setKeyValueInterceptor(field);
+        strike('s');
+        strike('e');
+        assertEquals("se", text.get());
+        ctrl('a');
+        assertEquals("Ctrl+A types nothing", "se", text.get());
+        strike('x');
+        assertEquals("Ctrl+A, then a letter, replaces the text", "x", text.get());
+
+        ctrl('c');
+        assertEquals("x", clip.last());
+        clip.text = clip.last();
+        ctrl('v');
+        assertEquals("xx", text.get());
+        ctrl('x');
+        assertEquals("", text.get());
+        assertEquals("xx", clip.last());
+        ctrl('z');
+        assertEquals("xx", text.get());
+        strike('z', KeyValue.Modifier.CTRL, KeyValue.Modifier.SHIFT);
+        assertEquals("Ctrl+Shift+Z redoes", "", text.get());
+        ctrl('z');
+        ctrl('y');
+        assertEquals("Ctrl+Y redoes", "", text.get());
+
+        assertTrue("nothing reaches the shell", mTerminal.codePoints.isEmpty());
+        assertTrue(mTerminal.keyCodes.isEmpty());
+        assertTrue(mTerminal.writes.isEmpty());
+        assertEquals(0, mHost.pastes + mHost.clipboardPastes + mHost.copies + mHost.cuts
+            + mHost.selectAlls);
+    }
+
+    @Test
+    public void drawerSearchCtrlChordsEditTypedText() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.launcher.drawer.AppDrawerSearchController search =
+            new com.termux.app.launcher.drawer.AppDrawerSearchController(clip);
+        search.setHost(new com.termux.app.launcher.drawer.AppDrawerSearchController.Host() {
+            @Override public boolean isSearchActive() { return true; }
+            @Override public void onSearchCommitRequested() {}
+            @Override public void onSearchDismissRequested() {}
+        });
+        assertCtrlChordsEditTypedText(search, search::query, clip);
+    }
+
+    @Test
+    public void inlineRenameCtrlChordsEditTypedText() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.terminal.rename.InlineRenameController rename =
+            new com.termux.app.terminal.rename.InlineRenameController(clip);
+        rename.begin("", 40, new com.termux.app.terminal.rename.InlineRenameController.Host() {
+            @Override public void onDraftChanged(
+                com.termux.app.terminal.rename.InlineRenameModel model) {}
+            @Override public void onRenameEnded(boolean committed, String committedName) {}
+        });
+        assertCtrlChordsEditTypedText(rename, () -> rename.model().text(), clip);
+    }
+
+    /** What latched Ctrl + a really delivers: the keyboard has made it a key event. */
+    @Test
+    public void latchedCtrlOnALetterArrivesAsAKeyEvent() {
+        KeyValue struck = KeyModifier.modify(KeyValue.makeCharKey('a'),
+            mods(KeyValue.Modifier.CTRL), null);
+        assertEquals(KeyValue.Kind.Keyevent, struck.getKind());
+        assertEquals(KeyEvent.KEYCODE_A, struck.getKeyevent());
+    }
+
     private void up(String name) {
         mHandler.key_up(KeyValue.getKeyByName(name), Pointers.Modifiers.EMPTY);
     }
 
     private void ctrl(char c) {
-        mHandler.key_up(KeyValue.makeCharKey(c), mods(KeyValue.Modifier.CTRL));
+        strike(c, KeyValue.Modifier.CTRL);
+    }
+
+    /**
+     * A character key tapped under latched modifiers, delivered as the keyboard delivers it:
+     * {@code Pointers} stores {@code Keyboard2View.modifyKey} of the key (that is,
+     * {@link KeyModifier#modify} with the pointer's modifiers and the layout's modmap, none here),
+     * then hands that value and the same modifiers to {@code key_up}.
+     */
+    private void strike(char c, KeyValue.Modifier... modifiers) {
+        Pointers.Modifiers held = mods(modifiers);
+        mHandler.key_up(KeyModifier.modify(KeyValue.makeCharKey(c), held, null), held);
     }
 
     private static final class KeyCall {

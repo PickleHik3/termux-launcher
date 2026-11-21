@@ -222,4 +222,72 @@ public class AssistantFieldKeysTest {
         assertEquals("pq", composer.text());
         assertEquals(3, copied.size());
     }
+
+    /**
+     * The keys as the in-app keyboard really sends them, through its handler: a latched Ctrl turns
+     * a letter into a key event ({@code KeyModifier}) before the field sees it. Typed "se", then
+     * Ctrl+A and x, leaves "x"; copy, paste, cut and undo follow; nothing reaches the terminal.
+     */
+    @Test
+    public void ctrlChordsStruckOnTheKeyboardEditTypedText() {
+        List<String> copied = new ArrayList<>();
+        AssistantFieldKeys keys = new AssistantFieldKeys(composer::field, f -> composer.submit(),
+            new com.termux.app.terminal.ClipboardText() {
+                @Override public String read() {
+                    return copied.isEmpty() ? null : copied.get(copied.size() - 1);
+                }
+                @Override public void write(@NonNull String text) { copied.add(text); }
+            });
+        int[] terminalReads = {0};
+        List<String> hostCalls = new ArrayList<>();
+        com.termux.app.terminal.inappkeyboard.HostActions host =
+            (com.termux.app.terminal.inappkeyboard.HostActions) java.lang.reflect.Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class<?>[]{com.termux.app.terminal.inappkeyboard.HostActions.class},
+                (proxy, method, args) -> {
+                    if (method.getReturnType() == boolean.class) return false;
+                    if (!method.getName().equals("onKeyboardModifiersChanged"))
+                        hostCalls.add(method.getName());
+                    return null;
+                });
+        com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler handler =
+            new com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler(
+                () -> { terminalReads[0]++; return null; },
+                () -> { terminalReads[0]++; return null; },
+                host, new android.os.Handler(android.os.Looper.getMainLooper()));
+        handler.setKeyValueInterceptor(keys);
+        composer.field().requestFocus();
+
+        strike(handler, 's');
+        strike(handler, 'e');
+        assertEquals("se", composer.text());
+        strike(handler, 'a', KeyValue.Modifier.CTRL);
+        strike(handler, 'x');
+        assertEquals("Ctrl+A, then a letter, replaces the text", "x", composer.text());
+
+        strike(handler, 'a', KeyValue.Modifier.CTRL);
+        strike(handler, 'c', KeyValue.Modifier.CTRL);
+        assertEquals(List.of("x"), copied);
+        strike(handler, 'v', KeyValue.Modifier.CTRL);
+        assertEquals("pasting over the selection", "x", composer.text());
+        strike(handler, 'a', KeyValue.Modifier.CTRL);
+        strike(handler, 'x', KeyValue.Modifier.CTRL);
+        assertEquals("", composer.text());
+        assertEquals(List.of("x", "x"), copied);
+        strike(handler, 'v', KeyValue.Modifier.CTRL);
+        strike(handler, 'v', KeyValue.Modifier.CTRL);
+        assertEquals("xx", composer.text());
+
+        assertEquals("nothing reaches the terminal", 0, terminalReads[0]);
+        assertTrue("nothing acts on the terminal: " + hostCalls, hostCalls.isEmpty());
+    }
+
+    /** A key tapped under latched modifiers, modified and delivered as {@code Pointers} does. */
+    private static void strike(com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler handler,
+                               char c, KeyValue.Modifier... modifiers) {
+        juloo.keyboard2.Pointers.Modifiers held = juloo.keyboard2.Pointers.Modifiers.EMPTY;
+        for (KeyValue.Modifier modifier : modifiers)
+            held = held.with_extra_mod(KeyValue.makeInternalModifier(modifier));
+        handler.key_up(juloo.keyboard2.KeyModifier.modify(KeyValue.makeCharKey(c), held, null), held);
+    }
 }
