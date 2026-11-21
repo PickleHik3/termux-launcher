@@ -2,6 +2,8 @@ package com.termux.app;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -17,6 +19,13 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.dock.DockGeometry;
+import com.termux.app.dock.DockPlacement;
+import com.termux.app.dock.DockSpec;
+import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.DockSurfaceSpec;
+import com.termux.app.dock.WornDockDesign;
+import com.termux.app.place.PlaceChromePolicy;
+import com.termux.app.place.RestCards;
 import com.termux.app.dock.SideCardsController;
 import com.termux.app.dock.SideRowViews;
 import com.termux.app.page.PageKind;
@@ -180,6 +189,67 @@ public class SideCardsParityTest {
         }
         assertTrue("some fixtures stand apart", apartCases > 0);
         assertTrue("and some do not", apartCases < cases);
+    }
+
+    /**
+     * While apart the host's dress is Home's rest's, whichever page is in front: the same look
+     * from either side, Home's design, the card the answer cuts for it, its foot and its keyboard.
+     */
+    @Test public void theHostIsDressedAsHomesRestWhicheverPageIsInFront() {
+        int looks = 0;
+        int peeks = 0;
+        int tray = 0;
+        for (Fixture base : LayoutFixtures.cardFixtures()) {
+            for (DockStyle design : DockStyle.CHOICES) {
+                Fixture f = base.withHomeDesign(design);
+                for (boolean up : new boolean[] {false, true}) {
+                    String label = f.name + " " + design + " kb=" + (up ? "up" : "down");
+                    RestCards.HostLook[] seen = new RestCards.HostLook[2];
+                    for (PageRef page : new PageRef[] {PageRef.HOME, PageRef.TERMINAL}) {
+                        StackRenderer renderer = rendererFor(page.isHome());
+                        SideCardsController controller = new SideCardsController(
+                            hostOf(f, page, up, true, renderer));
+                        controller.update(f.pass(page, up, true));
+                        seen[page.isHome() ? 0 : 1] = controller.hostLook();
+                        if (!controller.apart() || !controller.hostPinned()) {
+                            assertNull(label, controller.hostLook());
+                            assertNull(label, controller.hostRestRect());
+                        }
+                    }
+                    if (seen[0] == null || seen[1] == null) {
+                        assertEquals(label, seen[0] == null, seen[1] == null);
+                        continue;
+                    }
+                    looks++;
+                    RestCards.HostLook look = seen[0];
+                    assertSame(label, look.design, seen[1].design);
+                    assertEquals(label, look.peek, seen[1].peek);
+                    assertEquals(label, look.floats, seen[1].floats);
+                    assertEquals(label, look.foot, seen[1].foot);
+                    assertEquals(label, look.keyboardUp, seen[1].keyboardUp);
+                    assertEquals(label, look.peekCut, seen[1].peekCut);
+                    assertEquals(label, look.drawn.toString(), seen[1].drawn.toString());
+                    PlaceLayout home = f.layoutOf(PageRef.HOME);
+                    DockStyle worn = WornDockDesign.of(f.homeDesign, home);
+                    assertSame(label, worn, look.design);
+                    assertEquals(label, up, look.keyboardUp);
+                    // Apart is Floating: the dock is placed as the card unless the Peek card stands.
+                    assertEquals(label, !look.peek, look.floats);
+                    assertEquals(label, look.peek, look.peekCut != null);
+                    assertEquals(label, DockSpec.footExists(PlaceChromePolicy.dockShown(home),
+                        look.floats, up, false, f.keptBandPx), look.foot);
+                    if (look.peek) {
+                        peeks++;
+                        assertTrue(label, DockSurfaceSpec.forStyle(look.design).peek);
+                    } else {
+                        tray++;
+                    }
+                }
+            }
+        }
+        assertTrue("some Home rests wear a look", looks > 0);
+        assertTrue("some wear the Peek card", peeks > 0);
+        assertTrue("some wear the tray", tray > 0);
     }
 
     @Test public void withoutTheOtherSidesLayoutTheCardsNeverStandApart() {

@@ -239,7 +239,7 @@ final class DockSurface {
      */
     @NonNull
     com.termux.app.dock.DockSurfaceSpec dockSlabSpec() {
-        return mDock.shownDockSurfaceSpec().forCard(mHost.peekCard());
+        return mDock.hostDressSpec().forCard(mHost.peekCard());
     }
 
     /**
@@ -284,7 +284,7 @@ final class DockSurface {
                 program.clearAzBeads();
             }
         } else {
-            applySlabGlass(program, spec, dockFloats());
+            applySlabGlass(program, spec, mDock.hostFloats());
         }
     }
 
@@ -314,7 +314,8 @@ final class DockSurface {
         // Beads always float, so each keeps its shadow under Docked too.
         boolean beads = mDock.beads() != null;
         boolean show = state != null && host != null && shelfShown(mHost.glassParamsValid(),
-            mHost.dockRows().surfaceShown(), state.keyboardShown, dockFloats() || beads,
+            mHost.dockRows().surfaceShown(), mDock.hostKeyboardUp(state.keyboardShown),
+            mDock.hostFloats() || beads,
             dockSlabSpec().contactShadow);
         shelf.setBeads(show ? mDock.dockBeadsShadowed() : null);
         shelf.setBeadShelfAlpha(mDock.dockBeadShelfAlpha());

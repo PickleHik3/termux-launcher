@@ -100,6 +100,11 @@ public final class DockController {
         boolean peekCardWanted();
         /** The Peek glass card as last cut, in the host's coordinates; null while none stands. */
         @Nullable PeekGlassGeometry.Card peekCard();
+        /**
+         * What the glass host wears at Home's rest while the two Floating cards stand apart
+         * ({@link com.termux.app.place.SideCards}); null while it is dressed from the page in front.
+         */
+        @Nullable com.termux.app.place.RestCards.HostLook hostLook();
         /** Corners, the one Floating radius, px. */
         float layoutCornersPx();
         /** The page id whose look the stack's surfaces wear. */
@@ -296,6 +301,39 @@ public final class DockController {
     /** {@link #dockFloats} for the dock measured in {@code floatingStyle}. */
     public boolean dockFloatsIn(boolean floatingStyle) {
         return mSurface.dockFloatsIn(floatingStyle);
+    }
+
+    // ------------------------------------------------------------------ The host's dress page
+    //
+    // While Home's card and the Terminal's extra-keys card stand apart, the glass host is Home's
+    // card at every rest and across every crossing: its dress reads Home's rest, worked out from
+    // the rest answer (RestCards.HostLook), and nothing the page in front says. Every reader of
+    // the host's dress asks here; the extra-keys card and the rest of the dock keep asking
+    // dockFloats and shownDockSurfaceSpec.
+
+    /** What the host wears at Home's rest while the cards stand apart; null otherwise. */
+    @Nullable
+    public com.termux.app.place.RestCards.HostLook hostLook() {
+        return mHost.hostLook();
+    }
+
+    /** {@link #dockFloats} for the glass host: Home's while the cards stand apart. */
+    public boolean hostFloats() {
+        com.termux.app.place.RestCards.HostLook look = hostLook();
+        return look != null ? look.floats : dockFloats();
+    }
+
+    /** The slab spec the host wears: Home's design while the cards stand apart, else the dock's shown. */
+    @NonNull
+    public DockSurfaceSpec hostDressSpec() {
+        com.termux.app.place.RestCards.HostLook look = hostLook();
+        return look != null ? DockSurfaceSpec.forStyle(look.design) : shownDockSurfaceSpec();
+    }
+
+    /** Whether the keyboard is up as the host's dress reads it: Home's rest while apart, else {@code front}. */
+    public boolean hostKeyboardUp(boolean front) {
+        com.termux.app.place.RestCards.HostLook look = hostLook();
+        return look != null ? look.keyboardUp : front;
     }
 
     /** The host the controller reads the activity through, for the card's dress beside it. */
@@ -704,7 +742,7 @@ public final class DockController {
         if (mDockBeads == null || Float.isNaN(share) || share >= 1f) return Float.NaN;
         View host = mHost.hotView(R.id.accessory_surface_host);
         if (host == null) return Float.NaN;
-        return dockFloats() ? resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
+        return hostFloats() ? resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
     }
 
 
@@ -1360,11 +1398,11 @@ public final class DockController {
         View surfaceHost = mHost.findViewById(onCard ? R.id.extra_keys_card
             : R.id.accessory_surface_host);
         int surfaceHeightPx = surfaceHost != null ? surfaceHost.getHeight() : 0;
-        dressPlankLayers(specular, glow, dockFloats()
+        boolean capsuleDock = onCard ? dockFloats() : hostFloats();
+        dressPlankLayers(specular, glow, capsuleDock
             ? resolveDockCapsuleCornerRadiusPx(surfaceHeightPx) : 0f, accent, materialAlpha);
         // Both styles tilt now: the capsule free-floating with a press dip, the edge-to-edge bar
         // hinged at the screen edge and overscanned so its slide cannot open a strip at the sides.
-        boolean capsuleDock = dockFloats();
         mDockPlankController.setMotionEnabled(true);
         mDockPlankController.setHingeMode(!capsuleDock);
         mDockPlankController.setReducedMotion(mHost.isReducedMotionEnabled());
