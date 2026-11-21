@@ -95,10 +95,6 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   Authors). Version 0.31. The Bold face is shipped unmodified and under its own name as
   `app/src/main/assets/fonts/Libron-Bold.ttf`, drawn by the Clock widget's Analog and Numerals
   faces. The license text is reproduced in THIRD_PARTY_LICENSES.txt.
-- **[Meteocons](https://github.com/basmilius/meteocons)** — MIT — Copyright 2020-present Bas
-  Milius. The weather animations in `app/src/main/assets/weather/` are the fill style of
-  `@meteocons/lottie`, unmodified apart from compact re-serialization; the license text ships beside
-  them as `app/src/main/assets/weather/LICENSE.txt`.
 - **[Silero VAD](https://github.com/snakers4/silero-vad) v5.1.2** — MIT — Copyright 2020-present
   Silero Team. The voice key's speech detector, `app/src/main/assets/vad/silero_vad_v5.tflite`, is
   the 16 kHz graph of the upstream `silero_vad.onnx` rebuilt for LiteRT with its weights unchanged
@@ -128,7 +124,6 @@ The Android application also uses these independently maintained libraries:
 - Google LiteRT 1.4.2 and LiteRT-LM 0.19.0 — Apache-2.0
 - Kotlin standard library, kotlin-reflect and kotlinx.coroutines — Apache-2.0 — through LiteRT-LM
   and AndroidX
-- Lottie for Android — Apache-2.0 — renders the bundled Meteocons weather animations
 - HiddenApiBypass — Apache-2.0
 - Markwon — Apache-2.0
 - Process Phoenix — Apache-2.0
