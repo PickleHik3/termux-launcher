@@ -13030,8 +13030,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAzOverflowAffordance();
     }
 
+    /** Where the dock's capsules were last measured on the wallpaper; reused. */
+    @NonNull private final Rect mTickGroundRect = new Rect();
+    @NonNull private final int[] mTickGroundLocation = new int[2];
+
+    /**
+     * The ground the page ticks are drawn on: the wallpaper behind them, with the bare-text ink
+     * Home's labels take there ({@link com.termux.app.chrome.WallpaperInk#bareInk}), where they
+     * stand over it ({@link PageTickStrip#standsOnWallpaper}); else the dock surface's
+     * {@code glass}, transparent before it is measured. A dress pass, never per frame.
+     */
+    private void syncPageTickGround(@Nullable OnGlass.Resolution glass) {
+        SuggestionBarView bar = mSuggestionBarView;
+        if (bar == null) return;
+        int surface = glass == null ? Color.TRANSPARENT : glass.surface;
+        int ink = glass == null ? Color.TRANSPARENT : glass.ink;
+        PageTickStripView strip = boundPageTickStrip();
+        if (strip != null && strip.getWidth() > 0 && strip.getHeight() > 0
+                && PageTickStrip.standsOnWallpaper(strip.getId() == R.id.apps_bar_indicator_band,
+                    mDock.appliedDockLayout().slabTopInsetPx > 0, mDock.beads() != null)) {
+            com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(strip, mTickGroundLocation,
+                mDockInkRootScratch);
+            mTickGroundRect.set(mTickGroundLocation[0], mTickGroundLocation[1],
+                mTickGroundLocation[0] + strip.getWidth(),
+                mTickGroundLocation[1] + strip.getHeight());
+            ChromeInk chromeInk = mChrome.ink();
+            int wallpaper = chromeInk.wallpaperSample(mTickGroundRect);
+            if (Color.alpha(wallpaper) == 0) wallpaper = chromeInk.wallpaperFallback();
+            if (Color.alpha(wallpaper) != 0) {
+                surface = wallpaper;
+                ink = com.termux.app.chrome.WallpaperInk.bareInk(wallpaper,
+                    com.termux.app.launcher.widget.HomeLabelInk.DARK_INK,
+                    com.termux.app.launcher.widget.HomeLabelInk.PALE_INK);
+            }
+        }
+        bar.setTickGround(surface, ink);
+    }
+
     private void syncAzScrubLettersAndTint() {
-        if (!isAzIndexEnabled() || mAzScrubRowView == null || mSuggestionBarView == null) return;
+        if (!isAzIndexEnabled() || mAzScrubRowView == null || mSuggestionBarView == null) {
+            syncPageTickGround(null);
+            return;
+        }
         Set<Character> letters = new LinkedHashSet<>(mSuggestionBarView.getAvailableAzLetters());
         mAzScrubRowView.setVisibleLetters(letters);
         int base = resolveAzGestureAccentColor();
@@ -13055,6 +13095,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // is the only thing either of them can ask.
         mSuggestionBarView.setGlassInk(glass == null ? Color.TRANSPARENT : glass.surface,
             glass == null ? Color.TRANSPARENT : glass.ink);
+        syncPageTickGround(glass);
         // The orb carries the letter the finger is on, so it is read as a graphic and takes the
         // large-text tier. The edge bloom carries nothing — it is a bloom off the screen's rim —
         // so it takes the decoration tier and stays the quieter of the two, which is the relation

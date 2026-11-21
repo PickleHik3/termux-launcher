@@ -9892,7 +9892,7 @@ public final class SuggestionBarView extends GridLayout
             // The rail's two pages are the pins and the most-used apps after them in one column:
             // the same two ticks a row shows, lit by the scroll, not a page turn.
             return new PageTicks(2, railScrollPagePosition(), true, vertical,
-                glassBackdrop, glassInk, accent);
+                tickBackdrop, tickInk, accent);
         }
         int pages = azPages ? getAzVisiblePageCount()
             : (overflow ? getPinnedVisiblePageCount() : 1);
@@ -9901,7 +9901,7 @@ public final class SuggestionBarView extends GridLayout
         // Not shown is INVISIBLE rather than GONE (the writer's): the band the ticks hold is the
         // row's own air, and a row that gained a page would otherwise grow by it.
         return new PageTicks(pages, position,
-            overflow, vertical, glassBackdrop, glassInk, accent);
+            overflow, vertical, tickBackdrop, tickInk, accent);
     }
 
     /**
@@ -9986,6 +9986,22 @@ public final class SuggestionBarView extends GridLayout
 
     private int glassBackdrop = android.graphics.Color.TRANSPARENT;
     private int glassInk = android.graphics.Color.TRANSPARENT;
+
+    /**
+     * What the page ticks stand on and the ink chosen there: the dock's surface where they are
+     * drawn on the slab, the wallpaper behind them where they stand over it
+     * ({@link com.termux.app.launcher.paging.PageTickStrip#standsOnWallpaper}). Pushed in by the
+     * activity beside {@link #setGlassInk}, which the drawer's A&ndash;Z rope keeps reading.
+     */
+    public void setTickGround(int surfaceColor, int inkColor) {
+        if (tickBackdrop == surfaceColor && tickInk == inkColor) return;
+        tickBackdrop = surfaceColor;
+        tickInk = inkColor;
+        publishPageTicks();
+    }
+
+    private int tickBackdrop = android.graphics.Color.TRANSPARENT;
+    private int tickInk = android.graphics.Color.TRANSPARENT;
 
     private void setRowInteractionActive(boolean active) {
         if (rowInteractionActive == active) {

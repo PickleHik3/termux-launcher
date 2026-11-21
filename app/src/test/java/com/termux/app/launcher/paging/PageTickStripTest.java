@@ -14,6 +14,17 @@ public class PageTickStripTest {
     private static final float DENSITY = 2.75f;
 
     @Test
+    public void capsulesOverTheWallpaperTakeItsGround() {
+        // Above the slab (Tray, Strip, Peek's card) or on a dock of beads: the bare wallpaper.
+        assertTrue(PageTickStrip.standsOnWallpaper(true, true, false));
+        assertTrue(PageTickStrip.standsOnWallpaper(true, false, true));
+        // In the slab's own air: the dock surface.
+        assertFalse(PageTickStrip.standsOnWallpaper(true, false, false));
+        // Off the dock the host's surface stands, whatever the dock's style.
+        assertFalse(PageTickStrip.standsOnWallpaper(false, true, true));
+    }
+
+    @Test
     public void theTickNearestThePageIsTheLongOne() {
         float[] lengths = PageTickStrip.lengthsPx(3, 1f, DENSITY);
         assertEquals(3, lengths.length);

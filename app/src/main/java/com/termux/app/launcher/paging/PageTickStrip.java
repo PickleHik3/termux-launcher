@@ -143,6 +143,19 @@ public final class PageTickStrip {
     }
 
     /** Which way the ticks run: down the strip for a rail, across it for a row. */
+    /**
+     * Whether the dock's capsules stand on the bare wallpaper rather than on the dock's slab:
+     * above the slab, for a style whose dashes float over it ({@code DockLayout.slabTopInsetPx}
+     * above 0, Peek glass's card included, whose top runs through the icons' centres), or on a
+     * dock that draws no slab (Lens beads drawn). Their ink is then the bare-text ink measured on
+     * the wallpaper behind them; anywhere else, the dock surface's. Off the dock it stays the
+     * surface the host hands down.
+     */
+    public static boolean standsOnWallpaper(boolean onDock, boolean dashesAboveSlab,
+                                            boolean beadsDrawn) {
+        return onDock && (dashesAboveSlab || beadsDrawn);
+    }
+
     public static boolean verticalOn(PlaceLayout.Edge edge) {
         return edge != null && edge.isOnSide();
     }
