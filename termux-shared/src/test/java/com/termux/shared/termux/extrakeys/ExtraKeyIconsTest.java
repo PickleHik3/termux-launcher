@@ -134,4 +134,23 @@ public class ExtraKeyIconsTest {
         assertEquals("", ExtraKeyButton.resolveDisplay("LEFT", "", map));
         assertNull(ExtraKeyIcons.effectiveDisplay("LEFT", null));
     }
+
+    @Test public void oldPaneAndPromptTitleCapsShowTheirIconAndTypedOnesStay() {
+        assertEquals(icon(ExtraKeyIcons.PROMPT_NEXT), ExtraKeyIcons.effectiveDisplay(
+            "tool:terminal.jump_next_prompt", "Jump to next prompt"));
+        assertEquals(icon(ExtraKeyIcons.PANE_RESIZE), ExtraKeyIcons.effectiveDisplay(
+            "tool:pane.resize", "Resize pane"));
+        assertEquals(icon(ExtraKeyIcons.PANE_FOCUS_DOWN), ExtraKeyIcons.effectiveDisplay(
+            "tool:pane.focus_direction:direction=down", "Move pane focus \u00b7 down"));
+        assertEquals(icon(ExtraKeyIcons.PANE_FOCUS_LEFT), ExtraKeyIcons.effectiveDisplay(
+            "tool:pane.focus_direction:direction=left", "Move pane focus \u00b7 left"));
+        // Typed by the user, or the wrong direction's text: unchanged.
+        assertEquals("focus", ExtraKeyIcons.effectiveDisplay(
+            "tool:pane.focus_direction:direction=left", "focus"));
+        assertEquals("Move pane focus \u00b7 up", ExtraKeyIcons.effectiveDisplay(
+            "tool:pane.focus_direction:direction=left", "Move pane focus \u00b7 up"));
+        // Resize and move-to-edge keys keep their per-value text, never one shared icon.
+        assertEquals("Resize pane \u00b7 left", ExtraKeyIcons.effectiveDisplay(
+            "tool:pane.resize:direction=left", "Resize pane \u00b7 left"));
+    }
 }
