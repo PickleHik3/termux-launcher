@@ -7105,11 +7105,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mDock.appliedDockLayout().horizontalInsetPx;
     }
 
-    private int resolveInAppKeyboardHorizontalInsetPx() {
-        return resolveSurfaceHorizontalInsetPx(mPreferences == null
+    /** The side gap the keyboard's host is inset by, in dp, before the Style says whether it applies. */
+    private int inAppKeyboardMarginDp() {
+        return mPreferences == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET
-            : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp()),
-            isInAppKeyboardCapsule());
+            : TermuxAppSharedPreferences.clampSurfaceHorizontalInset(chromeMarginDp());
     }
 
     /**
@@ -8024,12 +8024,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * pass both ask ({@link BottomInsets#keyboardFootPx(int, boolean)}).
      */
     private boolean inAppKeyboardFootApplies(boolean capsule) {
-        if (capsule || isKeyboardFloating() || isImeVisible() || underKeyboardBandsShown())
-            return false;
         View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
-        if (keyboardContainer == null || keyboardContainer.getVisibility() == View.GONE)
-            return false;
-        return isInAppKeyboardShown() || keyboardStaysLaidOut();
+        boolean laidOut = keyboardContainer != null
+            && keyboardContainer.getVisibility() != View.GONE
+            && (isInAppKeyboardShown() || keyboardStaysLaidOut());
+        return BottomInsets.keyboardWearsFoot(capsule, isKeyboardFloating(), isImeVisible(),
+            underKeyboardBandsShown(), laidOut);
     }
 
     /** The foot the keyboard's host was last dressed with; what the shape model reads. */
@@ -8065,12 +8065,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean floating = isKeyboardFloating();
         // The side gap keeps a docked capsule off the screen's edges; inside a floating card it was
         // only more rim round the keys.
-        int horizontalMargin = floating ? 0 : resolveInAppKeyboardHorizontalInsetPx();
+        float density = getResources().getDisplayMetrics().density;
+        int horizontalMargin = ChromePolicy.keyboardHostSideMarginPx(floating,
+            inAppKeyboardMarginDp(), capsule, density);
         // A floating keyboard already sits under its card's grab handle, so the capsule's top gap
         // would only push the keys further from it: the host runs straight up to the handle row
         // and keeps a thin inner rim of the one surface the card and the host share.
-        int topMargin = capsule && !floating ? com.termux.app.dock.UnderKeyboardBand
-            .keyboardGapPx(getResources().getDisplayMetrics().density) : 0;
+        int topMargin = ChromePolicy.keyboardHostTopMarginPx(capsule, floating, density);
         // A floating card keeps a thin 3dp rim at the sides and none above and below: its handle row
         // and the keyboard's own margins are rim enough.
         int innerPadding = floating ? Math.round(dpToPx(3)) : capsule ? Math.round(dpToPx(6)) : 0;

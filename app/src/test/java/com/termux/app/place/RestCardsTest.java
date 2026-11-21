@@ -12,7 +12,6 @@ import com.termux.app.place.ChromeShape.EdgeKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.RestCards.CardId;
 import com.termux.app.place.RestCards.StackView;
-import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.wall.PageRef;
 
 import org.junit.Test;
@@ -25,10 +24,7 @@ public class RestCardsTest {
 
     private static RestCards rest(LayoutFixtures.Fixture f, PageRef page, boolean up,
                                   boolean floating) {
-        return RestCards.of(new RestCards.Rest(f.pass(page, up, floating), page, f.widthPx,
-            f.heightPx, f.density, f.extraKeysRowPx, f.keyboardLaidOutPx(),
-            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false, f.density),
-            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, f.density)));
+        return RestCards.of(f.cardsRest(page, up, floating));
     }
 
     private static DockLayout dock(LayoutFixtures.Fixture f, PageRef page, boolean up,
@@ -127,6 +123,77 @@ public class RestCardsTest {
         assertNotNull(keyboard);
         assertEquals(StackView.KEYBOARD_COLUMN, keyboard.view);
         for (Edge edge : Edge.values()) assertEquals(EdgeKind.RIM, keyboard.edge(edge));
+    }
+
+    @Test public void dockedTrayOnHomeWithAKeptBandStandsTheFootUnderTheDockCard() {
+        LayoutFixtures.Fixture foot = LayoutFixtures.TL16.withFoot(LayoutFixtures.KEPT_BAND_PX,
+            LayoutFixtures.FLUSH_PX).withDesign(DockStyle.GLASS_TRAY);
+        RestCards cards = rest(foot, PageRef.HOME, false, false);
+        RestCards.Card dock = cards.card(CardId.DOCK);
+        RestCards.Card card = cards.card(CardId.FOOT);
+        assertNotNull(dock);
+        assertNotNull(card);
+        float top = foot.heightPx - LayoutFixtures.KEPT_BAND_PX;
+        assertEquals(top, dock.box.bottom, 0f);
+        assertEquals(top, card.box.top, 0f);
+        assertEquals(foot.heightPx, card.box.bottom, 0f);
+        assertEquals(StackView.HOST, card.view);
+        assertEquals(EdgeKind.JOIN, card.edge(Edge.TOP));
+        assertEquals(EdgeKind.SCREEN, card.edge(Edge.BOTTOM));
+    }
+
+    @Test public void theFootIsOneRectOnHomeAndTheTerminalKeyboardDown() {
+        LayoutFixtures.Fixture foot = LayoutFixtures.TL16.withFoot(LayoutFixtures.KEPT_BAND_PX,
+            LayoutFixtures.FLUSH_PX).withDesign(DockStyle.GLASS_TRAY);
+        RestCards.Card home = rest(foot, PageRef.HOME, false, false).card(CardId.FOOT);
+        RestCards.Card terminal = rest(foot, PageRef.TERMINAL, false, false).card(CardId.FOOT);
+        assertNotNull(home);
+        assertNotNull(terminal);
+        assertEquals(home.box.toString(), terminal.box.toString());
+    }
+
+    @Test public void aFloatingDockOwnsNoFoot() {
+        LayoutFixtures.Fixture foot = LayoutFixtures.TL16.withFoot(LayoutFixtures.KEPT_BAND_PX,
+            LayoutFixtures.FLUSH_PX).withDesign(DockStyle.GLASS_TRAY);
+        assertNull(rest(foot, PageRef.TERMINAL, false, true).card(CardId.FOOT));
+    }
+
+    @Test public void theFloatingFormKeyboardIsItsOwnFrameParkedAtTheBottomOfItsRoom() {
+        LayoutFixtures.Fixture f = LayoutFixtures.FLOATING_KEYBOARD;
+        RestCards cards = rest(f, PageRef.TERMINAL, true, false);
+        RestCards.Card keyboard = cards.card(CardId.KEYBOARD);
+        assertNotNull(keyboard);
+        assertEquals(StackView.FLOATING_KEYBOARD, keyboard.view);
+        assertEquals(f.heightPx, keyboard.box.bottom, 0f);
+        assertEquals(Math.round(f.widthPx * LayoutFixtures.FLOATING_KEYBOARD_WIDTH_SCALE),
+            keyboard.box.width(), 0f);
+        assertEquals((f.widthPx - keyboard.box.width()) / 2f, keyboard.box.left, 1f);
+        for (Edge edge : Edge.values()) assertEquals(EdgeKind.RIM, keyboard.edge(edge));
+        assertNull(rest(f, PageRef.TERMINAL, false, false).card(CardId.KEYBOARD));
+    }
+
+    @Test public void theSplitKeyboardIsOneHostAcrossItsTwoHalves() {
+        RestCards cards = rest(LayoutFixtures.SPLIT_KEYBOARD, PageRef.TERMINAL, true, false);
+        RestCards.Card keyboard = cards.card(CardId.KEYBOARD);
+        assertNotNull(keyboard);
+        assertEquals(java.util.Arrays.asList(ChromeShape.PieceId.KEYBOARD_LEFT,
+            ChromeShape.PieceId.KEYBOARD_RIGHT), keyboard.pieces);
+        assertEquals(0f, keyboard.box.left, 0f);
+        assertEquals(PONG.widthPx, keyboard.box.right, 0f);
+    }
+
+    @Test public void theAzRowOnTheDockRidesTheDockCardAndATabOrAHiddenBarHasNone() {
+        LayoutFixtures.Fixture az = LayoutFixtures.AZ_ON_DOCK.withDesign(DockStyle.GLASS_TRAY);
+        RestCards cards = rest(az, PageRef.TERMINAL, false, true);
+        assertEquals(RestCards.AzPlacement.DOCK_ROW, cards.azPlacement());
+        assertEquals(cards.card(CardId.DOCK), cards.carrierOf(ChromeShape.PieceId.AZ));
+        assertEquals(RestCards.AzPlacement.TAB,
+            RestCards.azPlacementOf(az.window.withAzTab(true)));
+        assertEquals(RestCards.AzPlacement.EDGE, RestCards.azPlacementOf(
+            az.window.withSlot(Element.AZ, new Slot(false, Edge.TOP, 0, false))));
+        RestCards plain = rest(TRAY, PageRef.TERMINAL, false, true);
+        assertEquals(RestCards.AzPlacement.HIDDEN, plain.azPlacement());
+        assertNull(plain.carrierOf(ChromeShape.PieceId.AZ));
     }
 
     /** The stack's height is the bands and the keyboard laid out, on every layout and Style. */

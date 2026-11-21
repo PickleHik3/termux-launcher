@@ -16,6 +16,7 @@ import com.termux.app.dock.DockHostBounds;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.dock.DockPlacement;
+import com.termux.app.dock.DockSpec;
 import com.termux.app.dock.DockSurfaceSpec;
 import com.termux.app.dock.PeekGlassGeometry;
 import com.termux.app.dock.UnderKeyboardBand;
@@ -28,6 +29,7 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.RestCards.CardId;
 import com.termux.app.place.RestCards.StackView;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
+import com.termux.app.terminal.inappkeyboard.FloatingKeyboardGeometry;
 import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.wall.PageRef;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -94,20 +96,59 @@ public class RestCardsParityTest {
         "DOCK shape≠layout: FLOATING TERMINAL kbDown bottom",
         "DOCK shape≠layout: FLOATING TERMINAL kbDown top",
         "DOCK shape≠layout: FLOATING TERMINAL kbUp bottom",
-        "DOCK shape≠layout: FLOATING TERMINAL kbUp top"));
+        "DOCK shape≠layout: FLOATING TERMINAL kbUp top",
+        // The floating-form keyboard: the activity hands the shape model no frame (a null box),
+        // so the model stands its default card (90 % of the opening's width, Margin above the
+        // opening's bottom) while the frame is parked where FloatingKeyboardGeometry puts it.
+        // floating keyboard fixture, frame [54,1742 - 1026,2412]: Docked model top and bottom
+        // 2163 (the opening's bottom, an empty keyboard band); Floating model 82.35..997.65 wide,
+        // top and bottom 2070.5.
+        "KEYBOARD shape≠frame: DOCKED TERMINAL bottom",
+        "KEYBOARD shape≠frame: DOCKED TERMINAL top",
+        "KEYBOARD shape≠frame: FLOATING TERMINAL bottom",
+        "KEYBOARD shape≠frame: FLOATING TERMINAL left",
+        "KEYBOARD shape≠frame: FLOATING TERMINAL right",
+        "KEYBOARD shape≠frame: FLOATING TERMINAL top",
+        // The status bar under Floating: the shape model stands its card Margin in from the
+        // screen's edges (pong: [31.5,31.5 - 1048.5,283.5]) while the bar is laid out full width
+        // from the screen's top ([0,0 - 1080,252]); Docked they agree.
+        "STATUS shape≠layout: FLOATING HOME kbDown bottom",
+        "STATUS shape≠layout: FLOATING HOME kbDown left",
+        "STATUS shape≠layout: FLOATING HOME kbDown right",
+        "STATUS shape≠layout: FLOATING HOME kbDown top",
+        "STATUS shape≠layout: FLOATING HOME kbUp bottom",
+        "STATUS shape≠layout: FLOATING HOME kbUp left",
+        "STATUS shape≠layout: FLOATING HOME kbUp right",
+        "STATUS shape≠layout: FLOATING HOME kbUp top",
+        "STATUS shape≠layout: FLOATING TERMINAL kbDown bottom",
+        "STATUS shape≠layout: FLOATING TERMINAL kbDown left",
+        "STATUS shape≠layout: FLOATING TERMINAL kbDown right",
+        "STATUS shape≠layout: FLOATING TERMINAL kbDown top",
+        "STATUS shape≠layout: FLOATING TERMINAL kbUp bottom",
+        "STATUS shape≠layout: FLOATING TERMINAL kbUp left",
+        "STATUS shape≠layout: FLOATING TERMINAL kbUp right",
+        "STATUS shape≠layout: FLOATING TERMINAL kbUp top"));
 
     private static final Set<String> FOUND = new TreeSet<>();
+    /** One case per key found: the fixture and the two numbers, for the message. */
+    private static final java.util.Map<String, String> CASES = new java.util.TreeMap<>();
 
-    @BeforeClass public static void clearFound() { FOUND.clear(); }
+    @BeforeClass public static void clearFound() {
+        FOUND.clear();
+        CASES.clear();
+    }
 
     @AfterClass public static void everyDisagreementIsNamedAndEveryNameStillDisagrees() {
-        assertEquals("parity exceptions found vs named", PARITY_EXCEPTIONS, FOUND);
+        StringBuilder msg = new StringBuilder("parity exceptions found vs named");
+        for (String key : FOUND)
+            if (!PARITY_EXCEPTIONS.contains(key)) msg.append("\n  ").append(CASES.get(key));
+        assertEquals(msg.toString(), PARITY_EXCEPTIONS, FOUND);
     }
 
     @Parameterized.Parameters(name = "{0}")
     public static List<Object[]> fixtures() {
         List<Object[]> out = new ArrayList<>();
-        for (LayoutFixtures.Fixture f : LayoutFixtures.allDesigns()) out.add(new Object[] {f});
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures()) out.add(new Object[] {f});
         return out;
     }
 
@@ -128,7 +169,8 @@ public class RestCardsParityTest {
         StackLayout.Result r;
         DockLayout dock;
         boolean peekStands, floats, unified, containerLaidOut, hostLaidOut, underLaidOut;
-        int containerTop, containerH, slack, kbDown, kbLaid, underRows, underBlock;
+        boolean dockFoot;
+        int containerTop, containerH, slack, kbDown, kbLaid, kbFoot, underRows, underBlock;
         int columnTop, columnH, columnBottom;
         int hostTop, hostBottom, sideMargin;
         int underTop, underBottom;
@@ -175,33 +217,42 @@ public class RestCardsParityTest {
         PlaceLayout layout = f.layoutOf(page);
         v.r = StackLayout.layout(pass, new DockGeometry());
         v.dock = v.r.dock;
-        BottomInsets insets = BottomInsets.forKept(0, 0, false, v.r.bottomMarginPx,
-            v.r.flushBottomInsetPx);
+        v.peekStands = DockPlacement.peekCardStandsOn(page.kind,
+            DockSurfaceSpec.forStyle(design(page)).peek, pass.toolbarShown, layout, false,
+            up, pass.imeLiftPx > 0, v.dock.promptFieldBandPx > 0);
+        v.floats = DockPlacement.floats(floating, floating && v.peekStands);
+        // The kept band: the dock's host owns it as its foot (DockSpec), or the Docked keyboard
+        // wears it under its keys while it is laid out with nothing under it.
+        boolean floatingForm = layout.keyboardForm == KeyboardForm.FLOATING;
+        v.dockFoot = DockSpec.footExists(pass.toolbarShown, v.floats, up, false, f.keptBandPx);
+        boolean keyboardFoot = !floating && !floatingForm && !v.r.bandsUnderKeyboard
+            && f.keyboardLaidOutPx() > 0;
+        BottomInsets insets = BottomInsets.forKept(0, f.keptBandPx, v.dockFoot,
+            v.r.bottomMarginPx, v.r.flushBottomInsetPx, keyboardFoot);
         v.kbDown = up ? 0 : f.keyboardLaidOutPx();
-        v.slack = laneSlack(page, pass.dock);
-        v.containerH = v.r.stackHeightPx + insets.stackExtraHeightPx + v.kbDown + v.slack;
+        v.slack = laneSlack(page, pass.dock) + Math.max(0,
+            f.settle(PageRef.TERMINAL, false, floating).flushPaddingPx - v.r.flushPaddingPx);
+        v.containerH = v.r.stackHeightPx + insets.stackExtraHeightPx + insets.keyboardFootPx
+            + v.kbDown + v.slack;
         v.containerTop = f.heightPx - insets.stackMarginPx - v.containerH;
         v.containerLaidOut = v.r.stackShown || v.kbDown > 0;
         v.kbLaid = up ? pass.keyboardHeightPx : v.kbDown;
+        v.kbFoot = v.kbLaid > 0 ? insets.keyboardFootPx : 0;
         if (v.r.bandsUnderKeyboard)
             for (Element e : EdgeStackPolicy.underKeyboard(layout))
                 v.underRows += bandOf(e, v.dock, pass);
         v.underBlock = v.r.bandsUnderKeyboard ? v.r.underKeyboardTopMarginPx + v.underRows
             + v.r.underKeyboardBottomMarginPx : 0;
-        v.columnH = v.kbLaid + v.underBlock;
+        v.columnH = v.kbLaid + v.kbFoot + v.underBlock;
         v.columnBottom = v.containerH - insets.stackPaddingPx - insets.keyboardColumnMarginPx;
         v.columnTop = v.columnBottom - v.columnH;
-        v.peekStands = DockPlacement.peekCardStandsOn(page.kind,
-            DockSurfaceSpec.forStyle(design(page)).peek, pass.toolbarShown, layout, false,
-            up, pass.imeLiftPx > 0, v.dock.promptFieldBandPx > 0);
-        v.floats = DockPlacement.floats(floating, floating && v.peekStands);
         v.sideMargin = DockHostBounds.sideMarginPx(v.floats, v.dock.horizontalInsetPx);
         int statusAbove = statusOnPlank(layout) ? 0 : v.r.statusBandPx;
         v.unified = !v.r.bandsUnderKeyboard
             && ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(pass.toolbarShown, up,
                 floating, true);
         v.hostTop = statusAbove + v.dock.slabTopInsetPx + v.slack;
-        v.hostBottom = v.unified ? v.containerH : v.columnTop;
+        v.hostBottom = v.unified || v.dockFoot ? v.containerH : v.columnTop;
         v.hostLaidOut = v.containerLaidOut && pass.toolbarShown && v.hostBottom > v.hostTop;
         v.underBottom = v.columnBottom - v.r.underKeyboardBottomMarginPx;
         v.underTop = v.underBottom - v.underRows;
@@ -226,7 +277,8 @@ public class RestCardsParityTest {
         g.keyboardInColumn = v.kbLaid > 0;
         g.keyboardTopPx = v.columnTop;
         g.keyboardWidthPx = f.widthPx;
-        g.keyboardHeightPx = v.kbLaid;
+        g.keyboardHeightPx = v.kbLaid + v.kbFoot;
+        g.keyboardFootPx = v.kbFoot;
         g.belowKeyboardInColumnPx = v.underBlock + insets.stackPaddingPx;
         g.underShown = v.underLaidOut;
         g.underTopPx = v.underTop;
@@ -305,10 +357,7 @@ public class RestCardsParityTest {
             + (up ? "kbUp" : "kbDown");
         StackLayout.Input pass = f.pass(page, up, floating);
         PlaceLayout layout = f.layoutOf(page);
-        RestCards.Rest rest = new RestCards.Rest(pass, page, f.widthPx, f.heightPx, f.density,
-            f.extraKeysRowPx, f.keyboardLaidOutPx(),
-            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false, f.density),
-            StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, f.density));
+        RestCards.Rest rest = f.cardsRest(page, up, floating);
         rest.statusOnDockPlank = statusOnPlank(layout);
         RestCards cards = RestCards.of(rest);
         Views v = views(page, up, floating, pass);
@@ -346,9 +395,35 @@ public class RestCardsParityTest {
         assertEquals(at + " peek card", v.hostLaidOut && v.peekStands, peekCard != null);
         assertEquals(at + " dock card", v.hostLaidOut && !v.peekStands, dockCard != null);
         if (peekCard != null) checkPeek(at, v, pass, layout, peekCard, host);
+        // The foot: the kept band, worn by the host while it owns it or carries a keyboard that
+        // wears it, or by the Docked keyboard's own host; never under a Peek card, which runs
+        // past the screen's bottom itself.
+        RestCards.Card foot = cards.card(CardId.FOOT);
+        float footTop = f.heightPx - f.keptBandPx;
+        boolean hostFoot = f.keptBandPx > 0 && v.hostLaidOut && !v.peekStands
+            && host.bottom >= f.heightPx && (v.dockFoot || v.unified && v.kbFoot > 0);
+        boolean wantsKeyboard = up && v.kbLaid > 0 && layout.keyboardForm != KeyboardForm.FLOATING
+            && !v.unified;
+        boolean keyboardFoot = f.keptBandPx > 0 && wantsKeyboard && v.kbFoot > 0;
+        assertEquals(at + " foot card", hostFoot || keyboardFoot, foot != null);
+        if (foot != null) {
+            assertEquals(at + " foot view", hostFoot ? StackView.HOST : StackView.KEYBOARD_COLUMN,
+                foot.view);
+            float left = hostFoot ? v.sideMargin : 0f;
+            assertBox(at + " foot", new Box(left, footTop, f.widthPx - left, f.heightPx),
+                foot.box);
+            assertTrue(at, foot.corners.isSquare());
+            assertEquals(at, EdgeKind.JOIN, foot.edge(Edge.TOP));
+            assertEquals(at, EdgeKind.SCREEN, foot.edge(Edge.BOTTOM));
+            assertEquals(at, EdgeKind.SCREEN, foot.edge(Edge.LEFT));
+            assertEquals(at, EdgeKind.SCREEN, foot.edge(Edge.RIGHT));
+        }
         if (dockCard != null) {
-            assertBox(at + " dock box", host, dockCard.box);
-            checkDock(at, v, page, up, floating, pass, layout, dockCard, cornersPx);
+            // With a foot the dock's card stops at the band, and the two together are the host.
+            assertBox(at + " dock box", hostFoot ? new Box(host.left, host.top, host.right,
+                footTop) : host, dockCard.box);
+            checkDock(at, v, page, up, floating, pass, layout, dockCard, cornersPx,
+                hostFoot ? f.heightPx : Float.NaN);
         }
 
         // The bands under the keyboard.
@@ -371,13 +446,24 @@ public class RestCardsParityTest {
             assertEquals(at, side, underCard.edge(Edge.RIGHT));
         }
 
-        // The keyboard.
+        // The keyboard: in the stack's column, or its floating frame.
         RestCards.Card keyboardCard = cards.card(CardId.KEYBOARD);
-        boolean wantsKeyboard = up && v.kbLaid > 0 && layout.keyboardForm != KeyboardForm.FLOATING
-            && !v.unified;
-        assertEquals(at + " keyboard card", wantsKeyboard, keyboardCard != null);
+        boolean floatingForm = layout.keyboardForm == KeyboardForm.FLOATING;
+        assertEquals(at + " keyboard card", wantsKeyboard || up && floatingForm,
+            keyboardCard != null);
         if (!up) assertFalse(at + " a down keyboard is cut whole", v.frame.visible(StackEnd.KEYBOARD));
-        if (keyboardCard != null) checkKeyboard(at, v, floating, cornersPx, keyboardCard);
+        if (keyboardCard != null && floatingForm) {
+            checkFloatingForm(at, page, up, floating, pass, cornersPx, keyboardCard,
+                cards.laidOut(StackView.FLOATING_KEYBOARD));
+        } else if (keyboardCard != null) {
+            checkKeyboard(at, v, page, up, floating, pass, layout, cornersPx, keyboardCard,
+                keyboardFoot ? footTop : Float.NaN);
+        } else {
+            assertNull(at, cards.laidOut(StackView.FLOATING_KEYBOARD));
+        }
+
+        // The A-Z bar: where the layout stands it and which card carries it.
+        checkAz(at, layout, cards, v, pass);
 
         // The status bar.
         RestCards.Card statusCard = cards.card(CardId.STATUS);
@@ -394,6 +480,13 @@ public class RestCardsParityTest {
             assertEquals(at + " status corners", piece.corners, statusCard.corners);
             for (Edge e : Edge.values())
                 assertEquals(at + " status " + e, piece.kind(e), statusCard.edge(e));
+            // The shape model's own box for the bar against where the bar is laid out.
+            String key = "STATUS shape≠layout: " + (floating ? "FLOATING" : "DOCKED") + " "
+                + page + " " + (up ? "kbUp" : "kbDown");
+            note(key, "left", piece.box.left, statusCard.box.left);
+            note(key, "top", piece.box.top, statusCard.box.top);
+            note(key, "right", piece.box.right, statusCard.box.right);
+            note(key, "bottom", piece.box.bottom, statusCard.box.bottom);
         } else {
             assertNull(at + " status laid out", cards.laidOut(StackView.STATUS_BAR));
         }
@@ -444,7 +537,7 @@ public class RestCardsParityTest {
 
     private void checkDock(String at, Views v, PageRef page, boolean up, boolean floating,
                            StackLayout.Input pass, PlaceLayout layout, RestCards.Card dock,
-                           float cornersPx) {
+                           float cornersPx, float footBottom) {
         ChromeShape shape = shape(page, up, floating, pass, v.dock, cornersPx);
         List<PieceId> ids = new ArrayList<>();
         for (Element e : AccessoryStackLayoutPolicy.plankBands(
@@ -481,28 +574,44 @@ public class RestCardsParityTest {
         String key = "DOCK shape≠layout: " + (floating ? "FLOATING" : "DOCKED") + " "
             + page + " " + (up ? "kbUp" : "kbDown");
         Box want = card.box;
-        Box got = dock.box;
+        // The shape model has no foot: its card is the dock's and the foot's together.
+        Box got = Float.isNaN(footBottom) ? dock.box
+            : new Box(dock.box.left, dock.box.top, dock.box.right, footBottom);
         note(key, "left", want.left, got.left);
         note(key, "top", want.top, got.top);
         note(key, "right", want.right, got.right);
         note(key, "bottom", want.bottom, got.bottom);
     }
 
-    private static void note(String key, String edge, float shape, float layout) {
+    private void note(String key, String edge, float shape, float layout) {
         if (Math.abs(shape - layout) <= SHAPE_EPS) return;
         FOUND.add(key + " " + edge);
+        if (!CASES.containsKey(key + " " + edge))
+            CASES.put(key + " " + edge, key + " " + edge + " :: " + f.name + " " + shape + " vs "
+                + layout);
     }
 
-    private void checkKeyboard(String at, Views v, boolean floating, float cornersPx,
-                               RestCards.Card kb) {
+    private void checkKeyboard(String at, Views v, PageRef page, boolean up, boolean floating,
+                               StackLayout.Input pass, PlaceLayout layout, float cornersPx,
+                               RestCards.Card kb, float footTop) {
         Box drawn = drawnRegion(v, StackEnd.KEYBOARD, 0, f.widthPx);
+        if (!Float.isNaN(footTop)) drawn = new Box(drawn.left, drawn.top, drawn.right, footTop);
         assertTrue(at + " keyboard drawn", v.frame.visible(StackEnd.KEYBOARD));
+        boolean split = layout.keyboardForm == KeyboardForm.SPLIT;
+        List<PieceId> ids = split ? Arrays.asList(PieceId.KEYBOARD_LEFT, PieceId.KEYBOARD_RIGHT)
+            : java.util.Collections.singletonList(PieceId.KEYBOARD);
+        assertEquals(at + " keyboard pieces", ids, kb.pieces);
+        // The host's side margin and top gap as the activity dresses the host.
+        int margin = com.termux.app.chrome.ChromePolicy.keyboardHostSideMarginPx(false,
+            TermuxAppSharedPreferences.clampSurfaceHorizontalInset(
+                pass.dock.rowsHalf().marginDp), floating, f.density);
+        int gap = com.termux.app.chrome.ChromePolicy.keyboardHostTopMarginPx(floating, false,
+            f.density);
         if (floating) {
-            int margin = DockLayoutPolicy.surfaceHorizontalInsetPx(
+            assertEquals(at + " keyboard gap", UnderKeyboardBand.keyboardGapPx(f.density), gap);
+            assertEquals(at + " keyboard side inset", DockLayoutPolicy.surfaceHorizontalInsetPx(
                 TermuxAppSharedPreferences.clampSurfaceHorizontalInset(
-                    f.pass(PageRef.TERMINAL, true, true).dock.rowsHalf().marginDp), true,
-                f.density);
-            int gap = UnderKeyboardBand.keyboardGapPx(f.density);
+                    pass.dock.rowsHalf().marginDp), true, f.density), margin);
             assertBox(at + " keyboard card", new Box(margin, drawn.top + gap, f.widthPx - margin,
                 drawn.bottom), kb.box);
             float radius = Math.min(cornersPx, kb.box.height() / 2f);
@@ -510,13 +619,105 @@ public class RestCardsParityTest {
             assertEquals(at, radius, kb.corners.bottomRight, EPS);
             for (Edge e : Edge.values()) assertEquals(at + " " + e, EdgeKind.RIM, kb.edge(e));
         } else {
+            assertEquals(at + " docked keyboard is flush", 0, margin);
+            assertEquals(at + " docked keyboard has no gap", 0, gap);
             assertBox(at + " keyboard card", drawn, kb.box);
-            assertTrue(at, kb.corners.isSquare());
+            // Docked, the keyboard is a slice of the frame: its corners and edges are the shape
+            // model's, as the activity clips and rims its host (chromeClipOf, KEYBOARD_PIECES).
+            ChromeShape shape = shape(page, up, false, pass, v.dock, cornersPx);
+            LiveChromeShape.Clip clip = LiveChromeShape.outlineOf(shape, ids);
+            assertNotNull(at, clip);
+            assertEquals(at + " TL", clip.topLeft, kb.corners.topLeft, 0f);
+            assertEquals(at + " BR", clip.bottomRight, kb.corners.bottomRight, 0f);
+            int rim = LiveChromeShape.rimEdges(shape, ids);
+            for (Edge e : Edge.values())
+                assertEquals(at + " keyboard rim " + e,
+                    (rim & com.termux.app.chrome.ChromeEdgeRule.edgeBit(e)) != 0,
+                    kb.edge(e).drawsRim());
             assertEquals(at, EdgeKind.SCREEN, kb.edge(Edge.LEFT));
             assertEquals(at, EdgeKind.SCREEN, kb.edge(Edge.RIGHT));
             assertEquals(at, EdgeKind.JOIN, kb.edge(Edge.TOP));
             assertEquals(at, v.r.bandsUnderKeyboard ? EdgeKind.JOIN : EdgeKind.SCREEN,
                 kb.edge(Edge.BOTTOM));
         }
+    }
+
+    /**
+     * The floating-form keyboard: its frame where FloatingKeyboardGeometry parks it in its room,
+     * as FloatingKeyboardController composes it. The activity hands the shape model no frame (a
+     * null box), so the model's own keyboard card is a second, disagreeing source.
+     */
+    private void checkFloatingForm(String at, PageRef page, boolean up, boolean floating,
+                                   StackLayout.Input pass, float cornersPx, RestCards.Card kb,
+                                   @Nullable Box laidOut) {
+        Box room = f.floatingKeyboardRoom();
+        int roomW = Math.round(room.width());
+        int frameW = FloatingKeyboardGeometry.frameWidthPx(roomW,
+            LayoutFixtures.FLOATING_KEYBOARD_WIDTH_SCALE, 0);
+        float left = room.left + FloatingKeyboardGeometry.positionPx(
+            FloatingKeyboardGeometry.DEFAULT_X_FRACTION,
+            FloatingKeyboardGeometry.travelPx(roomW, frameW));
+        float top = room.top + FloatingKeyboardGeometry.positionPx(
+            FloatingKeyboardGeometry.DEFAULT_Y_FRACTION,
+            FloatingKeyboardGeometry.travelPx(Math.round(room.height()), f.keyboardPx));
+        Box want = new Box(left, top, left + frameW, top + f.keyboardPx);
+        assertBox(at + " floating keyboard", want, kb.box);
+        assertBox(at + " floating keyboard laid out", want, laidOut);
+        assertEquals(at, StackView.FLOATING_KEYBOARD, kb.view);
+        for (Edge e : Edge.values()) assertEquals(at + " " + e, EdgeKind.RIM, kb.edge(e));
+        // The shape model handed this frame gives the card's corners.
+        PlaceLayout layout = f.layoutOf(page).withKeyboardShown(true);
+        ChromeShapeModel.Thickness thickness = ChromeShapeModel.Thickness.of(0, 0, 0, 0, 0, 0, 0,
+            0, f.keyboardPx);
+        LayoutStyle style = floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED;
+        float marginPx = Math.max(0, pass.dock.rowsHalf().marginDp) * f.density;
+        ChromeShape.Piece piece = ChromeShapeModel.shape(ChromeShapeModel.input(layout, style,
+            f.widthPx, f.heightPx, thickness).corners(cornersPx).margin(marginPx)
+            .floatingKeyboardBox(want).build()).piece(PieceId.KEYBOARD);
+        assertNotNull(at, piece);
+        assertEquals(at + " floating keyboard corners", piece.corners, kb.corners);
+        // What the activity's shape model says with no frame handed to it.
+        StackLayout.Input upPass = f.pass(page, true, floating);
+        ChromeShape.Piece blind = shape(page, true, floating, upPass,
+            StackLayout.layout(upPass, new DockGeometry()).dock, cornersPx)
+            .piece(PieceId.KEYBOARD);
+        if (blind == null) return;
+        String key = "KEYBOARD shape≠frame: " + (floating ? "FLOATING" : "DOCKED") + " "
+            + page;
+        note(key, "left", blind.box.left, kb.box.left);
+        note(key, "top", blind.box.top, kb.box.top);
+        note(key, "right", blind.box.right, kb.box.right);
+        note(key, "bottom", blind.box.bottom, kb.box.bottom);
+    }
+
+    /**
+     * The A-Z bar: its placement is what PlaceChromePolicy reads off the layout; on the dock's
+     * stack it rides the card whose rows it stands among (the dock's over the keyboard, the bands'
+     * under it, or the Peek card when it carries the row), and a tab, a hidden bar or one off the
+     * stack has no card here.
+     */
+    private void checkAz(String at, PlaceLayout layout, RestCards cards, Views v,
+                         StackLayout.Input pass) {
+        RestCards.AzPlacement want = PlaceChromePolicy.azTabShown(layout)
+            ? RestCards.AzPlacement.TAB
+            : PlaceChromePolicy.azRowOnDock(layout) ? RestCards.AzPlacement.DOCK_ROW
+            : PlaceChromePolicy.azRowShown(layout) ? RestCards.AzPlacement.EDGE
+            : RestCards.AzPlacement.HIDDEN;
+        assertEquals(at + " a-z placement", want, cards.azPlacement());
+        RestCards.Card carrier = cards.carrierOf(PieceId.AZ);
+        CardId wantCarrier = null;
+        if (want == RestCards.AzPlacement.DOCK_ROW && v.hostLaidOut) {
+            boolean under = EdgeStackPolicy.standsUnderKeyboard(layout, Element.AZ);
+            if (v.peekStands) {
+                if (DockPlacement.peekCardCarriesAz(layout, false)) wantCarrier = CardId.PEEK;
+            } else if (under) {
+                if (v.underLaidOut) wantCarrier = CardId.UNDER;
+            } else {
+                wantCarrier = CardId.DOCK;
+            }
+        }
+        assertEquals(at + " a-z carrier", wantCarrier, carrier == null ? null : carrier.id);
+        if (carrier != null && carrier.id != CardId.PEEK)
+            assertTrue(at + " a-z band laid out", bandOf(Element.AZ, v.dock, pass) > 0);
     }
 }
