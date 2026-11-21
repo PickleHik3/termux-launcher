@@ -62,6 +62,7 @@ public final class AppDrawerSectionPager {
     @NonNull private AppDrawerSection mSettled = AppDrawerSection.APPS;
     private boolean mDragging;
     private boolean mSettling;
+    private float mDragStartPosition;
     private int mDragStartIndex;
     private float mPageWidthPx;
     @NonNull private SettleSpring mSpring = SettleSpring.page(0f, 0f, 1f);
@@ -114,6 +115,30 @@ public final class AppDrawerSectionPager {
         stopSettle();
         mDragging = true;
         mDragStartIndex = nearestIndex(mPosition);
+        mDragStartPosition = mPosition;
+    }
+
+    /**
+     * Puts the number {@code travelPx} from where the drag began (positive towards Categories),
+     * clamped to the two pages. Absolute, so a lift that lands after a jump of the finger (moves
+     * the system batched, or the lift's own position) still counts all of the way travelled.
+     */
+    public void dragTo(float travelPx, float pageWidthPx) {
+        if (!mDragging) beginDrag();
+        if (!(pageWidthPx > 0f) || Float.isNaN(travelPx)) return;
+        mPageWidthPx = pageWidthPx;
+        setPosition(clamp(mDragStartPosition + travelPx / pageWidthPx));
+    }
+
+    /**
+     * The travel a drag that was claimed past {@code slopPx} moves the pages by: the finger's own
+     * travel less the slop it spent being decided, so the claim starts the pages from rest with no
+     * jump and nothing after it is lost.
+     */
+    public static float travelPastSlop(float fingerTravelPx, float slopPx) {
+        float slop = Math.max(0f, slopPx);
+        float abs = Math.abs(fingerTravelPx);
+        return abs <= slop ? 0f : Math.signum(fingerTravelPx) * (abs - slop);
     }
 
     /** Follows the finger by {@code dxPx}, clamped to the two pages: no rubber band past an end. */

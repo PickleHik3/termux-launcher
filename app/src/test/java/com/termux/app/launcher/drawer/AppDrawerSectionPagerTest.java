@@ -121,6 +121,52 @@ public class AppDrawerSectionPagerTest {
         assertEquals(AppDrawerSection.CATEGORIES, pager.settledSection());
     }
 
+    /**
+     * The emulator's fast swipe (DrawerSection log, 2026-11-21): 750 px of finger on a 1038 px
+     * page, but the pages were moved by per-move deltas from the claim, so the travel spent
+     * deciding and the lift's own last stretch were lost, the number stood at 0.25 and a swipe
+     * that crossed most of the page went home. Absolute travel from the down keeps all of it.
+     */
+    @Test public void aFastSwipeCountsAllItsTravelFromTheDown() {
+        float w = 1038f;
+        float slop = 16f;
+        pager.beginDrag();
+        // Claimed at 150 px; the next event is already the lift, 750 px from the down.
+        pager.dragTo(AppDrawerSectionPager.travelPastSlop(150f, slop), w);
+        pager.dragTo(AppDrawerSectionPager.travelPastSlop(750f, slop), w);
+        assertEquals((750f - slop) / w, pager.position(), 1e-4f);
+        // Even with no velocity left at the lift, the distance turns the page.
+        pager.release(0f, w, DENSITY);
+        clock.run(1f);
+        assertEquals(AppDrawerSection.CATEGORIES, pager.settledSection());
+    }
+
+    @Test public void aFastSwipeBackFromCategoriesTurnsBack() {
+        float w = 1038f;
+        pager.jumpTo(AppDrawerSection.CATEGORIES);
+        pager.beginDrag();
+        pager.dragTo(AppDrawerSectionPager.travelPastSlop(-750f, 16f), w);
+        pager.release(0f, w, DENSITY);
+        clock.run(1f);
+        assertEquals(AppDrawerSection.APPS, pager.settledSection());
+    }
+
+    @Test public void aShortFlingPastHomesThresholdTurns() {
+        // Short of the commit fraction, but thrown faster than PagePolicy's fling speed.
+        pager.beginDrag();
+        pager.dragTo(AppDrawerSectionPager.travelPastSlop(80f, 16f), W);
+        pager.release(com.termux.app.wall.PagePolicy.FLING_DP_PER_SEC * DENSITY + 1f, W, DENSITY);
+        clock.run(1f);
+        assertEquals(AppDrawerSection.CATEGORIES, pager.settledSection());
+    }
+
+    @Test public void travelPastSlopSpendsTheSlopOnce() {
+        assertEquals(0f, AppDrawerSectionPager.travelPastSlop(10f, 16f), 0f);
+        assertEquals(4f, AppDrawerSectionPager.travelPastSlop(20f, 16f), 0f);
+        assertEquals(-4f, AppDrawerSectionPager.travelPastSlop(-20f, 16f), 0f);
+        assertEquals(20f, AppDrawerSectionPager.travelPastSlop(20f, 0f), 0f);
+    }
+
     @Test public void aFlingAwayFromTheOnlyOtherPageStaysPut() {
         pager.beginDrag();
         pager.dragBy(50f, W);

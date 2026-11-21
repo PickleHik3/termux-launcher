@@ -251,7 +251,8 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mPagesActive;
     /** True from a section claim until its UP or CANCEL: this view drives the pager. */
     private boolean mSectionStream;
-    private float mSectionLastX;
+    /** The slop the claim spent, which the pages do not move by (0 for a caught settle). */
+    private float mSectionSlopPx;
     private float mSectionDownX;
     private float mSectionDownY;
     private int mTouchSlopPx;
@@ -2779,7 +2780,8 @@ public final class AppDrawerContentView extends FrameLayout
      */
     private void startSectionStream(@NonNull MotionEvent ev) {
         mSectionStream = true;
-        mSectionLastX = ev.getX();
+        // A drag claimed past the slop spends it; a settle caught on the down has none to spend.
+        mSectionSlopPx = ev.getActionMasked() == MotionEvent.ACTION_DOWN ? 0f : mTouchSlopPx;
         dismissContextPopups();
         cancelCellLongPresses();
         // Disarms the close policy and the categories' own touch stream.
@@ -2807,15 +2809,12 @@ public final class AppDrawerContentView extends FrameLayout
         if (tracker != null) tracker.addMovement(event);
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         switch (action) {
-            case MotionEvent.ACTION_MOVE: {
-                float x = event.getX();
-                float dx = x - mSectionLastX;
-                mSectionLastX = x;
-                // Towards Categories is the finger moving to the start side.
-                mSectionPager.dragBy(rtl ? dx : -dx, getWidth());
+            case MotionEvent.ACTION_MOVE:
+                applySectionTravel(event.getX(), rtl);
                 break;
-            }
             case MotionEvent.ACTION_UP: {
+                // The lift's own position counts: a fast swipe's last stretch can arrive on it.
+                applySectionTravel(event.getX(), rtl);
                 float velocity = 0f;
                 if (tracker != null) {
                     tracker.computeCurrentVelocity(1000);
@@ -2835,6 +2834,14 @@ public final class AppDrawerContentView extends FrameLayout
                 break;
         }
         return true;
+    }
+
+    /** Puts the pages where the finger at {@code x} has taken them since the down. */
+    private void applySectionTravel(float x, boolean rtl) {
+        // Towards Categories is the finger moving to the start side.
+        float finger = rtl ? x - mSectionDownX : mSectionDownX - x;
+        mSectionPager.dragTo(AppDrawerSectionPager.travelPastSlop(finger, mSectionSlopPx),
+            getWidth());
     }
 
     /** The stream is over (or the drawer is going away): the velocity tracker and latch go. */
