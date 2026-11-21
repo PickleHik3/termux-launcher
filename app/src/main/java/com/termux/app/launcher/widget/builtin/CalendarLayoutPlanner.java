@@ -36,9 +36,9 @@ final class CalendarLayoutPlanner {
     /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
     static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.CALENDAR.maxSpan;
 
-    static final String GLYPH_CALENDAR = "";
-    static final String GLYPH_PREV = "";
-    static final String GLYPH_NEXT = "";
+    static final String GLYPH_CALENDAR = WidgetIcons.CALENDAR;
+    static final String GLYPH_PREV = WidgetIcons.CHEVRON_LEFT;
+    static final String GLYPH_NEXT = WidgetIcons.CHEVRON_RIGHT;
 
     static final String WEEKDAY = "weekday";
     static final String DATE = "date";

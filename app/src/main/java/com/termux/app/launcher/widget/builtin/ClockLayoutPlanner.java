@@ -49,7 +49,7 @@ final class ClockLayoutPlanner {
     static final String TOUCH = "touch";
 
     /** The alarm's bell: Codicons' outlined bell. */
-    static final String GLYPH_ALARM = "";
+    static final String GLYPH_ALARM = WidgetIcons.ALARM;
 
     /** The smallest a digital face's box is kept at, and the dial's. */
     static final float FACE_MIN_DP = 24f;

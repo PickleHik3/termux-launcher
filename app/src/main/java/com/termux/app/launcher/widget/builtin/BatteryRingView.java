@@ -5,10 +5,12 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 /**
@@ -42,6 +44,8 @@ public final class BatteryRingView extends View {
     private final RectF oval = new RectF();
     private final Rect ink = new Rect();
     private final Rect markInk = new Rect();
+    /** The bolt: the Roundline power icon, in a square as wide as the bolt's text size. */
+    @Nullable private final Drawable boltIcon;
     private float fraction;
     @ColorInt private int fill;
     @NonNull private String label = PLACEHOLDER;
@@ -55,7 +59,7 @@ public final class BatteryRingView extends View {
         fill = style.primary;
         number.setTypeface(style.numerals);
         number.setColor(style.onSurface);
-        if (style.nerd != null) mark.setTypeface(style.nerd);
+        boltIcon = WidgetIcons.drawable(context, StatGlyphs.POWER, fill);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 
@@ -106,16 +110,27 @@ public final class BatteryRingView extends View {
         number.getTextBounds(label, 0, label.length(), ink);
         float height = ink.height();
         if (bolt) {
-            mark.getTextBounds(StatGlyphs.POWER, 0, StatGlyphs.POWER.length(), markInk);
+            markBox();
             height += number.getTextSize() * GAP_SHARE + markInk.height();
         }
         float top = cy - height / 2f;
         if (bolt) {
-            mark.setColor(fill);
-            canvas.drawText(StatGlyphs.POWER, cx - markInk.exactCenterX(), top - markInk.top, mark);
+            if (boltIcon != null) {
+                boltIcon.setTint(fill | 0xFF000000);
+                int left = Math.round(cx - markInk.width() / 2f);
+                int boltTop = Math.round(top);
+                boltIcon.setBounds(left, boltTop, left + markInk.width(), boltTop + markInk.height());
+                boltIcon.draw(canvas);
+            }
             top += markInk.height() + number.getTextSize() * GAP_SHARE;
         }
         canvas.drawText(label, cx - ink.exactCenterX(), top - ink.top, number);
+    }
+
+    /** The bolt's box: a square the size of its text size. */
+    private void markBox() {
+        int side = Math.round(mark.getTextSize());
+        markInk.set(0, 0, side, side);
     }
 
     /** Sizes the number and the bolt for a ring {@code size} across; once per size and label. */
@@ -129,7 +144,7 @@ public final class BatteryRingView extends View {
         number.getTextBounds(label, 0, label.length(), ink);
         numberWidth = Math.max(numberWidth, ink.width());
         numberHeight = Math.max(numberHeight, ink.height());
-        mark.getTextBounds(StatGlyphs.POWER, 0, StatGlyphs.POWER.length(), markInk);
+        markBox();
         float px = OneByOneFit.ringNumberSize(size * INNER, numberWidth / PROBE_PX,
             numberHeight / PROBE_PX, markInk.width() / PROBE_PX, markInk.height() / PROBE_PX,
             GAP_SHARE);
@@ -149,7 +164,7 @@ public final class BatteryRingView extends View {
         number.getTextBounds(label, 0, label.length(), ink);
         float width = ink.width(), height = ink.height();
         if (bolt) {
-            mark.getTextBounds(StatGlyphs.POWER, 0, StatGlyphs.POWER.length(), markInk);
+            markBox();
             width = Math.max(width, markInk.width());
             height += number.getTextSize() * GAP_SHARE + markInk.height();
         }

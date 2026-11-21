@@ -41,7 +41,7 @@ public class NotesWidgetView extends BuiltinWidgetView
     /** More lines than any card can show; the block clips to what fits. */
     private static final int BLOCK_LINES = 40;
 
-    private static final String GLYPH_NOTE = "";
+    private static final String GLYPH_NOTE = WidgetIcons.NOTE;
 
     /** The design's sample note, for the picker card. */
     private static final String SAMPLE = "# today\n"

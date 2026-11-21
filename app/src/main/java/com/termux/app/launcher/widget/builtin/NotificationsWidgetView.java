@@ -78,8 +78,8 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
     /** A row button's glyph, at most; smaller where the row is short. */
     private static final float BUTTON_GLYPH_SP = 16f;
     /** The Reply and Dismiss glyphs (Font Awesome's reply and times, in the Nerd font). */
-    private static final String GLYPH_REPLY = "\uf112";
-    private static final String GLYPH_DISMISS = "\uf00d";
+    private static final String GLYPH_REPLY = WidgetIcons.REPLY;
+    private static final String GLYPH_DISMISS = WidgetIcons.CLOSE;
     /** Ripple ink over a row or a button, as the Tasks widget's rows. */
     private static final int RIPPLE_ALPHA = 0x1F;
 
@@ -644,11 +644,11 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
         ZoneId zone = ZoneId.systemDefault();
         List<NotificationsWidgetData.Item> items = new ArrayList<>();
         Object[][] rows = {
-            {"WhatsApp", "Mum", "Are you coming for dinner tonight? Let me know", 14, 10, "", s.done},
-            {"Messages", "Alex", "I've sent the updated plans. See you tomorrow.", 13, 40, "", s.primary},
-            {"WhatsApp", "Mum", "Dinner is at eight", 13, 32, "", s.done},
-            {"Messages", "Alex", "Running late", 12, 10, "", s.primary},
-            {"WhatsApp", "Mum", "Call me when you can", 9, 15, "", s.done},
+            {"WhatsApp", "Mum", "Are you coming for dinner tonight? Let me know", 14, 10, WidgetIcons.MESSAGE, s.done},
+            {"Messages", "Alex", "I've sent the updated plans. See you tomorrow.", 13, 40, WidgetIcons.MESSAGE, s.primary},
+            {"WhatsApp", "Mum", "Dinner is at eight", 13, 32, WidgetIcons.MESSAGE, s.done},
+            {"Messages", "Alex", "Running late", 12, 10, WidgetIcons.MESSAGE, s.primary},
+            {"WhatsApp", "Mum", "Call me when you can", 9, 15, WidgetIcons.MESSAGE, s.done},
         };
         for (int i = 0; i < rows.length; i++) {
             Object[] row = rows[i];
