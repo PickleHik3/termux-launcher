@@ -63,9 +63,9 @@ public final class StepperRow {
         root.addView(titleView, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        MaterialButton minus = button(context, R.drawable.ic_editor_remove,
+        MaterialButton minus = button(context, R.drawable.ic_rl_remove,
             context.getString(R.string.appearance_stepper_less, title));
-        MaterialButton plus = button(context, R.drawable.ic_symbol_add,
+        MaterialButton plus = button(context, R.drawable.ic_rl_add,
             context.getString(R.string.appearance_stepper_more, title));
         TextView number = RowKit.title(context, readout.format(value));
         number.setGravity(Gravity.CENTER);

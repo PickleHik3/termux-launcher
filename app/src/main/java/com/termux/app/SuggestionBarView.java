@@ -1052,7 +1052,7 @@ public final class SuggestionBarView extends GridLayout
         tile.setPadding(0, 0, 0, 0);
         tile.setBackground(createPinnedFolderShellBackground());
         tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
-        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_status_bar_add_window);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_rl_window_add);
         floatTileGlyph = null;
         if (glyph != null) {
             glyph = DrawableCompat.wrap(glyph.mutate());
@@ -1098,7 +1098,7 @@ public final class SuggestionBarView extends GridLayout
         tile.setPadding(0, 0, 0, 0);
         tile.setBackground(createPinnedFolderShellBackground());
         tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
-        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_symbol_terminal);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_rl_terminal);
         paletteTileGlyph = null;
         if (glyph != null) {
             glyph = DrawableCompat.wrap(glyph.mutate());
@@ -1317,7 +1317,7 @@ public final class SuggestionBarView extends GridLayout
         tile.setPadding(0, 0, 0, 0);
         tile.setBackground(createPinnedFolderShellBackground());
         tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
-        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_symbol_apps);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_rl_apps);
         drawerTileGlyph = null;
         if (glyph != null) {
             glyph = DrawableCompat.wrap(glyph.mutate());
@@ -6785,7 +6785,7 @@ public final class SuggestionBarView extends GridLayout
                     }
                 });
             case EDIT_DOCK:
-                return appMenuItem(R.string.app_menu_edit_dock, R.drawable.ic_ms_edit, () -> {
+                return appMenuItem(R.string.app_menu_edit_dock, R.drawable.ic_rl_edit, () -> {
                     EditDockListener listener = editDockListener;
                     if (listener != null) listener.onEditDock();
                 });

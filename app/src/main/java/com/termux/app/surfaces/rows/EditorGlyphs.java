@@ -56,7 +56,7 @@ public final class EditorGlyphs {
     @DrawableRes public static final int BOTTOM_PADDING = R.drawable.ic_ed_bottom_padding;
 
     // The Dock's Bars list: the extra-keys editor's handle, and the sliders glyph.
-    @DrawableRes public static final int BARS_REORDER = R.drawable.ic_drag_indicator_24;
+    @DrawableRes public static final int BARS_REORDER = R.drawable.ic_rl_drag_grip;
     @DrawableRes public static final int BAR_SETTINGS = R.drawable.ic_tune_sliders_24;
 
     // A-Z, glass, wallpaper and the CRT colour.

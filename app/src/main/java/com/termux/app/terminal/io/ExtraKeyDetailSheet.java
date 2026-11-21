@@ -124,7 +124,7 @@ public final class ExtraKeyDetailSheet {
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         MaterialButton close = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialIconButtonStyle);
-        close.setIconResource(R.drawable.ic_symbol_close);
+        close.setIconResource(R.drawable.ic_rl_close);
         close.setContentDescription(context.getString(R.string.settings_extra_keys_sheet_done));
         close.setOnClickListener(v -> dialog.dismiss());
         header.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -369,7 +369,7 @@ public final class ExtraKeyDetailSheet {
         if (onClear != null) {
             MaterialButton clear = new MaterialButton(context, null,
                 com.google.android.material.R.attr.materialIconButtonStyle);
-            clear.setIconResource(R.drawable.ic_symbol_close);
+            clear.setIconResource(R.drawable.ic_rl_close);
             clear.setIconTint(android.content.res.ColorStateList.valueOf(colorSubtle));
             clear.setContentDescription(context.getString(
                 R.string.settings_extra_keys_sheet_clear_swipe_up));

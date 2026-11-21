@@ -29,9 +29,9 @@ final class TasksLayoutPlanner {
     /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
     static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.TASKS.maxSpan;
 
-    static final String GLYPH_ADD = "";
-    static final String GLYPH_OPEN = "";
-    static final String GLYPH_DONE = "";
+    static final String GLYPH_ADD = WidgetIcons.ADD;
+    static final String GLYPH_OPEN = WidgetIcons.CHECKBOX_EMPTY;
+    static final String GLYPH_DONE = WidgetIcons.CHECKBOX_CHECKED;
 
     /** One task as the card shows it, open ones first. */
     static final class Row {

@@ -97,13 +97,13 @@ final class EditorBar {
 
         // No orientation chip (appearance-cards overhaul): the other orientation is edited by
         // turning the phone, which needs no button.
-        mUndo = iconButton(R.drawable.ic_symbol_undo, R.string.appearance_editor_undo);
+        mUndo = iconButton(R.drawable.ic_rl_undo, R.string.appearance_editor_undo);
         mUndo.setOnClickListener(v -> { if (mListener != null) mListener.onUndo(); });
         addItem(mUndo, dp(48));
 
         mDone = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonStyle);
-        mDone.setIconResource(R.drawable.ic_symbol_check);
+        mDone.setIconResource(R.drawable.ic_rl_check);
         mDone.setText(R.string.appearance_editor_done);
         mDone.setSingleLine(true);
         mDone.setOnClickListener(v -> { if (mListener != null) mListener.onDone(); });

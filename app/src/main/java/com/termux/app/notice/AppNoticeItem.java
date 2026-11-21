@@ -139,7 +139,7 @@ public final class AppNoticeItem {
     /**
      * The icon the mark draws, or 0 when it draws text or nothing: the caller's icon, else (when
      * the caller gave text, or the shell is asking for attention) none, else the kind's own.
-     * Plain INFO has no mark.
+     * Plain INFO wears the generic info mark.
      */
     @DrawableRes
     public int resolvedIcon() {
@@ -150,7 +150,7 @@ public final class AppNoticeItem {
             case WARNING: return R.drawable.ic_rl_warning;
             case ERROR: return R.drawable.ic_rl_error;
             case INFO:
-            default: return 0;
+            default: return R.drawable.ic_rl_info;
         }
     }
 

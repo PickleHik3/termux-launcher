@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.text.TextPaint;
@@ -122,6 +123,16 @@ final class WidgetPlanView extends View {
             }
             case GLYPH: {
                 if (part.text.isEmpty() || width <= 0f) return null;
+                Drawable icon = WidgetIcons.drawable(getContext(), part.text, color(part.ink));
+                if (icon != null) {
+                    // A Roundline icon fills its square box; the box is the plan's, as the ink was.
+                    float side = Math.min(width, height);
+                    float x = left + (width - side) / 2f;
+                    float y = top + (height - side) / 2f;
+                    icon.setBounds(Math.round(x), Math.round(y), Math.round(x + side),
+                        Math.round(y + side));
+                    return new IconOp(icon);
+                }
                 TextPaint paint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
                 if (style.nerd != null) paint.setTypeface(style.nerd);
                 paint.setTextSize(PROBE_PX);
@@ -213,6 +224,14 @@ final class WidgetPlanView extends View {
         }
 
         @Override public void draw(@NonNull Canvas canvas) { canvas.drawText(text, x, baseline, paint); }
+    }
+
+    private static final class IconOp implements Op {
+        @NonNull final Drawable icon;
+
+        IconOp(@NonNull Drawable icon) { this.icon = icon; }
+
+        @Override public void draw(@NonNull Canvas canvas) { icon.draw(canvas); }
     }
 
     private static final class TrackOp implements Op {

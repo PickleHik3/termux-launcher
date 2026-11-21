@@ -41,7 +41,7 @@ final class NotificationsLayoutPlanner {
     static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.NOTIFICATIONS.maxSpan;
 
     /** The bell of a notice and of an icon that cannot be drawn. */
-    static final String GLYPH_BELL = "";
+    static final String GLYPH_BELL = WidgetIcons.BELL;
 
     private static final float ICON_GLANCE_DP = 24f;
 

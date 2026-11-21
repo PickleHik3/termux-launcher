@@ -37,6 +37,11 @@ public final class FloatTitlebarPolicy {
     public static final int HEIGHT_DP = 24;
     /** The air between the strip and the pane under it, so each reads as its own slab. */
     public static final int GAP_DP = 3;
+    /**
+     * The air above and below a button's glyph: the Roundline glyphs are 24dp squares, so each is
+     * scaled to the strip's height less this on both sides.
+     */
+    public static final int GLYPH_AIR_DP = 2;
     /** The width a button takes while the float is wide enough for every button at full size. */
     public static final int BUTTON_DP = 40;
     /** The drag handle's grip bar, drawn in the strip's free span when the span can hold it. */
