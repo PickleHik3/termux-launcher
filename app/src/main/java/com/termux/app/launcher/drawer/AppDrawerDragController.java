@@ -60,6 +60,12 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
          * ({@link DrawerHandOverPolicy}); NaN while there is none, and nothing is handed over.
          */
         default float handOverTopRawY() { return Float.NaN; }
+
+        /**
+         * Whether a carried app may go to Home at all. False while the drawer is being edited:
+         * the drag stays the drawer's, and only a folder drop on an app or folder takes effect.
+         */
+        default boolean dragMayLeaveDrawer() { return true; }
     }
 
     private final SuggestionBarView dock;
@@ -141,7 +147,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
      */
     public void onDragMoved(float rawX, float rawY) {
         LocalState state = active;
-        if (state == null || state.homeDrop == null) return;
+        if (state == null || state.homeDrop == null || !host.dragMayLeaveDrawer()) return;
         lastRawX = rawX;
         lastRawY = rawY;
         long now = SystemClock.uptimeMillis();
@@ -188,6 +194,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
     private boolean handOverToHome() {
         LocalState state = active;
         if (state == null || state.homeDrop == null) return false;
+        if (!host.dragMayLeaveDrawer()) return false;
         HomeAppDrop.Target home = host.homeAppDropTarget();
         if (home == null || !home.canTakeAppDrop()) return false;
         HomeAppDrop drop = state.homeDrop;

@@ -72,6 +72,14 @@ public final class AppDrawerEditModel {
         return mEntry == Entry.TILE_LONG_PRESS;
     }
 
+    /**
+     * Whether a lifted app may leave the drawer for Home. While editing nothing does: the lift
+     * stays the drawer's, and a drop that is not on an app or a folder puts the icon back.
+     */
+    public boolean dragMayLeaveDrawer() {
+        return !isEditing();
+    }
+
     /** The search bar does nothing while editing. */
     public boolean searchEnabled() {
         return !isEditing();

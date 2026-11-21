@@ -124,6 +124,13 @@ public class AppDrawerEditModelTest {
         assertEquals(UNCLAIMED, AppDrawerEditModel.backStep(false, false, false, false));
     }
 
+    @Test public void aLiftedAppMayLeaveTheDrawerOnlyOutsideEditMode() {
+        assertTrue(AppDrawerEditModel.OFF.dragMayLeaveDrawer());
+        for (Entry entry : new Entry[] {Entry.CORNER_BUTTON, Entry.TILE_LONG_PRESS}) {
+            assertFalse(entry.name(), AppDrawerEditModel.enter(entry).dragMayLeaveDrawer());
+        }
+    }
+
     @Test public void backWalksEditThenCloseAcrossPresses() {
         AppDrawerEditModel m = AppDrawerEditModel.enter(Entry.CORNER_BUTTON);
         assertEquals(LEAVE_EDIT, AppDrawerEditModel.backStep(true, m.isEditing(), false, false));

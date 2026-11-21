@@ -717,7 +717,9 @@ public final class AppDrawerContentView extends FrameLayout
                 case DragEvent.ACTION_DROP:
                     // Blank drawer space: only a folder has somewhere to land here, and the only
                     // position past the last row is the end of the list.
-                    return controller.isFolderSourceDrag() && controller.dropFolderAtDrawerEnd();
+                    // Editing: a drop on blank space cancels, the folder goes back to its place.
+                    return mEditModel.isEditing() ? false
+                        : controller.isFolderSourceDrag() && controller.dropFolderAtDrawerEnd();
                 case DragEvent.ACTION_DRAG_EXITED:
                     onDragTargetExited();
                     return true;
@@ -3134,6 +3136,10 @@ public final class AppDrawerContentView extends FrameLayout
         if (!isAttachedToWindow()) return Float.NaN;
         getLocationOnScreen(mDragLocation);
         return mDragLocation[1] + mGridBaseTopMarginPx;
+    }
+
+    @Override public boolean dragMayLeaveDrawer() {
+        return mEditModel.dragMayLeaveDrawer();
     }
 
     @NonNull @Override public AppDrawerViewType frozenSourceViewType() {
