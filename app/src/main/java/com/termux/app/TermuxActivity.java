@@ -12287,6 +12287,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
             syncPinnedAppsHost();
         });
+        mSuggestionBarView.setHiddenAppsChangedListener(() -> {
+            if (mSheets.appDrawerControllerIfBuilt() != null) {
+                mSheets.appDrawerControllerIfBuilt().onAppCatalogChanged();
+            }
+        });
         mSuggestionBarView.setEditDockListener(mSurfaceLongPress::editDock);
         // The app menu's Add to Home, offered while there are Home pages to take the icon.
         mSuggestionBarView.setAddToHomeListener(new SuggestionBarView.AddToHomeListener() {

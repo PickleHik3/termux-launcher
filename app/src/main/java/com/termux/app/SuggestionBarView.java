@@ -632,6 +632,8 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private LauncherUsageStatsStore usageStatsStore;
     @Nullable private Runnable appCatalogChangedListener;
     @Nullable private Runnable drawerConfigChangedListener;
+    /** Tells the drawer the hidden set moved, which the catalogue listener does not carry. */
+    @Nullable private Runnable hiddenAppsChangedListener;
     /** A config change that landed while the folder popup was up; replayed when it closes. */
     private boolean pendingDrawerConfigRefresh;
     /** A catalogue swap that landed while the host was hidden; rows re-render on return. */
@@ -6158,7 +6160,9 @@ public final class SuggestionBarView extends GridLayout
     public void showDrawerAppContextPopup(@NonNull View anchor, @NonNull LauncherAppEntry entry,
                                           @Nullable Runnable categoryAction) {
         dismissShortcutsPopup();
-        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null));
+        AppMenuContext menu = new AppMenuContext(entry, anchor, -1, null, null);
+        menu.fromDrawer = true;
+        showAppContextPopup(menu);
     }
 
     /**
@@ -6506,6 +6510,7 @@ public final class SuggestionBarView extends GridLayout
             && addToHomeListener.canOpenWidgets() && hasWidgetProviders(packageName);
         inputs.canAddToHome = addToHomeListener != null && addToHomeListener.canAddToHome();
         inputs.canMoveToCategory = categoryChoiceHandler != null;
+        inputs.canHide = context.fromDrawer && com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef);
         inputs.canAddToFolder = categoryChoiceHandler != null && !linuxApp
             && configRepository != null
             && com.termux.app.launcher.folder.DrawerFolderChoices.showsAddToFolder(
@@ -6789,6 +6794,9 @@ public final class SuggestionBarView extends GridLayout
                     EditDockListener listener = editDockListener;
                     if (listener != null) listener.onEditDock();
                 });
+            case HIDE:
+                return appMenuItem(R.string.settings_x11_app_drawer_hide, R.drawable.ic_rl_eye_off,
+                    () -> hideLinuxAppWithUndo(entry));
             case UNINSTALL:
             default:
                 return appMenuItem(R.string.app_menu_uninstall, R.drawable.ic_app_menu_uninstall,
@@ -7683,6 +7691,8 @@ public final class SuggestionBarView extends GridLayout
         @Nullable final Runnable removeFromHome;
         /** The icon was pressed on the dock's row itself, so the card offers Edit dock. */
         boolean onDock;
+        /** The icon was pressed in the drawer (grid, search result or category tile). */
+        boolean fromDrawer;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,
@@ -8740,6 +8750,35 @@ public final class SuggestionBarView extends GridLayout
      */
     private void revealLiftSource(@NonNull DockLift lift) {
         lift.source.end();
+    }
+
+    /**
+     * Hides a Linux app from the drawer through the same switch its settings page holds, and offers
+     * it back. Pins and folders keep pointing at it: only discovery is hidden.
+     */
+    private void hideLinuxAppWithUndo(@NonNull LauncherAppEntry entry) {
+        Context context = getContext();
+        String id = com.termux.app.x11.X11Apps.desktopId(entry.appRef);
+        com.termux.app.x11.X11AppSettingsStore store = new com.termux.app.x11.X11AppSettingsStore(context);
+        store.setHiddenInDrawer(id, true);
+        refreshDrawerAfterHiddenChange();
+        AppNotice.undoable(context, context.getString(R.string.app_menu_hidden, entry.label),
+            context.getString(R.string.home_item_removed_undo_hint), () -> {
+                store.setHiddenInDrawer(id, false);
+                refreshDrawerAfterHiddenChange();
+            }, com.termux.app.launcher.widget.HomeItemUndo.HOLD_MS, R.drawable.ic_rl_eye_off);
+    }
+
+    /** The drawer reads the provider's filtered list again, so the icon leaves (or returns) at once. */
+    private void refreshDrawerAfterHiddenChange() {
+        if (appDataProvider != null) allApps = appDataProvider.getAllApps();
+        resolvedRefCache.clear();
+        invalidateAzRankCache();
+        if (hiddenAppsChangedListener != null) hiddenAppsChangedListener.run();
+    }
+
+    public void setHiddenAppsChangedListener(@Nullable Runnable listener) {
+        this.hiddenAppsChangedListener = listener;
     }
 
     /** Takes {@code pin} out of the row as the store holds it now, without an Undo. */
