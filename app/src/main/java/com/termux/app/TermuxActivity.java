@@ -7376,22 +7376,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (edgeFx == null) {
             return;
         }
-        if (!visible) {
-            edgeFx.setVisibility(View.GONE);
-            edgeFx.setBackground(null);
-            return;
-        }
-
-        // No white top highlight band — it read as a plastic sheen. The crisp glass top edge is now
-        // produced by the AGSL refraction shader on the backdrop. Keep only a faint shadow seam.
-        int highlight = Color.TRANSPARENT;
-        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(18f * Math.max(0f, barAlpha)));
-        GradientDrawable edge = new GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[] { highlight, shadow, Color.TRANSPARENT }
-        );
-        edgeFx.setBackground(edge);
-        edgeFx.setVisibility(View.VISIBLE);
+        com.termux.app.dock.CapsuleGlass.dressTopEdge(edgeFx, visible, barAlpha,
+            resolveAccessoryOutlineColor());
     }
 
     @NonNull
@@ -9110,8 +9096,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         }
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
-        int seamOverscanPx = mDockFootPx > 0
-            ? horizontalOverscanPx : 0;
+        int seamOverscanPx = com.termux.app.dock.CapsuleGlass.seamOverscanPx(mDockFootPx,
+            horizontalOverscanPx);
         Rect currentTarget = buildAccessoryBackdropTargetRect(
             surfaceHost, horizontalOverscanPx, seamOverscanPx);
         // setLayoutParams() during pre-draw does not resize the ImageView until another layout.
@@ -9223,45 +9209,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int computeAccessoryBackdropHorizontalOverscanPx(int blurRadiusDp) {
         float blurRadiusPx = ViewUtils.dpToPx(this, Math.max(0, blurRadiusDp));
         float density = getResources().getDisplayMetrics().density;
-        return Math.max(0, Math.round((blurRadiusPx * 2f) + (density * 2f)));
+        return com.termux.app.dock.CapsuleGlass.horizontalOverscanPx(blurRadiusPx, density);
     }
 
     private void applyAccessoryBackdropOverscan(@NonNull ImageView backdrop, @NonNull View surfaceHost,
                                                 int horizontalOverscanPx, int bottomOverscanPx) {
-        ViewGroup.LayoutParams layoutParams = backdrop.getLayoutParams();
-        if (!(layoutParams instanceof FrameLayout.LayoutParams)) {
-            return;
-        }
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) layoutParams;
-        int targetWidth = Math.max(1, surfaceHost.getWidth() + (horizontalOverscanPx * 2));
-        // Grow the bitmap DOWN past the surface (clipped by the host) so the refraction's bottom edge
-        // band falls below the visible seam with the under-pill strip, not on it.
-        int targetHeight = Math.max(1, surfaceHost.getHeight() + bottomOverscanPx);
-        int targetLeftMargin = -horizontalOverscanPx;
-        int targetTopMargin = 0;
-        if (params.width != targetWidth || params.height != targetHeight ||
-            params.leftMargin != targetLeftMargin || params.topMargin != targetTopMargin) {
-            params.width = targetWidth;
-            params.height = targetHeight;
-            params.leftMargin = targetLeftMargin;
-            params.topMargin = targetTopMargin;
-            params.rightMargin = 0;
-            params.bottomMargin = 0;
-            params.gravity = Gravity.TOP | Gravity.START;
-            backdrop.setLayoutParams(params);
-        }
+        com.termux.app.dock.CapsuleGlass.applyOverscan(backdrop, surfaceHost.getWidth(),
+            surfaceHost.getHeight(), horizontalOverscanPx, bottomOverscanPx);
     }
 
     @NonNull
     private Rect buildAccessoryBackdropTargetRect(@NonNull View surfaceHost, int horizontalOverscanPx,
                                                   int bottomOverscanPx) {
         surfaceHost.getLocationOnScreen(mTmpViewLocation);
-        return new Rect(
-            mTmpViewLocation[0] - horizontalOverscanPx,
-            mTmpViewLocation[1],
-            mTmpViewLocation[0] + Math.max(1, surfaceHost.getWidth()) + horizontalOverscanPx,
-            mTmpViewLocation[1] + Math.max(1, surfaceHost.getHeight()) + bottomOverscanPx
-        );
+        return com.termux.app.dock.CapsuleGlass.targetRect(mTmpViewLocation, surfaceHost.getWidth(),
+            surfaceHost.getHeight(), horizontalOverscanPx, bottomOverscanPx);
     }
 
     /**
@@ -9681,8 +9643,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // When the under-pill decor strip abuts the dock/keyboard bottom (default dock only), overscan
         // the view downward past that seam so the refraction edge band lands below it — the strip
         // overscans upward by the same amount, so the two surfaces' blurred wallpaper meets seamlessly.
-        int seamOverscanPx = mDockFootPx > 0
-            ? horizontalOverscanPx : 0;
+        int seamOverscanPx = com.termux.app.dock.CapsuleGlass.seamOverscanPx(mDockFootPx,
+            horizontalOverscanPx);
         applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
         // The dock's own overscan is what the ImageView is sized to. The drawable inside samples
         // the shared frame at the view's live position, so the rect only says where the shader's
@@ -9705,7 +9667,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The frost filter follows Opacity live, and the even-out the wallpaper under the dock
             // now asks for (mid-drag the one last measured, re-measured on the release's pass);
             // the same filter instance when neither moved, which re-dresses nothing.
-            backdrop.setColorFilter(dockFrostFilter(mGlassDragPreview ? null : surfaceHost));
+            backdrop.setColorFilter(dockFrostFilter(mGlassDragPreview ? null
+                : hostEvenOutSurface(surfaceHost)));
             // DIAG(dock-filter): the frost a pass at rest puts up, on change; revert before merge.
             if (MotionLog.enabled && !mCrossing.crossing()) {
                 String d = matrixDiag(com.termux.app.chrome.GlassFilters.matrixOf(
@@ -9750,10 +9713,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // inset by the overscan, top/bottom span the full height. Hand that rect to the shader so
             // refraction happens at the real dock edge.
             float capLeft = horizontalOverscanPx;
-            float capRight = horizontalOverscanPx + Math.max(1, surfaceHost.getWidth());
-            // Put the shader's bottom edge at the overscanned bitmap bottom (below the visible seam)
-            // so the visible dock bottom reads as interior glass, not a refracting edge.
-            float capBottom = Math.max(1, surfaceHost.getHeight()) + seamOverscanPx;
             boolean capsuleDock = mDock.dockFloats();
             float radiusPx = capsuleDock
                 ? mDock.resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
@@ -9764,7 +9723,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int dockSeams = capsuleDock ? 0 : com.termux.app.chrome.LiveChromeShape.seamEdges(
                 chromeShape(), dockPieceIds(shouldUseUnifiedDefaultKeyboardGlassSurface(state)));
             float[] capRect = new float[4];
-            com.termux.app.chrome.GlassRefraction.rimRect(capRect, capLeft, 0f, capRight, capBottom,
+            com.termux.app.dock.CapsuleGlass.capRect(capRect, horizontalOverscanPx,
+                surfaceHost.getWidth(), surfaceHost.getHeight(), seamOverscanPx,
                 com.termux.app.chrome.GlassRefraction.seamReachPx(
                     com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
                     getResources().getDisplayMetrics().density, radiusPx),
@@ -9780,7 +9740,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Content-aware light scatter — the frost that makes the blur read as glass, not plastic —
         // with the dock band's even-out ahead of it (ADR 0014).
-        backdrop.setColorFilter(dockFrostFilter(surfaceHost));
+        backdrop.setColorFilter(dockFrostFilter(hostEvenOutSurface(surfaceHost)));
         backdrop.setVisibility(View.VISIBLE);
         // Below Android 13 there is no effect to install, and the dock keeps its rim.
         mDock.setDockProgramEdge(mGlassEffects.paramsValid());
@@ -9818,6 +9778,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // not carry the strip's dim: on pong (round 2) the dock and the keyboard rows it holds
         // kept Home's luma over a Terminal dimmed 50 while their ground was left to it.
         syncDockGround(backdrop, false);
+        installBackdropPicture(backdrop, installed, frame, frameRect, blurRadiusDp, live);
+    }
+
+    /**
+     * Points a capsule's {@code backdrop} at its live picture, or at the stored frame when it has
+     * none; the dock's and the extra-keys card's backdrops both are installed here.
+     */
+    private void installBackdropPicture(@NonNull ImageView backdrop,
+                                        @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
+                                        @NonNull Bitmap frame, @NonNull Rect frameRect,
+                                        int blurRadiusDp,
+                                        @Nullable android.graphics.drawable.Drawable live) {
         if (live != null) {
             // Live blur: the picture records what is beneath the dock; it is aimed by the recording.
             if (backdrop.getDrawable() != live) backdrop.setImageDrawable(live);
@@ -9836,6 +9808,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.invalidate();
     }
 
+    /**
+     * The surface the dock band's even-out is measured under for the host's pass: the host,
+     * except while the Terminal's extra-keys card is the dock's slab, when the card measures it
+     * (the band keeps one measurement, and the host is Home's parked card then). Null measures
+     * nothing and keeps what the card measured.
+     */
+    @Nullable
+    private View hostEvenOutSurface(@NonNull View surfaceHost) {
+        return mStackRenderer.keysCardStands() ? null : surfaceHost;
+    }
+
     /** Prototype #283: the ground drawn in the dock backdrop's overlay; null until first needed. */
     @Nullable private com.termux.app.chrome.GroundUnderGlass mDockGround;
 
@@ -9846,18 +9829,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * and holds the strip already.
      */
     private void syncDockGround(@NonNull ImageView backdrop, boolean carried) {
-        if (!com.termux.app.chrome.GlassGround.ON) return;
-        if (mDockGround == null) {
+        mDockGround = syncGround(mDockGround, backdrop, "dock-keyboard", carried);
+    }
+
+    /** {@link #syncDockGround} for any capsule backdrop: its overlay made once, held by the caller. */
+    @Nullable
+    private com.termux.app.chrome.GroundUnderGlass syncGround(
+            @Nullable com.termux.app.chrome.GroundUnderGlass held, @NonNull ImageView backdrop,
+            @NonNull String name, boolean carried) {
+        if (!com.termux.app.chrome.GlassGround.ON) return held;
+        if (held == null) {
             com.termux.app.chrome.GroundUnderGlass ground =
-                new com.termux.app.chrome.GroundUnderGlass(backdrop, "dock-keyboard");
-            mDockGround = ground;
+                new com.termux.app.chrome.GroundUnderGlass(backdrop, name);
+            held = ground;
             backdrop.getOverlay().add(ground);
             ground.setBounds(0, 0, backdrop.getWidth(), backdrop.getHeight());
             backdrop.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
                 ground.setBounds(0, 0, r - l, b - t));
             ground.attach();
         }
-        mDockGround.setCarried(carried);
+        held.setCarried(carried);
+        return held;
     }
 
     @Nullable
@@ -9956,6 +9948,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyInAppKeyboardSurfaceState(state);
             Trace.endSection();
             configureAccessoryTopEdgeFx(false, state.barAlpha);
+            mKeysCardDress.release();
             resetAzOverflowAffordanceState();
             if (mDock.dockPlankController() != null) {
                 mDock.dockPlankController().setEnabled(false);
@@ -9999,6 +9992,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // redraws the whole window, terminal text included, on the UI thread.
         Trace.beginSection("Chrome.renderEffectBackdrop");
         updateAccessoryRenderEffectBackdrop(state);
+        mKeysCardDress.update(state);
         Trace.endSection();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         updateAzOverflowAffordance();
@@ -10896,6 +10890,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public boolean statusOnDockPlank() { return mStatusBarOnDockPlank; }
             @Override public boolean keyboardGlassShared() { return isInAppKeyboardGlassSurface(); }
             @Override public void sidesApart(boolean apart, int homeDropPx) { mStackRenderer.setSidesApart(apart, homeDropPx); }
+        });
+
+    /** The glass element of the Terminal's extra-keys card, one more Live entry while it is on screen. */
+    private static final String KEYS_CARD_GLASS = "keys_card";
+
+    /** The Terminal's extra-keys card wearing the dock capsule's glass (ADR 0032, #302). */
+    private final com.termux.app.dock.KeysCardDress mKeysCardDress =
+        new com.termux.app.dock.KeysCardDress(mDock, new com.termux.app.dock.KeysCardDress.Source() {
+            @Override public boolean crossing() { return mCrossing.crossing(); }
+            @Override public boolean blurWanted(@NonNull ChromeSpec state) {
+                return shouldUseAccessoryRenderEffectBlur(state);
+            }
+            @Override public boolean pictureUp(@NonNull ImageView backdrop) {
+                return accessoryPictureUp(backdrop);
+            }
+            @Nullable @Override public android.graphics.drawable.Drawable attachLive(
+                    @NonNull ImageView backdrop, int radiusDp) {
+                com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, radiusDp,
+                    com.termux.app.chrome.LiveBackdrop.RANK_CHROME, KEYS_CARD_GLASS,
+                    mDockGlassRedress);
+                return picture == null ? null : picture.drawable();
+            }
+            @Override public void releaseLive(@NonNull ImageView backdrop) {
+                if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
+                mGlass.unregister(KEYS_CARD_GLASS);
+            }
+            @Nullable @Override public Bitmap blurFrame(int radiusDp, @NonNull Rect outRect) {
+                Bitmap frame = mChrome.blurCache().obtain(radiusDp,
+                    findViewById(R.id.activity_termux_root_view));
+                outRect.set(mChrome.blurCache().frameRectRef());
+                return frame;
+            }
+            @Nullable @Override public android.graphics.ColorFilter frostFilter(@Nullable View surface) {
+                return dockFrostFilter(surface);
+            }
+            @Override public boolean managedSource() { return shouldUseManagedWallpaperBlurSource(); }
+            @Override public boolean glassDragPreview() { return mGlassDragPreview; }
+            @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierLook() {
+                return mFancierGlassLook;
+            }
+            @Override public int footPx() { return mDockFootPx; }
+            @Nullable @Override public Drawable plate(float barAlpha) {
+                return dockSheetStandsDownOnFrame() ? null
+                    : deckSlabOr(mChrome.glass().dockSurface(barAlpha, 0f, 1f, false));
+            }
+            @Override public int outlineColor() { return resolveAccessoryOutlineColor(); }
+            @Nullable @Override public com.termux.app.chrome.GroundUnderGlass ground(
+                    @Nullable com.termux.app.chrome.GroundUnderGlass held, @NonNull ImageView backdrop) {
+                return syncGround(held, backdrop, "keys-card", false);
+            }
+            @Override public void installPicture(@NonNull ImageView backdrop,
+                    @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
+                    @NonNull Bitmap frame, @NonNull Rect frameRect, int radiusDp,
+                    @Nullable android.graphics.drawable.Drawable live) {
+                installBackdropPicture(backdrop, installed, frame, frameRect, radiusDp, live);
+            }
         });
 
     private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
@@ -14135,6 +14185,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The plan's begin first: it works out the arriving keyboard's even-out the keyboard's
         // arriving card is then built on.
         beginDockGroundBlend(here, there);
+        // The Terminal's extra-keys card is dressed as it first shows (its glass entry registers
+        // here, once), not at the landing.
+        if (there.kind == com.termux.app.page.PageKind.TERMINAL && mSideCards.apart())
+            mKeysCardDress.onCrossingBegin(buildChromeSpec());
         beginKeyboardLookBlend(there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);

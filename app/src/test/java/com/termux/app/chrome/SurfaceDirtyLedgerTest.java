@@ -27,6 +27,19 @@ public class SurfaceDirtyLedgerTest {
     }
 
     @Test
+    public void theDockBackdropDirtiesTheKeysCardsAndNotTheOtherWay() {
+        Rect rect = new Rect(0, 0, 10, 10);
+        ledger.recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, 20, false, rect);
+        ledger.recordApplied(SurfaceDirtyLedger.Backdrop.KEYS_CARD, 20, false, rect);
+        assertFalse(ledger.isDirty(SurfaceDirtyLedger.Backdrop.KEYS_CARD));
+        ledger.markDirty(SurfaceDirtyLedger.Backdrop.KEYS_CARD);
+        assertFalse(ledger.isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY));
+        ledger.recordApplied(SurfaceDirtyLedger.Backdrop.KEYS_CARD, 20, false, rect);
+        ledger.markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+        assertTrue(ledger.isDirty(SurfaceDirtyLedger.Backdrop.KEYS_CARD));
+    }
+
+    @Test
     public void everySurfaceStartsDirtyWithNothingToMatch() {
         for (SurfaceDirtyLedger.Backdrop backdrop : SurfaceDirtyLedger.Backdrop.values()) {
             assertTrue(backdrop.name(), ledger.isDirty(backdrop));
