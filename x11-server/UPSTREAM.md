@@ -8,6 +8,8 @@ committed prebuilt under `app/src/main/jniLibs/<abi>/`, produced by
 arm64-v8a, x86_64, armeabi-v7a and x86. The two 32-bit builds were added on 2026-10-27 (built
 locally with the workflow's exact steps and NDK r29, as Actions were unavailable; a local arm64
 build from the same steps exports the same symbols as the CI one), so 32-bit phones get a display.
+The current four were rebuilt locally on 2026-11-21 with the workflow's exact steps and NDK r29
+(29.0.14206865) for the chunked clipboard-picture change to 0004, with the pin unchanged.
 
 - upstream: <https://github.com/termux/termux-x11> (GPLv3, the licence this app already ships under)
 - upstream commit: `9df8b767645aa0d0a2f2576767449df55b41962f` (2026-09-04)
