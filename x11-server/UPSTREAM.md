@@ -178,6 +178,13 @@ screen is to own the server. See `project-docs/reference/launcher/pane-wall-x11-
   `requestClipboardImage(String, int)`, `sendClipboardAnnounceTargets` and
   `sendClipboardImageChunk` forward with the patch, or the first view dies in `nativeInit` or
   `RegisterNatives`.
+- **`lorie/clipboard.c` registers a `ClientStateCallback`** (in 0004, beside upstream's
+  `SelectionCallback`). A waiting clipboard request holds its `ClientPtr` until it is answered;
+  the callback drops a client's requests when it goes or is retained, before the dispatcher frees
+  it. Upstream's own text requests (`lorieDataTargetHead`) had the same dangling pointer — a
+  client that asked for the Android clip's text and quit before it arrived was written to after
+  being freed — and the callback forgets those too. Take this forward on a nightly merge unless
+  upstream has fixed it its own way.
 
 ## `loader/`
 

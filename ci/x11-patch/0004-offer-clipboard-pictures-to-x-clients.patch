@@ -49,7 +49,11 @@ GetProperty, whose reply length has no such limit.
 
 A requester must never be left waiting. Waiting requests are refused when the next announce
 arrives, when the host disconnects, when there is no host to ask, and when the answer cannot be
-written; a request whose client has gone in the meantime is dropped without writing to it.
+written. A request holds its ClientPtr until it is answered, so a `ClientStateCallback`
+registered beside upstream's `SelectionCallback` drops a client's waiting requests when it goes
+(ClientStateGone) or is retained (ClientStateRetained): the dispatcher frees the client right
+after. Upstream's text requests (`lorieDataTargetHead`) had the same dangling pointer, and the
+same callback forgets them too.
 
 The picture's frames are larger than one read, so the server reads them with a read loop
 (`lorieReadFully`) and the host writes them with a write loop that waits out a full buffer
@@ -239,7 +243,7 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
  void lorieEnableClipboardSync(Bool enable) {
      clipboardEnabled = enable;
  }
-@@ -296,6 +317,202 @@
+@@ -296,6 +317,219 @@
  
  /* functions related to clipboard announcing and sending */
  
@@ -251,18 +255,11 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
 +    return FALSE;
 +}
 +
-+/* A picture request outlives the request that made it (Java reads and maybe converts the
-+ * picture first), so its client may be gone by the answer. */
-+static Bool lorieClientAlive(ClientPtr client) {
-+    return client && client->index > 0 && client->index < currentMaxClients &&
-+           clients[client->index] == client && !client->clientGone;
-+}
-+
++/* A waiting request holds its ClientPtr until it is answered. The dispatcher frees a client right
++ * after ClientStateCallback, so a client's requests go with it there (lorieClientStateCallback)
++ * and every pointer still on a list is live. */
 +static void lorieRefuseSelection(struct LorieDataTarget* ldt) {
 +    xEvent event;
-+
-+    if (!lorieClientAlive(ldt->client))
-+        return;
 +
 +    memset(&event, 0, sizeof(xEvent));
 +    event.u.u.type = SelectionNotify;
@@ -310,9 +307,6 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
 +    Atom realProperty = ldt->property != None ? ldt->property : ldt->target;
 +    xEvent event;
 +    int rc;
-+
-+    if (!lorieClientAlive(ldt->client))
-+        return Success;
 +
 +    if (size == 0)
 +        return BadMatch;
@@ -439,10 +433,37 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
 +    }
 +}
 +
++/* Drops every request of client from the list at link, without answering it. */
++static void lorieForgetClientRequests(struct LorieDataTarget **link, ClientPtr client) {
++    while (*link != NULL) {
++        struct LorieDataTarget* ldt = *link;
++        if (ldt->client != client) {
++            link = &ldt->next;
++            continue;
++        }
++
++        *link = ldt->next;
++        free(ldt);
++    }
++}
++
++/* A client that goes (or is retained after its connection closes) while a request of its waits
++ * takes the request with it: the dispatcher frees the ClientPtr right after this callback, and a
++ * later answer or refusal through it would write to freed memory. Upstream's text requests
++ * (lorieDataTargetHead) had the same hole and are forgotten here too. */
++static void lorieClientStateCallback(__unused CallbackListPtr *callbacks, __unused void *data, void *args) {
++    ClientPtr client = ((NewClientInfoRec*) args)->client;
++
++    if (client->clientState == ClientStateGone || client->clientState == ClientStateRetained) {
++        lorieForgetClientRequests(&lorieDataTargetHead, client);
++        lorieForgetClientRequests(&lorieImageTargetHead, client);
++    }
++}
++
  static int lorieConvertSelection(ClientPtr client, Atom selection, Atom target, Atom property, Window requestor, CARD32 time, const char* data) {
      Selection *pSel;
      WindowPtr pWin;
-@@ -332,13 +549,22 @@
+@@ -332,13 +566,22 @@
      /* FIXME: MULTIPLE target */
  
      if (target == xaTARGETS) {
@@ -469,7 +490,7 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
          if (rc != Success)
              return rc;
      } else if (target == xaTIMESTAMP) {
-@@ -348,6 +574,8 @@
+@@ -348,6 +591,8 @@
                                       TRUE);
          if (rc != Success)
              return rc;
@@ -478,7 +499,7 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
      } else {
          if (data == NULL) {
              struct LorieDataTarget* ldt;
-@@ -356,6 +584,10 @@
+@@ -356,6 +601,10 @@
                  (target != xaUTF8_STRING))
                  return BadMatch;
  
@@ -489,7 +510,7 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
              ldt = calloc(1, sizeof(struct LorieDataTarget));
              if (ldt == NULL)
                  return BadAlloc;
-@@ -509,7 +741,35 @@
+@@ -509,7 +758,35 @@
      return Success;
  }
  
@@ -526,7 +547,7 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
      // The data has changed in some way, so whatever is in our cache is now stale
      free((void*) cachedData);
      cachedData = NULL;
-@@ -523,6 +783,11 @@
+@@ -523,6 +800,11 @@
          log(ERROR, "Could not set CLIPBOARD selection");
  }
  
@@ -538,6 +559,14 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
  void lorieHandleClipboardData(const char* data) {
      struct LorieDataTarget* next;
  
+@@ -576,4 +858,7 @@
+ 
+     if (!AddCallback(&SelectionCallback, lorieSelectionCallback, NULL))
+         FatalError("Adding SelectionCallback failed\n");
++
++    if (!AddCallback(&ClientStateCallback, lorieClientStateCallback, NULL))
++        FatalError("Adding ClientStateCallback failed\n");
+ }
 diff --git a/lorie/src/main/cpp/lorie/cmdentrypoint.cpp b/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
 --- a/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
 +++ b/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
