@@ -332,6 +332,8 @@ public final class PeekGlassReflection {
 
     /** Nothing reflected, the views put away, and every drawing let go. */
     public void clear() {
+        mHeld = false;
+        mStaleWhileHeld = false;
         mShown = false;
         mCard = null;
         mRow = null;
@@ -346,9 +348,65 @@ public final class PeekGlassReflection {
         if (mStripView != null) detach(mStripView);
     }
 
+    /** What a sync does with the reflection ({@link #syncFor}). */
+    public enum Sync {
+        /** Drawn for the card and the row as they stand now. */
+        DRAW,
+        /** Kept as it stands: Home's card carries it while Home's row does not stand. */
+        KEEP,
+        /** Put away: no card, the knob at 0, or nothing to draw it on. */
+        CLEAR
+    }
+
+    /**
+     * What a sync does with the reflection. While the cards stand apart the glass host is Home's
+     * card at every rest, parked beside the screen while the Terminal is in front, and the
+     * reflection is part of it: with Home's row not standing (the Terminal's rows up) there is
+     * nothing to draw it from, so it is kept as Home's rest drew it, never put away, and so it is
+     * there for the whole slide back and at the landing. Not apart, the base's rule.
+     *
+     * @param cardStands     a card is cut on the host
+     * @param strengthOn     the Reflection knob is above 0
+     * @param surfacesReady  the row, the host and the container are there
+     * @param apart          the cards stand apart (the host is Home's card)
+     * @param homeRowStands  Home's apps row is shown
+     */
+    @NonNull
+    public static Sync syncFor(boolean cardStands, boolean strengthOn, boolean surfacesReady,
+                               boolean apart, boolean homeRowStands) {
+        if (!cardStands || !strengthOn || !surfacesReady) return Sync.CLEAR;
+        return apart && !homeRowStands ? Sync.KEEP : Sync.DRAW;
+    }
+
+    /**
+     * Holds the reflection as it stands ({@link Sync#KEEP}): nothing is recorded or captured from
+     * the row while it does not stand; a change the row asked for meanwhile is recorded once when
+     * the hold lets go.
+     */
+    public void setHeld(boolean held) {
+        if (held == mHeld) return;
+        mHeld = held;
+        if (held) return;
+        boolean stale = mStaleWhileHeld;
+        mStaleWhileHeld = false;
+        if (stale) onRowContentChanged();
+    }
+
+    /** Whether the reflection is held as it stands ({@link #setHeld}). */
+    public boolean held() {
+        return mHeld;
+    }
+
+    private boolean mHeld;
+    private boolean mStaleWhileHeld;
+
     /** One of the row's icons asked to be drawn again: an icon arrived, a dot or a press changed. */
     public void onRowContentChanged() {
         if (!mShown || mRow == null) return;
+        if (mHeld) {
+            mStaleWhileHeld = true;
+            return;
+        }
         if (mLive) {
             if (mRecordPending) return;
             mRecordPending = true;
@@ -366,6 +424,10 @@ public final class PeekGlassReflection {
     public void onIconsMoved() {
         Row row = mRow;
         if (!mShown || row == null) return;
+        if (mHeld) {
+            mStaleWhileHeld = true;
+            return;
+        }
         if (mLive) {
             record();
             return;

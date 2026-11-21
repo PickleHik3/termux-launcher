@@ -6018,13 +6018,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SuggestionBarView row = mSuggestionBarView;
         View host = findViewById(R.id.accessory_surface_host);
         View container = findViewById(R.id.accessory_stack_container);
-        // Apart, the reflection mirrors Home's row, which stands only while the stack stands
-        // Home's rows: with the Terminal's rows up there is nothing of Home's to mirror yet.
-        boolean rowStands = mSideCards.hostLook() == null
-            || com.termux.app.wall.PaneWallPolicy.isHomePlace(stackDressPage());
-        if (card == null || strength <= 0 || row == null || !(host instanceof ViewGroup)
-            || container == null || !rowStands) {
+        // Apart, the reflection is part of Home's card: while Home's row does not stand (the
+        // Terminal's rows up) it is kept as Home's rest drew it, parked with the card, so it is
+        // there for the whole slide back and the landing finds it right (PeekGlassReflection#syncFor).
+        com.termux.app.dock.PeekGlassReflection.Sync sync =
+            com.termux.app.dock.PeekGlassReflection.syncFor(card != null, strength > 0,
+                row != null && host instanceof ViewGroup && container != null,
+                mSideCards.hostLook() != null, peekHomeRowStands());
+        if (sync == com.termux.app.dock.PeekGlassReflection.Sync.CLEAR) {
             if (mPeekReflection != null) mPeekReflection.clear();
+            return;
+        }
+        if (sync == com.termux.app.dock.PeekGlassReflection.Sync.KEEP) {
+            if (mPeekReflection != null) {
+                mPeekReflection.setHeld(true);
+                mPeekReflection.setFade(drawnPeekShare());
+                mPeekReflection.setDrawnOffsetY(peekCardRowsDrift(card));
+            }
             return;
         }
         float[] rowAt = com.termux.app.dock.DockController.layoutOffsetIn(row, container);
@@ -6063,6 +6073,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
         reflection.setFade(drawnPeekShare());
         reflection.setDrawnOffsetY(peekCardRowsDrift(card));
+        reflection.setHeld(false);
+    }
+
+    /** Whether Home's apps row stands (shown), which the reflection is drawn from. */
+    private boolean peekHomeRowStands() {
+        SuggestionBarView row = mSuggestionBarView;
+        return row != null && row.isShown();
     }
 
     /** The reflection and its views let go, and the knob no longer heard; for the activity's end. */
@@ -7194,7 +7211,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (MotionLog.enabled) MotionLog.log("peek-card", "card=" + (card != null)
             + " homeRest=" + isHomeAtRest() + " share=" + mPeekShare + " travel="
             + peekChromeTravelling() + " dress=" + stackDressPage());
-        mPeekCardRowsPx = peekLayoutRowsOverHost();
+        // Apart with Home's row not standing, the reflection is kept as Home's rest aimed it, and
+        // so is where the row stood over the host then (syncPeekReflection reads it at the landing).
+        if (mSideCards.hostLook() == null || peekHomeRowStands())
+            mPeekCardRowsPx = peekLayoutRowsOverHost();
         if (!isHomeAtRest()) return;
         View host = findViewById(R.id.accessory_surface_host);
         mHomeRestCard = card;
