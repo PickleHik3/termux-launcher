@@ -2298,7 +2298,14 @@ public final class AppDrawerContentView extends FrameLayout
             if (!mCancellingContent && mCornerTab.filter(ev) == AppDrawerCornerTab.CONSUME) {
                 return true;
             }
-            return dispatchTouchEventObserved(ev);
+            boolean handled = dispatchTouchEventObserved(ev);
+            // A corner armed on a down nothing under it took (the card's edge below the grid, a
+            // gap between tiles): keep the stream, or its lift goes to the plane and the tab
+            // never opens.
+            if (!handled && terminalAction == MotionEvent.ACTION_DOWN && mCornerTab.isArmed()) {
+                return true;
+            }
+            return handled;
         } finally {
             if (terminal) mSuppressCellClickDuringTerminalDispatch = false;
         }

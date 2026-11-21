@@ -63,6 +63,11 @@ final class AppDrawerCornerTab {
         mHost = host;
     }
 
+    /** True while a down in a corner square waits for its hold. */
+    boolean isArmed() {
+        return mPolicy.isTracking();
+    }
+
     /** One event of the stream, before the content dispatches it. */
     int filter(@NonNull MotionEvent ev) {
         int action = ev.getActionMasked();
