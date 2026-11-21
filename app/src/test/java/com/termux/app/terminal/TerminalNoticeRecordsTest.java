@@ -30,6 +30,46 @@ public class TerminalNoticeRecordsTest {
     }
 
     @Test
+    public void removeIfGenerationRemovesTheMatchingRecord() {
+        TerminalNoticeRecords records = new TerminalNoticeRecords();
+        records.put(TerminalNoticeKind.MESSAGE, new Object(), "w1", "", null, null);
+        int seen = records.generationOf("w1");
+        assertTrue(records.removeIfGeneration("w1", seen));
+        assertNull(records.get("w1"));
+    }
+
+    @Test
+    public void removeIfGenerationKeepsANewerRecord() {
+        TerminalNoticeRecords records = new TerminalNoticeRecords();
+        Object pane = new Object();
+        records.put(TerminalNoticeKind.MESSAGE, pane, "w1", "", null, null);
+        int seen = records.generationOf("w1");
+        TerminalNoticeRecords.Record newer = records.put(TerminalNoticeKind.MESSAGE, pane, "w1", "", null, null);
+        assertFalse(records.removeIfGeneration("w1", seen));
+        assertSame(newer, records.get("w1"));
+    }
+
+    @Test
+    public void removeIfGenerationWithNoRecordAtCapture() {
+        TerminalNoticeRecords records = new TerminalNoticeRecords();
+        int seen = records.generationOf("w1");
+        assertEquals(TerminalNoticeRecords.NO_RECORD, seen);
+        assertTrue(records.removeIfGeneration("w1", seen));
+        records.put(TerminalNoticeKind.MESSAGE, new Object(), "w1", "", null, null);
+        assertFalse(records.removeIfGeneration("w1", seen));
+        assertNotNull(records.get("w1"));
+    }
+
+    @Test
+    public void removeIfGenerationWhenTheRecordIsGone() {
+        TerminalNoticeRecords records = new TerminalNoticeRecords();
+        records.put(TerminalNoticeKind.MESSAGE, new Object(), "w1", "", null, null);
+        int seen = records.generationOf("w1");
+        records.remove("w1");
+        assertTrue(records.removeIfGeneration("w1", seen));
+    }
+
+    @Test
     public void generationIncreasesOnEveryPut() {
         TerminalNoticeRecords records = new TerminalNoticeRecords();
         Object pane = new Object();

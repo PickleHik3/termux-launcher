@@ -532,6 +532,8 @@ public final class ShellNotifications {
             CharSequence typed = results == null ? null : results.getCharSequence(REPLY_KEY);
             String windowKey = intent.getStringExtra(EXTRA_WINDOW_KEY);
             if (windowKey == null) return;
+            // The notice this reply answers; a newer one posted meanwhile must not be taken down.
+            int noticeGeneration = TerminalNoticeRecords.shared().generationOf(windowKey);
             Context app = context.getApplicationContext();
             // Nothing typed: nothing is sent, and the notification is shown again as it was, which
             // is what stops the shade's reply spinner.
@@ -563,9 +565,12 @@ public final class ShellNotifications {
                         } else {
                             openWithUnsent(app, handle, tag, text, capturedName);
                         }
-                        TerminalNoticeRecords.shared().remove(windowKey);
-                        // A replied notification must be updated or taken down, or it keeps spinning.
-                        takeDown(app, windowKey, TerminalNoticeRecords.shared().size());
+                        // A newer notice has replaced this one: it was posted under the same tag, which
+                        // already ended the old reply spinner, so leave its record and notification be.
+                        // Otherwise take it down, or it keeps spinning.
+                        if (TerminalNoticeRecords.shared().removeIfGeneration(windowKey, noticeGeneration)) {
+                            takeDown(app, windowKey, TerminalNoticeRecords.shared().size());
+                        }
                     } catch (RuntimeException e) {
                         Log.w(LOG_TAG, "Could not handle a notification reply", e);
                     } finally {

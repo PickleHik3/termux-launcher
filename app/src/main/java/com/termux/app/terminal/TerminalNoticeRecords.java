@@ -87,6 +87,30 @@ public final class TerminalNoticeRecords {
         return mRecords.remove(windowKey);
     }
 
+    /** Generation reported by {@link #generationOf} when the window has no record; real ones start at 1. */
+    public static final int NO_RECORD = 0;
+
+    /** The window's current record generation, or {@link #NO_RECORD}. */
+    public int generationOf(@NonNull String windowKey) {
+        Record record = mRecords.get(windowKey);
+        return record == null ? NO_RECORD : record.generation;
+    }
+
+    /**
+     * Removes the window's record only if it is still the one seen at {@code generation}, and says
+     * whether the caller may take the notification down. A record that has appeared or been
+     * replaced since is left alone (false). With no record now there is nothing newer to protect,
+     * so it is true: taking down a notification that is already gone is harmless, and one left up
+     * would keep its reply spinner going.
+     */
+    public boolean removeIfGeneration(@NonNull String windowKey, int generation) {
+        Record record = mRecords.get(windowKey);
+        if (record == null) return true;
+        if (record.generation != generation) return false;
+        mRecords.remove(windowKey);
+        return true;
+    }
+
     /** Drops the records raised by {@code pane}, and any whose pane is gone; returns them. */
     @NonNull
     public List<Record> removeForPane(@Nullable Object pane) {
