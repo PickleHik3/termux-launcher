@@ -2710,8 +2710,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             mGeometry.request(GeometryScheduler.Reason.HOME, GeometryScheduler.ResizePolicy.NONE);
             mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-            // HOME while already home never stops the activity, so onStart does not fire for it.
-            playWeatherArrivalAnimation();
         }
     }
 
@@ -2720,10 +2718,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onStart();
         com.termux.app.terminal.TouchDownHint.attach(this);
         if (mScene != null) mScene.attach();
-        // Both arrivals the launcher has: unlocking the phone, and switching back from another
-        // app. Each ends in onStart, because the keyguard stops this activity too.
-        View arrivalHost = findViewById(android.R.id.content);
-        if (arrivalHost != null) arrivalHost.post(this::playWeatherArrivalAnimation);
         Logger.logDebug(LOG_TAG, "onStart");
     
         if (mIsInvalidState) return;
@@ -31692,41 +31686,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mWeatherController;
     }
 
-    /** How long the status-bar weather icon moves for on arrival. */
-    private static final long WEATHER_GREETING_ANIMATION_MS = 3_000L;
-    /** Two arrival signals can land together (restart plus a HOME intent); one replay is enough. */
-    private static final long WEATHER_GREETING_MIN_GAP_MS = 2_000L;
-    private long mLastWeatherGreetingAt;
     /**
      * The Widgets place's weather, longest first: temperature · sky · place, temperature · sky,
      * temperature. Null everywhere else, where the weather is the temperature alone.
      */
     @Nullable private String[] mWeatherForms;
 
-    /**
-     * Runs the weather icon for a few seconds when the user arrives — unlocking the phone, or
-     * coming back to the home screen from another app.
-     *
-     * <p>The icon is otherwise still: looping it costs about 14% of a core for as long as the
-     * status bar is up, which is not a price worth paying for something nobody is looking at. The
-     * moment the user does look is exactly when they have just arrived, so that is where the
-     * movement goes.
-     */
-    private void playWeatherArrivalAnimation() {
-        com.termux.app.statusbar.StatusBarWidgetView widget =
-            findViewById(R.id.terminal_status_widget_weather);
-        if (widget == null || widget.getVisibility() != View.VISIBLE) return;
-        long now = android.os.SystemClock.uptimeMillis();
-        if (now - mLastWeatherGreetingAt < WEATHER_GREETING_MIN_GAP_MS) return;
-        mLastWeatherGreetingAt = now;
-        widget.replayIconAnimation(WEATHER_GREETING_ANIMATION_MS);
-    }
-
     private void onWeatherUpdated(@NonNull com.termux.app.statusbar.WeatherController.Weather weather) {
         com.termux.app.statusbar.StatusBarWidgetView widget = findViewById(R.id.terminal_status_widget_weather);
         if (widget != null && widget.getVisibility() == View.VISIBLE) {
             if (weather.valid) {
-                widget.setIconAnimation(com.termux.app.statusbar.WeatherController.animationAssetFor(
+                widget.setWeatherIcon(com.termux.app.statusbar.WeatherIcons.forCode(
                     weather.currentCode, weather.currentIsDay));
                 boolean fahrenheit = mPreferences != null
                     && mPreferences.isStatusWidgetWeatherFahrenheit();

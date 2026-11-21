@@ -896,58 +896,38 @@ public final class WeatherController {
     }
 
     /**
-     * Directory under {@code assets/} holding the bundled Meteocons animations, one Lottie JSON
-     * per icon name. MIT licensed; the licence ships beside them.
-     */
-    public static final String WEATHER_ANIMATION_ASSET_DIR = "weather";
-
-    /**
-     * One row of the WMO table: the codes that describe a sky, and everything the UI shows for it.
+     * One row of the WMO table: the codes that describe a sky and the words for it. The picture
+     * is {@link WeatherIcons}' to choose, by code and is-day flag.
      *
-     * <p>Codes that describe the same sky share a row on purpose — drizzle intensity (51/53/55)
-     * is a rate, not a different sky. Conditions with no sun or moon in frame (overcast, rime fog,
-     * snow grains) carry one animation for both day and night, because a split there would be a
-     * difference the sky does not have. The glyph is the bundled Nerd Font cut for the card's week
-     * rows, where a Lottie view per row would be seven animations deep; day variants throughout,
-     * because a daily code describes the day, not a moment with an is_day flag.
+     * <p>Codes that describe the same sky share a row on purpose: drizzle intensity (51/53/55)
+     * is a rate, not a different sky.
      */
     enum Condition {
-        CLEAR("Clear", "", "clear-day", "clear-night", 0),
-        MAINLY_CLEAR("Mainly clear", "", "clear-day", "clear-night", 1),
-        PARTLY_CLOUDY("Partly cloudy", "", "partly-cloudy-day", "partly-cloudy-night", 2),
-        OVERCAST("Overcast", "", "overcast", "overcast", 3),
-        FOG("Fog", "", "fog-day", "fog-night", 45),
-        RIME_FOG("Fog", "", "overcast-fog", "overcast-fog", 48),
-        DRIZZLE("Drizzle", "", "partly-cloudy-day-drizzle", "partly-cloudy-night-drizzle",
-            51, 53, 55),
-        FREEZING_DRIZZLE("Drizzle", "", "partly-cloudy-day-sleet", "partly-cloudy-night-sleet",
-            56, 57),
-        RAIN("Rain", "", "overcast-day-rain", "overcast-night-rain", 61, 63, 65),
-        FREEZING_RAIN("Rain", "", "overcast-day-sleet", "overcast-night-sleet", 66, 67),
-        SNOW("Snow", "", "overcast-day-snow", "overcast-night-snow", 71, 73, 75),
-        SNOW_GRAINS("Snow", "", "snowflake", "snowflake", 77),
+        CLEAR("Clear", 0),
+        MAINLY_CLEAR("Mainly clear", 1),
+        PARTLY_CLOUDY("Partly cloudy", 2),
+        OVERCAST("Overcast", 3),
+        FOG("Fog", 45),
+        RIME_FOG("Fog", 48),
+        DRIZZLE("Drizzle", 51, 53, 55),
+        FREEZING_DRIZZLE("Drizzle", 56, 57),
+        RAIN("Rain", 61, 63, 65),
+        FREEZING_RAIN("Rain", 66, 67),
+        SNOW("Snow", 71, 73, 75),
+        SNOW_GRAINS("Snow", 77),
         /** Rain showers fall from broken cloud, not an overcast lid. */
-        SHOWERS("Showers", "", "partly-cloudy-day-rain", "partly-cloudy-night-rain", 80, 81, 82),
-        SNOW_SHOWERS("Snow showers", "", "partly-cloudy-day-snow", "partly-cloudy-night-snow",
-            85, 86),
-        THUNDERSTORM("Thunderstorm", "", "thunderstorms-day", "thunderstorms-night", 95),
-        THUNDERSTORM_HAIL("Thunderstorm with hail", "", "thunderstorms-day-hail",
-            "thunderstorms-night-hail", 96, 99),
-        /** An unknown code is not "cloudy": it gets the not-available cut and no label. */
-        UNKNOWN("—", "", "not-available", "not-available");
+        SHOWERS("Showers", 80, 81, 82),
+        SNOW_SHOWERS("Snow showers", 85, 86),
+        THUNDERSTORM("Thunderstorm", 95),
+        THUNDERSTORM_HAIL("Thunderstorm with hail", 96, 99),
+        /** An unknown code is not "cloudy": it gets no label. */
+        UNKNOWN("\u2014");
 
         @NonNull final String label;
-        @NonNull final String glyph;
-        @NonNull final String dayAnimation;
-        @NonNull final String nightAnimation;
         @NonNull final int[] codes;
 
-        Condition(@NonNull String label, @NonNull String glyph, @NonNull String dayAnimation,
-                  @NonNull String nightAnimation, int... codes) {
+        Condition(@NonNull String label, int... codes) {
             this.label = label;
-            this.glyph = glyph;
-            this.dayAnimation = dayAnimation;
-            this.nightAnimation = nightAnimation;
             this.codes = codes;
         }
 
@@ -960,38 +940,8 @@ public final class WeatherController {
         }
     }
 
-    /**
-     * Meteocons animation name for a WMO weather code, day/night aware.
-     *
-     * <p>The Material vector set this replaced had one file per condition, so it collapsed the
-     * whole WMO table into eight shapes and only told day from night for a clear or partly clear
-     * sky; the Nerd Font set that briefly replaced <em>that</em> read too small at status-bar
-     * size. Meteocons carries a day and a night cut of every condition that looks different after
-     * dark, at whatever size the view gives it.
-     *
-     * @param isDay from the provider's own is_day flag, not from the device clock
-     * @return the asset's base name, without the {@code .json} suffix
-     */
-    @NonNull
-    public static String animationFor(int code, boolean isDay) {
-        Condition condition = Condition.forCode(code);
-        return isDay ? condition.dayAnimation : condition.nightAnimation;
-    }
-
-    /** The asset path {@code LottieAnimationView.setAnimation(String)} takes. */
-    @NonNull
-    public static String animationAssetFor(int code, boolean isDay) {
-        return WEATHER_ANIMATION_ASSET_DIR + "/" + animationFor(code, isDay) + ".json";
-    }
-
     @NonNull
     public static String describe(int code) {
         return Condition.forCode(code).label;
-    }
-
-    /** Bundled Nerd Font weather glyph for a WMO code, for the card's week rows. */
-    @NonNull
-    public static String glyphFor(int code) {
-        return Condition.forCode(code).glyph;
     }
 }

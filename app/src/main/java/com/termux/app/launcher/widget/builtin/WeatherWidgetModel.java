@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.statusbar.WeatherController;
+import com.termux.app.statusbar.WeatherIcons;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -26,10 +27,6 @@ final class WeatherWidgetModel {
 
     /** Which of today's sun times comes next: the sunrise, the sunset, or neither (after dark). */
     enum Sun { NONE, RISE, SET }
-
-    /** Weather Icons night cuts: a clear night, and a partly cloudy one. */
-    static final String GLYPH_NIGHT_CLEAR = "\ue32b";
-    static final String GLYPH_NIGHT_PARTLY_CLOUDY = "\ue37e";
 
     static final int HOURLY_MAX = 5;
     static final int FORECAST_DAYS = 5;
@@ -319,13 +316,11 @@ final class WeatherWidgetModel {
     }
 
     /**
-     * The sky's glyph: the shared table's day cut, with a night cut for the clear and partly
-     * cloudy skies the table only draws with a sun.
+     * The sky's picture, as the plan's glyph text: {@link WeatherIcons}' key for the code and the
+     * is-day flag, which the plan view draws in two tints.
      */
     @NonNull static String glyph(int code, boolean isDay) {
-        if (!isDay && (code == 0 || code == 1)) return GLYPH_NIGHT_CLEAR;
-        if (!isDay && code == 2) return GLYPH_NIGHT_PARTLY_CLOUDY;
-        return WeatherController.glyphFor(code);
+        return WeatherIcons.forCode(code, isDay).key;
     }
 
     /** "Wed" for {@code 2026-10-07}, in the user's language; the input when it does not parse. */
