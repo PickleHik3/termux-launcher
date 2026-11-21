@@ -1306,10 +1306,13 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** The ink the A-Z rope reads: the settled glass ink, else the launcher's text colour. */
     private int sectionSwitchInk() {
-        SuggestionBarView dock = mDock;
-        if (dock == null) return Color.WHITE;
-        int settled = dock.glassInk();
-        return Color.alpha(settled) != 0 ? settled : dock.getLauncherTextColor();
+        // The search bar's own ink, so the two stacked controls read alike in every theme. The
+        // dock's glass ink (the A–Z strip's) is an accent tint that all but vanished on the
+        // card's grey in dark.
+        return com.google.android.material.color.MaterialColors.getColor(mPill,
+            com.google.android.material.R.attr.colorOnSurface,
+            androidx.core.content.ContextCompat.getColor(getContext(),
+                com.termux.R.color.termux_on_surface));
     }
 
     /** Settings › A–Z strip; read once per open. */
