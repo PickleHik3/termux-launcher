@@ -8,8 +8,9 @@ package com.termux.app.wall.pageswitch;
  *
  * <p>The band is what the grid gives up above the dock's reserve. With the indicator off it is
  * nothing at all. With the indicator on it is the air above the pill and the pill, and the air
- * below the pill only while dock rows stand under it: with none the pill takes the dock's place
- * at the pane's bottom, so no empty strip is left under it. A keyboard hides the pill and leaves
+ * below the pill: {@link PageBarLayout#BOTTOM_AIR_DP} while dock rows stand under it, the dock's
+ * own edge gap without them, so the pill takes the dock's place with its bottom on the line the
+ * dock's bottom would stand on. A keyboard hides the pill and leaves
  * the band, so the grid is not cut again on every keyboard toggle.
  */
 public final class PageBarBand {
@@ -21,16 +22,28 @@ public final class PageBarBand {
         return dockReservePx > 0;
     }
 
-    /** The band's height in dp: 0 with the indicator off. */
+    /**
+     * The band's height in dp before the air under the pill that is not {@link
+     * PageBarLayout#BOTTOM_AIR_DP}: 0 with the indicator off. With no dock rows below, the air
+     * under the pill is the dock's edge gap, which is in pixels ({@link #bandHeightPx}).
+     */
     public static float bandHeightDp(boolean indicatorOn, boolean dockRowsBelow) {
         if (!indicatorOn) return 0f;
         return PageBarLayout.TOP_AIR_DP + PageBarLayout.PILL_HEIGHT_DP
             + (dockRowsBelow ? PageBarLayout.BOTTOM_AIR_DP : 0f);
     }
 
-    /** The band's height in px, the part of the pane's height the grid gives up. */
-    public static int bandHeightPx(boolean indicatorOn, boolean dockRowsBelow, float density) {
-        return Math.round(bandHeightDp(indicatorOn, dockRowsBelow) * density);
+    /**
+     * The band's height in px, the part of the pane's height the grid gives up. The air under the
+     * pill is {@link PageBarLayout#BOTTOM_AIR_DP} while dock rows stand below it, and the dock's
+     * own edge gap ({@code edgeGapPx}, what the dock keeps above the pane's bottom) without them:
+     * the pill then stands where the dock's bottom would.
+     */
+    public static int bandHeightPx(boolean indicatorOn, boolean dockRowsBelow, int edgeGapPx,
+                                   float density) {
+        if (!indicatorOn) return 0;
+        return Math.round(bandHeightDp(true, dockRowsBelow) * density)
+            + (dockRowsBelow ? 0 : Math.max(0, edgeGapPx));
     }
 
     /** The pill's top within the band. */

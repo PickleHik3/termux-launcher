@@ -507,6 +507,18 @@ public class StackLayoutTest {
     }
 
     @Test
+    public void theEdgeGapAHomeRestKeepsIsThePassesForTheFloatingAndTheFlushDock() {
+        for (boolean floating : new boolean[] {false, true}) {
+            Snapshot s = homeIn(DockStyle.GLASS_TRAY, floating, false);
+            DockLayout rest = DockGeometry.compute(s.restOf(PageRef.HOME));
+            StackLayout.RestInput in = new StackLayout.RestInput(s, PageRef.HOME);
+            in.toolbarShown = true;
+            assertEquals("floating=" + floating, run(home(s, false, 0)).stackEdgeGapPx,
+                StackLayout.restGridEdgeGapPx(in, rest));
+        }
+    }
+
+    @Test
     public void aFloatingPeekHalfRestsAsAPassLaysItOut() {
         Snapshot s = homeIn(DockStyle.PEEK_GLASS, true, false);
         DockLayout rest = DockGeometry.compute(s.restOf(PageRef.HOME));

@@ -871,7 +871,8 @@ public final class CrossingController {
         in.keyboardShown = mHost.inAppKeyboard() != null && mHost.inAppKeyboard().isEnabled()
             && mHost.wantsKeyboardOnEnter(com.termux.app.page.PageKind.HOME);
         ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
-            com.termux.app.place.StackLayout.restGridDockReservePx(in, homeRest));
+            com.termux.app.place.StackLayout.restGridDockReservePx(in, homeRest),
+            com.termux.app.place.StackLayout.restGridEdgeGapPx(in, homeRest));
     }
 
     /**

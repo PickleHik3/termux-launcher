@@ -13,14 +13,30 @@ public class PageBarBandTest {
     @Test public void bandIsTopAirAndPillWithBottomAirOnlyOverDockRows() {
         assertEquals(64f, PageBarBand.bandHeightDp(true, true), EPS);
         assertEquals(52f, PageBarBand.bandHeightDp(true, false), EPS);
-        assertEquals(128, PageBarBand.bandHeightPx(true, true, 2f));
-        assertEquals(104, PageBarBand.bandHeightPx(true, false, 2f));
+        assertEquals(128, PageBarBand.bandHeightPx(true, true, 0, 2f));
+        assertEquals(104, PageBarBand.bandHeightPx(true, false, 0, 2f));
         assertEquals(PageBarLayout.bandHeightDp(), PageBarBand.bandHeightDp(true, true), EPS);
     }
 
     @Test public void indicatorOffGivesTheWholeBandBack() {
-        assertEquals(0, PageBarBand.bandHeightPx(false, true, 3f));
-        assertEquals(0, PageBarBand.bandHeightPx(false, false, 3f));
+        assertEquals(0, PageBarBand.bandHeightPx(false, true, 20, 3f));
+        assertEquals(0, PageBarBand.bandHeightPx(false, false, 20, 3f));
+    }
+
+    @Test public void withNoDockRowsThePillStandsTheDocksEdgeGapAboveThePanesBottom() {
+        // The pill's bottom is the air under it above the band's bottom, which is the pane's
+        // bottom with no reserve: the line the dock's bottom would stand on.
+        int edgeGap = 16;
+        int top = Math.round((PageBarLayout.TOP_AIR_DP + PageBarLayout.PILL_HEIGHT_DP) * 2f);
+        assertEquals(top + edgeGap, PageBarBand.bandHeightPx(true, false, edgeGap, 2f));
+        assertEquals("a flush dock keeps no gap, so neither does the pill", top,
+            PageBarBand.bandHeightPx(true, false, 0, 2f));
+        assertEquals(top, PageBarBand.bandHeightPx(true, false, -4, 2f));
+    }
+
+    @Test public void overDockRowsTheEdgeGapIsTheDocksAndTheAirUnderThePillIsItsOwn() {
+        assertEquals(PageBarBand.bandHeightPx(true, true, 0, 2f),
+            PageBarBand.bandHeightPx(true, true, 16, 2f));
     }
 
     @Test public void dockRowsAreBelowWhileThereIsAReserve() {

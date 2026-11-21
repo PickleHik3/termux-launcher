@@ -17941,7 +17941,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : findViewById(R.id.widget_pane);
         if (widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView) {
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
-                stack.homeGridDockReservePx);
+                stack.homeGridDockReservePx, stack.stackEdgeGapPx);
             // The page bar's pill is put away while either keyboard is up; its band stays.
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setKeyboardUp(
                 state.keyboardShown || isImeVisible());

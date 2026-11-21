@@ -310,7 +310,7 @@ public final class WidgetPaneView extends FrameLayout
         // while the indicator is on (a keyboard hides the pill, not the band, and adding a page
         // does not shrink every cell); with the indicator off the grid takes the band's height.
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
-        gridParams.bottomMargin = gridBottomInsetPx(0, indicator.glyphsShown(),
+        gridParams.bottomMargin = gridBottomInsetPx(0, indicator.glyphsShown(), 0,
             getResources().getDisplayMetrics().density);
         addView(grid, gridParams);
 
@@ -325,7 +325,7 @@ public final class WidgetPaneView extends FrameLayout
 
         dots = new PageBarView(context); dots.setId(R.id.widget_page_dots);
         LayoutParams dotsParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            PageBarBand.bandHeightPx(indicator.glyphsShown(), false, density()),
+            PageBarBand.bandHeightPx(indicator.glyphsShown(), false, dockEdgeGapPx, density()),
             Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         dotsParams.bottomMargin = 0;
         addView(dots, dotsParams);
@@ -486,13 +486,14 @@ public final class WidgetPaneView extends FrameLayout
         float density = density();
         boolean on = indicator.glyphsShown();
         LayoutParams gridParams = (LayoutParams) grid.getLayoutParams();
-        int gridBottom = gridBottomInsetPx(dockReservePx, on, density);
+        int gridBottom = gridBottomInsetPx(dockReservePx, on, dockEdgeGapPx, density);
         if (gridParams.bottomMargin != gridBottom) {
             gridParams.bottomMargin = gridBottom;
             grid.setLayoutParams(gridParams);
         }
         LayoutParams dotsParams = (LayoutParams) dots.getLayoutParams();
-        int band = PageBarBand.bandHeightPx(on, PageBarBand.dockRowsBelow(dockReservePx), density);
+        int band = PageBarBand.bandHeightPx(on, PageBarBand.dockRowsBelow(dockReservePx),
+            dockEdgeGapPx, density);
         int bottom = PageBarBand.bottomMarginPx(dockReservePx);
         if (dotsParams.height != band || dotsParams.bottomMargin != bottom) {
             dotsParams.height = band;
@@ -579,20 +580,26 @@ public final class WidgetPaneView extends FrameLayout
 
     /** The band at the pane's bottom the dock takes at rest; see {@link #setDockReservePx}. */
     private int dockReservePx;
+    /** The edge gap the dock keeps above the pane's bottom; see {@link #setDockReservePx}. */
+    private int dockEdgeGapPx;
 
     /**
      * The band at the pane's bottom the dock stands over at rest
      * ({@code KeyboardOverlayPolicy#homeGridDockReservePx}, #104): the page bar and the grid stand
      * above it, so the grid's last row is never behind the dock. The grid's rows are cut from what
      * is left. Zero when no dock rows stand at the bottom: the pill then takes the dock's place
-     * at the pane's bottom, with no air under it.
+     * where the dock's bottom would stand: {@code edgeGapPx}, the dock's own edge gap, is the air
+     * under it. The two arrive together so the band is cut once.
      */
-    public void setDockReservePx(int px) {
+    public void setDockReservePx(int px, int edgeGapPx) {
         int wanted = Math.max(0, px);
-        if (dockReservePx == wanted) return;
+        int wantedGap = Math.max(0, edgeGapPx);
+        if (dockReservePx == wanted && dockEdgeGapPx == wantedGap) return;
+        boolean reserveMoved = dockReservePx != wanted;
         dockReservePx = wanted;
+        dockEdgeGapPx = wantedGap;
         applyBand();
-        picker.setDockReservePx(wanted);
+        if (reserveMoved) picker.setDockReservePx(wanted);
     }
 
     /** Whether a keyboard is up on Home; see {@link #setKeyboardUp}. */
@@ -606,9 +613,10 @@ public final class WidgetPaneView extends FrameLayout
      * How far above the pane's bottom the grid ends: the dock's band, then the page bar's band
      * (none with the indicator off; kept while a keyboard hides the pill).
      */
-    static int gridBottomInsetPx(int dockReservePx, boolean indicatorOn, float density) {
+    static int gridBottomInsetPx(int dockReservePx, boolean indicatorOn, int edgeGapPx,
+                                 float density) {
         return PageBarBand.bottomMarginPx(dockReservePx) + PageBarBand.bandHeightPx(indicatorOn,
-            PageBarBand.dockRowsBelow(dockReservePx), density);
+            PageBarBand.dockRowsBelow(dockReservePx), edgeGapPx, density);
     }
 
     /**

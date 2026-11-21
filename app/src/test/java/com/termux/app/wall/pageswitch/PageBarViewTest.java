@@ -79,15 +79,24 @@ public class PageBarViewTest {
         float density = activity.getResources().getDisplayMetrics().density;
         View dots = pane.findViewById(R.id.widget_page_dots);
         // No dock reserve yet: the pill takes the dock's place, no air under it.
-        assertEquals(PageBarBand.bandHeightPx(true, false, density), dots.getLayoutParams().height);
-        pane.setDockReservePx(100);
-        assertEquals(PageBarBand.bandHeightPx(true, true, density), dots.getLayoutParams().height);
+        assertEquals(PageBarBand.bandHeightPx(true, false, 0, density),
+            dots.getLayoutParams().height);
+        // With the dock away it keeps the dock's edge gap under the pill, and a gap alone moves it.
+        pane.setDockReservePx(0, 17);
+        assertEquals(PageBarBand.bandHeightPx(true, false, 17, density),
+            dots.getLayoutParams().height);
+        assertEquals(PageBarBand.bandHeightPx(true, false, 0, density) + 17,
+            dots.getLayoutParams().height);
+        pane.setDockReservePx(100, 17);
+        assertEquals("over dock rows the air under the pill is its own",
+            PageBarBand.bandHeightPx(true, true, 0, density), dots.getLayoutParams().height);
         assertEquals(100, ((android.widget.FrameLayout.LayoutParams) dots.getLayoutParams())
             .bottomMargin);
         pane.setKeyboardUp(true);
         assertEquals("a keyboard hides the pill, not the band", View.INVISIBLE,
             dots.getVisibility());
-        assertEquals(PageBarBand.bandHeightPx(true, true, density), dots.getLayoutParams().height);
+        assertEquals(PageBarBand.bandHeightPx(true, true, 0, density),
+            dots.getLayoutParams().height);
         pane.setKeyboardUp(false);
         assertEquals(View.VISIBLE, dots.getVisibility());
         pane.setPageIndicator(com.termux.app.launcher.home.HomePageIndicator.OFF);

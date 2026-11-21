@@ -390,6 +390,17 @@ public final class StackLayout {
             dockContentPx, base.edgeGapPx);
     }
 
+    /**
+     * The edge gap {@code page}'s dock keeps above the pane's bottom at rest, built the way
+     * {@link #layout} builds {@link Result#stackEdgeGapPx}: the page bar's pill stands that far up
+     * when no dock rows stand under it.
+     */
+    public static int restGridEdgeGapPx(@NonNull RestInput in, @NonNull DockLayout rest) {
+        DockGeometry.Half half = in.dock.half(in.page);
+        return new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
+            in.imeLiftPx, in.page.kind).edgeGapPx;
+    }
+
     /** Whether {@code layout} stands the status bar along the bottom, a band of the stack. */
     private static boolean statusAlongTheBottom(@NonNull PlaceLayout layout) {
         return EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM).contains(Element.STATUS);
