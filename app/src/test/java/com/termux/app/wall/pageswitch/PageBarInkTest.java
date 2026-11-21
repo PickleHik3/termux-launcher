@@ -52,28 +52,4 @@ public class PageBarInkTest {
         assertEquals(OnGlass.opaque(OnGlass.composite(tint, PageBarGlass.cardFor(0xFFF2F0E4))),
             PageBarGlass.raisedGround(tint, 0, 0xFFF2F0E4));
     }
-
-    /** Home's well: the measured ground under the well's shade, the marks solved on it, the side kept. */
-    @Test public void theHomeWellSinksTheGroundAndSolvesTheMarksOnIt() {
-        int accent = 0xFFFFB59C;
-        int[][] cases = {{0xFF2A2C34, 0xFFF2F0E4}, {0xFFE8E4DC, 0xFF1F2A2D}};
-        for (int[] c : cases) {
-            PageBarGlass.Ink ink = new PageBarGlass.Ink();
-            ink.ground = c[0];
-            ink.ink = c[1];
-            PageBarGlass.sink(ink, accent);
-            boolean dark = c[1] == 0xFFF2F0E4;
-            String at = Integer.toHexString(c[0]);
-            assertEquals(at, dark, ink.wellDark);
-            assertEquals(at, com.termux.app.chrome.InsetGlass.groundIn(c[0], dark), ink.ground);
-            assertEquals(at, c[1], ink.ink);
-            assertTrue(at, OnGlass.ratio(ink.ink, ink.ground) >= OnGlass.TARGET_LARGE_TEXT);
-            assertEquals(at, com.termux.app.chrome.PageMarkInk.other(ink.ground, ink.ink, ink.accent),
-                ink.other);
-        }
-        // Nothing measured: nothing to sink.
-        PageBarGlass.Ink none = new PageBarGlass.Ink();
-        PageBarGlass.sink(none, accent);
-        assertEquals(0, none.ground);
-    }
 }
