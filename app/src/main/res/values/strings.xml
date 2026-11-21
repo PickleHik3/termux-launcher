@@ -897,6 +897,7 @@
         <item quantity="other">%1$d APPS</item>
     </plurals>
     <string name="app_drawer_search_hint">Search apps</string>
+    <string name="app_drawer_section_switch_selected">%1$s, selected</string>
     <plurals name="app_drawer_search_result_count">
         <item quantity="one">%1$d RESULT</item>
         <item quantity="other">%1$d RESULTS</item>

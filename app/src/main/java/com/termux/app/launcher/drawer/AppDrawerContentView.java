@@ -130,11 +130,11 @@ public final class AppDrawerContentView extends FrameLayout
     public static final float OVERPULL_MAX_DP = 96f;
 
     /** The drawer's side padding, and the content inset every view type ends above the card's bottom. */
-    static final float PILL_MARGIN_H_DP = 16f;
-    private static final float PILL_MARGIN_TOP_DP = 12f;
-    private static final float PILL_TO_GRID_DP = 10f;
+    static final float PILL_MARGIN_H_DP = AppDrawerChromeLayout.SIDE_MARGIN_DP;
     /** Band the categories search reserves above its rows for the "N RESULTS" label. */
     private static final float RESULTS_LABEL_BAND_DP = 24f;
+    /** The no-results state's drop below the content's top. */
+    private static final float NO_RESULTS_BELOW_CONTENT_DP = 64f;
 
     /** Distance from the content's bottom edge to its last element; see {@link #setBottomInsetPx}. */
     private int mBottomInsetPx;
@@ -205,7 +205,9 @@ public final class AppDrawerContentView extends FrameLayout
     /** Vertical grid columns, retained so the search-row presentation can restore the span. */
     private int mVerticalColumns = AppDrawerGridMetrics.MIN_COLUMNS;
     private boolean mCategorySearchPresentation;
-    private final int mGridBaseTopMarginPx;
+    /** Where the content starts under the top chrome; moves with the section switch ({@link #applySectionSwitchLayout}). */
+    private int mGridBaseTopMarginPx;
+    private final AppDrawerSectionSwitchView mSectionSwitch;
     /** The configured type. Everything that draws or routes touches reads {@link #presentedType()}. */
     @NonNull private AppDrawerViewType mViewType = AppDrawerViewType.VERTICAL;
     /** The remembered section; only the Default type shows it. */
@@ -350,11 +352,13 @@ public final class AppDrawerContentView extends FrameLayout
         setClipChildren(false);
         setClipToPadding(false);
 
+        AppDrawerChromeLayout.Result chrome = AppDrawerChromeLayout.resolve(
+            new AppDrawerChromeLayout.Input(mDensity, 0, false, 0));
         LayoutParams pillParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            Math.round(AppDrawerSearchPillView.HEIGHT_DP * mDensity));
-        pillParams.leftMargin = dp(PILL_MARGIN_H_DP);
-        pillParams.rightMargin = dp(PILL_MARGIN_H_DP);
-        pillParams.topMargin = dp(PILL_MARGIN_TOP_DP);
+            chrome.searchHeightPx);
+        pillParams.leftMargin = chrome.sideMarginPx;
+        pillParams.rightMargin = chrome.sideMarginPx;
+        pillParams.topMargin = chrome.searchTopPx;
         // Under the pill, in the pill's own rectangle: the pill stays what is tapped and what is
         // seen, the field is only what the Android keyboard types into.
         mInput = new AppDrawerSearchInputView(context);
@@ -383,6 +387,21 @@ public final class AppDrawerContentView extends FrameLayout
         mPill = new AppDrawerSearchPillView(context);
         mPill.setCallbacks(this);
         addView(mPill, pillParams);
+
+        // Default only: laid out and shown by applySectionSwitchLayout. Above the search bar, so
+        // a drag that starts on it is chrome to the section gesture and moves nothing.
+        mSectionSwitch = new AppDrawerSectionSwitchView(context);
+        mSectionSwitch.attachTo(mSectionPager);
+        mSectionSwitch.setCallbacks(this::onSectionSwitchChosen);
+        mSectionSwitch.setInkSource(this::sectionSwitchInk);
+        mSectionSwitch.setVisibility(GONE);
+        LayoutParams switchParams = new LayoutParams(LayoutParams.WRAP_CONTENT,
+            Math.round(AppDrawerSectionSwitchGeometry.HEIGHT_DP * mDensity),
+            Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        switchParams.leftMargin = chrome.sideMarginPx;
+        switchParams.rightMargin = chrome.sideMarginPx;
+        switchParams.topMargin = chrome.searchTopPx;
+        addView(mSectionSwitch, switchParams);
 
         mAdapter = new AppDrawerAppsAdapter(dock);
         mLayoutManager = new GridLayoutManager(context, AppDrawerGridMetrics.MIN_COLUMNS);
@@ -441,7 +460,7 @@ public final class AppDrawerContentView extends FrameLayout
         mColumnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
-        gridParams.topMargin = pillParams.topMargin + pillParams.height + dp(PILL_TO_GRID_DP);
+        gridParams.topMargin = chrome.contentTopPx;
         mGridBaseTopMarginPx = gridParams.topMargin;
         gridParams.bottomMargin = 0;
         // The letters are not an overlay: the grid gives up exactly the strip's width so no cell
@@ -519,7 +538,7 @@ public final class AppDrawerContentView extends FrameLayout
         bindNoResultsText();
         LayoutParams noResultsParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.WRAP_CONTENT);
-        noResultsParams.topMargin = mGridBaseTopMarginPx + dp(64f);
+        noResultsParams.topMargin = mGridBaseTopMarginPx + dp(NO_RESULTS_BELOW_CONTENT_DP);
         noResultsParams.leftMargin = dp(PILL_MARGIN_H_DP);
         noResultsParams.rightMargin = dp(PILL_MARGIN_H_DP);
         addView(mNoResults, noResultsParams);
@@ -1166,8 +1185,54 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     private void applyViewType() {
+        applySectionSwitchLayout();
         applyViewTypeLayout();
         applyLowerStart();
+    }
+
+    /**
+     * Stacks the top chrome as {@link AppDrawerChromeLayout} answers: the switch (Default only),
+     * the search bar under it, and the content's top. Compared before it is set; runs where the
+     * type or the search state changes, never from measure, layout or draw.
+     */
+    private void applySectionSwitchLayout() {
+        boolean shown = mViewType == AppDrawerViewType.DEFAULT;
+        int switchHeight = Math.round(AppDrawerSectionSwitchGeometry.HEIGHT_DP * mDensity);
+        AppDrawerChromeLayout.Result r = AppDrawerChromeLayout.resolve(
+            new AppDrawerChromeLayout.Input(mDensity, getWidth(), shown, switchHeight));
+        setVisibilityIfChanged(mSectionSwitch, shown ? VISIBLE : GONE);
+        mSectionSwitch.setPagesActive(shown && defaultPagesActive());
+        mSectionSwitch.setMaxWidthPx(r.switchMaxWidthPx);
+        mSectionSwitch.invalidate();
+        if (shown) setTopMargin(mSectionSwitch, r.switchTopPx);
+        setTopMargin(mPill, r.searchTopPx);
+        setTopMargin(mInput, r.searchTopPx);
+        mGridBaseTopMarginPx = r.contentTopPx;
+        setTopMargin(mHorizontalPager, r.contentTopPx);
+        setTopMargin(mCategoryView, r.contentTopPx);
+        setTopMargin(mResultsLabel, r.contentTopPx);
+        setTopMargin(mNoResults, r.contentTopPx + dp(NO_RESULTS_BELOW_CONTENT_DP));
+    }
+
+    private static void setTopMargin(@NonNull View view, int topMargin) {
+        LayoutParams params = (LayoutParams) view.getLayoutParams();
+        if (params.topMargin == topMargin) return;
+        params.topMargin = topMargin;
+        view.setLayoutParams(params);
+    }
+
+    /** A tap on a switch label: the pages slide there; a tap on the page already shown does nothing. */
+    private void onSectionSwitchChosen(@NonNull AppDrawerSection section) {
+        if (!mPagesActive || !mInteractive) return;
+        setSection(section);
+    }
+
+    /** The ink the A-Z rope reads: the settled glass ink, else the launcher's text colour. */
+    private int sectionSwitchInk() {
+        SuggestionBarView dock = mDock;
+        if (dock == null) return Color.WHITE;
+        int settled = dock.glassInk();
+        return Color.alpha(settled) != 0 ? settled : dock.getLauncherTextColor();
     }
 
     /** Settings › A–Z strip; read once per open. */

@@ -100,7 +100,8 @@ public final class LegendSlider extends View {
     static final long HOLD_TO_CLAIM_MS = StripTouchPolicy.HOLD_TO_CLAIM_MS;
     /** The handle's touch target along the track: M3's 48dp minimum, centred on the handle. */
     private static final float HANDLE_TOUCH_DP = 48f;
-    private static final int DISABLED_ALPHA = 97;
+    /** The launcher's disabled alpha, of 255; the drawer's section switch dims to it too. */
+    public static final int DISABLED_ALPHA = 97;
     /** A horizontal slider's track height (the M3 Expressive XS track) and its hit area. */
     static final int ACROSS_TRACK_DP = 16;
     static final int ACROSS_HIT_DP = 48;
