@@ -221,7 +221,9 @@ public final class PageBarLayout {
      */
     private void spread(float[] centers, float[] scales, int end, int nb, float nbX) {
         float unit = glyphPx() * NEIGHBOUR_SCALE / PageBarGlyphPainter.GLYPH_UNITS;
-        float half = PageBarGlyphPainter.GLYPH_UNITS * unit / 2f;
+        // The pill's ends are round: a glyph centred less than the cap's radius from an end
+        // crosses the outline at its corners, so the cap's radius is the least room it keeps.
+        float half = Math.max(PageBarGlyphPainter.GLYPH_UNITS * unit / 2f, pillHeightPx() / 2f);
         boolean stack = mFolded != null && nb < mFolded.length && mFolded[nb];
         float pillRight = mPillLeft + pillWidthPx();
         float minX = mPillLeft + half

@@ -97,12 +97,13 @@ public class PageBarLayoutTest {
     @Test public void aNeighbourThatIsAnEndIsClampedInsideThePill() {
         PageBarLayout l = seven();
         l.slidePositions(1f, 1f, c, s);
-        // rest(1) - 66.25 would sit left of the pill's inner edge plus half the scaled glyph.
-        assertEquals(24.5f + 22f * 1.25f / 2f, c[0], EPS);
+        // rest(1) - 66.25 would sit left of the pill; it stops the round cap's radius (24, more
+        // than half the scaled glyph) inside the end, so its corners clear the outline.
+        assertEquals(24.5f + 24f, c[0], EPS);
         assertEquals(1.25f, s[0], EPS);
         assertEquals(0f, s[1], EPS);
         l.slidePositions(5f, 1f, c, s);
-        assertEquals(24.5f + 371f - 22f * 1.25f / 2f, c[6], EPS);
+        assertEquals(24.5f + 371f - 24f, c[6], EPS);
     }
 
     @Test public void aFoldedEndNeighbourKeepsItsPlatesInsideThePill() {
@@ -112,11 +113,12 @@ public class PageBarLayoutTest {
         l.slidePositions(5f, 1f, c, s, folded);
         float unit = 1.25f;
         float pillRight = 24.5f + 371f;
-        float reach = (11f + PageBarGlyphPainter.STACK_OVERHANG_RIGHT) * unit;
-        assertEquals(pillRight, c[6] + reach, EPS);
-        // Unfolded, the same slot sits further out.
+        // The round cap's radius (24) is the least room an end neighbour keeps; a stack's plates
+        // reach past that.
+        assertEquals(pillRight - 24f - PageBarGlyphPainter.STACK_OVERHANG_RIGHT * unit, c[6], EPS);
+        // Unfolded, the same slot sits further out, still a cap's radius from the end.
         l.slidePositions(5f, 1f, c, s);
-        assertEquals(pillRight - 11f * unit, c[6], EPS);
+        assertEquals(pillRight - 24f, c[6], EPS);
     }
 
     @Test public void focusOnAnEndDrawsNothingThereAndOnlyOneNeighbour() {
