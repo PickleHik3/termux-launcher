@@ -18854,6 +18854,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 column.setLayoutParams(params);
             }
         }
+        // Home's card while the cards stand apart is pinned from the rest answer alone
+        // (SideCardsController#layOutHost), at both keyboard states: the foot changing hands when
+        // Home's keyboard shows must not swap its pin for the column's.
+        if (mSideCards.hostPinned()) return;
         View host = container.findViewById(R.id.accessory_surface_host);
         if (host == null || !(host.getLayoutParams() instanceof RelativeLayout.LayoutParams)) return;
         RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) host.getLayoutParams();
