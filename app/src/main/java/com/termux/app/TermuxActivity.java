@@ -11135,9 +11135,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @SuppressWarnings("deprecation")
     private void noteRootFitBottom(@NonNull WindowInsetsCompat insets) {
-        int diagPriorFit = mRootFitBottomPx; // DIAG(home-kb)
         mRootFitBottomPx = insets.getSystemWindowInsetBottom();
-        if (diagPriorFit != mRootFitBottomPx) diagHomeKb("system-insets"); // DIAG(home-kb)
         mRootRestFitBottomPx = insets.getInsets(Type.systemBars() | Type.displayCutout()).bottom;
         if (mCrossing.holdsContent() || mLastWallPage != com.termux.app.page.PageKind.HOME)
             return;
@@ -18347,7 +18345,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAppliedStack = stack;
         boolean keyboardShownChanged = mKeyboardGeometry.applyKeyboardShown(state.keyboardShown);
         if (keyboardShownChanged) {
-            diagHomeKb(state.keyboardShown ? "inapp-show" : "inapp-hide"); // DIAG(home-kb)
             endHomePillFlight();
             mHomePill.refresh();
         }
@@ -29219,22 +29216,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a keyboard the insets miss is the root's own bottom margin, which already put the root's
      * bottom on the keyboard's top.
      */
-    // DIAG(home-kb): the page in front, which keyboard is up and where its top is; revert before merge.
-    private void diagHomeKb(String event) {
-        if (mLastWallPage != com.termux.app.page.PageKind.HOME) return;
-        int[] at = mHomeImeTopScratch;
-        View stack = findViewById(R.id.accessory_stack_container);
-        int stackBottom = 0;
-        if (stack != null) {
-            stack.getLocationOnScreen(at);
-            stackBottom = Math.round(at[1] - stack.getTranslationY()) + stack.getHeight();
-        }
-        mStackRenderer.diagHomeKb(event, "page=" + mLastWallPage + " inApp="
-            + mHomeFloatKeyboardShown + " system=" + (mHomeFloatImePushPx > 0) + " kbTop="
-            + homeKeyboardTopOnScreenPx(stackBottom) + " coveredAct=" + homeRowsCovered()
-            + " fit=" + mRootFitBottomPx + "/" + mRootRestFitBottomPx);
-    }
-
     private int systemImeTopOnScreenPx() {
         View root = mTermuxActivityRootView;
         if (root == null) return 0;
