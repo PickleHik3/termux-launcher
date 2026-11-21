@@ -37,6 +37,9 @@
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Needed by the app menu's Uninstall: since Android 9 the system ignores an uninstall request
+         from an app that targets API 28 or later and does not declare this. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- The built-in agenda and calendar widgets; asked for when one is placed, never before. -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
