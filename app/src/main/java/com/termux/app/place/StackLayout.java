@@ -67,6 +67,11 @@ public final class StackLayout {
         public boolean keyboardOverlays;
         /** The committed page is Home: the dock floats over its grid. */
         public boolean dockOverlays;
+        /**
+         * Home's keyboard is always on: the cover does not apply, Home's rows ride the keyboard
+         * as before #309 ({@link HomeKeyboardCover#liftsRows(PageKind, boolean)}).
+         */
+        public boolean homeKeyboardAlwaysOn;
         public int systemImeTakePx;
         /** A slide holds the content, and the reservation it was committed with. */
         public boolean travelHoldsContent;
@@ -126,7 +131,8 @@ public final class StackLayout {
             DockLayout probe = geometry.layout(unsqueezed);
             // The stack wears the Style of the half whose rows it stands, from its arrangement.
             Base base = new Base(probe, in.dock.rowsHalf(), in.dock.arrangement,
-                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dock.rows.kind);
+                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dock.rows.kind,
+                in.homeKeyboardAlwaysOn);
             int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
                 : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
             int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
@@ -165,7 +171,10 @@ public final class StackLayout {
             stackHeightPx = stackHeightPx(dockContentHeightPx, flushPaddingPx,
                 in.keyboardHeightPx);
             homeFloatDockPx = dockContentHeightPx + flushPaddingPx;
-            homeFloatImePushPx = in.systemImeTakePx + (base.lifted ? Math.max(0, in.imeLiftPx) : 0);
+            // The IME's real push, which floats read: on Home the dock no longer rides it (the
+            // margin carries no lift there), but the push is still what the keyboard raised.
+            homeFloatImePushPx = in.systemImeTakePx
+                + (in.toolbarShown || in.keyboardShown ? Math.max(0, in.imeLiftPx) : 0);
 
             // On a Home page the dock floats with the keyboard, either keyboard: the grid keeps
             // its whole height.
@@ -210,7 +219,10 @@ public final class StackLayout {
      */
     private static final class Base {
         final int edgeGapPx;
-        /** Whether the IME's lift stands under the stack: only while it holds rows or a keyboard. */
+        /**
+         * Whether the IME's lift stands under the stack: only while it holds rows or a keyboard,
+         * and never on a page whose rows no keyboard lifts ({@link HomeKeyboardCover}).
+         */
         final boolean lifted;
         final int marginPx;
         final boolean bandsUnderKeyboard;
@@ -218,15 +230,15 @@ public final class StackLayout {
 
         Base(@NonNull DockLayout dock, @NonNull DockGeometry.Half half,
              @NonNull PlaceLayout arrangement, boolean toolbarShown, boolean keyboardShown,
-             int imeLiftPx, @NonNull PageKind rowsPage) {
+             int imeLiftPx, @NonNull PageKind rowsPage, boolean homeKeyboardAlwaysOn) {
             // On Home the card stands on the keyboard too (D11), so Floating's gap goes with it.
             // Read for the page whose rows the stack stands, as the activity dresses the dock.
             boolean peekCardStands = DockPlacement.peekCardStandsOn(rowsPage,
-                DockSurfaceSpec.forStyle(half.design).peek, toolbarShown, arrangement, false,
+                homeKeyboardAlwaysOn, DockSurfaceSpec.forStyle(half.design).peek, toolbarShown, arrangement, false,
                 keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0);
             edgeGapPx = ChromePolicy.bottomEdgeGapPx(
                 DockPlacement.floats(half.floating, peekCardStands), dock.capsuleBottomGapPx);
-            lifted = toolbarShown || keyboardShown;
+            lifted = (toolbarShown || keyboardShown) && HomeKeyboardCover.liftsRows(rowsPage, homeKeyboardAlwaysOn);
             marginPx = (lifted ? imeLiftPx : 0) + edgeGapPx;
             bandsUnderKeyboard = toolbarShown
                 && !EdgeStackPolicy.underKeyboard(arrangement).isEmpty();
@@ -307,6 +319,11 @@ public final class StackLayout {
         public int keyboardHeightPx;
         public boolean keyboardOverlays;
         public int flushPaddingPx;
+        /**
+         * Home's keyboard is always on: the cover does not apply, Home's rows ride the keyboard
+         * as before #309.
+         */
+        public boolean homeKeyboardAlwaysOn;
 
         public RestInput(@NonNull DockGeometry.Snapshot dock, @NonNull PageRef page) {
             this.dock = dock;
@@ -359,7 +376,7 @@ public final class StackLayout {
         DockGeometry.Half half = in.dock.half(in.page);
         DockLayout rest = DockGeometry.compute(in.dock.restOf(in.page));
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx, in.page.kind);
+            in.imeLiftPx, in.page.kind, in.homeKeyboardAlwaysOn);
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);
@@ -380,7 +397,7 @@ public final class StackLayout {
     public static int restGridDockReservePx(@NonNull RestInput in, @NonNull DockLayout rest) {
         DockGeometry.Half half = in.dock.half(in.page);
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx, in.page.kind);
+            in.imeLiftPx, in.page.kind, in.homeKeyboardAlwaysOn);
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);

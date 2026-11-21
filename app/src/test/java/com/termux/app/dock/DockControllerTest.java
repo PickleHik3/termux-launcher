@@ -630,6 +630,7 @@ public class DockControllerTest {
             return peekWanted;
         }
         @Nullable @Override public PeekGlassGeometry.Card peekCard() { return null; }
+        @Nullable @Override public com.termux.app.place.RestCards.HostLook hostLook() { return null; }
         @Override public float layoutCornersPx() { return cornersPx; }
         @Override public int stackLookPage() { return 7; }
         @Override public boolean stackStandsDownOnFrame() { return false; }

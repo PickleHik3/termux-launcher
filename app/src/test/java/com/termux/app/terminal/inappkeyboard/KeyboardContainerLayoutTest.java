@@ -61,4 +61,36 @@ public class KeyboardContainerLayoutTest {
         assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO, keyboard.getImportantForAccessibility());
         assertFalse(keyboard.isTouchRefused());
     }
+
+    @Test public void aCoveringContainerKeepsTheTouchInItsGapFromTheDockUnderIt() {
+        Context context = RuntimeEnvironment.getApplication();
+        FrameLayout parent = new FrameLayout(context);
+        View under = new View(context);
+        final int[] hits = {0};
+        // A cancel of the last touch also reaches it; only a down counts.
+        under.setOnTouchListener((v, e) -> {
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) hits[0]++;
+            return true;
+        });
+        KeyboardContainerLayout keyboard = new KeyboardContainerLayout(context);
+        parent.addView(under, new FrameLayout.LayoutParams(100, 100));
+        parent.addView(keyboard, new FrameLayout.LayoutParams(100, 100));
+        parent.measure(View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY));
+        parent.layout(0, 0, 100, 100);
+
+        // No key takes the touch: it falls to the dock under, as it always did.
+        assertTrue(parent.dispatchTouchEvent(down(50, 50)));
+        assertEquals(1, hits[0]);
+
+        // Covering Home's dock (#309): the gap swallows it.
+        keyboard.setCoversBelow(true);
+        assertTrue(parent.dispatchTouchEvent(down(50, 50)));
+        assertEquals("the dock under heard nothing", 1, hits[0]);
+
+        // A refused (down) keyboard still lets the touch through.
+        keyboard.setTouchRefused(true);
+        assertTrue(parent.dispatchTouchEvent(down(50, 50)));
+        assertEquals(2, hits[0]);
+    }
 }

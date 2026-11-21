@@ -47,6 +47,7 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.chrome.LiveChromeShape;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.launcher.popup.AnchoredMenu;
 import com.termux.app.launcher.popup.AnchoredMenuTheme;
@@ -490,6 +491,19 @@ public class TerminalPaneController {
     private int mHomeRoomTopOnScreenPx = Integer.MIN_VALUE;
     private int mHomeDockTopOnScreenPx = Integer.MAX_VALUE;
     private int mHomeKeyboardTopOnScreenPx = -1;
+    /**
+     * Where the in-app keyboard will stand when raised, on screen, the same edge as
+     * {@link #mHomeKeyboardTopOnScreenPx} (the top of the stack it raises), or -1 with no in-app
+     * keyboard laid out: a system keyboard's height is not known before it shows.
+     */
+    private int mHomePredictedKeyboardTopOnScreenPx = -1;
+    /**
+     * How far the keyboard's top stood above the float layer's bottom the last time it was up,
+     * and whether the layer was landscape then: where a float born with the keyboard down aims
+     * its bottom. Zero until the keyboard has been up.
+     */
+    private int mRaisedKeyboardRisePx;
+    private boolean mRaisedKeyboardLandscape;
     /** Home's Margin in px: the air the floats' room keeps inside what covers the layer. */
     private int mHomeFloatMarginPx;
     private final PaneInteractionOverlay mInteractionOverlay;
@@ -3738,23 +3752,26 @@ public class TerminalPaneController {
 
     /**
      * The shape a float born on Home page {@code page} takes: a window inside the room
-     * ({@link HomeFloatPolicy#birthFrac(int, int, int, int, int)}) on a page that shows no float,
-     * else cascaded off the topmost one shown there by its titlebar's band, so a second
-     * float never hides the first one's titlebar. Read before the new float joins the floats.
+     * ({@link HomeFloatPolicy#birthFrac(Rect, int, int, int, int, int, int)}) on a page that shows
+     * no float, else the first position of the stepping sequence no float shown there stands on
+     * ({@link HomeFloatPolicy#openingFrac}), whatever order the floats were raised in, so a new
+     * float never hides another's titlebar. Read before the new float joins the floats.
      */
     @NonNull
     private RectF homeFloatBirthFrac(int pageIndex) {
         int page = homePageIdAt(pageIndex);
-        RectF under = null;
-        for (int i = mHomeFloats.size() - 1; i >= 0 && under == null; i--) {
-            Window other = mHomeFloats.get(i);
-            if (other.active != null && HomeFloatPolicy.shownOn(other.homePageId, other.minimised, page))
-                under = other.active.floatFrac;
+        List<RectF> shown = new ArrayList<>();
+        for (Window other : mHomeFloats) {
+            if (other.active != null && other.active.floatFrac != null
+                && HomeFloatPolicy.shownOn(other.homePageId, other.minimised, page))
+                shown.add(other.active.floatFrac);
         }
         Rect room = homeFloatRoom();
-        return HomeFloatPolicy.cascadeFrac(under, room.width(), room.height(),
-            dp(HomeFloatPolicy.CASCADE_STEP_RIGHT_DP), titlebarBandPx(), dp(FLOAT_MIN_WIDTH_DP),
-            dp(FLOAT_MIN_HEIGHT_DP));
+        RectF birth = HomeFloatPolicy.birthFrac(room, homeFloatEdgeTopPx(),
+            raisedKeyboardTopInLayerPx(), keyboardGapPx(),
+            dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), titlebarBandPx());
+        return HomeFloatPolicy.openingFrac(shown, birth, room.width(), room.height(),
+            dp(HomeFloatPolicy.CASCADE_STEP_RIGHT_DP), titlebarBandPx());
     }
 
     /** How many Home floats there are, open or minimised, across every page. */
@@ -3956,6 +3973,19 @@ public class TerminalPaneController {
      */
     public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
                                          int keyboardTopOnScreenPx, int marginPx) {
+        setHomeFloatObstructions(roomTopOnScreenPx, dockTopOnScreenPx, keyboardTopOnScreenPx,
+            marginPx, -1);
+    }
+
+    /**
+     * The same, with where the in-app keyboard will stand once raised
+     * ({@code predictedKeyboardTopOnScreenPx}, -1 when unknown), which a float born with the
+     * keyboard down aims its bottom at.
+     */
+    public void setHomeFloatObstructions(int roomTopOnScreenPx, int dockTopOnScreenPx,
+                                         int keyboardTopOnScreenPx, int marginPx,
+                                         int predictedKeyboardTopOnScreenPx) {
+        mHomePredictedKeyboardTopOnScreenPx = predictedKeyboardTopOnScreenPx;
         int margin = Math.max(0, marginPx);
         boolean roomMoved = roomTopOnScreenPx != mHomeRoomTopOnScreenPx
             || dockTopOnScreenPx != mHomeDockTopOnScreenPx || margin != mHomeFloatMarginPx;
@@ -3964,8 +3994,18 @@ public class TerminalPaneController {
         mHomeDockTopOnScreenPx = dockTopOnScreenPx;
         mHomeKeyboardTopOnScreenPx = keyboardTopOnScreenPx;
         mHomeFloatMarginPx = margin;
+        rememberRaisedKeyboard();
         if (roomMoved) relayHomeFloats();
         else if (keyboardMoved) applyHomeFloatLift();
+    }
+
+    /** Notes where the keyboard stands while it is up, for floats born while it is down. */
+    private void rememberRaisedKeyboard() {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        int top = homeKeyboardTopInLayerPx();
+        if (layer == null || top < 0 || layer.getHeight() <= 0) return;
+        mRaisedKeyboardRisePx = Math.max(0, layer.getHeight() - top);
+        mRaisedKeyboardLandscape = HomeFloatPolicy.isLandscape(layer.getWidth(), layer.getHeight());
     }
 
     private void attachHomeFloatContainer(@NonNull Window w) {
@@ -4086,6 +4126,38 @@ public class TerminalPaneController {
         applyHomeFloatLift();
     }
 
+    /**
+     * The lower edge of what covers the layer's top (the status bar), in the layer's pixels, before
+     * Home's Margin; zero where nothing does.
+     */
+    private int homeFloatEdgeTopPx() {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        if (layer == null || mHomeRoomTopOnScreenPx == Integer.MIN_VALUE) return 0;
+        int[] onScreen = new int[2];
+        layer.getLocationOnScreen(onScreen);
+        return mHomeRoomTopOnScreenPx - onScreen[1];
+    }
+
+    /**
+     * The top of the keyboard raised, in the float layer's pixels, as far as it is known
+     * ({@link HomeFloatPolicy#raisedKeyboardTopPx}): live while it is up, else as last seen in
+     * this orientation, else -1.
+     */
+    private int raisedKeyboardTopInLayerPx() {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        if (layer == null) return -1;
+        boolean sameOrientation = mRaisedKeyboardLandscape
+            == HomeFloatPolicy.isLandscape(layer.getWidth(), layer.getHeight());
+        int predicted = -1;
+        if (mHomePredictedKeyboardTopOnScreenPx >= 0) {
+            int[] onScreen = new int[2];
+            layer.getLocationOnScreen(onScreen);
+            predicted = Math.max(0, mHomePredictedKeyboardTopOnScreenPx - onScreen[1]);
+        }
+        return HomeFloatPolicy.raisedKeyboardTopPx(homeKeyboardTopInLayerPx(), predicted,
+            mRaisedKeyboardRisePx, sameOrientation, layer.getHeight());
+    }
+
     /** The room Home floats are laid out in, in the float layer's pixels. */
     @NonNull
     private Rect homeFloatRoom() {
@@ -4094,8 +4166,7 @@ public class TerminalPaneController {
         int[] onScreen = new int[2];
         layer.getLocationOnScreen(onScreen);
         int height = layer.getHeight();
-        int top = mHomeRoomTopOnScreenPx == Integer.MIN_VALUE ? 0
-            : mHomeRoomTopOnScreenPx - onScreen[1];
+        int top = homeFloatEdgeTopPx();
         int bottom = mHomeDockTopOnScreenPx == Integer.MAX_VALUE ? 0
             : onScreen[1] + height - mHomeDockTopOnScreenPx;
         return HomeFloatPolicy.room(layer.getWidth(), height, top, bottom, mHomeFloatMarginPx);
@@ -7856,8 +7927,8 @@ public class TerminalPaneController {
         }
 
         /**
-         * The room this float is laid out in now: {@link #room()}, except that a Home float on the
-         * page reaching below the keyboard's top takes its shape above the keyboard while it is up
+         * The room this float is laid out in now: {@link #room()}, except that the focused Home
+         * float reaching below the keyboard's gap takes its shape above the keyboard while it is up
          * ({@link HomeFloatPolicy#keyboardRoom}). Its fractions stay those of the whole room, so
          * the keyboard is no resize and nothing of it is saved.
          */
@@ -7866,7 +7937,8 @@ public class TerminalPaneController {
             if (mHomeFloat == null || mFlying || getVisibility() != View.VISIBLE) return room;
             int keyboardTop = homeKeyboardTopInLayerPx();
             return HomeFloatPolicy.keyboardRoom(room, mLeaf.floatFrac, keyboardTop >= 0,
-                keyboardTop, dp(FLOAT_KEYBOARD_MIN_HEIGHT_DP));
+                isFocusedFloat(), keyboardTop, keyboardGapPx(),
+                dp(FLOAT_KEYBOARD_MIN_HEIGHT_DP));
         }
 
         /** The room {@link #applyFloatBounds} last laid this float out in, when it was not {@link #room()}. */
@@ -8138,6 +8210,11 @@ public class TerminalPaneController {
         int[] loc = new int[2];
         v.getLocationOnScreen(loc);
         return new int[]{ loc[0] + v.getWidth() / 2, loc[1] + v.getHeight() / 2 };
+    }
+
+    /** The small gap a float keeps above the keyboard, in px: the air the Terminal keeps from it. */
+    private int keyboardGapPx() {
+        return Math.round(dp(LiveChromeShape.TERMINAL_VERTICAL_GAP_DP));
     }
 
     private int dp(int dp) {

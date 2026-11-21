@@ -47,7 +47,23 @@ public final class ChromePolicy {
                                                                       boolean keyboardShown,
                                                                       boolean roundedDockStyle,
                                                                       boolean keyboardGlassSurface) {
-        return toolbarShown && keyboardShown && !roundedDockStyle && keyboardGlassSurface;
+        return shouldUseUnifiedDefaultKeyboardGlassSurface(toolbarShown, keyboardShown,
+            roundedDockStyle, keyboardGlassSurface, true);
+    }
+
+    /**
+     * The same on the page the rows stand ({@code pageLiftsRows}, see {@code HomeKeyboardCover}):
+     * on a page no keyboard lifts (Home) the keyboard draws over the dock and wears its own coat
+     * of glass, so the two are never one surface and the dock's host stays above the keyboard's
+     * column at both keyboard states.
+     */
+    public static boolean shouldUseUnifiedDefaultKeyboardGlassSurface(boolean toolbarShown,
+                                                                      boolean keyboardShown,
+                                                                      boolean roundedDockStyle,
+                                                                      boolean keyboardGlassSurface,
+                                                                      boolean pageLiftsRows) {
+        return pageLiftsRows && toolbarShown && keyboardShown && !roundedDockStyle
+            && keyboardGlassSurface;
     }
 
     /**
@@ -123,6 +139,27 @@ public final class ChromePolicy {
      */
     public static int keyboardChinBottomPaddingPx(boolean capsule, int innerPaddingPx, int chinPx) {
         return innerPaddingPx + (capsule ? 0 : Math.max(0, chinPx));
+    }
+
+    /**
+     * The keyboard host's side margin: the surface's side gap keeps a docked capsule off the
+     * screen's edges ({@code marginDp}, the chrome's side gap); inside a floating card
+     * ({@code floatingForm}) it would only be more rim round the keys, and Docked is flush.
+     */
+    public static int keyboardHostSideMarginPx(boolean floatingForm, int marginDp, boolean capsule,
+                                               float density) {
+        return floatingForm ? 0 : com.termux.app.dock.DockLayoutPolicy.surfaceHorizontalInsetPx(
+            marginDp, capsule, density);
+    }
+
+    /**
+     * The keyboard host's top margin: a capsule in the stack keeps the keyboard gap above it; a
+     * floating card's host runs straight up to its grab handle, and a Docked slice is flush.
+     */
+    public static int keyboardHostTopMarginPx(boolean capsule, boolean floatingForm,
+                                              float density) {
+        return capsule && !floatingForm
+            ? com.termux.app.dock.UnderKeyboardBand.keyboardGapPx(density) : 0;
     }
 
     /**

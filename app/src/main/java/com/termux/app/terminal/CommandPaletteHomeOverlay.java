@@ -91,6 +91,16 @@ final class CommandPaletteHomeOverlay {
     }
 
     /**
+     * The top the Home palette's glass keeps clear of: where the bottom stack stands, or, while
+     * Home's keyboard covers the dock ({@code covered}, #309) and a keyboard is up, the
+     * keyboard's own top, since the dock's rows stand under it and the band above it is empty.
+     */
+    static float lowerBoundTopPx(float stackTopPx, float keyboardTopPx, boolean covered) {
+        if (covered && !Float.isNaN(keyboardTopPx)) return keyboardTopPx;
+        return stackTopPx;
+    }
+
+    /**
      * How far above the room's bottom the Home palette's glass ends: past the whole bottom stack
      * ({@link #stackHeightPx}) and the keycap strip that hangs under the glass, so neither the
      * glass nor its strip lies over the dock or the keyboard. Never more than the room.

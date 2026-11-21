@@ -12,6 +12,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.color.MaterialColors;
@@ -273,13 +274,34 @@ final class EditorBar {
      * translation, never a layout.
      */
     void place(float barLiftPx, float halfLiftPx) {
-        mBar.setTranslationY(-barLiftPx);
+        mBarLiftPx = barLiftPx;
+        applyBarTranslation();
         mHalfRow.setTranslationY(-halfLiftPx);
         int halfRowPx = mHalfRowPx > 0 ? mHalfRowPx : mHalfRow.getHeight();
         mHint.setTranslationY(-(Math.max(barLiftPx + dp(BAR_DP), halfLiftPx + halfRowPx)));
-        mBarLiftPx = barLiftPx;
         mHalfLiftPx = halfLiftPx;
         placeNote();
+    }
+
+    /** How far above its place the bar stands while it drops in; 0 at rest. */
+    private float mDropPx;
+    @Nullable private android.animation.ValueAnimator mDropAnimator;
+
+    /** The bar's translation: its lift over the foot, plus the drop it is still coming through. */
+    private void applyBarTranslation() {
+        float to = -mBarLiftPx - mDropPx;
+        if (mBar.getTranslationY() != to)
+            mBar.setTranslationY(to);
+    }
+
+    /** The bar's translation now, for the tests. */
+    float barTranslationY() {
+        return mBar.getTranslationY();
+    }
+
+    private void setDropPx(float dropPx) {
+        mDropPx = dropPx;
+        applyBarTranslation();
     }
 
     /**
@@ -348,6 +370,9 @@ final class EditorBar {
             return;
         }
         mBar.animate().cancel();
+        if (mDropAnimator != null)
+            mDropAnimator.cancel();
+        setDropPx(0f);
         float to = shown ? 1f : 0f;
         boolean arriving = shown && mBar.getVisibility() != View.VISIBLE;
         if (arriving) {
@@ -356,7 +381,6 @@ final class EditorBar {
         }
         if (!animate) {
             mBar.setAlpha(to);
-            mBar.setTranslationY(0f);
             mBar.setVisibility(shown ? View.VISIBLE : View.INVISIBLE);
             return;
         }
@@ -365,9 +389,13 @@ final class EditorBar {
         // fades out on effects-fast.
         EditorMotion.Use fade = shown ? EditorMotion.Use.REVEAL_IN : EditorMotion.Use.REVEAL_OUT;
         if (arriving && !reduced) {
-            mBar.setTranslationY(-BAR_DROP_DP * mBar.getResources().getDisplayMetrics().density);
-            android.animation.ObjectAnimator drop = android.animation.ObjectAnimator.ofFloat(mBar,
-                View.TRANSLATION_Y, mBar.getTranslationY(), 0f);
+            // The drop is its own offset over the lift, so place() and the drop never undo each
+            // other: the bar ends at its lift, not at the foot.
+            float from = BAR_DROP_DP * mBar.getResources().getDisplayMetrics().density;
+            setDropPx(from);
+            android.animation.ValueAnimator drop = android.animation.ValueAnimator.ofFloat(from, 0f);
+            drop.addUpdateListener(a -> setDropPx((Float) a.getAnimatedValue()));
+            mDropAnimator = drop;
             drop.setDuration(EditorMotion.Use.BAR_DROP.durationMs(false));
             drop.setInterpolator(EditorMotion.Use.BAR_DROP.curve(false));
             drop.start();

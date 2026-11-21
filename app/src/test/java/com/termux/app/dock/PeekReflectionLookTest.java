@@ -44,4 +44,29 @@ public class PeekReflectionLookTest {
         assertTrue(PeekReflectionLook.specular(0f, 40f, th, 74f) < onEdge);
         assertEquals(0f, PeekReflectionLook.specular(0f, 74f * 1.5f, th, 74f), 1e-5f);
     }
+
+    /**
+     * Apart, Home's lane and the host are drawn Home's drop lower alike, so the mirror stands
+     * over the host as laid out and over its fade band exactly as Home's rest drew it before the
+     * cards stood apart (no drop): the host's drop is never taken off the y. Across, the lane's
+     * slide is drawn in and the host's taken off once, so the two cancel.
+     */
+    @Test
+    public void apartTheMirrorStandsOnItsBandAsBeforeTheCardsStoodApart() {
+        float drop = 31f;
+        float laneTy = com.termux.app.place.SideCards.laneTyPx(
+            com.termux.app.place.StackLanes.HOME, true, drop, 0, 0f);
+        assertEquals("Home's lane carries the host's drop", drop, laneTy, 0f);
+        // The row's y over the host as drawn less as laid out: the lane's drop less the host's.
+        float rowOverHostMoved = laneTy - drop;
+        for (float origin : new float[] {0f, 120f}) {
+            float base = PeekGlassGeometry.drawOriginY(origin, 0f);
+            assertEquals(origin + rowOverHostMoved, PeekGlassGeometry.drawOriginY(origin, drop), 0f);
+            assertEquals(base, PeekGlassGeometry.drawOriginY(origin, drop), 0f);
+        }
+        float slide = -1080f;
+        // drawOn translates by rowDrawX(-originX, laneTx): the lane's slide less the host's.
+        assertEquals(0f, PeekGlassGeometry.rowDrawX(-PeekGlassGeometry.drawOriginX(0f, slide),
+            slide), 0f);
+    }
 }

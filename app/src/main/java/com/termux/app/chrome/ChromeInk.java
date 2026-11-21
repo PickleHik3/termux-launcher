@@ -1588,6 +1588,8 @@ public final class ChromeInk {
         @Nullable android.graphics.ColorMatrix matrix;
         /** The side last mapped on; the next measure keeps it while it can still be reached. */
         @Nullable Polarity polarity;
+        /** Moves each time {@link #matrix} does, and only then ({@link #bandEvenOutChanges}). */
+        int changes;
         /** {@link #rowWallpapers} through {@link #matrix}; scratch, rewritten on every ask. */
         @NonNull final int[] rows = new int[FACE_ROWS];
     }
@@ -1612,6 +1614,7 @@ public final class ChromeInk {
             memo.measured = false;
             if (policy == null && memo.matrix != null) {
                 memo.matrix = null;
+                memo.changes++;
                 changedEvenOut();
             }
         }
@@ -1672,6 +1675,57 @@ public final class ChromeInk {
         return mapEvenOut(mBandEvenOut.get(band), policy, mTmpEvenOutRect, dim, tint, true);
     }
 
+    /**
+     * A token that moves when {@code band}'s own even-out matrix does, and never for another
+     * band's: what a surface that bakes this band's matrix into its glass keys its build on.
+     * {@link #evenOutGeneration} moves for every band, so a landing where only the dock was
+     * measured again read as a new keyboard glass.
+     */
+    public int bandEvenOutChanges(@NonNull GlassBackdropCache.Band band) {
+        BandEvenOut memo = mBandEvenOut.get(band);
+        return memo == null ? 0 : memo.changes;
+    }
+
+    /**
+     * {@code band} stands on {@link #bandEvenOutMatrixOver}'s answer from here: the even-out its
+     * glass wears at the page a crossing arrives on, worked out past the crossing's freeze over
+     * {@code pageGround} where the band is laid out, and kept as the band's own matrix. It is kept
+     * against the ground under the band now, so the reads until the landing (the travel's hold
+     * keeps it too) find it; the settle after the landing measures the band where it rests and
+     * moves it only if that differs. Books nothing: the caller builds the glass next. Nothing is
+     * kept when the wallpaper there reads nothing.
+     */
+    public void standBandEvenOutOver(@NonNull GlassBackdropCache.Band band,
+                                     @NonNull Rect screenRect, @ColorInt int pageGround) {
+        EvenOutPolicy policy = mBandEvenOutPolicies.get(band);
+        if (policy == null) return;
+        readMode();
+        toRootSpace(screenRect, mTmpEvenOutRect);
+        BandGlass glass = glassFor(band);
+        boolean framed = dimHidden(glass);
+        int tint = OnGlass.withAlpha(baseOf(glass), ChromePolicy.dockGlassBaseAlpha(glass.opacity));
+        BandEvenOut memo = mBandEvenOut.get(band);
+        if (memo == null) {
+            memo = new BandEvenOut();
+            mBandEvenOut.put(band, memo);
+        }
+        android.graphics.ColorMatrix matrix = mapEvenOut(memo, policy, mTmpEvenOutRect,
+            framed ? Color.TRANSPARENT : pageGround, tint, true);
+        Polarity mapped = mMappedPolarity;
+        if (mapped == null) return;
+        boolean moved = !java.util.Arrays.equals(matrix == null ? null : matrix.getArray(),
+            memo.matrix == null ? null : memo.matrix.getArray());
+        memo.polarity = mapped;
+        memo.rect.set(mTmpEvenOutRect);
+        memo.generation = mCache.generation();
+        memo.measured = true;
+        memo.policy = policy;
+        memo.dim = groundDim(framed, dimUnder(mTmpEvenOutRect));
+        memo.tint = tint;
+        memo.matrix = matrix;
+        if (moved) memo.changes++;
+    }
+
     /** Whether {@code band} has an even-out to draw through ({@link #setBandEvenOutPolicy}). */
     public boolean hasBandEvenOut(@NonNull GlassBackdropCache.Band band) {
         return mBandEvenOutPolicies.containsKey(band);
@@ -1721,7 +1775,10 @@ public final class ChromeInk {
         memo.dim = dim;
         memo.tint = tint;
         memo.matrix = matrix;
-        if (moved) changedEvenOut();
+        if (moved) {
+            memo.changes++;
+            changedEvenOut();
+        }
         return matrix;
     }
 

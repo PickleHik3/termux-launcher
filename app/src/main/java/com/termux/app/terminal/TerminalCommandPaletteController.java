@@ -922,7 +922,11 @@ public final class TerminalCommandPaletteController
     private float[] passThroughRects() {
         List<View> views = new ArrayList<>(4);
         views.add(mPaletteHost.findView(R.id.inapp_keyboard_container));
-        views.add(mPaletteHost.findView(R.id.accessory_stack_container));
+        // Covered Home with its keyboard up: the dock's rows stand under the keyboard and the band
+        // above it is empty, so the keyboard alone takes its own touches (#309).
+        if (Float.isNaN(coveringKeyboardTop())) {
+            views.add(mPaletteHost.findView(R.id.accessory_stack_container));
+        }
         View floatingHost = mPaletteHost.findView(R.id.floating_keyboard_host);
         if (floatingHost instanceof ViewGroup && floatingHost.isShown()) {
             ViewGroup group = (ViewGroup) floatingHost;
@@ -953,7 +957,24 @@ public final class TerminalCommandPaletteController
         stack.getLocationOnScreen(mLocation);
         int stackTop = mLocation[1];
         mHost.getLocationOnScreen(mLocation);
-        return stackTop - mLocation[1];
+        return CommandPaletteHomeOverlay.lowerBoundTopPx(stackTop - mLocation[1],
+            coveringKeyboardTop(), true);
+    }
+
+    /**
+     * The in-app keyboard's top in host coordinates while it is up over a Home whose keyboard
+     * covers the dock (raised on demand, #309); NaN otherwise.
+     */
+    private float coveringKeyboardTop() {
+        if (mContext != CommandPaletteContext.HOME || !mHomeHost.isKeyboardUp()
+            || com.termux.app.place.HomeKeyboardCover.liftsRows(com.termux.app.page.PageKind.HOME,
+            mHomeHost.isKeyboardAlwaysOn())) return Float.NaN;
+        View keyboard = mPaletteHost.findView(R.id.inapp_keyboard_container);
+        if (keyboard == null || !keyboard.isShown() || keyboard.getHeight() <= 0) return Float.NaN;
+        keyboard.getLocationOnScreen(mLocation);
+        int keyboardTop = mLocation[1];
+        mHost.getLocationOnScreen(mLocation);
+        return keyboardTop - mLocation[1];
     }
 
     private float terminalTop() {

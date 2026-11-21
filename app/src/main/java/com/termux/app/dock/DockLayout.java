@@ -323,6 +323,20 @@ public final class DockLayout {
     }
 
     /**
+     * Where the apps row's icons are centred, down from the top of the row's band: the ticks'
+     * strip first when they lead the row ({@code PageTickStrip#ticksLeadRow}), then the row
+     * view's padding on its top side (the air, or what the strip leaves of it beside the ticks),
+     * then half of what the paddings leave. The padding the dock's dress gives the row
+     * ({@code DockDress}), so a card cut from this number stands where the icons are drawn.
+     */
+    public float appsIconCentreInBandPx(boolean ticksLead) {
+        int top = ticksLead ? appsRowPaddingBesideTicksPx() : appsTopPaddingPx;
+        int bottom = ticksLead ? appsBottomPaddingPx : appsRowPaddingBesideTicksPx();
+        int rowTop = ticksLead ? appsRowStripBandPx : 0;
+        return rowTop + top + Math.max(0, appsRowViewBandPx() - top - bottom) / 2f;
+    }
+
+    /**
      * The extra side inset the dock's apps row takes under {@link DockSurfaceSpec#LENS_BEADS}, on
      * each side ({@link LensBeadGeometry#ROW_SIDE_INSET_DP}): it narrows the row's slots so the
      * end beads stand clear of the screen's edges. Zero for every other surface.

@@ -428,6 +428,24 @@ public final class StackScene {
     }
 
     /**
+     * Cuts {@code cutPx} more off the bottom of layer slot {@code v} ({@code heightPx} tall) in
+     * {@code out}, on top of any cut it already has: the larger of the two shows. 0 or less
+     * leaves the slot as it is. Used by the Home cover (#309), which cuts a covered layer at the
+     * keyboard's top.
+     */
+    public static void addBottomCut(@NonNull Frame out, int v, int widthPx, int heightPx,
+                                    int displayHeightPx, int cutPx) {
+        if (cutPx <= 0) return;
+        int h = Math.max(0, heightPx);
+        int bottom = Math.max(0, h - cutPx);
+        if (out.clipped[v]) {
+            out.clipBottom[v] = Math.min(out.clipBottom[v], bottom);
+            return;
+        }
+        bottomCut(out, v, Math.max(1, widthPx), h, displayHeightPx, cutPx);
+    }
+
+    /**
      * A clip generous above and to the sides (glow and ripple layers draw outside their view on
      * purpose) that cuts only the bottom, {@code hidden} up from {@code height}.
      */

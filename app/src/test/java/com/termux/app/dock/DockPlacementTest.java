@@ -73,12 +73,29 @@ public class DockPlacementTest {
     public void withTheAzRowTheKeyboardIMEAndSearchFieldRuleStandsAsBefore() {
         assertFalse(DockPlacement.peekCardStands(true, true, APPS_OVER_AZ, false, true, false,
             false));
-        assertTrue("Home: the card stands on the keyboard", DockPlacement.peekCardStands(true,
-            true, APPS_OVER_AZ, false, true, false, false, true));
-        assertFalse(DockPlacement.peekCardStands(true, true, APPS_OVER_AZ, false, false, true,
-            false, true));
+        assertTrue("Home: the card stands, the keyboard covers it", DockPlacement.peekCardStands(
+            true, true, APPS_OVER_AZ, false, true, false, false, true));
+        assertTrue("Home: the system keyboard's lift no longer refuses it too",
+            DockPlacement.peekCardStands(true, true, APPS_OVER_AZ, false, false, true,
+                false, true));
+        assertFalse("off Home the lift refuses it", DockPlacement.peekCardStands(true, true,
+            APPS_OVER_AZ, false, false, true, false, false));
         assertFalse(DockPlacement.peekCardStands(true, true, APPS_OVER_AZ, false, false, false,
             true, true));
+    }
+
+    @Test
+    public void anAlwaysOnHomeIsStillRefusedTheCardByTheSystemKeyboardsLift() {
+        assertFalse("rows ride the keyboard: the lift refuses", DockPlacement.peekCardStands(true,
+            true, APPS_OVER_AZ, false, false, true, false, true, false));
+        assertTrue("the in-app keyboard never refuses Home's card", DockPlacement.peekCardStands(
+            true, true, APPS_OVER_AZ, false, true, false, false, true, false));
+        assertTrue("covered rows: the lift does not refuse", DockPlacement.peekCardStands(true,
+            true, APPS_OVER_AZ, false, false, true, false, true, true));
+        assertFalse("always on, through the page overload", DockPlacement.peekCardStandsOn(
+            PageKind.HOME, true, true, true, APPS_OVER_AZ, false, false, true, false));
+        assertTrue("on demand, through the page overload", DockPlacement.peekCardStandsOn(
+            PageKind.HOME, false, true, true, APPS_OVER_AZ, false, false, true, false));
     }
 
     @Test

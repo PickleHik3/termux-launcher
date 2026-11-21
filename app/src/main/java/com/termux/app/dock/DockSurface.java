@@ -68,7 +68,7 @@ final class DockSurface {
      * Docked no surface carries a radius of its own: the frame's outer corners are the model's.
      */
     float resolveDockCapsuleCornerRadiusPx(int surfaceHeightPx) {
-        return Math.min(mHost.layoutCornersPx(), Math.max(0, surfaceHeightPx) / 2f);
+        return CapsuleGlass.radiusPx(mHost.layoutCornersPx(), surfaceHeightPx);
     }
 
     /** What the dock material's tint covers of the frost under it, 0..1. */
@@ -178,18 +178,26 @@ final class DockSurface {
             return;
         }
 
-        // Barely-there containing stroke; where the program runs, its gathered light is the edge
-        // and the capsule keeps only the outline it clips to, or the two would read as a double
-        // line ("inside rim") over the glass.
         float capsuleRadiusPx = resolveDockCapsuleCornerRadiusPx(surfaceHeightPx);
-        Drawable outline = dockGlassDrawsEdge()
-            ? mHost.chrome().glass().outlineOnly(capsuleRadiusPx)
-            : mHost.chrome().glass().rimUnderGlass(capsuleRadiusPx);
+        Drawable outline = capsuleOutline(capsuleRadiusPx, dockGlassDrawsEdge());
         surface.setBackground(outline);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             surface.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
             surface.setClipToOutline(true);
         }
+    }
+
+    /**
+     * The capsule's containing stroke: barely there, and where the program runs ({@code
+     * programDrawsEdge}) its gathered light is the edge and the capsule keeps only the outline it
+     * clips to, or the two would read as a double line ("inside rim") over the glass. The host's
+     * capsule and the Terminal's extra-keys card ({@link KeysCardDress}) wear this one.
+     */
+    @Nullable
+    Drawable capsuleOutline(float capsuleRadiusPx, boolean programDrawsEdge) {
+        return programDrawsEdge
+            ? mHost.chrome().glass().outlineOnly(capsuleRadiusPx)
+            : mHost.chrome().glass().rimUnderGlass(capsuleRadiusPx);
     }
 
     // ------------------------------------------------------------------ Glass
@@ -231,7 +239,7 @@ final class DockSurface {
      */
     @NonNull
     com.termux.app.dock.DockSurfaceSpec dockSlabSpec() {
-        return mDock.shownDockSurfaceSpec().forCard(mHost.peekCard());
+        return mDock.hostDressSpec().forCard(mHost.peekCard());
     }
 
     /**
@@ -276,12 +284,22 @@ final class DockSurface {
                 program.clearAzBeads();
             }
         } else {
-            // A row the beads cannot draw keeps the slab, and the slab the tray's own band.
-            float softRim = spec.beads
-                ? com.termux.app.dock.DockSurfaceSpec.GLASS_TRAY.softRimDp : spec.softRimDp;
-            program.setDockSurface(softRim, dockFloats() ? spec.shelf : 0f);
-            program.clearBeads();
+            applySlabGlass(program, spec, mDock.hostFloats());
         }
+    }
+
+    /**
+     * A slab with no beads on its program: a row the beads cannot draw keeps the slab, and the
+     * slab the tray's own band; the shelf only where the slab floats ({@code floats}).
+     */
+    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    static void applySlabGlass(@NonNull com.termux.app.chrome.GlassRefraction.Program program,
+                               @NonNull com.termux.app.dock.DockSurfaceSpec spec, boolean floats) {
+        // A row the beads cannot draw keeps the slab, and the slab the tray's own band.
+        float softRim = spec.beads
+            ? com.termux.app.dock.DockSurfaceSpec.GLASS_TRAY.softRimDp : spec.softRimDp;
+        program.setDockSurface(softRim, floats ? spec.shelf : 0f);
+        program.clearBeads();
     }
 
     /**
@@ -295,13 +313,23 @@ final class DockSurface {
         View host = mHost.findViewById(R.id.accessory_surface_host);
         // Beads always float, so each keeps its shadow under Docked too.
         boolean beads = mDock.beads() != null;
-        boolean show = state != null && mHost.glassParamsValid() && host != null
-            && mHost.dockRows().surfaceShown() && !state.keyboardShown
-            && (dockFloats() || beads) && dockSlabSpec().contactShadow;
+        boolean show = state != null && host != null && shelfShown(mHost.glassParamsValid(),
+            mHost.dockRows().surfaceShown(), mDock.hostKeyboardUp(state.keyboardShown),
+            mDock.hostFloats() || beads,
+            dockSlabSpec().contactShadow);
         shelf.setBeads(show ? mDock.dockBeadsShadowed() : null);
         shelf.setBeadShelfAlpha(mDock.dockBeadShelfAlpha());
         shelf.follow(show ? host : null);
         mHost.dockRows().setShelfShown(show);
+    }
+
+    /**
+     * Whether a capsule's shelf shows: its glass refracts, its surface stands, the keyboard is
+     * not under it, it floats (or is beads), and its design casts a contact shadow.
+     */
+    static boolean shelfShown(boolean glassParamsValid, boolean surfaceShown, boolean keyboardShown,
+                              boolean floats, boolean contactShadow) {
+        return glassParamsValid && surfaceShown && !keyboardShown && floats && contactShadow;
     }
 
     // ------------------------------------------------------------------ Off-dock plank

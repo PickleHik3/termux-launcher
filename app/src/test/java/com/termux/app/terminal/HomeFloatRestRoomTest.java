@@ -89,8 +89,11 @@ public class HomeFloatRestRoomTest {
     @Test public void homeAtRestStillMeetsItsOwnKeyboard() {
         int[] rest = boundsOfFloat();
 
-        pass(false, false, true, HOME_ROOM_TOP, HOME_DOCK_TOP, 600);
-        assertEquals("shrunk to end at Home's keyboard", 600, bottomOfFloat());
+        pass(false, false, true, HOME_ROOM_TOP, HOME_DOCK_TOP, 400);
+        assertEquals("shrunk to end a small gap above Home's keyboard", 400 - Math.round(
+            com.termux.app.chrome.LiveChromeShape.TERMINAL_VERTICAL_GAP_DP
+                * RuntimeEnvironment.getApplication().getResources().getDisplayMetrics().density),
+            bottomOfFloat());
         pass(false, false, true, HOME_ROOM_TOP, HOME_DOCK_TOP, -1);
         assertBounds("grown back when it closes", rest);
     }

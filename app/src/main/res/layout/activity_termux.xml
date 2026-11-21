@@ -907,12 +907,66 @@
                         android:visibility="gone" />
                 </FrameLayout>
 
-                <FrameLayout
+                <com.termux.app.dock.KeysRowHostLayout
                     android:id="@+id/terminal_toolbar_host"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:clipChildren="false"
                     android:clipToPadding="false">
+
+                    <!-- The Terminal's extra-keys card while it stands apart from Home's dock card
+                         (SideCards): laid out from the answer at rest and never the size that sizes
+                         this row (KeysCardLayout). It rides the Terminal's lane with the row. Its
+                         glass layers are the dock capsule's, dressed by the dock (GONE until then);
+                         the shelf stands beside it because it draws below the card's cut. -->
+                    <com.termux.app.DockShelfView
+                        android:id="@+id/extra_keys_card_shelf_fx"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone" />
+
+                    <com.termux.app.dock.KeysCardLayout
+                        android:id="@+id/extra_keys_card"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:clipChildren="true"
+                        android:clipToPadding="true"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:id="@+id/extra_keys_card_blur_backdrop"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="fitXY"
+                            android:visibility="gone" />
+
+                        <View
+                            android:id="@+id/extra_keys_card_top_edge_fx"
+                            android:layout_width="match_parent"
+                            android:layout_height="12dp"
+                            android:layout_gravity="top"
+                            android:visibility="gone" />
+
+                        <View
+                            android:id="@+id/extra_keys_card_background"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:visibility="gone"
+                            android:background="?attr/termuxColorSurfacePanelHigh"/>
+
+                        <com.termux.app.DockEdgeGlowView
+                            android:id="@+id/extra_keys_card_edge_glow_fx"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:visibility="gone" />
+
+                        <View
+                            android:id="@+id/extra_keys_card_specular_fx"
+                            android:layout_width="300dp"
+                            android:layout_height="300dp"
+                            android:layout_gravity="center"
+                            android:visibility="gone" />
+                    </com.termux.app.dock.KeysCardLayout>
 
                     <com.termux.app.terminal.extrakeys.ExtraKeysBarView
                         android:id="@+id/terminal_toolbar_view_pager"
@@ -920,7 +974,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="37.5dp"
                         android:background="@android:color/transparent"/>
-                </FrameLayout>
+                </com.termux.app.dock.KeysRowHostLayout>
             </com.termux.app.place.EdgeStackView>
 
             <!-- The keyboard and the bands standing under it, bottom-anchored as one column: the
