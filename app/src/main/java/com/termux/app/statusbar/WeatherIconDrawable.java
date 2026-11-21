@@ -3,6 +3,7 @@ package com.termux.app.statusbar;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
@@ -13,6 +14,8 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+
+import com.termux.app.theme.SchemeTone;
 
 /**
  * A weather picture drawn in two tints: the base layer (cloud, rain, snow, fog) in the ink and
@@ -33,6 +36,13 @@ public final class WeatherIconDrawable extends Drawable {
     @Nullable private Drawable mAccent;
     @ColorInt private int mInk;
     @ColorInt private int mAccentColor;
+    /** The accent actually drawn: {@link #legibleAccent} of what was asked for. */
+    @ColorInt private int mAccentTint;
+    /** The ink is light from this HCT tone up, dark below it. */
+    static final double INK_SIDE_TONE = 50d;
+    /** The least tone an accent has beside a light ink, and the most beside a dark one. */
+    static final double ACCENT_TONE_ON_LIGHT_INK = 80d;
+    static final double ACCENT_TONE_ON_DARK_INK = 40d;
     private int mAlpha = 255;
 
     public WeatherIconDrawable(@NonNull Context context) {
@@ -58,6 +68,7 @@ public final class WeatherIconDrawable extends Drawable {
         mIcon = icon;
         mInk = ink;
         mAccentColor = accent;
+        if (retint) mAccentTint = legibleAccent(accent, ink);
         if (reload) {
             mBase = layer(icon.base);
             mAccent = layer(icon.accent);
@@ -67,7 +78,7 @@ public final class WeatherIconDrawable extends Drawable {
         }
         if (retint) {
             if (mBase != null) mBase.setTint(ink);
-            if (mAccent != null) mAccent.setTint(accent);
+            if (mAccent != null) mAccent.setTint(mAccentTint);
             invalidateSelf();
         }
     }
@@ -89,7 +100,29 @@ public final class WeatherIconDrawable extends Drawable {
 
     @ColorInt public int inkTint() { return mInk; }
 
-    @ColorInt public int accentTint() { return mAccentColor; }
+    @ColorInt public int accentTint() { return mAccentTint; }
+
+    /**
+     * {@code accent} put on the ink's side of the tone scale, as Material does for a primary on a
+     * dark or a light surface: beside a light ink (tone 50 or more) the accent is raised to at
+     * least {@link #ACCENT_TONE_ON_LIGHT_INK}, beside a dark ink lowered to at most
+     * {@link #ACCENT_TONE_ON_DARK_INK}, keeping hue and chroma as far as the gamut allows
+     * ({@link SchemeTone#toneShift}). An accent already on the right side is returned unchanged,
+     * and alpha is the accent's own. No ground is assumed: the ink was measured against the real
+     * one. Call on a colour change only, never per draw.
+     */
+    @ColorInt
+    static int legibleAccent(@ColorInt int accent, @ColorInt int ink) {
+        int opaqueAccent = accent | 0xFF000000;
+        double tone = SchemeTone.tone(opaqueAccent);
+        boolean lightInk = SchemeTone.tone(ink | 0xFF000000) >= INK_SIDE_TONE;
+        if (lightInk ? tone >= ACCENT_TONE_ON_LIGHT_INK : tone <= ACCENT_TONE_ON_DARK_INK) {
+            return accent;
+        }
+        int moved = SchemeTone.toneShift(opaqueAccent,
+            (lightInk ? ACCENT_TONE_ON_LIGHT_INK : ACCENT_TONE_ON_DARK_INK) - tone);
+        return (moved & 0x00FFFFFF) | (Color.alpha(accent) << 24);
+    }
 
     @Override public void draw(@NonNull Canvas canvas) {
         if (mBase != null) mBase.draw(canvas);

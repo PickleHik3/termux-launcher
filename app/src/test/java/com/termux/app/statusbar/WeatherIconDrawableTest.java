@@ -16,6 +16,9 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.android.material.color.utilities.Hct;
+import com.termux.app.theme.SchemeTone;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -70,9 +73,10 @@ public class WeatherIconDrawableTest {
         assertEquals(icon.base, rec(drawable.baseLayer()).res);
         assertEquals(INK, rec(drawable.baseLayer()).tint);
         assertEquals(icon.accent, rec(drawable.accentLayer()).res);
-        assertEquals(ACCENT, rec(drawable.accentLayer()).tint);
+        assertEquals(WeatherIconDrawable.legibleAccent(ACCENT, drawable.inkTint()),
+            rec(drawable.accentLayer()).tint);
         assertEquals(INK, drawable.inkTint());
-        assertEquals(ACCENT, drawable.accentTint());
+        assertEquals(WeatherIconDrawable.legibleAccent(ACCENT, INK), drawable.accentTint());
     }
 
     @Test
@@ -86,7 +90,8 @@ public class WeatherIconDrawableTest {
         assertSame(base, drawable.baseLayer());
         assertEquals(loads, loaded.size());
         assertEquals(0xFFEEEEEE, rec(drawable.baseLayer()).tint);
-        assertEquals(ACCENT, rec(drawable.accentLayer()).tint);
+        assertEquals(WeatherIconDrawable.legibleAccent(ACCENT, drawable.inkTint()),
+            rec(drawable.accentLayer()).tint);
     }
 
     @Test
@@ -94,7 +99,8 @@ public class WeatherIconDrawableTest {
         WeatherIconDrawable drawable = drawable();
         drawable.set(WeatherIcons.CLEAR_DAY, INK, ACCENT);
         assertNull(drawable.baseLayer());
-        assertEquals(ACCENT, rec(drawable.accentLayer()).tint);
+        assertEquals(WeatherIconDrawable.legibleAccent(ACCENT, drawable.inkTint()),
+            rec(drawable.accentLayer()).tint);
         drawable.set(WeatherIcons.OVERCAST, INK, ACCENT);
         assertNull(drawable.accentLayer());
         assertEquals(INK, rec(drawable.baseLayer()).tint);
@@ -115,7 +121,57 @@ public class WeatherIconDrawableTest {
         drawable.set(WeatherIcons.forCode(80, true), INK, ACCENT);
         drawable.setTintList(ColorStateList.valueOf(0xFF00FF00));
         assertEquals(INK, rec(drawable.baseLayer()).tint);
-        assertEquals(ACCENT, rec(drawable.accentLayer()).tint);
+        assertEquals(WeatherIconDrawable.legibleAccent(ACCENT, drawable.inkTint()),
+            rec(drawable.accentLayer()).tint);
         assertTrue(drawable.getOpacity() == PixelFormat.TRANSLUCENT);
+    }
+
+    private static final int DARK_PURPLE = 0xFF4A3B7C;
+    private static final int LIGHT_PEACH = 0xFFF2D9C4;
+
+    /** The crescent and the "24" as the emulator drew them over a teal/blue wallpaper. */
+    private static final int CRESCENT = 0xFF67548E;
+    private static final int NEAR_WHITE_INK = 0xFFDED3EC;
+
+    @Test
+    public void theEmulatorsDimCrescentBesideItsNearWhiteInkIsClearlyLighter() {
+        int out = WeatherIconDrawable.legibleAccent(CRESCENT, NEAR_WHITE_INK);
+        assertTrue(String.format("%08X", out), SchemeTone.tone(out) >= 79d);
+        assertTrue(SchemeTone.tone(CRESCENT) < 50d);
+        assertHueKept(CRESCENT, out);
+    }
+
+    @Test
+    public void aDarkAccentBesideLightInkIsRaisedToTheLightTone() {
+        int out = WeatherIconDrawable.legibleAccent(DARK_PURPLE, 0xFFF5F5F5);
+        assertTrue(SchemeTone.tone(out) >= WeatherIconDrawable.ACCENT_TONE_ON_LIGHT_INK - 1d);
+        assertHueKept(DARK_PURPLE, out);
+    }
+
+    @Test
+    public void aLightAccentBesideDarkInkIsLoweredToTheDarkTone() {
+        int out = WeatherIconDrawable.legibleAccent(LIGHT_PEACH, 0xFF101010);
+        assertTrue(SchemeTone.tone(out) <= WeatherIconDrawable.ACCENT_TONE_ON_DARK_INK + 1d);
+        assertHueKept(LIGHT_PEACH, out);
+    }
+
+    @Test
+    public void anAccentAlreadyOnTheInksSideIsReturnedUnchanged() {
+        assertEquals(0xFFFFD180, WeatherIconDrawable.legibleAccent(0xFFFFD180, 0xFFF5F5F5));
+        assertEquals(0xFF5E35B1, WeatherIconDrawable.legibleAccent(0xFF5E35B1, 0xFF101010));
+    }
+
+    private static void assertHueKept(int before, int after) {
+        double gap = Math.abs(Hct.fromInt(after).getHue() - Hct.fromInt(before).getHue());
+        assertTrue("hue " + gap, Math.min(gap, 360 - gap) < 25);
+    }
+
+    @Test
+    public void theDrawnAccentIsTheLegibleOneAndKeepsItsAlpha() {
+        WeatherIconDrawable drawable = drawable();
+        drawable.set(WeatherIcons.CLEAR_NIGHT, 0xFFF5F5F5, DARK_PURPLE);
+        assertEquals(WeatherIconDrawable.legibleAccent(DARK_PURPLE, 0xFFF5F5F5),
+            rec(drawable.accentLayer()).tint);
+        assertEquals(0x80, WeatherIconDrawable.legibleAccent(0x804A3B7C, 0xFFF5F5F5) >>> 24);
     }
 }
