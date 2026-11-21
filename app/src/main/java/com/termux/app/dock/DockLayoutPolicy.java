@@ -497,10 +497,14 @@ public final class DockLayoutPolicy {
         // a small gap over its top edge. The band is still the row's, so the stack, the pager and
         // the strip are sized exactly as before; only the glass starts lower (slabTopInsetPx).
         boolean dashesAboveSlab = dashesAboveSlab(in);
-        if (dashesAboveSlab) tickSideAirPx = airPx + stripBandPx;
+        // The slab starts the capsules' own air (PageTickStrip.SURFACE_AIR_DP) below them, not flush
+        // under the strip's band, where the band's thin air under the capsules crowded its edge.
+        int surfaceExtraPx = dashesAboveSlab
+            ? PageTickStrip.surfaceExtraPx(stripBandPx, density) : 0;
+        if (dashesAboveSlab) tickSideAirPx = airPx + stripBandPx + surfaceExtraPx;
         out.surface = in.surface;
         out.slabTopInsetPx = dashesAboveSlab && in.preferencesAvailable && in.appsRowEnabledPref
-            ? stripBandPx : 0;
+            ? stripBandPx + surfaceExtraPx : 0;
         out.appsRowStripBandPx = stripBandPx;
         out.appsTopPaddingPx = airPx;
         out.appsBottomPaddingPx = airPx;

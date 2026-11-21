@@ -36,6 +36,13 @@ public final class PageTickStrip {
     /** The band the strip claims across itself: the tick and the air either side of it. */
     public static final float BAND_DP = 9f;
 
+    /**
+     * The air between the capsules and the dock's own surface on the side they face: the slab's
+     * top edge, or the icons' tops where no edge stands there. The one number the dock reads
+     * ({@code DockLayoutPolicy}) for how far below the strip its slab starts.
+     */
+    public static final float SURFACE_AIR_DP = 6f;
+
     /** The band a strip claims across itself, which is what its host reserves for it. */
     public static int bandPx(float density) {
         return Math.round(Math.max(0f, density) * BAND_DP);
@@ -48,6 +55,16 @@ public final class PageTickStrip {
      */
     public static float edgeGapPx(int bandPx, float density) {
         return Math.max(0f, (bandPx - THICKNESS_DP * Math.max(0f, density)) * 0.5f);
+    }
+
+    /**
+     * What a slab standing under a strip {@code bandPx} across needs added below the band so the
+     * capsules keep {@link #SURFACE_AIR_DP} from its top edge: the air asked for, less the
+     * band's own air under the capsules ({@link #edgeGapPx}).
+     */
+    public static int surfaceExtraPx(int bandPx, float density) {
+        float want = SURFACE_AIR_DP * Math.max(0f, density);
+        return Math.round(Math.max(0f, want - edgeGapPx(bandPx, density)));
     }
 
     /**
