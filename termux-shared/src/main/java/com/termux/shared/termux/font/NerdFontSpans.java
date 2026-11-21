@@ -72,7 +72,7 @@ public final class NerdFontSpans {
 
     /** {@code spanned} with a tinted-drawable span over every registered code point of the label. */
     private static void spanDrawables(@NonNull Context context, @NonNull CharSequence label,
-                                      @NonNull SpannableString spanned) {
+                                      @NonNull android.text.Spannable spanned) {
         int length = label.length();
         int index = 0;
         while (index < length) {
@@ -186,16 +186,22 @@ public final class NerdFontSpans {
 
     /**
      * Re-spans an editable in place: every span this class owns is dropped and the Nerd Font runs
-     * of the current text are marked again. Editing a key label is the one place the text changes
-     * under the spans, and rewriting the text to re-span it would fight the input connection.
+     * and registered drawable symbols of the current text are marked again. Editing a key label
+     * is the one place the text changes under the spans, and rewriting the text to re-span it
+     * would fight the input connection.
      */
     public static void applyTo(@NonNull Context context, @NonNull android.text.Editable editable) {
         for (SymbolTypefaceSpan span : editable.getSpans(0, editable.length(),
                 SymbolTypefaceSpan.class)) {
             editable.removeSpan(span);
         }
+        for (TintedDrawableSpan span : editable.getSpans(0, editable.length(),
+                TintedDrawableSpan.class)) {
+            editable.removeSpan(span);
+        }
         int length = editable.length();
         if (length == 0) return;
+        spanDrawables(context, editable, editable);
         Typeface typeface = typeface(context);
         if (typeface == null) return;
         int runStart = -1;

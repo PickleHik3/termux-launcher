@@ -443,12 +443,12 @@ public final class ExtraKeyActionPicker {
                         cells.add(new Cell(CELL_WIDE, choiceLabel,
                             tool.name + ":" + required + "=" + choice,
                             new Choice("tool:" + tool.name + ":" + choice, choiceLabel,
-                                toolKey(tool.name, required, choice, choiceLabel))));
+                                toolKey(tool.name, required, choice, choiceLabel, true))));
                     }
                 } else if (required == null) {
                     cells.add(new Cell(CELL_WIDE, label, tool.name,
                         new Choice("tool:" + tool.name, label,
-                            toolKey(tool.name, null, null, label))));
+                            toolKey(tool.name, null, null, label, false))));
                 } else {
                     cells.add(new Cell(CELL_WIDE, label, tool.name + " · " + required,
                         new Choice("tool:" + tool.name, label, tool, required, label)));
@@ -561,7 +561,7 @@ public final class ExtraKeyActionPicker {
         ok.setOnClickListener(v -> {
             String value = input.getText().toString().trim();
             dialog.dismiss();
-            onPicked.onPicked(toolKey(tool.name, argument, value.isEmpty() ? null : value, label));
+            onPicked.onPicked(toolKey(tool.name, argument, value.isEmpty() ? null : value, label, false));
         });
         LinearLayout.LayoutParams okParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -579,12 +579,13 @@ public final class ExtraKeyActionPicker {
     private static ExtraKeysLayoutModel.Key toolKey(@NonNull String toolName,
                                                     @Nullable String argument,
                                                     @Nullable String value,
-                                                    @NonNull String label) {
+                                                    @NonNull String label,
+                                                    boolean fromChoices) {
         String spec = "tool:" + toolName;
         if (argument != null && value != null) spec += ":" + argument + "=" + value;
         // A tool with a glyph of its own wears it; otherwise the label seeds the display text and
         // the user can shorten it in the key sheet.
-        String glyph = ExtraKeyActionLabels.defaultCapGlyph(toolName);
+        String glyph = ExtraKeyActionLabels.defaultCapGlyph(toolName, fromChoices ? value : null);
         return new ExtraKeysLayoutModel.Key(spec, false, glyph != null ? glyph : label, null);
     }
 
