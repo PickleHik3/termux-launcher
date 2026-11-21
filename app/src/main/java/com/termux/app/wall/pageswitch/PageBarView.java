@@ -80,7 +80,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     }
 
     /** The page's name over the lifted glyph. */
-    private static final float LABEL_TEXT_SP = 13f;
+    private static final float LABEL_TEXT_SP = 12f;
     /** The current page's accent falls to this share of itself while sliding. */
     private static final float SLIDE_ACCENT_KEEP = 0.45f;
 

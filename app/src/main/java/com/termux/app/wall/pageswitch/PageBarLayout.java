@@ -14,11 +14,12 @@ import com.termux.app.ScrubWave;
  * Its bottom stands {@link #GAP_DP} above the touch row's, so it hugs whatever stands below the
  * bar.</p>
  *
- * <p>While a finger slides, each glyph swells on the A–Z bar's wave ({@link ScrubWave}): the
- * glyph under the finger grows to {@link #RAISED_SCALE} and rises to {@link #liftPeakPx}, which the
+ * <p>While a finger slides, the glyph under the finger is picked out on a plateau-and-crossfade envelope of
+ * the bar's own ({@link #shape}; the enter easing is {@link ScrubWave#SETTLE_MS}): it grows to {@link #RAISED_SCALE} and rises to {@link #liftPeakPx}, which the
  * slab's geometry answers (on Home its bottom just clears the well's rim, {@link #LIFT_CLEAR_DP}
- * above the slab's top; on the key's raised bar it stays inside the strip), its neighbours by the
- * wave's envelope, all scaled by the enter share so nothing jumps as the finger crosses slots.
+ * above the slab's top; on the key's raised bar it stays inside the strip), a glyph resting under the finger
+ * has neighbours that stay put, and between two glyphs one sinks as the other rises (their
+ * envelopes sum to 1), all scaled by the enter share so nothing jumps as the finger crosses slots.
  * Every number is declared once, in dp.</p>
  */
 public final class PageBarLayout {
@@ -48,6 +49,18 @@ public final class PageBarLayout {
      * over other glass stands as a comfortable bar, not a strip ({@link #raised}).
      */
     public static final float RAISED_PAD_DP = 8f;
+    /**
+     * How far from the finger a glyph stays fully raised, in slots: a glyph this close is at the
+     * envelope's plateau. {@code HOLD_SLOTS + REACH_SLOTS == 1}, so the page bar hands the lift
+     * from one glyph to the next instead of raising several together.
+     */
+    public static final float HOLD_SLOTS = 0.25f;
+    /**
+     * How far the lift reaches, in slots: a glyph this far or further from the finger does not
+     * move. With {@link #HOLD_SLOTS} it makes the envelopes of two adjacent glyphs sum to exactly 1
+     * for a finger anywhere between them.
+     */
+    public static final float REACH_SLOTS = 0.75f;
     /** The finger leaving the touch row vertically by more than this cancels the slide. */
     public static final float CANCEL_DP = 32f;
 
@@ -282,17 +295,31 @@ public final class PageBarLayout {
         return half + liftClearPx() + raisedHalf;
     }
 
-    /** The A–Z wave's envelope for {@code slot} with the finger at {@code focus}, times {@code enter}. */
+    /**
+     * The page bar's own envelope of a glyph {@code distanceInSlots} from the finger: 1 within
+     * {@link #HOLD_SLOTS}, 0 from {@link #REACH_SLOTS} on, and a raised cosine between, so it is
+     * continuous with no slope at either end and falls monotonically. Because
+     * {@code HOLD_SLOTS + REACH_SLOTS == 1}, the envelopes of two adjacent glyphs sum to exactly 1
+     * for a finger anywhere between them: a glyph resting under the finger has neighbours at 0,
+     * and at the midpoint each stands at 0.5.
+     */
+    public static float shape(float distanceInSlots) {
+        float d = Math.abs(distanceInSlots);
+        if (d <= HOLD_SLOTS) return 1f;
+        if (d >= REACH_SLOTS) return 0f;
+        return 0.5f * (1f + (float) Math.cos(Math.PI * (d - HOLD_SLOTS) / (REACH_SLOTS - HOLD_SLOTS)));
+    }
+
+    /** {@link #shape} for {@code slot} with the finger at {@code focus}, times {@code enter}. */
     public static float envelope(int slot, float focus, float enter) {
         if (enter <= 0f) return 0f;
-        return ScrubWave.envelope(Math.abs(slot - focus)) * Math.min(1f, enter);
+        return shape(slot - focus) * Math.min(1f, enter);
     }
 
     /** How far {@code slot}'s glyph rises above its rest centre; 0 at rest. */
     public float liftPx(int slot, float focus, float enter) {
         if (enter <= 0f) return 0f;
-        return ScrubWave.lift(ScrubWave.envelope(Math.abs(slot - focus))) * liftPeakPx()
-            * Math.min(1f, enter);
+        return envelope(slot, focus, enter) * liftPeakPx();
     }
 
     /** {@code slot}'s glyph scale against its rest size; 1 at rest. */
