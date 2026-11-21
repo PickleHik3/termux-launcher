@@ -104,8 +104,12 @@ public class RestCardsTest {
         assertTrue(dock.box.left > 0f);
     }
 
+    /**
+     * The Terminal's dock and keyboard are one surface (Home's are not since #309: its keyboard
+     * covers the dock, see {@link #homeKeyboardUpDrawsOverTheDockAtItsKeyboardDownRect}).
+     */
     @Test public void dockedWithTheKeyboardUpOneSurfaceCarriesTheKeyboardSoItHasNoCardOfItsOwn() {
-        for (PageRef page : new PageRef[] {PageRef.HOME, PageRef.TERMINAL}) {
+        for (PageRef page : new PageRef[] {PageRef.TERMINAL}) {
             RestCards cards = rest(TRAY, page, true, false);
             RestCards.Card dock = cards.card(CardId.DOCK);
             if (dock == null) continue;
@@ -115,6 +119,61 @@ public class RestCardsTest {
                 dock.pieces.contains(ChromeShape.PieceId.KEYBOARD));
             assertEquals(PONG.heightPx, dock.box.bottom, 0f);
         }
+    }
+
+    private static RestCards homeRest(LayoutFixtures.Fixture f, boolean up, boolean floating,
+                                      boolean alwaysOn) {
+        RestCards.Rest rest = f.cardsRest(PageRef.HOME, up, floating);
+        rest.pass.homeKeyboardAlwaysOn = alwaysOn;
+        return RestCards.of(rest);
+    }
+
+    private static RestCards.Card dockOrPeek(RestCards cards) {
+        RestCards.Card card = cards.card(CardId.DOCK);
+        return card != null ? card : cards.card(CardId.PEEK);
+    }
+
+    /** #309: Home's rows stand at their keyboard-down rect and the keyboard's card covers them. */
+    @Test public void homeKeyboardUpDrawsOverTheDockAtItsKeyboardDownRect() {
+        for (LayoutFixtures.Fixture f : new LayoutFixtures.Fixture[] {TRAY,
+                PONG.withDesign(DockStyle.PEEK_GLASS)})
+            for (boolean floating : new boolean[] {false, true}) {
+                String at = f.name + " " + f.homeDesign + (floating ? " floating" : " docked");
+                RestCards down = homeRest(f, false, floating, false);
+                RestCards up = homeRest(f, true, floating, false);
+                RestCards.Card downDock = dockOrPeek(down);
+                RestCards.Card upDock = dockOrPeek(up);
+                assertNotNull(at, downDock);
+                assertNotNull(at, upDock);
+                assertEquals(at + " same card", downDock.id, upDock.id);
+                assertEquals(at + " top", downDock.box.top, upDock.box.top, 0.01f);
+                assertEquals(at + " left", downDock.box.left, upDock.box.left, 0f);
+                assertEquals(at + " right", downDock.box.right, upDock.box.right, 0f);
+                assertEquals(at + " drop down", 0f, down.rowsDropPx(), 0f);
+                assertTrue(at + " drop up", up.rowsDropPx() > 0f);
+                assertTrue(at + " nothing covered while down", down.covered().isEmpty());
+                RestCards.Card keyboard = up.card(CardId.KEYBOARD);
+                assertNotNull(at + " the keyboard's own card", keyboard);
+                assertNull(at + " not one surface", dockCarriesKeyboard(up));
+                boolean coversDock = false;
+                for (RestCards.Card c : up.covered()) coversDock |= c.id == upDock.id;
+                assertTrue(at + " covers the dock's card", coversDock);
+                assertTrue(at + " the card runs under the keyboard's",
+                    upDock.box.bottom > keyboard.box.top);
+            }
+    }
+
+    private static RestCards.Card dockCarriesKeyboard(RestCards cards) {
+        RestCards.Card dock = cards.card(CardId.DOCK);
+        return dock != null && dock.pieces.contains(ChromeShape.PieceId.KEYBOARD) ? dock : null;
+    }
+
+    /** The cover applies only to a Home whose keyboard is raised on demand. */
+    @Test public void anAlwaysOnHomeKeepsRidingTheKeyboard() {
+        RestCards up = homeRest(TRAY, true, false, true);
+        assertEquals(0f, up.rowsDropPx(), 0f);
+        assertTrue(up.covered().isEmpty());
+        assertNotNull(dockCarriesKeyboard(up));
     }
 
     @Test public void theKeyboardsOwnCardStandsWhenTheDockIsFloating() {

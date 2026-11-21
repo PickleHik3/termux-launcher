@@ -243,11 +243,16 @@ public final class RestCards {
     @NonNull private final AzPlacement mAz;
     @NonNull private final List<Card> mCards = new ArrayList<>(6);
     @NonNull private final List<Card> mParked = new ArrayList<>(2);
+    @NonNull private final List<Card> mCovered = new ArrayList<>(2);
     @NonNull private final Box[] mLaidOut = new Box[StackView.values().length];
     private boolean mApart;
     private int mContainerMarginPx;
     private int mHomeDropPx;
     private int mTerminalLiftPx;
+    /** How far below the container this rest's rows and glass host are drawn (Home's cover). */
+    private float mRowsDropPx;
+    /** The same at Home's rest, whichever page is in front (adopted like the host's look). */
+    private float mHomeRowsDropPx;
     /** How the host dresses its card at this rest (the Home half's, once adopted); null for the Terminal's. */
     @Nullable private HostLook mHostLook;
 
@@ -276,7 +281,10 @@ public final class RestCards {
         RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome);
         RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome);
         answer.adopt(otherCards, frontHome);
-        if (!frontHome) answer.mHostLook = otherCards.mHostLook;
+        if (!frontHome) {
+            answer.mHostLook = otherCards.mHostLook;
+            answer.mHomeRowsDropPx = otherCards.mRowsDropPx;
+        }
         answer.mApart = true;
         answer.mContainerMarginPx = SideCards.containerMarginPx(homeMargin, terminalMargin, true,
             frontHome);
@@ -349,6 +357,33 @@ public final class RestCards {
         return Collections.unmodifiableList(mParked);
     }
 
+    /**
+     * How far below the container this rest draws Home's rows, the glass host and the A-Z layers
+     * ({@link HomeKeyboardCover#rowsDropPx}): the keyboard's laid-out height less the share the
+     * container already sits lower by, so with Home's keyboard raised on demand they stand at the
+     * rect they have with it down and the keyboard draws over them. 0 on a page whose rows the
+     * keyboard lifts, and on a Home whose keyboard is always on.
+     */
+    public float rowsDropPx() {
+        return mRowsDropPx;
+    }
+
+    /** {@link #rowsDropPx} at Home's rest, whichever page is in front. */
+    public float homeRowsDropPx() {
+        return mApart ? mHomeRowsDropPx : mRowsDropPx;
+    }
+
+    /**
+     * The cards the keyboard's card draws over: with Home's keyboard raised on demand and up, the
+     * dock's card or the Peek card (both stand at their keyboard-down rect under it) and the
+     * bands under the keyboard or the foot where they overlap it. Empty while the keyboard is
+     * down, where the rows are lifted, and while no keyboard card is drawn.
+     */
+    @NonNull
+    public List<Card> covered() {
+        return Collections.unmodifiableList(mCovered);
+    }
+
     /** The cards in a stable order: STATUS, DOCK or PEEK, a foot it wears, UNDER, KEYBOARD, its foot. */
     @NonNull
     public List<Card> cards() {
@@ -415,6 +450,10 @@ public final class RestCards {
         final float density = rest.density;
         final StackLayout.Result r = StackLayout.layout(pass, new DockGeometry());
         final DockLayout dock = r.dock;
+        // Whether a keyboard lifts the rows this rest stands: not Home's, unless its keyboard is
+        // always on (#309).
+        final boolean liftsRows = HomeKeyboardCover.liftsRows(pass.dock.rows.kind,
+            pass.homeKeyboardAlwaysOn);
         final float cornersPx = cornersPx(half, density);
         mContainerMarginPx = marginPx(r);
 
@@ -425,7 +464,7 @@ public final class RestCards {
         // The bands under the keyboard and whether the dock's glass stands as the Peek card.
         final List<Element> under = EdgeStackPolicy.underKeyboard(layout);
         final boolean peekStands = DockPlacement.peekCardStandsOn(pass.dock.rows.kind,
-            DockSurfaceSpec.forStyle(half.design).peek, pass.toolbarShown, layout, false, up,
+            pass.homeKeyboardAlwaysOn, DockSurfaceSpec.forStyle(half.design).peek, pass.toolbarShown, layout, false, up,
             pass.imeLiftPx > 0, dock.promptFieldBandPx > 0);
         final boolean floats = DockPlacement.floats(floating, floating && peekStands);
 
@@ -466,6 +505,11 @@ public final class RestCards {
         final float columnBottom = containerBottom - insets.stackPaddingPx
             - insets.keyboardColumnMarginPx;
         final float columnTop = columnBottom - (keyboardLaid + keyboardFootPx + underBlock);
+        // Home's rows are drawn this much lower than the container, so they stand where they
+        // stand with the keyboard down and the keyboard's card draws over them (#309).
+        final float rowsDrop = HomeKeyboardCover.rowsDropPx(liftsRows, keyboardLaid, shift);
+        final float hostShift = shift + rowsDrop;
+        mRowsDropPx = rowsDrop;
         if (containerLaidOut && keyboardLaid + keyboardFootPx + underBlock > 0)
             mLaidOut[StackView.KEYBOARD_COLUMN.ordinal()] = new Box(0f, columnTop, w, columnBottom);
 
@@ -481,7 +525,7 @@ public final class RestCards {
                 rest.statusOnDockPlank ? 0 : r.statusBandPx, dock.slabTopInsetPx, slack);
         final boolean unified = !r.bandsUnderKeyboard
             && ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(pass.toolbarShown, up,
-                floating, rest.keyboardGlassShared);
+                floating, rest.keyboardGlassShared, liftsRows);
         final float hostBottomOfStack = unified || insets.dockFootPx > 0 ? containerBottom
             : columnTop;
         // The extra-keys card is the keys band only, in both keyboard states (ADR 0032): the
@@ -522,20 +566,20 @@ public final class RestCards {
         PeekGlassGeometry.Card peekCut = null;
         Box hostDrawn = null;
         if (hostLaidOut) {
-            hostDrawn = new Box(sideMargin, hostTop + shift, w - sideMargin,
-                Math.min(hostBottom + shift, containerBottom));
-            float drawnBottom = Math.min(hostBottom + shift, containerBottom);
+            hostDrawn = new Box(sideMargin, hostTop + hostShift, w - sideMargin,
+                Math.min(hostBottom + hostShift, containerBottom));
+            float drawnBottom = Math.min(hostBottom + hostShift, containerBottom);
             boolean hostFoot = kept > 0 && drawnBottom >= h && !peekStands
                 && (insets.dockFootPx > 0 || unified && keyboardFootPx > 0);
             float cardBottom = hostFoot ? footTop : drawnBottom;
             if (peekStands) {
-                peekCut = addPeek(rest, layout, dock, hostTop, hostBottom, columnTop, w, h, shift,
-                    density);
+                peekCut = addPeek(rest, layout, dock, hostTop, hostBottom, columnTop, w, h,
+                    hostShift, density);
             } else if (floats) {
                 addFloatingDock(hostView, layout, pass, rest, dock, hostTop, cardBottom,
-                    sideMargin, w, shift, cornersPx, unified);
+                    sideMargin, w, hostShift, cornersPx, unified);
             } else {
-                addDockedDock(layout, pass, rest, shape, hostTop, cardBottom, w, shift, unified,
+                addDockedDock(layout, pass, rest, shape, hostTop, cardBottom, w, hostShift, unified,
                     hostFoot);
             }
             if (hostFoot) addFoot(hostView, sideMargin, footTop, w - sideMargin, h);
@@ -558,6 +602,16 @@ public final class RestCards {
         }
         // KEYBOARD: the floating-form keyboard, its own frame parked in its room.
         if (up && form == KeyboardForm.FLOATING) addFloatingKeyboard(rest, cornersPx);
+
+        // What the keyboard's card draws over: the rows it covers, and the cards that overlap it.
+        Card keyboardDrawn = card(CardId.KEYBOARD);
+        if (!liftsRows && up && keyboardDrawn != null) {
+            for (Card card : mCards) {
+                if (card.id == CardId.KEYBOARD || card.id == CardId.STATUS) continue;
+                if (card.id == CardId.DOCK || card.id == CardId.PEEK
+                    || overlaps(card.box, keyboardDrawn.box)) mCovered.add(card);
+            }
+        }
 
         // Home's side while the cards stand apart: the container stands at the Terminal's margin,
         // so what it carries is laid out that much higher than it is drawn above.
@@ -591,6 +645,11 @@ public final class RestCards {
             below += bandPx(e, dock, pass);
         }
         return columnTop - below - bandPx(Element.EXTRA_KEYS, dock, pass);
+    }
+
+    private static boolean overlaps(@NonNull Box a, @NonNull Box b) {
+        return Math.min(a.right, b.right) > Math.max(a.left, b.left)
+            && Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top);
     }
 
     private void liftLaidOut(@NonNull StackView view, int px) {
