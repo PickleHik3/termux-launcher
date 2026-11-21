@@ -62,7 +62,8 @@ public class ExtraKeysEditorFragmentTest {
         h.idle();
         View typed = findText(h.sheet(), "Send \"zz9\" as text");
         assertNotNull("typed text is offered as a key", typed);
-        h.click(typed);
+        // The row (mark, then name) takes the tap, as a finger would hit it.
+        h.click((View) typed.getParent());
         h.click(findText(h.sheet(), "Add to row: zz9"));
 
         assertNotNull("the new key is a cap on page 2", findText(h.page(), "zz9"));
