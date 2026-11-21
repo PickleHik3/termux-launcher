@@ -270,6 +270,24 @@ public final class PeekGlassReflection {
             || Float.compare(rowDx, mRowDx) != 0 || Float.compare(rowDy, mRowDy) != 0
             || liveNow != mLive || !mShown;
         boolean alphaMoved = Float.compare(alpha, mAlpha) != 0;
+        // DIAG(reflection): what this update moved; revert before merge.
+        if (geometryMoved || alphaMoved) {
+            StringBuilder why = new StringBuilder();
+            if (!mShown) why.append(" wasHidden");
+            if (mCard == null) why.append(" firstCard");
+            else if (!card.equals(mCard)) why.append(" card(axis ").append(mCard.mirrorAxisY)
+                .append("->").append(card.mirrorAxisY).append(" top ").append(mCard.top)
+                .append("->").append(card.top).append(" depth ").append(mCard.reflectionDepth())
+                .append("->").append(card.reflectionDepth()).append(')');
+            if (row != mRow) why.append(" row");
+            if (Float.compare(rowDx, mRowDx) != 0) why.append(" rowDx ").append(mRowDx).append("->").append(rowDx);
+            if (Float.compare(rowDy, mRowDy) != 0) why.append(" rowDy ").append(mRowDy).append("->").append(rowDy);
+            if (liveNow != mLive) why.append(" live ").append(mLive).append("->").append(liveNow);
+            if (alphaMoved) why.append(" alpha ").append(mAlpha).append("->").append(alpha);
+            mDiagWhy = why.toString();
+        } else {
+            mDiagWhy = null;
+        }
         mCard = card;
         mRow = row;
         mRowDx = rowDx;
@@ -316,6 +334,31 @@ public final class PeekGlassReflection {
     }
 
     private float mDrawnOffsetY;
+
+    /** DIAG(reflection): what the last update moved, or null for nothing; revert before merge. */
+    @androidx.annotation.Nullable private String mDiagWhy;
+
+    /** DIAG(reflection): {@link #mDiagWhy}, read once; revert before merge. */
+    @androidx.annotation.Nullable
+    public String takeDiagWhy() {
+        String why = mDiagWhy;
+        mDiagWhy = null;
+        return why;
+    }
+
+    /** DIAG(reflection): the aim and the host view, for the PeekRefl log; revert before merge. */
+    public String diagAim() {
+        PeekReflectionView v = mHostView;
+        PeekGlassGeometry.Card c = mCard;
+        return "shown=" + mShown + " held=" + mHeld + " stale=" + mStaleWhileHeld + " live=" + mLive
+            + " alpha=" + mAlpha + " fade=" + mFade
+            + (c == null ? " card=none" : " axis=" + c.mirrorAxisY + " cardTop=" + c.top
+                + " depth=" + c.reflectionDepth())
+            + " rowDx=" + mRowDx + " rowDy=" + mRowDy + " drawnDy=" + mDrawnOffsetY
+            + (v == null ? " view=none" : " viewTy=" + v.getTranslationY() + " viewH=" + v.getHeight()
+                + " viewVis=" + v.getVisibility() + " viewA=" + v.getAlpha()
+                + " originY=" + v.originY());
+    }
 
     /** DIAG(reflection): the host view's state; revert before merge. */
     public String diagState() {

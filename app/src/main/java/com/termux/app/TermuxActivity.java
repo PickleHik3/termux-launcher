@@ -6030,11 +6030,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 row != null && host instanceof ViewGroup && container != null,
                 mSideCards.hostLook() != null, peekHomeRowStands());
         if (sync == com.termux.app.dock.PeekGlassReflection.Sync.CLEAR) {
+            // DIAG(reflection): a shown reflection put away; revert before merge.
+            if (mPeekReflection != null && !mPeekReflection.diagAim().startsWith("shown=false"))
+                diagPeekRefl("clear", "card=" + (card != null) + " strength=" + strength);
             if (mPeekReflection != null) mPeekReflection.clear();
             return;
         }
         if (sync == com.termux.app.dock.PeekGlassReflection.Sync.KEEP) {
             if (mPeekReflection != null) {
+                // DIAG(reflection): the hold taking it; revert before merge.
+                if (!mPeekReflection.held()) diagPeekRefl("hold", "keep");
                 mPeekReflection.setHeld(true);
                 mPeekReflection.setFade(drawnPeekShare());
                 mPeekReflection.setDrawnOffsetY(peekCardRowsDrift(card));
@@ -6073,11 +6078,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // reflection moved by as much as the rows have moved over the host since, the same as
         // the card's top (peekCardCut), so the mirror stays under the icons and on the card.
         float cutAt = card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx;
+        boolean diagWasHeld = reflection.held();
+        if (diagWasHeld) diagPeekRefl("release-before", "heldLetGo cutFrom="
+            + (card == mPeekCard ? "peekCard" : "homeRestCard"));
         reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], cutAt,
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
         reflection.setFade(drawnPeekShare());
         reflection.setDrawnOffsetY(peekCardRowsDrift(card));
         reflection.setHeld(false);
+        String why = reflection.takeDiagWhy();
+        if (why != null || diagWasHeld) diagPeekRefl("sync", "why=" + why
+            + (diagWasHeld ? " heldLetGo" : ""));
+    }
+
+    /**
+     * DIAG(reflection): one PeekRefl line, the reflection's aim, the host's rect and motion, the
+     * rows it was cut from and the crossing's state; revert before merge.
+     */
+    private void diagPeekRefl(@NonNull String at, @NonNull String why) {
+        View host = findViewById(R.id.accessory_surface_host);
+        String hostState = "host=none";
+        if (host != null) {
+            int[] on = new int[2];
+            host.getLocationOnScreen(on);
+            hostState = "host=[" + host.getLeft() + "," + host.getTop() + "," + host.getRight() + ","
+                + host.getBottom() + "] hostScreenY=" + on[1] + " hostTy=" + host.getTranslationY()
+                + " hostMotionY=" + com.termux.app.chrome.GlassAnchor.motionY(host);
+        }
+        android.util.Log.i("PeekRefl", at + " t=" + android.os.SystemClock.uptimeMillis()
+            + " " + why + " | " + (mPeekReflection == null ? "refl=none" : mPeekReflection.diagAim())
+            + " | " + hostState + " rowsOverHost=" + peekRowsOverHost() + " layoutRows="
+            + peekLayoutRowsOverHost() + " peekCardRows=" + mPeekCardRowsPx + " homeRestRows="
+            + mHomeRestCardRowsPx + " apart=" + (mSideCards.hostLook() != null) + " rowStands="
+            + peekHomeRowStands() + " homeRest=" + isHomeAtRest() + " crossing="
+            + mCrossing.crossing() + " holds=" + mCrossing.holdsContent() + " front=" + mLastWallPage
+            + " dress=" + stackDressPage() + " share=" + mPeekShare
+            + " hostPinned=" + mSideCards.hostPinned() + " hostHeightPx=" + mSideCards.hostHeightPx());
     }
 
     /** Whether Home's apps row stands (shown), which the reflection is drawn from. */
@@ -6948,7 +6984,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void runLandingSettle() {
         if (isDestroyed()) return;
+        // DIAG(reflection): the landing's settle, before and after it re-dresses; revert before merge.
+        diagPeekRefl("land", "settle-before");
         flushLandingRestyle();
+        diagPeekRefl("land", "settle-after");
         // The re-dress has laid the bar out at the Margin it eased to; whatever it found to do,
         // no ease outlives the crossing.
         if (!mCrossing.crossing()) mStatusBar.resetStatusMarginEase();
@@ -7217,8 +7256,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             + peekChromeTravelling() + " dress=" + stackDressPage());
         // Apart with Home's row not standing, the reflection is kept as Home's rest aimed it, and
         // so is where the row stood over the host then (syncPeekReflection reads it at the landing).
-        if (mSideCards.hostLook() == null || peekHomeRowStands())
+        if (mSideCards.hostLook() == null || peekHomeRowStands()) {
+            float diagWas = mPeekCardRowsPx;
             mPeekCardRowsPx = peekLayoutRowsOverHost();
+            // DIAG(reflection): the rows a held reflection is aimed from moved; revert before merge.
+            if (Float.compare(diagWas, mPeekCardRowsPx) != 0)
+                diagPeekRefl("rows", "peekCardRows " + diagWas + "->" + mPeekCardRowsPx
+                    + " travelling=" + peekChromeTravelling() + " card=" + (card != null));
+        }
         if (!isHomeAtRest()) return;
         View host = findViewById(R.id.accessory_surface_host);
         mHomeRestCard = card;
@@ -14309,6 +14354,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncLegibilityCrossing() {
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         if (store.crossing() == mCrossing.crossing()) return;
+        // DIAG(reflection): each crossing's begin and end; revert before merge.
+        diagPeekRefl(mCrossing.crossing() ? "begin" : "end", "crossing");
         if (mCrossing.crossing()) store.beginCrossing();
         else store.endCrossing();
     }
