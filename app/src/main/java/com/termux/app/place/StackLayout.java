@@ -165,7 +165,10 @@ public final class StackLayout {
             stackHeightPx = stackHeightPx(dockContentHeightPx, flushPaddingPx,
                 in.keyboardHeightPx);
             homeFloatDockPx = dockContentHeightPx + flushPaddingPx;
-            homeFloatImePushPx = in.systemImeTakePx + (base.lifted ? Math.max(0, in.imeLiftPx) : 0);
+            // The IME's real push, which floats read: on Home the dock no longer rides it (the
+            // margin carries no lift there), but the push is still what the keyboard raised.
+            homeFloatImePushPx = in.systemImeTakePx
+                + (in.toolbarShown || in.keyboardShown ? Math.max(0, in.imeLiftPx) : 0);
 
             // On a Home page the dock floats with the keyboard, either keyboard: the grid keeps
             // its whole height.
@@ -210,7 +213,10 @@ public final class StackLayout {
      */
     private static final class Base {
         final int edgeGapPx;
-        /** Whether the IME's lift stands under the stack: only while it holds rows or a keyboard. */
+        /**
+         * Whether the IME's lift stands under the stack: only while it holds rows or a keyboard,
+         * and never on a page whose rows no keyboard lifts ({@link HomeKeyboardCover}).
+         */
         final boolean lifted;
         final int marginPx;
         final boolean bandsUnderKeyboard;
@@ -226,7 +232,7 @@ public final class StackLayout {
                 keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0);
             edgeGapPx = ChromePolicy.bottomEdgeGapPx(
                 DockPlacement.floats(half.floating, peekCardStands), dock.capsuleBottomGapPx);
-            lifted = toolbarShown || keyboardShown;
+            lifted = (toolbarShown || keyboardShown) && HomeKeyboardCover.liftsRows(rowsPage);
             marginPx = (lifted ? imeLiftPx : 0) + edgeGapPx;
             bandsUnderKeyboard = toolbarShown
                 && !EdgeStackPolicy.underKeyboard(arrangement).isEmpty();

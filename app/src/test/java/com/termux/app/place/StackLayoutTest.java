@@ -301,6 +301,33 @@ public class StackLayoutTest {
         assertEquals(r.contentReservationPx - KEYBOARD, floated.contentReservationPx);
     }
 
+    /** The Home page at rest with the toolbar and keyboard up, {@code lift} the IME's lift. */
+    private static StackLayout.Result homeWithLift(int lift) {
+        Snapshot s = device(half(HOME, false), half(WINDOW, false))
+            .rows(PageRef.HOME).arrangement(HOME).build();
+        StackLayout.Input in = new StackLayout.Input(s);
+        in.toolbarShown = true;
+        in.toolbarHeightPx = TOOLBAR;
+        in.keyboardShown = true;
+        in.keyboardHeightPx = KEYBOARD;
+        in.imeLiftPx = lift;
+        return run(in);
+    }
+
+    @Test
+    public void homesMarginCarriesNoImeLiftWhileTheTerminalsDoes() {
+        assertEquals("Home's dock does not ride the IME",
+            homeWithLift(0).bottomMarginPx, homeWithLift(50).bottomMarginPx);
+        assertEquals("floats still read the IME's real push", 50,
+            homeWithLift(50).homeFloatImePushPx);
+        StackLayout.Input t0 = window(true);
+        t0.imeLiftPx = 0;
+        StackLayout.Input t50 = window(true);
+        t50.imeLiftPx = 50;
+        assertEquals("the Terminal's grows by the lift", run(t0).bottomMarginPx + 50,
+            run(t50).bottomMarginPx);
+    }
+
     // ---- reservation during travel ----
 
     @Test
@@ -486,9 +513,12 @@ public class StackLayoutTest {
         terminal.keyboardHeightPx = KEYBOARD;
         assertTrue("the keyboard up on the Terminal keeps Floating's gap",
             run(terminal).stackEdgeGapPx > 0);
+        // #309: on Home the system keyboard covers the dock too, so its lift neither refuses the
+        // card nor stands under the stack: the card keeps its rest, flush, with no lift margin.
         StackLayout.Result lifted = run(home(peek, false, LIFT));
-        assertEquals("lifted over the system keyboard", gap, lifted.stackEdgeGapPx);
-        assertEquals(gap + LIFT, lifted.bottomMarginPx);
+        assertEquals("the system keyboard up on Home: the card stands at its rest", 0,
+            lifted.stackEdgeGapPx);
+        assertEquals(0, lifted.bottomMarginPx);
         assertEquals("the Search field under the row", gap,
             run(home(homeIn(DockStyle.PEEK_GLASS, true, true), false, 0)).stackEdgeGapPx);
         StackLayout.Input away = home(peek, false, 0);
