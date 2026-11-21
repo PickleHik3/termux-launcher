@@ -514,6 +514,32 @@ public final class DockGeometry {
     }
 
     /**
+     * {@link #appsRowNextToCanvas(PlaceLayout)} for the dock's own row as the views stand it:
+     * read from the layout of the side whose lane the row stands in
+     * ({@code StackLanes#laneSide}), whichever page is in front, so the row's ticks, its padding
+     * and the band order are its side's rest's while the other page is in front and through a
+     * crossing back, and the landing moves nothing. A row in no lane reads {@code front}. Null
+     * {@code home} or {@code terminal} (not known yet) reads {@code front}.
+     */
+    public static boolean appsRowNextToCanvas(@NonNull PlaceLayout front,
+                                              @Nullable PlaceLayout home,
+                                              @Nullable PlaceLayout terminal) {
+        return appsRowNextToCanvas(appsRowLayout(front, home, terminal));
+    }
+
+    /** The layout the dock's apps row is ordered by: its lane's side's, else {@code front}. */
+    @NonNull
+    public static PlaceLayout appsRowLayout(@NonNull PlaceLayout front,
+                                            @Nullable PlaceLayout home,
+                                            @Nullable PlaceLayout terminal) {
+        if (home == null || terminal == null) return front;
+        com.termux.app.page.Side side =
+            com.termux.app.place.StackLanes.laneSide(Element.APPS, home, terminal);
+        if (side == null) return front;
+        return side == com.termux.app.page.Side.HOME ? home : terminal;
+    }
+
+    /**
      * Whether the pinned-apps row shares its container with nothing: on the dock no band beside it
      * but the extra keys ({@link DockLayoutPolicy#appsRowAloneOnDock}); off the dock, no index
      * riding its plank; a rail always. It decides the air around the row's icons and its ticks.

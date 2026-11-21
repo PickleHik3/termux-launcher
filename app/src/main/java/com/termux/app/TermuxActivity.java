@@ -17013,13 +17013,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!wantHost && dockIndicator != null) {
             dockIndicator.setVerticalForm(false);
             // The dock's own pair follows the same rule as the portable host's: the ticks stand
-            // on the row's outer side unless the row is the band next to the canvas.
+            // on the row's outer side unless the row is the band next to the canvas. A row in a
+            // side's lane is ordered by that side's layout, whichever page is in front.
             orderAppsBarBands(findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
                     com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST)),
                 findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
                     com.termux.app.dock.SideRowViews.Part.ROW)), dockIndicator,
                 !PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM,
-                    isAppsRowNextToCanvas(layout)));
+                    com.termux.app.dock.DockGeometry.appsRowNextToCanvas(layout,
+                        homePlaceLayout(), terminalPlaceLayout())));
         }
         if (wantHost) {
             DockLayout dockLayout = mDock.dockLayoutIn(layout);
@@ -17473,8 +17475,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean moved = false;
         // Which side of the row its page ticks take is a property of the arrangement, and the pass
         // that pads the dock's own row is handed the dock's numbers rather than the place's.
-        // Remembered here, where the arrangement arrives.
-        mAppsRowNextToCanvas = isAppsRowNextToCanvas(layout);
+        // Remembered here, where the arrangement arrives: a row in a side's lane by that side's
+        // own layout, so the Home row a crossing slides in is padded as at Home's rest.
+        boolean frontHome = frontSide == com.termux.app.page.Side.HOME;
+        mAppsRowNextToCanvas = com.termux.app.dock.DockGeometry.appsRowNextToCanvas(layout,
+            frontHome ? laneFront : other, frontHome ? other : laneFront);
         PlaceLayout.Edge plankEdge = mDock.offDockPlankEdge(layout);
         View plankHost = findViewById(R.id.place_off_dock_plank_host);
         com.termux.app.place.EdgeStackView plankBars =
