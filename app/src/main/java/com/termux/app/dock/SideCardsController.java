@@ -350,7 +350,6 @@ public final class SideCardsController {
             mDiagAnswer == null ? null : mDiagAnswer.laidOut(RestCards.StackView.HOST), frameDy); // DIAG(two-cards)
         diagView(b, "keys", mHost.view(R.id.extra_keys_card),
             mDiagAnswer == null ? null : mDiagAnswer.laidOut(RestCards.StackView.KEYS_CARD), frameDy); // DIAG(two-cards)
-        diagHomeRows(b, frameDy); // DIAG(two-cards)
         if (container != null) { // DIAG(two-cards)
             int[] at = new int[2]; // DIAG(two-cards)
             diagLaidOutOrigin(container, at); // DIAG(two-cards)
@@ -366,50 +365,6 @@ public final class SideCardsController {
         b.append(" kbHostBg=").append(kb == null ? "null" : kb.getBackground() == null ? "none"
             : kb.getBackground().getClass().getSimpleName()); // DIAG(two-cards)
         return b.toString(); // DIAG(two-cards)
-    }
-
-    /**
-     * DIAG(two-cards): Home's lane rows in the row stack: their laid-out top and bottom in the
-     * window and their translation, then what the answer expects (they stand on the keyboard
-     * column's laid-out top, drawn Home's drop lower), with a match.
-     */
-    private void diagHomeRows(@NonNull StringBuilder b, int frameDy) {
-        View stackView = mHost.view(R.id.accessory_row_stack); // DIAG(two-cards)
-        b.append(" rows="); // DIAG(two-cards)
-        if (!(stackView instanceof com.termux.app.place.EdgeStackView)) {
-            b.append("null"); // DIAG(two-cards)
-            return; // DIAG(two-cards)
-        }
-        com.termux.app.place.EdgeStackView stack = (com.termux.app.place.EdgeStackView) stackView; // DIAG(two-cards)
-        int top = Integer.MAX_VALUE; // DIAG(two-cards)
-        int bottom = Integer.MIN_VALUE; // DIAG(two-cards)
-        float ty = Float.NaN; // DIAG(two-cards)
-        int[] at = new int[2]; // DIAG(two-cards)
-        for (int i = 0; i < stack.getChildCount(); i++) { // DIAG(two-cards)
-            View row = stack.getChildAt(i); // DIAG(two-cards)
-            if (row.getVisibility() == View.GONE
-                || stack.getLane(row) != com.termux.app.place.StackLanes.HOME) continue; // DIAG(two-cards)
-            diagLaidOutOrigin(row, at); // DIAG(two-cards)
-            top = Math.min(top, at[1]); // DIAG(two-cards)
-            bottom = Math.max(bottom, at[1] + row.getHeight()); // DIAG(two-cards)
-            if (Float.isNaN(ty)) ty = row.getTranslationY(); // DIAG(two-cards)
-        }
-        if (top == Integer.MAX_VALUE) {
-            b.append("none"); // DIAG(two-cards)
-            return; // DIAG(two-cards)
-        }
-        b.append(top).append(',').append(bottom).append(" rowsTy=").append(ty); // DIAG(two-cards)
-        Box column = mDiagAnswer == null ? null
-            : mDiagAnswer.laidOut(RestCards.StackView.KEYBOARD_COLUMN); // DIAG(two-cards)
-        if (column == null) {
-            b.append(" rowsExpect=none rowsMatch=none"); // DIAG(two-cards)
-            return; // DIAG(two-cards)
-        }
-        int expectBottom = Math.round(column.top) + frameDy; // DIAG(two-cards)
-        float expectTy = mApart ? mHomeDropPx : 0f; // DIAG(two-cards)
-        b.append(" rowsExpect=bottom:").append(expectBottom).append(" ty:").append(expectTy)
-            .append(" rowsDrawnBottom=").append(bottom + ty)
-            .append(" rowsMatch=").append(Math.abs(bottom - expectBottom) <= 1 && ty == expectTy); // DIAG(two-cards)
     }
 
     /** DIAG(two-cards): the view's laid-out origin in the window, translations left out. */
