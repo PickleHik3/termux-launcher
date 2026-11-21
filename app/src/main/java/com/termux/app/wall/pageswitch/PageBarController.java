@@ -1,6 +1,7 @@
 package com.termux.app.wall.pageswitch;
 
 import android.content.Context;
+import android.graphics.Rect;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -8,6 +9,9 @@ import android.widget.FrameLayout;
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.termux.app.ScrubWave;
+import com.termux.app.chrome.LookGlassStyle;
 
 import java.util.ArrayList;
 
@@ -18,8 +22,9 @@ import java.util.ArrayList;
  * lives in the view ({@link PageBarSlide}).
  *
  * <p>It owns both entries. Home's bar lives in the wall. The extra-keys page switcher key pops up
- * a second bar in the overlay layer, made on the first touch of the key, a small air above the
- * band the key stands on and as wide as the layer. The key feeds it the finger in raw screen
+ * a second bar in the overlay layer, made on the first touch of the key: one more card of the stack
+ * over the extra-keys card, in raised glass ({@link PageBarPopupFrame},
+ * {@link com.termux.app.chrome.ElevatedGlass}). The key feeds it the finger in raw screen
  * coordinates ({@link #keyDown}, {@link #keyMove}, {@link #keyUp}); a slide and release commit as on
  * Home and put it away, a release without a slide leaves it up for one use ({@link PageBarPopup}).</p>
  */
@@ -37,6 +42,17 @@ public final class PageBarController implements PageBarView.Entry {
         @NonNull PageBarModel pageBarModel();
         /** The ink sheets and menus draw their labels in: the popup's glyphs and outline. */
         @ColorInt int ink();
+        /**
+         * The raised glass the popup wears ({@link com.termux.app.chrome.ElevatedGlass}), worn
+         * only while the popup is shown; null leaves it on its solid card.
+         */
+        @Nullable default LookGlassStyle raisedGlass() { return null; }
+        /** The extra-keys card's frame on the screen into {@code out}; false while it is not shown. */
+        default boolean keysCardOnScreen(@NonNull Rect out) { return false; }
+        /** The stack's row gap: the air the extra-keys card keeps from the keyboard's card. */
+        default int stackRowGapPx() { return 0; }
+        /** The extra-keys card's corner rule for a card {@code heightPx} tall. */
+        default float keysCardRadiusPx(int heightPx) { return heightPx / 2f; }
     }
 
     /** Told when a slide begins or ends, for the dock's capsules to dim. */
@@ -50,6 +66,12 @@ public final class PageBarController implements PageBarView.Entry {
     @Nullable private final FrameLayout mLayer;
     private final PageBarPopup mPopup = new PageBarPopup();
     private final int[] mLayerAt = new int[2];
+    private final Rect mCard = new Rect();
+    private final PageBarPopupFrame mFrame = new PageBarPopupFrame();
+    /** The raised glass the popup wears while shown, given back when it is put away. */
+    @Nullable private LookGlassStyle mWornGlass;
+    /** The leave's end: the popup goes GONE and lets its glass go, unless it opened again meanwhile. */
+    private final Runnable mHidden = this::hidePopupView;
     @Nullable private PageBarView mPopupView;
     /** The popup's left and top on the screen, for turning raw coordinates into the bar's. */
     private float mOriginX;
@@ -98,7 +120,10 @@ public final class PageBarController implements PageBarView.Entry {
             boolean claimed = mPopup.shown();
             if (!claimed && !mHost.isSuppressed()) {
                 for (int i = 0; i < mHitAreas.size() && !claimed; i++) {
-                    claimed = mHitAreas.get(i).containsRaw(ev.getRawX(), ev.getRawY());
+                    PageSwitchHitArea area = mHitAreas.get(i);
+                    // A popup fading out after it was put away takes no touch.
+                    if (area == mPopupView) continue;
+                    claimed = area.containsRaw(ev.getRawX(), ev.getRawY());
                 }
             }
             mStreamClaimed = claimed;
@@ -113,9 +138,10 @@ public final class PageBarController implements PageBarView.Entry {
     // ---- The key's popup, in raw screen coordinates -----------------------------------------------
 
     /**
-     * The key was touched: the bar appears with its touch row's bottom on {@code bandTopRaw}, the
-     * top of the extra-keys band the key stands on, so its slab stands {@link PageBarLayout#GAP_DP}
-     * above the keys.
+     * The key was touched: the bar appears as one more card of the stack over the extra-keys card
+     * ({@link PageBarPopupFrame}): the card's sides, the stack's row gap above the card's top, its
+     * corner rule, in the raised glass. Without the card to read it stands above
+     * {@code bandTopRaw}, the top of the extra-keys band the key stands on.
      *
      * @return whether the popup opened; false leaves the key to its plain behaviour
      */
@@ -127,12 +153,23 @@ public final class PageBarController implements PageBarView.Entry {
         if (mPopup.shown()) putAway();
         PageBarView view = ensurePopupView(layer);
         view.setFixedInk(mHost.ink(), mHost.accent());
-        view.setModel(model);
         int width = layer.getWidth();
-        int height = Math.round(PageBarLayout.bandHeightDp()
-            * mContext.getResources().getDisplayMetrics().density);
+        float density = mContext.getResources().getDisplayMetrics().density;
         layer.getLocationOnScreen(mLayerAt);
-        int top = Math.max(0, bandTopRaw - mLayerAt[1] - height);
+        boolean card = mHost.keysCardOnScreen(mCard);
+        PageBarPopupFrame frame = mFrame.set(density, width, card, mCard.left - mLayerAt[0],
+            mCard.right - mLayerAt[0], (card ? mCard.top : bandTopRaw) - mLayerAt[1],
+            mHost.stackRowGapPx(),
+            mHost.keysCardRadiusPx(PageBarPopupFrame.slabHeightPx(density)));
+        view.setRaisedFrame(frame.slabLeftPx, frame.slabWidthPx, frame.radiusPx);
+        view.setModel(model);
+        LookGlassStyle glass = mHost.raisedGlass();
+        if (glass != mWornGlass && mWornGlass != null) mWornGlass.setWorn(false);
+        mWornGlass = glass;
+        if (glass != null) glass.setWorn(true);
+        view.setRaisedGlass(glass);
+        int height = frame.viewHeightPx;
+        int top = frame.viewTopPx;
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) view.getLayoutParams();
         if (lp.topMargin != top || lp.height != height) {
             lp.topMargin = top;
@@ -146,7 +183,8 @@ public final class PageBarController implements PageBarView.Entry {
         }
         mOriginX = mLayerAt[0];
         mOriginY = mLayerAt[1] + top;
-        view.setVisibility(View.VISIBLE);
+        view.redress();
+        appear(view, density);
         mPopup.keyDown();
         view.feed(MotionEvent.ACTION_DOWN, rawX - mOriginX, rawY - mOriginY);
         return true;
@@ -191,6 +229,7 @@ public final class PageBarController implements PageBarView.Entry {
 
             @Override public void onViewDetachedFromWindow(View v) {
                 mPopup.putAway();
+                hidePopupView();
             }
         });
         layer.addView(view, new FrameLayout.LayoutParams(
@@ -199,15 +238,58 @@ public final class PageBarController implements PageBarView.Entry {
         return view;
     }
 
-    /** GONE, its lift given back, and the layer no longer takes touches. */
+    /**
+     * The popup rises into place and fades in over the glyph lift's settle time
+     * ({@link ScrubWave#SETTLE_MS}), from {@link PageBarLayout#GAP_DP} below, on its render
+     * properties only: no layout. Reduced motion snaps.
+     */
+    private void appear(@NonNull PageBarView view, float density) {
+        view.animate().cancel();
+        view.setVisibility(View.VISIBLE);
+        if (mHost.isReducedMotionEnabled() || !view.isAttachedToWindow()) {
+            view.setAlpha(1f);
+            view.setTranslationY(0f);
+            return;
+        }
+        view.setAlpha(0f);
+        view.setTranslationY(PageBarLayout.GAP_DP * density);
+        view.animate().alpha(1f).translationY(0f).setDuration(ScrubWave.SETTLE_MS);
+    }
+
+    /**
+     * Put away: its lift given back, the layer no longer takes touches, and the popup sinks and
+     * fades out as it rose (reduced motion: at once), then goes GONE with its glass let go.
+     */
     private void putAway() {
         mPopup.putAway();
         PageBarView view = mPopupView;
         if (view != null) {
             view.release();
-            view.setVisibility(View.GONE);
+            view.animate().cancel();
+            if (mHost.isReducedMotionEnabled() || !view.isAttachedToWindow()
+                    || view.getVisibility() != View.VISIBLE) {
+                hidePopupView();
+            } else {
+                float density = mContext.getResources().getDisplayMetrics().density;
+                view.animate().alpha(0f).translationY(PageBarLayout.GAP_DP * density)
+                    .setDuration(ScrubWave.SETTLE_MS).withEndAction(mHidden);
+            }
         }
         if (mLayer != null) mLayer.setClickable(false);
+    }
+
+    /** GONE, and the raised glass's frame given back: nothing held while the popup is away. */
+    private void hidePopupView() {
+        if (mPopup.shown()) return;
+        PageBarView view = mPopupView;
+        if (view != null) {
+            view.setVisibility(View.GONE);
+            view.dropRaisedGlass();
+        }
+        if (mWornGlass != null) {
+            mWornGlass.setWorn(false);
+            mWornGlass = null;
+        }
     }
 
     /** A touch on the open popup's layer that no glyph took: a tap anywhere else puts it away. */

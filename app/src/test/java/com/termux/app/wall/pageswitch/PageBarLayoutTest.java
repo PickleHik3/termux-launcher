@@ -47,16 +47,21 @@ public class PageBarLayoutTest {
         assertEquals(260f, l.restCenterX(4), EPS);
     }
 
-    @Test public void theSlabHugsTheGlyphsWithTheGapAllRound() {
+    @Test public void theSlabHugsTheGlyphsAndKeepsTheirRhythmToItsEnds() {
         PageBarLayout l = new PageBarLayout(1f, 360f, 5);
         assertEquals(24.5f, l.slabHeightPx(), EPS);
-        assertEquals(87.75f, l.slabLeftPx(), EPS);
-        assertEquals(184.5f, l.slabWidthPx(), EPS);
+        // Was 87.75 and 184.5 (the end glyph 4 dp from the slab's round end against 23.5 dp
+        // between glyphs); the end glyph now stands half a slot in, as the pitch between glyphs.
+        assertEquals(80f, l.slabLeftPx(), EPS);
+        assertEquals(200f, l.slabWidthPx(), EPS);
         assertEquals(44f, l.slabBottomPx(), EPS);
         assertEquals(19.5f, l.slabTopPx(), EPS);
         assertEquals(31.75f, l.slabCenterYPx(), EPS);
-        // The end glyph's box and every glyph's top stand the gap inside the slab.
-        assertEquals(4f, (l.restCenterX(0) - l.glyphPx() / 2f) - l.slabLeftPx(), EPS);
+        // The end glyph's centre is half the pitch from the slab's end (11.75 dp of air to its
+        // box), the gaps between glyphs unchanged at 23.5 dp; every glyph's top the gap inside.
+        assertEquals(l.slotWidthPx() / 2f, l.restCenterX(0) - l.slabLeftPx(), EPS);
+        assertEquals(11.75f, (l.restCenterX(0) - l.glyphPx() / 2f) - l.slabLeftPx(), EPS);
+        assertEquals(23.5f, l.restCenterX(1) - l.restCenterX(0) - l.glyphPx(), EPS);
         assertEquals(4f, (l.slabCenterYPx() - l.glyphPx() / 2f) - l.slabTopPx(), EPS);
         // And the slab's bottom the gap above the touch row's, the dock's top.
         assertEquals(4f, l.pillBottomPx() - l.slabBottomPx(), EPS);
@@ -108,13 +113,13 @@ public class PageBarLayoutTest {
                 assertEquals(at, 40f * d, l.slotWidthPx(), EPS);
                 assertEquals(at, 40f * d * n, l.pillWidthPx(), EPS);
                 assertEquals(at, 24.5f * d, l.slabHeightPx(), EPS);
-                assertEquals(at, (40f * n - 15.5f) * d, l.slabWidthPx(), EPS);
+                assertEquals(at, 40f * d * n, l.slabWidthPx(), EPS);
                 assertEquals(at, 44f * d, l.slabBottomPx(), EPS);
                 assertEquals(at, 16.5f * d, l.glyphPx(), EPS);
-                // Centred in its touch row, the end glyphs on the round ends' centres.
+                // As wide as its touch row, the end glyphs half a slot from its ends.
                 assertEquals(at, l.slabLeftPx() - l.pillLeftPx(),
                     l.pillLeftPx() + l.pillWidthPx() - l.slabLeftPx() - l.slabWidthPx(), EPS);
-                assertEquals(at, l.slabHeightPx() / 2f, l.restCenterX(0) - l.slabLeftPx(), EPS);
+                assertEquals(at, l.slotWidthPx() / 2f, l.restCenterX(0) - l.slabLeftPx(), EPS);
                 assertEquals(at, (1080f - l.pillWidthPx()) / 2f, l.pillLeftPx(), EPS);
             }
         }
