@@ -1,6 +1,9 @@
 package juloo.keyboard2;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 import android.content.Context;
 import android.graphics.Color;
@@ -85,6 +88,36 @@ public class Keyboard2ViewPasteGlyphTest
     view.setPasteShowsPicture(false);
     assertEquals("", view.labelForDrawing(PASTE));
     assertEquals(LabelFace.KEY, view.labelFaceForDrawing(PASTE));
+  }
+
+  @Test
+  public void withAnIconHostTheTwoStatesDrawDifferentSymbols()
+  {
+    Config.Builder builder = new Config.Builder(
+        RuntimeEnvironment.getApplication().getResources(), new NoopHandler());
+    builder.hapticEnabled = false;
+    builder.symbolIcons = new SymbolIcons()
+    {
+      @Override public String toolLabel(String toolId, String symbol) { return symbol; }
+      @Override public android.graphics.drawable.Drawable iconFor(String label, boolean keyFont)
+      {
+        return keyFont ? new android.graphics.drawable.ColorDrawable(0) : null;
+      }
+    };
+    Theme.Palette palette = new Theme.Palette(
+        Color.BLACK, Color.DKGRAY, Color.DKGRAY, Color.DKGRAY,
+        Color.GRAY, Color.WHITE, Color.LTGRAY, Color.CYAN, Color.WHITE,
+        Color.GREEN, Color.GRAY, false, 0f, 0f, 1f);
+    Keyboard2View iconView = new Keyboard2View(
+        RuntimeEnvironment.getApplication(), builder.build(), palette);
+
+    String plain = iconView.labelForDrawing(PASTE);
+    assertNotNull(iconView.symbolIcon(plain, true));
+    iconView.setPasteShowsPicture(true);
+    String picture = iconView.labelForDrawing(PASTE);
+    assertEquals(PHOTO, picture);
+    assertNotEquals(plain, picture);
+    assertNull("the picture is a glyph, not the paste icon", iconView.symbolIcon(picture, false));
   }
 
   private static final class NoopHandler implements Config.IKeyEventHandler

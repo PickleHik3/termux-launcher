@@ -71,7 +71,7 @@ public final class ExtraKeyActionLabels {
      * Each icon code point with the drawable that draws it, one row per {@link ExtraKeyIcons#ALL}
      * entry. The Roundline set, except the page switcher's placeholder.
      */
-    static final int[][] ICON_DRAWABLES = {
+    public static final int[][] ICON_DRAWABLES = {
         {ExtraKeyIcons.ASSISTANT, R.drawable.ic_rl_assistant},
         {ExtraKeyIcons.PAGE_SWITCHER, R.drawable.ic_page_terminal},
         {ExtraKeyIcons.HOME, R.drawable.ic_rl_home},

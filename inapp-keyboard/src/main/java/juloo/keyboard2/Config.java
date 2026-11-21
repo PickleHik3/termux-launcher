@@ -56,6 +56,8 @@ public final class Config
   /** Typeface for labels holding private-use icon glyphs (see [LabelFace]), or null to draw
       them in [labelFont] too. Lets a user label font keep the Nerd Font icons it lacks. */
   public final Typeface symbolFont;
+  /** The host's drawable symbols, or null to draw every symbol from a font. */
+  public final SymbolIcons symbolIcons;
 
   public final boolean addBottomRow;
   public final boolean addNumberRow;
@@ -98,6 +100,7 @@ public final class Config
     keySoundEnabled = builder.keySoundEnabled;
     labelFont = builder.labelFont;
     symbolFont = builder.symbolFont;
+    symbolIcons = builder.symbolIcons;
     if (hapticAmplitude < -1 || hapticAmplitude == 0 || hapticAmplitude > 255)
       throw new IllegalArgumentException("hapticAmplitude must be -1 or in [1, 255]");
     addBottomRow = builder.addBottomRow;
@@ -185,6 +188,7 @@ public final class Config
     public boolean keySoundEnabled = false;
     public Typeface labelFont = null;
     public Typeface symbolFont = null;
+    public SymbolIcons symbolIcons = null;
     public boolean addBottomRow = true;
     public boolean addNumberRow = false;
     public boolean numberRowSymbols = true;
