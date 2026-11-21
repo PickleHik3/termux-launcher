@@ -1826,6 +1826,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean keyboardOnOpen = preferences != null
             && preferences.isAppLauncherDrawerSearchOnOpenEnabled();
         content.setLowerStart(DrawerSettings.lowerStart(mHost.context()) && !keyboardOnOpen);
+        content.setSearchAtBottom(DrawerSettings.searchBottom(mHost.context()));
     }
 
     /** Raises the overlay and picks its backdrop material for this open. */
@@ -1873,7 +1874,6 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setDock(mHost.suggestionBar());
         plane.setContentInsets(contentRect);
         mContentRect = contentRect;
-        content.setSurfaceRadiusPx(mOpenRadiusPx);
         // Which keyboard the search will ask for is decided here, once per open, so a switch flipped
         // in Settings takes effect on the next pull and never mid-search.
         TermuxAppSharedPreferences preferences = mHost.preferences();

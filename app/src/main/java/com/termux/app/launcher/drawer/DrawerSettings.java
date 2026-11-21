@@ -28,12 +28,16 @@ public final class DrawerSettings {
     /** Drawer › Start in the lower half. Off: the list starts under the search pill. */
     public static final String KEY_LOWER_START = "app_launcher_drawer_lower_start";
 
+    /** Drawer › Search bar at the bottom. Off: the bar stands at the top, as it always did. */
+    public static final String KEY_SEARCH_BOTTOM = "app_launcher_drawer_search_bottom";
+
     /** Drawer › A–Z strip: an {@link AppDrawerAzSide} value. Right, as the drawer was drawn. */
     public static final String KEY_AZ_SIDE = "app_launcher_drawer_az_side";
 
     public static boolean owns(@Nullable String key) {
         return KEY_OPEN_ONLY_MATCH.equals(key) || KEY_REMEMBER_POSITION.equals(key)
-            || KEY_LOWER_START.equals(key) || KEY_AZ_SIDE.equals(key);
+            || KEY_LOWER_START.equals(key) || KEY_SEARCH_BOTTOM.equals(key)
+            || KEY_AZ_SIDE.equals(key);
     }
 
     @NonNull
@@ -43,6 +47,10 @@ public final class DrawerSettings {
 
     public static boolean lowerStart(@NonNull Context context) {
         return HomeSettings.getBoolean(context, KEY_LOWER_START, false);
+    }
+
+    public static boolean searchBottom(@NonNull Context context) {
+        return HomeSettings.getBoolean(context, KEY_SEARCH_BOTTOM, false);
     }
 
     public static boolean rememberPosition(@NonNull Context context) {

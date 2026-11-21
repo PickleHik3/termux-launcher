@@ -30,6 +30,12 @@
         android:defaultValue="false" />
 
     <SwitchPreferenceCompat
+        app:key="app_launcher_drawer_search_bottom"
+        app:title="@string/settings_drawer_search_bottom_title"
+        app:summary="@string/settings_drawer_search_bottom_summary"
+        android:defaultValue="false" />
+
+    <SwitchPreferenceCompat
         app:key="app_launcher_drawer_remember_position"
         app:title="@string/settings_drawer_remember_position_title"
         app:summary="@string/settings_drawer_remember_position_summary"

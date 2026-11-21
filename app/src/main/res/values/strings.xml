@@ -784,6 +784,8 @@
     <string name="settings_drawer_remember_position_summary">Reopen the drawer where you left it.</string>
     <string name="settings_drawer_lower_start_title">Start in the lower half</string>
     <string name="settings_drawer_lower_start_summary">Apps begin lower on the screen, closer to your thumb.</string>
+    <string name="settings_drawer_search_bottom_title">Search bar at the bottom</string>
+    <string name="settings_drawer_search_bottom_summary">Search sits at the bottom of the drawer, within thumb reach.</string>
     <string name="settings_drawer_az_side_title">A–Z strip</string>
     <string name="settings_drawer_az_side_left">Left</string>
     <string name="settings_drawer_az_side_right">Right</string>

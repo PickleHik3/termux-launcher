@@ -86,7 +86,6 @@ public final class AppDrawerSearchPillView extends View {
     @NonNull private String mQuery = "";
     @NonNull private String mHint = "";
     private int mCaret;
-    private float mSurfaceRadiusPx;
     /** True while a DOWN that landed on the clear affordance is still live. */
     private boolean mClearPressed;
 
@@ -125,21 +124,13 @@ public final class AppDrawerSearchPillView extends View {
         invalidate();
     }
 
-    /** The drawer surface's own corner radius; the pill clamps it to a capsule for its height. */
-    public void setSurfaceRadiusPx(float radiusPx) {
-        float radius = Math.max(0f, radiusPx);
-        if (mSurfaceRadiusPx == radius) return;
-        mSurfaceRadiusPx = radius;
-        invalidate();
-    }
-
     public boolean hasQuery() {
         return !mQuery.isEmpty();
     }
 
-    /** The radius actually painted: the surface token, never more than a capsule. */
+    /** The radius actually painted: a full capsule on every drawer type and surface. */
     public float resolveRadiusPx() {
-        return Math.min(mSurfaceRadiusPx, getHeight() * 0.5f);
+        return getHeight() * 0.5f;
     }
 
     @Override

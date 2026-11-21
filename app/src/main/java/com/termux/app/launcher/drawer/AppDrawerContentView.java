@@ -138,6 +138,8 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** Distance from the content's bottom edge to its last element; see {@link #setBottomInsetPx}. */
     private int mBottomInsetPx;
+    /** Settings › Search bar at the bottom; read once per open. */
+    private boolean mSearchAtBottom;
     private final AppDrawerSearchPillView mPill;
     private final AppDrawerSearchInputView mInput;
     private final TextView mResultsLabel;
@@ -353,9 +355,9 @@ public final class AppDrawerContentView extends FrameLayout
         setClipToPadding(false);
 
         AppDrawerChromeLayout.Result chrome = AppDrawerChromeLayout.resolve(
-            new AppDrawerChromeLayout.Input(mDensity, 0, false, 0));
+            new AppDrawerChromeLayout.Input(mDensity, 0, false, 0, false, 0));
         LayoutParams pillParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            chrome.searchHeightPx);
+            chrome.searchHeightPx, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         pillParams.leftMargin = chrome.sideMarginPx;
         pillParams.rightMargin = chrome.sideMarginPx;
         pillParams.topMargin = chrome.searchTopPx;
@@ -492,7 +494,7 @@ public final class AppDrawerContentView extends FrameLayout
         LayoutParams pagerParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
         pagerParams.topMargin = gridParams.topMargin;
-        pagerParams.bottomMargin = Math.round(pagerBottomBandPx());
+        pagerParams.bottomMargin = Math.round(pagerBottomBandPx(0));
         mHorizontalPager.setVisibility(GONE);
         addView(mHorizontalPager, pagerParams);
 
@@ -935,26 +937,70 @@ public final class AppDrawerContentView extends FrameLayout
         int inset = Math.max(0, bottomInsetPx);
         if (inset == mBottomInsetPx) return;
         mBottomInsetPx = inset;
+        applyBottomChrome(resolveChrome());
+    }
+
+    /**
+     * The bottom half of the chrome: the search bar's place (when it is down there), the margin the
+     * content ends above it, and the inset the content keeps inside that margin. Every write
+     * compares first; runs on an inset, placement or type change, never per frame.
+     */
+    private void applyBottomChrome(@NonNull AppDrawerChromeLayout.Result r) {
+        int inset = r.innerBottomInsetPx;
         float rowTrailing = AppDrawerGridMetrics.ROW_BOTTOM_DP * mDensity;
         int listPadding = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset, rowTrailing);
         if (mGrid.getPaddingBottom() != listPadding) mGrid.setPadding(0, 0, 0, listPadding);
-        LayoutParams pager = (LayoutParams) mHorizontalPager.getLayoutParams();
-        int band = Math.round(pagerBottomBandPx());
-        if (pager.bottomMargin != band) {
-            pager.bottomMargin = band;
-            mHorizontalPager.setLayoutParams(pager);
-        }
-        LayoutParams indicator = (LayoutParams) mPageIndicator.getLayoutParams();
-        if (indicator.bottomMargin != inset) {
-            indicator.bottomMargin = inset;
-            mPageIndicator.setLayoutParams(indicator);
-        }
+        setBottomMargin(mGrid, r.contentBottomPx);
+        setBottomMargin(mColumn, r.contentBottomPx);
+        setBottomMargin(mCategoryView, r.contentBottomPx);
+        setBottomMargin(mHorizontalPager, r.contentBottomPx + Math.round(pagerBottomBandPx(inset)));
+        setBottomMargin(mPageIndicator, r.contentBottomPx + inset);
         mCategoryView.setBottomInsetPx(inset);
+        int gravity = (mSearchAtBottom ? Gravity.BOTTOM : Gravity.TOP) | Gravity.CENTER_HORIZONTAL;
+        applySearchBarParams(mPill, r, gravity);
+        applySearchBarParams(mInput, r, gravity);
+    }
+
+    private void applySearchBarParams(@NonNull View bar, @NonNull AppDrawerChromeLayout.Result r,
+                                      int gravity) {
+        LayoutParams params = (LayoutParams) bar.getLayoutParams();
+        int width = getWidth() > 0 ? r.searchWidthPx : LayoutParams.MATCH_PARENT;
+        if (params.width == width && params.gravity == gravity
+            && params.topMargin == r.searchTopPx && params.bottomMargin == r.searchBottomMarginPx) {
+            return;
+        }
+        params.width = width;
+        params.gravity = gravity;
+        params.topMargin = r.searchTopPx;
+        params.bottomMargin = r.searchBottomMarginPx;
+        bar.setLayoutParams(params);
+    }
+
+    private static void setBottomMargin(@NonNull View view, int bottomMargin) {
+        LayoutParams params = (LayoutParams) view.getLayoutParams();
+        if (params.bottomMargin == bottomMargin) return;
+        params.bottomMargin = bottomMargin;
+        view.setLayoutParams(params);
+    }
+
+    @NonNull
+    private AppDrawerChromeLayout.Result resolveChrome() {
+        boolean shown = mViewType == AppDrawerViewType.DEFAULT;
+        int switchHeight = Math.round(AppDrawerSectionSwitchGeometry.HEIGHT_DP * mDensity);
+        return AppDrawerChromeLayout.resolve(new AppDrawerChromeLayout.Input(mDensity, getWidth(),
+            shown, switchHeight, mSearchAtBottom, mBottomInsetPx));
+    }
+
+    /** Settings › Search bar at the bottom; read once per open. */
+    public void setSearchAtBottom(boolean enabled) {
+        if (mSearchAtBottom == enabled) return;
+        mSearchAtBottom = enabled;
+        applyViewType();
     }
 
     /** Dots, the row gap above them and the inset below: what the pager gives up at the bottom. */
-    private float pagerBottomBandPx() {
-        return AppDrawerContentInsetPolicy.pagerBottomBandPx(mBottomInsetPx,
+    private float pagerBottomBandPx(int insetPx) {
+        return AppDrawerContentInsetPolicy.pagerBottomBandPx(insetPx,
             AppDrawerPageIndicatorView.dotsHeightPx(mDensity),
             AppDrawerGridMetrics.ROW_BOTTOM_DP * mDensity);
     }
@@ -1197,21 +1243,23 @@ public final class AppDrawerContentView extends FrameLayout
      */
     private void applySectionSwitchLayout() {
         boolean shown = mViewType == AppDrawerViewType.DEFAULT;
-        int switchHeight = Math.round(AppDrawerSectionSwitchGeometry.HEIGHT_DP * mDensity);
-        AppDrawerChromeLayout.Result r = AppDrawerChromeLayout.resolve(
-            new AppDrawerChromeLayout.Input(mDensity, getWidth(), shown, switchHeight));
+        AppDrawerChromeLayout.Result r = resolveChrome();
         setVisibilityIfChanged(mSectionSwitch, shown ? VISIBLE : GONE);
         mSectionSwitch.setPagesActive(shown && defaultPagesActive());
         mSectionSwitch.setMaxWidthPx(r.switchMaxWidthPx);
         mSectionSwitch.invalidate();
         if (shown) setTopMargin(mSectionSwitch, r.switchTopPx);
-        setTopMargin(mPill, r.searchTopPx);
-        setTopMargin(mInput, r.searchTopPx);
         mGridBaseTopMarginPx = r.contentTopPx;
         setTopMargin(mHorizontalPager, r.contentTopPx);
         setTopMargin(mCategoryView, r.contentTopPx);
         setTopMargin(mResultsLabel, r.contentTopPx);
         setTopMargin(mNoResults, r.contentTopPx + dp(NO_RESULTS_BELOW_CONTENT_DP));
+        applyBottomChrome(r);
+    }
+
+    private void applyChromeForWidth() {
+        applySectionSwitchLayout();
+        applyLowerStart();
     }
 
     private static void setTopMargin(@NonNull View view, int topMargin) {
@@ -1421,11 +1469,6 @@ public final class AppDrawerContentView extends FrameLayout
         mColumn.setActive(false);
         mColumn.resetRope();
         mColumn.setVisibility(GONE);
-    }
-
-    /** The drawer surface's corner radius, passed through to the pill, which clamps it. */
-    public void setSurfaceRadiusPx(float radiusPx) {
-        mPill.setSurfaceRadiusPx(radiusPx);
     }
 
     /**
@@ -2243,7 +2286,7 @@ public final class AppDrawerContentView extends FrameLayout
         // The highlight is a keyboard affordance: a touch on the results puts it away (the pill is
         // the one place a finger lands while typing).
         if (action == MotionEvent.ACTION_DOWN && mSearch != null
-            && mSearch.highlightedIndex() >= 0 && ev.getY() > mPill.getBottom()) {
+            && mSearch.highlightedIndex() >= 0 && (mSearchAtBottom ? ev.getY() < mPill.getTop() : ev.getY() > mPill.getBottom())) {
             mSearch.clearHighlight();
         }
         boolean handled = super.dispatchTouchEvent(ev);
@@ -2730,6 +2773,9 @@ public final class AppDrawerContentView extends FrameLayout
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         mSectionPager.setPageWidthPx(w);
+        // The search bar's width follows the drawer's; a layout pass cannot ask for another, so the
+        // new width is applied right after this one.
+        if (w != oldw) post(this::applyChromeForWidth);
         // The pages stand at position times the width: a new width moves them with the same draw.
         applyPageTransforms();
     }

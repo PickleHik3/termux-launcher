@@ -80,6 +80,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_grid_view, "app_launcher_drawer_view_type");
         key(R.drawable.ic_ms_sort_by_alpha, "app_launcher_drawer_az_side");
         key(R.drawable.ic_ms_keyboard_alt, "app_launcher_drawer_search_android_keyboard");
+        key(R.drawable.ic_ms_search, "app_launcher_drawer_search_bottom");
         key(R.drawable.ic_ms_bookmark, "app_launcher_drawer_remember_position");
         key(R.drawable.ic_ms_vertical_align_bottom, "app_launcher_drawer_lower_start");
         key(R.drawable.ic_ms_category, "app_launcher_category_sort");
