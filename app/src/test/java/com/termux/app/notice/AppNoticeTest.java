@@ -341,4 +341,20 @@ public class AppNoticeTest {
     private static AppNoticeItem item(AppNoticeItem.Kind kind, String glyph) {
         return new AppNoticeItem(kind, "title", null, glyph, AppNoticeHostView.HOLD_SHORT_MS);
     }
+
+    /** The bell notice for a window somewhere else carries the bell mark, and the pill binds it. */
+    @Test
+    public void theAttentionNoticeCarriesTheBellMark() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        AppNotice.shell(activity, "[1] wants attention", null, R.drawable.ic_rl_bell, true, () -> {});
+        AppNoticeHostView host = AppNotice.hostFor(activity);
+        assertNotNull(host);
+        AppNoticeItem shown = host.activeItem();
+        assertNotNull(shown);
+        assertEquals(R.drawable.ic_rl_bell, shown.resolvedIcon());
+        assertTrue(shown.hasMark());
+        android.widget.TextView mark = (android.widget.TextView) ((LinearLayout) host).getChildAt(0);
+        assertEquals(View.VISIBLE, mark.getVisibility());
+        assertEquals(1, mark.getText().length());
+    }
 }

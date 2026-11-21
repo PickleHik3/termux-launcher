@@ -1078,7 +1078,7 @@ public final class TermuxInAppKeyboard {
         if (!mEnabled || mDestroyed)
             return false;
         if (mLayoutRing.size() < 2) {
-            AppNotice.show(requireContainer().getContext(),
+            AppNotice.show(requireContainer().getContext(), R.drawable.ic_rl_keyboard,
                 requireContainer().getContext().getString(R.string.keyboard_layout_ring_single),
                 false);
             return false;
@@ -1108,7 +1108,7 @@ public final class TermuxInAppKeyboard {
         mPreferences.setInAppKeyboardActiveLayout(layoutId);
         selectLayout(layoutId);
         if (announce && moved) {
-            AppNotice.show(requireContainer().getContext(),
+            AppNotice.show(requireContainer().getContext(), R.drawable.ic_rl_keyboard,
                 LauncherKeyboardLayouts.labelFor(
                     requireContainer().getResources(), layoutId), false);
         }

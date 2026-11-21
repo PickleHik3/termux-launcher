@@ -2137,7 +2137,7 @@ public class TerminalPaneController {
                 : DragResizePause.splitReadout(res, firstColumns, firstRows,
                     secondColumns, secondRows);
             com.termux.app.notice.AppNotice.readout(host.getContext(), label,
-                DragResizePause.READOUT_CEILING_MS);
+                DragResizePause.READOUT_CEILING_MS, com.termux.R.drawable.ic_rl_layout);
             mReadoutShown = true;
         }
 
