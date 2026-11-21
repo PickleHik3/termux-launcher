@@ -157,7 +157,7 @@ public final class SettingsLayoutUtils {
      * navigation, so these keep a bare row.
      */
     private static final Set<String> ACTION_ROW_KEYS = new java.util.HashSet<>(java.util.Arrays.asList(
-        "app_launcher_category_refresh", "gui_apps_copy",
+        "app_launcher_category_refresh", "app_launcher_category_order_reset", "gui_apps_copy",
         "tai_huggingface_token", "tai_endpoint_copy", "tai_share_diagnostics",
         "tai_runtime_stop", "tai_runtime_unload", "tai_runtime_logs",
         "settings_backup_export", "settings_backup_import",
