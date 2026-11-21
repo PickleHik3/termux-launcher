@@ -32,7 +32,8 @@ So the owner learns picture targets. `lorie.h` gains three events sharing one pa
   for another target, and when the host disconnects. `LORIE_CLIPBOARD_IMAGE_MAX` (32 MiB) caps the
   running total: past it the rest is drained and dropped and the requesters are refused. On the
   last chunk every request waiting on that target is answered — the property typed as the target,
-  format 8 — and the bytes are freed at once: a picture is never cached, unlike upstream's text.
+  format 8, and the SelectionNotify naming the property actually written — and the bytes are
+  freed at once: a picture is never cached, unlike upstream's text.
 
 Chunks, not one frame, because the host writes on its main thread like every other event (the
 socket is one stream; a second writer would interleave) and one 32 MiB write held that thread for
@@ -329,7 +330,7 @@ diff --git a/lorie/src/main/cpp/lorie/clipboard.c b/lorie/src/main/cpp/lorie/cli
 +    event.u.selectionNotify.requestor = ldt->requestor;
 +    event.u.selectionNotify.selection = ldt->selection;
 +    event.u.selectionNotify.target = ldt->target;
-+    event.u.selectionNotify.property = ldt->property;
++    event.u.selectionNotify.property = realProperty;
 +    WriteEventsToClient(ldt->client, 1, &event);
 +    return Success;
 +}
