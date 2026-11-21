@@ -53,14 +53,31 @@ public class AppDrawerChromeLayoutTest {
         assertEquals(0, resolve(2f, 0, true, 80).switchMaxWidthPx);
     }
 
-    @Test public void narrowPhoneBarIsFullWidthMinusMargins() {
+    @Test public void aPhoneBarIsACentredCapsuleNotEdgeToEdge() {
+        // 360dp phone: 328dp between the margins, 78% of it.
         AppDrawerChromeLayout.Result r = resolve(3f, 360 * 3, false, 0);
-        assertEquals((360 - 32) * 3, r.searchWidthPx);
+        assertEquals(Math.round(328 * 3 * 0.78f), r.searchWidthPx);
+        assertTrue(r.searchWidthPx < (360 - 32) * 3);
+        assertEquals(0, (360 * 3 - r.searchWidthPx) % 2);
+    }
+
+    @Test public void aNarrowPaneKeepsTheMinimumWhileTheMarginsAllow() {
+        // 250dp between the margins: 78% would be 195dp, the floor is 220dp.
+        assertEquals(220 * 2, resolve(2f, (250 + 32) * 2, false, 0).searchWidthPx);
+        // Narrower than the floor: the bar takes what the margins leave.
+        assertEquals(200 * 2, resolve(2f, (200 + 32) * 2, false, 0).searchWidthPx);
+    }
+
+    @Test public void theBottomBarHasTheSameWidthAsTheTopOne() {
+        for (int w : new int[] {280, 360, 411, 600, 900}) {
+            assertEquals(resolve(2.75f, Math.round(w * 2.75f), true, 110).searchWidthPx,
+                resolve(2.75f, Math.round(w * 2.75f), true, 110, true, 300).searchWidthPx);
+        }
     }
 
     @Test public void wideScreenBarStopsAtMaxWidth() {
         AppDrawerChromeLayout.Result r = resolve(2f, 600 * 2, false, 0);
-        assertEquals(480 * 2, r.searchWidthPx);
+        assertEquals(360 * 2, r.searchWidthPx);
         // Centred: the same room on both sides.
         assertEquals(0, (1200 - r.searchWidthPx) % 2);
         assertEquals(1200 - 2 * 32, r.switchMaxWidthPx);
