@@ -68,4 +68,14 @@ public class IconArtworkPolicyTest {
         assertEquals(24 * MB, IconArtworkPolicy.budgetBytes(512, 288));
         assertTrue(IconArtworkPolicy.budgetBytes(4096, 288) <= 24 * MB);
     }
+
+    @Test
+    public void homeIsFedTheSizeItDrawsNotTheRawPreset() {
+        // A 60dp preset held to the dock's 48dp cap draws 48dp: base cap even at density 4.
+        com.termux.app.place.layout.IconSize drawn = com.termux.app.dock.IconSizeCap.effective(
+            com.termux.app.place.layout.IconSize.XL, com.termux.app.place.layout.IconSize.M);
+        assertEquals(48, drawn.dp);
+        assertEquals(192, IconArtworkPolicy.capPx(4.0f, drawn.dp));
+        assertEquals(240, IconArtworkPolicy.capPx(4.0f, com.termux.app.place.layout.IconSize.XL.dp));
+    }
 }

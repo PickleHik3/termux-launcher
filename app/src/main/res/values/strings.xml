@@ -820,6 +820,9 @@
     <string name="settings_app_drawer_category_sort_unavailable_memory">Not available — needs %1$s of RAM</string>
     <string name="settings_app_drawer_category_sort_load_failed">Couldn\'t start sorting. %1$s</string>
     <string name="settings_app_drawer_category_refresh_title">Re-sort apps</string>
+    <string name="settings_app_drawer_category_order_reset_title">Reset category order</string>
+    <string name="settings_app_drawer_category_order_reset_summary">Put the category tiles back in their original order.</string>
+    <string name="settings_app_drawer_category_order_reset_done">Category order reset</string>
     <string name="settings_app_drawer_category_refresh_never">Never run</string>
     <string name="settings_app_drawer_category_refresh_last_run">Last run · %1$s · %2$d apps</string>
     <plurals name="settings_app_drawer_category_refresh_pending">

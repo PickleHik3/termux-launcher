@@ -453,4 +453,12 @@ public class LauncherIconStoreTest {
         store.artwork(entry("b", null));
         assertEquals(held + 192 * 192 * 4, store.sizeBytes());
     }
+
+    @Test
+    public void scaledPackArtworkFollowsTheCapItIsGiven() {
+        Drawable big = artwork(284);
+        assertEquals(192, DrawablePixels.scaleAboutCentre(resources, big, 1.2f).getIntrinsicWidth());
+        assertEquals(240,
+            DrawablePixels.scaleAboutCentre(resources, big, 1.2f, 240).getIntrinsicWidth());
+    }
 }

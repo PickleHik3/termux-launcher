@@ -46,6 +46,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
 
     private static final String KEY_CATEGORY_SORT = "app_launcher_category_sort";
     private static final String KEY_CATEGORY_REFRESH = "app_launcher_category_refresh";
+    private static final String KEY_CATEGORY_ORDER_RESET = "app_launcher_category_order_reset";
     private static final String KEY_VIEW_TYPE = "app_launcher_drawer_view_type";
     /** The only drawer layout that renders categories, so the only one the two rows apply to. */
     private static final String VIEW_TYPE_CATEGORIES = "categories";
@@ -140,6 +141,16 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
                 return true;
             });
         }
+        Preference orderReset = findPreference(KEY_CATEGORY_ORDER_RESET);
+        if (orderReset != null) {
+            orderReset.setPersistent(false);
+            orderReset.setOnPreferenceClickListener(preference -> {
+                new com.termux.app.launcher.data.LauncherCategoryOrderStore(context).clear();
+                AppNotice.show(context,
+                    getString(R.string.settings_app_drawer_category_order_reset_done), false);
+                return true;
+            });
+        }
         updateRefreshSummary(context);
     }
 
@@ -164,6 +175,8 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         if (sort != null) sort.setVisible(categories);
         Preference refresh = findPreference(KEY_CATEGORY_REFRESH);
         if (refresh != null) refresh.setVisible(categories);
+        Preference orderReset = findPreference(KEY_CATEGORY_ORDER_RESET);
+        if (orderReset != null) orderReset.setVisible(categories);
         // Categories' cards are sized by their own width rule, so Columns has nothing to set there;
         // Rows only means something to the paged grid, which scrolls nowhere else.
         Preference columns = findPreference(KEY_COLUMNS);

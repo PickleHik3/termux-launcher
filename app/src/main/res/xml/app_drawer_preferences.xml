@@ -76,4 +76,9 @@
     <com.termux.app.fragments.settings.termux.CategorySortProgressPreference
         app:key="app_launcher_category_refresh"
         app:title="@string/settings_app_drawer_category_refresh_title" />
+
+    <Preference
+        app:key="app_launcher_category_order_reset"
+        app:title="@string/settings_app_drawer_category_order_reset_title"
+        app:summary="@string/settings_app_drawer_category_order_reset_summary" />
 </PreferenceScreen>
