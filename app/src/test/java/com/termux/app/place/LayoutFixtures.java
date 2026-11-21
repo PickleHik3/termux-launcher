@@ -259,6 +259,17 @@ public final class LayoutFixtures {
         @NonNull
         public RestCards.Rest cardsRest(@NonNull PageRef page, boolean keyboardUp,
                                         boolean dockFloating) {
+            RestCards.Rest rest = cardsRestOf(page, keyboardUp, dockFloating);
+            // The other side's rest, in the same keyboard state; one level, as the answer reads it.
+            rest.other = cardsRestOf(page.isHome() ? PageRef.TERMINAL : PageRef.HOME, keyboardUp,
+                dockFloating);
+            return rest;
+        }
+
+        /** {@link #cardsRest} for one side alone: no other side's rest. */
+        @NonNull
+        public RestCards.Rest cardsRestOf(@NonNull PageRef page, boolean keyboardUp,
+                                          boolean dockFloating) {
             StackLayout.Input pass = pass(page, keyboardUp, dockFloating);
             StackLayout.Result r = StackLayout.layout(pass, new DockGeometry());
             boolean floatingForm = floatingKeyboard();
@@ -339,6 +350,14 @@ public final class LayoutFixtures {
             KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5), 1);
 
     /**
+     * A new install's layouts: the Terminal shows the status bar on top and the extra keys along
+     * the bottom over the keyboard, no apps row; Home is {@link #HOME}.
+     */
+    public static final Fixture DEFAULT_INSTALL = new Fixture("default install", 1080, 2412,
+        new PlaceLayout(Edge.TOP, RowPlacement.HIDDEN, false, Edge.BOTTOM, RowPlacement.BOTTOM,
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5), HOME, 1);
+
+    /**
      * The fixtures the per-rest card answer is held to: {@link #ALL}, pong and tl16 with a foot
      * and flush padding, a split keyboard and the A–Z bar on the dock, each in every design. Kept
      * apart from {@link #ALL}, whose numbers other tests pin.
@@ -350,6 +369,7 @@ public final class LayoutFixtures {
         base.add(TL16.withFoot(KEPT_BAND_PX, FLUSH_PX));
         base.add(SPLIT_KEYBOARD);
         base.add(AZ_ON_DOCK);
+        base.add(DEFAULT_INSTALL);
         List<Fixture> out = new ArrayList<>();
         for (Fixture fixture : base)
             for (DockStyle design : DockStyle.CHOICES) out.add(fixture.withDesign(design));

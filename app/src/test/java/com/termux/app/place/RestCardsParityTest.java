@@ -352,12 +352,139 @@ public class RestCardsParityTest {
                     checkRest(page, up, floating);
     }
 
+    // ---- Two cards under Floating -------------------------------------------------------------
+
+    /** {@code page}'s rest with both sides' status flags set the way the activity sets them. */
+    private RestCards.Rest restWithOther(PageRef page, boolean up) {
+        RestCards.Rest rest = f.cardsRest(page, up, true);
+        rest.statusOnDockPlank = statusOnPlank(f.layoutOf(page));
+        PageRef otherPage = page.isHome() ? PageRef.TERMINAL : PageRef.HOME;
+        rest.other.statusOnDockPlank = statusOnPlank(f.layoutOf(otherPage));
+        return rest;
+    }
+
+    private RestCards.Rest restAlone(PageRef page, boolean up) {
+        RestCards.Rest rest = f.cardsRestOf(page, up, true);
+        rest.statusOnDockPlank = statusOnPlank(f.layoutOf(page));
+        return rest;
+    }
+
+    private static void assertSameCard(String at, RestCards.Card want, RestCards.Card got) {
+        assertEquals(at + " id", want.id, got.id);
+        assertBox(at + " " + want.id, want.box, got.box);
+        assertEquals(at + " " + want.id + " corners", want.corners, got.corners);
+        assertEquals(at + " " + want.id + " pieces", want.pieces, got.pieces);
+        for (Edge e : Edge.values())
+            assertEquals(at + " " + want.id + " " + e, want.edge(e), got.edge(e));
+    }
+
+    @Test public void whileApartEachSideKeepsItsCardAndTheContainerOneMargin() {
+        final int w = f.widthPx;
+        for (boolean up : new boolean[] {false, true}) {
+            String at = f.name + " " + (up ? "kbUp" : "kbDown");
+            boolean apart = SideCards.apart(f.home, f.window, true, statusOnPlank(f.window));
+            RestCards homeRest = RestCards.of(restWithOther(PageRef.HOME, up));
+            RestCards termRest = RestCards.of(restWithOther(PageRef.TERMINAL, up));
+            RestCards homeSolo = RestCards.of(restAlone(PageRef.HOME, up));
+            RestCards termSolo = RestCards.of(restAlone(PageRef.TERMINAL, up));
+            if (!apart) {
+                // Not apart: byte for byte the one side alone.
+                for (RestCards[] pair : new RestCards[][] {{homeRest, homeSolo},
+                        {termRest, termSolo}}) {
+                    assertTrue(at, pair[0].parked().isEmpty());
+                    assertNull(at, pair[0].laidOut(StackView.KEYS_CARD));
+                    assertEquals(at, pair[1].cards().size(), pair[0].cards().size());
+                    for (int i = 0; i < pair[1].cards().size(); i++)
+                        assertSameCard(at, pair[1].cards().get(i), pair[0].cards().get(i));
+                    for (StackView view : StackView.values())
+                        assertEquals(at + " " + view, pair[1].laidOut(view),
+                            pair[0].laidOut(view));
+                }
+                continue;
+            }
+            // (i) Home draws what it drew alone; the Terminal's dock card is the keys card.
+            assertEquals(at, homeSolo.cards().size(), homeRest.cards().size());
+            for (int i = 0; i < homeSolo.cards().size(); i++)
+                assertSameCard(at + " home", homeSolo.cards().get(i), homeRest.cards().get(i));
+            assertEquals(at, termSolo.cards().size(), termRest.cards().size());
+            for (int i = 0; i < termSolo.cards().size(); i++) {
+                RestCards.Card want = termSolo.cards().get(i);
+                RestCards.Card got = termRest.cards().get(i);
+                assertSameCard(at + " terminal", want, got);
+                assertEquals(at, want.view == StackView.HOST ? StackView.KEYS_CARD : want.view,
+                    got.view);
+            }
+            // Each side parks the other's glass, on screen it draws none of it.
+            assertFalse(at, homeRest.parked().isEmpty());
+            assertFalse(at, termRest.parked().isEmpty());
+            for (RestCards.Card c : homeRest.parked())
+                assertEquals(at, StackView.KEYS_CARD, c.view);
+            for (RestCards.Card c : termRest.parked())
+                assertEquals(at, StackView.HOST, c.view);
+            for (RestCards.Card c : homeRest.cards())
+                assertTrue(at + " Home draws no keys card", c.view != StackView.KEYS_CARD);
+            // (ii) The keys card is the extra-keys row's band inset by the dock's side margin,
+            // its corners Corners clamped to half its height, a rim on every edge.
+            StackLayout.Input termPass = f.pass(PageRef.TERMINAL, up, true);
+            Views tv = views(PageRef.TERMINAL, up, true, termPass);
+            RestCards.Card keys = termRest.card(CardId.DOCK);
+            assertNotNull(at, keys);
+            assertEquals(at, StackView.KEYS_CARD, keys.view);
+            int side = DockHostBounds.sideMarginPx(true, tv.dock.horizontalInsetPx);
+            // While the flush rule pads a lone Terminal (keyboard down) its card stands the
+            // padding's lower half taller than the band: today's host does, and the card is
+            // that host (a named finding, see the crossing test's KEYS_CARD entries).
+            float flushTaller = up ? 0f : tv.r.flushBottomInsetPx;
+            assertEquals(at + " keys card height",
+                bandOf(Element.EXTRA_KEYS, tv.dock, termPass) + flushTaller,
+                keys.box.height(), EPS);
+            assertEquals(at + " keys card left", side, keys.box.left, EPS);
+            assertEquals(at + " keys card right", w - side, keys.box.right, EPS);
+            Box drawn = drawnHost(tv, w);
+            assertEquals(at + " keys card bottom", drawn.bottom, keys.box.bottom, EPS);
+            float radius = Math.min(cornersPx(termPass, f.density), keys.box.height() / 2f);
+            assertEquals(at + " keys card corners", radius, keys.corners.topLeft, EPS);
+            assertEquals(at + " keys card corners", radius, keys.corners.bottomRight, EPS);
+            for (Edge e : Edge.values())
+                assertEquals(at + " keys card " + e, EdgeKind.RIM, keys.edge(e));
+            assertEquals(at + " keys card pieces",
+                java.util.Collections.singletonList(PieceId.EXTRA_KEYS), keys.pieces);
+            // (iii) A view is laid out the same at both rests.
+            assertBox(at + " HOST laid out at both", homeRest.laidOut(StackView.HOST),
+                termRest.laidOut(StackView.HOST));
+            assertBox(at + " KEYS_CARD laid out at both", homeRest.laidOut(StackView.KEYS_CARD),
+                termRest.laidOut(StackView.KEYS_CARD));
+            // (iv) One container margin, and Home's drawn cards that much lower than laid out.
+            int homeMargin = Math.max(0, f.settle(PageRef.HOME, up, true).bottomMarginPx);
+            int termMargin = Math.max(0, f.settle(PageRef.TERMINAL, up, true).bottomMarginPx);
+            int margin = SideCards.containerMarginPx(homeMargin, termMargin, true, true);
+            int drop = SideCards.homeSideDropPx(homeMargin, termMargin, true);
+            assertEquals(at, termMargin, margin);
+            assertEquals(at + " home container bottom", f.heightPx - margin,
+                homeRest.laidOut(StackView.CONTAINER).bottom, EPS);
+            assertEquals(at + " terminal container bottom", f.heightPx - margin,
+                termRest.laidOut(StackView.CONTAINER).bottom, EPS);
+            StackLayout.Input homePass = f.pass(PageRef.HOME, up, true);
+            Views hv = views(PageRef.HOME, up, true, homePass);
+            assertEquals(at + " home container drop", drop,
+                hv.containerTop - homeRest.laidOut(StackView.CONTAINER).top, EPS);
+            if (hv.hostLaidOut) {
+                // Laid out, so without the container's keyboard-down share.
+                assertEquals(at + " home host drop", drop,
+                    hv.containerTop + hv.hostTop - homeRest.laidOut(StackView.HOST).top, EPS);
+            }
+            assertEquals(at + " terminal drop", 0f,
+                tv.containerTop - termRest.laidOut(StackView.CONTAINER).top, EPS);
+        }
+    }
+
     private void checkRest(PageRef page, boolean up, boolean floating) {
         final String at = f.name + " " + page + " " + (floating ? "FLOATING" : "DOCKED") + " "
             + (up ? "kbUp" : "kbDown");
         StackLayout.Input pass = f.pass(page, up, floating);
         PlaceLayout layout = f.layoutOf(page);
-        RestCards.Rest rest = f.cardsRest(page, up, floating);
+        // One side alone: today's views, whatever the two-card rule says (checkApart holds that).
+        RestCards.Rest rest = f.cardsRestOf(page, up, floating);
         rest.statusOnDockPlank = statusOnPlank(layout);
         RestCards cards = RestCards.of(rest);
         Views v = views(page, up, floating, pass);
