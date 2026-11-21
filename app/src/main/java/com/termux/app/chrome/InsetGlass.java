@@ -43,7 +43,7 @@ public final class InsetGlass {
     public static final int FLOOR_ALPHA_LIGHT = 0x1F;
     /** The faint light at the floor's bottom: about 5 % dark, 8 % light. */
     public static final int FLOOR_LIGHT_ALPHA_DARK = 0x0D;
-    public static final int FLOOR_LIGHT_ALPHA_LIGHT = 0x14;
+    public static final int FLOOR_LIGHT_ALPHA_LIGHT = 0x0E;
     /** Where the floor's shade is gone, as a share of the well's height: the lower part is lit. */
     public static final float FLOOR_CLEAR_SHARE = 0.7f;
     /**
