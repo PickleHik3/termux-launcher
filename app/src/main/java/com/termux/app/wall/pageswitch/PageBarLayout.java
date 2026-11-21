@@ -7,10 +7,12 @@ import com.termux.app.ScrubWave;
  *
  * <p>Two shapes. The <b>pill</b> is the touch row: {@link #PILL_HEIGHT_DP} tall, its slots
  * ({@link #MIN_SLOT_DP} on Home) end to end, centred on the window (in the pane when the pane is
- * centred); taps, slides and screen-reader buttons read it. The <b>slab</b> is what is drawn: the
- * glyphs with {@link #GAP_DP} above and below them, its bottom {@link #GAP_DP} above the touch row's,
- * so it hugs whatever stands below the bar. It is as wide as the touch row, so the end glyphs stand
- * half a slot from its ends: the same rhythm end to end as between glyphs.</p>
+ * centred); taps, slides and screen-reader buttons read it. The <b>slab</b> is what is drawn, by
+ * one rule: each glyph is centred in a square cell one slot wide, and the slab is the row of cells
+ * ({@link #homeSlabHeightDp}). So the air at its ends and above and below the glyphs is the same,
+ * half the air between two glyphs, and an end glyph is concentric with the capsule's round end.
+ * Its bottom stands {@link #GAP_DP} above the touch row's, so it hugs whatever stands below the
+ * bar.</p>
  *
  * <p>While a finger slides, each glyph lifts out of the slab on the A–Z bar's wave
  * ({@link ScrubWave}): the glyph under the finger rises to {@link #liftPeakPx} and grows to
@@ -23,12 +25,12 @@ public final class PageBarLayout {
     public static final float PILL_HEIGHT_DP = 48f;
     public static final float GLYPH_DP = 16.5f;
     /** A slot's width on Home, and the least the fold counts with. */
-    public static final float MIN_SLOT_DP = 40f;
+    public static final float MIN_SLOT_DP = 30f;
     /** The pill is at most this far from the pane's edges. */
     public static final float SIDE_INSET_DP = 16f;
     /**
-     * The bar's one small gap: the slab's padding around its glyphs on all four sides, the air
-     * under the slab and the gap between a lifted glyph and the page's name above it.
+     * The bar's one small gap: the air under the slab and the gap between a lifted glyph and the
+     * page's name above it; with a glyph, the least Home's slab is tall ({@link #homeSlabHeightDp}).
      */
     public static final float GAP_DP = 4f;
     /** The glyph under the finger, lifted, against its rest size. */
@@ -41,9 +43,13 @@ public final class PageBarLayout {
     /** The finger leaving the touch row vertically by more than this cancels the slide. */
     public static final float CANCEL_DP = 32f;
 
-    /** The slab's height: one glyph and the gap above and below it. */
-    public static float slabHeightDp() {
-        return GLYPH_DP + 2f * GAP_DP;
+    /**
+     * Home's slab height for slots {@code slotDp} wide: the slot itself, so every glyph sits in a
+     * square cell with half the inter-glyph air on each side of it, top and bottom included; never
+     * less than one glyph and {@link #GAP_DP} above and below it.
+     */
+    public static float homeSlabHeightDp(float slotDp) {
+        return Math.max(GLYPH_DP + 2f * GAP_DP, slotDp);
     }
 
     /** The raised bar's height: one glyph and {@link #RAISED_PAD_DP} above and below it. */
@@ -112,7 +118,7 @@ public final class PageBarLayout {
         float pillWidth = mSlotWidth * mSlotCount;
         mPillLeft = fill ? (paneWidthPx - pillWidth) / 2f
             : PageBarBand.pillLeftPx(paneLeftPx, paneWidthPx, windowWidthPx, pillWidth, density);
-        mSlabHeightDp = slabHeightDp();
+        mSlabHeightDp = homeSlabHeightDp(mSlotWidth / density);
         mSlabBottomDp = PILL_HEIGHT_DP - GAP_DP;
     }
 

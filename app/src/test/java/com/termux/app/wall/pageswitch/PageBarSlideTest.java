@@ -123,7 +123,7 @@ public class PageBarSlideTest {
     @Test public void focusChangedFiresOnSlotChangesOnly() {
         PageBarSlide s = plain();
         s.down(xOf(0), Y);
-        s.move(xOf(0) + 15f, Y);
+        s.move(xOf(0) + mLayout.slotWidthPx() * 0.375f, Y);
         assertFalse(s.focusChanged());
         s.move(xOf(1), Y);
         assertTrue(s.focusChanged());
@@ -169,7 +169,8 @@ public class PageBarSlideTest {
         s.down(left + w * 0.1f, Y);
         s.move(left + w * 0.1f + 9f, Y);
         assertEquals(State.SLIDING, s.state());
-        s.move(left + w * 0.5f, Y);
+        // The slop already carries the finger past a narrow member: step on to the last one.
+        s.move(left + w * 0.9f, Y);
         assertTrue(s.focusChanged());
         assertEquals(Result.COMMIT, s.up(left + w * 0.9f, Y));
         assertEquals(1 + 2, s.entryIndex());

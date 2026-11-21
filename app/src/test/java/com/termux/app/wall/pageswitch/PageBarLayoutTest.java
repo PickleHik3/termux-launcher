@@ -10,6 +10,8 @@ import org.junit.Test;
 public class PageBarLayoutTest {
 
     private static final float EPS = 0.01f;
+    /** Home's slot at density 1, in px: every Home number below is derived from it. */
+    private static final float S = PageBarLayout.MIN_SLOT_DP;
 
     @Test public void bandIsTheTouchRow() {
         assertEquals(48f, PageBarLayout.bandHeightDp(), EPS);
@@ -17,15 +19,17 @@ public class PageBarLayoutTest {
     }
 
     @Test public void maxSlotsCountsMinSlotsInsideTheSideInsets() {
-        assertEquals(8, PageBarLayout.maxSlots(1f, 360f));
-        assertEquals(9, PageBarLayout.maxSlots(2f, 800f));
+        assertEquals((int) Math.floor((360f - 32f) / S), PageBarLayout.maxSlots(1f, 360f));
+        assertEquals((int) Math.floor((800f - 64f) / (2f * S)), PageBarLayout.maxSlots(2f, 800f));
         assertEquals(1, PageBarLayout.maxSlots(1f, 10f));
     }
 
     @Test public void homeSlotsAreTheFoldsSlotWidth() {
-        assertEquals(40f, new PageBarLayout(1f, 360f, 3).slotWidthPx(), EPS);
-        assertEquals(40f, new PageBarLayout(1f, 360f, 8).slotWidthPx(), EPS);
-        assertEquals(36.44f, new PageBarLayout(1f, 360f, 9).slotWidthPx(), EPS);
+        assertEquals(PageBarLayout.MIN_SLOT_DP, new PageBarLayout(1f, 360f, 3).slotWidthPx(), EPS);
+        assertEquals(PageBarLayout.MIN_SLOT_DP, new PageBarLayout(1f, 360f, 8).slotWidthPx(), EPS);
+        // More slots than fit at S share the room inside the side insets.
+        int many = (int) Math.ceil(328f / S) + 1;
+        assertEquals(328f / many, new PageBarLayout(1f, 360f, many).slotWidthPx(), EPS);
     }
 
     @Test public void theKeysBarSpansThePaneWithEqualUncappedSlots() {
@@ -41,39 +45,61 @@ public class PageBarLayoutTest {
 
     @Test public void pillIsCentredAndSlotsFillItEndToEnd() {
         PageBarLayout l = new PageBarLayout(1f, 360f, 5);
-        assertEquals(200f, l.pillWidthPx(), EPS);
-        assertEquals(80f, l.pillLeftPx(), EPS);
-        assertEquals(100f, l.restCenterX(0), EPS);
-        assertEquals(260f, l.restCenterX(4), EPS);
+        assertEquals(5f * S, l.pillWidthPx(), EPS);
+        assertEquals((360f - 5f * S) / 2f, l.pillLeftPx(), EPS);
+        assertEquals(l.pillLeftPx() + S / 2f, l.restCenterX(0), EPS);
+        assertEquals(l.pillLeftPx() + 4.5f * S, l.restCenterX(4), EPS);
     }
 
     @Test public void theSlabHugsTheGlyphsAndKeepsTheirRhythmToItsEnds() {
         PageBarLayout l = new PageBarLayout(1f, 360f, 5);
-        assertEquals(24.5f, l.slabHeightPx(), EPS);
-        // Was 87.75 and 184.5 (the end glyph 4 dp from the slab's round end against 23.5 dp
-        // between glyphs); the end glyph now stands half a slot in, as the pitch between glyphs.
-        assertEquals(80f, l.slabLeftPx(), EPS);
-        assertEquals(200f, l.slabWidthPx(), EPS);
+        // One rule: a square cell per glyph, the slab their row.
+        assertEquals(S, l.slabHeightPx(), EPS);
+        // The end glyph stands half a slot in, as the pitch between glyphs.
+        assertEquals((360f - 5f * S) / 2f, l.slabLeftPx(), EPS);
+        assertEquals(5f * S, l.slabWidthPx(), EPS);
         assertEquals(44f, l.slabBottomPx(), EPS);
-        assertEquals(19.5f, l.slabTopPx(), EPS);
-        assertEquals(31.75f, l.slabCenterYPx(), EPS);
-        // The end glyph's centre is half the pitch from the slab's end (11.75 dp of air to its
-        // box), the gaps between glyphs unchanged at 23.5 dp; every glyph's top the gap inside.
+        assertEquals(44f - S, l.slabTopPx(), EPS);
+        assertEquals(44f - S / 2f, l.slabCenterYPx(), EPS);
+        // The end glyph's centre is half the pitch from the slab's end, the air between glyphs
+        // a slot less a glyph; every glyph's top the gap inside.
         assertEquals(l.slotWidthPx() / 2f, l.restCenterX(0) - l.slabLeftPx(), EPS);
-        assertEquals(11.75f, (l.restCenterX(0) - l.glyphPx() / 2f) - l.slabLeftPx(), EPS);
-        assertEquals(23.5f, l.restCenterX(1) - l.restCenterX(0) - l.glyphPx(), EPS);
-        assertEquals(4f, (l.slabCenterYPx() - l.glyphPx() / 2f) - l.slabTopPx(), EPS);
+        assertEquals((S - 16.5f) / 2f, (l.restCenterX(0) - l.glyphPx() / 2f) - l.slabLeftPx(), EPS);
+        assertEquals(S - 16.5f, l.restCenterX(1) - l.restCenterX(0) - l.glyphPx(), EPS);
+        // Above and below the glyph the same air as at the ends: half the air between glyphs.
+        assertEquals((S - 16.5f) / 2f, (l.slabCenterYPx() - l.glyphPx() / 2f) - l.slabTopPx(), EPS);
         // And the slab's bottom the gap above the touch row's, the dock's top.
         assertEquals(4f, l.pillBottomPx() - l.slabBottomPx(), EPS);
+    }
+
+    @Test public void theSlabNeverGoesBelowAGlyphAndItsGap() {
+        assertEquals(16.5f + 8f, PageBarLayout.homeSlabHeightDp(10f), EPS);
+        assertEquals(S, PageBarLayout.homeSlabHeightDp(S), EPS);
+    }
+
+    /** On the wave no two glyphs touch: the raised glyph and its neighbours keep air in a slot. */
+    @Test public void liftedGlyphsNeverTouchTheirNeighbours() {
+        PageBarLayout l = seven();
+        float worst = Float.MAX_VALUE;
+        for (int k = 0; k <= 600; k++) {
+            float focus = k / 100f;
+            for (int i = 0; i + 1 < 7; i++) {
+                float half = l.glyphPx() * l.scaleAt(i, focus, 1f) / 2f;
+                float next = l.glyphPx() * l.scaleAt(i + 1, focus, 1f) / 2f;
+                worst = Math.min(worst, l.restCenterX(i + 1) - l.restCenterX(i) - half - next);
+            }
+        }
+        assertTrue("air " + worst, worst > 0f);
     }
 
     @Test public void slotAtClampsAtTheEndsAndUsesRestSlots() {
         PageBarLayout l = new PageBarLayout(1f, 360f, 5);
         assertEquals(0, l.slotAt(-50f));
         assertEquals(0, l.slotAt(10f));
-        assertEquals(0, l.slotAt(80f + 39f));
-        assertEquals(1, l.slotAt(80f + 41f));
-        assertEquals(2, l.slotAt(180f));
+        float left = l.pillLeftPx();
+        assertEquals(0, l.slotAt(left + S - 1f));
+        assertEquals(1, l.slotAt(left + S + 1f));
+        assertEquals(2, l.slotAt(left + 2.5f * S));
         assertEquals(4, l.slotAt(400f));
     }
 
@@ -81,18 +107,18 @@ public class PageBarLayoutTest {
         PageBarLayout l = new PageBarLayout(1f, 360f, 5);
         float left = l.pillLeftPx() + 2 * l.slotWidthPx();
         assertEquals(0, l.subIndexAt(left + 1f, 2, 3));
-        assertEquals(1, l.subIndexAt(left + 20f, 2, 3));
-        assertEquals(2, l.subIndexAt(left + 30f, 2, 3));
+        assertEquals(1, l.subIndexAt(left + S * 0.5f, 2, 3));
+        assertEquals(2, l.subIndexAt(left + S * 0.75f, 2, 3));
         assertEquals(2, l.subIndexAt(left + 90f, 2, 3));
         assertEquals(0, l.subIndexAt(left - 90f, 2, 3));
-        assertEquals(0, l.subIndexAt(left + 30f, 2, 1));
+        assertEquals(0, l.subIndexAt(left + S * 0.75f, 2, 1));
     }
 
     @Test public void focusAtFollowsTheFingerAndClamps() {
         PageBarLayout l = seven();
         assertEquals(0f, l.focusAt(-10f), EPS);
         assertEquals(3f, l.focusAt(l.restCenterX(3)), EPS);
-        assertEquals(3.5f, l.focusAt(l.restCenterX(3) + 20f), EPS);
+        assertEquals(3.5f, l.focusAt(l.restCenterX(3) + S / 2f), EPS);
         assertEquals(6f, l.focusAt(1000f), EPS);
     }
 
@@ -110,10 +136,10 @@ public class PageBarLayoutTest {
                 String at = "d=" + d + " n=" + n;
                 assertEquals(at, 48f * d, l.bandHeightPx(), EPS);
                 assertEquals(at, 48f * d, l.pillHeightPx(), EPS);
-                assertEquals(at, 40f * d, l.slotWidthPx(), EPS);
-                assertEquals(at, 40f * d * n, l.pillWidthPx(), EPS);
-                assertEquals(at, 24.5f * d, l.slabHeightPx(), EPS);
-                assertEquals(at, 40f * d * n, l.slabWidthPx(), EPS);
+                assertEquals(at, PageBarLayout.MIN_SLOT_DP * d, l.slotWidthPx(), EPS);
+                assertEquals(at, PageBarLayout.MIN_SLOT_DP * d * n, l.pillWidthPx(), EPS);
+                assertEquals(at, S * d, l.slabHeightPx(), EPS);
+                assertEquals(at, PageBarLayout.MIN_SLOT_DP * d * n, l.slabWidthPx(), EPS);
                 assertEquals(at, 44f * d, l.slabBottomPx(), EPS);
                 assertEquals(at, 16.5f * d, l.glyphPx(), EPS);
                 // As wide as its touch row, the end glyphs half a slot from its ends.
@@ -231,8 +257,9 @@ public class PageBarLayoutTest {
         assertEquals(96f, l.pillHeightPx(), EPS);
         assertEquals(0f, l.pillTopPx(), EPS);
         assertEquals(33f, l.glyphPx(), EPS);
-        assertEquals(80f, l.slotWidthPx(), EPS);
-        assertEquals(49f, l.slabHeightPx(), EPS);
-        assertEquals(2f * 42.625f, l.liftPeakPx(), EPS);
+        assertEquals(2f * S, l.slotWidthPx(), EPS);
+        assertEquals(2f * S, l.slabHeightPx(), EPS);
+        assertEquals(2f * (S / 2f + ScrubWave.LIFT_DP * ScrubWave.FOCUS_LIFT_GAIN + 24.75f / 2f),
+            l.liftPeakPx(), EPS);
     }
 }

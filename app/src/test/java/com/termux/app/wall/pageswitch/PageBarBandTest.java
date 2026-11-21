@@ -124,9 +124,10 @@ public class PageBarBandTest {
             offset.pillLeftPx(), EPS);
         assertEquals(540f - 80f, offset.pillLeftPx() + offset.pillWidthPx() / 2f, EPS);
         // The pane-centred constructors keep the old centring, the key's bar included; Home's
-        // slots are 40 wide now (were 53).
-        assertEquals((1000f - 120f) / 2f, new PageBarLayout(1f, 1000f, 3).pillLeftPx(), EPS);
-        assertEquals((1000f - 120f) / 2f,
+        // slots are MIN_SLOT_DP wide.
+        float three = 3f * PageBarLayout.MIN_SLOT_DP;
+        assertEquals((1000f - three) / 2f, new PageBarLayout(1f, 1000f, 3).pillLeftPx(), EPS);
+        assertEquals((1000f - three) / 2f,
             new PageBarLayout(1f, 1000f, 3, 100f, 1200f).pillLeftPx(), EPS);
         assertEquals(16f, new PageBarLayout(1f, 360f, 3, true).pillLeftPx(), EPS);
     }
