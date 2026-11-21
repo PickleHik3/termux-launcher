@@ -525,6 +525,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             // The dock's and the keyboard's glass sample the wallpaper through this translation;
             // a transform alone redraws nothing, so they are re-aimed here.
             invalidateIfShown(R.id.accessory_blur_backdrop);
+            invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
             invalidateIfDressed(R.id.inapp_keyboard_view_host);
             invalidateIfDressed(R.id.accessory_under_keyboard_stack);
         }
@@ -555,7 +556,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         }
         View keysCard = mViews.view(R.id.extra_keys_card);
         if (keysCard != null) {
-            writeTy(SLOT_KEYS_CARD, keysCard, keysTilt ? plankTy(PLANK_HOST) : 0f);
+            // The card's glass samples where the card is drawn: a move of the card alone redraws it.
+            if (writeTy(SLOT_KEYS_CARD, keysCard, keysTilt ? plankTy(PLANK_HOST) : 0f))
+                invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
             writePlank(SLOT_KEYS_CARD, keysCard, keysTilt ? PLANK_HOST : PLANK_NONE, 0f);
         }
         // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
@@ -612,6 +615,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         View rowStack = mViews.view(R.id.accessory_row_stack);
         if (!(rowStack instanceof EdgeStackView)) return;
         EdgeStackView stack = (EdgeStackView) rowStack;
+        boolean cardLaneMoved = false;
         for (int i = 0; i < LANE_HOST_IDS.length; i++) {
             View host = mViews.view(LANE_HOST_IDS[i]);
             if (host == null) continue;
@@ -625,6 +629,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                         .ordinal()];
                 }
             }
+            // The Terminal's card sits in the extra-keys row host: its glass samples where the lane
+            // draws it, so the lane's offset is published to the anchor (and withdrawn with it).
+            if (LANE_HOST_IDS[i] == R.id.terminal_toolbar_host)
+                cardLaneMoved |= writeCardLaneMotion(host, want, wantTy);
             if (host != mWrittenLaneView[i]) {
                 mWrittenLaneView[i] = host;
                 mWrittenLaneTx[i] = Float.NaN;
@@ -645,7 +653,29 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             mWriteCount++;
             mViews.laneMoved(host);
         }
+        if (cardLaneMoved) invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
     }
+
+    /**
+     * Publishes the card's row host's lane offset to its glass anchor while the cards stand
+     * apart, and withdraws it after.
+     *
+     * @return whether the published offset moved
+     */
+    private boolean writeCardLaneMotion(@NonNull View host, float tx, float ty) {
+        if (!mApart) {
+            if (!mCardLaneMotionSet) return false;
+            mCardLaneMotionSet = false;
+            com.termux.app.chrome.GlassAnchor.clearMotion(host);
+            return true;
+        }
+        if (mCardLaneMotionSet && com.termux.app.chrome.GlassAnchor.motionX(host) == tx
+            && com.termux.app.chrome.GlassAnchor.motionY(host) == ty) return false;
+        mCardLaneMotionSet = true;
+        com.termux.app.chrome.GlassAnchor.setMotion(host, tx, ty);
+        return true;
+    }
+    private boolean mCardLaneMotionSet;
 
     private int plankTarget() {
         return mViews.keyboardShown() ? PLANK_HOST : PLANK_CONTAINER;
