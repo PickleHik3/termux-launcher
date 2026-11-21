@@ -391,10 +391,13 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
                 canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
             }
         } else {
-            // No glass: the mock's translucent fill and outline, in the ink. The key's pop-up
-            // stands over the terminal's text, so it first lays the card its ink is read on.
-            if (mFixedInk) {
-                mFill.setColor(PageBarGlass.cardFor(mInk.ink));
+            // No glass: the solid card the ink was measured for, as a widget's slab falls back
+            // to (PageBarGlass.measure); the key's pop-up, with no ground measured, lays the card
+            // its fixed ink reads on, since it stands over the terminal's text. Then the mock's
+            // translucent fill and outline, in the ink.
+            int card = mFixedInk ? PageBarGlass.cardFor(mInk.ink) : mInk.veil;
+            if (Color.alpha(card) != 0) {
+                mFill.setColor(card);
                 canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
             }
             mFill.setColor((mInk.ink & 0x00FFFFFF) | 0x21000000);
