@@ -20461,15 +20461,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Makes a keyboard available for typing into a focusless surface, and reports whether one is.
      *
      * <p>False means there is nothing on screen to aim the key channel at — the caller either does
-     * without typing or falls back to a focused editor.
+     * without typing or falls back to a focused editor. A field opening is not a person asking for
+     * the keyboard: with a hardware keyboard attached and the setting on, the in-app keyboard stays
+     * down and this is still true, since the hardware keys reach the surface through the overlay
+     * key channel.
      */
     private boolean ensureInAppTypingKeyboard() {
         if (!isInAppKeyboardEnabled() || mInAppKeyboard == null) return false;
         if (!mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
         return true;
+    }
+
+    /**
+     * Raises the in-app keyboard by hand for a field the Home palette opens; true when it raised.
+     * Nothing is raised while a hardware keyboard is the one typing (the setting asks the in-app
+     * keyboard to stand aside), so the palette opens alone and takes the hardware keys.
+     */
+    private boolean raiseKeyboardForField() {
+        if (mInAppKeyboard != null && mInAppKeyboard.yieldsToHardwareKeyboard()) return false;
+        return terminalHost().showInAppKeyboard(false);
     }
 
     /**
@@ -25280,7 +25293,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void setHomeActionsAnchor(float rawX, float rawY) { mHomeActionsRawX = rawX; mHomeActionsRawY = rawY; }
         // -------------------------------------------------------------- the Home palette
         @Override public boolean isOnHome() { return mPages.isCommitted(com.termux.app.page.PageKind.HOME); }
-        @Override public boolean raiseInAppKeyboard() { return terminalHost().showInAppKeyboard(false); }
+        // The palette is a field: a hardware keyboard the in-app one yields to types into it.
+        @Override public boolean raiseInAppKeyboard() { return raiseKeyboardForField(); }
         @Override public boolean isHomeKeyboardAlwaysOn() { return TermuxActivity.this.isHomeKeyboardAlwaysOn(); }
         @Override public @NonNull PlaceLayout.Edge appsEdge() { return arrangement().appsEdge(); }
         @Override public @Nullable TermuxAppSharedPreferences preferences() { return mPreferences; }
@@ -28492,7 +28506,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSheets.runWithoutNotices(() -> mPaneController.openHomeFloat(shell, page));
         if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
         return true;
     }
@@ -32990,7 +33004,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController.focusedHomeFloat() == window && mInAppKeyboard != null
             && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
     }
 
@@ -33203,7 +33217,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
         if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
         return true;
     }
@@ -33256,7 +33270,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // by hand as the swipe up raises it (openHomePalette).
         @Override public boolean isKeyboardUp() { return committedKeyboardVisible(); }
 
-        @Override public boolean raiseKeyboard() { return terminalHost().showInAppKeyboard(false); }
+        @Override public boolean raiseKeyboard() { return raiseKeyboardForField(); }
     }
 
     @Nullable

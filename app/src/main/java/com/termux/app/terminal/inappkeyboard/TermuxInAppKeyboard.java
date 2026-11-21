@@ -64,7 +64,13 @@ public final class TermuxInAppKeyboard {
         /** A person asked, through {@code keyboard.show} on a key, a chord or the palette. */
         TOOL,
         /** Something on screen took text focus and the keyboard was opened for it. */
-        FOCUS
+        FOCUS,
+        /**
+         * A field that needs typing opened (a rename, the find strip, a sheet's field, a Home
+         * float): the person asked for the field, not for this keyboard, so a hardware keyboard
+         * serves it just as well and the setting keeps this one down.
+         */
+        TEXT_ENTRY
     }
 
     public enum HideReason {
@@ -282,10 +288,13 @@ public final class TermuxInAppKeyboard {
             && mHardwareKeyboardConnected.getAsBoolean();
     }
 
-    /** Taps, focus and first enable are the app's doing; the rest are a person asking. */
+    /**
+     * Taps, focus, first enable and a field opening are the app's doing; the rest are a person
+     * asking for the keyboard itself.
+     */
     private static boolean isAutomaticShow(@Nullable ShowReason reason) {
         return reason == ShowReason.FIRST_ENABLE || reason == ShowReason.TERMINAL_TAP
-            || reason == ShowReason.FOCUS;
+            || reason == ShowReason.FOCUS || reason == ShowReason.TEXT_ENTRY;
     }
 
     /** Puts down a keyboard that an automatic show raised once the setting and hardware say so. */
