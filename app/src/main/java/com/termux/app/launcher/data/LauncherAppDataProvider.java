@@ -550,24 +550,6 @@ public final class LauncherAppDataProvider {
         return loaded;
     }
 
-    /** Test-only: the first scan waits here, so a test decides when its callback can land. */
-    @Nullable private volatile java.util.concurrent.CountDownLatch scanGateForTest;
-
-    @androidx.annotation.VisibleForTesting
-    public void holdScanForTest(@Nullable java.util.concurrent.CountDownLatch gate) {
-        scanGateForTest = gate;
-    }
-
-    private void awaitScanGateForTest() {
-        java.util.concurrent.CountDownLatch gate = scanGateForTest;
-        if (gate == null) return;
-        try {
-            gate.await(10, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
     /**
      * Test-only: starts the catalogue scan and returns once it has run, so the warm-up callbacks
      * are already posted and {@link #hasLoadedApps()} holds. A test then drains the main looper
@@ -612,7 +594,6 @@ public final class LauncherAppDataProvider {
 
         final int capturedGeneration = generationToLoad;
         executor.execute(() -> {
-            awaitScanGateForTest();
             Snapshot snapshot = loadSnapshot();
             List<Runnable> callbacks;
             synchronized (LauncherAppDataProvider.this) {
