@@ -101,6 +101,21 @@ public final class ElementGlass {
     }
 
     /**
+     * This glass with its blur, opacity and grain replaced, everything else kept: what
+     * {@link ElevatedGlass} answers with. Itself when nothing changes.
+     */
+    @NonNull
+    ElementGlass withBody(int blurDp, int opacityPercent, int grainPercent) {
+        if (blurDp == this.blurDp && opacityPercent == this.opacityPercent
+            && grainPercent == this.grainPercent) {
+            return this;
+        }
+        return new ElementGlass(element, clamp(blurDp, 0, MAX_BLUR_DP),
+            clamp(opacityPercent, 0, 100), clamp(grainPercent, 0, 100), tintPercent, cornersDp,
+            ownHue, ownRim, ownDepthDp, ownEdgePercent);
+    }
+
+    /**
      * Whether a value is this element's own rather than the Global one the
      * renderer's global look already carries.
      */
