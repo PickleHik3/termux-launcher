@@ -442,6 +442,51 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             normalizeAppLauncherDrawerViewType(value), false);
     }
 
+    /** The drawer's icon size in dp as text: "auto", "48", "54" or "60". */
+    public String getAppLauncherDrawerIconSize() {
+        return normalizeDrawerGridValue(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_ICON_SIZE, true), "48", "54", "60");
+    }
+
+    public void setAppLauncherDrawerIconSize(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE,
+            normalizeDrawerGridValue(value, "48", "54", "60"), false);
+    }
+
+    /** The drawer's column count as text: "auto", "4", "5" or "6". */
+    public String getAppLauncherDrawerColumns() {
+        return normalizeDrawerGridValue(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_COLUMNS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_COLUMNS, true), "4", "5", "6");
+    }
+
+    public void setAppLauncherDrawerColumns(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_COLUMNS,
+            normalizeDrawerGridValue(value, "4", "5", "6"), false);
+    }
+
+    /** The horizontal drawer's row count as text: "auto", "3", "4", "5" or "6". */
+    public String getAppLauncherDrawerRows() {
+        return normalizeDrawerGridValue(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ROWS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_ROWS, true), "3", "4", "5", "6");
+    }
+
+    public void setAppLauncherDrawerRows(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ROWS,
+            normalizeDrawerGridValue(value, "3", "4", "5", "6"), false);
+    }
+
+    /** One of {@code allowed}, else auto: a stored value this build does not know reads as auto. */
+    private static String normalizeDrawerGridValue(String value, String... allowed) {
+        if (value != null) {
+            for (String candidate : allowed)
+                if (candidate.equals(value)) return candidate;
+        }
+        return TERMUX_APP.APP_LAUNCHER_DRAWER_GRID_AUTO;
+    }
+
     public String getAppLauncherDrawerSection() {
         return normalizeAppLauncherDrawerSection(SharedPreferenceUtils.getString(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SECTION,

@@ -147,6 +147,44 @@
         <item>horizontal</item>
         <item>categories</item>
     </string-array>
+    <string-array name="app_launcher_drawer_icon_size_entries">
+        <item>@string/settings_drawer_grid_auto</item>
+        <item>@string/settings_drawer_icon_size_small</item>
+        <item>@string/settings_drawer_icon_size_default</item>
+        <item>@string/settings_drawer_icon_size_large</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_icon_size_values" translatable="false">
+        <item>auto</item>
+        <item>48</item>
+        <item>54</item>
+        <item>60</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_columns_entries" translatable="false">
+        <item>@string/settings_drawer_grid_auto</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_columns_values" translatable="false">
+        <item>auto</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_rows_entries" translatable="false">
+        <item>@string/settings_drawer_grid_auto</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_rows_values" translatable="false">
+        <item>auto</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+    </string-array>
     <string-array name="app_launcher_drawer_az_side_entries">
         <item>@string/settings_drawer_az_side_left</item>
         <item>@string/settings_drawer_az_side_right</item>

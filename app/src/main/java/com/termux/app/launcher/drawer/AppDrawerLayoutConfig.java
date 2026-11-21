@@ -1,6 +1,7 @@
 package com.termux.app.launcher.drawer;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -8,6 +9,10 @@ import java.util.Objects;
 
 /** Sanitized immutable input for one in-place drawer layout application. */
 public final class AppDrawerLayoutConfig {
+    /** Rows Settings offers; the metrics' own clamp is wider and only guards a stray caller. */
+    public static final int MIN_ROWS = 3;
+    public static final int MAX_ROWS = 6;
+
     @NonNull public final AppDrawerViewType viewType;
     public final int iconSizeDp;
     public final int verticalColumns;
@@ -22,7 +27,7 @@ public final class AppDrawerLayoutConfig {
         this.iconSizeDp = validIcon(iconSizeDp) ? iconSizeDp : 0;
         this.verticalColumns = validAppColumns(verticalColumns) ? verticalColumns : 0;
         this.horizontalColumns = validAppColumns(horizontalColumns) ? horizontalColumns : 0;
-        this.horizontalRows = horizontalRows >= 2 && horizontalRows <= 6 ? horizontalRows : 0;
+        this.horizontalRows = horizontalRows >= MIN_ROWS && horizontalRows <= MAX_ROWS ? horizontalRows : 0;
         this.categoryColumns = categoryColumns >= 1 && categoryColumns <= 3 ? categoryColumns : 0;
     }
 
@@ -31,21 +36,31 @@ public final class AppDrawerLayoutConfig {
     }
 
     /**
-     * The view type is the only drawer layout preference left. Icon size and the column/row counts
-     * are read as auto (0) on purpose: the settings entries are gone, every view resolves its own
-     * geometry from the plane's width, and the category cards size their previews to fill — a stored
-     * value from an older install would only pin an icon smaller than the card wants.
-     *
-     * <p>The explicit constructor still takes all six, so a caller (and the tests) can pin geometry;
-     * nothing in the app does.
+     * The view type plus the drawer's icon size, column count and row count, each read as Auto (0)
+     * until the user picks a step. Columns feed the three grids that have columns (Vertical,
+     * Horizontal, Default's Apps page) and rows the Horizontal one; Categories sizes its cards
+     * itself, so {@code categoryColumns} stays Auto.
      */
     @NonNull public static AppDrawerLayoutConfig from(@NonNull TermuxAppSharedPreferences prefs) {
+        int columns = parseStep(prefs.getAppLauncherDrawerColumns());
         return new AppDrawerLayoutConfig(AppDrawerViewType.fromPreference(
-            prefs.getAppLauncherDrawerViewType()), 0, 0, 0, 0, 0);
+            prefs.getAppLauncherDrawerViewType()),
+            parseStep(prefs.getAppLauncherDrawerIconSize()), columns, columns,
+            parseStep(prefs.getAppLauncherDrawerRows()), 0);
+    }
+
+    /** "auto", garbage and null read as 0; a number reads as itself (the constructor validates). */
+    static int parseStep(@Nullable String value) {
+        if (value == null) return 0;
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private static boolean validIcon(int value) {
-        return value == 0 || value == 36 || value == 40 || value == 44 || value == 48;
+        return value == 0 || value == 48 || value == 54 || value == 60;
     }
 
     private static boolean validAppColumns(int value) {

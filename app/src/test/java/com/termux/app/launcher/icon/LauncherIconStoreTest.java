@@ -371,4 +371,18 @@ public class LauncherIconStoreTest {
         assertNotNull(holder[0].artwork(ref("a")));
         assertEquals(0, holder[0].sizeBytes());
     }
+
+    /**
+     * The drawer's largest icon-size step (Home's Large, 60dp) is drawn at 180px on a 3.0 display,
+     * which the retained artwork must still cover so it is not upscaled. Denser displays are not
+     * covered (3.5 draws 210px, 4.0 draws 240px); that is a budget decision, not this test's.
+     */
+    @Test
+    public void theLargestDrawerIconStepAtThreeTimesDensityStaysWithinTheRetainedSize() {
+        int largest = 0;
+        for (int dp : com.termux.app.launcher.drawer.AppDrawerGridMetrics.ICON_STEPS_DP)
+            largest = Math.max(largest, dp);
+        assertEquals(60, largest);
+        assertTrue(Math.round(largest * 3.0f) <= LauncherIconStore.MAX_RETAINED_PX);
+    }
 }

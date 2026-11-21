@@ -43,6 +43,36 @@ public class AppDrawerSharedPreferencesTest {
         assertEquals("default", preferences.getAppLauncherDrawerViewType());
     }
 
+    @Test public void gridStepsDefaultToAutoAndUnknownValuesReadAsAuto() {
+        assertEquals("auto", preferences.getAppLauncherDrawerIconSize());
+        assertEquals("auto", preferences.getAppLauncherDrawerColumns());
+        assertEquals("auto", preferences.getAppLauncherDrawerRows());
+        for (String size : new String[] {"48", "54", "60"}) {
+            preferences.setAppLauncherDrawerIconSize(size);
+            assertEquals(size, preferences.getAppLauncherDrawerIconSize());
+        }
+        for (String columns : new String[] {"4", "5", "6"}) {
+            preferences.setAppLauncherDrawerColumns(columns);
+            assertEquals(columns, preferences.getAppLauncherDrawerColumns());
+        }
+        for (String rows : new String[] {"3", "4", "5", "6"}) {
+            preferences.setAppLauncherDrawerRows(rows);
+            assertEquals(rows, preferences.getAppLauncherDrawerRows());
+        }
+        // Not a step of its own setting: Auto, on the way in and on the way out.
+        preferences.setAppLauncherDrawerIconSize("36");
+        assertEquals("auto", preferences.getAppLauncherDrawerIconSize());
+        preferences.setAppLauncherDrawerColumns("7");
+        assertEquals("auto", preferences.getAppLauncherDrawerColumns());
+        preferences.setAppLauncherDrawerRows("2");
+        assertEquals("auto", preferences.getAppLauncherDrawerRows());
+        preferences.setAppLauncherDrawerRows(null);
+        assertEquals("auto", preferences.getAppLauncherDrawerRows());
+        raw.edit().putString(TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_COLUMNS,
+            "corrupt").commit();
+        assertEquals("auto", preferences.getAppLauncherDrawerColumns());
+    }
+
     @Test public void aFreshInstallKeepsDefault() {
         preferences.migrateLookGrid(java.util.Collections.emptyList(), true);
         assertEquals("default", preferences.getAppLauncherDrawerViewType());

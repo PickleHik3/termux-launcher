@@ -14,9 +14,9 @@ import org.robolectric.annotation.Config;
 public class AppDrawerLiveApplyLifecycleTest {
     @Test public void duplicateConfigNoOpsAndUnbuiltConfigRemainsAValueUntilFirstTree() {
         AppDrawerLayoutConfig pending = new AppDrawerLayoutConfig(AppDrawerViewType.HORIZONTAL,
-            44, 4, 6, 5, 2);
+            54, 4, 6, 5, 2);
         assertEquals(pending, new AppDrawerLayoutConfig(AppDrawerViewType.HORIZONTAL,
-            44, 4, 6, 5, 2));
+            54, 4, 6, 5, 2));
         AppDrawerContentView content = new AppDrawerContentView(RuntimeEnvironment.getApplication());
         content.onDragStateChanged(true);
         content.cancelTransientFolderState();

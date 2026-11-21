@@ -34,9 +34,9 @@ import java.util.concurrent.Executors;
 /**
  * Dedicated drawer controls. Visibility changes immediately; persistence drives live apply.
  *
- * <p>Only the view type is a preference. Icon size and the per-view column/row counts were removed:
- * each view resolves its geometry from the plane's width, and the category cards size their preview
- * icons to fill the card, so a user-chosen size could only reintroduce dead space.
+ * <p>The view type, icon size, columns and rows are preferences, each Auto by default (the sizing
+ * every view resolves from the plane's width). Columns hide for Categories and rows show for
+ * Horizontal only, following the view type live.
  *
  * <p>Categorization is not a preference either: it is a run, so its two rows are click actions and
  * their state is polled off {@link LauncherCategorySortService}'s static progress fields.
@@ -50,6 +50,9 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
     /** The only drawer layout that renders categories, so the only one the two rows apply to. */
     private static final String VIEW_TYPE_CATEGORIES = "categories";
     private static final String VIEW_TYPE_DEFAULT = "default";
+    private static final String VIEW_TYPE_HORIZONTAL = "horizontal";
+    private static final String KEY_COLUMNS = "app_launcher_drawer_columns";
+    private static final String KEY_ROWS = "app_launcher_drawer_rows";
     private static final long POLL_INTERVAL_MS = 700L;
     private static final int REQUEST_POST_NOTIFICATIONS = 4711;
 
@@ -161,6 +164,12 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         if (sort != null) sort.setVisible(categories);
         Preference refresh = findPreference(KEY_CATEGORY_REFRESH);
         if (refresh != null) refresh.setVisible(categories);
+        // Categories' cards are sized by their own width rule, so Columns has nothing to set there;
+        // Rows only means something to the paged grid, which scrolls nowhere else.
+        Preference columns = findPreference(KEY_COLUMNS);
+        if (columns != null) columns.setVisible(!VIEW_TYPE_CATEGORIES.equals(viewType));
+        Preference rows = findPreference(KEY_ROWS);
+        if (rows != null) rows.setVisible(VIEW_TYPE_HORIZONTAL.equals(viewType));
     }
 
     /**

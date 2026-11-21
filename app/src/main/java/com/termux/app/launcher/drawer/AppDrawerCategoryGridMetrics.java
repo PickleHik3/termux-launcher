@@ -74,6 +74,8 @@ public final class AppDrawerCategoryGridMetrics {
     public final float smallBlockGapPx;
     public final int largeIconPx;
     public final int smallIconPx;
+    /** The expanded category grid's icon; equals {@link #largeIconPx} unless an icon size is chosen. */
+    public final int detailIconPx;
     public final int estimatedAttachedTiles;
     public final int expandedColumns;
     public final float expandedRowHeightPx;
@@ -86,7 +88,7 @@ public final class AppDrawerCategoryGridMetrics {
         float spanWidthPx, float tileHorizontalInsetPx, float tileSidePx, float itemHeightPx,
         float headingGapPx, float headingHeightPx, float itemBottomGapPx, float innerPaddingPx,
         float slotGapPx, float largeSlotPx, float smallBlockGapPx, int largeIconPx,
-        int estimatedAttachedTiles,
+        int detailIconPx, int estimatedAttachedTiles,
         int expandedColumns, float expandedRowHeightPx, float radiusPx, float collapseTravelPx,
         float emptyTopMinPx, float headerListGapPx) {
         this.columns = columns;
@@ -105,6 +107,7 @@ public final class AppDrawerCategoryGridMetrics {
         this.smallBlockGapPx = Math.min(Math.max(0f, smallBlockGapPx), largeSlotPx);
         this.smallCellPx = Math.max(0f, (largeSlotPx - this.smallBlockGapPx) / 2f);
         this.largeIconPx = largeIconPx;
+        this.detailIconPx = detailIconPx;
         // Off the cell, not half the large icon: the 2x2 block now occupies exactly one icon's
         // footprint, so half a large icon is a hair wider than the cell it would sit in and the four
         // previews would touch across the block's hairline gap.
@@ -185,18 +188,27 @@ public final class AppDrawerCategoryGridMetrics {
             float grown = Math.min(WIDE_MAX_ICON_DP * d, (tile - 3f * MAX_SPACING_DP * d) / 2f);
             iconCapPx = Math.max(iconCapPx, (int) Math.floor(grown));
         }
-        int requestedIconPx = requestedIconDp == 36 || requestedIconDp == 40
-            || requestedIconDp == 44 || requestedIconDp == 48
-            ? Math.round(requestedIconDp * d) : iconCapPx;
-        int icon = Math.max(0, Math.min(Math.min(Math.min(iconCapPx,
-            requestedIconPx), geometryIcon),
+        // A chosen size is honoured by the expanded grid and the previews alike; the ceiling above
+        // is Automatic's. The previews still take no more than the card holds (geometry) or the
+        // cache budget allows.
+        boolean chosenIcon = AppDrawerGridMetrics.isIconStep(requestedIconDp);
+        int requestedIconPx = chosenIcon ? Math.round(requestedIconDp * d) : iconCapPx;
+        int icon = Math.max(0, Math.min(Math.min(requestedIconPx, geometryIcon),
             Math.max(0, budgetIcon)));
         int detailColumns = EXPANDED_COLUMNS;
         float detailCell = detailColumns == 0 ? 0f : width / detailColumns;
-        int detailIcon = Math.min(icon, Math.max(0, Math.round(detailCell * 0.58f)));
-        // One shared size is mandatory: preview-large and detail cache keys are identical.
-        icon = Math.min(icon, detailIcon);
-        float detailRow = icon + AppDrawerGridMetrics.LABEL_GAP_DP * d
+        int detailHolds = Math.max(0, Math.round(detailCell * AppDrawerGridMetrics.ICON_CELL_FRACTION));
+        int detailIcon;
+        if (chosenIcon) {
+            // Sized like the Apps grid: the chosen size, capped to the cell. It may differ from the
+            // previews', so the icon cache can hold both sizes of an app.
+            detailIcon = Math.min(requestedIconPx, detailHolds);
+        } else {
+            detailIcon = Math.min(icon, detailHolds);
+            // Automatic keeps one shared size: preview-large and detail cache keys are identical.
+            icon = Math.min(icon, detailIcon);
+        }
+        float detailRow = detailIcon + AppDrawerGridMetrics.LABEL_GAP_DP * d
             + finiteNonNegative(appLabelHeightPx)
             + AppDrawerGridMetrics.ROW_BOTTOM_DP * d;
         // The one spacing the whole card is built from: the width the two icons could not take is
@@ -212,7 +224,7 @@ public final class AppDrawerCategoryGridMetrics {
         float smallBlockGap = Math.min(SMALL_BLOCK_GAP_DP * d, largeSlot);
         return new AppDrawerCategoryGridMetrics(columns, side, gap, span, inset, tile,
             itemHeight, spacing, heading, bottom, spacing, spacing, largeSlot, smallBlockGap,
-            icon, attached,
+            icon, detailIcon, attached,
             detailColumns, detailRow, Math.min(finiteNonNegative(drawerRadiusPx), tile / 2f),
             // The collapse drag's full range. A whole viewport of travel made the shrink lag the
             // finger — two-thirds of the screen dragged still left the pane 60% expanded, and a
