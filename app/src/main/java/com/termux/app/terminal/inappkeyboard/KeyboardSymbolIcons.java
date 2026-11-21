@@ -46,10 +46,11 @@ public final class KeyboardSymbolIcons implements SymbolIcons {
         {0xE038, R.drawable.ic_rl_assistant},
     };
 
-    /** Other code points: the paste picture glyph (Nerd nf-md-image). */
-    static final int[][] OTHER_ICONS = {
-        {0xF02E9, R.drawable.ic_rl_paste},
-    };
+    /**
+     * Other code points. Empty: the paste picture glyph (U+F02E9) stays a Nerd glyph so the
+     * picture state differs from plain paste; it takes ic_rl_image once that drawable is here.
+     */
+    static final int[][] OTHER_ICONS = {};
 
     /**
      * Tool keys the keyboard's own layouts ship with a Nerd glyph the bar's {@code ExtraKeyIcons}

@@ -128,8 +128,8 @@ public class KeyboardSymbolIconsTest {
     }
 
     @Test
-    public void thePasteKeyAndThePastePictureDrawTheSameIcon() {
+    public void thePastePictureStaysAGlyphWhilePlainPasteIsAnIcon() {
         assertNotNull(icons.iconFor(cp(0xE032), true));
-        assertNotNull(icons.iconFor(cp(0xF02E9), false));
+        assertNull(icons.iconFor(cp(0xF02E9), false));
     }
 }
