@@ -22,10 +22,11 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /** The one-time bubble over the editor bar's palette glyph. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class EditorBarThemeHintTest {
 

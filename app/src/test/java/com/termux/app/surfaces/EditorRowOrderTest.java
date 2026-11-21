@@ -1,6 +1,7 @@
 package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.surfaces.EditorRows.Group;
@@ -49,11 +50,15 @@ public class EditorRowOrderTest {
         for (Row row : new Row[] {Row.DOCK_TYPE, Row.STATUS_POSITION, Row.FORM, Row.STYLE,
                 Row.DESIGN, Row.DOCK_STYLE, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.THEME})
             assertEquals(row.name(), Group.LOOK, EditorRows.groupOf(row));
-        // The Dock's Type and the Status bar's Position are the Global card's (ADR 0023 §1).
-        assertEquals("the Dock opens on its icon size", Row.HOME_ICON_SIZE,
+        // The Dock's Type and the Status bar's Position are every page's, on their own cards'
+        // first row and nowhere else (spec §3, Global).
+        assertEquals("the Dock opens on its type", Row.DOCK_TYPE,
             EditorRows.rows(EditorCard.DOCK, OFFERS[0]).get(0).row);
-        assertEquals("the Status bar opens on its indicators", Row.STATUS_INDICATORS,
+        assertEquals("the Status bar opens on its position", Row.STATUS_POSITION,
             EditorRows.rows(EditorCard.STATUS, OFFERS[0]).get(0).row);
+        assertFalse(EditorRows.tier(EditorCard.APPEARANCE, OFFERS[0], 3).contains(Row.DOCK_TYPE));
+        assertFalse(EditorRows.tier(EditorCard.APPEARANCE, OFFERS[0], 3)
+            .contains(Row.STATUS_POSITION));
         assertEquals("the Keyboard opens on its Form", Row.FORM,
             EditorRows.rows(EditorCard.KEYBOARD, OFFERS[0]).get(0).row);
         for (Row row : new Row[] {Row.RIM, Row.CONTRAST, Row.HOME_ICON_SIZE, Row.LABEL_SIZE,
@@ -78,14 +83,14 @@ public class EditorRowOrderTest {
     public void headingsTiersAndAGroupsOwnOrderStay() {
         List<Spec> listed = new EditorRows.CardRows()
             .tier(1, Row.MULTIPLEXER, Row.MARGIN, Row.TINT_HUE, Row.CORNERS, Row.LOOK)
-            .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.RIM)
+            .tier(3, Row.SECTION_LINKS, Row.LINK_GESTURES, Row.RIM)
             .tier(1, Row.HEIGHT)
             .build();
         List<Row> got = new ArrayList<>();
         for (Spec spec : EditorRows.ordered(listed))
             got.add(spec.row);
         assertEquals(Arrays.asList(Row.LOOK, Row.MARGIN, Row.CORNERS, Row.MULTIPLEXER, Row.TINT_HUE,
-            Row.SECTION_LINKS, Row.RIM, Row.LINK_SHEETS, Row.HEIGHT), got);
+            Row.SECTION_LINKS, Row.RIM, Row.LINK_GESTURES, Row.HEIGHT), got);
     }
 
     @Test

@@ -44,7 +44,7 @@ public enum DockStyle {
      * ({@link #CHOICES}) and never drawn ({@link #BUILT}).
      */
     PROMPT_LINE("prompt_line"),
-    /** A first row for the Workspace (a clock and the terminals) above the apps. */
+    /** A first row for the Terminal (a clock and the terminals) above the apps. */
     WALL_STRIP("wall_strip"),
     /**
      * A glass card rising from the screen's bottom edge, its top edge through the icons' centres,

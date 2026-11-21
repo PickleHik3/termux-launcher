@@ -98,14 +98,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         preferenceManager.setPreferenceDataStore(store);
         setPreferencesFromResource(preferencesXml(), rootKey);
 
-        // Keyboard sizes are percentage ratios, whichever page holds them.
-        for (String key : new String[] {"in_app_keyboard_floating_width",
-            "in_app_keyboard_floating_height", "in_app_keyboard_split_gap"}) {
-            Preference slider = findPreference(key);
-            if (slider instanceof com.termux.app.fragments.settings.SliderPreference)
-                ((com.termux.app.fragments.settings.SliderPreference) slider).setValueSuffix("%");
-        }
-
         SegmentedPillPreference inputMethodPreference = findPreference("keyboard_input_method");
         if (inputMethodPreference == null) {
             // A focused subpage has no input-method row of its own: it follows the stored choice,
@@ -252,9 +244,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
     private void updateBuiltInKeyboardRows(boolean enabled) {
         Preference layout = findPreference("keyboard_layout");
-        Preference shapes = findPreference("keyboard_shapes");
         Preference feedback = findPreference("keyboard_feedback");
-        for (String key : new String[] {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"}) {
+        for (String key : new String[] {"keyboard_sub_layout", "keyboard_sub_typing"}) {
             Preference row = findPreference(key);
             if (row != null) row.setEnabled(enabled);
         }
@@ -262,7 +253,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         Preference look = findPreference("keyboard_appearance");
         if (look != null) look.setEnabled(enabled);
         if (layout != null) layout.setEnabled(enabled);
-        if (shapes != null) shapes.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);
     }
 
@@ -279,6 +269,42 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             if (voiceCleanupRows != null) voiceCleanupRows.refresh(getContext());
             // The keyboard may have learned more, or paused itself, while the screen was away.
             refreshTapCorrectionRows();
+            refreshExtraKeysSummary(getContext());
+        }
+    }
+
+    /** The extra-keys entry says which pages have a row of their own; the rest follow Global. */
+    private void refreshExtraKeysSummary(@NonNull Context context) {
+        Preference entry = findPreference("edit_extra_keys_row");
+        if (entry == null) return;
+        Properties properties = TermuxPropertiesFile.load(context);
+        java.util.List<com.termux.app.terminal.io.ExtraKeysTarget> own =
+            com.termux.app.terminal.io.ExtraKeysOwnPages.of(properties::getProperty);
+        String summary;
+        if (own.isEmpty()) {
+            summary = getString(R.string.settings_edit_extra_keys_summary_global);
+        } else {
+            String names = "";
+            for (int i = 0; i < own.size(); i++) {
+                String name = ownPageName(own.get(i));
+                if (i == 0) names = name;
+                else if (i == own.size() - 1) names = getString(R.string.settings_extra_keys_list_and, names, name);
+                else names = names + ", " + name;
+            }
+            summary = getString(own.size() == 1 ? R.string.settings_edit_extra_keys_summary_own_one
+                : R.string.settings_edit_extra_keys_summary_own, names);
+        }
+        if (!summary.contentEquals(entry.getSummary() == null ? "" : entry.getSummary())) entry.setSummary(summary);
+    }
+
+    @NonNull
+    private String ownPageName(@NonNull com.termux.app.terminal.io.ExtraKeysTarget target) {
+        switch (target) {
+            case TERMINAL: return getString(R.string.settings_extra_keys_target_terminal);
+            case DISPLAY: return getString(R.string.settings_extra_keys_target_display);
+            case HOME: return getString(R.string.settings_extra_keys_target_home);
+            case ASSISTANT: return getString(R.string.settings_extra_keys_target_assistant);
+            default: return getString(R.string.settings_extra_keys_target_global);
         }
     }
 

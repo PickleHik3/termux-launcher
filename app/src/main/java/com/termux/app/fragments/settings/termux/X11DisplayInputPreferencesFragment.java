@@ -26,6 +26,7 @@ public class X11DisplayInputPreferencesFragment extends X11DisplayPreferencesFra
 
     private static final String KEY_AUTO_KEYBOARD = "x11_keyboard_follows_text";
     private static final String KEY_TOUCH_MODE = "touchMode";
+    private static final String KEY_PASTE_SHORTCUT = "x11_paste_shortcut";
 
     @Nullable private PlaceLayoutStore mPlaces;
 
@@ -58,6 +59,7 @@ public class X11DisplayInputPreferencesFragment extends X11DisplayPreferencesFra
                 return true;
             });
         }
+        bindPasteShortcut();
         ListPreference row = findPreference(KEY_KEYBOARD_OVER_DISPLAY);
         if (row == null) return;
         row.setOnPreferenceChangeListener((preference, value) -> {
@@ -71,6 +73,19 @@ public class X11DisplayInputPreferencesFragment extends X11DisplayPreferencesFra
             return false;
         });
         refreshKeyboardOverDisplay();
+    }
+
+    /** The display's paste shortcut lives with the per-app ones, not in the display's own store. */
+    private void bindPasteShortcut() {
+        ListPreference paste = findPreference(KEY_PASTE_SHORTCUT);
+        Context context = getContext();
+        if (paste == null || context == null) return;
+        com.termux.app.x11.X11AppSettingsStore store = new com.termux.app.x11.X11AppSettingsStore(context);
+        paste.setValue(store.globalPasteShortcut());
+        paste.setOnPreferenceChangeListener((preference, value) -> {
+            store.setGlobalPasteShortcut(String.valueOf(value));
+            return true;
+        });
     }
 
     @Override

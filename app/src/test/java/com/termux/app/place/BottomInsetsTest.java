@@ -70,7 +70,10 @@ public class BottomInsetsTest {
     @Test
     public void floatingCardKeepsItsGapAboveTheInset() {
         BottomInsets insets = BottomInsets.of(false, NAV, NAV, false, 21, 0);
-        assertEquals(NAV + 21, insets.stackMarginPx);
+        // The band is laid out as the foot lays it (the container reaches the edge), so the foot
+        // changing hands at a landing moves no layout number; only the surface is the foot's.
+        assertEquals(21, insets.stackMarginPx);
+        assertEquals(NAV, insets.stackExtraHeightPx);
         assertEquals(0, insets.dockFootPx);
         assertEquals(NAV + 21, insets.rowsBottomFromScreenBottomPx());
     }
@@ -103,8 +106,8 @@ public class BottomInsetsTest {
     }
 
     /**
-     * The tail of a Workspace -> Home crossing on pong: Home's rows stand, so the stack takes the
-     * foot (margin 0, the column one inset up) while the Workspace's 654 px keyboard is still laid
+     * The tail of a Terminal -> Home crossing on pong: Home's rows stand, so the stack takes the
+     * foot (margin 0, the column one inset up) while the Terminal's 654 px keyboard is still laid
      * out in the column and the travel holds the stack 654 px down. The stack's clip cuts at its
      * own bottom, the screen's edge, which left the keyboard's top 63 px (its number row) showing
      * under the gesture pill; the keyboard's own cut hides all of it.
@@ -122,12 +125,12 @@ public class BottomInsetsTest {
             BottomInsets.keyboardTravelHiddenPx(travel, 0f, 0, foot.stackPaddingPx));
     }
 
-    /** Without a foot the column stands on the stack's bottom: the cut is the stack's own. */
+    /** Without a foot the column stands the kept band up, as with one; the cut is the same. */
     @Test
     public void keyboardCutWithoutAFootIsTheStacksOwn() {
         int flush = 24;
         BottomInsets noFoot = BottomInsets.forKept(0, NAV, false, 0, flush);
-        assertEquals(0, noFoot.keyboardColumnMarginPx);
+        assertEquals(NAV, noFoot.keyboardColumnMarginPx);
         // The stack clips at its bottom minus the travel; the keyboard ends the padding above it.
         assertEquals(300 - flush,
             BottomInsets.keyboardTravelHiddenPx(300f, 0f, 0, noFoot.stackPaddingPx));
@@ -139,5 +142,88 @@ public class BottomInsetsTest {
         assertEquals(0, BottomInsets.keyboardTravelHiddenPx(-80f, 0f, 0, 0));
         // The keyboard's own share behind held bands wins when it is the larger cut.
         assertEquals(200, BottomInsets.keyboardTravelHiddenPx(300f, 200f, 120, 0));
+    }
+
+    // ---- The keyboard's foot (ADR 0029 section 6) ------------------------------------------
+
+    /** Docked, the keyboard is a slice of the frame: its host reaches the edge by the kept band. */
+    @Test
+    public void keyboardFootMovesTheBandFromTheColumnMarginIntoTheKeyboard() {
+        BottomInsets noDock = BottomInsets.forKept(0, NAV, false, 0, 0, true);
+        assertEquals(NAV, noDock.keyboardFootPx);
+        assertEquals(0, noDock.stackExtraHeightPx);
+        assertEquals(0, noDock.keyboardColumnMarginPx);
+        assertEquals(0, noDock.dockFootPx);
+        assertEquals(NAV, noDock.containerExtraPx());
+        assertEquals(NAV, noDock.rowsBottomFromScreenBottomPx());
+
+        BottomInsets dock = BottomInsets.forKept(0, NAV, true, 0, 6, true);
+        assertEquals(NAV, dock.keyboardFootPx);
+        assertEquals(0, dock.stackExtraHeightPx);
+        assertEquals(0, dock.stackPaddingPx);
+        assertEquals(6, dock.keyboardColumnMarginPx);
+        assertEquals(6 + NAV, dock.dockFootPx);
+        assertEquals(6 + NAV, dock.rowsBottomFromScreenBottomPx());
+    }
+
+    @Test
+    public void keyboardFootChangesNeitherTheRowsNorTheContainer() {
+        for (int kept : new int[] {0, NAV})
+            for (boolean dockFoot : new boolean[] {false, true})
+                for (int margin : new int[] {0, 21})
+                    for (int flush : new int[] {0, 9}) {
+                        BottomInsets without = BottomInsets.forKept(0, kept, dockFoot, margin, flush);
+                        BottomInsets with = BottomInsets.forKept(0, kept, dockFoot, margin, flush,
+                            true);
+                        String at = "kept=" + kept + " dockFoot=" + dockFoot + " margin=" + margin
+                            + " flush=" + flush;
+                        assertEquals(at, without.rowsBottomFromScreenBottomPx(),
+                            with.rowsBottomFromScreenBottomPx());
+                        assertEquals(at, without.containerExtraPx(), with.containerExtraPx());
+                        assertEquals(at, without.dockFootPx, with.dockFootPx);
+                        assertEquals(at, without.stackMarginPx, with.stackMarginPx);
+                        assertEquals(at, 0, without.keyboardFootPx);
+                        assertEquals(at, kept, with.keyboardFootPx);
+                    }
+    }
+
+    /** The dress phase and the stack pass read the foot from the same static. */
+    @Test
+    public void dressPhaseFootEqualsTheStackPassFoot() {
+        for (int kept : new int[] {0, NAV})
+            for (boolean flag : new boolean[] {false, true})
+                for (boolean dockFoot : new boolean[] {false, true}) {
+                    BottomInsets pass = BottomInsets.forKept(0, kept, dockFoot, 0, 0, flag);
+                    assertEquals(pass.keyboardFootPx, BottomInsets.keyboardFootPx(kept, flag));
+                }
+        assertEquals(0, BottomInsets.keyboardFootPx(0, true));
+        assertEquals(0, BottomInsets.keyboardFootPx(NAV, false));
+    }
+
+    @Test
+    public void keysAreTheLaidOutHeightLessTheFoot() {
+        assertEquals(654, BottomInsets.keyboardKeysPx(654 + NAV, NAV));
+        assertEquals(654, BottomInsets.keyboardKeysPx(654, 0));
+        assertEquals(0, BottomInsets.keyboardKeysPx(10, NAV));
+    }
+
+    /** The cut also eats the foot in proportion to the keyboard's share. */
+    @Test
+    public void keyboardTravelCutEatsTheFootWithTheShare() {
+        int keys = 654;
+        // Share 0: nothing is hidden.
+        assertEquals(0, BottomInsets.keyboardTravelHiddenPx(0f, 0f, 0, 0, NAV, keys));
+        // Half the keys slid: half the foot goes with it.
+        assertEquals(327 + Math.round(NAV / 2f),
+            BottomInsets.keyboardTravelHiddenPx(327f, 327f, 0, 0, NAV, keys));
+        // Down at rest (share = keys): the whole keyboard, foot included.
+        assertEquals(keys + NAV,
+            BottomInsets.keyboardTravelHiddenPx(keys, keys, 0, 0, NAV, keys));
+        // A crossing's travel past the keyboard (dock too) hides at least that much.
+        assertEquals(keys + 300,
+            BottomInsets.keyboardTravelHiddenPx(keys + 300f, keys, 0, 0, NAV, keys));
+        // No foot: today's answer.
+        assertEquals(BottomInsets.keyboardTravelHiddenPx(300f, 200f, 120, 0),
+            BottomInsets.keyboardTravelHiddenPx(300f, 200f, 120, 0, 0, keys));
     }
 }

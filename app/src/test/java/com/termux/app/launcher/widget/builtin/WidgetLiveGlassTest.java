@@ -41,9 +41,10 @@ import org.robolectric.annotation.GraphicsMode;
 import java.util.List;
 
 /**
- * A built-in widget's glass takes Live blur's picture only while Live blur is on, the phone can
- * record, the slab is worn and its page is shown and on screen; it gives the picture back when
- * the page leaves or the switch goes off, and with Live off it never holds one.
+ * A built-in widget's glass asks for Live blur's picture while the phone can record and the slab
+ * is worn; its page showing, hiding or sliding never changes what it holds (ADR 0029 section 4).
+ * It gives the picture back when it leaves the window or its kind moves, and with Live off it
+ * never holds one.
  */
 @RunWith(RobolectricTestRunner.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -54,14 +55,11 @@ public class WidgetLiveGlassTest {
     public void wantsEveryTermAndNothingLess() {
         int[] sdks = {Build.VERSION_CODES.R, Build.VERSION_CODES.S, Build.VERSION_CODES.TIRAMISU};
         for (int sdk : sdks) {
-            for (int bits = 0; bits < 16; bits++) {
-                boolean live = (bits & 1) != 0;
-                boolean slab = (bits & 2) != 0;
-                boolean page = (bits & 4) != 0;
-                boolean screen = (bits & 8) != 0;
-                boolean expected = bits == 15 && sdk >= Build.VERSION_CODES.S;
+            for (int bits = 0; bits < 2; bits++) {
+                boolean slab = bits == 1;
+                boolean expected = slab && sdk >= Build.VERSION_CODES.S;
                 assertEquals("sdk " + sdk + " bits " + bits, expected,
-                    WidgetLiveGlass.wants(live, sdk, slab, page, screen));
+                    WidgetLiveGlass.wants(sdk, slab));
             }
         }
     }
@@ -87,8 +85,14 @@ public class WidgetLiveGlassTest {
         @Override public void addGlassWidget(@NonNull BuiltinWidgetView widget) { }
         @Override public void removeGlassWidget(@NonNull BuiltinWidgetView widget) { }
         @Override public boolean liveBlur() { return live; }
-        @Nullable @Override public LivePicture attachLiveGlass(@NonNull View slab) {
-            if (!live || recorder == null) return null;
+        @Nullable @Override public LivePicture attachLiveGlass(@NonNull View slab,
+                                                               @Nullable Runnable redress) {
+            if (recorder == null) return null;
+            if (!live) {
+                // Granted the stored frame: any picture it had goes, as the activity's does.
+                recorder.detach(slab);
+                return null;
+            }
             return recorder.attach(slab, 20f, LiveBackdrop.RANK_WIDGET);
         }
         @Override public void detachLiveGlass(@NonNull View slab) {
@@ -120,7 +124,7 @@ public class WidgetLiveGlassTest {
         @Override public int paneGlassGrainStrength() { return 0; }
         @Override public float paneGlassCornerRadiusPx() { return 0f; }
         @Override public int paneCornerRadiusDp() {
-            return TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS;
+            return TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS;
         }
         @Override public int paneGapDp() { return 0; }
     }
@@ -187,21 +191,21 @@ public class WidgetLiveGlassTest {
     }
 
     @Test
-    public void aShownPageTakesThePictureAndALeavingOneGivesItBack() {
+    public void aPageHiddenOrShownKeepsItsPictureAndAKindChangeGivesItBack() {
         Scene scene = scene(true);
-        assertNotNull("a widget on the page in front is live", scene.slab.livePicture());
+        LivePicture picture = scene.slab.livePicture();
+        assertNotNull("a widget wearing glass is live", picture);
         assertEquals(1, scene.page.recorder.size());
 
-        // The wall slides Home off (INVISIBLE), or the pager drops the page beside (GONE).
+        // The wall slides Home off (INVISIBLE), or the pager drops the page beside (GONE): the
+        // kind stays, and a hidden surface holds no layer.
         scene.page.setVisibility(View.INVISIBLE);
-        assertNull("a page off screen holds no picture", scene.slab.livePicture());
-        assertEquals(0, scene.page.recorder.size());
-
+        assertSame("a hidden page keeps its picture", picture, scene.slab.livePicture());
         scene.page.setVisibility(View.VISIBLE);
-        assertNotNull("back on screen, live again", scene.slab.livePicture());
+        assertSame(picture, scene.slab.livePicture());
         assertEquals(1, scene.page.recorder.size());
 
-        // Live blur off: the next dress pass gives it back.
+        // Live blur off moves the kind: the next dress pass gives it back.
         scene.page.live = false;
         scene.clock.onGlassStyle(scene.page.glass);
         assertNull(scene.slab.livePicture());
@@ -218,47 +222,17 @@ public class WidgetLiveGlassTest {
     }
 
     @Test
-    public void aWidgetSlidOffScreenGivesItsPictureBackOnTheMove() {
+    public void aWidgetSlidAnywhereKeepsItsPicture() {
         Scene scene = scene(true);
-        assertNotNull(scene.slab.livePicture());
-        scene.clock.setTranslationX(100_000f);
-        scene.clock.onGlassMoved();
-        assertNull("slid out of the window", scene.slab.livePicture());
-        scene.clock.setTranslationX(0f);
-        scene.clock.onGlassMoved();
-        assertNotNull(scene.slab.livePicture());
-    }
-
-    @Test
-    public void armsOnScreenAndOneScreenAwayButNotFurther() {
-        int w = 1080;
-        int h = 2400;
-        assertTrue("on screen", WidgetLiveGlass.near(100, 200, 400, 300, w, h));
-        assertTrue("the incoming page, one width right", WidgetLiveGlass.near(100 + w, 200, 400, 300, w, h));
-        assertTrue("the incoming page, one width left", WidgetLiveGlass.near(100 - w, 200, 400, 300, w, h));
-        assertTrue("not laid out yet: armed, recorded once it has a size",
-            WidgetLiveGlass.near(0, 0, 0, 0, w, h));
-        assertFalse("two widths right", WidgetLiveGlass.near(2 * w, 200, 400, 300, w, h));
-        assertFalse("two widths left", WidgetLiveGlass.near(-w - 400, 200, 400, 300, w, h));
-        assertFalse("far below", WidgetLiveGlass.near(100, 2 * h, 400, 300, w, h));
-    }
-
-    @Test
-    public void theIncomingPageIsLiveBeforeItSlidesOn() {
-        Scene scene = scene(true);
+        LivePicture picture = scene.slab.livePicture();
+        assertNotNull(picture);
         int width = scene.page.getRootView().getWidth();
-        assertTrue(width > 0);
-        // Posed as Home's pager poses the page beside: one page width off, nothing of it showing.
-        scene.clock.setTranslationX(width);
-        scene.clock.onGlassMoved();
-        assertNotNull("armed before its first frame on screen", scene.slab.livePicture());
-        scene.clock.setTranslationX(-width);
-        scene.clock.onGlassMoved();
-        assertNotNull(scene.slab.livePicture());
-        // Further than the page beside: given back.
-        scene.clock.setTranslationX(3 * width);
-        scene.clock.onGlassMoved();
-        assertNull(scene.slab.livePicture());
+        // Posed beside the screen, or far off it, as a swipe moves the page: nothing moves the kind.
+        for (float x : new float[] {width, -width, 3f * width, 100_000f, 0f}) {
+            scene.clock.setTranslationX(x);
+            scene.clock.onGlassMoved();
+            assertSame("posed at " + x, picture, scene.slab.livePicture());
+        }
     }
 
     @Test

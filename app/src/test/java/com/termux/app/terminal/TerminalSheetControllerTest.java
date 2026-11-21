@@ -91,6 +91,48 @@ public class TerminalSheetControllerTest {
         assertFalse(sheet.isOpen());
     }
 
+    @Test
+    public void closingACardUnderAnotherLeavesTheUpperCardOpenAndShowing() {
+        TermuxActivity activity = laidOutActivity();
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+        int[] lowerDismissed = {0};
+        int[] upperDismissed = {0};
+        sheet.show("Consent", new TextView(activity), false, null, () -> lowerDismissed[0]++);
+        View lower = sheet.topCard();
+        sheet.show("Other", new TextView(activity), false, null, () -> upperDismissed[0]++);
+        View upper = sheet.topCard();
+        assertEquals(2, sheet.depth());
+
+        assertTrue(sheet.dismiss(lower));
+
+        assertEquals(1, sheet.depth());
+        assertSame(upper, sheet.topCard());
+        assertEquals(View.VISIBLE, upper.getVisibility());
+        assertTrue(sheet.isOpen());
+        assertEquals(1, lowerDismissed[0]);
+        assertEquals(0, upperDismissed[0]);
+        // Already gone: nothing happens, nothing runs twice.
+        assertFalse(sheet.dismiss(lower));
+        assertEquals(1, sheet.depth());
+        assertEquals(1, lowerDismissed[0]);
+    }
+
+    @Test
+    public void closingTheTopCardByReferenceIsTheNormalDismiss() {
+        TermuxActivity activity = laidOutActivity();
+        TerminalSheetController sheet = activity.getTerminalSheetController();
+        int[] dismissed = {0};
+        sheet.show("Under", new TextView(activity));
+        View under = sheet.topCard();
+        sheet.show("Consent", new TextView(activity), false, null, () -> dismissed[0]++);
+
+        assertTrue(sheet.dismiss(sheet.topCard()));
+
+        assertEquals(1, sheet.depth());
+        assertSame(under, sheet.topCard());
+        assertEquals(1, dismissed[0]);
+    }
+
     /**
      * The route back actually travels on a device: KEYCODE_BACK is claimed in the key channel and
      * {@code onBackPressed()} never runs. Both routes have to pop exactly one card.
@@ -265,7 +307,7 @@ public class TerminalSheetControllerTest {
     }
 
     /**
-     * A workspace prompt or the search bar rises out of the terminal's own bottom edge: it spans the
+     * A terminal prompt or the search bar rises out of the terminal's own bottom edge: it spans the
      * terminal's frame, sits on that edge, and the plane is cut off there so the panel is clipped by
      * it on the way in and out instead of sliding across the dock.
      */

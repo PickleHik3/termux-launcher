@@ -19,6 +19,8 @@ import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
 import java.time.Duration;
+import android.app.Application;
+import com.termux.app.page.PageKind;
 
 /**
  * A released window swipe costs the release frame only what the next frame draws: the leaving
@@ -26,7 +28,7 @@ import java.time.Duration;
  * does not need (the drawer, the window beyond the arriving one) runs once that settle is over.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class InnerStepReleaseTest {
 
     private static final int WIDTH = 1080;
@@ -48,21 +50,21 @@ public class InnerStepReleaseTest {
         wall.addView(terminal);
         wall.setReducedMotion(true);
         wall.setPages(PaneWallPolicy.availablePages(true, false, false));
-        wall.setPageView(PaneWallPage.TERMINAL, terminal);
+        wall.setPageView(PageKind.TERMINAL, terminal);
         previous = new FrameLayout(activity);
         previous.addView(new View(activity));
         next = new FrameLayout(activity);
         next.addView(new View(activity));
         wall.setInnerNeighbourViews(previous, next, null);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean hasInnerPage(PaneWallPage page, int s) {
-                return page == PaneWallPage.TERMINAL;
+            @Override public boolean hasInnerPage(PageKind page, int s) {
+                return page == PageKind.TERMINAL;
             }
-            @Override public void onInnerStep(PaneWallPage page, int s, float fromPx) {
+            @Override public void onInnerStep(PageKind page, int s, float fromPx) {
                 steps = s;
                 // What stepWindowFromWall does once the window is shown: the arrival nudge,
                 // with the deferred work as its end.
-                wall.nudgePage(PaneWallPage.TERMINAL, fromPx, 380L, null, () -> deferredRuns++);
+                wall.nudgePage(PageKind.TERMINAL, fromPx, 380L, null, () -> deferredRuns++);
             }
         });
         layOut();

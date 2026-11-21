@@ -397,6 +397,17 @@ public final class TerminalBuffer implements TerminalContent {
         mLines[externalToInternalRow(row)].setLineWrap(false);
     }
 
+    /** The unbroken run of blank rows at the bottom of the screen, counted no further up than the row below {@code cursorRow}. */
+    int blankRowsAtBottomBelow(int cursorRow) {
+        int blank = 0;
+        for (int i = mScreenRows - 1; i > cursorRow; i--) {
+            TerminalRow row = mLines[externalToInternalRow(i)];
+            if (row != null && !row.isBlank()) break;
+            blank++;
+        }
+        return blank;
+    }
+
     /**
      * Where a rows-only {@link #resize} would put the rows now on screen, without doing it: the
      * number of rows down that every surviving screen row moves (negative is up), so old external

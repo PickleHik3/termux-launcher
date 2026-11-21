@@ -8,7 +8,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 import com.termux.R;
-import com.termux.app.TermuxActivity;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
@@ -86,16 +85,13 @@ public final class TerminalCommandPalette {
     private TerminalCommandPalette() {
     }
 
-    /** Shows the palette. Must be called on the main thread. */
-    public static void show(@NonNull TermuxActivity activity) {
-        // Opened on a Home page, the palette shows the Home set.
-        activity.getCommandPaletteController().toggle(activity.paletteContextHere());
-    }
-
-    /** Shows the palette with the row set for {@code where}. Must be called on the main thread. */
-    public static void show(@NonNull TermuxActivity activity,
+    /**
+     * Shows the palette with the row set for {@code where}; opened on a Home page, the caller
+     * passes the Home set. Must be called on the main thread.
+     */
+    public static void show(@NonNull TerminalCommandPaletteController palette,
                             @NonNull CommandPaletteContext where) {
-        activity.getCommandPaletteController().toggle(where);
+        palette.toggle(where);
     }
 
     /**
@@ -183,8 +179,10 @@ public final class TerminalCommandPalette {
      * what makes "rename session 2" findable by typing — which is the palette's whole point.
      */
     @NonNull
-    static List<CommandPaletteFilter.Entry> buildSessionEntries(@NonNull TermuxActivity activity) {
-        List<SessionBrowserModel.Session> sessions = activity.getSessionBrowserSessions();
+    static List<CommandPaletteFilter.Entry> buildSessionEntries(
+        @NonNull TerminalCommandPaletteController.Host host) {
+        Context activity = host.context();
+        List<SessionBrowserModel.Session> sessions = host.sessionBrowserSessions();
         if (sessions.isEmpty()) return Collections.emptyList();
         List<CommandPaletteFilter.Entry> entries = new ArrayList<>(sessions.size() * 2);
         for (SessionBrowserModel.Session session : sessions) {
@@ -260,10 +258,11 @@ public final class TerminalCommandPalette {
      */
     @NonNull
     static List<CommandPaletteFilter.Entry> buildKeyboardLayoutEntries(
-        @NonNull TermuxActivity activity) {
-        List<String> ring = activity.inAppKeyboardLayoutRing();
-        if (!activity.isInAppKeyboardEnabled() || ring.size() < 2) return Collections.emptyList();
-        String active = activity.activeInAppKeyboardLayoutId();
+        @NonNull TerminalCommandPaletteController.Host host) {
+        Context activity = host.context();
+        List<String> ring = host.inAppKeyboardLayoutRing();
+        if (!host.isInAppKeyboardEnabled() || ring.size() < 2) return Collections.emptyList();
+        String active = host.activeInAppKeyboardLayoutId();
         List<CommandPaletteFilter.Entry> entries = new ArrayList<>(ring.size());
         for (String layoutId : ring) {
             JSONObject arguments = new JSONObject();
@@ -301,8 +300,9 @@ public final class TerminalCommandPalette {
      */
     @NonNull
     static List<CommandPaletteFilter.Entry> buildKeyboardFormEntries(
-        @NonNull TermuxActivity activity) {
-        if (!activity.isInAppKeyboardEnabled()) return Collections.emptyList();
+        @NonNull TerminalCommandPaletteController.Host host) {
+        if (!host.isInAppKeyboardEnabled()) return Collections.emptyList();
+        Context activity = host.context();
         KeyboardForm current = TerminalActionDispatcher.getInstance().keyboardForm();
         List<CommandPaletteFilter.Entry> entries =
             new ArrayList<>(KeyboardForm.values().length);

@@ -127,7 +127,7 @@ public class ChromeRetroEffectTest {
         assertFalse(effect.targets().isEmpty());
     }
 
-    @Test public void homeChromeIsDrawnPlainAndTheWorkspaceWearsTheStyle() {
+    @Test public void homeChromeIsDrawnPlainAndTheTerminalWearsTheStyle() {
         for (PaneRetroStyle style : PaneRetroStyle.values()) {
             assertEquals(PaneRetroStyle.NONE, ChromeRetroEffect.chromeStyle(style, true));
             assertEquals(style, ChromeRetroEffect.chromeStyle(style, false));

@@ -20,15 +20,16 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * One-time cleanup of the wallpaper vision models. The wallpaper analysis they served is gone, so
- * any copy still under {@code files/tai/models} is dead weight: it is deleted once, with the picks
- * that named the removed wallpaper functions. Reads and deletes files: never on the main thread.
+ * One-time cleanup of the wallpaper vision models. The scene and cut-out models served an analysis
+ * that is gone, so any copy still under {@code files/tai/models} is dead weight: it is deleted
+ * once, with the picks that named the removed wallpaper functions. The two depth models stay: the
+ * photo wallpaper's depth maker uses them. Reads and deletes files: never on the main thread.
  */
 final class TaiVisionLeftovers {
     private static final String TAG = "TaiVisionLeftovers";
-    /** The four catalogue ids that shipped, for a download whose record carries no capabilities. */
+    /** The scene and cut-out ids that shipped, for a download whose record carries no capabilities. */
     private static final Set<String> LEGACY_IDS = Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(
-        "depth-anything-3-small", "depth-anything-v2-small", "segformer-b0-ade20k", "u2net")));
+        "segformer-b0-ade20k", "u2net")));
     /** Picks and accelerators of the removed wallpaper functions, in the TAI settings file. */
     private static final List<String> LEGACY_KEYS = Collections.unmodifiableList(Arrays.asList(
         "wallpaper_depth_model", "tai_fn_wallpaper_reader_model", "tai_fn_wallpaper_reader_accel",
@@ -38,19 +39,27 @@ final class TaiVisionLeftovers {
     private TaiVisionLeftovers() {}
 
     /**
-     * The model ids to delete: every spec that is a vision tool or a legacy id, and every legacy id
-     * the store still has a download record for.
+     * The model ids to delete: every spec with a scene or cut-out capability or a legacy id, and
+     * every legacy id the store still has a download record for. A depth model is never listed.
      */
     @NonNull
     static Set<String> idsToDelete(@NonNull Collection<TaiModelSpec> specs, @NonNull Collection<String> recordIds) {
         Set<String> ids = new LinkedHashSet<>();
         for (TaiModelSpec spec : specs) {
+            if (isDepth(spec)) continue;
             if (spec.isVisionTool() || LEGACY_IDS.contains(spec.id)) ids.add(spec.id);
         }
         for (String id : recordIds) {
             if (LEGACY_IDS.contains(id)) ids.add(id);
         }
         return ids;
+    }
+
+    private static boolean isDepth(@NonNull TaiModelSpec spec) {
+        return TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID.equals(spec.id)
+            || TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID.equals(spec.id)
+            || spec.capabilities.contains(TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION)
+            || spec.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
     }
 
     /** Runs the cleanup the first time only; a failure leaves the flag unset so the next start retries. */

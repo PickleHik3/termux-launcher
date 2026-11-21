@@ -22,6 +22,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * A recording of what is beneath a surface starts with the window's ground: the window background
@@ -29,7 +30,7 @@ import org.robolectric.annotation.GraphicsMode;
  * the screen there, not a hole.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class LiveBackdropGroundTest {
 

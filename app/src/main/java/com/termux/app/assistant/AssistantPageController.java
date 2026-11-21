@@ -25,7 +25,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
 import com.termux.R;
-import com.termux.app.TermuxActivity;
+import com.termux.app.page.Page;
+import com.termux.app.page.PageHost;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.termux.TaiModelCentreFragment;
 
@@ -62,6 +63,8 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
 
     private final Context context;
     private final View page;
+    private final PageHost host;
+    private final Page self;
     private final AssistantChatView chatView;
     private final AssistantChatsView chatsView;
     private final AssistantEngine engine;
@@ -103,10 +106,13 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         render();
     };
 
-    AssistantPageController(@NonNull Context context, @NonNull View page, @NonNull AssistantChatView chatView,
+    AssistantPageController(@NonNull Context context, @NonNull View page, @NonNull PageHost host,
+                            @NonNull Page self, @NonNull AssistantChatView chatView,
                             @NonNull AssistantChatsView chatsView, @NonNull AssistantUi.Palette palette) {
         this.context = context;
         this.page = page;
+        this.host = host;
+        this.self = self;
         this.chatView = chatView;
         this.chatsView = chatsView;
         this.palette = palette;
@@ -269,11 +275,24 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         chatView.composer().setGenerating(engine.isGenerating());
         updateChip();
         updateNotice();
+        updateAnswerStatus();
         // An answer the store still calls streaming that nobody is writing: read it as the store has it.
         if (generating == 0L && !messages.isEmpty() && AssistantMessage.STATE_STREAMING
             .equals(messages.get(messages.size() - 1).state) && !renderScheduled) {
             reload();
         }
+    }
+
+    /** The status line above the composer: loading, thinking or responding while an answer is in progress. */
+    private void updateAnswerStatus() {
+        long id = engine.generatingMessageId();
+        String live = id == 0L ? null : engine.liveText(id);
+        AssistantModelStatus.Snapshot snap = snapshot;
+        AssistantModelStatus.Kind kind = snap == null ? AssistantModelStatus.Kind.NONE : snap.defaultModel.state.kind;
+        AssistantModelPresenter.Stage stage = AssistantModelPresenter.stage(engine.isGenerating(),
+            live == null || live.isEmpty(), kind, engine.answerPhase());
+        String name = snap == null ? "" : context.getString(AssistantModelPresenter.fullName(snap.defaultModel.modelId));
+        chatView.setAnswerStatus(stage, name);
     }
 
     private boolean containsMessage(long id) {
@@ -507,14 +526,23 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     }
 
     @Override
-    public void onSearchFocused() {
-        imeRequested();
+    public void onSearchFocused(boolean focused) {
+        typingFocusChanged(focused);
     }
 
-    /** Whether back should close the Chats list; the page's host asks first. */
+    /**
+     * Back's work on the page, one step per press: the Chats list closes first, then the
+     * composer's focus drops and the keyboard goes down. False with neither to do, so the chain
+     * takes the wall to Home page 1.
+     */
     boolean handleBack() {
-        if (!chatsOpen) return false;
-        closeChats();
+        if (chatsOpen) {
+            closeChats();
+            return true;
+        }
+        if (!chatView.composer().field().hasFocus()) return false;
+        hideKeyboard();
+        host.lowerKeyboard();
         return true;
     }
 
@@ -634,6 +662,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         if (sheet != null) sheet.refresh();
         updateChip();
         updateNotice();
+        updateAnswerStatus();
         engine.setModelReady(AssistantModelPresenter.canAnswer(next));
     }
 
@@ -822,14 +851,16 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     // -------------------------------------------------------------------------- dictation
 
     @Override
-    public void onFieldFocused() {
-        imeRequested();
+    public void onFieldFocused(boolean focused) {
+        typingFocusChanged(focused);
     }
 
-    /** The system keyboard is about to show: the activity must accept its insets first. */
-    private void imeRequested() {
-        Activity activity = activity();
-        if (activity instanceof TermuxActivity) ((TermuxActivity) activity).onSystemImeRequested();
+    /**
+     * One of the page's fields took or lost focus: the launcher's keyboard comes up for it and
+     * takes the keys, or the claim is recomputed without it. The phone's keyboard never opens here.
+     */
+    private void typingFocusChanged(boolean focused) {
+        host.fieldFocusChanged(self, focused);
     }
 
     @Nullable
@@ -868,7 +899,6 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
                     return;
                 }
                 chatView.composer().insertDictation(text);
-                imeRequested();
             }
         });
         if (result == AssistantDictation.Start.NO_PERMISSION) showMicNotice();

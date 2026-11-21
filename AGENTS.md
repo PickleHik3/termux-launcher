@@ -52,7 +52,9 @@ device of record. Every other name (a place, surface, gesture, edition) is in
    (the app downloads and verifies it on first run). One committed zip cost a history rewrite.
 4. **Touching a real phone without being asked.** Ask before installing, force-stopping or
    injecting input on pong, and pass `-s <serial>` to every adb command (bare `adb` often reaches
-   the phone). A stray tap once zeroed the developer's side gap on every surface.
+   the phone). A stray tap once zeroed the developer's side gap on every surface. An install the
+   developer asked for may run in the background while they use another app (the launcher
+   restarts behind it); taps, screenshots and recordings never run while they are using the phone.
 5. **Merging `dev` into an edition branch** carelessly. Expect conflicts in `app/build.gradle`,
    `app/src/main/res/values/strings.xml` and `.github/workflows/debug_build.yml`; resolve identity,
    `versionName` and the push trigger to the edition's side, and diff `app/build.gradle` against
@@ -79,7 +81,8 @@ Before calling a change done, say which of these applied:
 - **Editions.** Anything touching applicationId, bootstrap, manifest or signing needs a decision
   per edition.
 - **The system IME.** Every path that shows it calls `TermuxActivity.onSystemImeRequested()`
-  first, or the `mAcceptSystemImeInsets` gate drops its insets.
+  first: that takes the `system-ime` Hold (`SystemImeRide`), and only an owned keyboard's insets
+  move the layout. A request whose keyboard never shows backs off at the Hold's 1.5 s backstop.
 
 ## Where code lives
 
@@ -106,10 +109,28 @@ Before calling a change done, say which of these applied:
   [building.md](docs/agents/building.md).
 - Prove the change with the smallest check that shows it works, then stop: the tests you touched,
   then the module suite before handing work over. CI owns the rest.
-- If the cause of a bug is plain from the code, fix it. If not, or one fix has already missed,
-  reproduce the failing state first (a failing test, a log line, a measured value). Fixes ship
-  with a focused regression test.
+- The developer's description of what they see is the reproduction. For a small bug, when the
+  code shows a likely cause that fits it, fix it and name what to check. Build a reproduction (a
+  failing test, a log line, a measured value) only when no cause in the code fits, or one fix has
+  already missed. Fixes ship with a focused regression test.
+- Gradle: let it keep its daemon (a warm daemon builds an unchanged tree in about 3 s instead of
+  19 s; it exits after 15 idle minutes). Never `./gradlew --stop`: it stops every session's daemon
+  mid-build. The full unit suite runs through `scripts/full-suite.sh [log]`, which waits for any
+  other full suite on the machine to finish first and prints one result line per module.
 - Pong is the truth for layout and motion; the emulator is for throwaway shots.
+- **Pong rounds** (until the next release ships; the developer set this on 2026-11-18):
+  - Every build installed on pong is a logging build. The motion log stays on, and the diagnostic
+    lines a wave adds go into pong's APK. A diag commit is reverted only on the branch that merges,
+    after pong's APK is built from a head that still has it; say which diag commits the APK carries.
+  - A defect seen on pong is chased on pong's log, not reproduced on the emulator first. The
+    emulator sweeps the other setups (Floating, other layouts, keyboard states) for regressions.
+  - One recorded round is `scripts/pong-round.sh <outdir>`: both Home ⇄ Terminal crossings at every
+    frame, the motion log per crossing, a frame scan and strips of the biggest jumps
+    (`summary.txt`). It runs only when the developer has said they are off the phone.
+  - The developer's own use is evidence too: `ssh termux launcherctl motion-log dump` reads it
+    with no taps or screenshots, so it may run while they use the phone.
+  - Owed tap checks for a build (`project-docs/device-checks.md`) go into the same round, one
+    `device-checker` batch right after the recording, not separate rounds.
 - Say what you verified and on what; anything owed goes on `project-docs/device-checks.md` or
   `developer-checks.md` in the same commit ([testing.md](docs/agents/testing.md)).
 - Compile-check an API claim before relying on it (`UserHandle.getIdentifier` looks public and is
@@ -148,14 +169,22 @@ Raise these if you think they are wrong; do not silently undo them.
 - The Sessions sidebar is legacy: no Sessions tab in the editor, no dot tab badges.
 - The Appearance editor commits only on Done. Its card sheet is always present at peek, half or
   full (no ✕); Back above peek collapses to peek, at peek it goes through the unsaved-changes
-  dialog; dirtiness compares against the entry snapshot. Views raised over the editor need a Z
-  above the sheet's elevation; `bringToFront` alone draws under.
+  dialog; dirtiness compares the draft against the store. A view's place in Z is its window layer
+  (ground, pages, chrome, sheets, editor, notices, back to front; `WindowLayer`): runtime views
+  join their layer's host through `WindowLayers`, never the window decor or the content view;
+  elevation only draws a shadow and `bringToFront` is not used.
 - The editor collapses the status pane on entry, so a status-pane control draws its own preview.
 - A stored `-1` corner radius means "follow the style", resolved only in
   `resolveAutoCornerRadiusDp`. Never give `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
   `DEFAULT_STATUS_BAR_CORNER_RADIUS` a real number.
 - Shipped defaults are pinned for existing installs (`adoptShippedSurfaceDefaults()`; a store
-  holding only `log_level` is a fresh install).
+  holding only `log_level` is a fresh install). The one sanctioned way to drop carried-over
+  appearance is the reset number, `AppearanceReset.NUMBER`: a build that raises it puts everything
+  the Appearance editor owns back to a new install's once, on the first start. Raised to 1 for the
+  2.0 pre-release, which also carries the one-look model (ADR 0031): that reset deletes every
+  per-kind and per-page look key, the sheets' and widgets' looks, surfaces' own values beyond
+  Opacity and Blur and the per-page wallpaper dim, converting none. Raised again only on the
+  developer's say (releasing.md).
 - `SettingsLayoutUtils.applyItemLayout` overwrites every preference's layout; a preference with
   its own layout goes on the exemption list.
 - Pane inner padding favours rows; change the rule only in `PaneShape` (`verticalInsetPx`,

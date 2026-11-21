@@ -13,7 +13,7 @@ import com.termux.app.TermuxService;
 import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeyModifiers;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
@@ -43,8 +43,8 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** The shell behind {@link #focusedView()}, or null when no pane holds one. */
     @Nullable TerminalSession currentSession();
 
-    /** The extra keys row of the visible toolbar page, or null while there is none. */
-    @Nullable ExtraKeysView extraKeysView();
+    /** The one modifier state every extra-keys page shares; the terminal reads CTRL, ALT, SHIFT and FN from it. */
+    @NonNull ExtraKeyModifiers extraKeyModifiers();
 
     /** The toolbar's text input, or null while the toolbar is not inflated. */
     @Nullable EditText toolbarTextInput();
@@ -89,12 +89,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     void finishActivityIfNotFinishing();
 
     /**
-     * Whether Home stays on screen once the Workspace's last shell has closed, and so whether the
+     * Whether Home stays on screen once the Terminal's last shell has closed, and so whether the
      * terminal service keeps running with no shell
      * ({@link com.termux.app.wall.WallRow#lastShellClosedShowsHome}). False, plain Termux's end,
      * for a host with no Home.
      */
-    default boolean staysWhenWorkspaceEmpty() {
+    default boolean staysWhenTerminalEmpty() {
         return false;
     }
 
@@ -271,6 +271,15 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      * activity can be fully in the foreground with the terminal a whole page away.
      */
     default boolean isTerminalPlaceOnScreen() {
+        return true;
+    }
+
+    /**
+     * Whether the terminal is the page on screen, at rest: the wall is not moving and a terminal
+     * window is the place the user is on. Stricter than {@link #isTerminalPlaceOnScreen()}. The
+     * default is true so a host that does not model pages behaves as before.
+     */
+    default boolean isTerminalShowing() {
         return true;
     }
 
@@ -661,6 +670,9 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     void openAppDrawer();
 
     void showCommandPalette();
+
+    /** Opens the page switcher above the key row, as a tap on its key would. */
+    void showPageSwitcher();
 
     void showExtraKeysRowEditor();
 

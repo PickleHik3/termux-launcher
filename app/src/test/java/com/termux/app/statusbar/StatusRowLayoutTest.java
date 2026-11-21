@@ -194,11 +194,33 @@ public class StatusRowLayoutTest {
         assertFalse(mRow.isReadingsTight());
     }
 
+    @Test public void readingsWiderThanTheRowAreDroppedWholeAndTheChipStaysWhole() {
+        windows(3);
+        layOut();
+        View wide = new View(mActivity);
+        mCluster.addView(wide, new LinearLayout.LayoutParams(dp(500),
+            ViewGroup.LayoutParams.MATCH_PARENT));
+
+        layOut();
+
+        assertEquals(View.INVISIBLE, mCluster.getVisibility());
+        View badge = mStrip.getChildAt(0);
+        assertEquals(dp(20), badge.getWidth());
+        assertTrue("badge whole", badge.getRight() <= mStrip.getWidth());
+        assertTrue("nothing past the row", mEndWidgets.getRight() <= dp(411));
+        assertTrue("the end widgets do not overlap the strip",
+            mStrip.getRight() <= mEndWidgets.getLeft());
+
+        mCluster.removeView(wide);
+        layOut();
+        assertEquals(View.VISIBLE, mCluster.getVisibility());
+    }
+
     // ---- helpers ----
 
     private StatusBarWidgetView reading(LinearLayout parent, int marginStart) {
         StatusBarWidgetView widget = new StatusBarWidgetView(mActivity);
-        widget.setIconGlyph("");
+        widget.setIconResource(com.termux.R.drawable.ic_rl_cpu);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT);
         params.setMarginStart(marginStart);

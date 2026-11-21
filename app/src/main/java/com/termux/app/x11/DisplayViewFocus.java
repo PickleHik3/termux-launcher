@@ -2,12 +2,12 @@ package com.termux.app.x11;
 
 import android.view.KeyEvent;
 import android.view.View;
-import android.view.ViewTreeObserver;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import java.util.function.BooleanSupplier;
+import com.termux.app.terminal.PaneKeys;
+
 import java.util.function.Predicate;
 
 /**
@@ -59,7 +59,7 @@ public final class DisplayViewFocus {
      * was out of the window says so too, and no key ever reaches it.
      */
     public static boolean holdsKeys(@Nullable View view) {
-        return view != null && view.isAttachedToWindow() && view.getRootView().findFocus() == view;
+        return PaneKeys.holds(view);
     }
 
     /**
@@ -68,35 +68,7 @@ public final class DisplayViewFocus {
      * out of the window, or its page about to change under it.
      */
     public static boolean handBackTo(@Nullable View terminal, @NonNull Runnable request) {
-        if (terminal == null) return false;
-        if (holdsKeys(terminal)) return true;
-        request.run();
-        return holdsKeys(terminal);
-    }
-
-    /**
-     * Runs {@code attempt} after {@code anchor}'s next layout pass, and after the one after that
-     * while it answers false, {@code attempts} times at most; {@code exhausted} runs when the last
-     * one answered false too. A layout is asked for each time, so a retry does not wait for
-     * something else to move.
-     */
-    public static void retryAfterLayout(@NonNull View anchor, int attempts,
-                                        @NonNull BooleanSupplier attempt,
-                                        @NonNull Runnable exhausted) {
-        if (attempts <= 0) {
-            exhausted.run();
-            return;
-        }
-        anchor.getViewTreeObserver().addOnGlobalLayoutListener(
-            new ViewTreeObserver.OnGlobalLayoutListener() {
-                @Override public void onGlobalLayout() {
-                    ViewTreeObserver live = anchor.getViewTreeObserver();
-                    if (live.isAlive()) live.removeOnGlobalLayoutListener(this);
-                    if (!attempt.getAsBoolean())
-                        retryAfterLayout(anchor, attempts - 1, attempt, exhausted);
-                }
-            });
-        anchor.requestLayout();
+        return PaneKeys.handBack(terminal, request);
     }
 
     /** Who holds the window's focus when a key arrives. */

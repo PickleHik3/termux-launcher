@@ -48,6 +48,20 @@ public final class ProotDistro {
         "DISPLAY=${DISPLAY:-:0}", "MOZ_USE_XINPUT2=1"));
 
     /**
+     * An app's scale variables ({@link X11AppLaunchEnv#SCALE_VARIABLES}), each forwarded only while
+     * the shell running the login has it set, like {@link #FORWARDED_BUS}: an empty value would
+     * override the toolkit's own detection.
+     */
+    static final List<String> FORWARDED_SCALE_ENV;
+    static {
+        List<String> forwarded = new java.util.ArrayList<>();
+        for (String name : X11AppLaunchEnv.SCALE_VARIABLES) {
+            forwarded.add("${" + name + ":+-e " + name + "=$" + name + "}");
+        }
+        FORWARDED_SCALE_ENV = Collections.unmodifiableList(forwarded);
+    }
+
+    /**
      * The launcher's session bus, as the distro sees it, forwarded only while the shell running
      * the login was handed one ({@link LauncherSound#DISTRO_BUS_VARIABLE}). Expanded by that
      * shell into either nothing or one {@code -e} pair: an empty address would stop a distro app
@@ -446,6 +460,7 @@ public final class ProotDistro {
         line.append(" --shared-x11");
         for (String variable : FORWARDED_ENV) line.append(" -e ").append(variable);
         line.append(' ').append(FORWARDED_BUS);
+        for (String forwarded : FORWARDED_SCALE_ENV) line.append(' ').append(forwarded);
         line.append(" -- /bin/sh -c ").append(singleQuote(command));
         return line.toString();
     }

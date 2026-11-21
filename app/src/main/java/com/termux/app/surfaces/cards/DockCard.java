@@ -74,10 +74,10 @@ public final class DockCard {
     /** The Options tiles, in the order the grid shows them. */
     public enum Option {
         SEARCH_FIELD(R.drawable.ic_symbol_search, R.string.editor_dock_option_search_field, 0),
-        DRAWER_ICON(R.drawable.ic_symbol_apps, R.string.editor_dock_option_drawer_icon, 0),
-        COMMAND_PALETTE(R.drawable.ic_symbol_terminal, R.string.editor_dock_option_command_palette,
+        DRAWER_ICON(R.drawable.ic_rl_apps, R.string.editor_dock_option_drawer_icon, 0),
+        COMMAND_PALETTE(R.drawable.ic_rl_terminal, R.string.editor_dock_option_command_palette,
             0),
-        FLOAT_TERMINAL(R.drawable.ic_status_bar_add_window,
+        FLOAT_TERMINAL(R.drawable.ic_rl_window_add,
             R.string.editor_dock_option_float_terminal, 0),
         NOTIFICATION_DOTS(R.drawable.ic_ms_circle_notifications,
             R.string.editor_dock_option_notification_dots, 0),
@@ -169,9 +169,9 @@ public final class DockCard {
     }
 
     /** The dock types' glyphs and words, today's, in the order the tiles show them. */
-    private static final int[] TYPE_GLYPHS = {R.drawable.ic_symbol_dock_glass_tray,
-        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip,
-        R.drawable.ic_symbol_dock_peek_glass};
+    private static final int[] TYPE_GLYPHS = {R.drawable.ic_rl_dock_tray,
+        R.drawable.ic_rl_dock_beads, R.drawable.ic_rl_dock_strip,
+        R.drawable.ic_rl_dock_peek};
     private static final int[] TYPE_WORDS = {R.string.layout_editor_dock_style_glass_tray,
         R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip,
         R.string.layout_editor_dock_style_peek_glass};
@@ -183,15 +183,16 @@ public final class DockCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.HOME_ICON_SIZE, Row.DOCK_APP_ICONS)
-            .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
-                Row.DOCK_MONOCHROME)
-            .tier(3, Row.SECTION_LAYOUT, Row.DOCK_BARS);
         // Reflection is Peek glass's own knob, shown only while Peek is the type.
-        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
-            .tier(3, Row.REFLECTION)
-            .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.LINK_GLOBAL)
+        // The design, icons and icon options are the apps row's: a place without one lists none.
+        EditorRows.CardRows rows = new EditorRows.CardRows();
+        if (offers.appsRow)
+            rows.tier(1, Row.DOCK_TYPE, Row.DOCK_APP_ICONS)
+                .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
+                    Row.DOCK_MONOCHROME);
+        return rows
+            .tier(3, Row.SECTION_BARS, Row.DOCK_BARS)
+            .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST, Row.REFLECTION)
             .build();
     }
 
@@ -424,6 +425,7 @@ public final class DockCard {
     private static PreviewTilesRow.Tile glyphTile(@NonNull Context context, int glyph, int word) {
         android.widget.ImageView preview = new android.widget.ImageView(context);
         preview.setImageResource(glyph);
+        // The tile row tints the glyph with its name's ink (PreviewTilesRow).
         preview.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         return new PreviewTilesRow.Tile(context.getString(word), preview);
     }
@@ -452,10 +454,6 @@ public final class DockCard {
 
             @Override public boolean shown(@NonNull Element bar) {
                 return mHost.barShown(bar);
-            }
-
-            @Override public void setShown(@NonNull Element bar, boolean shown) {
-                mHost.setBarShown(bar, shown);
             }
 
             @Override public void reorder(@NonNull List<Element> order) {

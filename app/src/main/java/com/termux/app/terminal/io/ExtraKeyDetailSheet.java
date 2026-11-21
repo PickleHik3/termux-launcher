@@ -124,7 +124,7 @@ public final class ExtraKeyDetailSheet {
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         MaterialButton close = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialIconButtonStyle);
-        close.setIconResource(R.drawable.ic_symbol_close);
+        close.setIconResource(R.drawable.ic_rl_close);
         close.setContentDescription(context.getString(R.string.settings_extra_keys_sheet_done));
         close.setOnClickListener(v -> dialog.dismiss());
         header.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -302,7 +302,12 @@ public final class ExtraKeyDetailSheet {
         field.setContentDescription(label);
         fieldLayout.addView(field, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        if (target.display != null) field.setText(NerdFontSpans.span(context, target.display));
+        // The stored value as the bar draws it: an old shipped glyph shows as its icon. The store
+        // keeps what it holds until the user types.
+        if (target.display != null) field.setText(NerdFontSpans.span(context,
+            target.macro ? target.display
+                : com.termux.shared.termux.extrakeys.ExtraKeyIcons.effectiveDisplay(
+                    target.key, target.display)));
         field.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
@@ -364,7 +369,7 @@ public final class ExtraKeyDetailSheet {
         if (onClear != null) {
             MaterialButton clear = new MaterialButton(context, null,
                 com.google.android.material.R.attr.materialIconButtonStyle);
-            clear.setIconResource(R.drawable.ic_symbol_close);
+            clear.setIconResource(R.drawable.ic_rl_close);
             clear.setIconTint(android.content.res.ColorStateList.valueOf(colorSubtle));
             clear.setContentDescription(context.getString(
                 R.string.settings_extra_keys_sheet_clear_swipe_up));

@@ -21,6 +21,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiBenchStore;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiBenchHost;
 import com.termux.ai.TaiSettings;
 import com.termux.ai.TaiSpeechModels;
 import com.termux.ai.TaiVoiceBench;
@@ -40,7 +41,7 @@ import java.util.concurrent.Executors;
  * replying, writes, reads a long page) and the memory, the details (each with its range, load, the
  * sanity check when it failed), the Chat reply collapsed, the history chart of that entry's kept
  * runs split where the app or runtime version changed, "Run this model again" (Choose with only this model selected) and "Delete this model's results"
- * ({@link TaiManager#clearBenchmarks} for the model, every processor).
+ * ({@link TaiBenchHost#clearBenchmarks} for the model, every processor).
  */
 @Keep
 public class TaiBenchResultFragment extends Fragment {
@@ -107,7 +108,7 @@ public class TaiBenchResultFragment extends Fragment {
         executor.execute(() -> {
             JSONObject benchmarks = null;
             try {
-                benchmarks = TaiManager.getInstance(app).benchmarks();
+                benchmarks = TaiManager.getInstance(app).benchHost().benchmarks();
             } catch (JSONException | RuntimeException ignored) {
             }
             JSONObject loaded = benchmarks;
@@ -540,7 +541,7 @@ public class TaiBenchResultFragment extends Fragment {
         executor.execute(() -> {
             JSONObject result = null;
             try {
-                result = TaiManager.getInstance(app).clearBenchmarks(new JSONObject().put("modelId", modelId).toString());
+                result = TaiManager.getInstance(app).benchHost().clearBenchmarks(new JSONObject().put("modelId", modelId).toString());
             } catch (JSONException | RuntimeException ignored) {
             }
             JSONObject finalResult = result;

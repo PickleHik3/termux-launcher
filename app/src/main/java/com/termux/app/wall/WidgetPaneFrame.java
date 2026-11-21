@@ -54,7 +54,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
 
     /**
      * The built-in widgets live on this page, fed the Look's glass and Corners
-     * ({@link PaneSurfaceStyle#lookGlass}: Base's values, not the terminal's).
+     * ({@link PaneSurfaceStyle#lookGlass}: Global's values, not the terminal's).
      */
     private final java.util.Set<com.termux.app.launcher.widget.builtin.BuiltinWidgetView>
         mGlassWidgets = new java.util.LinkedHashSet<>();
@@ -75,7 +75,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener
         mWidgetsOnGlassListener = (store, key) -> {
             // The Widgets cells (ADR 0017): glass off is Opacity 100 at Frost 0 there. A Widgets
-            // cell redresses the cards; a Base or page cell only when it moves the switch, since
+            // cell redresses the cards; a Global or page cell only when it moves the switch, since
             // the chrome pass already redresses on the Look's own change.
             com.termux.shared.termux.settings.preferences.LookGrid.Key cell = key == null ? null
                 : com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
@@ -107,14 +107,14 @@ public final class WidgetPaneFrame extends PaneContentFrame
             : prefs.getSharedPreferences();
         mWidgetsOnGlass = prefs != null && prefs.isWidgetsOnGlassEnabled();
         if (store == null) return;
-        store.registerOnSharedPreferenceChangeListener(mWidgetsOnGlassListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mWidgetsOnGlassListener);
         mWidgetsOnGlassStore = store;
         mWidgetsOnGlassWatched = true;
     }
 
     private void unwatchWidgetsOnGlass() {
         if (mWidgetsOnGlassStore != null)
-            mWidgetsOnGlassStore.unregisterOnSharedPreferenceChangeListener(mWidgetsOnGlassListener);
+            com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mWidgetsOnGlassStore, mWidgetsOnGlassListener);
         mWidgetsOnGlassStore = null;
         mWidgetsOnGlassWatched = false;
     }
@@ -122,6 +122,15 @@ public final class WidgetPaneFrame extends PaneContentFrame
     @Override public void addGlassWidget(
             @NonNull com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget) {
         mGlassWidgets.add(widget);
+        syncLookWorn();
+    }
+
+    /** The page bar's pill holds the blur frame while it is dressed in glass. */
+    private boolean mBarGlassWanted;
+
+    @Override public void setBarGlassWanted(boolean wanted) {
+        if (mBarGlassWanted == wanted) return;
+        mBarGlassWanted = wanted;
         syncLookWorn();
     }
 
@@ -137,14 +146,30 @@ public final class WidgetPaneFrame extends PaneContentFrame
     }
 
     @Nullable @Override
-    public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
+    public com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
+                                                             @Nullable Runnable redress) {
         com.termux.app.chrome.LookGlassStyle look = mStyle == null ? null : mStyle.lookGlass();
-        if (mHost == null || look == null) return null;
-        return mHost.attachWidgetLiveGlass(slab, look.spec().blurDp);
+        if (mLiveGlass == null || look == null) return null;
+        return mLiveGlass.wear(slab, look.spec().blurDp, redress);
     }
 
     @Override public void detachLiveGlass(@NonNull View slab) {
-        if (mHost != null) mHost.detachWidgetLiveGlass(slab);
+        if (mLiveGlass != null) mLiveGlass.drop(slab);
+    }
+
+    /** Where a widget's glass is worn and given back; the Home page's glass. */
+    public interface Glass {
+        /** The slab's live picture at {@code blurDp}; null while another kind is granted. */
+        @Nullable
+        com.termux.app.chrome.LivePicture wear(@NonNull View slab, int blurDp,
+                                               @Nullable Runnable redress);
+
+        /** The slab gave its glass back. */
+        void drop(@NonNull View slab);
+    }
+
+    public void setGlass(@Nullable Glass glass) {
+        mLiveGlass = glass;
     }
 
     /**
@@ -167,9 +192,9 @@ public final class WidgetPaneFrame extends PaneContentFrame
 
     /**
      * A system ask for the solid card or the "Widgets on glass" switch changed: the frame is held
-     * or let go, the widgets re-dress.
+     * or let go, the widgets re-dress. Also run by the activity when Home's own polarity moves.
      */
-    private void redressWidgets() {
+    public void redressWidgets() {
         syncLookWorn();
         PaneSurfaceStyle look = widgetGlassStyle();
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget
@@ -184,8 +209,9 @@ public final class WidgetPaneFrame extends PaneContentFrame
     private void syncLookWorn() {
         com.termux.app.chrome.LookGlassStyle look = mStyle == null ? null : mStyle.lookGlass();
         if (look == null) return;
-        boolean worn = false;
+        boolean worn = mBarGlassWanted;
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets) {
+            if (worn) break;
             if (widget.wantsGlassFrame()) {
                 worn = true;
                 break;
@@ -220,17 +246,6 @@ public final class WidgetPaneFrame extends PaneContentFrame
         void setWidgetGrid(int columns, int rows);
         /** Whether Live blur is in effect now. */
         default boolean liveBlur() { return false; }
-        /**
-         * A widget slab's live picture at {@code blurDp}, in the budget's widget place; null while
-         * Live blur is off or no place is left.
-         */
-        @Nullable
-        default com.termux.app.chrome.LivePicture attachWidgetLiveGlass(@NonNull View slab,
-                                                                        int blurDp) {
-            return null;
-        }
-        /** The slab gave its live picture back. */
-        default void detachWidgetLiveGlass(@NonNull View slab) {}
     }
 
     /** The buttons the page's border tab carries. */
@@ -254,6 +269,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
     @Nullable private PaneSurfaceStyle mStyle;
     @Nullable private PaneControlsView mControls;
     @Nullable private Host mHost;
+    @Nullable private Glass mLiveGlass;
     @Nullable private com.termux.app.launcher.widget.WidgetGridSizePopup mGridSizePopup;
     private boolean mEditing;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
@@ -412,7 +428,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
                 getContext().getString(R.string.pane_controls_add_page)),
             PaneControlsView.Action.glyph(ACTION_APPEARANCE, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.pane_controls_wallpaper_style)),
-            // No minimal button: minimal mode is the Workspace's, and a Home page never enters it.
+            // No minimal button: minimal mode is the Terminal's, and a Home page never enters it.
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
     }
@@ -444,7 +460,7 @@ public final class WidgetPaneFrame extends PaneContentFrame
     }
 
     /** The tick, in the same hand-drawn family the panes' own close and maximise marks use. */
-    private static void drawTickMark(@NonNull Canvas canvas, @NonNull RectF button,
+    public static void drawTickMark(@NonNull Canvas canvas, @NonNull RectF button,
                                      @NonNull Paint paint, float density) {
         float cx = button.centerX();
         float cy = button.centerY();
@@ -827,17 +843,25 @@ public final class WidgetPaneFrame extends PaneContentFrame
         // Look, so a new wallpaper, dim or mode reaches them on the pass that reaches the widgets.
         if (mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView)
             ((com.termux.app.launcher.widget.WidgetPaneView) mGrid).refreshWallpaperInk();
+        // So does Home's grabber, which stands over the dock where the dock shows no dashes.
+        if (look instanceof com.termux.app.chrome.WidgetInkSource) {
+            for (android.view.ViewParent p = getParent(); p != null; p = p.getParent()) {
+                if (p instanceof PaneWallLayout) {
+                    ((PaneWallLayout) p).refreshHomeGrabberGround(
+                        (com.termux.app.chrome.WidgetInkSource) look);
+                    break;
+                }
+            }
+        }
     }
 
     /**
-     * The wall moved this page, or the wallpaper panned under it: the slab re-aims at whatever
-     * is behind it now. Per frame of a slide, so nothing here but an invalidate.
+     * The wall moved this page, or the wallpaper panned under it: its widgets re-dress. The slab
+     * and the tab re-aim through the glass service ({@code SlabAim}). Per frame of a slide.
      */
     public void onWallMoved() {
-        if (mGlass != null) mGlass.invalidateGlassPosition();
         for (com.termux.app.launcher.widget.builtin.BuiltinWidgetView widget : mGlassWidgets)
             widget.onGlassMoved();
-        if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
     }
 
     /** How much of the page's rim the wall's slide leaves showing; see PaneWallPolicy#outlineAlpha. */

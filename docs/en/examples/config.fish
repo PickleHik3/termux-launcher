@@ -19,6 +19,13 @@ end
 
 set -gx TMPDIR "$HOME/.tmp"
 mkdir -p "$TMPDIR"
+# The launcher's display keeps its socket in the prefix's tmp. Link it here, so a program that
+# looks under TMPDIR finds it and a server started from this shell lands beside it; an empty
+# folder an earlier server left here goes first, and a real one is left alone.
+if set -q PREFIX; and test -d "$PREFIX/tmp/.X11-unix"; and not test -L "$TMPDIR/.X11-unix"
+    rmdir "$TMPDIR/.X11-unix" 2>/dev/null
+    ln -s "$PREFIX/tmp/.X11-unix" "$TMPDIR/.X11-unix" 2>/dev/null
+end
 
 set -q COLORTERM; or set -gx COLORTERM truecolor
 

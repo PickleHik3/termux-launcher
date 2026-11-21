@@ -31,7 +31,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDownloadEngine;
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiDownloadHub;
+import com.termux.ai.TaiRuntimePresence;
 import com.termux.ai.TaiDownloadQueue;
 import com.termux.ai.TaiFeatureCheckRunner;
 import com.termux.ai.TaiFeatureCheckStore;
@@ -39,6 +41,7 @@ import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiPlatformCaps;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
@@ -144,12 +147,15 @@ public class TaiModelCentreFragment extends Fragment
     @NonNull private List<TaiModelSpec> installedSpeech = Collections.emptyList();
     /** Installed text-to-image models; their own "Image generation" group under Installed, never in a chat list. */
     @NonNull private List<TaiModelSpec> installedImage = Collections.emptyList();
+    @NonNull private List<TaiModelSpec> installedDepth = Collections.emptyList();
     /** Installed speech-output (voice) models; shown under Installed and never as chat or speech-to-text. */
     @NonNull private List<TaiModelSpec> installedVoice = Collections.emptyList();
     /** The resolver for this phone's picks, rebuilt with the installed models; the Functions rows read it. */
     @Nullable private TaiFunctionModels functionModels;
     @NonNull private String deviceLine = "";
     @NonNull private List<TaiFunctionRows.FunctionRow> functionRows = Collections.emptyList();
+    /** The feature the "Check the GPU" row opens the check for; null hides the row (the GPU is confirmed or not offered). */
+    @Nullable private TaiFunction gpuCheckFeature;
     /** "Used by: ..." per installed model id, empty text for a model no function uses. */
     @NonNull private Map<String, String> usedBy = Collections.emptyMap();
     /** What deleting each installed model would leave each function on; see {@link TaiFunctionRows#deleteWarning}. */
@@ -165,6 +171,11 @@ public class TaiModelCentreFragment extends Fragment
     @Nullable private String defaultId;
     @Nullable private String voiceId;
     @Nullable private String loadedId;
+    /** Model availability tells us the runtime loaded or unloaded something: the "In use" pill follows. */
+    private final ModelAvailability.Listener loadedListener = () -> {
+        Context current = getContext();
+        if (current != null) fetchLoadedModel(current, true);
+    };
     /** Best ranked writing speed per model id, for the quiet speed pill; refreshed on {@link #onStart}. */
     @NonNull private Map<String, Double> benchmarkSpeeds = Collections.emptyMap();
     private int parallel = TaiDownloadQueue.DEFAULT_PARALLEL;
@@ -258,8 +269,45 @@ public class TaiModelCentreFragment extends Fragment
         loadInstalled(context);
         rebuild();
         TaiDownloadHub.get(context).addListener(this);
+        ModelAvailability.get(context).addListener(loadedListener);
         fetchLoadedModel(context);
         fetchBenchmarkSpeeds(context);
+        requestGpuProbe(context);
+    }
+
+    /**
+     * The GPU probe runs in {@code :tai_runtime} as it starts; while this phone has none on file, the
+     * page starts the runtime for it, on a thread of its own (the wait can be seconds), and reloads
+     * the Functions rows when the facts land. Nothing happens once the facts are known.
+     */
+    private void requestGpuProbe(@NonNull Context context) {
+        Context app = context.getApplicationContext();
+        TaiPlatformCaps caps = TaiPlatformCaps.cached(app);
+        if (caps.probed || !caps.anyLocalBackend()) return;
+        Thread thread = new Thread(() -> {
+            boolean probed;
+            try {
+                probed = TaiPlatformCaps.probeInRuntime(app).probed;
+            } catch (RuntimeException e) {
+                probed = false;
+            }
+            if (!probed) return;
+            handler.post(() -> {
+                Context now = getContext();
+                if (isAdded() && now != null) loadFunctions(now);
+            });
+        }, "tai-centre-gpu-probe");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * Whether "Check the GPU" is offered: only once the probe has run (an unprobed phone reads
+     * {@code UNKNOWN} too, and that is not a GPU waiting for a check), the GPU path is still
+     * {@code UNKNOWN} after any verdict, and the GPU is offered at all.
+     */
+    static boolean offersGpuCheck(boolean probed, @NonNull TaiTierPolicy.Env env) {
+        return probed && env.gpuPath == TaiPlatformCaps.GpuPath.UNKNOWN && TaiTierPolicy.gpuOffered(env);
     }
 
     @Override
@@ -272,6 +320,7 @@ public class TaiModelCentreFragment extends Fragment
     public void onStop() {
         Context context = getContext();
         if (context != null) TaiDownloadHub.get(context).removeListener(this);
+        if (context != null) ModelAvailability.get(context).removeListener(loadedListener);
         super.onStop();
     }
 
@@ -327,6 +376,7 @@ public class TaiModelCentreFragment extends Fragment
         }
         installedChat = chat;
         installedImage = TaiModelCentreRows.imageModels(installedAll.values());
+        installedDepth = TaiModelCentreRows.depthModels(installedAll.values());
         installedSpeech = TaiSpeechModels.installed(store);
         installedVoice = TaiTtsModels.installed(store);
         // Read aloud is offered only with a voice installed; an install or delete here changes that.
@@ -351,6 +401,9 @@ public class TaiModelCentreFragment extends Fragment
         Map<String, TaiModelSpec> installed = installedAll;
         int generation = ++functionsGeneration;
         executor.execute(() -> {
+            // Read before the models' env: probed facts, once read, stay for the process, so an env
+            // read after a "probed" answer never carries the unprobed UNKNOWN.
+            boolean gpuProbed = TaiPlatformCaps.cached(app).probed;
             TaiFunctionModels models = TaiFunctionModels.forContext(app);
             TaiFeaturePlans plans = TaiFeaturePlans.forContext(app, models);
             TaiFunctionRows.Planner planner = plans::plan;
@@ -359,6 +412,20 @@ public class TaiModelCentreFragment extends Fragment
             String level = prefs == null ? "polished" : prefs.getInAppKeyboardVoicePolishLevel();
             List<TaiFunctionRows.FunctionRow> rows = withCheckOffers(app, plans,
                 TaiFunctionRows.functionRows(models, planner, labels, level));
+            TaiFunction gpuCheck = null;
+            if (offersGpuCheck(gpuProbed, models.env())) {
+                try {
+                    for (TaiFunction feature : TaiFeatureCheckRunner.featuresInUse(plans)) {
+                        if (feature.usesChatModel()) {
+                            gpuCheck = feature;
+                            break;
+                        }
+                    }
+                } catch (RuntimeException ignored) {
+                    // no row: the check cannot be started from here
+                }
+            }
+            final TaiFunction gpuCheckFor = gpuCheck;
             TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(app);
             String soc = capabilities.socModel == null || capabilities.socModel.trim().isEmpty() ? capabilities.model : capabilities.socModel;
             String device = TaiFunctionRows.deviceLine(models.env(), soc, Build.VERSION.RELEASE);
@@ -374,6 +441,7 @@ public class TaiModelCentreFragment extends Fragment
                 functionModels = models;
                 tidyLevel = level;
                 functionRows = rows;
+                gpuCheckFeature = gpuCheckFor;
                 deviceLine = device;
                 usedBy = used;
                 deleteWarnings = warnings;
@@ -382,25 +450,27 @@ public class TaiModelCentreFragment extends Fragment
         });
     }
 
-    /** The runtime status is a blocking IPC; read it off the main thread for the "In use" pill. */
+    /**
+     * The model the runtime holds for the "In use" pill, from Model availability's presence read (the
+     * runtime publishes it; no IPC wakes the runtime). Read off the main thread, like the file it is.
+     */
     private void fetchLoadedModel(@NonNull Context context) {
+        fetchLoadedModel(context, false);
+    }
+
+    private void fetchLoadedModel(@NonNull Context context, boolean onlyIfChanged) {
         if (executor.isShutdown()) return;
         Context app = context.getApplicationContext();
         executor.execute(() -> {
-            String id = null;
-            try {
-                JSONObject runtime = TaiManager.getInstance(app).runtimeStatus().optJSONObject("runtime");
-                if (runtime != null && (runtime.optBoolean("loaded", false) || "loading".equals(runtime.optString("state", "")))) {
-                    String loaded = runtime.optString("loadedModelId", "");
-                    id = loaded.isEmpty() ? null : loaded;
-                }
-            } catch (JSONException | RuntimeException ignored) {
-            }
+            TaiRuntimePresence.Snapshot presence = ModelAvailability.get(app).presence();
+            String id = (presence.loaded || presence.loading) && presence.modelId != null
+                && !presence.modelId.isEmpty() ? presence.modelId : null;
             String finalId = id;
             handler.post(() -> {
                 if (!isAdded()) return;
+                boolean changed = !java.util.Objects.equals(loadedId, finalId);
                 loadedId = finalId;
-                rebuild();
+                if (changed || !onlyIfChanged) rebuild();
             });
         });
     }
@@ -412,7 +482,7 @@ public class TaiModelCentreFragment extends Fragment
         executor.execute(() -> {
             JSONObject benchmarks;
             try {
-                benchmarks = TaiManager.getInstance(app).benchmarks();
+                benchmarks = TaiManager.getInstance(app).benchHost().benchmarks();
             } catch (JSONException | RuntimeException e) {
                 benchmarks = null;
             }
@@ -603,6 +673,17 @@ public class TaiModelCentreFragment extends Fragment
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_FUNCTION, row.function.name(),
                 row.signature(), row, false));
         }
+        if (gpuCheckFeature != null) {
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_GPU_CHECK, "gpu-check", "gpu-check",
+                null, false));
+        }
+    }
+
+    /** "Check the GPU": opens the feature check, whose result settles the GPU verdict. */
+    @Override
+    public void onGpuCheck() {
+        TaiFunction feature = gpuCheckFeature;
+        if (feature != null) TaiBenchHomeFragment.openFeatureCheck(getActivity(), feature);
     }
 
     /** Brings a deep-linked model row to the top of the list once it is there. */
@@ -775,7 +856,23 @@ public class TaiModelCentreFragment extends Fragment
                 addModelRow(items, row);
             }
         }
-        if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty() && installedImage.isEmpty()) {
+        if (!installedDepth.isEmpty()) {
+            String header = getString(R.string.tai_centre_depth_header);
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "depth-models", "depth-models|" + header,
+                new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_depth_sub)), false));
+            for (TaiModelSpec spec : installedDepth) {
+                // Nothing to load, make default or tune: only Delete, like an image model.
+                TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(spec.id, false, spec, null);
+                row.image = true;
+                row.title = spec.displayName;
+                StringBuilder subtitle = new StringBuilder(getString(R.string.tai_centre_kind_depth));
+                if (spec.sizeBytes > 0L) subtitle.append(" · ").append(TaiModelCentreRows.formatBytes(spec.sizeBytes));
+                row.subtitle = subtitle.toString();
+                addModelRow(items, row);
+            }
+        }
+        if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty() && installedImage.isEmpty()
+                && installedDepth.isEmpty()) {
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-installed", "empty-installed",
                 new TaiModelCentreAdapter.Empty(getString(R.string.tai_centre_empty_installed_title),
                     getString(R.string.tai_fn_empty_installed_summary)), false));
@@ -1017,11 +1114,11 @@ public class TaiModelCentreFragment extends Fragment
                 String body = new JSONObject().put("modelId", modelId).toString();
                 TaiManager manager = TaiManager.getInstance(app);
                 switch (action) {
-                    case PAUSE: result = manager.pauseDownload(body); break;
+                    case PAUSE: result = manager.modelManagement().pauseDownload(body); break;
                     case RESUME:
-                    case RETRY: result = manager.resumeDownload(body); break;
-                    case START_NOW: result = manager.prioritizeDownload(body); break;
-                    default: result = manager.cancelDownload(body); break;
+                    case RETRY: result = manager.modelManagement().resumeDownload(body); break;
+                    case START_NOW: result = manager.modelManagement().prioritizeDownload(body); break;
+                    default: result = manager.modelManagement().cancelDownload(body); break;
                 }
             } catch (JSONException | RuntimeException ignored) {
             }
@@ -1136,13 +1233,13 @@ public class TaiModelCentreFragment extends Fragment
             JSONObject result = null;
             try {
                 if (!speech) {
-                    result = TaiManager.getInstance(app).downloadCatalogModel(modelId);
+                    result = TaiManager.getInstance(app).modelManagement().downloadCatalogModel(modelId);
                 } else if (firstVoiceModel && noPendingVoiceChoice(app)) {
                     // The first speech model on the phone becomes the one voice input uses as
                     // soon as it lands; later ones wait for "Use for...".
                     result = TaiSpeechModels.startDownload(app, modelId, windowSeconds);
                 } else {
-                    result = TaiManager.getInstance(app).downloadSpeechModel(modelId, windowSeconds);
+                    result = TaiManager.getInstance(app).modelManagement().downloadSpeechModel(modelId, windowSeconds);
                 }
             } catch (JSONException | RuntimeException ignored) {
             }
@@ -1512,11 +1609,11 @@ public class TaiModelCentreFragment extends Fragment
         return warning == null || warning.isEmpty() ? plain : plain + "\n\n" + warning;
     }
 
-    /** The voice picker lives with the speech settings (Voice input > Speech model). */
+    /** A voice's settings (which voice, speed) live on the Read aloud page. */
     private void openVoiceSettings() {
         if (getActivity() instanceof SettingsActivity) {
-            ((SettingsActivity) getActivity()).openScreen(KeyboardVoicePreferencesFragment.class,
-                R.string.settings_keyboard_sub_voice_title, null);
+            ((SettingsActivity) getActivity()).openScreen(ReadAloudPreferencesFragment.class,
+                R.string.read_aloud_title, null);
         }
     }
 
@@ -1562,9 +1659,9 @@ public class TaiModelCentreFragment extends Fragment
                 TaiManager manager = TaiManager.getInstance(app);
                 JSONObject download = new TaiModelStore(app).findDownloadForModel(modelId);
                 if (download != null && TaiSpeechModels.isDownloadActive(download.optString("status", ""))) {
-                    manager.cancelDownload(new JSONObject().put("modelId", modelId).toString());
+                    manager.modelManagement().cancelDownload(new JSONObject().put("modelId", modelId).toString());
                 }
-                result = manager.deleteModel(new JSONObject().put("modelId", modelId).put("confirm", true).toString());
+                result = manager.modelManagement().deleteModel(new JSONObject().put("modelId", modelId).put("confirm", true).toString());
             } catch (JSONException | RuntimeException ignored) {
             }
             JSONObject finalResult = result;

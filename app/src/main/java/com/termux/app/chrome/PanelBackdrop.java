@@ -33,16 +33,23 @@ import androidx.annotation.VisibleForTesting;
 
 import com.github.mmin18.widget.AndroidStockBlurImpl;
 import com.termux.R;
+import com.termux.app.glass.GlassEntry;
+import com.termux.app.glass.GlassKind;
+import com.termux.app.glass.GlassService;
+import com.termux.app.window.WindowLayer;
 
 /**
  * The picture behind a panel's glass (the app drawer, the command palette, the terminal sheet, a
  * popup menu): what the window draws beneath the panel, from {@link LiveBackdrop}'s recorder, held
- * by the panel's backdrop {@link ImageView}. {@link PanelBackdropPolicy} picks the kind:
+ * by the panel's backdrop {@link ImageView}. The panel registers with the window's
+ * {@link GlassService} for as long as it is open ({@link WindowLayer#SHEETS}, the dock's priority),
+ * so its Live slot is one of the registry's eight and it can never push a widget off Live behind
+ * the registry's back. {@link PanelBackdropPolicy} picks the kind from what the service grants:
  *
  * <ul>
- *   <li><b>Live</b> (Live blur on): the recorder's {@link LivePicture}, refreshed on frames where
- *   something beneath changed.</li>
- *   <li><b>Snapshot</b> (Live blur off): the same recording blurred once into a GPU bitmap on its
+ *   <li><b>Live</b> (the service granted Live): the recorder's {@link LivePicture}, refreshed on
+ *   frames where something beneath changed.</li>
+ *   <li><b>Snapshot</b> (Live not granted): the same recording blurred once into a GPU bitmap on its
  *   own {@link HardwareRenderer} when the panel opens and when it comes to rest. While it moves
  *   nothing is recorded or rendered: the bitmap stands. The UI thread only records (it reuses the
  *   views' display lists) and hands the frame over; the blur runs on the render thread and the
@@ -55,8 +62,10 @@ import com.termux.R;
  * </ul>
  *
  * <p>A controller calls {@link #open} on each open, {@link #setMoving} as its motion starts and
- * stops, and {@link #close} once shut, which gives back every layer and buffer: a shut panel
- * holds no pixels.</p>
+ * stops, and {@link #close} once shut, which gives back every layer and buffer and the panel's
+ * entry: a shut panel holds no pixels. A policy event while it is open (Live switched off,
+ * memory short, its slot taken by a better surface) puts the panel up again as the kind it is now
+ * granted.</p>
  */
 public final class PanelBackdrop {
 
@@ -70,8 +79,8 @@ public final class PanelBackdrop {
         /** The window's recorder, made on first use; null when the window has no root for it. */
         @Nullable LiveBackdrop recorder();
 
-        /** {@link LiveBlurPolicy#live} as it stands now. */
-        boolean liveBlur();
+        /** The window's glass service; null when the window has none (the panel then never asks for Live). */
+        @Nullable GlassService glass();
     }
 
     /**
@@ -131,10 +140,17 @@ public final class PanelBackdrop {
 
     @NonNull private final ImageView mSurface;
     @NonNull private final View mAnchor;
+    @NonNull private final String mElement;
     @Nullable private Scene mScene;
     @ColorInt private int mVeilColor;
     @Nullable private ColorFilter mVeil;
     private float mRadiusPx;
+
+    /** The glass service holding this panel's entry, and the kind the entry asks for; null while shut. */
+    @Nullable private GlassService mGlass;
+    @Nullable private GlassKind mWants;
+    /** A policy event moved the kind the open panel was granted. */
+    @NonNull private final GlassService.Redress mRedress = this::onGranted;
 
     /** The kind of the open panel; null while shut. */
     @Nullable private PanelBackdropPolicy.Kind mKind;
@@ -158,8 +174,18 @@ public final class PanelBackdrop {
      *                popup in a window of its own)
      */
     public PanelBackdrop(@NonNull ImageView surface, @NonNull View anchor) {
+        this(surface, anchor, "panel@" + Integer.toHexString(System.identityHashCode(surface)));
+    }
+
+    /**
+     * @param element the panel's name in the glass registry ("drawer", "palette", "sheet"): one
+     *                entry per element, so a panel that opens twice at once is refused the second
+     */
+    public PanelBackdrop(@NonNull ImageView surface, @NonNull View anchor,
+                         @NonNull String element) {
         mSurface = surface;
         mAnchor = anchor;
+        mElement = element;
     }
 
     public void setScene(@Nullable Scene scene) {
@@ -200,12 +226,23 @@ public final class PanelBackdrop {
         LiveBackdrop recorder = source == null ? null : source.recorder();
         boolean sameWindow = recorder != null
             && mSurface.getRootView() == recorder.root().getRootView();
-        PanelBackdropPolicy.Kind kind = PanelBackdropPolicy.kind(Build.VERSION.SDK_INT,
-            recorder != null && pictured(), source != null && source.liveBlur(), sameWindow,
-            recorder != null && recorder.size() < LiveBackdrop.MAX_LIVE_SURFACES);
+        boolean pictured = recorder != null && pictured();
+        GlassKind granted = register(source == null ? null : source.glass(),
+            PanelBackdropPolicy.wants(Build.VERSION.SDK_INT, pictured, sameWindow));
+        mMoving = true;
+        return present(recorder, pictured, granted);
+    }
+
+    /**
+     * Puts up the picture {@code granted} asks for: the kind, its layer or snapshot. False when the
+     * panel shows the stored frame instead.
+     */
+    private boolean present(@Nullable LiveBackdrop recorder, boolean pictured,
+                            @Nullable GlassKind granted) {
+        PanelBackdropPolicy.Kind kind = PanelBackdropPolicy.kind(Build.VERSION.SDK_INT, pictured,
+            granted == GlassKind.LIVE);
         if (kind != mKind || recorder != mRecorder) drop();
         mRecorder = recorder;
-        mMoving = true;
         if (kind == PanelBackdropPolicy.Kind.LIVE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             LivePicture picture = recorder.attach(mSurface, mRadiusPx, true);
             if (picture != null) {
@@ -231,6 +268,37 @@ public final class PanelBackdrop {
         return true;
     }
 
+    /**
+     * Registers this panel's entry with {@code glass} as {@code wants} (a fresh one when it asks
+     * for something else than the entry it holds), or lets the entry go when there is nothing to
+     * ask for. The kind granted; null with no service or no entry.
+     */
+    @Nullable
+    private GlassKind register(@Nullable GlassService glass, @Nullable GlassKind wants) {
+        if (mGlass != null && (mGlass != glass || mWants != wants)) unregister();
+        if (glass == null || wants == null) return null;
+        mGlass = glass;
+        mWants = wants;
+        return glass.register(new GlassEntry(mElement, mSurface, wants,
+            GlassEntry.PRIORITY_DOCK, WindowLayer.SHEETS, null), mRedress);
+    }
+
+    private void unregister() {
+        GlassService glass = mGlass;
+        mGlass = null;
+        mWants = null;
+        if (glass != null) glass.unregister(mElement);
+    }
+
+    /** A policy event moved the kind the open panel holds: it is put up again as that kind. */
+    private void onGranted(@NonNull GlassKind granted) {
+        if (mKind == null) return;
+        // A Snapshot that was retaken on rest stays frozen while the panel still moves.
+        boolean moving = mMoving;
+        present(mRecorder, mRecorder != null && pictured(), granted);
+        mMoving = moving;
+    }
+
     /** The panel's motion started or stopped; a Snapshot is retaken when it comes to rest. */
     public void setMoving(boolean moving) {
         boolean was = mMoving;
@@ -239,6 +307,28 @@ public final class PanelBackdrop {
             // A failed software retake leaves no picture (the glass's tint), never a half-drawn one.
             takeSnapshot();
         }
+    }
+
+    /**
+     * What stands beneath the open panel was decided anew without the panel moving (the drawer's
+     * keyboard going away under its card): a Snapshot panel takes its picture again now, of the
+     * scene its {@link Scene} poses, so the glass never shows what was beneath before. Live
+     * refreshes on its own; a shut panel takes nothing.
+     */
+    public void retake() {
+        if (mKind == PanelBackdropPolicy.Kind.SNAPSHOT) takeSnapshot();
+    }
+
+    /**
+     * Whether the panel's picture is up: false only while a Snapshot panel still waits for its
+     * first picture (the GPU one lands a few frames after it is asked for). Live, the stored frame
+     * and a shut panel have nothing to wait for.
+     */
+    public boolean pictureUp() {
+        if (mKind != PanelBackdropPolicy.Kind.SNAPSHOT) return true;
+        Drawable drawable = mSurface.getDrawable();
+        return !(drawable instanceof SnapshotDrawable)
+            || ((SnapshotDrawable) drawable).mBitmap != null;
     }
 
     /** Software Snapshots taken since this backdrop was made. */
@@ -252,6 +342,8 @@ public final class PanelBackdrop {
         drop();
         mKind = null;
         mRecorder = null;
+        // After the picture is back in the recorder, so a surface waiting for the slot finds room.
+        unregister();
     }
 
     @Nullable

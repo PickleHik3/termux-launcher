@@ -67,7 +67,7 @@ ad -s emu runas com.termux 'launcherctl pane list'
 | Icon size, Icons per page | Appearance editor → Layout page | value shows only on screen (not in the accessibility tree); read it from a `zoom` crop |
 | Command palette | tap the terminal so the keyboard is up, then swipe up on its space bar: `ad swipe 540 2250 540 2000 250` | type to filter, `ad key DPAD_DOWN` moves the selection; chip strip kbd, pick, split, font; app chips need usage history; a theme change closes it |
 | Icon pack | Appearance editor → `appearance_page_mode_icon_pack` (tap a tile by its label, `ad tap Arcticons`; coordinates miss); a pinned override: long-press a dock icon › Change dock icon › a pack › an icon; (the editor reopens on its last page) | tiles `icon_pack_tile_label` (tap the tile art if the label does not take); "Pinned app icons only" is `icon_pack_pinned_only`, on by default. MBE Style (`me.iacn.mbestyle_27.apk`, F-Droid) installs as a PNG pack |
-| AI models | Settings → Model centre; Export/Import use the system folder picker (USE THIS FOLDER, then ALLOW), export lands in `/sdcard/Documents/Termux Launcher models` | Get models goes stale after a `tai delete`: leave and re-enter the page |
+| AI models | Settings → Model centre; Export/Import use the system folder picker (USE THIS FOLDER, then ALLOW), export lands in `/sdcard/Documents/Termux Launcher models` | Get models goes stale after a `tai delete`: leave and re-enter the page. `emu` keeps Gemma E2B installed (Default model = E2B/CPU) for AI checks; its 6 GiB is under E2B's RAM advice, so an Assistant send fails `autoload_preflight_not_clean` until `tai load --cpu`. There is no `tai chat`: test the endpoint with curl to `/v1/chat/completions` (endpoint and token are in Termux's own `~/.launcherctl/`, so read them with `ad runas com.termux`). The Assistant page is one swipe left of Home. After `tai unload` an Assistant send fails at once with `autoload_preflight_not_clean`, so a cancel-during-load check can't be done on emu. Edit pages' "Add assistant" is at about 871,2220. `ad logcat` follows forever: use `ad adb logcat -d --pid=$(ad adb shell pidof com.termux)` for a dump |
 | Keyboard layouts | Settings → Keyboard → Layouts (list at about 487,1242) → Layouts (487,671); a tap on a catalogue row slides its strip open, `ad find` by description works ("Add Colemak to the cycle"); cycle to the next layout by swiping down on the space bar: `ad swipe 540 2200 540 2330 250` | — |
 | App drawer | reliable: on Home's free area `ad swipe 540 1700 540 900 700` opens the palette with the in-app keyboard; type `>` with an up-right flick on the v key (`adb shell input swipe 535 2130 575 2070 250`; a tap types the letter, symbols are corner flicks), then tap d r a w e r at 327,1968 / 381,1826 / 114,1968 / 168,1826 / 273,1826 / 381,1826 (0.3 s apart) and the "App drawer" row at about 300,1195; `ad ui` then shows `app_drawer_host`; `ad back` closes it. The dock's swipe-down gesture opens it only about one time in three on the emulator (`input swipe 540 2150 540 2390 50`; slow swipes never), so do not rely on it. A slow upward drag from the dock row opens Edit pinned apps (Close at 680,2304) | drawer ids `app_drawer_host`, `app_drawer_glass`; a swipe on the dock's letters scrubs that letter's apps into the dock instead |
 | Pinned apps | unpin one: long-press its dock icon → Unpin (about 160,1410; the popup is not in `ui`, screenshot it). Edit sheet: long-press an empty dock spot (about 800,1531, not 540); the first row's remove is about 938,692 and rows shift up after each removal (a tap on a row still animating out is ignored: space taps ~1.5 s); pin from the sheet by searching (field about 540,1484) and ticking the row (`ad swipe x y x y 1200`) → "Edit pinned apps": tap names under MOST USED, then Done; remove with "Remove from pinned apps" | a letter in the dock strip shows that letter's apps in the dock; the letters shift when an app is installed. The dock's grid glyph (about 810,1700) opens a split pane, not the drawer; a pane opened that way is not `launcherctl`'s to close (`exit` in it) |
@@ -179,6 +179,9 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
   A Home float opens from `ad long 540 1000` (a free cell) then the Terminal row of the Home actions
   sheet that slides up (`ad tap Terminal`; the sheet's rows are real nodes, unlike the old menu); on a
   full-size float Close is about 1006,283 and Minimise about 796,283.
+  A float's bottom-right 28 dp is its resize grip: a page swipe that starts there resizes the float
+  instead (with the keyboard up the grip rises to about y 1500 on pong). Start page swipes clear of
+  any float, or with the keyboard down.
 - The Terminal entry's menu is a long press at 76,2190 on the dock (New float here / New window).
   The dock's edit sheet is a long press at 540,2180; the Terminal entry is under MOST USED there.
 - The Appearance editor on a named card without the corner tab (the Layout-mode intent
@@ -200,7 +203,7 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
 - Ctrl+Alt+F over adb needs a prior tap on the terminal for focus.
 - Home's corner tab: long press at 1040,175 on the free page; its plus (804,198) adds a page, and a
   long press on an empty cell then offers Remove page.
-- The sessions drawer opens from the list key at 990,1700 in the Workspace's key row (the grid key
+- The sessions drawer opens from the list key at 990,1700 in the Terminal's key row (the grid key
   at 810,1700 opens a split). In the drawer: the chevron at 102,542 expands a session, Home at
   118,1245, the session's Float row under it.
 - The display's controls appear from a long press at 1030,262 on the display window; power at 604,285.
@@ -224,7 +227,7 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
   Unpin (the gesture took the screen corner as its origin); a pin that vanishes on a long press is
   that bug, not the store.
 - A blind end-user review: `ad codex "<goal>" -c model_reasoning_effort=medium`, one area per run
-  (Home, Workspace, floats, Settings), 6–35 min each; the goal text and answers of the 2026-10-18
+  (Home, Terminal, floats, Settings), 6–35 min each; the goal text and answers of the 2026-10-18
   run are in the session scratchpad `codex-review/` and under ~/reports/wall-rework-2026-10-18/blind/.
 
 ## Wall rework phase two (feat/wall-rework-phase2, 2026-10-18)
@@ -235,7 +238,7 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
 - The corner long-press toolbar hangs off the page's corner, not the screen's. On a window it is
   the window's (Appearance, minimal, tiling, settings, help); on Home it is Home's (pencil, plus,
   palette, help), whose palette is the button described "Appearance" and opens the Overview. A
-  window's corner moves in with the Workspace's Margin. Home's page reaches the screen's edges
+  window's corner moves in with the Terminal's Margin. Home's page reaches the screen's edges
   since 9980f4a6d, so its corner squares sit at the screen's corners whatever the Margin.
 - A Home float drawn over most of a Home page looks like a window. Which toolbar a corner hold
   brings out (above) tells them apart.
@@ -435,13 +438,62 @@ a Linux app.
   (`su -c cat /data/data/com.termux/shared_prefs/com.termux_preferences.xml`), a Java thread dump
   (`su -c 'kill -3 <pid>'`, then `/data/anr/trace_00`) and `simpleperf record -p <pid> --duration N`
   all work on the release build, which is not debuggable (no `run-as`, no `ad runas`).
-- The dock glyphs are page tabs, laid out per page: on the Workspace the house at 870,1710 goes to
-  Home; on Home the terminal glyph at 500,1700 goes back to the Workspace (1203,1710 is empty there). A border drag along the pane's bottom edge (y≈1685) did not cross, and a horizontal
+- The dock glyphs are page tabs, laid out per page: on the Terminal the house at 870,1710 goes to
+  Home; on Home the terminal glyph at 500,1700 goes back to the Terminal (1203,1710 is empty there). A border drag along the pane's bottom edge (y≈1685) did not cross, and a horizontal
   `input swipe` on Home's free area at y=1500 pulled the notification shade instead.
 - `ad -s surface frames` and `record` refuse with "no lease on 100.68.34.42_5555" while the lease
   on `surface` is held: run `screenrecord` through `ad shell` and `adb pull` the file instead.
 - The developer's own terminal (claude under herdr) is usually in front: never type into it, and
-  leave the Workspace page in front when done.
+  leave the Terminal page in front when done.
 - RenderScript has no GPU driver here: `ScriptIntrinsicBlur` runs in `libRSCpuRef.so` on an
   8-thread pool whose threads inherit the submitter's name (`wallpaper-blur`), so nine
   `wallpaper-blur` threads are one worker plus the pool, not nine executors.
+
+## Routes learned in the 2026-11-10 refactor checks (emulator, 1080×2400 at 420 dpi)
+
+- **Page swipes need one shell call.** `input swipe` does not page the wall, and a
+  `motionevent` sequence split over several `ad` calls is slow enough to become a long-press
+  that selects terminal text (a tap on empty terminal space clears it; Esc does not). Whole
+  gesture in one call: `ad adb shell 'input motionevent DOWN 900 1500; for x in 800 700 600 500
+  400 300 200 150; do input motionevent MOVE $x 1500; done; input motionevent UP 150 1500'`
+  (towards the Terminal); reverse the x values to go back. With an Assistant page between Home
+  and the Terminal it takes two.
+- **Edit pages**: "Edit pages" in the home actions sheet (long-press empty space on a Home page,
+  e.g. 540,1200; `ad find "Edit pages"`). The long-press only works on a Home page. A card's
+  menu (Set as home, Rename, Remove) opens from a 1.2 s body long-press. Add page, Add display
+  and Add assistant are not in `ad ui`: tap them by coordinates (y about 2257). A Home card or
+  the Terminal card reorders by a body drag (DOWN, `sleep 0.9`, MOVEs, hold, UP in one call);
+  Display and Assistant cards stay where they stand. The Terminal page is one card ("Terminal",
+  or "Terminal, N windows"), whose node also carries "Move Terminal page left/right". Closing
+  Edit pages lands on the page that was in front.
+- **Dock designs**: values `glass_tray` (Tray), `lens_beads` (Beads), `wall_strip` (Strip),
+  `peek_glass` (Peek). Home's design is `layout.home.dock_design` and also `dock_design` inside
+  the `"home"` JSON in `shared_prefs/layouts.xml`, which wins: set both, then force-stop. In
+  that JSON one run needed plain `&quot;` between key and value and a later one `\&quot;` in the
+  replacement (an unescaped `&` is sed's "the match"): check the file after the edit, because a
+  corrupt prefs file is reset silently, pins and all, and brings back the "Use as your home
+  screen?" sheet (Skip at about 613,2254; Back does not dismiss it). Edit after `ad stop
+  com.termux`, writing to a temp file and `cat`-ing it back. The Terminal's is
+  `layout.dock_design`. `app_launcher_dock_style` is `docked` or `floating`, absent by default.
+  The home app is set with `adb shell cmd package set-home-activity <component>`. Beads are faint at rest: judge them from a zoomed crop. With the
+  keyboard up on Home under Beads the icons stand on bare wallpaper, no bead and no slab (the
+  same before and after the 11-10 dock moves).
+- **Pins**: a fresh emulator has only Terminal pinned and the `700 2165` hold recipe above does
+  nothing there. Seed `app_launcher_pinned_items_v2` with activities from
+  `cmd package query-activities --brief` (escape `&` in the sed replacement), then force-stop.
+  A hold on a pinned icon opens Change icon / Uninstall / Edit dock; a hold on bare dock opens
+  Apps row Edit / Hide, and Edit opens the Appearance editor's Dock card.
+- **Keyboard on Home**: the palette swipe (`ad swipe 540 1700 540 900 700`); a tap on free space
+  closes it. `ad ui` ids: `apps_bar_row_host`, `apps_bar_plank_layer`, `accessory_row_stack`
+  (dock rows and the A–Z row, which has no id of its own), `inapp_keyboard_container`.
+- **Sheets in the way**: the Setup cards sheet opens at launch only for a card never shown before (Back dismisses
+  it); once shown, a card does not reopen it, so a repeat check needs Settings > General > Setup. `set-home-activity com.termux/.app.TermuxActivity` makes it home for a check; set the
+  stock launcher back afterwards. After a lease wait the emulator may be stopped: `ad -s emu emu
+  start` under the lease.
+- **Setup wizard and its AI card**: rerun the wizard with `am start -n com.termux/.app.TermuxActivity
+  --ez com.termux.app.extra.RERUN_SETUP true` (Skip on step 01 ends the whole wizard; On-device AI
+  is step 05/07). Once the wizard is finished, the AI card ("Models for this phone") opens directly
+  with `am start -n com.termux/.app.TermuxActivity --ez com.termux.app.extra.SHOW_SETUP_CARDS true
+  --es com.termux.app.extra.SETUP_CARD_ID ai`. A cold start shows ~3 s of splash first: poll `ui`
+  for `desc="Voice typing"` before tapping. The AI GPU probe's cache is `files/tai/gpu-probe.json`
+  (written by `:tai_runtime`); delete it with `run-as` to make the card or the Model Centre probe again.

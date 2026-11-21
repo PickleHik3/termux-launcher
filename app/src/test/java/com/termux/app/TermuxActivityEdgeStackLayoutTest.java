@@ -13,7 +13,9 @@ import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.place.EdgeStackView;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeyModifiers;
+import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
+import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -411,19 +413,28 @@ public class TermuxActivityEdgeStackLayoutTest {
     }
 
     @Test
-    public void oneKeyViewIsLentBetweenThePagerAndThePortableHost() {
-        // The pager's first page and the bar standing on another edge are the same instance, so a
-        // latched modifier and the colours the Appearance editor picked survive the move.
+    public void thePortableHostsPageSharesTheActivitysModifiersAndPageOnesKeys() {
+        // The column or top row is a page of its own, not the bar's page lent out: the state that
+        // once forced the lending (a latched modifier) lives in the one model both read.
         TermuxActivity activity = inflate();
-        ExtraKeysView keys = activity.lendExtraKeysPage(0);
+        ReflectionHelpers.setField(activity, "mProperties", TermuxAppSharedProperties.init(activity));
+        ExtraKeysPageView keys = activity.standExtraKeysColumnPage(true);
         assertNotNull(keys);
         ViewGroup host = activity.findViewById(R.id.place_extra_keys_host);
         host.addView(keys);
         assertSame(host, keys.getParent());
+        assertTrue(keys.isVertical());
 
-        ExtraKeysView again = activity.lendExtraKeysPage(0);
-        assertSame("one view per page, lent rather than rebuilt", keys, again);
-        assertNull("lending takes it out of whatever was holding it", again.getParent());
+        ExtraKeyModifiers modifiers = ReflectionHelpers.getField(activity, "mExtraKeyModifiers");
+        assertSame(modifiers, keys.getModifiers());
+        assertEquals("page 1's keys",
+            activity.getTermuxTerminalExtraKeys(0).getExtraKeysInfo().getMatrix()[0].length,
+            keys.columnCount());
+
+        host.removeAllViews();
+        assertSame("one page, restyled rather than rebuilt", keys,
+            activity.standExtraKeysColumnPage(false));
+        assertTrue(!keys.isVertical());
     }
 
     // ------------------------------------------------------ the air around a row standing alone

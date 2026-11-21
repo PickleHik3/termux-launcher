@@ -345,8 +345,9 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         String countText = resources.getQuantityString(R.plurals.widget_picker_widget_count,
             section.count, section.count);
         count.setText(countText);
-        // nf-fa-angle_up / nf-fa-angle_down, the same family the page's own chrome wears.
-        chevron.setText(section.expanded ? "\uf106" : "\uf107");
+        chevron.setText(com.termux.app.launcher.widget.builtin.WidgetIcons.label(chevron.getContext(),
+            section.expanded ? com.termux.app.launcher.widget.builtin.WidgetIcons.CHEVRON_UP
+                : com.termux.app.launcher.widget.builtin.WidgetIcons.CHEVRON_DOWN));
         holder.itemView.setEnabled(true); holder.itemView.setAlpha(1f);
         holder.itemView.setClickable(true); makeKeyboardReachable(holder.itemView);
         holder.itemView.setContentDescription(resources.getString(

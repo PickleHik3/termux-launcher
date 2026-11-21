@@ -34,15 +34,20 @@ public final class GlassEffects {
         @Nullable
         float[] peekGlassRect();
 
+        /**
+         * How much of the Peek card the program draws: 1 at Home's rest, 0 at the Terminal's,
+         * Home's share across a crossing ({@code StackScene#homeShare}).
+         */
+        default float peekShare() {
+            return 1f;
+        }
+
         /** The Fancier Glass look, or null for the numbers the dock always ran with. */
         @Nullable
         GlassRefraction.Look fancierLook();
 
         /** What the dock's tint covers of the gathered edge, as the last dress pass worked it out. */
         float dockCover();
-
-        /** The same for the strip under the pill. */
-        float navStripCover();
 
         /** Writes the dock style's own glass (soft rim, shelf, beads) on the dock's program. */
         @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
@@ -61,11 +66,13 @@ public final class GlassEffects {
 
     @NonNull private final Host mHost;
     @Nullable private GlassRefraction.Program mDockRefraction;
-    @Nullable private GlassRefraction.Program mNavStripRefraction;
 
     private boolean mParamsValid = false;
     private float mBlurPx, mCapLeft, mCapTop, mCapRight, mCapBottom, mRadiusPx;
     @NonNull private final float[] mLens = new float[5];
+    /** The slab's cap and the program's rect, reused: a crossing rebuilds the effect per frame. */
+    @NonNull private final float[] mCap = new float[RoundCut.SIZE];
+    @NonNull private final float[] mRect = new float[RoundCut.SIZE];
 
     public GlassEffects(@NonNull Host host) {
         mHost = host;
@@ -108,71 +115,77 @@ public final class GlassEffects {
     @Nullable
     public RenderEffect buildDock(float blurPx, float capLeft, float capTop, float capRight,
                                   float capBottom, float radiusPx) {
-        return build(false, blurPx, capLeft, capTop, capRight, capBottom, radiusPx);
-    }
-
-    /** The under-pill strip's effect: its own program, square, and never a key's lens. */
-    @Nullable
-    public RenderEffect buildNavStrip(float left, float top, float right, float bottom) {
-        return build(true, 0f, left, top, right, bottom, 0f);
+        return build(blurPx, capLeft, capTop, capRight, capBottom, radiusPx);
     }
 
     /** Rebuild + re-apply the dock's effect with the current lens state (no recapture). */
     public void rebuildForLens() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mParamsValid) {
+            if (MotionLog.enabled) MotionLog.log("lens-rebuild", "skipped params=" + mParamsValid); // DIAG(lens)
             return;
         }
         View backdrop = mHost.dockBackdrop();
         if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) {
+            if (MotionLog.enabled) MotionLog.log("lens-rebuild", "skipped backdrop="
+                + (backdrop == null ? "none" : backdrop.getVisibility())); // DIAG(lens)
             return;
         }
         RenderEffect glass = buildDock(mBlurPx, mCapLeft, mCapTop, mCapRight, mCapBottom, mRadiusPx);
+        if (MotionLog.enabled) MotionLog.log("lens-rebuild", "rect=" + mRect[0] + "," + mRect[1]
+            + "," + mRect[2] + "," + mRect[3] + " r=" + mRect[4] + " share=" + mHost.peekShare()
+            + " backdropTy=" + backdrop.getTranslationY() + " top=" + backdrop.getTop()); // DIAG(lens)
         if (glass != null) {
             backdrop.setRenderEffect(glass);
         }
     }
 
+    /**
+     * The program's rect: the slab's {@code cap} with no Peek card, the card's {@code peek} at
+     * Home's rest ({@code homeShare} 1), the blend between them across a crossing.
+     */
+    static void programRect(@NonNull float[] cap, @Nullable float[] peek, float homeShare,
+                            @NonNull float[] out) {
+        if (peek == null) {
+            RoundCut.blend(cap, cap, 0f, out);
+            return;
+        }
+        RoundCut.blend(cap, peek, homeShare, out);
+    }
+
     @Nullable
-    private RenderEffect build(boolean navStrip, float blurPx, float capLeft, float capTop,
+    private RenderEffect build(float blurPx, float capLeft, float capTop,
                                float capRight, float capBottom, float radiusPx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             return null;
         }
         try {
-            GlassRefraction.Program program = navStrip ? mNavStripRefraction : mDockRefraction;
+            GlassRefraction.Program program = mDockRefraction;
             if (program == null) {
                 program = GlassRefraction.Program.create(mHost.density());
-                if (navStrip) mNavStripRefraction = program;
-                else mDockRefraction = program;
+                mDockRefraction = program;
             }
             if (program == null) {
                 return null;
             }
             // The view's own pixels are the content here, so the aim is identity.
             program.setAim(1f, 1f, 0f, 0f);
-            // Peek glass: the dock's glass is the card, its rim on the card's top and sides.
-            float[] peek = navStrip ? null : mHost.peekGlassRect();
-            if (peek != null) {
-                program.setRect(peek[0], peek[1], peek[2], peek[3], peek[4]);
-            } else {
-                program.setRect(capLeft, capTop, capRight, capBottom, radiusPx);
-            }
+            // Peek glass: the dock's glass is the card, its rim on the card's top and sides; a
+            // crossing blends it with the slab's by Home's share.
+            RoundCut.set(mCap, capLeft, capTop, capRight, capBottom, radiusPx);
+            programRect(mCap, mHost.peekGlassRect(), mHost.peekShare(), mRect);
+            program.setRect(mRect[RoundCut.LEFT], mRect[RoundCut.TOP], mRect[RoundCut.RIGHT],
+                mRect[RoundCut.BOTTOM], mRect[RoundCut.RADIUS]);
             // The user's knobs while Fancier Glass is on, the numbers this dock always ran with
             // otherwise; either way its gathered edge is raised by what the dock's tint covers
             // of it, the one rule every glass surface's edge follows. The cover is the one
             // the last dress pass worked out, so a key's lens rebuilding this per frame reads no
             // preference.
             program.setLook(GlassStack.lookFor(mHost.fancierLook())
-                .withCover(Math.max(0f, navStrip ? mHost.navStripCover() : mHost.dockCover())));
-            // The Dock design's own glass (the Tray's soft rim and shelf); the keyboard's strip
-            // under the pill wears none of it.
-            if (navStrip) {
-                program.setDockSurface(0f, 0f);
-            } else {
-                mHost.applyDockSurfaceGlass(program);
-            }
+                .withCover(Math.max(0f, mHost.dockCover())));
+            // The Dock design's own glass (the Tray's soft rim and shelf).
+            mHost.applyDockSurfaceGlass(program);
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
-            if (!navStrip && mHost.keyLensActive() && mHost.keyLensIntensity() > 0f) {
+            if (mHost.keyLensActive() && mHost.keyLensIntensity() > 0f) {
                 mHost.keyLens(mLens);
                 program.setLens(mLens[0], mLens[1], mLens[2], mLens[3], mLens[4],
                     mHost.keyLensIntensity());

@@ -46,7 +46,7 @@
             app:entryValues="@array/settings_animation_speed_values"
             app:useSimpleSummaryProvider="true"
             android:defaultValue="normal" />
-        <!-- How every page turns: Home's pages, Home to the Workspace, and window to window. Opens
+        <!-- How every page turns: Home's pages, Home to the Terminal, and window to window. Opens
              the Appearance editor on its Home card, where the choice lives; the summary names the effect in use. Its key is
              the one it had on Home. -->
         <Preference
@@ -70,6 +70,28 @@
             app:key="in_app_keyboard_haptics_enabled"
             app:title="@string/settings_behavior_keyboard_vibration_title"
             app:summary="@string/settings_behavior_keyboard_vibration_summary" />
+    </PreferenceCategory>
+
+    <!-- The launcher's sound server and media controls (project-docs/active/launcher-sound-2026-10-25.md).
+         The last row says when the user's own setup is in use or the server kept stopping, and
+         is hidden otherwise. -->
+    <PreferenceCategory app:key="general_sound" app:title="@string/settings_x11_group_sound">
+        <SwitchPreferenceCompat
+            app:key="launcher_sound"
+            app:title="@string/settings_launcher_sound_title"
+            app:summary="@string/settings_launcher_sound_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="launcher_media_controls"
+            app:title="@string/settings_launcher_media_controls_title"
+            app:summary="@string/settings_launcher_media_controls_summary"
+            app:dependency="launcher_sound"
+            android:defaultValue="true" />
+        <Preference
+            app:key="launcher_sound_status"
+            app:selectable="false"
+            app:persistent="false"
+            app:isPreferenceVisible="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="general_more" app:title="@string/settings_general_more_header">

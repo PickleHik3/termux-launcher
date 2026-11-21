@@ -2,50 +2,20 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_status_clock_header">
-        <SwitchPreferenceCompat
-            app:key="top_pane_clock_am_pm"
-            app:title="@string/settings_use_12_hour_title"
-            app:summary="@string/settings_use_12_hour_summary"
-            app:defaultValue="false" />
-    </PreferenceCategory>
+    <Preference
+        app:key="status_layout_editor"
+        app:persistent="false"
+        app:title="@string/settings_layout_editor_title"
+        app:summary="@string/settings_appearance_door_summary" />
 
-    <PreferenceCategory app:title="@string/settings_status_indicators_header">
-        <SwitchPreferenceCompat
-            app:key="status_widget_cpu"
-            app:title="@string/settings_cpu_usage_title"
-            app:summary="@string/termux_status_widget_cpu_summary"
-            app:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="status_widget_ram"
-            app:title="@string/settings_memory_usage_title"
-            app:summary="@string/settings_memory_usage_summary"
-            app:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="status_widget_media"
-            app:title="@string/settings_status_media_title"
-            app:summary="@string/settings_status_media_summary"
-            app:defaultValue="true" />
-    </PreferenceCategory>
-
+    <!-- Which indicators the bar shows, its clock and the temperature unit are the editor's Status
+         bar card. The place the weather follows stays here. -->
     <PreferenceCategory app:title="@string/settings_status_weather_header">
-        <SwitchPreferenceCompat
-            app:key="status_widget_weather"
-            app:title="@string/settings_weather_title"
-            app:summary="@string/settings_weather_summary"
-            app:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="status_widget_weather_fahrenheit"
-            app:title="@string/settings_weather_fahrenheit_title"
-            app:summary="@string/settings_weather_fahrenheit_summary"
-            app:defaultValue="false"
-            app:dependency="status_widget_weather" />
         <Preference
             app:key="status_widget_weather_location"
             app:persistent="false"
             app:title="@string/settings_weather_location_title"
-            app:summary="@string/settings_weather_location_summary_device"
-            app:dependency="status_widget_weather" />
+            app:summary="@string/settings_weather_location_summary_device" />
     </PreferenceCategory>
 
     <!-- Where the bar shares the camera's band, its row leaves a gap for the camera (#163).

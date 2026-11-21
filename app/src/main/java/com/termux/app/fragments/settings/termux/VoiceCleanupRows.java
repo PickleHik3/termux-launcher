@@ -11,6 +11,7 @@ import androidx.preference.PreferenceFragmentCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
@@ -168,10 +169,7 @@ final class VoiceCleanupRows {
 
     @NonNull
     private static TaiFunctionLabels labelsOf(@NonNull Context app) {
-        TaiModelStore store = new TaiModelStore(app);
-        Map<String, TaiModelSpec> installed = new LinkedHashMap<>(store.getDownloadedReadableModels());
-        installed.putAll(store.getInstalledUserModels());
-        return new TaiFunctionLabels(app, installed);
+        return new TaiFunctionLabels(app, ModelAvailability.get(app).models());
     }
 
     @NonNull

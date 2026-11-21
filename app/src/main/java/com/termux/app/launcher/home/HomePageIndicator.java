@@ -4,14 +4,14 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * Settings › Home › Page indicator: the small dots under the Home grid, or none. Dots is Home as
- * it was, and they still show only once there is more than one page.
+ * Settings › Home › Page indicator: the page glyphs under the Home grid, or none. Glyphs show even
+ * with one Home page, since they name the other pages too. The stored value stays {@code dots}.
  *
- * <p>The dots' band under the grid stays whichever is chosen: it is part of the grid's height,
- * so turning the dots off never resizes every widget on every page.
+ * <p>Off gives the band back: the grid takes the height the glyphs stood in, so changing the
+ * setting resizes the Home grid ({@code PageBarBand}).
  */
 public enum HomePageIndicator {
-    DOTS("dots"),
+    GLYPHS("dots"),
     OFF("off");
 
     @NonNull public final String value;
@@ -20,7 +20,7 @@ public enum HomePageIndicator {
         this.value = value;
     }
 
-    public static final HomePageIndicator DEFAULT = DOTS;
+    public static final HomePageIndicator DEFAULT = GLYPHS;
 
     @NonNull
     public static HomePageIndicator fromValue(@Nullable String value) {
@@ -28,8 +28,8 @@ public enum HomePageIndicator {
         return DEFAULT;
     }
 
-    /** Whether the dots show for {@code pageCount} Home pages. */
-    public boolean dotsShown(int pageCount) {
-        return this == DOTS && pageCount > 1;
+    /** Whether the glyph row shows, however many Home pages there are. */
+    public boolean glyphsShown() {
+        return this == GLYPHS;
     }
 }

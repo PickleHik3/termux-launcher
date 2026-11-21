@@ -101,6 +101,14 @@ public final class DockLayout {
     public final int appsRowStripBandPx;
 
     /**
+     * The empty air at the foot of {@link #appsRowStripBandPx} under the capsules, so they keep
+     * {@link com.termux.app.launcher.paging.PageTickStrip#SURFACE_AIR_DP} from the slab that starts
+     * under the band. Part of the band, not added to it; the strip draws its capsules centred in
+     * the band less this. Zero wherever no slab edge stands under the strip.
+     */
+    public final int appsRowStripAirPx;
+
+    /**
      * The air on the side of the icons the ticks stand on, which is {@link #appsTopPaddingPx} for
      * every row but one standing alone: that one keeps its sliver on the other side and the
      * strip's own band here, so its plank is as short as the two sides can make it.
@@ -274,6 +282,7 @@ public final class DockLayout {
         this.appsRowBandHintPx = Math.max(0, b.appsRowBandHintPx);
         this.appsRowIconPx = Math.max(0, b.appsRowIconPx);
         this.appsRowStripBandPx = Math.max(0, b.appsRowStripBandPx);
+        this.appsRowStripAirPx = Math.max(0, b.appsRowStripAirPx);
         this.appsRowTickSideAirPx = Math.max(0, b.appsRowTickSideAirPx);
         this.appsRowUsableWidthPx = Math.max(0, b.appsRowUsableWidthPx);
         this.slotIconPx = Math.max(0, b.slotIconPx);
@@ -311,6 +320,20 @@ public final class DockLayout {
      */
     public int appsRowPaddingBesideTicksPx() {
         return Math.max(0, appsRowTickSideAirPx - appsRowStripBandPx);
+    }
+
+    /**
+     * Where the apps row's icons are centred, down from the top of the row's band: the ticks'
+     * strip first when they lead the row ({@code PageTickStrip#ticksLeadRow}), then the row
+     * view's padding on its top side (the air, or what the strip leaves of it beside the ticks),
+     * then half of what the paddings leave. The padding the dock's dress gives the row
+     * ({@code DockDress}), so a card cut from this number stands where the icons are drawn.
+     */
+    public float appsIconCentreInBandPx(boolean ticksLead) {
+        int top = ticksLead ? appsRowPaddingBesideTicksPx() : appsTopPaddingPx;
+        int bottom = ticksLead ? appsBottomPaddingPx : appsRowPaddingBesideTicksPx();
+        int rowTop = ticksLead ? appsRowStripBandPx : 0;
+        return rowTop + top + Math.max(0, appsRowViewBandPx() - top - bottom) / 2f;
     }
 
     /**
@@ -403,6 +426,7 @@ public final class DockLayout {
         int appsRowBandHintPx;
         int appsRowIconPx;
         int appsRowStripBandPx;
+        int appsRowStripAirPx;
         int appsRowTickSideAirPx;
         int appsRowUsableWidthPx;
         int slotIconPx;

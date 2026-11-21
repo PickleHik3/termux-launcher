@@ -141,6 +141,14 @@ public final class PeekGlassReflection {
 
         /** Whether a page swipe or a page switch draws the icons away from their places now. */
         boolean iconsMoving();
+
+        /**
+         * The translationX the row's hosts carry now, from the row's parent up to the row stack:
+         * the lane's slide in a page crossing, which the reflection draws in, read at draw time.
+         */
+        default float laneTx() {
+            return 0f;
+        }
     }
 
     private final float mDensity;
@@ -161,6 +169,11 @@ public final class PeekGlassReflection {
     private final float mRippleKy;
     private final float mSpecularThicknessPx;
 
+    /**
+     * How much of the reflection shows: 1 at Home's rest, Home's share across a crossing. Its
+     * views' own alpha, so a fade records nothing again.
+     */
+    private float mFade = 1f;
     @Nullable private PeekReflectionView mHostView;
     @Nullable private PeekReflectionView mStripView;
 
@@ -281,8 +294,46 @@ public final class PeekGlassReflection {
         }
     }
 
+    /** Shows {@code fade} of the reflection (0..1) through its views' alpha. */
+    public void setFade(float fade) {
+        float f = fade <= 0f ? 0f : fade >= 1f ? 1f : fade;
+        if (f == mFade) return;
+        mFade = f;
+        for (PeekReflectionView view : new PeekReflectionView[] {mHostView, mStripView}) {
+            if (view != null && view.getAlpha() != f) view.setAlpha(f);
+        }
+    }
+
+    /**
+     * Moves the reflection on the host by {@code dy} from where it was last aimed: the rows have
+     * moved that far over the host since (the host shifted across a crossing), and the mirror
+     * stays under the icons. Its view's own translation, so nothing is recorded again.
+     */
+    public void setDrawnOffsetY(float dy) {
+        if (dy == mDrawnOffsetY) return;
+        mDrawnOffsetY = dy;
+        if (mHostView != null && mHostView.getTranslationY() != dy) mHostView.setTranslationY(dy);
+    }
+
+    private float mDrawnOffsetY;
+
+    /** DIAG(reflection): the host view's state; revert before merge. */
+    public String diagState() {
+        PeekReflectionView v = mHostView;
+        return "shown=" + mShown + " live=" + mLive + " alpha=" + mAlpha + " fade=" + mFade
+            + (v == null ? " view=none" : " vis=" + v.getVisibility() + " ty=" + v.getTranslationY()
+            + " a=" + v.getAlpha() + " parent=" + (v.getParent() != null) + " h=" + v.getHeight());
+    }
+
+    /** The fade last set ({@link #setFade}). */
+    public float fade() {
+        return mFade;
+    }
+
     /** Nothing reflected, the views put away, and every drawing let go. */
     public void clear() {
+        mHeld = false;
+        mStaleWhileHeld = false;
         mShown = false;
         mCard = null;
         mRow = null;
@@ -297,9 +348,93 @@ public final class PeekGlassReflection {
         if (mStripView != null) detach(mStripView);
     }
 
+    /** What a sync does with the reflection ({@link #syncFor}). */
+    public enum Sync {
+        /** Drawn for the card and the row as they stand now. */
+        DRAW,
+        /** Kept as it stands: Home's card carries it while Home's row does not stand. */
+        KEEP,
+        /** Put away: no card, the knob at 0, or nothing to draw it on. */
+        CLEAR
+    }
+
+    /**
+     * What a sync does with the reflection. While the cards stand apart the glass host is Home's
+     * card at every rest, parked beside the screen while the Terminal is in front, and the
+     * reflection is part of it: with Home's row not standing (the Terminal's rows up) there is
+     * nothing to draw it from, so it is kept as Home's rest drew it, never put away, and so it is
+     * there for the whole slide back and at the landing. Not apart, the base's rule.
+     *
+     * @param cardStands     a card is cut on the host
+     * @param strengthOn     the Reflection knob is above 0
+     * @param surfacesReady  the row, the host and the container are there
+     * @param apart          the cards stand apart (the host is Home's card)
+     * @param homeRowStands  Home's apps row is shown
+     */
+    @NonNull
+    public static Sync syncFor(boolean cardStands, boolean strengthOn, boolean surfacesReady,
+                               boolean apart, boolean homeRowStands) {
+        if (!cardStands || !strengthOn || !surfacesReady) return Sync.CLEAR;
+        return apart && !homeRowStands ? Sync.KEEP : Sync.DRAW;
+    }
+
+    /**
+     * The card a sync aims the reflection by. Apart, the reflection is part of Home's card: once
+     * Home has stood at rest it is aimed by Home's rest card whichever page is in front or however
+     * far a crossing has come, so the Terminal's rest finds nothing to re-aim and the landing
+     * nothing to correct. Not apart (or before Home's first rest), the card cut now.
+     */
+    @NonNull
+    public static PeekGlassGeometry.Card aimCard(boolean apart,
+                                                 @androidx.annotation.Nullable PeekGlassGeometry.Card homeRestCard,
+                                                 @NonNull PeekGlassGeometry.Card shown) {
+        return apart && homeRestCard != null ? homeRestCard : shown;
+    }
+
+    /**
+     * Where the row stands over the host for the reflection's aim ({@link #update}'s rowDy), with
+     * {@link #aimCard}'s rule: apart, where Home's rest laid it out, never the live layout read
+     * with another page in front (the Terminal's rows stand the row elsewhere over the parked
+     * host); not apart, where it stood when {@code shown} was cut.
+     *
+     * @param homeRestRows the rows over the host at Home's last rest
+     * @param cutRows      the rows over the host when the shown card was cut
+     */
+    public static float aimRowDy(boolean apart,
+                                 @androidx.annotation.Nullable PeekGlassGeometry.Card homeRestCard,
+                                 float homeRestRows, float cutRows) {
+        return apart && homeRestCard != null ? homeRestRows : cutRows;
+    }
+
+    /**
+     * Holds the reflection as it stands ({@link Sync#KEEP}): nothing is recorded or captured from
+     * the row while it does not stand; a change the row asked for meanwhile is recorded once when
+     * the hold lets go.
+     */
+    public void setHeld(boolean held) {
+        if (held == mHeld) return;
+        mHeld = held;
+        if (held) return;
+        boolean stale = mStaleWhileHeld;
+        mStaleWhileHeld = false;
+        if (stale) onRowContentChanged();
+    }
+
+    /** Whether the reflection is held as it stands ({@link #setHeld}). */
+    public boolean held() {
+        return mHeld;
+    }
+
+    private boolean mHeld;
+    private boolean mStaleWhileHeld;
+
     /** One of the row's icons asked to be drawn again: an icon arrived, a dot or a press changed. */
     public void onRowContentChanged() {
         if (!mShown || mRow == null) return;
+        if (mHeld) {
+            mStaleWhileHeld = true;
+            return;
+        }
         if (mLive) {
             if (mRecordPending) return;
             mRecordPending = true;
@@ -317,6 +452,10 @@ public final class PeekGlassReflection {
     public void onIconsMoved() {
         Row row = mRow;
         if (!mShown || row == null) return;
+        if (mHeld) {
+            mStaleWhileHeld = true;
+            return;
+        }
         if (mLive) {
             record();
             return;
@@ -339,7 +478,9 @@ public final class PeekGlassReflection {
         PeekGlassGeometry.Card card = mCard;
         if (!mShown || card == null) return;
         int save = canvas.save();
-        canvas.translate(-originX, -originY);
+        Row row = mRow;
+        canvas.translate(PeekGlassGeometry.rowDrawX(-originX, row == null ? 0f : row.laneTx()),
+            -originY);
         if (mLive) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Live.draw(canvas, mNode);
         } else if (!mStillSuspended) {
@@ -362,6 +503,9 @@ public final class PeekGlassReflection {
             if (view == null) continue;
             int visibility = show ? View.VISIBLE : View.GONE;
             if (view.getVisibility() != visibility) view.setVisibility(visibility);
+            if (view.getAlpha() != mFade) view.setAlpha(mFade);
+            if (view == mHostView && view.getTranslationY() != mDrawnOffsetY)
+                view.setTranslationY(mDrawnOffsetY);
             if (show) dress(view);
         }
     }
@@ -449,6 +593,11 @@ public final class PeekGlassReflection {
         dropDrawings();
         syncViews();
         requestStillCapture();
+    }
+
+    /** The row's lane host moved across: the reflection is drawn again where the row now stands. */
+    public void onLaneMoved() {
+        if (mShown) invalidateViews();
     }
 
     private void invalidateViews() {

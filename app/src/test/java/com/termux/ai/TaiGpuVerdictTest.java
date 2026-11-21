@@ -9,9 +9,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** The GPU canary's matcher, the verdict keyed by driver and app version, and what it does to the GPU path. */
+/** The GPU canary's matcher, the verdict keyed by GPU name and driver, and what it does to the GPU path. */
 public class TaiGpuVerdictTest {
-    private static final String KEY = TaiGpuVerdict.key("Adreno (TM) 830", "OpenCL 3.0 Compiler E031", "1.0.0");
+    private static final String KEY = TaiGpuVerdict.key("Adreno (TM) 830", "OpenCL 3.0 Compiler E031");
 
     private static class FakeStore implements TaiGpuVerdict.Store {
         String value;
@@ -52,11 +52,20 @@ public class TaiGpuVerdictTest {
     }
 
     @Test
-    public void aDriverOrAppUpdateRunsTheCanaryAgain() {
+    public void aDriverUpdateRunsTheCanaryAgainButAnAppUpdateDoesNot() {
         FakeStore store = new FakeStore();
         store.write(TaiGpuVerdict.encode(State.FAILED, KEY));
-        assertEquals(State.UNKNOWN, TaiGpuVerdict.current(store, TaiGpuVerdict.key("Adreno (TM) 830", "OpenCL 3.0 Compiler E032", "1.0.0")));
-        assertEquals(State.UNKNOWN, TaiGpuVerdict.current(store, TaiGpuVerdict.key("Adreno (TM) 830", "OpenCL 3.0 Compiler E031", "1.0.1")));
+        assertEquals(State.UNKNOWN, TaiGpuVerdict.current(store, TaiGpuVerdict.key("Adreno (TM) 830", "OpenCL 3.0 Compiler E032")));
+        assertEquals(State.FAILED, TaiGpuVerdict.current(store, KEY));
+    }
+
+    @Test
+    public void anOldThreePartKeyStillMatchesOnNameAndDriver() {
+        FakeStore store = new FakeStore();
+        store.write(TaiGpuVerdict.encode(State.VERIFIED, KEY + "|1.0.0"));
+        assertEquals(State.VERIFIED, TaiGpuVerdict.current(store, KEY));
+        assertEquals(State.UNKNOWN, TaiGpuVerdict.current(store, TaiGpuVerdict.key("Adreno (TM) 830", "OpenCL 3.0 Compiler E032")));
+        assertEquals(State.UNKNOWN, TaiGpuVerdict.current(store, TaiGpuVerdict.key("Adreno (TM) 830", "OpenCL 3.0")));
     }
 
     @Test
@@ -90,7 +99,7 @@ public class TaiGpuVerdictTest {
         for (State state : new State[] {State.VERIFIED, State.FAILED, State.UNKNOWN}) {
             GpuPath path = TaiGpuVerdict.apply(GpuPath.UNKNOWN, state);
             TaiTierPolicy.Env env = new TaiTierPolicy.Env(TaiDeviceTier.TIER_2, 12 * gib, 34, true, true, path, false);
-            assertEquals(state == State.FAILED ? "cpu" : "gpu", TaiTierPolicy.defaultAccelerator(env));
+            assertEquals(state == State.VERIFIED ? "gpu" : "cpu", TaiTierPolicy.defaultAccelerator(env));
         }
     }
 
@@ -108,8 +117,9 @@ public class TaiGpuVerdictTest {
     }
 
     @Test
-    public void theKeyCarriesTheDriverAndTheBuild() {
-        assertEquals("gpu|drv|1.2", TaiGpuVerdict.key(" gpu ", "drv", "1.2"));
-        assertEquals("||", TaiGpuVerdict.key(null, null, null));
+    public void theKeyCarriesTheNameAndTheDriverOnly() {
+        assertEquals("gpu|drv", TaiGpuVerdict.key(" gpu ", "drv"));
+        assertEquals("|", TaiGpuVerdict.key(null, null));
+        assertEquals("VERIFIED\tgpu|drv", TaiGpuVerdict.encode(State.VERIFIED, TaiGpuVerdict.key("gpu", "drv")));
     }
 }

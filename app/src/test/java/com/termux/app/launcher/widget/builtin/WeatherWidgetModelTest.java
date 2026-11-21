@@ -2,8 +2,10 @@ package com.termux.app.launcher.widget.builtin;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertSame;
 
 import com.termux.app.statusbar.WeatherController;
+import com.termux.app.statusbar.WeatherIcons;
 
 import org.junit.Test;
 
@@ -98,12 +100,13 @@ public class WeatherWidgetModelTest {
         assertEquals(WeatherWidgetModel.Tone.CLOUD, WeatherWidgetModel.tone(61, false));
     }
 
-    @Test public void nightSkiesGetANightGlyphAndTheRestTheSharedTable() {
-        assertEquals(WeatherController.glyphFor(0), WeatherWidgetModel.glyph(0, true));
-        assertEquals(WeatherWidgetModel.GLYPH_NIGHT_CLEAR, WeatherWidgetModel.glyph(0, false));
-        assertEquals(WeatherWidgetModel.GLYPH_NIGHT_PARTLY_CLOUDY, WeatherWidgetModel.glyph(2, false));
-        assertEquals(WeatherController.glyphFor(61), WeatherWidgetModel.glyph(61, false));
+    @Test public void aSkyIsDrawnAsItsRoundlinePictureForTheCodeAndTheTimeOfDay() {
+        assertEquals(WeatherIcons.CLEAR_DAY.key, WeatherWidgetModel.glyph(0, true));
+        assertEquals(WeatherIcons.CLEAR_NIGHT.key, WeatherWidgetModel.glyph(0, false));
+        assertEquals(WeatherIcons.PARTLY_CLOUDY_NIGHT.key, WeatherWidgetModel.glyph(2, false));
+        assertEquals(WeatherIcons.OVERCAST_NIGHT_RAIN.key, WeatherWidgetModel.glyph(61, false));
         assertNotEquals(WeatherWidgetModel.glyph(0, true), WeatherWidgetModel.glyph(0, false));
+        assertSame(WeatherIcons.CLEAR_DAY, WeatherIcons.forKey(WeatherWidgetModel.glyph(0, true)));
     }
 
     @Test public void theSampleIsTheDesignsCard() {

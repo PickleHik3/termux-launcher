@@ -1,6 +1,5 @@
 package com.termux.app.launcher.drawer;
 
-import com.termux.app.wall.PaneWallPage;
 import android.content.Context;
 import android.view.View;
 import android.widget.EditText;
@@ -43,6 +42,13 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return viewRoot == null ? null : (T) viewRoot.findViewById(viewId);
     }
 
+    /** The band the host reaches through under the pill; tests set it. */
+    int sheetsBandPx;
+
+    @Override public int sheetsBandPx() {
+        return sheetsBandPx;
+    }
+
     @Override public int restingPage() {
         return TermuxAppSharedPreferences.terminalPageId();
     }
@@ -64,11 +70,11 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return false;
     }
 
-    /** The last opacity the drawer asked of the under-pill strip; 1 until it asks for anything. */
-    float decorNavStripAlpha = 1f;
+    /** Whether the built-in keyboard is up (a laid-out one that is down is not). */
+    boolean inAppKeyboardShown = true;
 
-    @Override public void setDecorNavStripAlpha(float alpha) {
-        decorNavStripAlpha = alpha;
+    @Override public boolean inAppKeyboardShown() {
+        return inAppKeyboardShown;
     }
 
     /** Whether the close puts down a keyboard the drawer's search raised. */
@@ -78,9 +84,19 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return closeLowersKeyboard;
     }
 
-    /** The terminal pane's gap and corner radius; negative means the host gives none. */
+    /** The terminal pane's gap, corner radius and Margin; negative means the host gives none. */
     float paneGapPx = -1f;
     float paneCornerRadiusPx = -1f;
+    float marginPx = -1f;
+    float keyboardCardRadiusPx;
+
+    @Override public float searchKeyboardMarginPx() {
+        return marginPx;
+    }
+
+    @Override public float inAppKeyboardCardRadiusPx() {
+        return keyboardCardRadiusPx;
+    }
 
     @Override public float searchKeyboardGapPx() {
         return paneGapPx;

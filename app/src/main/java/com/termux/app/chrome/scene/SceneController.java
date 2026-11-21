@@ -14,7 +14,6 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -90,12 +89,15 @@ public final class SceneController implements LatencyProbe.CommitListener {
     @NonNull private final Host mHost;
     @NonNull private final int[] mLoc = new int[2];
     @Nullable private SceneLayerView mLayer;
+    private float mPageOffset;
     private boolean mAttached;
     @Nullable private SceneInvalTrace mInvalTrace;
     /** The persisted choice as of the last attach or {@link #refresh}; read here, never per touch. */
     @NonNull private WallpaperMotion mMotion = WallpaperMotion.photo();
     /** The stored shader's settings, re-read on every refresh. */
     @Nullable private ShaderStore.Meta mMeta;
+    /** What the stored choice plays, set by {@link #currentSpec}; null while a debug file or nothing plays. */
+    @Nullable private SceneSource mSource;
     /** The stored shader as of the last refresh, the one the running layer was built from, and one that failed its check. */
     @Nullable private ShaderStamp mStoredStamp, mRunningStamp, mRejectedStamp;
     /** A changed source or texture is being checked offscreen before the layer is rebuilt. */
@@ -189,8 +191,10 @@ public final class SceneController implements LatencyProbe.CommitListener {
             // Re-read on every refresh: an edit of the shader in use keeps the same motion string.
             mMeta = ShaderStore.readMeta(mActivity, motion.id);
             File texture = ShaderStore.textureFile(mActivity, motion.id, mMeta);
+            File depth = ShaderStore.depthFile(mActivity, motion.id, mMeta);
             mStoredStamp = new ShaderStamp(ShaderStore.sourceFile(mActivity, motion.id).lastModified(),
-                mMeta.texture, texture == null ? 0L : texture.lastModified(), mMeta.quality, mMeta.rateHz);
+                mMeta.texture, texture == null ? 0L : texture.lastModified(),
+                mMeta.depth, depth == null ? 0L : depth.lastModified(), mMeta.quality, mMeta.rateHz);
         } else {
             mMeta = null;
             mStoredStamp = null;
@@ -231,14 +235,14 @@ public final class SceneController implements LatencyProbe.CommitListener {
         if (store == mStore) return;
         unlistenForChoice();
         if (store == null) return;
-        store.registerOnSharedPreferenceChangeListener(mChoiceListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mChoiceListener);
         mStore = store;
     }
 
     private void unlistenForChoice() {
         SharedPreferences store = mStore;
         mStore = null;
-        if (store != null) store.unregisterOnSharedPreferenceChangeListener(mChoiceListener);
+        if (store != null) com.termux.shared.settings.preferences.PreferenceDraft.unlisten(store, mChoiceListener);
     }
 
     /** From onStop: the layer goes away with the screen it was drawn on. */
@@ -313,11 +317,12 @@ public final class SceneController implements LatencyProbe.CommitListener {
     /** What should run now: the debug file, else the stored shader, else nothing. */
     @Nullable
     private SceneLayerView.Spec currentSpec(long now) {
+        mSource = null;
         String path = SHADER_FILE.get(now);
         if (path != null && !path.trim().isEmpty()) {
             path = path.trim();
             if (path.equals(mDebugGaveUp)) return null;
-            return new SceneLayerView.Spec("file:" + path, new File(path), null,
+            return new SceneLayerView.Spec("file:" + path, new File(path), null, null,
                 ShaderSafety.Quality.HALF, true);
         }
         String videoPath = VIDEO_FILE.get(now);
@@ -335,18 +340,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
         mDebugVideoPath = null;
         mDebugVideoName = null;
         mDebugGaveUp = null;
-        if (mMotion.kind == WallpaperMotion.Kind.VIDEO && mMotion.id != null) {
-            File video = VideoVariants.playable(mActivity, mVideoRateHz);
-            // An import from before frame-rate versions is the file named after the choice.
-            if (video == null) video = VideoImport.file(mActivity, mMotion.id);
-            // The file name is in the key: a version finishing swaps the layer to it.
-            return video.isFile()
-                ? new SceneLayerView.Spec(mMotion.format() + "@" + video.getName(), video, false) : null;
-        }
-        if (mMotion.kind != WallpaperMotion.Kind.SHADER || mMotion.id == null || mMeta == null) return null;
-        File channel0 = ShaderStore.textureFile(mActivity, mMotion.id, mMeta);
-        return new SceneLayerView.Spec(mMotion.format(), ShaderStore.sourceFile(mActivity, mMotion.id),
-            channel0, mMeta.quality, false);
+        mSource = SceneSource.resolve(mActivity, mMotion, mVideoRateHz, mMeta);
+        return mSource == null ? null : mSource.spec();
     }
 
     /** Copies the debug file in on a worker thread, then polls again on main; a file that cannot be imported is given up on. */
@@ -380,8 +375,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
         SceneLayerView layer = mLayer;
         if (layer == null || spec == null) return;
         String rateProp = RATE.get(now);
-        int choiceRate = mMotion.kind == WallpaperMotion.Kind.VIDEO && !spec.debugFile ? mVideoRateHz
-            : spec.debugFile || mMeta == null ? SceneFramePolicy.DEFAULT_RATE_HZ : mMeta.rateHz;
+        int choiceRate = mSource == null ? SceneFramePolicy.DEFAULT_RATE_HZ : mSource.rateHz();
         int sceneRate = rateProp == null || rateProp.isEmpty()
             ? choiceRate : SceneFramePolicy.parseRate(rateProp);
         layer.setRateHz(sceneRate);
@@ -443,6 +437,13 @@ public final class SceneController implements LatencyProbe.CommitListener {
         return hz == 15 || hz == 60 ? hz : SceneFramePolicy.DEFAULT_RATE_HZ;
     }
 
+    /** {@code tlPageOffset}, 0..1, for the layer now and any layer installed later. */
+    public void setPageOffset(float offset) {
+        mPageOffset = offset;
+        SceneLayerView layer = mLayer;
+        if (layer != null) layer.setPageOffset(offset);
+    }
+
     private void installLayer(@NonNull SceneLayerView.Spec spec) {
         SceneLayerView layer = new SceneLayerView(mActivity, spec, mHost::lazyMode,
             reason -> onLayerReverted(spec, reason));
@@ -452,6 +453,7 @@ public final class SceneController implements LatencyProbe.CommitListener {
         watchPower();
         layer.setPowerHold(mPowerHold);
         pushLook(layer);
+        layer.setPageOffset(mPageOffset);
         mContainer.addView(layer, Math.max(0, index), lp);
         mContainer.addOnLayoutChangeListener(mPlace);
         place();
@@ -483,7 +485,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
         mMotion = WallpaperMotion.photo();
         mMeta = null;
         removeLayer();
-        Toast.makeText(mActivity, R.string.wallpaper_motion_reverted, Toast.LENGTH_SHORT).show();
+        com.termux.app.notice.AppNotice.show(mActivity, com.termux.app.notice.AppNoticeItem.Kind.WARNING,
+            R.drawable.ic_rl_wallpaper, mActivity.getString(R.string.wallpaper_motion_reverted), null, false);
     }
 
     @Nullable private java.util.List<android.view.ViewGroup.LayoutParams> mInvalTraceParams;
@@ -495,9 +498,9 @@ public final class SceneController implements LatencyProbe.CommitListener {
             & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) {
             return;
         }
-        android.view.ViewGroup content = mActivity.findViewById(android.R.id.content);
+        android.view.ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mActivity);
         if (content == null || content.getChildCount() == 0) return;
-        // The content root can hold overlays beside the main tree: the recorder wraps them all.
+        // The window root holds the shell and the editor and notices hosts: the recorder wraps them all.
         SceneInvalTrace trace = new SceneInvalTrace(mActivity, layer::drawCount);
         java.util.ArrayList<View> children = new java.util.ArrayList<>();
         java.util.ArrayList<android.view.ViewGroup.LayoutParams> params = new java.util.ArrayList<>();

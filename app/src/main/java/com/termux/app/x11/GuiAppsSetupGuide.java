@@ -119,7 +119,11 @@ public final class GuiAppsSetupGuide {
             offered.add(GuiAppsSetup.StarterApp.BROWSER);
         }
         offered.add(GuiAppsSetup.StarterApp.FILE_MANAGER);
-        if (route == GuiAppsSetup.Route.DISTRO) offered.add(GuiAppsSetup.StarterApp.DESKTOP);
+        // Termux's x11 repository carries the desktop; VAJ's has not been checked for it.
+        if (route == GuiAppsSetup.Route.DISTRO
+            || (route == GuiAppsSetup.Route.X11_REPO && edition != AppEdition.VAJ)) {
+            offered.add(GuiAppsSetup.StarterApp.DESKTOP);
+        }
         return offered;
     }
 

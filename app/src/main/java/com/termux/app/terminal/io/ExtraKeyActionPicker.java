@@ -2,14 +2,13 @@ package com.termux.app.terminal.io;
 
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -31,6 +30,7 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
 import com.termux.app.material.M3;
 import com.termux.launcherctl.LauncherToolRegistry;
+import com.termux.shared.termux.extrakeys.ExtraKeyIcons;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import org.json.JSONArray;
@@ -69,9 +69,13 @@ public final class ExtraKeyActionPicker {
     private static final int CELL_HEADER = 0;
     private static final int CELL_TILE = 1;
     private static final int CELL_WIDE = 2;
+    /** A launcher action: the bar's cap as the leading mark, then the name. */
+    private static final int CELL_ACTION = 3;
+    /** The leading mark's slot, the same for every action row so the names line up. */
+    static final int MARK_SLOT_DP = 40;
 
     /** One thing that can be selected: what to call it, and how to turn it into a key. */
-    private static final class Choice {
+    static final class Choice {
         final String id;
         final String label;
         @Nullable final ExtraKeysLayoutModel.Key key;
@@ -104,17 +108,25 @@ public final class ExtraKeyActionPicker {
     }
 
     /** One cell of the grid: a section header, a square tile or a full-width row. */
-    private static final class Cell {
+    static final class Cell {
         final int type;
         final String label;
         @Nullable final String summary;
         @Nullable final Choice choice;
+        /** An action row's cap exactly as the bar will draw it (an icon's code point or text). */
+        @Nullable final String mark;
 
         Cell(int type, String label, @Nullable String summary, @Nullable Choice choice) {
+            this(type, label, summary, choice, null);
+        }
+
+        Cell(int type, String label, @Nullable String summary, @Nullable Choice choice,
+             @Nullable String mark) {
             this.type = type;
             this.label = label;
             this.summary = summary;
             this.choice = choice;
+            this.mark = mark;
         }
     }
 
@@ -129,11 +141,11 @@ public final class ExtraKeyActionPicker {
     /** True while an argument prompt owns the close callback instead of the picker sheet. */
     private boolean handedOffToPrompt;
 
-    private ExtraKeyActionPicker.Category category = Category.COMMON;
-    private String query = "";
+    ExtraKeyActionPicker.Category category = Category.COMMON;
+    String query = "";
     @Nullable private Choice selected;
 
-    private enum Category {
+    enum Category {
         COMMON(ExtraKeyPickerCatalog.Category.COMMON, R.string.settings_extra_keys_picker_common),
         NAVIGATION(ExtraKeyPickerCatalog.Category.NAVIGATION,
             R.string.settings_extra_keys_picker_navigation),
@@ -196,7 +208,7 @@ public final class ExtraKeyActionPicker {
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         MaterialButton close = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialIconButtonStyle);
-        close.setIconResource(R.drawable.ic_symbol_close);
+        close.setIconResource(R.drawable.ic_rl_close);
         close.setContentDescription(context.getString(R.string.settings_extra_keys_action_back));
         close.setOnClickListener(v -> dialog.dismiss());
         headerRow.addView(close, new LinearLayout.LayoutParams(pad(48), pad(48)));
@@ -293,17 +305,11 @@ public final class ExtraKeyActionPicker {
         confirmParams.setMarginStart(pad(12));
         bar.addView(confirm, confirmParams);
         root.addView(bar);
-        root.setOnApplyWindowInsetsListener((v, insets) -> {
-            int bottom;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                bottom = insets.getInsets(
-                    WindowInsets.Type.systemBars() | WindowInsets.Type.ime()).bottom;
-            } else {
-                bottom = insets.getSystemWindowInsetBottom();
-            }
-            v.setPadding(pad(16), 0, pad(16), bottom);
-            return insets;
-        });
+        // The sheet already lifts its content above the navigation bar and the keyboard; padding
+        // the column for them again left the grid no height once the keyboard was up.
+        // The column takes the first focus, so the sheet opens on the grid and the keyboard only
+        // comes up when the search field is tapped.
+        root.setFocusableInTouchMode(true);
 
         adapter.onSelect = choice -> {
             selected = choice;
@@ -329,6 +335,10 @@ public final class ExtraKeyActionPicker {
         refreshConfirm.run();
 
         dialog.setContentView(root);
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+        }
         View sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
         if (sheet != null) {
             ViewGroup.LayoutParams params = sheet.getLayoutParams();
@@ -367,7 +377,7 @@ public final class ExtraKeyActionPicker {
     // ------------------------------------------------------------------ cells
 
     @NonNull
-    private List<Cell> buildCells() {
+    List<Cell> buildCells() {
         List<Cell> cells = new ArrayList<>();
         String needle = query.trim().toLowerCase(Locale.ROOT);
         if (!needle.isEmpty()) {
@@ -376,16 +386,16 @@ public final class ExtraKeyActionPicker {
             String typed = query.trim();
             ExtraKeyChord.Parsed chord = ExtraKeyChord.parse(typed);
             if (chord != null) {
-                cells.add(new Cell(CELL_WIDE,
+                cells.add(new Cell(CELL_ACTION,
                     context.getString(R.string.settings_extra_keys_action_send_chord, chord.display), null,
                     new Choice("macro:" + chord.macro, chord.display,
                         new ExtraKeysLayoutModel.Key(chord.macro, true, chord.display, null))));
             }
-            cells.add(new Cell(CELL_WIDE,
+            cells.add(new Cell(CELL_ACTION,
                 context.getString(R.string.settings_extra_keys_action_send_text, typed), null,
                 new Choice("text:" + typed, typed, new ExtraKeysLayoutModel.Key(typed))));
             if (typed.contains(" ")) {
-                cells.add(new Cell(CELL_WIDE, typed,
+                cells.add(new Cell(CELL_ACTION, typed,
                     context.getString(R.string.settings_extra_keys_action_macro_summary),
                     new Choice("macro:" + ExtraKeyChord.normaliseMacro(typed), typed,
                         new ExtraKeysLayoutModel.Key(ExtraKeyChord.normaliseMacro(typed), true, null, null))));
@@ -441,26 +451,34 @@ public final class ExtraKeyActionPicker {
                 if (choices != null) {
                     // A fixed set of values is a row each - "Pane layout · grid" - so binding one
                     // is picking rather than typing a value the user would have to already know.
+                    String ownIcon = ExtraKeyActionLabels.defaultCapGlyph(tool.name);
                     for (String choice : choices) {
                         String choiceLabel = label + " · " + choice;
-                        cells.add(new Cell(CELL_WIDE, choiceLabel,
-                            tool.name + ":" + required + "=" + choice,
-                            new Choice("tool:" + tool.name + ":" + choice, choiceLabel,
-                                toolKey(tool.name, required, choice, choiceLabel))));
+                        ExtraKeysLayoutModel.Key key =
+                            toolKey(tool.name, required, choice, choiceLabel, true);
+                        cells.add(new Cell(CELL_ACTION, choiceLabel, null,
+                            new Choice("tool:" + tool.name + ":" + choice, choiceLabel, key),
+                            // The row wears its action's own icon even where the key's cap
+                            // is the value's text, so a list of choices stays in one column.
+                            // A value with an icon of its own (a focus direction) wears that.
+                            ExtraKeyActionLabels.defaultCapGlyph(tool.name, choice) != null
+                                ? ExtraKeyActionLabels.defaultCapGlyph(tool.name, choice)
+                                : ownIcon != null ? ownIcon : key.display));
                     }
                 } else if (required == null) {
-                    cells.add(new Cell(CELL_WIDE, label, tool.name,
-                        new Choice("tool:" + tool.name, label,
-                            toolKey(tool.name, null, null, label))));
+                    ExtraKeysLayoutModel.Key key = toolKey(tool.name, null, null, label, false);
+                    cells.add(new Cell(CELL_ACTION, label, null,
+                        new Choice("tool:" + tool.name, label, key), key.display));
                 } else {
-                    cells.add(new Cell(CELL_WIDE, label, tool.name + " · " + required,
-                        new Choice("tool:" + tool.name, label, tool, required, label)));
+                    cells.add(new Cell(CELL_ACTION, label, null,
+                        new Choice("tool:" + tool.name, label, tool, required, label),
+                        toolKey(tool.name, required, null, label, false).display));
                 }
             }
         }
     }
 
-    private final class GridAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+    final class GridAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         List<Cell> cells = new ArrayList<>();
         OnSelect onSelect = choice -> { };
 
@@ -481,6 +499,7 @@ public final class ExtraKeyActionPicker {
         @NonNull
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int type) {
+            if (type == CELL_ACTION) return actionHolder();
             TextView view = new TextView(context);
             view.setTextColor(colorText);
             RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
@@ -511,9 +530,46 @@ public final class ExtraKeyActionPicker {
             return new RecyclerView.ViewHolder(view) { };
         }
 
+        /** Mark slot, then the name: one line, so the row's height is the touch height. */
+        private RecyclerView.ViewHolder actionHolder() {
+            LinearLayout row = row();
+            row.setMinimumHeight(pad(TILE_MIN_DP));
+            row.setPadding(pad(14), pad(8), pad(14), pad(8));
+            RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.setMargins(pad(GAP_DP / 2f), pad(GAP_DP / 2f), pad(GAP_DP / 2f),
+                pad(GAP_DP / 2f));
+            row.setLayoutParams(params);
+            TextView mark = new TextView(context);
+            M3.textAppearance(mark, com.google.android.material.R.attr.textAppearanceLabelLarge);
+            mark.setTextColor(colorText);
+            mark.setGravity(Gravity.CENTER);
+            mark.setMaxLines(1);
+            // dp, not sp: the slot is a fixed width, so a cap in it must not grow with the font.
+            mark.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 14);
+            mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            row.addView(mark, new LinearLayout.LayoutParams(pad(MARK_SLOT_DP),
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            TextView name = new TextView(context);
+            M3.textAppearance(name, com.google.android.material.R.attr.textAppearanceLabelLarge);
+            name.setTextColor(colorText);
+            name.setMaxLines(2);
+            name.setEllipsize(TextUtils.TruncateAt.END);
+            name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            nameParams.setMarginStart(pad(8));
+            row.addView(name, nameParams);
+            return new RecyclerView.ViewHolder(row) { };
+        }
+
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             Cell cell = cells.get(position);
+            if (cell.type == CELL_ACTION) {
+                bindAction((LinearLayout) holder.itemView, cell);
+                return;
+            }
             TextView view = (TextView) holder.itemView;
             if (cell.type == CELL_HEADER) {
                 view.setText(cell.label);
@@ -523,6 +579,30 @@ public final class ExtraKeyActionPicker {
                 && selected.id.equals(cell.choice.id);
             view.setText(cell.summary == null ? NerdFontSpans.span(context, cell.label)
                 : cell.label + "\n" + cell.summary);
+            styleCell(view, cell, isSelected);
+        }
+
+        private void bindAction(@NonNull LinearLayout row, @NonNull Cell cell) {
+            boolean isSelected = selected != null && cell.choice != null
+                && selected.id.equals(cell.choice.id);
+            // The mark goes through the span the bar's cap uses, so an icon is the drawable the
+            // bar will draw. A text cap shows only when all of it fits the slot; anything else,
+            // and a row with no cap of its own, wears the one generic mark, never an ellipsis.
+            TextView mark = (TextView) row.getChildAt(0);
+            CharSequence cap = cell.mark == null ? "" : NerdFontSpans.span(context, cell.mark);
+            boolean icon = cap instanceof android.text.Spanned;
+            if (!icon && (cap.length() == 0
+                || mark.getPaint().measureText(cap.toString()) > pad(MARK_SLOT_DP))) {
+                cap = NerdFontSpans.span(context, ExtraKeyIcons.string(ExtraKeyIcons.COMMAND));
+            }
+            mark.setText(cap);
+            ((TextView) row.getChildAt(1)).setText(
+                cell.summary == null ? cell.label : cell.label + "\n" + cell.summary);
+            row.setContentDescription(cell.label);
+            styleCell(row, cell, isSelected);
+        }
+
+        private void styleCell(@NonNull View view, @NonNull Cell cell, boolean isSelected) {
             GradientDrawable background = new GradientDrawable();
             background.setCornerRadius(pad(12));
             background.setColor(isSelected
@@ -564,7 +644,7 @@ public final class ExtraKeyActionPicker {
         ok.setOnClickListener(v -> {
             String value = input.getText().toString().trim();
             dialog.dismiss();
-            onPicked.onPicked(toolKey(tool.name, argument, value.isEmpty() ? null : value, label));
+            onPicked.onPicked(toolKey(tool.name, argument, value.isEmpty() ? null : value, label, false));
         });
         LinearLayout.LayoutParams okParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -582,12 +662,13 @@ public final class ExtraKeyActionPicker {
     private static ExtraKeysLayoutModel.Key toolKey(@NonNull String toolName,
                                                     @Nullable String argument,
                                                     @Nullable String value,
-                                                    @NonNull String label) {
+                                                    @NonNull String label,
+                                                    boolean fromChoices) {
         String spec = "tool:" + toolName;
         if (argument != null && value != null) spec += ":" + argument + "=" + value;
         // A tool with a glyph of its own wears it; otherwise the label seeds the display text and
         // the user can shorten it in the key sheet.
-        String glyph = ExtraKeyActionLabels.defaultCapGlyph(toolName);
+        String glyph = ExtraKeyActionLabels.defaultCapGlyph(toolName, fromChoices ? value : null);
         return new ExtraKeysLayoutModel.Key(spec, false, glyph != null ? glyph : label, null);
     }
 

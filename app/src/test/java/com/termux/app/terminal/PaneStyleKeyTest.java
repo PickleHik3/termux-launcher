@@ -16,6 +16,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * The pane style is a live view onto the activity's state, so two reads of it can only be told
@@ -23,7 +24,7 @@ import org.robolectric.annotation.Config;
  * panes while it holds.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PaneStyleKeyTest {
 
     private static final class Style implements PaneSurfaceStyle {

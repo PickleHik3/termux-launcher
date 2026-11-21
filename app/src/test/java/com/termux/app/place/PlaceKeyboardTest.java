@@ -4,9 +4,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /**
  * Whether the keyboard comes up on a page (moved from the Home chrome policy's test): a window's
@@ -14,15 +14,18 @@ import org.junit.Test;
  */
 public class PlaceKeyboardTest {
 
-    private static final PaneWallPage HOME = PaneWallPage.WIDGETS;
-    private static final PaneWallPage WINDOW = PaneWallPage.TERMINAL;
+    private static final PageKind HOME = PageKind.HOME;
+    private static final PageKind WINDOW = PageKind.TERMINAL;
 
     @Test
-    public void homeHasNoKeyboardMemoryAndIsUpOnlyWhileAlwaysOn() {
-        assertFalse("remembered open means nothing on Home",
+    public void homeComesBackAsItWasLeftAndIsAlwaysUpWhileAlwaysOn() {
+        assertTrue("Home remembers its keyboard per visit",
             PlaceKeyboard.keyboardOnEnter(HOME, true, false, false));
+        assertFalse(PlaceKeyboard.keyboardOnEnter(HOME, false, false, false));
+        assertTrue("minimal mode leaves Home's memory alone",
+            PlaceKeyboard.keyboardOnEnter(HOME, true, true, false));
         assertTrue(PlaceKeyboard.keyboardOnEnter(HOME, false, false, true));
-        assertTrue("minimal mode is the Workspace's",
+        assertTrue("minimal mode is the Terminal's",
             PlaceKeyboard.keyboardOnEnter(HOME, false, true, true));
         // A window keeps its memory, and minimal mode still puts it away.
         assertTrue(PlaceKeyboard.keyboardOnEnter(WINDOW, true, false, false));
@@ -54,7 +57,7 @@ public class PlaceKeyboardTest {
         assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(HOME, false));
         assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(WINDOW, true));
         assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(WINDOW, false));
-        assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(PaneWallPage.DISPLAY, true));
+        assertFalse(PlaceKeyboard.editorEndKeepsKeyboard(PageKind.DISPLAY, true));
     }
 
     @Test

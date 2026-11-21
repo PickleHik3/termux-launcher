@@ -191,6 +191,89 @@ public final class GlassBackdropCache {
     @ColorInt private int mFallbackWallpaper = Color.TRANSPARENT;
     private int mGeneration;
 
+    /**
+     * Asked before every read of the wallpaper: true while measuring is not allowed (a crossing).
+     * Frozen, the cache reads nothing: a band keeps the sample it holds, whatever rect it is now
+     * asked at, a band with none answers the fallback, and the uncached reads answer nothing; the
+     * next ask after the freeze lifts measures as it always did.
+     */
+    public interface Freeze {
+        boolean frozen();
+    }
+
+    @Nullable private Freeze mFreeze;
+
+    /**
+     * Which rectangle legibility reads (#297): {@link #adaptive()} true reads each item's own
+     * rect, false reads {@link #wholePicture()} once for everything ({@link LegibilityScope}).
+     */
+    public interface Scope {
+        boolean adaptive();
+
+        /** The whole still picture in the sampler's space; empty while nothing can be read. */
+        @NonNull Rect wholePicture();
+    }
+
+    @Nullable private Scope mScope;
+
+    /** The whole-picture memo, a few numbers: kept across {@link #invalidate} on purpose. */
+    @NonNull private final Rect mWholeRect = new Rect();
+    @ColorInt private int mWholeMean = UNREADABLE;
+    @Nullable private Lightness mWholeLightness;
+
+    /** Null is the per-rect behaviour: every read goes to the sampler at the rect it was asked at. */
+    public void setScope(@Nullable Scope scope) {
+        mScope = scope;
+    }
+
+    /**
+     * Drops the whole-picture memo: the wallpaper, the scheme or the scope moved. It survives
+     * {@link #invalidate}, which also runs on page changes.
+     */
+    public void forgetWholePicture() {
+        mWholeMean = UNREADABLE;
+        mWholeLightness = null;
+    }
+
+    private boolean shared() {
+        return mScope != null && !mScope.adaptive();
+    }
+
+    /** The scope's whole picture, the memo dropped when it is a different rect than last time. */
+    @NonNull
+    private Rect wholePicture() {
+        Rect whole = mScope.wholePicture();
+        if (!whole.equals(mWholeRect)) {
+            mWholeRect.set(whole);
+            forgetWholePicture();
+        }
+        return mWholeRect;
+    }
+
+    /** The mean the sampler reads for {@code rect}, or for the memoised whole picture when shared. */
+    private int readMean(@NonNull Sampler sampler, @NonNull Rect rect, int blurRadiusDp) {
+        if (!shared()) {
+            return blurRadiusDp < 0 ? sampler.sampleWallpaper(rect)
+                : sampler.sampleWallpaper(rect, blurRadiusDp);
+        }
+        Rect whole = wholePicture();
+        if (whole.isEmpty()) return UNREADABLE;
+        if (Color.alpha(mWholeMean) == 0) {
+            int read = sampler.sampleWallpaper(whole);
+            if (Color.alpha(read) == 0) return UNREADABLE;
+            mWholeMean = read;
+        }
+        return mWholeMean;
+    }
+
+    public void setFreeze(@Nullable Freeze freeze) {
+        mFreeze = freeze;
+    }
+
+    private boolean frozen() {
+        return mFreeze != null && mFreeze.frozen();
+    }
+
     /** The sampler to read pixels through; null parks the cache on its fallback. */
     public void setSampler(@Nullable Sampler sampler) {
         if (mSampler == sampler) return;
@@ -242,16 +325,30 @@ public final class GlassBackdropCache {
      */
     @ColorInt
     public int sampleUncached(@NonNull Rect rect) {
-        if (mSampler == null || rect.isEmpty()) return UNREADABLE;
-        int read = mSampler.sampleWallpaper(rect);
+        if (mSampler == null || rect.isEmpty() || frozen()) return UNREADABLE;
+        int read = readMean(mSampler, rect, -1);
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
     }
 
     /** {@link Sampler#sampleLightness}, remembered nowhere; null when there is nothing to read. */
     @Nullable
     public Lightness sampleLightnessUncached(@NonNull Rect rect) {
+        if (frozen()) return null;
+        return sampleLightnessPastFreeze(rect);
+    }
+
+    /**
+     * {@link #sampleLightnessUncached} even while frozen: the one read a crossing asks for as it
+     * begins (the arriving page's even-out, by then already frozen), never one per frame.
+     */
+    @Nullable
+    public Lightness sampleLightnessPastFreeze(@NonNull Rect rect) {
         if (mSampler == null || rect.isEmpty()) return null;
-        return mSampler.sampleLightness(rect);
+        if (!shared()) return mSampler.sampleLightness(rect);
+        Rect whole = wholePicture();
+        if (whole.isEmpty()) return null;
+        if (mWholeLightness == null) mWholeLightness = mSampler.sampleLightness(whole);
+        return mWholeLightness;
     }
 
     /**
@@ -261,8 +358,8 @@ public final class GlassBackdropCache {
      */
     @ColorInt
     public int sampleUncached(@NonNull Rect rect, int blurRadiusDp) {
-        if (mSampler == null || rect.isEmpty()) return UNREADABLE;
-        int read = mSampler.sampleWallpaper(rect, blurRadiusDp);
+        if (mSampler == null || rect.isEmpty() || frozen()) return UNREADABLE;
+        int read = readMean(mSampler, rect, blurRadiusDp);
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
     }
 
@@ -405,13 +502,14 @@ public final class GlassBackdropCache {
             entry = new Entry();
             entry.wallpaper = mFallbackWallpaper;
             mEntries.put(band, entry);
-        } else if (entry.sampled && entry.rect.equals(screenRect)) {
+            if (frozen()) return entry;
+        } else if (frozen() || (entry.sampled && entry.rect.equals(screenRect))) {
             return entry;
         }
         entry.rect.set(screenRect);
         int read = UNREADABLE;
         if (mSampler != null && !screenRect.isEmpty()) {
-            read = mSampler.sampleWallpaper(screenRect);
+            read = readMean(mSampler, screenRect, -1);
         }
         boolean sampled = Color.alpha(read) != 0;
         int wallpaper = sampled ? OnGlass.opaque(read) : mFallbackWallpaper;
@@ -462,7 +560,13 @@ public final class GlassBackdropCache {
      */
     @ColorInt
     public static int sampleBitmapRegion(@Nullable Bitmap bitmap, @NonNull Rect region) {
-        int[] pixels = readGrid(bitmap, region);
+        return sampleBitmapRegion(bitmap, region, SAMPLE_GRID);
+    }
+
+    /** {@link #sampleBitmapRegion(Bitmap, Rect)} on a grid of at most {@code grid}&sup2; pixels. */
+    @ColorInt
+    public static int sampleBitmapRegion(@Nullable Bitmap bitmap, @NonNull Rect region, int grid) {
+        int[] pixels = readGrid(bitmap, region, grid);
         if (pixels == null) return UNREADABLE;
         return averageColor(pixels, 0, pixels.length);
     }
@@ -474,7 +578,14 @@ public final class GlassBackdropCache {
      */
     @Nullable
     public static Lightness sampleBitmapLightness(@Nullable Bitmap bitmap, @NonNull Rect region) {
-        int[] pixels = readGrid(bitmap, region);
+        return sampleBitmapLightness(bitmap, region, SAMPLE_GRID);
+    }
+
+    /** {@link #sampleBitmapLightness(Bitmap, Rect)} on a grid of at most {@code grid}&sup2; pixels. */
+    @Nullable
+    public static Lightness sampleBitmapLightness(@Nullable Bitmap bitmap, @NonNull Rect region,
+                                                  int grid) {
+        int[] pixels = readGrid(bitmap, region, grid);
         if (pixels == null) return null;
         int mean = averageColor(pixels, 0, pixels.length);
         if (mean == UNREADABLE) return null;
@@ -518,17 +629,27 @@ public final class GlassBackdropCache {
         }
     }
 
-    /** The grid of ARGB pixels over {@code region}, or null for a recycled bitmap or empty region. */
+    /**
+     * The grid of ARGB pixels over {@code region}, or null for a recycled bitmap or empty region.
+     * A {@code HARDWARE} frame is read through its small sampling copy ({@link HardwareFrame}),
+     * over the same part of the picture; one with no copy reads as nothing.
+     */
     @Nullable
-    private static int[] readGrid(@Nullable Bitmap bitmap, @NonNull Rect region) {
-        if (bitmap == null || bitmap.isRecycled()) return null;
+    private static int[] readGrid(@Nullable Bitmap frame, @NonNull Rect frameRegion, int grid) {
+        Bitmap bitmap = HardwareFrame.readable(frame);
+        if (bitmap == null) return null;
+        Rect region = frameRegion;
+        if (bitmap != frame) {
+            region = new Rect();
+            HardwareFrame.mapToReadable(frame, bitmap, frameRegion, region);
+        }
         int left = Math.max(0, region.left);
         int top = Math.max(0, region.top);
         int right = Math.min(bitmap.getWidth(), region.right);
         int bottom = Math.min(bitmap.getHeight(), region.bottom);
         if (right <= left || bottom <= top) return null;
-        int columns = Math.min(SAMPLE_GRID, right - left);
-        int rows = Math.min(SAMPLE_GRID, bottom - top);
+        int columns = Math.min(grid, right - left);
+        int rows = Math.min(grid, bottom - top);
         int[] pixels = new int[columns * rows];
         int index = 0;
         for (int row = 0; row < rows; row++) {

@@ -5,21 +5,22 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.Locale;
+import com.termux.app.page.PageKind;
 
 /**
  * Every door into the Appearance editor, and the card each one opens (editor-redesign §5, the
  * Door · Today · After table). The rule: a screen's door opens that screen's card, and Global (the
- * palette's card, {@link EditorCard#APPEARANCE}) is always one tap further.
+ * palette's card, {@link EditorCard#APPEARANCE}) is always one tap further; the exception is the
+ * Home sheet's Appearance, which names Global itself.
  *
  * <p>Every door logs one line under {@link #LOG_TAG} naming itself and the card, so a stray open
  * on a phone names its door:</p>
  *
  * <pre>
  *   EditorCard card = EditorDoor.HOME_SHEET_APPEARANCE.route(null, null);
- *   // logs "home-sheet-appearance -> HOME"
+ *   // logs "home-sheet-appearance -> APPEARANCE"
  * </pre>
  *
  * <p>Doors that cross from Settings carry their name in the editor's intent
@@ -27,7 +28,7 @@ import java.util.Locale;
  * No views and no {@code Context}: the table is held by JVM tests.</p>
  */
 public enum EditorDoor {
-    /** Long-press Home, then the Home sheet's Appearance. */
+    /** Long-press Home, then the Home sheet's Appearance: the Global card. */
     HOME_SHEET_APPEARANCE("home-sheet-appearance"),
     /** Long-press Home, then the Home sheet's Wallpaper: the picker. */
     HOME_SHEET_WALLPAPER("home-sheet-wallpaper"),
@@ -37,13 +38,13 @@ public enum EditorDoor {
      */
     TERMINAL_SHEET_APPEARANCE("terminal-sheet-appearance"),
     /**
-     * The terminal's action sheet (the Workspace's More), then Wallpaper: the picker, for those
+     * The terminal's action sheet (the Terminal's More), then Wallpaper: the picker, for those
      * who use the launcher as a terminal only and have no Home sheet.
      */
     TERMINAL_SHEET_WALLPAPER("terminal-sheet-wallpaper"),
     /** The legacy terminal context-menu item for the editor, which no sheet lists today. */
     TERMINAL_CONTEXT_MENU("terminal-context-menu"),
-    /** A pane's or window's controls, then Appearance: the Workspace card. */
+    /** A pane's or window's controls, then Appearance: the Terminal card. */
     PANE_CONTROLS("pane-controls-appearance"),
     /** {@code launcherctl appearance.surface_editor}: the page's own card. */
     LAUNCHERCTL("launcherctl-surface-editor"),
@@ -62,7 +63,7 @@ public enum EditorDoor {
      * dock's own tiles).
      */
     ELEMENTS_LIST("elements-list"),
-    /** In the editor: a tap on the page label under the frame, Home or Workspace. */
+    /** In the editor: a tap on the page label under the frame, Home or Terminal. */
     EDITOR_PAGE_LABEL("editor-page-label"),
     /**
      * In the editor: the preview swiped to the other page while a screen's card is open; the card
@@ -77,6 +78,8 @@ public enum EditorDoor {
     SETTINGS_TERMINAL("settings-terminal"),
     /** Settings › Keyboard › Edit on screen. */
     SETTINGS_KEYBOARD("settings-keyboard"),
+    /** Settings › Status bar › Edit on screen. */
+    SETTINGS_STATUS("settings-status"),
     /** Settings › Look (the root's Appearance row, and the row at the top of its page). */
     SETTINGS_LOOK("settings-look"),
     /** A Settings search hit on a row the editor holds; the card is the row's. */
@@ -111,11 +114,11 @@ public enum EditorDoor {
      *     intent's section); only those doors read it
      */
     @Nullable
-    public EditorCard cardFor(@Nullable PaneWallPage onScreen, @Nullable EditorCard named) {
+    public EditorCard cardFor(@Nullable PageKind onScreen, @Nullable EditorCard named) {
         switch (this) {
-            case HOME_SHEET_APPEARANCE:
             case SETTINGS_HOME:
                 return EditorCard.HOME;
+            case HOME_SHEET_APPEARANCE:
             case HOME_SHEET_WALLPAPER:
             case TERMINAL_SHEET_WALLPAPER:
             case LAUNCHERCTL_WALLPAPER:
@@ -124,7 +127,6 @@ public enum EditorDoor {
             case SETTINGS_LOOK:
                 return EditorCard.APPEARANCE;
             case TERMINAL_SHEET_APPEARANCE:
-                return EditorCard.WORKSPACE;
             case SETTINGS_TERMINAL:
                 return EditorCard.TERMINAL;
             case SETTINGS_KEYBOARD:
@@ -134,13 +136,14 @@ public enum EditorDoor {
             case APP_MENU_EDIT_DOCK:
                 return EditorCard.DOCK;
             case POPUP_STATUS:
+            case SETTINGS_STATUS:
                 return EditorCard.STATUS;
             case EDITOR_PAGE_LABEL:
             case EDITOR_PAGE_SWIPE:
-                return onScreen == PaneWallPage.WIDGETS ? EditorCard.HOME : EditorCard.WORKSPACE;
+                return EditorCard.forScreen(onScreen == null ? PageKind.TERMINAL : onScreen);
             case PANE_CONTROLS:
-                // The Terminal or Display pane corner opens the Workspace (overhaul §1).
-                return EditorCard.WORKSPACE;
+                // The Terminal or Display pane corner opens the Terminal card.
+                return EditorCard.TERMINAL;
             case TERMINAL_CONTEXT_MENU:
             case LAUNCHERCTL:
                 return pageCard(onScreen);
@@ -169,26 +172,26 @@ public enum EditorDoor {
         }
     }
 
-    /** The card of the screen {@code page} is on: Home's on Home, the Workspace's elsewhere. */
+    /** The card of the screen {@code page} is on: Home's on Home, the Terminal's elsewhere. */
     @NonNull
-    static EditorCard screenCard(@NonNull PaneWallPage page) {
-        return page == PaneWallPage.WIDGETS ? EditorCard.HOME : EditorCard.WORKSPACE;
+    static EditorCard screenCard(@NonNull PageKind page) {
+        return EditorCard.forScreen(page);
     }
 
     /**
      * The page the editor opens on. A card that stands on one screen only (Home's, the
-     * Workspace's, the terminal's) opens on that screen when the page on screen is the other; else
+     * Terminal's, the terminal's) opens on that screen when the page on screen is the other; else
      * {@code place}, null for the page on screen.
      */
     @Nullable
-    public static PaneWallPage placeFor(@Nullable EditorCard card, @Nullable PaneWallPage place,
-                                        @Nullable PaneWallPage onScreen) {
+    public static PageKind placeFor(@Nullable EditorCard card, @Nullable PageKind place,
+                                        @Nullable PageKind onScreen) {
         if (place != null || card == null)
             return place;
         if (onScreen != null && card.standsOn(onScreen))
             return null;
-        if (card == EditorCard.HOME) return PaneWallPage.WIDGETS;
-        if (card == EditorCard.TERMINAL || card == EditorCard.WORKSPACE) return PaneWallPage.TERMINAL;
+        if (card == EditorCard.HOME) return PageKind.HOME;
+        if (card == EditorCard.TERMINAL) return PageKind.TERMINAL;
         return null;
     }
 
@@ -197,15 +200,15 @@ public enum EditorDoor {
      * the terminal's over a terminal, the editor at rest over the display.
      */
     @Nullable
-    static EditorCard pageCard(@Nullable PaneWallPage page) {
-        if (page == PaneWallPage.WIDGETS) return EditorCard.HOME;
-        if (page == PaneWallPage.TERMINAL) return EditorCard.TERMINAL;
+    static EditorCard pageCard(@Nullable PageKind page) {
+        if (page == PageKind.HOME) return EditorCard.HOME;
+        if (page == PageKind.TERMINAL) return EditorCard.TERMINAL;
         return null;
     }
 
     /** {@link #cardFor}, with the door's line logged. */
     @Nullable
-    public EditorCard route(@Nullable PaneWallPage onScreen, @Nullable EditorCard named) {
+    public EditorCard route(@Nullable PageKind onScreen, @Nullable EditorCard named) {
         EditorCard card = cardFor(onScreen, named);
         log(card);
         return card;

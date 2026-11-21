@@ -13,6 +13,7 @@ import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.DrawerTilePolicy;
 import com.termux.app.dock.WallStripRowPolicy;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -20,8 +21,6 @@ import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.layout.LayoutsJson;
 import com.termux.app.place.layout.SharedChromeFold;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
@@ -49,9 +48,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * #forVariant} pins it to one. The minimal layout is seeded from the normal one the first time it
  * is used ({@link MinimalMode#apply}), and is the user's from then on.
  *
- * <p>One layout dresses both halves of the wall (ADR 0009): a Home page wears the Workspace's
+ * <p>One layout dresses both halves of the wall (ADR 0009): a Home page wears the Terminal's
  * layout, normal or minimal, less what Home leaves out ({@link #resolve(PlaceOrientation,
- * PaneWallPage)}), unless Home holds a <b>Home layout</b> of its own ({@link #hasHomeLayout},
+ * PageKind)}), unless Home holds a <b>Home layout</b> of its own ({@link #hasHomeLayout},
  * {@code place.home_layout}). That is a third arrangement ({@link LayoutVariant#HOME}), under
  * {@code layout.home.<portrait|landscape>.<key>}: the status bar, the dock's rows and the keyboard
  * are its elements, so the extra keys always resolve put away there. Turned on, it
@@ -77,13 +76,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * launcher-wide flag. Version 8 drops the alphabets index's minimised flag: the pull tab is gone,
  * and an index that was minimised reads as shown. Version 9 moves Home onto the shared layout,
  * keeping a Home that differed as a Home layout ({@link #migrateToOneLayout}). Version 10 gives a
- * kept Home layout the Workspace's status bar, which Home now wears ({@link
+ * kept Home layout the Terminal's status bar, which Home now wears ({@link
  * #migrateHomeLayoutToTheBar}). Version 11 turns the Prompt line design into the Tray with the
  * Search field on ({@link #migratePromptLineToTheSearchField}). Version 12 turns the Taskbar
  * design into the Tray with the Drawer tile on where it stood ({@link
  * #migrateTaskbarToTheDrawerTile}). Version 13 drops the Home layout's own sizes and shape, which
- * it now reads linked from the Workspace's ({@link #migrateToLinkedKeys}). Version 14 gives every
- * install a Home layout: the switch is gone, and Home and the Workspace each keep their own
+ * it now reads linked from the Terminal's ({@link #migrateToLinkedKeys}). Version 14 gives every
+ * install a Home layout: the switch is gone, and Home and the Terminal each keep their own
  * arrangement ({@link #migrateToHomeLayoutAlways}).
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
@@ -193,7 +192,7 @@ public final class PlaceLayoutStore {
 
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
     /**
-     * The Home layout's keyboard element, one value for both orientations like the Workspace's:
+     * The Home layout's keyboard element, one value for both orientations like the Terminal's:
      * {@code layout.home.keyboard_shown}. Shown is always on; absent is put away, which is what the
      * Home layout is seeded with.
      */
@@ -264,8 +263,8 @@ public final class PlaceLayoutStore {
     private static final String KEY_VOICE_PILL_Y = "voice_pill_y";
 
     /**
-     * The per-place choice of how the keyboard came back on entry. Gone with version 6: Home always
-     * comes back closed and the other two as they were left, so there is nothing left to choose.
+     * The per-place choice of how the keyboard came back on entry. Gone with version 6: every place
+     * comes back as it was left (Home also while always on), so there is nothing left to choose.
      */
     private static final String LEGACY_KEY_KEYBOARD_ON_ENTER = "keyboard_on_enter";
 
@@ -464,6 +463,32 @@ public final class PlaceLayoutStore {
     /** True while the migration runs: slots read what the arrangement keys held. */
     private final java.util.concurrent.atomic.AtomicBoolean mMigrating;
 
+    /**
+     * This store as the layouts file holds it, the Appearance editor's draft left out: a reading
+     * for the editor's unsaved question, which compares what each layout resolves to on both
+     * sides. Its caches are its own and it writes nothing; this store itself where there are no
+     * documents yet.
+     */
+    @NonNull
+    public PlaceLayoutStore storedReading() {
+        return mStore instanceof LayoutDocumentPrefs
+            ? new PlaceLayoutStore(this, ((LayoutDocumentPrefs) mStore).storedOnly()) : this;
+    }
+
+    private PlaceLayoutStore(@NonNull PlaceLayoutStore root, @NonNull SharedPreferences stored) {
+        mPreferences = root.mPreferences;
+        mStore = stored;
+        mRevision = new AtomicInteger();
+        mFixedVariant = root.mFixedVariant;
+        mMigrating = new java.util.concurrent.atomic.AtomicBoolean();
+        // The layouts this store has seeded read as seeded here too; a copy, so this reading,
+        // which writes nothing, never marks one seeded for the store.
+        mSeeded = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        mSeeded.addAll(root.mSeeded);
+        mVariantViews = new java.util.concurrent.ConcurrentHashMap<>();
+        mShownPages = root.mShownPages;
+    }
+
     private PlaceLayoutStore(@NonNull PlaceLayoutStore root, @NonNull LayoutVariant variant) {
         mPreferences = root.mPreferences;
         mStore = root.mStore;
@@ -506,11 +531,11 @@ public final class PlaceLayoutStore {
 
     /**
      * The variant a page's chrome is arranged by, and the one the Layout editor opened on it
-     * edits: the layout the page's dress wears ({@link DressResolver#layoutOf}), the Workspace's
+     * edits: the layout the page's dress wears ({@link DressResolver#layoutOf}), the Terminal's
      * (normal or minimal) on a window, the normal one or Home's own on a Home page while it holds a Home layout.
      */
     @NonNull
-    public LayoutVariant variantFor(@NonNull PaneWallPage page) {
+    public LayoutVariant variantFor(@NonNull PageKind page) {
         if (mDresses == null) mDresses = DressResolver.of(this);
         return mDresses.layoutOf(page);
     }
@@ -518,7 +543,7 @@ public final class PlaceLayoutStore {
     /**
      * The variant {@code page} is arranged by, read for its own id (#173 slice E): another Home
      * page's own layout while a different one is in front, so a crossing between the two resolves
-     * each end for its page. A page with no id said reads as {@link #variantFor(PaneWallPage)}.
+     * each end for its page. A page with no id said reads as {@link #variantFor(PageKind)}.
      */
     @NonNull
     public LayoutVariant variantFor(@NonNull PageRef page) {
@@ -552,7 +577,7 @@ public final class PlaceLayoutStore {
 
     /**
      * Turns the Home layout on or off. Turned on, Home's copy starts as what Home wore on the
-     * shared layout (the Workspace's normal layout, its Dock design and toggles), so nothing on
+     * shared layout (the Terminal's normal layout, its Dock design and toggles), so nothing on
      * screen moves until the user edits it; the linked sizes and Style, Corners and Margin are
      * the shared layout's either way and are not copied, and the widget grid and always on are
      * Home's either way and are left alone. Turned off, Home wears the shared layout again and its
@@ -647,15 +672,15 @@ public final class PlaceLayoutStore {
 
     /**
      * The id of the page {@code page} stands for on screen: the Home page in front for {@link
-     * PaneWallPage#WIDGETS}, the bound Display page for {@link PaneWallPage#DISPLAY}, the
+     * PageKind#HOME}, the bound Display page for {@link PageKind#DISPLAY}, the
      * Terminal page for a terminal window; -1 where the launcher has not said.
      */
-    public int shownPageId(@NonNull PaneWallPage page) {
+    public int shownPageId(@NonNull PageKind page) {
         ShownPages pages = mShownPages.get();
         if (pages == null) return -1;
-        if (page == PaneWallPage.WIDGETS) return pages.homePageInFront();
-        if (page == PaneWallPage.DISPLAY) return pages.displayPage();
-        if (page == PaneWallPage.ASSISTANT) return pages.assistantPage();
+        if (page == PageKind.HOME) return pages.homePageInFront();
+        if (page == PageKind.DISPLAY) return pages.displayPage();
+        if (page == PageKind.ASSISTANT) return pages.assistantPage();
         return pages.terminalPage();
     }
 
@@ -685,11 +710,11 @@ public final class PlaceLayoutStore {
 
     /**
      * Copies {@code from}'s arrangement over {@code to}'s: the Match rows' layout half (Match
-     * Workspace Styling on the Home card, Match Home Styling on the Workspace card). Where every
+     * Terminal Styling on the Home card, Match Home Styling on the Terminal card). Where every
      * bar stands in either orientation, which are put away and their order, the keyboard's form,
      * and the Dock design with its Search field and Drawer tile. Not copied: the widget grid
      * (Home's alone), the linked sizes when Home is either side (one value already, {@link
-     * #LINKED_KEYS}), and when Home is either side the extra keys, which only the Workspace wears
+     * #LINKED_KEYS}), and when Home is either side the extra keys, which only the Terminal wears
      * ({@link DressResolver#wornOn}). A key {@code from} does not hold is removed from {@code to},
      * so the copy reads exactly as the source did. {@link #arrangementKeys} names every key this
      * writes, for an undo snapshot taken before it.
@@ -781,11 +806,11 @@ public final class PlaceLayoutStore {
         // A layout that reads its sizes from the normal one would hold a dead copy of them.
         if (isLinkedKey(key) && (from.linksSizes() || to.linksSizes())) return false;
         boolean home = from.isHomeKind() || to.isHomeKind();
-        return !home || !isWorkspaceOnlyKey(key);
+        return !home || !isTerminalOnlyKey(key);
     }
 
-    /** The extra keys' placement keys: the one element only the Workspace wears. */
-    private static boolean isWorkspaceOnlyKey(@NonNull String key) {
+    /** The extra keys' placement keys: the one element only the Terminal wears. */
+    private static boolean isTerminalOnlyKey(@NonNull String key) {
         return KEY_EXTRA_KEYS.equals(key) || orderKeyName(Element.EXTRA_KEYS).equals(key)
             || underKeyboardKeyName(Element.EXTRA_KEYS).equals(key)
             || restoreEdgeKeyName(Element.EXTRA_KEYS).equals(key);
@@ -859,14 +884,14 @@ public final class PlaceLayoutStore {
     /**
      * One half's Style, Corners and Margin as the preferences hold them now ({@link
      * WallShape#read}): what the Dress resolver shapes a page by. Linked like the sizes, so
-     * Home's half answers the Workspace's and a Home layout brings no shape of its own (#84).
+     * Home's half answers the Terminal's and a Home layout brings no shape of its own (#84).
      */
     @NonNull
     public WallShape shape() {
         return shape(false);
     }
 
-    /** {@link #shape()} for Home pages ({@code home}) or the Workspace's: Margin is per kind. */
+    /** {@link #shape()} for Home pages ({@code home}) or the Terminal's: Margin is per kind. */
     @NonNull
     public WallShape shape(boolean home) {
         return WallShape.read(mPreferences, home);
@@ -902,7 +927,7 @@ public final class PlaceLayoutStore {
 
     /**
      * What a kind shows with nothing stored: Home pages the status bar and the dock (the apps row
-     * and the A-Z index); the Workspace's pages (Terminal, Display and Assistant, ADR 0025) the
+     * and the A-Z index); the Terminal's pages (Terminal, Display and Assistant, ADR 0025) the
      * status bar and the extra keys.
      */
     public static boolean kindShowsByDefault(@NonNull PageKind kind, @NonNull Element element) {
@@ -957,10 +982,10 @@ public final class PlaceLayoutStore {
     /**
      * The layout {@code page} wears in an orientation, as its dress has it: the variant {@link
      * #variantFor} names, resolved for that page ({@link #resolve(PlaceOrientation,
-     * LayoutVariant, PaneWallPage)}).
+     * LayoutVariant, PageKind)}).
      */
     @NonNull
-    public PlaceLayout resolve(@NonNull PlaceOrientation orientation, @NonNull PaneWallPage page) {
+    public PlaceLayout resolve(@NonNull PlaceOrientation orientation, @NonNull PageKind page) {
         return resolve(orientation, variantFor(page), page);
     }
 
@@ -969,21 +994,22 @@ public final class PlaceLayoutStore {
      * Dock design the layout holds (#93). A Home page on the shared layout leaves out what Home
      * never wears (the extra keys, {@link DressResolver#wornBy}), its keyboard element is always
      * on, Home's own whichever layout it wears ({@link #isHomeKeyboardAlwaysOn}), and its dock
-     * draws the design the layout holds too. On the Home layout it is that layout as it resolves.
+     * draws the design the layout holds too. The extra keys never dock on a Home page: Home's
+     * extra-keys key switches the floating Home pill instead. On the Home layout it is that layout as it resolves.
      */
     @NonNull
     public PlaceLayout resolve(@NonNull PlaceOrientation orientation,
-                               @NonNull LayoutVariant variant, @NonNull PaneWallPage page) {
+                               @NonNull LayoutVariant variant, @NonNull PageKind page) {
         PlaceLayoutStore layout = forVariant(variant);
         PlaceLayout resolved = layout.resolve(orientation);
-        if (page != PaneWallPage.WIDGETS || variant.isHomeKind()) return resolved;
+        if (page != PageKind.HOME || variant.isHomeKind()) return resolved;
         // A Home page on the shared arrangement shows what the Home kind shows, whatever the
         // shared layout's own kind does.
-        PageKind kind = DressResolver.kindOf(page);
+        PageKind kind = DressResolver.dressKindOf(page);
         for (Element element : Element.values()) {
             Slot slot = resolved.slot(element);
-            boolean shown = kindShows(kind, orientation, element)
-                && (element != Element.EXTRA_KEYS || mPreferences.shouldShowTerminalToolbar());
+            // Home's extra-keys key means the floating Home pill, so the stack never docks the bar.
+            boolean shown = element != Element.EXTRA_KEYS && kindShows(kind, orientation, element);
             if (slot.hidden == shown) resolved = resolved.withSlot(element, slot.withHidden(!shown));
         }
         return resolved.withKeyboardShown(isHomeKeyboardAlwaysOn())
@@ -1041,9 +1067,11 @@ public final class PlaceLayoutStore {
             // An element the page's kind does not show is not shown, whatever is stored.
             // Minimal mode's layout and a page's own hold their own visibility; the others
             // follow their kind.
-            boolean shown = mMigrating.get() ? variant.offers(element)
+            // Home's extra-keys key means the floating Home pill, never a docked bar.
+            boolean homeKeys = element == Element.EXTRA_KEYS && variant.isHomeKind();
+            boolean shown = !homeKeys && (mMigrating.get() ? variant.offers(element)
                 : variant.holdsOwnVisibility()
-                    || kindShows(kindOfVariant(variant), orientation, element);
+                    || kindShows(kindOfVariant(variant), orientation, element));
             slots.put(element, shown || slot.hidden ? slot : slot.withHidden(true));
         }
         // The terminal's own toolbar switch can still have put the extra keys away everywhere.
@@ -1088,7 +1116,23 @@ public final class PlaceLayoutStore {
             return;
         }
         if (mPreferences.isKeyboardTurnedOff() == !shown) return;
-        mPreferences.setKeyboardTurnedOff(!shown);
+        // The switch is the Appearance editor's while its draft is open: written there, so Done
+        // stores it and Discard drops it with the rest of the arrangement.
+        TermuxAppSharedPreferences writes = mPreferences;
+        com.termux.shared.settings.preferences.PreferenceDraft draft =
+            com.termux.shared.settings.preferences.PreferenceDraft.current();
+        if (draft != null && draft.isOpen()
+                && draft.store() == mPreferences.getSharedPreferences()) {
+            // The draft is dirty where it holds a value the store does not: the shipped answer
+            // (shown) over a store that holds no key is the same answer, so it holds no key too.
+            if (shown && !draft.store().contains(TERMUX_APP.KEY_KEYBOARD_TURNED_OFF)) {
+                draft.edit().remove(TERMUX_APP.KEY_KEYBOARD_TURNED_OFF).apply();
+                mRevision.incrementAndGet();
+                return;
+            }
+            writes = mPreferences.overDraft(draft);
+        }
+        writes.setKeyboardTurnedOff(!shown);
         mRevision.incrementAndGet();
     }
 
@@ -1777,17 +1821,14 @@ public final class PlaceLayoutStore {
 
     /**
      * Whether the place was left with the keyboard up, which is what it comes back with. This is
-     * the one thing the places still keep apart: the widget grid has nothing to type into, so it
-     * always answers closed, while the terminal and the display each remember their own.
+     * the one thing the places still keep apart: Home, the terminal and the display each remember
+     * their own.
      */
-    public boolean wasKeyboardOpen(@NonNull PaneWallPage place) {
-        if (place == PaneWallPage.WIDGETS) return false;
+    public boolean wasKeyboardOpen(@NonNull PageKind place) {
         return mStore != null && mStore.getBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), false);
     }
 
-    public void setKeyboardOpen(@NonNull PaneWallPage place, boolean open) {
-        // Home has no memory to keep: it comes back closed whatever it was left with.
-        if (place == PaneWallPage.WIDGETS) return;
+    public void setKeyboardOpen(@NonNull PageKind place, boolean open) {
         writeBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), open);
     }
 
@@ -1884,10 +1925,9 @@ public final class PlaceLayoutStore {
 
     @VisibleForTesting
     @NonNull
-    static String placeKey(@NonNull PaneWallPage place) {
-        // The widget grid is the home screen everywhere a user can see it; only the enum says
-        // WIDGETS.
-        return place == PaneWallPage.WIDGETS ? "home" : place.name().toLowerCase(Locale.ROOT);
+    static String placeKey(@NonNull PageKind place) {
+        // The widget grid is the home screen everywhere a user can see it.
+        return place == PageKind.HOME ? "home" : place.name().toLowerCase(Locale.ROOT);
     }
 
     /** Where the normal arrangement keeps one value for one orientation. */
@@ -1932,7 +1972,7 @@ public final class PlaceLayoutStore {
 
     /**
      * Where the widget grid's columns and rows are kept: the Home layout's keys, whichever variant
-     * asks. The grid is Home's content and nothing else draws one, so a Workspace variant changing
+     * asks. The grid is Home's content and nothing else draws one, so a Terminal variant changing
      * underneath (minimal mode) never re-cuts it.
      */
     @NonNull
@@ -1961,6 +2001,18 @@ public final class PlaceLayoutStore {
      * it back to this.
      */
     private void seedIfNeeded(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation) {
+        com.termux.app.place.layout.LayoutStore documents = layouts();
+        // The seed is the store's, not the Appearance editor's: past its draft, so a read made
+        // with the editor open neither shows it as an edit nor leaves Discard to drop it.
+        if (documents != null && documents.isDraftOpen() && variant == LayoutVariant.MINIMAL
+                && !mSeeded.contains(seededKey(variant, orientation))) {
+            documents.writePastDraft(() -> seedNow(variant, orientation));
+            return;
+        }
+        seedNow(variant, orientation);
+    }
+
+    private void seedNow(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation) {
         if (mStore == null || variant == LayoutVariant.NORMAL
             // With the documents in use only Terminal-minimal starts from another layout; the
             // others were folded whole by step 17 or read their shipped defaults.
@@ -2008,7 +2060,7 @@ public final class PlaceLayoutStore {
     /** Where a place kept its own copy of an arrangement value, before version 6 shared them. */
     @VisibleForTesting
     @NonNull
-    static String legacyArrangementKey(@NonNull PaneWallPage place,
+    static String legacyArrangementKey(@NonNull PageKind place,
                                        @NonNull PlaceOrientation orientation,
                                        @NonNull String key) {
         return PREFIX + placeKey(place) + "." + orientation.storageValue() + "." + key;
@@ -2016,14 +2068,14 @@ public final class PlaceLayoutStore {
 
     @VisibleForTesting
     @NonNull
-    static String memoryKey(@NonNull PaneWallPage place, @NonNull String key) {
+    static String memoryKey(@NonNull PageKind place, @NonNull String key) {
         return PREFIX + placeKey(place) + "." + key;
     }
 
     /** Where a place kept its own value for a shared look key, before version 6 folded them. */
     @VisibleForTesting
     @NonNull
-    static String legacyLookKey(@NonNull PaneWallPage place, @NonNull String key) {
+    static String legacyLookKey(@NonNull PageKind place, @NonNull String key) {
         return PREFIX + placeKey(place) + LEGACY_LOOK_INFIX + key;
     }
 
@@ -2164,10 +2216,7 @@ public final class PlaceLayoutStore {
         LayoutsMigration fold = new LayoutsMigration(mStore.getAll(), wall,
             context.getResources().getConfiguration().smallestScreenWidthDp);
         com.termux.app.place.layout.LayoutStore.shared(context).replaceAll(fold.layouts());
-        SharedPreferences.Editor editor = mStore.edit();
-        for (Map.Entry<String, Object> cell : fold.lookCells().entrySet())
-            put(editor, cell.getKey(), cell.getValue());
-        editor.putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
+        mStore.edit().putInt(KEY_MIGRATED, MIGRATION_VERSION).apply();
         mRevision.incrementAndGet();
     }
 
@@ -2248,12 +2297,12 @@ public final class PlaceLayoutStore {
      * orientation, where the dock's rows stand, whether each is put away, their order and which
      * stand under the keyboard: {@link #arrangementsDiffer}; and, only while Home's keyboard is
      * always on, the keyboard's form: {@link #keyboardFormsDiffer}) is compared with the
-     * Workspace's normal one. Where anything differs the Home layout is turned on and Home keeps
+     * Terminal's normal one. Where anything differs the Home layout is turned on and Home keeps
      * its arrangement, so its rows stand where they stood. Where nothing does, Home wears the
      * shared layout and its own arrangement keys go; the widget grid and always on are Home's
      * either way and stay. The linked sizes (the dock's and the Strip row's heights, the
      * keyboard's height and chin) and Style, Corners and Margin are no difference (#84): Home
-     * reads them from the Workspace's whatever it stored, and version 13 drops its copies. The
+     * reads them from the Terminal's whatever it stored, and version 13 drops its copies. The
      * Dock design is no difference either: Home's pick becomes the design of the shared layout,
      * normal and minimal, and of the Home layout, with the Taskbar's tile position beside it,
      * under every layout's own keys; Home's old keys for them go.
@@ -2294,7 +2343,7 @@ public final class PlaceLayoutStore {
     /**
      * Version 13: the linked keys (#84). The Home layout holds no sizes and no shape of its own
      * any more: its stored dock and Strip row heights and keyboard height and chin go, in both
-     * orientations, and so do Home's own Style, Corners and Margin, so Home wears the Workspace's
+     * orientations, and so do Home's own Style, Corners and Margin, so Home wears the Terminal's
      * values for all of them. The Home layout switch is left as it is, since it may be the user's
      * choice; whatever else Home's own layout holds (its rows, their order and edge, its design
      * and toggles, its keyboard form) stays. A step of its own rather than a change to version 9,
@@ -2313,8 +2362,8 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * Version 14: Home and the Workspace each keep their own layout (editor-redesign §1, §9). A
-     * Home that wore the shared layout gets a copy of the Workspace's normal one, the layout it
+     * Version 14: Home and the Terminal each keep their own layout (editor-redesign §1, §9). A
+     * Home that wore the shared layout gets a copy of the Terminal's normal one, the layout it
      * was wearing, so nothing on screen moves: where every bar stands, which are put away (the
      * hidden stack) and their order, the Dock design and its toggles ({@link #setHomeLayout}).
      * The keyboard's height and chin (Bottom padding) and the other linked sizes need no copy:
@@ -2411,7 +2460,7 @@ public final class PlaceLayoutStore {
 
     /**
      * Version 10: Home wears the status bar (#90). A Home layout held the bar only as its seed
-     * put it away, never as the user placed it, so it takes the Workspace's normal bar instead:
+     * put it away, never as the user placed it, so it takes the Terminal's normal bar instead:
      * where the bar stands, whether it is put away, its place in the stack and the edge it comes
      * back to, in either orientation. A Home layout that holds nothing yet is seeded on first use
      * as before, now with the bar.
@@ -2485,13 +2534,13 @@ public final class PlaceLayoutStore {
      * terminal that never stored one defers to the display's. Every place's own flag then goes.
      */
     private void migrateToOneMinimalMode(@NonNull SharedPreferences.Editor editor) {
-        String terminal = memoryKey(PaneWallPage.TERMINAL, KEY_MINIMAL);
-        String display = memoryKey(PaneWallPage.DISPLAY, KEY_MINIMAL);
+        String terminal = memoryKey(PageKind.TERMINAL, KEY_MINIMAL);
+        String display = memoryKey(PageKind.DISPLAY, KEY_MINIMAL);
         Boolean minimal = null;
         if (mStore.contains(terminal)) minimal = mStore.getBoolean(terminal, false);
         else if (mStore.contains(display)) minimal = mStore.getBoolean(display, false);
         if (minimal != null) editor.putBoolean(minimalKey(), minimal);
-        for (PaneWallPage place : PaneWallPage.values())
+        for (PageKind place : PageKind.values())
             editor.remove(memoryKey(place, KEY_MINIMAL));
     }
 
@@ -2519,7 +2568,7 @@ public final class PlaceLayoutStore {
                     mStore.getString(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_RAIL_SIDE, null),
                     RowPlacement.LEFT);
                 if (!side.isOnSide()) side = RowPlacement.LEFT;
-                for (PaneWallPage place : PaneWallPage.values()) {
+                for (PageKind place : PageKind.values()) {
                     editor.putString(legacyArrangementKey(place, PlaceOrientation.LANDSCAPE,
                         KEY_APPS_ROW), side.storageValue());
                 }
@@ -2531,7 +2580,7 @@ public final class PlaceLayoutStore {
                     mStore.getString(TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, null), RowPlacement.BOTTOM);
                 if (side == RowPlacement.HIDDEN) side = RowPlacement.BOTTOM;
                 for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                    editor.putString(legacyArrangementKey(PaneWallPage.DISPLAY, orientation,
+                    editor.putString(legacyArrangementKey(PageKind.DISPLAY, orientation,
                         KEY_EXTRA_KEYS), side.storageValue());
                 }
             }
@@ -2541,7 +2590,7 @@ public final class PlaceLayoutStore {
             editor.remove(LEGACY_KEY_X11_HIDE_STATUS_BAR);
 
             if (mStore.contains(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN)) {
-                editor.putBoolean(memoryKey(PaneWallPage.DISPLAY, KEY_KEYBOARD_OPEN),
+                editor.putBoolean(memoryKey(PageKind.DISPLAY, KEY_KEYBOARD_OPEN),
                     mStore.getBoolean(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN, false));
                 editor.remove(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN);
             }
@@ -2552,7 +2601,7 @@ public final class PlaceLayoutStore {
                 // that migrated before version 5 kept it under the place's memory key, and the
                 // step below folds that one; writing it here as well would leave the old key
                 // behind, since every removal an editor carries is applied before every put.
-                for (PaneWallPage place : PaneWallPage.values()) {
+                for (PageKind place : PageKind.values()) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
                         editor.putBoolean(legacyArrangementKey(place, orientation,
                             KEY_STATUS_COMPACT), compact);
@@ -2566,7 +2615,7 @@ public final class PlaceLayoutStore {
             // placement. A master that was off becomes Hidden everywhere, once; resolve() has no
             // more use for the master afterwards.
             if (!mPreferences.isAppLauncherAppsRowEnabled()) {
-                for (PaneWallPage place : PaneWallPage.values()) {
+                for (PageKind place : PageKind.values()) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
                         editor.putString(legacyArrangementKey(place, orientation, KEY_APPS_ROW),
                             RowPlacement.HIDDEN.storageValue());
@@ -2574,7 +2623,7 @@ public final class PlaceLayoutStore {
                 }
             }
             if (!mPreferences.isAppLauncherExtraKeysRowEnabled()) {
-                for (PaneWallPage place : PaneWallPage.values()) {
+                for (PageKind place : PageKind.values()) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
                         editor.putString(legacyArrangementKey(place, orientation, KEY_EXTRA_KEYS),
                             RowPlacement.HIDDEN.storageValue());
@@ -2591,7 +2640,7 @@ public final class PlaceLayoutStore {
             // place's own look override where it had taken one. A value nobody ever set is left
             // unwritten — the read still answers with the shipped default, and pinning it would
             // freeze a default that still moves with the dock's style.
-            for (PaneWallPage place : PaneWallPage.values()) {
+            for (PageKind place : PageKind.values()) {
                 String dockOverride = legacyLookKey(place, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
                 Float dock = storedFloat(dockOverride);
                 if (dock == null) dock = storedFloat(TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT);
@@ -2632,7 +2681,7 @@ public final class PlaceLayoutStore {
             // BOTH orientations are seeded with the one value the place had, so nobody is asked
             // again for a choice they have already made. Only a place that never stored one is
             // left unwritten, which is the one case the landscape default is allowed to answer.
-            for (PaneWallPage place : PaneWallPage.values()) {
+            for (PageKind place : PageKind.values()) {
                 String legacy = memoryKey(place, KEY_STATUS_COMPACT);
                 if (!mStore.contains(legacy)) continue;
                 boolean compact = mStore.getBoolean(legacy, false);
@@ -2666,19 +2715,19 @@ public final class PlaceLayoutStore {
             for (String key : FOLDED_KEYS) {
                 Object seed = all.get(legacyArrangementKey(sourceOf(key), orientation, key));
                 if (seed != null) put(editor, layoutKey(orientation, key), seed);
-                for (PaneWallPage place : PaneWallPage.values())
+                for (PageKind place : PageKind.values())
                     editor.remove(legacyArrangementKey(place, orientation, key));
             }
         }
-        for (PaneWallPage place : PaneWallPage.values())
+        for (PageKind place : PageKind.values())
             editor.remove(memoryKey(place, LEGACY_KEY_KEYBOARD_ON_ENTER));
-        // Home comes back closed whatever it was left with, so its memory has nothing to answer.
-        editor.remove(memoryKey(PaneWallPage.WIDGETS, KEY_KEYBOARD_OPEN));
+        // A Home memory from before version 6 is stale: Home starts its own memory closed.
+        editor.remove(memoryKey(PageKind.HOME, KEY_KEYBOARD_OPEN));
 
         for (Map.Entry<String, ?> entry : all.entrySet()) {
-            PaneWallPage owner = ownerOfLegacyLookKey(entry.getKey());
+            PageKind owner = ownerOfLegacyLookKey(entry.getKey());
             if (owner == null) continue;
-            if (owner == PaneWallPage.TERMINAL && entry.getValue() != null) {
+            if (owner == PageKind.TERMINAL && entry.getValue() != null) {
                 String shared = entry.getKey().substring(
                     (PREFIX + placeKey(owner) + LEGACY_LOOK_INFIX).length());
                 put(editor, shared, entry.getValue());
@@ -2689,23 +2738,23 @@ public final class PlaceLayoutStore {
 
     /** The place whose copy of an arrangement value is the one every place shares from version 6. */
     @NonNull
-    private static PaneWallPage sourceOf(@NonNull String key) {
+    private static PageKind sourceOf(@NonNull String key) {
         switch (key) {
             case KEY_WIDGET_COLUMNS:
             case KEY_WIDGET_ROWS:
-                return PaneWallPage.WIDGETS;
+                return PageKind.HOME;
             case KEY_KEYBOARD_MODE:
-                return PaneWallPage.DISPLAY;
+                return PageKind.DISPLAY;
             default:
-                return PaneWallPage.TERMINAL;
+                return PageKind.TERMINAL;
         }
     }
 
     /** The place a stored per-place look key belonged to, or null for any other key. */
     @Nullable
-    private static PaneWallPage ownerOfLegacyLookKey(@NonNull String key) {
+    private static PageKind ownerOfLegacyLookKey(@NonNull String key) {
         if (!key.startsWith(PREFIX)) return null;
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             if (key.startsWith(PREFIX + placeKey(place) + LEGACY_LOOK_INFIX)) return place;
         }
         return null;

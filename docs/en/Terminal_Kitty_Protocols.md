@@ -136,8 +136,7 @@ When the cursor jumps, inside a pane or from one pane to another, a short animat
 it. Ordinary one-cell typing is not animated, and there is no trail while you are scrolled back.
 Over a text-sizing block the trail covers the whole enlarged cursor.
 
-Pick its look in **Settings → Terminal → Text & display → Cursor trail**, or in **Appearance →
-Look**: choose **Custom**, tap the terminal, then **Cursor trail**:
+Pick its look in **Appearance → Terminal → Cursor trail**:
 
 - **Default**: kitty's own trail, a solid shape that shears toward the cursor and is gone once it
   lands.
@@ -172,9 +171,8 @@ after; Pixie dust follows kitty's particles.
 
 ## Terminal effect
 
-**Settings → Terminal → Text & display → Terminal effect** gives the whole home screen a **CRT**,
-**CRT (green)**, **CRT (amber)** or **TFT grid** look; **None** is the default. It is also on the
-terminal's **Custom** row in **Appearance → Look**, and needs Android 13 or newer. The effect
+**Screen effect** on the Terminal card gives the whole home screen a **CRT**,
+**CRT (green)**, **CRT (amber)** or **TFT grid** look; **None** is the default. It needs Android 13 or newer. The effect
 covers every terminal pane and the status bar, dock, bars and keyboard around them, with the
 scanlines fixed to the screen. Only the panes curve like a tube; the bars stay flat so every key is
 where you touch it.

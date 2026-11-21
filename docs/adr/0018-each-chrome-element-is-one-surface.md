@@ -128,3 +128,23 @@ a dock of its own: the dock is the Home kind's rest, read and written there from
   through the palette loses that; the trade is one blur source for every glass.
 - The spec for this round, its waves and its device cadence are in
   `project-docs/active/chrome-elements-2026-10-31.md`. Each wave lands on pong before the next.
+
+## Amendment (2026-11-17): §1 is accepted for glass
+
+[ADR 0029](0029-each-glass-surface-keeps-one-picture.md) accepts §1 for glass: one entry per
+element drawn by its own view, no wallpaper twin, and the foot is the slab's own bottom with the
+decor strip deleted. §4's "a crossing lays out nothing" is enforced by [ADR 0028](0028-one-frame-pipeline-a-view-property-has-one-writer.md)'s
+guards and source-scan test. The rest of this ADR stays proposed.
+
+## Amendment (2026-11-21): on Home the keyboard covers the dock ([#309](https://github.com/PickleHik3/termux-launcher/issues/309))
+
+§4's "the dock over the keyboard on a Home page" (D11) changes: on Home the keyboard no longer
+lifts the dock. Whenever a keyboard is up on Home (the in-app keyboard in any form, or the system
+keyboard; the command palette, a terminal widget, a Home float), the dock stays where it stands
+with the keyboard down and the keyboard draws over it, in Docked and Floating and every Dock
+design. Everything on the dock stays with it (the A–Z row, the Peek card, which is no longer
+refused by the keyboard or the system keyboard's lift on Home). The dock is still Home's dock, in
+Home's design. The Terminal is unchanged: its rows ride the keyboard. One pure policy answers which
+page's rows the keyboard lifts (`place/HomeKeyboardCover`); the Docked dock and keyboard are never
+one glass surface on Home, so the keyboard wears its own coat and the covered dock is cut at its top.
+

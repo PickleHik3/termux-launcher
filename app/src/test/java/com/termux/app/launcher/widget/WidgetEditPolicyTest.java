@@ -14,9 +14,10 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.Assert.*;
+import android.app.Application;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class WidgetEditPolicyTest {
     private static final WidgetGridDefinition GRID = new WidgetGridDefinition(4, 4);
 

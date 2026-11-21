@@ -76,13 +76,13 @@ public class GuiAppsSetupInstalledDistroTest {
         assertTrue(inside(GuiAppsSetup.Distro.DEBIAN, true).contains("dbus-x11"));
     }
 
-    @Test public void theDesktopIsOffOnTheDistroRouteOnlyAndNeverInstalledByTheX11Route() {
+    @Test public void theDesktopIsOfferedOnBothRoutesExceptVajsAndOffUntilTicked() {
         assertTrue(GuiAppsSetupGuide.startersOffered(AppEdition.TERMUX, GuiAppsSetup.Route.DISTRO)
             .contains(GuiAppsSetup.StarterApp.DESKTOP));
-        assertFalse(GuiAppsSetupGuide.startersOffered(AppEdition.TERMUX, GuiAppsSetup.Route.X11_REPO)
+        assertTrue(GuiAppsSetupGuide.startersOffered(AppEdition.TERMUX, GuiAppsSetup.Route.X11_REPO)
+            .contains(GuiAppsSetup.StarterApp.DESKTOP));
+        assertFalse(GuiAppsSetupGuide.startersOffered(AppEdition.VAJ, GuiAppsSetup.Route.X11_REPO)
             .contains(GuiAppsSetup.StarterApp.DESKTOP));
         assertFalse(GuiAppsSetup.defaultStarters().contains(GuiAppsSetup.StarterApp.DESKTOP));
-        assertFalse(GuiAppsSetup.command(GuiAppsSetup.Route.X11_REPO, GuiAppsSetup.Distro.DEBIAN,
-            EnumSet.allOf(GuiAppsSetup.StarterApp.class), AppEdition.TERMUX).contains("xfce4 "));
     }
 }

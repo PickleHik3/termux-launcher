@@ -18,22 +18,27 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * Live blur's memory budget (docs/agents/performance.md rule 2): at most
- * {@link LiveBackdrop#MAX_LIVE_SURFACES} pictures, each one quarter-scale layer, under ten MiB in
- * all, and every picture released when Live goes off or a surface hides.
+ * {@link LiveBackdrop#MAX_LIVE_SURFACES} pictures, each one quarter-scale blur layer and a pages
+ * layer of whole pages, under {@link LiveBackdrop#BUDGET_BYTES} in all, and every picture released when Live goes off or a surface hides.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.TIRAMISU)
+@Config(sdk = Build.VERSION_CODES.TIRAMISU, application = Application.class)
 public class LiveBackdropBudgetTest {
 
     @Test
     public void theBudgetIsEightQuarterScaleScreens() {
         assertEquals(8, LiveBackdrop.MAX_LIVE_SURFACES);
         assertEquals(360L * 800L * 4L, LiveBackdrop.MAX_LAYER_BYTES);
-        assertEquals(8L * 360L * 800L * 4L, LiveBackdrop.BUDGET_BYTES);
-        assertTrue("under ten MiB", LiveBackdrop.BUDGET_BYTES < 10L * 1024L * 1024L);
+        // The pages layers of every surface share one pool (GlassPagePool), sized by RAM.
+        assertEquals(4, LiveBackdrop.PAGE_LAYER_SLOTS);
+        // The worst case in all: eight blur layers and the quarter-scale pool, 8 x 1,152,000 +
+        // 6,291,456 = 15,507,456 B (14.8 MiB). It replaced 82,944,000 B (eight full pages layers).
+        assertEquals(8L * 1_152_000L + 6L * 1024L * 1024L, LiveBackdrop.BUDGET_BYTES);
+        assertTrue("under 18 MiB", LiveBackdrop.BUDGET_BYTES < 18L * 1024L * 1024L);
     }
 
     @Test

@@ -72,7 +72,7 @@ public class LauncherToolRegistryTest {
         // with its palette pair window.move_left and window.move_right, which reorder the row, and
         // by pane.consume and pane.expel, Niri's column moves on the row, and by minimal.toggle,
         // the palette's door to minimal mode, and by wall.assistant, the Assistant key.
-        assertEquals(91, registry.getUiTools().size());
+        assertEquals(92, registry.getUiTools().size());
     }
 
     @Test
@@ -107,6 +107,16 @@ public class LauncherToolRegistryTest {
             assertEquals(name, LauncherToolRegistry.CATEGORY_WALL, tool.category);
             assertTrue(name + " is self-evident", tool.selfEvident);
         }
+    }
+
+    @Test
+    public void openingTheAppDrawer_narratesItself() {
+        // The drawer coming up is the read-out: an "App drawer" pill over its search field for
+        // the length of the hint was clutter over the thing it named (pong, 2026-11-20).
+        LauncherToolRegistry.ToolMetadata tool =
+            registry.getTool(LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER);
+        assertNotNull(tool);
+        assertTrue(tool.selfEvident);
     }
 
     @Test

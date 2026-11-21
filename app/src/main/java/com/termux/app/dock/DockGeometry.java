@@ -196,7 +196,7 @@ public final class DockGeometry {
         /** False before the preference store is attached; the rows collapse to zero then. */
         public final boolean preferencesAvailable;
         @NonNull public final Half home;
-        @NonNull public final Half workspace;
+        @NonNull public final Half terminal;
         /**
          * A second Home page's half, for a crossing between two Home pages (#173 slice E): it
          * answers for the page its arrangement is resolved for ({@link #half}), {@link #home} for
@@ -205,7 +205,7 @@ public final class DockGeometry {
         @Nullable public final Half otherHome;
         /**
          * The page whose rows the frame shows, and whose dress they wear: Home's half answers for
-         * a Home page, the Workspace's for every window ({@link #half}).
+         * a Home page, the Terminal's for every window ({@link #half}).
          */
         @NonNull public final PageRef rows;
         /**
@@ -232,11 +232,11 @@ public final class DockGeometry {
         private Snapshot(@NonNull Builder b) {
             preferencesAvailable = b.preferencesAvailable;
             home = b.home;
-            workspace = b.workspace;
+            terminal = b.terminal;
             otherHome = b.otherHome;
             rows = b.rows;
             arrangement = b.arrangement != null ? b.arrangement
-                : half(b.rows, b.home, b.otherHome, b.workspace).layout;
+                : half(b.rows, b.home, b.otherHome, b.terminal).layout;
             density = b.density;
             widthPx = b.widthPx;
             cutoutLeftPx = b.cutoutLeftPx;
@@ -250,24 +250,24 @@ public final class DockGeometry {
         }
 
         @NonNull
-        public static Builder builder(@NonNull Half home, @NonNull Half workspace) {
-            return new Builder(home, workspace);
+        public static Builder builder(@NonNull Half home, @NonNull Half terminal) {
+            return new Builder(home, terminal);
         }
 
         /**
-         * The half {@code page} stands in: Home's for a Home page, the Workspace's for a window;
+         * The half {@code page} stands in: Home's for a Home page, the Terminal's for a window;
          * the second Home half ({@link #otherHome}) for the Home page it is resolved for, while a
          * crossing between two Home pages holds one.
          */
         @NonNull
         public Half half(@NonNull PageRef page) {
-            return half(page, home, otherHome, workspace);
+            return half(page, home, otherHome, terminal);
         }
 
         @NonNull
         private static Half half(@NonNull PageRef page, @NonNull Half home,
-                                 @Nullable Half otherHome, @NonNull Half workspace) {
-            if (!page.isHome()) return workspace;
+                                 @Nullable Half otherHome, @NonNull Half terminal) {
+            if (!page.isHome()) return terminal;
             if (otherHome != null && page.id >= 0
                 && otherHome.arrangement.page().equals(page)
                 && !home.arrangement.page().equals(page)) return otherHome;
@@ -296,7 +296,7 @@ public final class DockGeometry {
 
         @NonNull
         public Builder toBuilder() {
-            return new Builder(home, workspace).otherHome(otherHome)
+            return new Builder(home, terminal).otherHome(otherHome)
                 .preferencesAvailable(preferencesAvailable)
                 .rows(rows).arrangement(arrangement)
                 .density(density).widthPx(widthPx).cutouts(cutoutLeftPx, cutoutRightPx)
@@ -325,18 +325,18 @@ public final class DockGeometry {
                 && arrangement.equals(that.arrangement)
                 && home.equals(that.home)
                 && Objects.equals(otherHome, that.otherHome)
-                && workspace.equals(that.workspace);
+                && terminal.equals(that.terminal);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(preferencesAvailable, home, otherHome, workspace, rows, arrangement, density, widthPx, cutoutLeftPx, cutoutRightPx, baseToolbarHeightPx,
+            return Objects.hash(preferencesAvailable, home, otherHome, terminal, rows, arrangement, density, widthPx, cutoutLeftPx, cutoutRightPx, baseToolbarHeightPx,
                 landscape, pinnedSlotCount, fieldReveal, stripReveal, squeezePx);
         }
 
         public static final class Builder {
             @NonNull private final Half home;
-            @NonNull private final Half workspace;
+            @NonNull private final Half terminal;
             @Nullable private Half otherHome;
             private boolean preferencesAvailable = true;
             @NonNull private PageRef rows = PageRef.TERMINAL;
@@ -352,9 +352,9 @@ public final class DockGeometry {
             private float stripReveal;
             private int squeezePx;
 
-            private Builder(@NonNull Half home, @NonNull Half workspace) {
+            private Builder(@NonNull Half home, @NonNull Half terminal) {
                 this.home = home;
-                this.workspace = workspace;
+                this.terminal = terminal;
             }
 
             /** A second Home page's half ({@link Snapshot#otherHome}); null for none. */
@@ -511,6 +511,32 @@ public final class DockGeometry {
         List<Element> stack =
             EdgeStackPolicy.stack(layout, PlaceChromePolicy.appsEdge(layout));
         return !stack.isEmpty() && stack.get(stack.size() - 1) == Element.APPS;
+    }
+
+    /**
+     * {@link #appsRowNextToCanvas(PlaceLayout)} for the dock's own row as the views stand it:
+     * read from the layout of the side whose lane the row stands in
+     * ({@code StackLanes#laneSide}), whichever page is in front, so the row's ticks, its padding
+     * and the band order are its side's rest's while the other page is in front and through a
+     * crossing back, and the landing moves nothing. A row in no lane reads {@code front}. Null
+     * {@code home} or {@code terminal} (not known yet) reads {@code front}.
+     */
+    public static boolean appsRowNextToCanvas(@NonNull PlaceLayout front,
+                                              @Nullable PlaceLayout home,
+                                              @Nullable PlaceLayout terminal) {
+        return appsRowNextToCanvas(appsRowLayout(front, home, terminal));
+    }
+
+    /** The layout the dock's apps row is ordered by: its lane's side's, else {@code front}. */
+    @NonNull
+    public static PlaceLayout appsRowLayout(@NonNull PlaceLayout front,
+                                            @Nullable PlaceLayout home,
+                                            @Nullable PlaceLayout terminal) {
+        if (home == null || terminal == null) return front;
+        com.termux.app.page.Side side =
+            com.termux.app.place.StackLanes.laneSide(Element.APPS, home, terminal);
+        if (side == null) return front;
+        return side == com.termux.app.page.Side.HOME ? home : terminal;
     }
 
     /**

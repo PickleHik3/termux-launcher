@@ -62,29 +62,24 @@ public final class SceneStill {
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
         if (prefs == null) return null;
         WallpaperMotion motion = ShaderStore.readMotion(prefs.getSharedPreferences());
-        if (motion.kind == WallpaperMotion.Kind.VIDEO && motion.id != null
-            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            File video = VideoVariants.playable(context, ShaderStore.readVideoRate(prefs.getSharedPreferences()));
-            if (video == null) video = VideoImport.file(context, motion.id);
-            return video.isFile() ? VideoStill.render(video, widthPx, heightPx) : null;
-        }
-        if (motion.kind != WallpaperMotion.Kind.SHADER || motion.id == null) return null;
-        String source = ShaderStore.readText(ShaderStore.sourceFile(context, motion.id));
+        ShaderStore.Meta meta = motion.kind == WallpaperMotion.Kind.SHADER && motion.id != null
+            ? ShaderStore.readMeta(context, motion.id) : null;
+        SceneSource source = SceneSource.resolve(context, motion,
+            ShaderStore.readVideoRate(prefs.getSharedPreferences()), meta);
         if (source == null) return null;
-        ShaderStore.Meta meta = ShaderStore.readMeta(context, motion.id);
-        return render(source, ShaderStore.textureFile(context, motion.id, meta), widthPx, heightPx,
-            look != null ? look : ShaderLook.resolve(context));
+        return source.still(widthPx, heightPx, look != null ? look : ShaderLook.resolve(context));
     }
 
     /**
-     * @param channel0 the iChannel0 image, or null for none
+     * @param channel0 the iChannel0 image (the photo), or null for none
+     * @param channel1 the iChannel1 image (its depth image), or null for none
      * @param look     tlDark and tlColor0..2, or null to leave them 0
      * @return a mutable software ARGB_8888 bitmap, or null below API 29 or when the shader does not build
      * @throws IllegalStateException when the GPU could not draw it
      */
     @WorkerThread
     @Nullable
-    public static Bitmap render(@NonNull String source, @Nullable File channel0, int widthPx, int heightPx,
+    public static Bitmap render(@NonNull String source, @Nullable File channel0, @Nullable File channel1, int widthPx, int heightPx,
                                 @Nullable ShaderLook look) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null;
         int[] size = fitSize(widthPx, heightPx);
@@ -102,7 +97,8 @@ public final class SceneStill {
             } catch (GlShader.CompileException e) {
                 return null;
             }
-            if (channel0 != null) gl.setChannel(0, new ImageChannel(channel0));
+            if (channel0 != null) gl.setChannel(0, ImageChannel.photo(channel0));
+            if (channel1 != null) gl.setChannel(1, ImageChannel.depth(channel1));
             ShaderInputs in = new ShaderInputs();
             in.setDate(System.currentTimeMillis());
             in.pageOffset = 0f;

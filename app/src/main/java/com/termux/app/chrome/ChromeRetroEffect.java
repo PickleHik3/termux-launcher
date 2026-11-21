@@ -20,10 +20,10 @@ import java.util.List;
 
 /**
  * The terminal effect on the launcher's own surfaces: the status bar, the dock and the bars off
- * it, the keyboard docked or floating, and the Docked frame's glass, so the Workspace reads as one
+ * it, the keyboard docked or floating, and the Docked frame's glass, so the Terminal reads as one
  * CRT or TFT display with the panes.
  *
- * <p>Only the Workspace's chrome wears it. On Home the same chrome (one dock, one status bar for
+ * <p>Only the Terminal's chrome wears it. On Home the same chrome (one dock, one status bar for
  * both halves) is drawn plain: scanlines over the pinned apps' icons and the widgets read as a
  * fault, not a look. A crossing switches it at the landing ({@link #setOnHome}), never per frame:
  * a fade would mean a new effect chain on every root on every frame of the slide, and the chrome
@@ -81,7 +81,7 @@ public final class ChromeRetroEffect {
     private boolean mOnHome;
 
     /**
-     * The look the chrome is drawn through: the user's terminal effect on the Workspace, none on
+     * The look the chrome is drawn through: the user's terminal effect on the Terminal, none on
      * Home.
      */
     @NonNull
@@ -113,7 +113,7 @@ public final class ChromeRetroEffect {
     }
 
     /**
-     * Where the wall rests: on Home the chrome is drawn plain, on the Workspace through the
+     * Where the wall rests: on Home the chrome is drawn plain, on the Terminal through the
      * style. Called when the wall lands, so a crossing changes it once, at the landing.
      */
     public void setOnHome(boolean onHome) {

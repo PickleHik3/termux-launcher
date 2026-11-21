@@ -8,11 +8,10 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.LayoutVariant;
-import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -50,8 +49,8 @@ public class LayoutEditorLinkedSizesTest {
         com.termux.app.place.KindFixtures.onHomePage(places);
     }
 
-    private LayoutEditorPlan open(PaneWallPage place) {
-        return LayoutEditorPlan.enter(places, place, PORTRAIT, (List<PlaceArrangeSnapshot>) null);
+    private LayoutEditorPlan open(PageKind place) {
+        return DraftedSession.enter(places, place, PORTRAIT);
     }
 
     private PlaceLayoutStore normal() {
@@ -60,7 +59,7 @@ public class LayoutEditorLinkedSizesTest {
 
     @Test
     public void theHeightHandlesOnHomeEditTheSharedValues() {
-        LayoutEditorPlan plan = open(PaneWallPage.WIDGETS);
+        LayoutEditorPlan plan = open(PageKind.HOME);
         assertEquals(com.termux.app.place.KindFixtures.HOME_PAGE, plan.variant());
         plan.setDockHeightScale(1.4f);
         plan.setWallStripHeightDp(60);
@@ -74,7 +73,7 @@ public class LayoutEditorLinkedSizesTest {
 
     @Test
     public void discardPutsTheSharedHeightBackWhenTheWindowWasReachedFirst() {
-        LayoutEditorPlan plan = open(PaneWallPage.TERMINAL);
+        LayoutEditorPlan plan = open(PageKind.TERMINAL);
         plan.setDockHeightScale(1.3f);
         plan.showHome(true);
         assertEquals(com.termux.app.place.KindFixtures.HOME_PAGE, plan.variant());
@@ -86,7 +85,7 @@ public class LayoutEditorLinkedSizesTest {
 
     @Test
     public void discardPutsTheSharedHeightBackWhenHomeWasReachedFirst() {
-        LayoutEditorPlan plan = open(PaneWallPage.WIDGETS);
+        LayoutEditorPlan plan = open(PageKind.HOME);
         plan.setDockHeightScale(1.3f);
         plan.showHome(false);
         assertEquals(LayoutVariant.NORMAL, plan.variant());

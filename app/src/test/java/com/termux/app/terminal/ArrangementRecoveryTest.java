@@ -14,7 +14,7 @@ import org.junit.Test;
 public class ArrangementRecoveryTest {
 
     private static final String HOME = WallRow.START_IN_HOME;
-    private static final String WORKSPACE = WallRow.START_IN_WORKSPACE;
+    private static final String WORKSPACE = WallRow.START_IN_TERMINAL;
 
     @Test
     public void liveShellsWithALayoutComeBackAroundTheSameShells() {
@@ -72,7 +72,7 @@ public class ArrangementRecoveryTest {
     }
 
     @Test
-    public void anEmptyServiceInASettledProcessIsTheUsersEmptyWorkspace() {
+    public void anEmptyServiceInASettledProcessIsTheUsersEmptyTerminal() {
         for (Saved saved : Saved.values())
             for (String startIn : new String[]{HOME, WORKSPACE})
                 assertEquals(Start.EMPTY,
@@ -88,8 +88,24 @@ public class ArrangementRecoveryTest {
             Saved.EMPTY, ArrangementRecovery.effectiveStartIn(HOME, false)));
     }
 
+    /** #276: Terminal only, Ctrl+D on the last shell, then the icon again in the cached process. */
     @Test
-    public void aRebuildOfFloatsOnlyOpensAWindowOnlyForStartInWorkspace() {
+    public void withNoHomeAnEndedAppStartsColdEvenInACachedProcess() {
+        assertTrue(ArrangementRecovery.coldStart(false, true));
+        assertFalse(ArrangementRecovery.coldStart(true, true));
+        assertTrue(ArrangementRecovery.coldStart(true, false));
+        String startIn = ArrangementRecovery.effectiveStartIn(HOME, false);
+        assertEquals(Start.FRESH, ArrangementRecovery.decide(false, false,
+            ArrangementRecovery.coldStart(true, false), false, Saved.EMPTY, startIn));
+        assertEquals(Start.REBUILD, ArrangementRecovery.decide(false, false,
+            ArrangementRecovery.coldStart(true, false), false, Saved.ARRANGEMENT, startIn));
+        // With Home to show, the settled empty Workspace stays as the user left it.
+        assertEquals(Start.EMPTY, ArrangementRecovery.decide(false, false,
+            ArrangementRecovery.coldStart(true, true), false, Saved.EMPTY, WORKSPACE));
+    }
+
+    @Test
+    public void aRebuildOfFloatsOnlyOpensAWindowOnlyForStartInTerminal() {
         assertTrue(ArrangementRecovery.rebuildWantsFreshWindow(0, WORKSPACE));
         assertFalse(ArrangementRecovery.rebuildWantsFreshWindow(0, HOME));
         assertFalse(ArrangementRecovery.rebuildWantsFreshWindow(2, WORKSPACE));

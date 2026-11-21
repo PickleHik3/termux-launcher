@@ -3,7 +3,7 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 
@@ -76,9 +76,9 @@ public final class ExtraKeyEligibility {
             this.display = display;
         }
 
-        public boolean worksOn(@NonNull PaneWallPage place) {
+        public boolean worksOn(@NonNull PageKind place) {
             switch (place) {
-                case WIDGETS: return widgets;
+                case HOME: return widgets;
                 case DISPLAY: return display;
                 default: return terminal;
             }
@@ -138,6 +138,8 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_APP_OPEN_APPS_BAR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE, Band.LAUNCHER);
+        // The page switcher key opens the switcher above whichever bar it sits on, Home's included.
+        tools.put(LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_LAUNCH, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_CONTACT_OPEN, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_KEY_INSPECTOR, Band.LAUNCHER);
@@ -238,13 +240,13 @@ public final class ExtraKeyEligibility {
      * that cannot act. The shipped row drops such keys before they are built
      * ({@link ExtraKeysDefaultRow}); this is for a row the user wrote.
      */
-    public static boolean isUsable(@Nullable String keyValue, @NonNull PaneWallPage place,
-                                   @NonNull List<PaneWallPage> pages) {
+    public static boolean isUsable(@Nullable String keyValue, @NonNull PageKind place,
+                                   @NonNull List<PageKind> pages) {
         if (!isUsable(keyValue, place)) return false;
         if (keyValue == null || keyValue.indexOf(' ') >= 0) return true;
-        PaneWallPage target = placeSwitchTarget(keyValue);
+        PageKind target = placeSwitchTarget(keyValue);
         // The Assistant key stays live with no page: it adds the page (AssistantEntry).
-        return target == null || target == PaneWallPage.ASSISTANT || pages.contains(target);
+        return target == null || target == PageKind.ASSISTANT || pages.contains(target);
     }
 
     /**
@@ -256,13 +258,13 @@ public final class ExtraKeyEligibility {
      * settle restates it.
      */
     @NonNull
-    public static PaneWallPage rowPlace(@NonNull PaneWallPage restingPlace,
-                                        @Nullable PaneWallPage stackDressPage) {
+    public static PageKind rowPlace(@NonNull PageKind restingPlace,
+                                        @Nullable PageKind stackDressPage) {
         return stackDressPage != null ? stackDressPage : restingPlace;
     }
 
     /** Whether the key sending {@code keyValue} can act on {@code place}. */
-    public static boolean isUsable(@Nullable String keyValue, @NonNull PaneWallPage place) {
+    public static boolean isUsable(@Nullable String keyValue, @NonNull PageKind place) {
         if (keyValue == null || keyValue.isEmpty())
             return true;
         // A macro is only as usable as its least usable step: half a sequence is not a shortcut.
@@ -307,15 +309,15 @@ public final class ExtraKeyEligibility {
      * place in front at full strength; {@code wall.go} counts when it names its place outright.
      */
     @Nullable
-    public static PaneWallPage placeSwitchTarget(@Nullable String keyValue) {
+    public static PageKind placeSwitchTarget(@Nullable String keyValue) {
         if (keyValue == null
                 || !keyValue.startsWith(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX))
             return null;
         switch (toolNameOf(keyValue)) {
-            case LauncherToolRegistry.TOOL_WALL_WIDGETS: return PaneWallPage.WIDGETS;
-            case LauncherToolRegistry.TOOL_WALL_TERMINAL: return PaneWallPage.TERMINAL;
-            case LauncherToolRegistry.TOOL_WALL_DISPLAY: return PaneWallPage.DISPLAY;
-            case LauncherToolRegistry.TOOL_WALL_ASSISTANT: return PaneWallPage.ASSISTANT;
+            case LauncherToolRegistry.TOOL_WALL_WIDGETS: return PageKind.HOME;
+            case LauncherToolRegistry.TOOL_WALL_TERMINAL: return PageKind.TERMINAL;
+            case LauncherToolRegistry.TOOL_WALL_DISPLAY: return PageKind.DISPLAY;
+            case LauncherToolRegistry.TOOL_WALL_ASSISTANT: return PageKind.ASSISTANT;
             case LauncherToolRegistry.TOOL_WALL_GO: return namedPlace(keyValue);
             default: return null;
         }
@@ -323,13 +325,16 @@ public final class ExtraKeyEligibility {
 
     /** The place a {@code tool:wall.go:place=<name>} key names, or null when it names none. */
     @Nullable
-    private static PaneWallPage namedPlace(@NonNull String keyValue) {
+    private static PageKind namedPlace(@NonNull String keyValue) {
         for (String argument : keyValue.split(":")) {
             if (!argument.startsWith("place="))
                 continue;
             String name = argument.substring("place=".length());
-            for (PaneWallPage place : PaneWallPage.values()) {
-                if (place.toolName().equals(name))
+            // "widgets" is the old name of Home, kept for keys already written.
+            if (name.equals("widgets"))
+                return PageKind.HOME;
+            for (PageKind place : PageKind.values()) {
+                if (place.name().toLowerCase(java.util.Locale.ROOT).equals(name))
                     return place;
             }
         }

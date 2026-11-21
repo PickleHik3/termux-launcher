@@ -22,7 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The shared Text size (Appearance › Base): one percent on the terminal font, the key legends and
+ * The shared Text size (Appearance › Global): one percent on the terminal font, the key legends and
  * the chrome labels, each drawn at its own size times it. An install that has never touched the
  * slider reads the default, 100, which is the identity, so it keeps every size it had: pong's
  * 18 px terminal font (about 7 dp at 2.625) among them.

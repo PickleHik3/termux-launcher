@@ -23,6 +23,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * A pane under a terminal effect lays its terminal out inside the bezel: the grid's rect lies
@@ -30,7 +31,7 @@ import org.robolectric.annotation.GraphicsMode;
  * of bezel asks for a layout. On API 33, the first that draws an effect at all.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.TIRAMISU})
+@Config(sdk = {Build.VERSION_CODES.TIRAMISU}, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class PaneContentFrameBezelTest {
 

@@ -115,6 +115,16 @@ Memory: the ground shares the stored frame; the pages capture is the size §2a's
 layer is the blur node's. A scene ground adds one quarter-scale layer of the band it covers,
 counted in the picture's share (`LiveBackdrop.MAX_LAYER_BYTES`).
 
+### 2c. One picture per surface for its life (amendment, 2026-11-17)
+
+[ADR 0029](0029-each-glass-surface-keeps-one-picture.md) amends §1 and §2b. There is a fourth kind,
+Compositor (the keyboard's frost over the X11 screen). A Live surface always draws its backdrop
+layers, so the switch between one recording at rest and layers while moving goes, and so do each
+picture's own stale test. Kinds change only on a policy event. **See through: One layer** and its
+row in Battery & performance are removed. Until the build lands (step 4 of
+[`project-docs/active/window-restructure-2026-11-17.md`](../../project-docs/active/window-restructure-2026-11-17.md)),
+the app is as this ADR describes it.
+
 ## 4. Live is opt-in and budgeted
 
 One **Live blur** row in Battery & performance, off by default, covers the dock, floats and

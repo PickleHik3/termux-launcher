@@ -2,6 +2,7 @@ package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.app.page.PageKind;
 
 /**
  * What a Display page is on the wall (ADR 0016): each Display page is a cell of its own, and the
@@ -34,9 +35,9 @@ public final class DisplayPagePolicy {
      * Whether landing on a page of {@code kind} starts the display: any Display page, while the
      * display is neither running nor already on its way up.
      */
-    public static boolean startsOnLanding(@NonNull WallPages.PageKind kind, boolean running,
+    public static boolean startsOnLanding(@NonNull PageKind kind, boolean running,
                                           boolean starting) {
-        return kind == WallPages.PageKind.DISPLAY && !running && !starting;
+        return kind == PageKind.DISPLAY && !running && !starting;
     }
 
     /** What landing on a Display page does (A3c). */
@@ -69,7 +70,7 @@ public final class DisplayPagePolicy {
                                   boolean starting, boolean appHasWindow, boolean routedByRunner,
                                   boolean autostart) {
         if (binding == null) {
-            if (!startsOnLanding(WallPages.PageKind.DISPLAY, running, starting)) {
+            if (!startsOnLanding(PageKind.DISPLAY, running, starting)) {
                 return Landing.NOTHING;
             }
             return autostart ? Landing.START_DISPLAY : Landing.SHOW_START;
@@ -77,6 +78,15 @@ public final class DisplayPagePolicy {
         if (!appFound || routedByRunner) return Landing.NOTHING;
         if (running) return appHasWindow ? Landing.RAISE_APP : Landing.RUN_APP;
         return starting ? Landing.NOTHING : Landing.RUN_APP;
+    }
+
+    /**
+     * Whether landing on an unbound, stopped Display page starts it: the autostart setting starts
+     * the display with the launcher only, so once a display has run since the launcher started
+     * ({@code ranThisLaunch}) a landing shows Start, and a stop the user made stays stopped.
+     */
+    public static boolean landingAutostarts(boolean autostartSetting, boolean ranThisLaunch) {
+        return autostartSetting && !ranThisLaunch;
     }
 
     /**
@@ -98,6 +108,6 @@ public final class DisplayPagePolicy {
      */
     public static int homeDisplayPage(@Nullable WallPages pages) {
         WallPages.Page home = pages == null ? null : pages.home();
-        return home != null && home.kind == WallPages.PageKind.DISPLAY ? home.id : -1;
+        return home != null && home.kind == PageKind.DISPLAY ? home.id : -1;
     }
 }

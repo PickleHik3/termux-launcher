@@ -28,7 +28,7 @@ import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
-/** The Display Input page's "Keyboard over display" row reads and writes both orientations. */
+/** The Display Input page's "Keyboard behavior" row reads and writes both orientations. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
@@ -61,7 +61,7 @@ public class X11DisplayKeyboardOverDisplayTest {
         assertNotNull(row);
         assertFalse(row.isPersistent());
         assertEquals("overlay", row.getValue());
-        assertEquals("Covers the app", String.valueOf(row.getSummary()));
+        assertEquals("Overlay", String.valueOf(row.getSummary()));
     }
 
     @Test
@@ -73,7 +73,7 @@ public class X11DisplayKeyboardOverDisplayTest {
         assertEquals(KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.PORTRAIT));
         assertEquals(KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.LANDSCAPE));
         assertEquals("resize", row.getValue());
-        assertEquals("Shrinks the app", String.valueOf(row.getSummary()));
+        assertEquals("Resize display", String.valueOf(row.getSummary()));
     }
 
     @Test
@@ -82,7 +82,7 @@ public class X11DisplayKeyboardOverDisplayTest {
         store().setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.OVERLAY);
         ListPreference row = launch().findPreference(KEY);
         assertNotNull(row);
-        assertEquals("Portrait: Covers the app · Landscape: Shrinks the app",
+        assertEquals("Portrait: Overlay · Landscape: Resize display",
             String.valueOf(row.getSummary()));
     }
 }

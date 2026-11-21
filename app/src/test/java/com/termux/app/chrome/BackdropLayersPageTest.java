@@ -17,20 +17,18 @@ public class BackdropLayersPageTest {
     private static final int S = BackdropLayers.POSE_STRIDE;
 
     @Test
-    public void atRestWithoutASceneNothingChanges() {
-        assertEquals(Mode.LIVE, BackdropLayers.mode(true, false, false));
+    public void atRestThePagesStayFrozenToo() {
+        assertEquals(Mode.FROZEN, BackdropLayers.mode(true, false));
     }
 
     @Test
-    public void aSwipeFreezesThePagesAndASceneAtRestReferencesThem() {
-        assertEquals(Mode.FROZEN, BackdropLayers.mode(true, true, false));
-        assertEquals(Mode.FROZEN, BackdropLayers.mode(true, true, true));
-        assertEquals(Mode.REFERENCE, BackdropLayers.mode(true, false, true));
+    public void aSwipeFreezesThePages() {
+        assertEquals(Mode.FROZEN, BackdropLayers.mode(true, true));
     }
 
     @Test
-    public void aSurfaceThatCannotSplitKeepsOneLayer() {
-        assertEquals(Mode.LIVE, BackdropLayers.mode(false, true, true));
+    public void aSurfaceThatCannotSplitKeepsThePagesLocal() {
+        assertEquals(Mode.LIVE, BackdropLayers.mode(false, true));
     }
 
     @Test
@@ -67,14 +65,11 @@ public class BackdropLayersPageTest {
 
     @Test
     public void theLayerIsRecordedAgainWhenAnythingElseMoves() {
-        assertTrue(BackdropLayers.needsRecord(Mode.FROZEN, Mode.REFERENCE, true, 0f, true));
+        assertTrue(BackdropLayers.needsRecord(Mode.FROZEN, Mode.LIVE, true, 0f, true));
         assertTrue(BackdropLayers.needsRecord(Mode.FROZEN, Mode.FROZEN, false, 0f, true));
         assertTrue(BackdropLayers.needsRecord(Mode.FROZEN, Mode.FROZEN, true, Float.NaN, true));
         assertTrue(BackdropLayers.needsRecord(Mode.FROZEN, Mode.FROZEN, true, 10f, false));
-        // A reference layer draws the pages where they are: pages that moved at rest re-record.
-        assertTrue(BackdropLayers.needsRecord(Mode.REFERENCE, Mode.REFERENCE, true, 3f, true));
-        assertFalse(BackdropLayers.needsRecord(Mode.REFERENCE, Mode.REFERENCE, true, 0f, true));
-        assertEquals(0f, BackdropLayers.aim(Mode.REFERENCE, 3f), 0f);
+        assertEquals(0f, BackdropLayers.aim(Mode.LIVE, 3f), 0f);
         assertFalse(BackdropLayers.needsRecord(Mode.LIVE, Mode.FROZEN, false, Float.NaN, false));
     }
 

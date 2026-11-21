@@ -46,6 +46,13 @@ public final class FolderRenameModel {
         caret = Math.max(0, Math.min(codePointCount(), caret + delta));
     }
 
+    /** Replaces the whole draft (a cut, an undo), within the length limit, caret at its end. */
+    public void replaceAll(@NonNull String value) {
+        draft.setLength(0);
+        caret = 0;
+        insert(value);
+    }
+
     @NonNull public String committedTitle() {
         String trimmed = text().trim();
         return trimmed.isEmpty() ? "Folder" : trimmed;

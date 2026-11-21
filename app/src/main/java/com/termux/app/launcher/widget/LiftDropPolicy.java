@@ -23,6 +23,8 @@ public final class LiftDropPolicy {
         HOME_FOLDER,
         /** An app icon lifted out of the dock's pinned row. */
         DOCK_APP,
+        /** An app carried out of the app drawer's top edge: Home's follower carries it on. */
+        DRAWER_APP,
         /** An app shortcut dragged out of the App menu. */
         SHORTCUT
     }
@@ -77,9 +79,10 @@ public final class LiftDropPolicy {
             case HOME:
                 return true;
             case DOCK:
-                return item == Item.HOME_APP || item == Item.DOCK_APP;
+                return item == Item.HOME_APP || item == Item.DOCK_APP || item == Item.DRAWER_APP;
             case REMOVE:
-                return item != Item.SHORTCUT;
+                // The drawer's own targets act before the hand-over.
+                return item != Item.SHORTCUT && item != Item.DRAWER_APP;
             case UNINSTALL:
                 return item == Item.HOME_APP || item == Item.DOCK_APP;
             default:

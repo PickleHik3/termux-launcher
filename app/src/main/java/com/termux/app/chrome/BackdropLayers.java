@@ -3,44 +3,36 @@ package com.termux.app.chrome;
 import androidx.annotation.NonNull;
 
 /**
- * A Live surface's backdrop layers while the wall of pages moves ({@link LiveBackdrop}). Pure.
+ * A Live surface's backdrop layers (ADR 0029 section 3), at rest and while the wall of pages moves
+ * ({@link LiveBackdrop}). Pure.
  *
- * <p>At rest a Live surface records everything beneath it as one picture and blurs it. During a
- * swipe that picture would be recorded and blurred again on every frame, because the surface and
- * what is beneath it move apart. So while the wall moves the picture is split into layers that each
- * move on their own and are composited in the glass's one draw, bottom first:</p>
+ * <p>A Live surface always draws its layers, composited in the glass's one draw, bottom first, so
+ * the first frame of a swipe, every frame of it and the landed frame are one composition and a
+ * landing has nothing to swap:</p>
  *
  * <ul>
  *   <li>{@link Layer#GROUND}: the wallpaper as the stored pre-blurred frame, sampled where the
  *       surface stands and at the parallax offset ({@link Motion#PARALLAX}); over a live scene the
- *       scene's frame, new at the scene's glass rate ({@link Motion#SCENE}). A move never blurs it
- *       again.</li>
- *   <li>{@link Layer#PAGES}: the wall's pages beneath a surface that does not ride them (the dock,
- *       a float on the pinned layer), captured and blurred once as the swipe starts and moved by
- *       the pages' travel ({@link Motion#TRAVEL}). Each page is pictured on its own at full
- *       opacity and composited at its alpha now ({@link #pageAlpha}), so a page that fades as
- *       the pages slide (Fade) costs nothing. A surface on a page has no pages layer: lower
- *       pages that ride with it are in its local layer.</li>
- *   <li>{@link Layer#LOCAL}: what lies beneath the surface on its own page or float, or the chrome
- *       beneath the dock, recorded and blurred once ({@link Motion#FIXED}). Under a surface on a
- *       page it also holds the wall's ground strip, whose band there is the page's own ground
- *       and travels with it ({@link #holder}).</li>
+ *       scene's frame, new at the scene's glass rate ({@link Motion#SCENE}). Never blurred again.
+ *       Until the stored frame is resident the wallpaper is drawn in the local layer instead.</li>
+ *   <li>{@link Layer#PAGES}: the wall's pages beneath a surface that does not ride them (the
+ *       dock, a float on the pinned layer), captured and blurred once, held at rest and while the
+ *       wall moves, moved by the pages' travel ({@link Motion#TRAVEL}) and taken again behind the
+ *       old picture when the pages change ({@link PageLayerRefresh}). Each page is pictured on its
+ *       own, whole and untransformed, at full opacity, and drawn at its matrix and alpha now
+ *       ({@link #pageAlpha}, {@link #follow}): pages that turn redraw the slots and are never
+ *       captured again. Until the first capture lands, and for a surface whose pages cannot all
+ *       be held within the layer's budget, the pages are in the local layer, drawn as they are.</li>
+ *   <li>{@link Layer#LOCAL}: everything else beneath the surface, drawn from the views' own
+ *       display lists and blurred, so whatever redraws beneath (a terminal printing, a clock)
+ *       reaches the glass without a new recording. It is recorded again only when its views
+ *       change or the surface moves against a view that stands still ({@link Holder#FIXED}).</li>
  * </ul>
  *
- * <p>{@link #plan} says, for one frame, whether the surface draws its layers or the one picture
- * as at rest, and which layer is stale and recorded again. The first and the landed frame of a
- * swipe are always the one picture, so neither end differs from the resting glass. A layer that
- * cannot be held (pages that turn, fade or overlap, a capture still rendering, no stored frame)
- * sends the surface back to the one picture, recorded live, for those frames.</p>
- *
- * <p>The pages layer is §2a's page layer ({@link Mode}): the pages captured once and only moved,
- * kept while every tracked pose ({@link #POSE_STRIDE} floats: the view's matrix, its left, top and
- * alpha) is the same as when it was recorded but for one shared horizontal shift. At rest under a
- * live scene the one picture draws the pages on a cached layer ({@link Mode#REFERENCE}).</p>
- *
- * <p>{@link #drawsStored} is the "See through" rule, at rest too: with {@link SeeThrough#ONE} a
- * glass with another glass above it draws the stored frame, so the one above sees it but not
- * through it.</p>
+ * <p>Each layer keeps its own refresh trigger ({@link #plan}); there is no other picture to fall
+ * back to. The pages layer is §2a's page layer ({@link Mode}): the pages captured once and only
+ * moved, kept while every tracked pose ({@link #POSE_STRIDE} floats: the view's matrix, its left,
+ * top and alpha) is the same as when it was recorded but for one shared horizontal shift.</p>
  */
 public final class BackdropLayers {
 
@@ -81,9 +73,6 @@ public final class BackdropLayers {
         FADE
     }
 
-    /** "See through": every glass layer beneath, or only what is directly beneath the topmost. */
-    public enum SeeThrough { ALL, ONE }
-
     /** {@link #plan}: the surface draws its layers this frame; without it, the one picture. */
     public static final int LAYERS = 1;
     /** {@link #plan}: the layers it draws. */
@@ -95,8 +84,11 @@ public final class BackdropLayers {
     public static final int STALE_PAGES = 1 << 5;
     public static final int STALE_LOCAL = 1 << 6;
 
-    /** The pages layer of a surface that does not ride the pages (§2a). */
-    public enum Mode { LIVE, REFERENCE, FROZEN }
+    /**
+     * Where a surface's pages are (§2a): drawn as they are in the local layer, or frozen in a
+     * pages layer of their own while the wall moves.
+     */
+    public enum Mode { LIVE, FROZEN }
 
     /** Floats per tracked pose: the 3x3 matrix, then left, top and alpha. */
     public static final int POSE_STRIDE = 12;
@@ -114,13 +106,13 @@ public final class BackdropLayers {
 
     /**
      * The mode for a surface whose beneath can be split ({@code splittable}: the wall's pages are
-     * beneath it, opaque or gone, and the two layers fit the surface's budget).
+     * beneath it, opaque or gone, and the layers fit the surface's budget): frozen, at rest and
+     * while the wall moves, so a surface keeps one picture of its pages and nothing swaps when
+     * the wall starts or stops (ADR 0029 section 3). {@code wallMoving} does not matter.
      */
     @NonNull
-    public static Mode mode(boolean splittable, boolean wallMoving, boolean sceneLive) {
-        if (!splittable) return Mode.LIVE;
-        if (wallMoving) return Mode.FROZEN;
-        return sceneLive ? Mode.REFERENCE : Mode.LIVE;
+    public static Mode mode(boolean splittable, boolean wallMoving) {
+        return splittable ? Mode.FROZEN : Mode.LIVE;
     }
 
     /**
@@ -154,22 +146,58 @@ public final class BackdropLayers {
         return Float.isNaN(shift) ? 0f : shift;
     }
 
+    /** What a held frozen layer does for the pages' poses this frame ({@link #follow}). */
+    public enum Follow {
+        /** Moved by one shared shift (and its alphas composited): a property, nothing recorded. */
+        MOVE,
+        /** The pages turn: the slots are drawn again at the poses' matrices, nothing captured. */
+        REDRAW,
+        /** Not the pages the layer holds (the counts differ): captured again. */
+        RECAPTURE
+    }
+
     /**
-     * Whether the page layer is recorded again this frame: the mode changed, the pages drawn are
-     * not the ones recorded, they did not move together ({@code shift} NaN), they moved at rest,
-     * or the surface now reaches past what the layer holds.
+     * How a held frozen layer follows the poses in {@code now} since {@code recorded}: a shared
+     * shift is moved, any other change of matrix is a redraw of the slots (each page is held
+     * whole, so a turn needs no new picture), and only a different set of pages is a new capture.
+     */
+    @NonNull
+    public static Follow follow(@NonNull float[] recorded, int recordedPoses,
+                                @NonNull float[] now, int nowPoses) {
+        if (recordedPoses != nowPoses || recordedPoses < 0) return Follow.RECAPTURE;
+        return Float.isNaN(shift(recorded, recordedPoses, now, nowPoses, true))
+            ? Follow.REDRAW : Follow.MOVE;
+    }
+
+    /**
+     * The shift {@link #needsRecord} is asked about: the shared shift for pages that move, 0 for
+     * pages that turn (their slots are drawn again, so the layer is as good as held), NaN for a
+     * different set of pages.
+     */
+    public static float followShift(@NonNull float[] recorded, int recordedPoses,
+                                    @NonNull float[] now, int nowPoses) {
+        switch (follow(recorded, recordedPoses, now, nowPoses)) {
+            case MOVE:
+                return shift(recorded, recordedPoses, now, nowPoses, true);
+            case REDRAW:
+                return 0f;
+            default:
+                return Float.NaN;
+        }
+    }
+
+    /**
+     * Whether the page layer is captured again this frame: the mode changed, the pages drawn are
+     * not the ones recorded, they did not move together ({@code shift} NaN), or the surface now
+     * reaches past what the layer holds.
      */
     public static boolean needsRecord(@NonNull Mode mode, @NonNull Mode recorded,
                                       boolean samePages, float shift, boolean covered) {
         if (mode == Mode.LIVE) return false;
-        if (mode != recorded || !samePages || Float.isNaN(shift) || !covered) return true;
-        return mode == Mode.REFERENCE && shift != 0f;
+        return mode != recorded || !samePages || Float.isNaN(shift) || !covered;
     }
 
-    /**
-     * How far the page layer is moved, in px: the pages' shift while frozen; a reference layer
-     * draws the pages where they stand, so it never moves.
-     */
+    /** How far the page layer is moved, in px: the pages' shift while frozen. */
     public static float aim(@NonNull Mode mode, float shift) {
         return mode == Mode.FROZEN && !Float.isNaN(shift) ? shift : 0f;
     }
@@ -204,14 +232,34 @@ public final class BackdropLayers {
      */
     public static int pad(long baseBytes, int width, int height, boolean horizontal, int maxPadPx,
                           int slots) {
+        return padWithin(LiveBackdrop.MAX_LAYER_BYTES, baseBytes, width, height, horizontal,
+            maxPadPx, slots);
+    }
+
+    /**
+     * {@link #pad} against {@code budgetBytes} instead of a blur layer's share: the frozen pages
+     * layer's own atlas (at most the {@link GlassPagePool} pool), with {@code baseBytes} the
+     * whole pages already in it ({@link #slotBytes}) and {@code slots} the pictures the padded
+     * rect is cut into (the wall's decor: one).
+     */
+    public static int padWithin(long budgetBytes, long baseBytes, int width, int height,
+                                boolean horizontal, int maxPadPx, int slots) {
+        return padWithin(budgetBytes, baseBytes, width, height, horizontal, maxPadPx, slots,
+            LivePicture.SCALE);
+    }
+
+    /** {@link #padWithin} for an atlas held at 1/{@code scale} ({@link GlassPagePool.Tier}). */
+    public static int padWithin(long budgetBytes, long baseBytes, int width, int height,
+                                boolean horizontal, int maxPadPx, int slots, int scale) {
         int n = Math.max(1, slots);
-        if (!fits(baseBytes, n * width, height)) return -1;
+        if (!fitsWithin(budgetBytes, baseBytes, n * width, height, scale)) return -1;
         int low = 0;
         int high = Math.max(0, maxPadPx);
         while (low < high) {
             int mid = (low + high + 1) >>> 1;
-            boolean ok = horizontal ? fits(baseBytes, n * (width + 2 * mid), height)
-                : fits(baseBytes, n * width, height + 2 * mid);
+            boolean ok = horizontal
+                ? fitsWithin(budgetBytes, baseBytes, n * (width + 2 * mid), height, scale)
+                : fitsWithin(budgetBytes, baseBytes, n * width, height + 2 * mid, scale);
             if (ok) low = mid;
             else high = mid - 1;
         }
@@ -235,53 +283,87 @@ public final class BackdropLayers {
 
     /** Whether a page layer of {@code width} x {@code height} fits beside {@code baseBytes}. */
     public static boolean fits(long baseBytes, int width, int height) {
-        return baseBytes + LiveBackdrop.layerBytes(width, height) <= LiveBackdrop.MAX_LAYER_BYTES;
+        return fitsWithin(LiveBackdrop.MAX_LAYER_BYTES, baseBytes, width, height);
+    }
+
+    /** Whether a layer of {@code width} x {@code height} fits beside {@code baseBytes} in {@code budgetBytes}. */
+    public static boolean fitsWithin(long budgetBytes, long baseBytes, int width, int height) {
+        return fitsWithin(budgetBytes, baseBytes, width, height, LivePicture.SCALE);
+    }
+
+    /** {@link #fitsWithin} for a layer held at 1/{@code scale}. */
+    public static boolean fitsWithin(long budgetBytes, long baseBytes, int width, int height,
+                                     int scale) {
+        return baseBytes + LiveBackdrop.layerBytes(width, height, scale) <= budgetBytes;
+    }
+
+    /**
+     * A page's slot in the frozen layer, in the page's own coordinates into {@code out} (left,
+     * top, right, bottom): the page's bounds and {@code gutterPx} of the blur's reach around
+     * them. The slot holds the page as it is, untransformed; where the page stands is the pose's
+     * matrix, drawn later ({@link LivePicture}).
+     */
+    public static void slotBounds(int pageWidth, int pageHeight, int gutterPx, @NonNull int[] out) {
+        out[0] = -gutterPx;
+        out[1] = -gutterPx;
+        out[2] = pageWidth + gutterPx;
+        out[3] = pageHeight + gutterPx;
+    }
+
+    /** Bytes of a page's slot ({@link #slotBounds}) at the layer's quarter scale. */
+    public static long slotBytes(int pageWidth, int pageHeight, int gutterPx) {
+        return LiveBackdrop.layerBytes(pageWidth + 2 * gutterPx, pageHeight + 2 * gutterPx);
+    }
+
+    /** {@link #slotBytes} at 1/{@code scale} of the page's size ({@link GlassPagePool.Tier}). */
+    public static long slotBytes(int pageWidth, int pageHeight, int gutterPx, int scale) {
+        return LiveBackdrop.layerBytes(pageWidth + 2 * gutterPx, pageHeight + 2 * gutterPx, scale);
     }
 
     // ---- Backdrop layers -------------------------------------------------------------------
 
     /**
-     * One frame's plan for a Live surface: whether it draws its {@link #LAYERS} (and which) or the
-     * one picture, and which layers are stale and recorded again.
+     * One frame's plan for a Live surface: the layers it draws (always {@link #LAYERS} and
+     * {@link #LOCAL}) and which are recorded again. There is no resting picture of another kind:
+     * at rest and moving the surface draws the same layers.
      *
-     * @param place         where the surface stands against the wall
-     * @param wallMoving    the wall is anywhere but at rest
-     * @param displaced     something beneath has moved against the surface since the wall left
-     *                      rest: the pages' shift, the surface's own place, the parallax offset
-     * @param groundReady   the ground's frame is at hand (the stored frame, or the scene's)
+     * @param groundReady   the ground's frame is at hand (the stored frame, or the scene's); without
+     *                      it the wallpaper is drawn in the local layer
      * @param sceneLive     a live scene is the ground
      * @param sceneNewFrame the scene published a frame the ground does not hold yet
-     * @param pagesBeneath  wall pages lie beneath the surface outside its own page
-     * @param pagesMove     how those pages moved since the pages layer was recorded; for a
-     *                      {@link Place#PAGE} surface, against the surface's own page
-     * @param pagesReady    the pages layer has landed (its capture is not still rendering)
-     * @param localChanged  the views in the local layer are not the ones it was recorded from
-     * @param fixedBeneath  views beneath that no layer holds: chrome under a surface on a page, or
-     *                      a ground strip whose seams cross a surface that stays ({@link #holder})
+     * @param pagesHeld     a frozen pages layer is held this frame ({@link #holdsPages})
+     * @param localChanged  the views in the local layer are not the ones it was recorded from, or
+     *                      its size or what it holds of the ground changed
+     * @param fixedBeneath  the local layer holds a view that stands still while the surface may
+     *                      move against it ({@link Holder#FIXED})
+     * @param displaced     the surface stands elsewhere against the window than when its local
+     *                      layer was recorded
      */
-    public static int plan(@NonNull Place place, boolean wallMoving, boolean displaced,
-                           boolean groundReady, boolean sceneLive, boolean sceneNewFrame,
-                           boolean pagesBeneath, @NonNull Move pagesMove, boolean pagesReady,
-                           boolean localChanged, boolean fixedBeneath) {
-        // The first frame of a swipe and the landed one are the resting picture: no pop.
-        if (!wallMoving || !displaced) return 0;
-        if (!groundReady || fixedBeneath) return 0;
-        int plan = LAYERS | GROUND | LOCAL;
-        if (sceneLive && sceneNewFrame) plan |= STALE_GROUND;
-        if (localChanged) plan |= STALE_LOCAL;
-        if (pagesBeneath) {
-            // Off a page the frozen layer holds each page on its own at full opacity: a slide
-            // moves it, a fade only changes the alphas it is composited at (pageAlpha).
-            boolean stale = place == Place.PAGE ? pagesMove != Move.STILL
-                : pagesMove == Move.TURN;
-            // A pages layer recorded again is a capture that lands frames later: the one
-            // picture, recorded live, until it has.
-            if (stale) return STALE_PAGES;
-            if (!pagesReady) return 0;
-            // On a page, lower pages that ride with it are part of its local layer.
-            if (place != Place.PAGE) plan |= PAGES;
+    public static int plan(boolean groundReady, boolean sceneLive, boolean sceneNewFrame,
+                           boolean pagesHeld, boolean localChanged, boolean fixedBeneath,
+                           boolean displaced) {
+        int plan = LAYERS | LOCAL;
+        if (groundReady) {
+            plan |= GROUND;
+            if (sceneLive && sceneNewFrame) plan |= STALE_GROUND;
+            if (pagesHeld) plan |= PAGES;
         }
+        if (localChanged || (fixedBeneath && displaced)) plan |= STALE_LOCAL;
         return plan;
+    }
+
+    /**
+     * Whether a surface at {@code place} draws a frozen pages layer this frame: only off the wall,
+     * only for pages that moved by one travel ({@link Move#SHIFT}, {@link Move#FADE} or
+     * {@link Move#STILL}) into a picture that has landed, and not over a ground strip whose
+     * seams would then draw above the pages they lie under. Otherwise the pages are in the local
+     * layer, drawn as they are.
+     */
+    public static boolean holdsPages(@NonNull Place place, @NonNull Mode mode,
+                                     @NonNull Move pagesMove, boolean frozenReady,
+                                     boolean seamsBeneath) {
+        return place != Place.PAGE && mode == Mode.FROZEN && pagesMove != Move.TURN
+            && frozenReady && !seamsBeneath;
     }
 
     /** Where a view drawn beneath a Live surface stands against the wall ({@link #holder}). */
@@ -294,7 +376,7 @@ public final class BackdropLayers {
         ON_PAGE
     }
 
-    /** Which layer holds a view drawn beneath a Live surface while the wall moves. */
+    /** Which layer holds a view drawn beneath a Live surface. */
     public enum Holder {
         /** The ground layer draws it: the wallpaper or the scene. */
         GROUND,
@@ -302,52 +384,44 @@ public final class BackdropLayers {
         PAGES,
         /** The local layer, recorded once and moved with the surface. */
         LOCAL,
-        /** Stands still where a surface on a page sweeps: no layer holds it. */
+        /**
+         * The local layer too, but it stands still where the surface may move against it: the
+         * local layer is recorded again whenever the surface is displaced.
+         */
         FIXED,
         /** Draws nothing the surface sweeps: no layer needs it. */
         NONE
     }
 
     /**
-     * Which layer holds a view drawn beneath a surface at {@code place} while the wall moves.
-     * {@link Holder#FIXED} sends the surface back to the one picture ({@link #plan}'s
-     * {@code fixedBeneath}); {@link Holder#PAGES} on a page sets its {@code pagesBeneath}.
+     * Which layer holds a view drawn beneath a surface at {@code place}.
      *
-     * @param tier      where the view stands against the wall; ignored off a page
-     * @param ground    the view is the wallpaper or the scene
-     * @param holdsWall the view is the wall, or holds it, beneath a surface off the wall
-     * @param ridesWall the view paints each page's ground where that page stands (the ground
-     *                  strip), so its drawing travels with the pages
-     * @param inBand    the view crosses the band a surface on a page sweeps
-     * @param overlaps  the lower page lies under the surface
+     * @param tier        where the view stands against the wall; ignored off a page
+     * @param ground      the view is the wallpaper or the scene
+     * @param groundReady the ground layer is at hand; without it the ground is local
+     * @param holdsWall   the view is the wall, or holds it, beneath a surface off the wall
+     * @param pagesHeld   a frozen pages layer is held this frame ({@link #holdsPages})
+     * @param ridesWall   the view paints each page's ground where that page stands (the ground
+     *                    strip), so its drawing travels with the pages
+     * @param inBand      the view crosses the band a surface on a page sweeps
+     * @param overlaps    the lower page lies under the surface
      */
     @NonNull
     public static Holder holder(@NonNull Place place, @NonNull Tier tier, boolean ground,
-                                boolean holdsWall, boolean ridesWall, boolean inBand,
-                                boolean overlaps) {
-        return holder(place, tier, ground, holdsWall, ridesWall, false, inBand, overlaps);
-    }
-
-    /**
-     * {@link #holder}, where {@code seams} says the strip's grounds differ from page to page. Then
-     * under a surface that stays still (the dock, a bar, a float) a seam travels across it while
-     * the pages move: no layer holds that, so it is {@link Holder#FIXED} and the surface keeps
-     * the one picture, rather than holding the ground it started over and changing at landing.
-     */
-    @NonNull
-    public static Holder holder(@NonNull Place place, @NonNull Tier tier, boolean ground,
-                                boolean holdsWall, boolean ridesWall, boolean seams,
-                                boolean inBand, boolean overlaps) {
-        if (ground) return Holder.GROUND;
-        if (place != Place.PAGE) {
-            if (holdsWall) return Holder.PAGES;
-            return ridesWall && seams ? Holder.FIXED : Holder.LOCAL;
+                                boolean groundReady, boolean holdsWall, boolean pagesHeld,
+                                boolean ridesWall, boolean inBand, boolean overlaps) {
+        if (ground) {
+            if (groundReady) return Holder.GROUND;
+            // Drawn in the local layer, the wallpaper stands still where a surface on a page moves.
+            return place == Place.PAGE ? Holder.FIXED : Holder.LOCAL;
         }
+        if (place != Place.PAGE) return holdsWall && pagesHeld ? Holder.PAGES : Holder.LOCAL;
         switch (tier) {
             case ON_PAGE:
                 return Holder.LOCAL;
             case PAGE:
-                return overlaps ? Holder.PAGES : Holder.NONE;
+                // A lower page under the surface moves with it in a slide but not in a turn.
+                return overlaps ? Holder.FIXED : Holder.NONE;
             default:
                 // The ground strip's band under a surface on a page is that page's own ground, and
                 // it moves as the page does: it rides with the surface. Anything else stands still.
@@ -386,15 +460,5 @@ public final class BackdropLayers {
             if (Math.abs(now[alpha] - recorded[alpha]) > SAME_EPSILON) return Move.FADE;
         }
         return Math.abs(shift) > SHIFT_EPSILON_PX ? Move.SHIFT : Move.STILL;
-    }
-
-    /**
-     * Whether a Live surface draws as the Wallpaper kind (the stored frame at its offset) instead
-     * of recording what is beneath it. With {@link SeeThrough#ONE} a surface another Live glass
-     * stands over does: the one above records it, content and all, like anything beneath, but no
-     * longer sees through it to what lies under both.
-     */
-    public static boolean drawsStored(@NonNull SeeThrough seeThrough, boolean glassAbove) {
-        return seeThrough == SeeThrough.ONE && glassAbove;
     }
 }

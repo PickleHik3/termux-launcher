@@ -45,6 +45,13 @@ public final class LauncherCategorySortPlan {
         return new LauncherCategorySortPlan(feature.modelId, feature.accelerator, false, feature.warnBackground);
     }
 
+    /** A local model the user asked for in the chooser, where the feature plan names none. */
+    @NonNull
+    public static LauncherCategorySortPlan explicit(@NonNull String modelId, @Nullable String accelerator,
+                                                    boolean warnBackground) {
+        return new LauncherCategorySortPlan(modelId, accelerator, false, warnBackground);
+    }
+
     /** The estimate on the plan's own accelerator. */
     public int estimatedMinutes(int appCount) {
         return estimatedMinutes(appCount, accelerator);

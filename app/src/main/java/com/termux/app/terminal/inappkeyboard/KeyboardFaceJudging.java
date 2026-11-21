@@ -21,7 +21,7 @@ public final class KeyboardFaceJudging {
      *
      * <p>The band's rect is its layout, not the stack's travel, so it moves only when a layout
      * does, a few times a crossing at most. A crossing's first frame can still stand on the layout
-     * of the page it left: Home2 to the Workspace on pong measured the band below the screen, read
+     * of the page it left: Home2 to the Terminal on pong measured the band below the screen, read
      * its rows off a stand-in and bought a veil, so the function chips rose at alpha 0xCA and took
      * the landed rect's 0xE1 only at landing. A crossing that kept that first judgment kept the
      * old layout's inks.</p>

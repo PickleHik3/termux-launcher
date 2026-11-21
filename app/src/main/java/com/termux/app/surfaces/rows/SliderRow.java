@@ -29,8 +29,10 @@ import java.util.List;
 /**
  * A run of value sliders, one row under another (the cards' sliders, horizontal since
  * 2026-10-31; they were a strip of vertical columns before). A row is one line where it fits
- * (2026-11-04): the glyph, the name with its source dot after it, and a thick track that prints
- * its value inside at its end, in a 48dp hit area. Where the name or the value would not fit at
+ * (2026-11-04): the glyph, the name, and a thick track that prints its value inside at its end,
+ * in a 48dp hit area; then a fixed slot at the row's end where the reset arrow (↺) stands while
+ * the value is the surface's own, empty otherwise, so every track is one length and the arrows
+ * stand in one column (appearance-one-look spec §2). Where the name or the value would not fit at
  * the row's width and font scale ({@link SliderRowFit}), the row keeps two lines: the glyph,
  * name and value, and under them the track, the row's whole width. The row's height is
  * measured, so a larger font scale grows the name line rather than cutting it.
@@ -58,6 +60,9 @@ public final class SliderRow {
 
         /** A slider's finger lifted. */
         void onReleased(int index);
+
+        /** Slider {@code index}'s reset arrow was tapped: its value goes back to Global. */
+        default void onReset(int index) {}
     }
 
     /** The link between two sliders was turned on or off by touch. */
@@ -97,21 +102,20 @@ public final class SliderRow {
         @NonNull public final TextView name;
         @NonNull public final TextView value;
         @NonNull public final LegendSlider slider;
+        /** The reset arrow in the row's end slot: shown while the value is the surface's own. */
+        @NonNull public final ImageView reset;
         @NonNull private final CharSequence mName;
-        @NonNull private final GradientDrawable mDot = new GradientDrawable();
-        private int mDotColor;
 
         Item(@NonNull Line root, @NonNull ImageView glyph, @NonNull TextView name,
-             @NonNull TextView value, @NonNull LegendSlider slider, @NonNull CharSequence label) {
+             @NonNull TextView value, @NonNull LegendSlider slider, @NonNull ImageView reset,
+             @NonNull CharSequence label) {
             this.root = root;
             this.glyph = glyph;
             this.name = name;
             this.value = value;
             this.slider = slider;
+            this.reset = reset;
             mName = label;
-            int dot = RowKit.dp(root.getContext(), DOT_DP);
-            mDot.setShape(GradientDrawable.OVAL);
-            mDot.setBounds(0, 0, dot, dot);
         }
 
         /** Whether the finger is on this slider now. */
@@ -120,28 +124,22 @@ public final class SliderRow {
         }
 
         /**
-         * Where the value comes from: the dot after the name in {@code color} (0 for none) and
-         * the words a screen reader says for the name and the slider ("Frost, from Home page").
-         * Compares before it sets.
+         * Whether the value is the surface's own: the arrow shows in the end slot (the slot keeps
+         * its room either way), and a screen reader hears {@code spoken} for the slider, the
+         * row's state ("Opacity, the dock's own"), or the plain name for null. Compares first.
          */
-        public void setSource(int color, @Nullable CharSequence spoken) {
-            Drawable want = color != 0 ? mDot : null;
-            if (color != 0 && color != mDotColor) {
-                mDotColor = color;
-                mDot.setColor(color);
-            }
-            if (name.getCompoundDrawablesRelative()[2] != want)
-                name.setCompoundDrawablesRelative(null, null, want, null);
+        public void setOwn(boolean own, @Nullable CharSequence spoken) {
+            int visibility = own ? View.VISIBLE : View.INVISIBLE;
+            if (reset.getVisibility() != visibility)
+                reset.setVisibility(visibility);
             CharSequence said = spoken != null ? spoken : mName;
-            if (!TextUtils.equals(name.getContentDescription(), said))
-                name.setContentDescription(said);
-            slider.setMark(color, spoken);
+            if (!TextUtils.equals(slider.getContentDescription(), said))
+                slider.setContentDescription(said);
         }
     }
 
-    /** The source dot after the name, and its gap. */
-    static final int DOT_DP = 8;
-    static final int DOT_GAP_DP = 6;
+    /** The reset arrow's slot at the row's end: one touch target wide, on every row. */
+    static final int RESET_SLOT_DP = RowKit.TOUCH_DP;
     /** The gap between the name and the value. */
     static final int VALUE_GAP_DP = 8;
     /** Above a two-line row's name line; the track's 48dp hit area keeps its own room below. */
@@ -260,10 +258,10 @@ public final class SliderRow {
         }
     }
 
-    /** Slider {@code index}'s source: {@link Item#setSource}. */
-    public void setSource(int index, int color, @Nullable CharSequence spoken) {
+    /** Slider {@code index}'s own-value state: {@link Item#setOwn}. */
+    public void setOwn(int index, boolean own, @Nullable CharSequence spoken) {
         if (index >= 0 && index < items.size())
-            items.get(index).setSource(color, spoken);
+            items.get(index).setOwn(own, spoken);
     }
 
     /** Shows slider {@code index} at {@code value} without reporting it; not while it drags. */
@@ -330,8 +328,7 @@ public final class SliderRow {
         glyph.setImageTintList(ColorStateList.valueOf(RowKit.color(context,
             androidx.appcompat.R.attr.colorPrimary)));
 
-        // The name wraps its words, so the dot after its last glyph (a compound drawable)
-        // follows a short name; the row gives it what is left and it ellipsizes inside that.
+        // The row gives the name what is left and it ellipsizes inside that.
         TextView name = new TextView(context);
         RowKit.textAppearance(name, com.google.android.material.R.attr.textAppearanceBodyLarge);
         name.setTextColor(RowKit.color(context, com.google.android.material.R.attr.colorOnSurface));
@@ -341,7 +338,6 @@ public final class SliderRow {
         name.setMinWidth(0);
         name.setMinimumWidth(0);
         name.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        name.setCompoundDrawablePadding(RowKit.dp(context, DOT_GAP_DP));
         name.setContentDescription(track.name);
 
         LegendSlider slider = new LegendSlider(context);
@@ -364,11 +360,27 @@ public final class SliderRow {
         value.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         value.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
 
-        Line root = new Line(context, glyph, name, value, slider,
+        // The reset arrow: a 48dp target in the row's end slot, hidden (its room kept) until the
+        // value is the surface's own.
+        android.widget.ImageButton reset = new android.widget.ImageButton(context);
+        reset.setImageResource(R.drawable.ic_ms_restart_alt);
+        reset.setImageTintList(ColorStateList.valueOf(RowKit.color(context,
+            androidx.appcompat.R.attr.colorPrimary)));
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless,
+            ripple, true);
+        reset.setBackgroundResource(ripple.resourceId);
+        reset.setScaleType(ImageView.ScaleType.CENTER);
+        reset.setContentDescription(context.getString(R.string.editor_row_reset_to_global,
+            track.name));
+        reset.setVisibility(View.INVISIBLE);
+        reset.setOnClickListener(v -> listener.onReset(index));
+
+        Line root = new Line(context, glyph, name, value, slider, reset,
             widestReadoutPx(track, value.getPaint()),
             widestReadoutPx(track, slider.insetValuePaint()));
 
-        Item item = new Item(root, glyph, name, value, slider, track.name);
+        Item item = new Item(root, glyph, name, value, slider, reset, track.name);
         slider.addOnChangeListener((s, v, fromUser) -> {
             int at = Math.round(v);
             RowKit.setText(value, track.readout.format(at));
@@ -403,6 +415,8 @@ public final class SliderRow {
         @NonNull private final TextView mName;
         @NonNull private final TextView mValue;
         @NonNull private final LegendSlider mSlider;
+        @NonNull private final View mReset;
+        private final int mSlotPx;
         private final int mValueWidthPx;
         private final int mInsetValueWidthPx;
         private final int mGlyphPx;
@@ -418,13 +432,15 @@ public final class SliderRow {
         private boolean mOneLine;
 
         Line(@NonNull Context context, @NonNull ImageView glyph, @NonNull TextView name,
-             @NonNull TextView value, @NonNull LegendSlider slider, int valueWidthPx,
-             int insetValueWidthPx) {
+             @NonNull TextView value, @NonNull LegendSlider slider, @NonNull View reset,
+             int valueWidthPx, int insetValueWidthPx) {
             super(context);
             mGlyph = glyph;
             mName = name;
             mValue = value;
             mSlider = slider;
+            mReset = reset;
+            mSlotPx = RowKit.dp(context, RESET_SLOT_DP);
             mValueWidthPx = valueWidthPx;
             mInsetValueWidthPx = insetValueWidthPx;
             mGlyphPx = RowKit.dp(context, RowKit.GLYPH_DP);
@@ -441,6 +457,7 @@ public final class SliderRow {
             addView(name);
             addView(value);
             addView(slider);
+            addView(reset);
         }
 
         /** Whether the row stands on one line, as last measured. */
@@ -450,10 +467,14 @@ public final class SliderRow {
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            int width = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED
+            int full = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED
                 ? RowKit.defaultRowWidthPx(getContext())
                 : MeasureSpec.getSize(widthMeasureSpec);
+            // Everything but the reset slot at the end.
+            int width = Math.max(0, full - mSlotPx);
             int column = Math.max(0, width - mColumnStartPx);
+            int exactSlot = MeasureSpec.makeMeasureSpec(mSlotPx, MeasureSpec.EXACTLY);
+            mReset.measure(exactSlot, MeasureSpec.makeMeasureSpec(mTouchPx, MeasureSpec.EXACTLY));
             int unspecified = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
             int exactGlyph = MeasureSpec.makeMeasureSpec(mGlyphPx, MeasureSpec.EXACTLY);
             mGlyph.measure(exactGlyph, exactGlyph);
@@ -484,7 +505,7 @@ public final class SliderRow {
             }
             // A redraw only: the slider keeps its size, so nothing asks for a layout here.
             mSlider.setInsetShown(mOneLine);
-            setMeasuredDimension(width, resolveSize(height, heightMeasureSpec));
+            setMeasuredDimension(full, resolveSize(height, heightMeasureSpec));
         }
 
         /** The two-line row's name line: the glyph, the name and the value, centred on it. */
@@ -495,24 +516,27 @@ public final class SliderRow {
 
         @Override
         protected void onLayout(boolean changed, int l, int t, int r, int b) {
-            int width = r - l;
+            int full = r - l;
+            int width = Math.max(0, full - mSlotPx);
             if (mOneLine) {
                 int centre = (b - t) / 2;
-                place(mGlyph, 0, centre - mGlyph.getMeasuredHeight() / 2, width);
-                place(mName, mColumnStartPx, centre - mName.getMeasuredHeight() / 2, width);
+                place(mGlyph, 0, centre - mGlyph.getMeasuredHeight() / 2, full);
+                place(mName, mColumnStartPx, centre - mName.getMeasuredHeight() / 2, full);
                 int sliderStart = width - mSlider.getMeasuredWidth();
-                place(mSlider, sliderStart, centre - mSlider.getMeasuredHeight() / 2, width);
+                place(mSlider, sliderStart, centre - mSlider.getMeasuredHeight() / 2, full);
                 // Laid out at the track's end, where the track prints it; not drawn.
                 place(mValue, width - mValue.getMeasuredWidth(),
-                    centre - mValue.getMeasuredHeight() / 2, width);
+                    centre - mValue.getMeasuredHeight() / 2, full);
+                place(mReset, width, centre - mReset.getMeasuredHeight() / 2, full);
             } else {
                 int head = headPx();
                 int centre = mTopPx + head / 2;
-                place(mGlyph, 0, centre - mGlyph.getMeasuredHeight() / 2, width);
-                place(mName, mColumnStartPx, centre - mName.getMeasuredHeight() / 2, width);
+                place(mGlyph, 0, centre - mGlyph.getMeasuredHeight() / 2, full);
+                place(mName, mColumnStartPx, centre - mName.getMeasuredHeight() / 2, full);
                 place(mValue, width - mValue.getMeasuredWidth(),
-                    centre - mValue.getMeasuredHeight() / 2, width);
-                place(mSlider, 0, mTopPx + head, width);
+                    centre - mValue.getMeasuredHeight() / 2, full);
+                place(mSlider, 0, mTopPx + head, full);
+                place(mReset, width, mTopPx + head, full);
             }
         }
 

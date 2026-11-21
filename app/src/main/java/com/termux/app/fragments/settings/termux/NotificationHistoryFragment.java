@@ -400,7 +400,8 @@ public class NotificationHistoryFragment extends Fragment implements TaiBenchLis
             .setMessage(R.string.notif_history_clear_confirm_message)
             .setPositiveButton(R.string.notif_history_clear, (dialog, which) -> {
                 LauncherCtlNotificationStore.getInstance().clearAll();
-                AppNotice.show(context, R.string.notif_history_cleared, false);
+                AppNotice.show(context, R.drawable.ic_rl_delete_sweep,
+                    context.getString(R.string.notif_history_cleared), false);
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();

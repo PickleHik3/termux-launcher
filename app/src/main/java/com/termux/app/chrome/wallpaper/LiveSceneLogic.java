@@ -13,25 +13,12 @@ import com.termux.app.chrome.scene.WallpaperMotion;
  */
 public final class LiveSceneLogic {
 
-    /** Which kind shows: the Photo page, the Video page or the Shader list. */
-    public enum Kind { PHOTO, VIDEO, SHADER }
-
     private LiveSceneLogic() {}
 
-    /** The kind that matches the stored motion. */
+    /** The kind the picker opens on (Photo page, Video page or Shader list): the one in use when motion can run, else Photo. */
     @NonNull
-    public static Kind kindOf(@NonNull WallpaperMotion stored) {
-        switch (stored.kind) {
-            case VIDEO: return Kind.VIDEO;
-            case SHADER: return Kind.SHADER;
-            default: return Kind.PHOTO;
-        }
-    }
-
-    /** The kind the picker opens on: the one in use (when motion can run), else Photo. */
-    @NonNull
-    public static Kind startKind(@NonNull WallpaperMotion stored, boolean supported) {
-        return supported ? kindOf(stored) : Kind.PHOTO;
+    public static WallpaperMotion.Kind startKind(@NonNull WallpaperMotion stored, boolean supported) {
+        return supported ? stored.kind : WallpaperMotion.Kind.PHOTO;
     }
 
     /**

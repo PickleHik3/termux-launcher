@@ -217,6 +217,7 @@ final class GlShader {
         if (l[ShaderPrelude.A_OFFSET] >= 0) GLES20.glUniform2fv(l[ShaderPrelude.A_OFFSET], 1, in.offset, 0);
         if (l[ShaderPrelude.A_DATE] >= 0) GLES20.glUniform4fv(l[ShaderPrelude.A_DATE], 1, in.date, 0);
         if (l[ShaderPrelude.TL_PAGE_OFFSET] >= 0) GLES20.glUniform1f(l[ShaderPrelude.TL_PAGE_OFFSET], in.pageOffset);
+        if (l[ShaderPrelude.TL_TOUCH_AGE] >= 0) GLES20.glUniform1f(l[ShaderPrelude.TL_TOUCH_AGE], in.touchAge);
         if (l[ShaderPrelude.TL_BATTERY] >= 0) GLES20.glUniform1f(l[ShaderPrelude.TL_BATTERY], in.battery);
         if (l[ShaderPrelude.TL_KEYBOARD] >= 0) GLES20.glUniform1f(l[ShaderPrelude.TL_KEYBOARD], in.keyboard);
         if (l[ShaderPrelude.TL_DARK] >= 0) GLES20.glUniform1f(l[ShaderPrelude.TL_DARK], in.dark);

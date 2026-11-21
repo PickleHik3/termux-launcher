@@ -1,5 +1,6 @@
 package com.termux.app.launcher.home;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -10,17 +11,19 @@ public class HomePageIndicatorTest {
 
     @Test
     public void dotsAreTheDefaultAndShowOnlyPastOnePage() {
-        assertSame(HomePageIndicator.DOTS, HomePageIndicator.DEFAULT);
-        assertSame(HomePageIndicator.DOTS, HomePageIndicator.fromValue(null));
-        assertSame(HomePageIndicator.DOTS, HomePageIndicator.fromValue("bars"));
-        assertFalse(HomePageIndicator.DOTS.dotsShown(1));
-        assertTrue(HomePageIndicator.DOTS.dotsShown(2));
+        assertSame(HomePageIndicator.GLYPHS, HomePageIndicator.DEFAULT);
+        assertSame(HomePageIndicator.GLYPHS, HomePageIndicator.fromValue(null));
+        assertSame(HomePageIndicator.GLYPHS, HomePageIndicator.fromValue("bars"));
+        // The stored value of the old Dots entry reads as Glyphs.
+        assertSame(HomePageIndicator.GLYPHS, HomePageIndicator.fromValue("dots"));
+        assertEquals("dots", HomePageIndicator.GLYPHS.value);
+        // Glyphs show even with one Home page.
+        assertTrue(HomePageIndicator.GLYPHS.glyphsShown());
     }
 
     @Test
     public void offShowsNoDotsHoweverManyPages() {
         assertSame(HomePageIndicator.OFF, HomePageIndicator.fromValue("off"));
-        assertFalse(HomePageIndicator.OFF.dotsShown(1));
-        assertFalse(HomePageIndicator.OFF.dotsShown(5));
+        assertFalse(HomePageIndicator.OFF.glyphsShown());
     }
 }

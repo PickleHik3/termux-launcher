@@ -14,6 +14,7 @@ import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
 import com.termux.app.place.PlaceLayout;
@@ -23,7 +24,6 @@ import com.termux.app.terminal.inappkeyboard.FloatingKeyboardController;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallController;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
@@ -123,10 +123,10 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         }
         RelativeLayout.LayoutParams labelOverlayParams = (RelativeLayout.LayoutParams)
             mActivity.findViewById(R.id.apps_bar_az_label_overlay).getLayoutParams();
-        assertEquals(R.id.accessory_stack_container,
-            labelOverlayParams.getRules()[RelativeLayout.ABOVE]);
-        assertEquals(0, labelOverlayParams.getRules()[RelativeLayout.ALIGN_PARENT_BOTTOM]);
-        assertTrue(labelOverlayParams.alignWithParent);
+        // The labels stand on the front page's rest, written as a bottom margin: the container
+        // is laid out once at the union of both sides' rests, so it is no anchor for them.
+        assertEquals(0, labelOverlayParams.getRules()[RelativeLayout.ABOVE]);
+        assertTrue(labelOverlayParams.getRules()[RelativeLayout.ALIGN_PARENT_BOTTOM] != 0);
     }
 
     @Test
@@ -156,27 +156,11 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
-    public void gestureNavigationSurfaceFollowsEdgeToEdgeSurfacesOnly() {
-        // Edge-to-edge keyboard or dock continues under the gesture pill.
-        assertTrue(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 72, false, false, false));
-        // The dock with the keyboard down reaches under the pill itself (DockSpec): no strip.
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            true, false, 72, false, false, false));
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 0, false, false, false));
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 72, true, false, false));
-        // A floating capsule keyboard leaves the pill inset showing wallpaper.
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 72, false, true, true));
-        // The keyboard's capsule decision is decoupled from the dock style: an edge-to-edge
-        // keyboard under the Rounded dock still owns the gesture-navigation surface.
-        assertTrue(TermuxActivity.shouldShowDecorNavBarSurface(
-            false, true, 72, false, true, false));
-        // The Rounded dock itself always floats — no continuation surface without a keyboard.
-        assertFalse(TermuxActivity.shouldShowDecorNavBarSurface(
-            true, false, 72, false, true, false));
+    public void onHomeTheKeyboardIsNeverOneSurfaceWithTheDock() {
+        assertFalse(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
+            true, true, false, true, false));
+        assertTrue(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
+            true, true, false, true, true));
     }
 
     @Test
@@ -191,6 +175,19 @@ public class TermuxActivityInAppKeyboardGeometryTest {
             false, true, false, true));
         assertFalse(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
             true, false, false, true));
+    }
+
+    @Test
+    public void theSharedGlassIsLaidOutOverTheKeyboardOnceItReachesTheStacksBottom() {
+        // Pong's Terminal at rest: a 1063 px stack, the host 199 px below its top (the lane
+        // slack and the top inset), 864 px tall, over a 588 px keyboard. Its height is never the
+        // stack's, but it covers the keyboard: the keyboard wears no coat of its own.
+        assertTrue(ChromePolicy.unifiedHostLaidOut(1063, 864, 1063, 588));
+        // Still laid out for the dock alone: it stops short of the stack's bottom.
+        assertFalse(ChromePolicy.unifiedHostLaidOut(450, 251, 1063, 588));
+        // No taller than the keyboard: the old dock-only state.
+        assertFalse(ChromePolicy.unifiedHostLaidOut(1063, 588, 1063, 588));
+        assertFalse(ChromePolicy.unifiedHostLaidOut(1063, 864, 0, 588));
     }
 
     @Test
@@ -225,20 +222,6 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         // ...and not while surfaces are normalized, which is what left the keyboard lighter than
         // every other surface until the keyboard section was reset by hand.
         assertFalse(ChromePolicy.hasInAppKeyboardBackgroundOverride(true, 0xFF203040, 60, 46));
-    }
-
-    @Test
-    public void blurredUnifiedKeyboardRevealWaitsOnlyForDestinationBackdrop() {
-        assertTrue(KeyboardGeometryChoreographer.shouldDeferReveal(
-            true, true, true, false));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
-            true, true, true, true));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
-            false, true, true, false));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
-            true, false, true, false));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(
-            true, true, false, false));
     }
 
     @Test
@@ -308,9 +291,16 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         mController.toggle(TermuxInAppKeyboard.ToggleReason.KEYBOARD_ACTION);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals(View.GONE, keyboardContainer.getVisibility());
-        assertEquals(View.GONE, accessoryContainer.getVisibility());
-        assertEquals(0, accessoryContainer.getLayoutParams().height);
+        // A docked in-app keyboard that is on stays laid out while it is down; down is the
+        // stack scene's translation (StackScene.keyboardTranslationPx), not GONE.
+        assertFalse(mController.isVisible());
+        assertEquals(View.VISIBLE, keyboardContainer.getVisibility());
+        // This fixture's stack holds the keyboard alone (no dock rows, no status bar). The
+        // keyboard is always laid out, so the container stays laid out with it, as tall as the
+        // keyboard-up stack, and the scene translates it down; DockRows.stackShown (what the
+        // readers ask) still says the stack has nothing to show.
+        assertEquals(View.VISIBLE, accessoryContainer.getVisibility());
+        assertEquals(shownHeight, accessoryContainer.getLayoutParams().height);
 
         mController.toggle(TermuxInAppKeyboard.ToggleReason.KEYBOARD_ACTION);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
@@ -364,6 +354,10 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         preferences.setAppLauncherAppsRowEnabled(true);
         preferences.setAppLauncherAzRowEnabled(false);
         TerminalView terminalView = mActivity.findViewById(R.id.terminal_view);
+        // The terminal's room is its page's own rest, written into the wall.
+        preferences.setAppLauncherWidgetPaneEnabled(true);
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_TERMINAL);
+        buildWall().landOnColdStart(preferences.getLauncherStartIn());
 
         ReflectionHelpers.callInstanceMethod(mActivity, "initializeInAppKeyboard",
             ReflectionHelpers.ClassParameter.from(Bundle.class, null));
@@ -425,8 +419,12 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(View.VISIBLE, appsBar.getVisibility());
         assertTrue(dockContentHeight > 0);
         assertEquals(combinedHeight, accessoryContainer.getLayoutParams().height);
-        assertEquals(accessoryContainer.getTop(), terminalView.getBottom());
-        assertEquals(rootRelativeLayout.getHeight() - combinedHeight, terminalView.getHeight());
+        // The page's room is the rest's, the stack's height: it ends at the stack's top, and
+        // starts where the wall puts its frame.
+        assertEquals(accessoryContainer.getTop(),
+            terminalTopInRoot(terminalView) + terminalView.getHeight());
+        assertEquals(rootRelativeLayout.getHeight() - combinedHeight
+            - terminalTopInRoot(terminalView), terminalView.getHeight());
     }
 
     @Test
@@ -527,7 +525,8 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         assertTrue(mController.isEnabled());
         assertFalse(mController.isVisible());
-        assertEquals(View.GONE,
+        // Hidden, the docked keyboard is still laid out (down is a translation).
+        assertEquals(View.VISIBLE,
             mActivity.findViewById(R.id.inapp_keyboard_container).getVisibility());
     }
 
@@ -542,7 +541,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         PaneWallController wall = buildWall();
         wall.landOnColdStart(preferences.getLauncherStartIn());
-        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(PageKind.HOME, wall.currentPage());
 
         // The keyboard is built after the wall, remembering itself up (no saved state).
         hostKeyboard(null);
@@ -551,7 +550,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
         // And the wall put it down, not the user: the terminal gets it back like it does after
         // any Widgets -> Terminal move.
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         assertTrue(mController.isVisible());
     }
 
@@ -560,11 +559,11 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     public void coldStartOnTheTerminalKeepsTheRestoredKeyboardState() {
         TermuxAppSharedPreferences preferences = prepareActivity(true);
         preferences.setAppLauncherWidgetPaneEnabled(true);
-        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_WORKSPACE);
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_TERMINAL);
 
         PaneWallController wall = buildWall();
         wall.landOnColdStart(preferences.getLauncherStartIn());
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
 
         hostKeyboard(null);
         assertTrue(mController.isVisible());
@@ -581,7 +580,11 @@ public class TermuxActivityInAppKeyboardGeometryTest {
 
     @Test
     public void liveHeightPreviewInvalidatesCachedKeyboardAndTerminalGeometry() {
-        createActivityHostedController(null);
+        TermuxAppSharedPreferences preferences = prepareActivity(true);
+        preferences.setAppLauncherWidgetPaneEnabled(true);
+        preferences.setLauncherStartIn(com.termux.app.wall.WallRow.START_IN_TERMINAL);
+        buildWall().landOnColdStart(preferences.getLauncherStartIn());
+        hostKeyboard(null);
         float initialMarginScale = mActivity.getPreferences().getInAppKeyboardKeyMarginScale();
         float initialRadiusDp = mActivity.getPreferences().getInAppKeyboardKeyCornerRadiusDp();
         layoutActivityRoot();
@@ -600,8 +603,9 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertTrue(previewHeight > initialHeight);
         assertEquals(previewHeight, accessory.getLayoutParams().height);
         assertEquals(previewHeight, keyboard.getHeight());
-        assertEquals(accessory.getTop(), terminal.getBottom());
-        assertEquals(root.getHeight() - previewHeight, terminal.getHeight());
+        assertEquals(accessory.getTop(), terminalTopInRoot(terminal) + terminal.getHeight());
+        assertEquals(root.getHeight() - previewHeight - terminalTopInRoot(terminal),
+            terminal.getHeight());
         assertFalse(keyboardHeightDirty());
 
         Keyboard2View keyboardView = (Keyboard2View) ReflectionHelpers.getField(
@@ -625,7 +629,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(initialHeight, desiredKeyboardHeightPx());
         assertEquals(initialHeight, accessory.getLayoutParams().height);
         assertEquals(initialHeight, keyboard.getHeight());
-        assertEquals(accessory.getTop(), terminal.getBottom());
+        assertEquals(accessory.getTop(), terminalTopInRoot(terminal) + terminal.getHeight());
         assertEquals(initialMarginScale, keyboardView.getKeyMarginScale(), 0.0001f);
         assertEquals(initialRadiusDp * mActivity.getResources().getDisplayMetrics().density,
             keyboardView.getKeyCornerRadiusOverride(), 0.0001f);
@@ -743,6 +747,17 @@ public class TermuxActivityInAppKeyboardGeometryTest {
             ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
             layoutActivityRoot();
         }
+    }
+
+    /** Where the terminal view's top stands below the root relative layout's, from the layout. */
+    private int terminalTopInRoot(View terminal) {
+        View root = mActivity.findViewById(R.id.activity_termux_root_relative_layout);
+        int top = 0;
+        for (View v = terminal; v != null && v != root; v = v.getParent() instanceof View
+            ? (View) v.getParent() : null) {
+            top += v.getTop();
+        }
+        return top;
     }
 
     private void layoutActivityRoot() {

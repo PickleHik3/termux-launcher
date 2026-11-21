@@ -14,10 +14,11 @@ import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /** The preset tiles stand centred in the room they are given (the upgrade nudge's row). */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PreviewTilesCentredTest {
 
     @Test

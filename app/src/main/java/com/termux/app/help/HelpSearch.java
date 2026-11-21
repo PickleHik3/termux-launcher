@@ -2,13 +2,13 @@ package com.termux.app.help;
 
 import android.content.Context;
 
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import com.termux.app.page.PageKind;
 
 /**
  * One search over everything help knows: every topic, every fix and every glossary term, whatever
@@ -66,7 +66,7 @@ public final class HelpSearch {
     }
 
     /** The convenience the views use. */
-    public static List<Result> search(String query, PaneWallPage place, Context context) {
+    public static List<Result> search(String query, PageKind place, Context context) {
         return search(query, place, text(context));
     }
 
@@ -74,7 +74,7 @@ public final class HelpSearch {
      * Results best first. A blank query returns nothing — help home shows suggestions instead of
      * pretending everything matched.
      */
-    public static List<Result> search(String query, PaneWallPage place, HelpTopics.Text text) {
+    public static List<Result> search(String query, PageKind place, HelpTopics.Text text) {
         String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         if (needle.isEmpty()) return Collections.emptyList();
         List<Result> found = new ArrayList<>();

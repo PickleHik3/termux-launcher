@@ -1,8 +1,6 @@
 package com.termux.ai;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -16,7 +14,6 @@ import static org.junit.Assert.assertTrue;
  * Memory-mode choice and the image kind's place in the residency table. Sizes are the published
  * packages': Stable Diffusion 1.5 is 1.15 GB; the phone is pong (12 GB class).
  */
-@RunWith(RobolectricTestRunner.class)
 public class TaiImageAdmissionTest {
     /** A phone small enough that the fixed floors apply (the RAM-share rule gives less), so the plan arithmetic below holds. */
     private static final long SMALL_TOTAL = 4L * 1024L * 1024L * 1024L;

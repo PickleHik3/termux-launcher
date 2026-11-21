@@ -119,8 +119,11 @@ public final class SettingsSearchIndex {
 
     /** Rows a page hides on a phone that lacks their feature, so a result never points at nothing. */
     private static boolean hiddenOnThisPhone(@Nullable String key) {
-        return ("terminal_retro_effect".equals(key) && !com.termux.app.terminal.PaneRetroEffect.available())
-            || ("terminal_engine".equals(key) && !com.termux.terminal.TerminalEngine.isAvailable());
+        return (("terminal_retro_effect".equals(key) || "terminal_screen_events".equals(key)
+                || "terminal_retro_composite".equals(key))
+                && !com.termux.app.terminal.PaneRetroEffect.available())
+            || (("terminal_engine".equals(key) || "terminal_clipboard_read_reset".equals(key))
+                && !com.termux.terminal.TerminalEngine.isAvailable());
     }
 
     /** Reads give the default; writes go nowhere. */
@@ -202,6 +205,11 @@ public final class SettingsSearchIndex {
         for (int i = 0; i < mEntries.size(); i++) {
             Entry entry = mEntries.get(i);
             if (hidden != null && entry.section == hidden) continue;
+            // A Home card row found through the Appearance door goes with Home's section.
+            if (hidden == SettingsTree.Section.HOME && entry.key != null
+                && entry.section == SettingsTree.Section.APPEARANCE
+                && com.termux.app.fragments.settings.termux.SettingsEditorDoors.isHomeOnlyKey(entry.key))
+                continue;
             int rank = rank(entry, needle, words);
             if (rank < 0) continue;
             int scoped = scope != null && entry.section == scope ? 0 : 1;

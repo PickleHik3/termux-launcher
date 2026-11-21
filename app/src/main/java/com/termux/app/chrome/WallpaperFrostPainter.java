@@ -1,6 +1,8 @@
 package com.termux.app.chrome;
 
 import android.graphics.Bitmap;
+import android.graphics.ColorFilter;
+import android.graphics.drawable.Drawable;
 import android.graphics.Rect;
 import android.view.View;
 import android.widget.ImageView;
@@ -49,12 +51,12 @@ public final class WallpaperFrostPainter {
     }
 
     /** What a frost view shows now, so a hide from elsewhere is not skipped over. */
-    private void addFrostState(@Nullable ImageView frost) {
+    private void addFrostState(@Nullable Slot frost) {
         if (frost == null) {
             mPassGate.add(-1);
             return;
         }
-        mPassGate.add(frost.getVisibility()).add(frost.getDrawable() != null);
+        mPassGate.add(frost.shown()).add(frost.drawable() != null);
     }
 
     WallpaperFrostPainter(@NonNull ChromeRenderer.Surfaces surfaces,
@@ -79,9 +81,9 @@ public final class WallpaperFrostPainter {
         // Ride the same triggers: every state change that can move or restyle the top-pane frost
         // can move the terminal's glass pane too.
         mSurfaces.updateTerminalGlassFrost();
-        ImageView statusFrost = frostView(R.id.terminal_status_bar_wallpaper_backdrop);
-        ImageView paneFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop);
-        ImageView sideFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop_side);
+        Slot statusFrost = barSlot(R.id.terminal_status_bar_glass_surface);
+        Slot paneFrost = barSlot(R.id.terminal_window_bar_background);
+        Slot sideFrost = barSlot(R.id.terminal_window_bar_background_side);
         if (statusFrost == null || paneFrost == null) {
             mPassGate.invalidate();
             mSurfaces.onWindowBarFrostEdge(false);
@@ -177,16 +179,17 @@ public final class WallpaperFrostPainter {
             mLedger.setFrostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE, blurRadiusDp);
         }
         // Last, once the frost is where it will stay this pass: the bar's stroke follows it.
-        mSurfaces.onWindowBarFrostEdge(paneApplied && GlassSurfaceFactory.frostDrawsEdge(paneFrost));
+        mSurfaces.onWindowBarFrostEdge(paneApplied && paneFrost.drawsEdge());
     }
+
 
     public void clearTopPane() {
         mPassGate.invalidate();
-        ImageView statusFrost = frostView(R.id.terminal_status_bar_wallpaper_backdrop);
-        ImageView paneFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop);
+        Slot statusFrost = barSlot(R.id.terminal_status_bar_glass_surface);
+        Slot paneFrost = barSlot(R.id.terminal_window_bar_background);
         if (statusFrost != null) hide(statusFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
         if (paneFrost != null) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
-        ImageView sideFrost = frostView(R.id.terminal_window_bar_wallpaper_backdrop_side);
+        Slot sideFrost = barSlot(R.id.terminal_window_bar_background_side);
         if (sideFrost != null) hide(sideFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR_SIDE);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET);
@@ -203,7 +206,7 @@ public final class WallpaperFrostPainter {
      * the full glass pane and the pane's animated outline clips it.
      */
     public boolean applyCommandPalette(@NonNull ImageView frost) {
-        return applyFrost(frost, glassOf(frost, null), topGlassFrostRadiusDp(),
+        return applyFrost(new ImageSlot(frost), glassOf(frost, null), topGlassFrostRadiusDp(),
             SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE,
             SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE, mSurfaces.planeGlassCornerRadiusPx(), 0,
             sheetsCover(), sheets(), true);
@@ -217,7 +220,7 @@ public final class WallpaperFrostPainter {
      * heights and sharing the palette's made every alternation between them re-aim.
      */
     public boolean applyTerminalSheet(@NonNull ImageView frost) {
-        return applyFrost(frost, glassOf(frost, mSurfaces.findChromeView(R.id.terminal_sheet_host)),
+        return applyFrost(new ImageSlot(frost), glassOf(frost, mSurfaces.findChromeView(R.id.terminal_sheet_host)),
             topGlassFrostRadiusDp(),
             SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET,
             SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE, mSurfaces.planeGlassCornerRadiusPx(), 0,
@@ -232,7 +235,7 @@ public final class WallpaperFrostPainter {
      * installed; the frost spans the full glass pane and the plane's animated outline clips it.
      */
     public boolean applyAppDrawer(@NonNull ImageView frost) {
-        return applyFrost(frost, glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
+        return applyFrost(new ImageSlot(frost), glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
             SurfaceDirtyLedger.FrostRect.APP_DRAWER,
             SurfaceDirtyLedger.FrostRadius.APP_DRAWER, mSurfaces.planeGlassCornerRadiusPx(), 0,
             sheetsCover(), sheets(), true);
@@ -264,7 +267,7 @@ public final class WallpaperFrostPainter {
                                      @NonNull SurfaceDirtyLedger.FrostRect rectKey,
                                      float cornerRadiusPx, int seams) {
         followMoves(frost);
-        return applyFrost(frost, glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
+        return applyFrost(new ImageSlot(frost), glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
             rectKey, SurfaceDirtyLedger.FrostRadius.OFF_DOCK, cornerRadiusPx, seams, dockCover(),
             dock());
     }
@@ -275,7 +278,7 @@ public final class WallpaperFrostPainter {
      */
     public void hideOffDockSheet(@NonNull ImageView frost,
                                  @NonNull SurfaceDirtyLedger.FrostRect rectKey) {
-        hide(frost, rectKey);
+        hide(new ImageSlot(frost), rectKey);
     }
 
     /** The frosts {@link #followMoves} already watches. */
@@ -328,7 +331,7 @@ public final class WallpaperFrostPainter {
      * @param cornerRadiusPx the rounded rect the rim follows: the surface's own corner
      * @param seams          edges another glass surface continues past; see {@link GlassRefraction#rimRect}
      */
-    private boolean applyFrost(@NonNull ImageView frost, @Nullable View boundsView, int blurRadiusDp,
+    private boolean applyFrost(@NonNull Slot frost, @Nullable View boundsView, int blurRadiusDp,
                                @NonNull SurfaceDirtyLedger.FrostRect rectKey,
                                @NonNull SurfaceDirtyLedger.FrostRadius radiusKey,
                                float cornerRadiusPx, int seams, float cover,
@@ -342,7 +345,7 @@ public final class WallpaperFrostPainter {
      *     it (below Android 12, once the software blur has failed) the frost is its picture over the
      *     launcher's own wallpaper too
      */
-    private boolean applyFrost(@NonNull ImageView frost, @Nullable View boundsView, int blurRadiusDp,
+    private boolean applyFrost(@NonNull Slot frost, @Nullable View boundsView, int blurRadiusDp,
                                @NonNull SurfaceDirtyLedger.FrostRect rectKey,
                                @NonNull SurfaceDirtyLedger.FrostRadius radiusKey,
                                float cornerRadiusPx, int seams, float cover,
@@ -359,7 +362,7 @@ public final class WallpaperFrostPainter {
         boundsView.getLocationOnScreen(mTmpViewLocation);
         Rect targetRect = new Rect(mTmpViewLocation[0], mTmpViewLocation[1],
             mTmpViewLocation[0] + boundsView.getWidth(), mTmpViewLocation[1] + boundsView.getHeight());
-        SharedFrameDrawable installed = SharedFrameDrawable.of(frost.getDrawable());
+        SharedFrameDrawable installed = SharedFrameDrawable.of(frost.drawable());
         GlassRefraction.Look look = glass.refraction();
         if (installed != null) refract(installed, look, cornerRadiusPx, seams, cover);
         Bitmap frame = mBlurCache.obtain(blurRadiusDp, wallpaperFrame);
@@ -384,17 +387,18 @@ public final class WallpaperFrostPainter {
         // WallpaperBlurCache.isCrossfadedRadius. A rotation or a radius change never sets that
         // flag, so those keep landing the way they always have: on the next frame, all at once.
         boolean crossfade = installed != null && mBlurCache.isCrossfadedRadius(blurRadiusDp)
-            && !ReducedMotion.isEnabled(frost.getContext());
+            && !ReducedMotion.isEnabled(frost.view().getContext());
         if (installed != null) {
             installed.setFrame(frame, frameRect, crossfade);
         } else {
             installed = new SharedFrameDrawable(frame, frameRect,
-                mSurfaces.wallpaperParallax(), GlassAnchor.screen(frost));
+                mSurfaces.wallpaperParallax(), GlassAnchor.screen(frost.view()));
             refract(installed, look, cornerRadiusPx, seams, cover);
-            frost.setImageDrawable(installed);
+            frost.setDrawable(installed);
         }
         clarify(installed, look, blurRadiusDp, wallpaperFrame);
         frost.setColorFilter(GlassFilters.frost());
+        frost.setParallax(mSurfaces.wallpaperParallax());
         mLedger.setFrostRadiusDp(radiusKey, blurRadiusDp);
         show(frost, rectKey, targetRect);
         return true;
@@ -415,10 +419,10 @@ public final class WallpaperFrostPainter {
      * Fancier Glass look with that element's own Depth and Edge where it holds them (ADR 0017).
      */
     private final class ElementOn {
-        @NonNull final com.termux.shared.termux.settings.preferences.LookGrid.Element element;
+        @Nullable final com.termux.shared.termux.settings.preferences.LookGrid.Element element;
         final int page;
 
-        ElementOn(@NonNull com.termux.shared.termux.settings.preferences.LookGrid.Element element,
+        ElementOn(@Nullable com.termux.shared.termux.settings.preferences.LookGrid.Element element,
                   int page) {
             this.element = element;
             this.page = page;
@@ -433,12 +437,12 @@ public final class WallpaperFrostPainter {
 
     @NonNull private ElementOn status() { return new ElementOn(com.termux.shared.termux.settings.preferences.LookGrid.Element.STATUS, mSurfaces.statusLookPage()); }
     @NonNull private ElementOn dock() { return new ElementOn(com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, mSurfaces.stackLookPage()); }
-    @NonNull private ElementOn sheets() { return new ElementOn(com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, mSurfaces.stackLookPage()); }
+    /** The sheets wear Global's glass (the all-glass cell), not an element's own. */
+    @NonNull private ElementOn sheets() { return new ElementOn(null, mSurfaces.stackLookPage()); }
 
-    /** What a sheet's tint (the Sheets element's opacity) covers of its frost. */
+    /** What a sheet's tint (Global's opacity, raised to the sheets' floor) covers of its frost. */
     private float sheetsCover() {
-        return ElementGlass.of(mSurfaces.preferences(), com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS,
-            mSurfaces.stackLookPage()).tintAlpha();
+        return SheetGlass.of(mSurfaces.preferences()).tintAlpha();
     }
 
     /** What the status bar's tint covers of its frost. */
@@ -486,24 +490,85 @@ public final class WallpaperFrostPainter {
      * last pass: a plane animating open, a bar that changed edge. The drawable re-aims on every
      * draw, but a view whose ancestor moved is not redrawn on its own.
      */
-    private void show(@NonNull ImageView frost, @NonNull SurfaceDirtyLedger.FrostRect rectKey,
+    private void show(@NonNull Slot frost, @NonNull SurfaceDirtyLedger.FrostRect rectKey,
                       @NonNull Rect targetRect) {
         if (!mLedger.matchesFrostRect(rectKey, targetRect)) {
             mLedger.recordFrostRect(rectKey, targetRect);
             frost.invalidate();
         }
-        frost.setVisibility(View.VISIBLE);
+        frost.setShown(true);
     }
 
-    private void hide(@NonNull ImageView frost, @NonNull SurfaceDirtyLedger.FrostRect rectKey) {
-        frost.setImageDrawable(null);
-        frost.setVisibility(View.GONE);
+    private void hide(@NonNull Slot frost, @NonNull SurfaceDirtyLedger.FrostRect rectKey) {
+        frost.setDrawable(null);
+        frost.setShown(false);
         mLedger.clearFrostRect(rectKey);
     }
 
+    /** The frost slot a bar's glass view holds, or null when the view is not one. */
     @Nullable
-    private ImageView frostView(int viewId) {
+    private Slot barSlot(int viewId) {
         View view = mSurfaces.findChromeView(viewId);
-        return view instanceof ImageView ? (ImageView) view : null;
+        if (!(view instanceof BarGlassView)) return null;
+        BarGlassView bar = (BarGlassView) view;
+        BarSlot slot = mBarSlots.get(bar);
+        if (slot == null) {
+            slot = new BarSlot(bar);
+            mBarSlots.put(bar, slot);
+        }
+        return slot;
+    }
+
+    /** The bar slots made so far, one per glass view, so a pass allocates none. */
+    @NonNull private final java.util.Map<BarGlassView, BarSlot> mBarSlots =
+        new java.util.WeakHashMap<>();
+
+    /**
+     * Where a frost lives: an ImageView of its own (the planes, sheets and plank) or inside a bar's
+     * glass view. The passes show, hide and aim either one the same way.
+     */
+    private interface Slot {
+        @NonNull View view();
+        @Nullable Drawable drawable();
+        void setDrawable(@Nullable Drawable drawable);
+        void setColorFilter(@Nullable ColorFilter filter);
+        void setParallax(@Nullable WallpaperParallax parallax);
+        void setShown(boolean shown);
+        boolean shown();
+        void invalidate();
+        /** Whether the frost is up and its program draws the edge ({@link GlassSurfaceFactory#frostDrawsEdge}). */
+        boolean drawsEdge();
+    }
+
+    private static final class ImageSlot implements Slot {
+        @NonNull private final ImageView mFrost;
+
+        ImageSlot(@NonNull ImageView frost) { mFrost = frost; }
+
+        @Override @NonNull public View view() { return mFrost; }
+        @Override @Nullable public Drawable drawable() { return mFrost.getDrawable(); }
+        @Override public void setDrawable(@Nullable Drawable drawable) { mFrost.setImageDrawable(drawable); }
+        @Override public void setColorFilter(@Nullable ColorFilter filter) { mFrost.setColorFilter(filter); }
+        @Override public void setParallax(@Nullable WallpaperParallax parallax) { }
+        @Override public void setShown(boolean shown) { mFrost.setVisibility(shown ? View.VISIBLE : View.GONE); }
+        @Override public boolean shown() { return mFrost.getVisibility() == View.VISIBLE; }
+        @Override public void invalidate() { mFrost.invalidate(); }
+        @Override public boolean drawsEdge() { return GlassSurfaceFactory.frostDrawsEdge(mFrost); }
+    }
+
+    private static final class BarSlot implements Slot {
+        @NonNull private final BarGlassView mBar;
+
+        BarSlot(@NonNull BarGlassView bar) { mBar = bar; }
+
+        @Override @NonNull public View view() { return mBar; }
+        @Override @Nullable public Drawable drawable() { return mBar.getFrost(); }
+        @Override public void setDrawable(@Nullable Drawable drawable) { mBar.setFrost(drawable); }
+        @Override public void setColorFilter(@Nullable ColorFilter filter) { mBar.setFrostColorFilter(filter); }
+        @Override public void setParallax(@Nullable WallpaperParallax parallax) { mBar.setParallax(parallax); }
+        @Override public void setShown(boolean shown) { mBar.setFrostShown(shown); }
+        @Override public boolean shown() { return mBar.frostShown(); }
+        @Override public void invalidate() { mBar.invalidate(); }
+        @Override public boolean drawsEdge() { return GlassSurfaceFactory.frostDrawsEdge(mBar); }
     }
 }

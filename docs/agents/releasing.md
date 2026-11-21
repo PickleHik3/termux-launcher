@@ -57,6 +57,9 @@ name. `versionCode` stays **1020** for upstream parity — never change it. The 
 - **Nightlies** (`debug_build.yml`) build as `X.Y.Z+dev.<shortsha>`: semver build metadata, so a
   nightly sorts equal to the release it follows. That string is the in-app `versionName` and goes
   verbatim into the APK name. The TAI bench groups results by the `X.Y.Z` core only.
+  A manual run can ask for `build_type: release`: the same commit built as a published APK is
+  (not debuggable, test key, split per ABI), named `X.Y.Z+rel.<shortsha>`, for comparing speed
+  on a tester's phone: `gh workflow run debug_build.yml --ref <branch> -f build_type=release`.
   Pushes to `dev` prune artifacts to the newest two runs per live branch (`prune_artifacts.yml`), so
   a nightly APK must be fetched from one of the last two runs or built from the tag.
 - **APK names** follow one pattern, release and nightly alike:
@@ -78,7 +81,13 @@ First the owed checks: run `project-docs/device-checks.md` (agent-drivable) and 
 developer has accepted what is left. **Accepted items are
 recorded** in the body of the `main` `release:` commit, one `Accepted owed: <item>` line each, and
 deleted from the checks file in the same pass. A minor cut first promotes from `pre`
-("Promoting from `pre` to a stable" below). Then, per edition, as in `Release v1.0.1 (merge dev into io-vaj-package)` followed by `release: vaj-v1.0.1`:
+("Promoting from `pre` to a stable" below). **For 2.0.0 only:** raise
+`AppearanceReset.NUMBER` by one on `pre` before the promotion, so pre-release testers' looks reset a
+second time and every 2.0 user starts on the default look; never raise it for any other release
+without the developer's say. Number 1 also covers the one-look model (ADR 0031, #290): the
+first drop that carries it must still carry 1 unreleased, so the same reset deletes the old
+model's per-kind, per-page and per-surface look keys; if a release carrying 1 ships first, raise it
+to 2 with that drop. Then, per edition, as in `Release v1.0.1 (merge dev into io-vaj-package)` followed by `release: vaj-v1.0.1`:
 merge `dev`, then set `versionName` to the plain `X.Y.Z` in a `release:` commit (it **must** equal
 the tag minus its edition prefix and `v`, or CI aborts), push, tag, `gh release create --draft
 --notes-file …` (never `--prerelease` on a stable), then dispatch `attach_debug_apks_to_release.yml`

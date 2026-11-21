@@ -34,22 +34,19 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 public final class LauncherIconStore {
 
     /**
-     * The largest artwork worth keeping. The drawer grid clamps its icons to
-     * {@code AppDrawerGridMetrics.MAX_ICON_DP} (48dp) and the dock rail asks for 38dp, so on any
-     * ordinary density this is comfortably above every size anything renders at; a request beyond
-     * it upscales slightly rather than failing. At 284x284 an {@code ARGB_8888} icon costs 323 KB
-     * and at 192x192 it costs 147 KB, which is the difference between a budget that holds a
-     * catalogue and one that thrashes through it.
+     * The smallest per-icon cap, which is also the cap on a normal phone: the drawer grid draws
+     * its icons at 48dp on Auto and at most 60dp at the largest Icon size step, and the dock rail
+     * asks for 38dp, so up to a density of 3.2 this covers every size anything renders at. A
+     * denser display with a larger icon raises the cap ({@link #setLargestIconDp}, rule and
+     * numbers in {@link IconArtworkPolicy}) and the budget with it. At 284x284 an
+     * {@code ARGB_8888} icon costs 323 KB and at 192x192 it costs 147 KB, which is the difference
+     * between a budget that holds a catalogue and one that thrashes through it.
      */
     @VisibleForTesting
-    static final int MAX_RETAINED_PX = 192;
+    static final int MAX_RETAINED_PX = IconArtworkPolicy.BASE_PX;
 
-    /** Smallest artwork budget we will hand out, even on a memory-starved device. */
-    private static final int MIN_BYTES = 4 * 1024 * 1024;
-    /** Ceiling regardless of how generous the heap is: ~110 icons at the retained size. */
-    private static final int MAX_BYTES = 16 * 1024 * 1024;
-    /** Fraction of the per-app heap raw artwork may hold (1/16th). */
-    private static final int HEAP_DIVISOR = 16;
+    /** The largest icon, in dp, assumed until an owner says otherwise: Auto's and the dock's 48dp. */
+    private static final float DEFAULT_LARGEST_ICON_DP = 48f;
 
     /**
      * Produces an app's raw artwork when it is not held. Runs on whichever thread asked — for the
@@ -97,6 +94,10 @@ public final class LauncherIconStore {
     @NonNull private final Resources resources;
     @NonNull private final ArtworkLoader loader;
     @NonNull private final LruCache<String, Drawable> cache;
+    private final int memoryClassMb;
+    private final float density;
+    /** The per-icon cap now in force; see {@link IconArtworkPolicy}. */
+    private volatile int capPx;
     /** Which icon packs produced the held artwork. See {@link #artworkKey}. */
     @NonNull private volatile String iconPackIdentity = "";
     /**
@@ -110,7 +111,11 @@ public final class LauncherIconStore {
                              @NonNull ArtworkLoader loader) {
         this.resources = resources;
         this.loader = loader;
-        this.cache = new LruCache<String, Drawable>(resolveBudgetBytes(memoryClassMb)) {
+        this.memoryClassMb = memoryClassMb;
+        this.density = resources.getDisplayMetrics().density;
+        this.capPx = IconArtworkPolicy.capPx(density, DEFAULT_LARGEST_ICON_DP);
+        this.cache = new LruCache<String, Drawable>(
+            IconArtworkPolicy.budgetBytes(memoryClassMb, capPx)) {
             @Override
             protected int sizeOf(String key, Drawable value) {
                 return DrawablePixels.heldBytes(value);
@@ -118,9 +123,34 @@ public final class LauncherIconStore {
         };
     }
 
-    /** One sixteenth of the per-app heap, clamped into [4MB, 16MB]. */
+    /** One sixteenth of the per-app heap, clamped into [4MB, 16MB]: the budget at the base cap. */
     public static int resolveBudgetBytes(int memoryClassMb) {
-        return HeapBudget.of(memoryClassMb, HEAP_DIVISOR, MIN_BYTES, MAX_BYTES);
+        return IconArtworkPolicy.budgetBytes(memoryClassMb, IconArtworkPolicy.BASE_PX);
+    }
+
+    /**
+     * Tells the store the largest icon any surface will draw, in dp (the drawer's resolved size,
+     * Home's size preset, the dock's), so the cap and budget follow the screen. When the cap
+     * rises everything held is dropped, since it was shrunk to the old cap and would stay soft;
+     * the next reads load at the new one. When it falls the held artwork stays until it is
+     * evicted, {@code sizeOf} counts the pixels it really holds, and the smaller budget trims it.
+     *
+     * @return true when the cap rose and the store was dropped, so renders made from the old
+     *         artwork are stale too.
+     */
+    public boolean setLargestIconDp(float largestIconDp) {
+        int next = IconArtworkPolicy.capPx(density, largestIconDp);
+        if (next == capPx) return false;
+        boolean raised = next > capPx;
+        capPx = next;
+        if (raised) invalidateAll();
+        cache.resize(IconArtworkPolicy.budgetBytes(memoryClassMb, next));
+        return raised;
+    }
+
+    /** The per-icon cap now in force, in pixels. */
+    public int capPx() {
+        return capPx;
     }
 
     /**
@@ -219,9 +249,9 @@ public final class LauncherIconStore {
         return cache.maxSize();
     }
 
-    /** Artwork is kept no larger than {@link #MAX_RETAINED_PX}, measured by the pixels it holds. */
+    /** Artwork is kept no larger than the cap, measured by the pixels it holds. */
     @Nullable
     private Drawable shrink(@Nullable Drawable source) {
-        return DrawablePixels.shrink(resources, source, MAX_RETAINED_PX);
+        return DrawablePixels.shrink(resources, source, capPx);
     }
 }

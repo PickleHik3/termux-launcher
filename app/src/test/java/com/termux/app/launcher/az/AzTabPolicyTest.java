@@ -259,7 +259,7 @@ public class AzTabPolicyTest {
 
     @Test
     public void theTabRestsInOnePlaceWhicheverWayTheCanvasReaches() {
-        // On the Workspace the canvas reaches 30dp up under the bar while the wall moves and comes
+        // On the Terminal the canvas reaches 30dp up under the bar while the wall moves and comes
         // back down at rest; the pane, and so its text, stays where it is either way.
         AzTabPolicy.Box reaching = new AzTabPolicy.Box(CANVAS.left, CANVAS.top - 30f * D,
             CANVAS.right, CANVAS.bottom);
@@ -293,7 +293,7 @@ public class AzTabPolicyTest {
 
     @Test
     public void theTabStandsInThePanesMarginBesideEveryRow() {
-        // The emulator's Workspace (10-26): 2.625 density, the canvas 24px in from each side, the
+        // The emulator's Terminal (10-26): 2.625 density, the canvas 24px in from each side, the
         // text 46px in. The 20dp half-pill reached 52.5px in and covered the prompt's "~".
         float d = 2.625f;
         float screenW = 1080f;

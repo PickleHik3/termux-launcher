@@ -162,7 +162,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
 
     /**
      * Where a widget gets the Look's glass: the page it stands on, which hands out the Look as a
-     * pane style ({@code LookGlassStyle}: Base's values, never a detached surface's), re-feeds
+     * pane style ({@code LookGlassStyle}: Global's values, never a detached surface's), re-feeds
      * every registered widget whenever the Look or its blur frame moves ({@link #onGlassStyle})
      * and re-aims them as the wall slides ({@link #onGlassMoved}). Every live widget registers
      * while attached, worn or not, since its corners follow the Look too; the page asks for a
@@ -176,17 +176,24 @@ public abstract class BuiltinWidgetView extends FrameLayout
         /** {@code widget} is live on this page, or its switch flipped; idempotent. */
         void addGlassWidget(@NonNull BuiltinWidgetView widget);
         void removeGlassWidget(@NonNull BuiltinWidgetView widget);
-        /** Whether Live blur is in effect now; asked as the page moves, so a field read. */
+        /**
+         * The page bar's pill wants the Look's blur frame too, with no glass widget on the page
+         * (it is not a widget); idempotent.
+         */
+        default void setBarGlassWanted(boolean wanted) {}
+        /** Whether Live blur is in effect now. */
         default boolean liveBlur() { return false; }
         /**
          * {@code slab}'s live picture of what is drawn beneath it, at the Look's blur; null while
-         * Live blur is off or the budget has no room for a widget, and the stored frame stands.
+         * the glass service grants it another kind, and the stored frame stands. {@code redress}
+         * runs when a policy event moves that kind.
          */
         @Nullable
-        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab) {
+        default com.termux.app.chrome.LivePicture attachLiveGlass(@NonNull View slab,
+                                                                  @Nullable Runnable redress) {
             return null;
         }
-        /** {@code slab} shows its stored frame again: its picture and layer can go. */
+        /** {@code slab} stopped wearing glass or left: its glass entry, picture and layer go. */
         default void detachLiveGlass(@NonNull View slab) {}
     }
 
@@ -205,10 +212,10 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /** The alpha of the Look's tint the slab wears; what the card's ground is, see-through. */
     private int wornTintAlpha;
     @Nullable private GlassSource glassSource;
-    /** What {@link WidgetLiveGlass#wants} last answered; the page's moves act only on a change. */
+    /** What {@link WidgetLiveGlass#wants} last answered: the slab holds a glass entry. */
     private boolean liveAsked;
-    /** Scratch for {@link WidgetLiveGlass#nearScreen}. */
-    private final int[] liveLocation = new int[2];
+    /** The glass service moved this slab's kind: it puts up the new one. */
+    private final Runnable liveRedress = this::syncLiveGlass;
     /** Whether the page's ink is the pale one, so the card is the dark one ({@link #resolveStyle}). */
     private boolean inkPale;
     /** Whether the widget wears the Look's glass now: its switch on and no solid fallback. */
@@ -240,8 +247,18 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /** The opaque colour the content stands on, as last measured; the card itself before that. */
     private int groundSurface;
     private final android.graphics.Rect inkRect = new android.graphics.Rect();
+    /** The body and ink {@link #measureInk} last solved, reused. */
+    private final com.termux.app.chrome.WidgetBody.Answer bodyAnswer =
+        new com.termux.app.chrome.WidgetBody.Answer();
     private final int[] inkLocation = new int[2];
     private final int[] inkRootLocation = new int[2];
+    /** The laid-out origin and size the ink was last asked at; see {@link #remeasureIfMoved}. */
+    private final int[] inkAsked = new int[4];
+    private boolean inkAskedSet;
+    private final int[] inkNow = new int[2];
+    private final int[] inkNowRoot = new int[2];
+    /** The wait for the first frame after attach, where the ink is measured once; null when none. */
+    @Nullable private com.termux.app.window.FirstLayout.Handle inkSettle;
     /** A restyle the dress asked for inside a layout pass, built after it. */
     private final Runnable restyle = () -> { if (this.built) rebuild(); };
     @NonNull private BuiltinWidgetSpan span = BuiltinWidgetSpan.ONE_BY_ONE;
@@ -459,6 +476,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
         // Moved on its grid without a new size: what is behind it is new. A memoised ask when it
         // is not; a re-dress of the card's fill and rim only, never a rebuild.
         if (changed) remeasureInk();
+        else remeasureIfMoved();
     }
 
     private void setZoom(float next) {
@@ -687,38 +705,40 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /** The wall moved the page, or the wallpaper panned: the slab re-aims at what is behind it. */
     public final void onGlassMoved() {
         if (slab != null && slab.getVisibility() == VISIBLE) slab.invalidateGlassPosition();
-        // Per frame of a slide: only a page sliding near the screen or away from it changes the answer.
-        if (slab != null && wantsLiveGlass() != liveAsked) syncLiveGlass();
     }
 
     /** {@link WidgetLiveGlass#wants} for this widget as it stands now. */
     private boolean wantsLiveGlass() {
         GlassSource source = glassSource;
-        return source != null && slab != null && WidgetLiveGlass.wants(source.liveBlur(),
-            android.os.Build.VERSION.SDK_INT, glassWorn && slab.getVisibility() == VISIBLE,
-            isShown(), WidgetLiveGlass.nearScreen(this, liveLocation));
+        return source != null && slab != null && WidgetLiveGlass.wants(
+            android.os.Build.VERSION.SDK_INT, glassWorn && slab.getVisibility() == VISIBLE);
     }
 
     /**
-     * Hands the slab Live blur's picture while {@link WidgetLiveGlass#wants} it, or gives the
-     * picture back and lets the slab draw the stored frame. With Live blur off a slab that never
-     * had a picture is not touched, so it draws exactly as it did.
+     * While {@link WidgetLiveGlass#wants} it the slab holds a glass entry and draws the kind the
+     * glass service grants (Live blur's picture, or the stored frame); otherwise it gives the entry
+     * back and draws the stored frame. With Live blur off the grant is the stored frame, so a slab
+     * that never had a picture draws exactly as it did.
      */
     private void syncLiveGlass() {
         com.termux.app.terminal.PaneGlassBackdropView glass = slab;
         if (glass == null) return;
         GlassSource source = glassSource;
         boolean want = wantsLiveGlass();
+        boolean wasAsked = liveAsked;
         liveAsked = want;
         if (want) {
-            glass.setLivePicture(source.attachLiveGlass(glass));
-        } else if (glass.livePicture() != null) {
+            glass.setLivePicture(source.attachLiveGlass(glass, liveRedress));
+        } else if (wasAsked || glass.livePicture() != null) {
             glass.setLivePicture(null);
             if (source != null) source.detachLiveGlass(glass);
         }
     }
 
-    /** The widget, its page or Home itself shown or hidden: a hidden page gives its pictures back. */
+    /**
+     * The widget, its page or Home itself shown or hidden. The kind stays (a hidden widget holds
+     * no layer); only a slab that stopped wearing glass gives its entry back.
+     */
     @Override public void onVisibilityAggregated(boolean isVisible) {
         super.onVisibilityAggregated(isVisible);
         syncLiveGlass();
@@ -858,25 +878,26 @@ public abstract class BuiltinWidgetView extends FrameLayout
     private boolean measureInk() {
         if (bareWorn) return measureBare();
         com.termux.app.chrome.WidgetInkSource ink = preview ? null : inkSource(fedLook);
-        int lift = glassWorn && wornLook != null
-            ? com.termux.app.chrome.OnGlass.withAlpha(style.card,
-                com.termux.app.chrome.OnGlass.widgetLiftAlpha255(wornTintAlpha))
+        boolean onGlass = glassWorn && wornLook != null;
+        int tint = onGlass ? wornLook.paneGlassTintColor() : android.graphics.Color.TRANSPARENT;
+        int fill = onGlass ? com.termux.app.chrome.WidgetBody.lift(style.card, tint)
             : android.graphics.Color.TRANSPARENT;
-        int fill = lift;
         boolean rim = false;
         int ground = style.card;
+        if (slab != null && (ink == null || !glassWorn)) slab.setEvenOut(null);
         if (ink != null && getWidth() > 0 && getHeight() > 0) {
             com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, inkLocation,
                 inkRootLocation);
             inkRect.set(inkLocation[0], inkLocation[1], inkLocation[0] + getWidth(),
                 inkLocation[1] + getHeight());
-            int body = glassWorn && wornLook != null
-                ? com.termux.app.chrome.OnGlass.composite(lift, wornLook.paneGlassTintColor())
-                : style.card;
-            com.termux.app.chrome.OnGlass.Resolution answer = ink.widgetInk(inkRect, body,
-                style.card, style.onSurfaceVariant, style.primary);
+            noteInkAsked();
+            // The recipe the page bar's pill shares (WidgetBody): lift, body, veil, even-out.
+            com.termux.app.chrome.WidgetBody.solve(ink, inkRect, onGlass, style.card, tint,
+                style.onSurfaceVariant, style.primary, bodyAnswer);
+            com.termux.app.chrome.OnGlass.Resolution answer = bodyAnswer.resolution;
             ground = answer.surface;
-            if (glassWorn) fill = com.termux.app.chrome.OnGlass.stackAlpha(lift, answer.veil);
+            if (slab != null) slab.setEvenOut(glassWorn ? bodyAnswer.evenOut : null);
+            if (glassWorn) fill = bodyAnswer.fill;
             else rim = BuiltinWidgetGlass.edgeRimWanted(style.card, ink.widgetWallpaper(inkRect));
         }
         boolean moved = fill != cardFill || rim != edgeRim;
@@ -908,6 +929,7 @@ public abstract class BuiltinWidgetView extends FrameLayout
                 inkRootLocation);
             inkRect.set(inkLocation[0], inkLocation[1], inkLocation[0] + getWidth(),
                 inkLocation[1] + getHeight());
+            noteInkAsked();
             int wallpaper = ink.widgetWallpaper(inkRect);
             boolean pale = base.dark;
             double text = com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT;
@@ -947,6 +969,26 @@ public abstract class BuiltinWidgetView extends FrameLayout
      * Re-asks the band for where the widget is laid out now, and re-dresses the card if it moved;
      * a Bare widget whose inks moved with it is built again in them.
      */
+    private void noteInkAsked() {
+        inkAsked[0] = inkLocation[0];
+        inkAsked[1] = inkLocation[1];
+        inkAsked[2] = getWidth();
+        inkAsked[3] = getHeight();
+        inkAskedSet = true;
+    }
+
+    /**
+     * Re-asks only when the laid-out origin is not the one last asked at: a widget attached again
+     * with its own frame unchanged, under ancestors that settle after it, is judged on the wallpaper
+     * where it stands. Never for a slide or a transform (the laid-out origin ignores them).
+     */
+    private void remeasureIfMoved() {
+        if (!inkAskedSet || preview || getWidth() <= 0 || getHeight() <= 0) return;
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, inkNow, inkNowRoot);
+        if (inkNow[0] != inkAsked[0] || inkNow[1] != inkAsked[1]
+            || getWidth() != inkAsked[2] || getHeight() != inkAsked[3]) remeasureInk();
+    }
+
     private void remeasureInk() {
         BuiltinWidgetStyle before = style;
         if (measureInk()) applyChrome();
@@ -1099,11 +1141,21 @@ public abstract class BuiltinWidgetView extends FrameLayout
         super.onAttachedToWindow();
         if (!preview) startInternal();
         if (syncGlassRegistration()) restyled();
+        if (!preview && inkSettle == null) {
+            inkSettle = com.termux.app.window.FirstLayout.beforeNextDraw(this, () -> {
+                inkSettle = null;
+                remeasureIfMoved();
+            });
+        }
     }
 
     @Override @CallSuper protected void onDetachedFromWindow() {
+        if (inkSettle != null) {
+            inkSettle.cancel();
+            inkSettle = null;
+        }
         stopInternal();
-        if (slab != null && slab.livePicture() != null) {
+        if (slab != null && (slab.livePicture() != null || liveAsked)) {
             com.termux.app.terminal.PaneGlassBackdropView glass = slab;
             glass.setLivePicture(null);
             if (glassSource != null) glassSource.detachLiveGlass(glass);

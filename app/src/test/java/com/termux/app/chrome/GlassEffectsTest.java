@@ -35,7 +35,6 @@ public class GlassEffectsTest {
         @Nullable @Override public float[] peekGlassRect() { peekReads++; return null; }
         @Nullable @Override public GlassRefraction.Look fancierLook() { return null; }
         @Override public float dockCover() { return 0f; }
-        @Override public float navStripCover() { return 0f; }
         @Override public void applyDockSurfaceGlass(@NonNull GlassRefraction.Program program) {
             surfaceGlassWrites++;
         }
@@ -49,7 +48,6 @@ public class GlassEffectsTest {
         FakeHost host = new FakeHost();
         GlassEffects effects = new GlassEffects(host);
         assertNull(effects.buildDockAndRemember(0f, 0f, 0f, 100f, 50f, 8f));
-        assertNull(effects.buildNavStrip(0f, 0f, 100f, 50f));
         assertFalse(effects.paramsValid());
         assertNull(effects.dockProgram());
         assertEquals(0, host.peekReads);
@@ -82,16 +80,5 @@ public class GlassEffectsTest {
         GlassEffects effects = new GlassEffects(new FakeHost());
         effects.invalidateParams();
         assertFalse(effects.paramsValid());
-    }
-
-    @Test
-    @Config(sdk = Build.VERSION_CODES.TIRAMISU, application = Application.class)
-    public void theNavStripNeverReadsThePeekCardOrTheDockSurface() {
-        FakeHost host = new FakeHost();
-        GlassEffects effects = new GlassEffects(host);
-        effects.buildNavStrip(0f, 0f, 100f, 50f);
-        assertEquals(0, host.peekReads);
-        assertEquals(0, host.surfaceGlassWrites);
-        assertNull(effects.dockProgram());
     }
 }

@@ -26,31 +26,35 @@ public class GlassRowsTest {
         Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
         Row.DEPTH, Row.RIM, Row.TINT_HUE);
 
+    /** The terminal's glass card wears the whole Appearance block until #287 turns it into Background. */
     @Test
-    public void everyGlassCardWearsTheAppearanceBlock() {
-        for (EditorCard card : new EditorCard[] {EditorCard.DOCK, EditorCard.STATUS,
-                EditorCard.TERMINAL, EditorCard.HOME, EditorCard.WORKSPACE, EditorCard.WIDGETS,
-                EditorCard.SHEETS}) {
-            java.util.List<Row> rows = rowsOf(card, ALL);
-            int at = rows.indexOf(Row.SECTION_APPEARANCE);
-            assertTrue(card.toString(), at >= 0);
-            // In group order; a card's own rows (the Dock's Reflection) may stand among them.
-            java.util.List<Row> block = new java.util.ArrayList<>();
-            for (Row row : rows.subList(at, rows.size()))
-                if (BLOCK.contains(row) && block.size() < BLOCK.size()) block.add(row);
-            assertEquals(card.toString(), BLOCK, block);
-        }
+    public void theTerminalCardWearsItsBackgroundAndNoGlassBlock() {
+        // ADR 0031 §4 (#287): Opacity, Blur and Wallpaper dim, its own; the glass block is gone.
+        java.util.List<Row> rows = rowsOf(EditorCard.TERMINAL, ALL);
+        int at = rows.indexOf(Row.SECTION_BACKGROUND);
+        assertTrue(at >= 0);
+        assertEquals(java.util.Arrays.asList(Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY,
+            Row.TERMINAL_BLUR, Row.WALLPAPER_DIM), rows.subList(at, at + 4));
+        for (Row row : BLOCK)
+            assertFalse(row.name(), rows.contains(row));
+        assertFalse(rows.contains(Row.SECTION_APPEARANCE));
     }
 
+    /**
+     * The status bar, the dock and the keyboard own Opacity and Blur only (ADR 0031 §2): their
+     * Appearance holds those two and the surface's own extras, never Grain, Tint or the rest.
+     */
     @Test
-    public void widgetsAndSheetsArePlainGlassCards() {
-        for (EditorCard card : new EditorCard[] {EditorCard.WIDGETS, EditorCard.SHEETS}) {
-            assertEquals(card.toString(), BLOCK, rowsOf(card, ALL));
-            assertFalse(card.hasEye());
+    public void theChromeCardsHoldOpacityAndBlurOnly() {
+        for (EditorCard card : new EditorCard[] {EditorCard.DOCK, EditorCard.STATUS,
+                EditorCard.KEYBOARD}) {
+            java.util.List<Row> rows = rowsOf(card, ALL);
+            assertTrue(card + " Opacity", rows.contains(Row.OPACITY));
+            assertTrue(card + " Blur", rows.contains(Row.FROST));
+            for (Row gone : new Row[] {Row.LOOK, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,
+                    Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.VIBRANCY, Row.LINK_GLASS_REFRACTION})
+                assertFalse(card + " " + gone, rows.contains(gone));
         }
-        assertEquals(LookGrid.Element.SHEETS, EditorChips.elementOf(EditorCard.SHEETS));
-        assertFalse(EditorRows.rows(EditorCard.HOME, ALL).toString().contains("LINK_WIDGETS"));
-        assertTrue(EditorRows.rows(EditorCard.APPEARANCE, ALL).toString().contains("LINK_SHEETS"));
     }
 
     @Test
@@ -130,89 +134,13 @@ public class GlassRowsTest {
         assertTrue(GlassRows.allGlassOnly(Row.MARGIN));
         assertTrue(GlassRows.allGlassOnly(Row.VIBRANCY));
         assertFalse(GlassRows.allGlassOnly(Row.OPACITY));
-        EditorChips dockOnHome = new EditorChips(EditorChips.AppliesTo.HOME, LookGrid.Element.DOCK);
-        LookGrid.Key margin = dockOnHome.cell(GlassRows.cellProperty(Row.MARGIN));
+        EditorChips dock = new EditorChips(LookGrid.Element.DOCK);
+        LookGrid.Key margin = dock.cell(GlassRows.cellProperty(Row.MARGIN));
         assertNull("no element column", margin.element);
-        assertEquals("Home's kind row", LookGrid.Kind.HOME, margin.kind);
-        LookGrid.Key vibrancy = dockOnHome.cell(GlassRows.cellProperty(Row.VIBRANCY));
-        assertNull("no kind row", vibrancy.kind);
+        assertNull(margin.kind);
+        LookGrid.Key vibrancy = dock.cell(GlassRows.cellProperty(Row.VIBRANCY));
+        assertNull(vibrancy.element);
         assertEquals(LookGrid.NO_PAGE, vibrancy.page);
     }
 
-    @Test
-    public void theHomeCardsDepthAndEdgeLandOnHomesKind() {
-        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(),
-            page -> page == 4 ? LookGrid.Kind.HOME : null, null);
-        EditorChips onKind = EditorChips.openFor(EditorCard.HOME, null);
-        for (Row row : new Row[] {Row.DEPTH, Row.GLASS_EDGE}) {
-            LookGrid.Key cell = onKind.cell(GlassRows.cellProperty(row));
-            grid.write(cell, GlassRows.toCell(row, 30));
-            assertEquals(row + " is the kind's", LookGrid.Cell.KIND,
-                grid.resolve(cell.property, null, 4).cell);
-            assertFalse(row + " leaves the wall", grid.has(cell.property, null, LookGrid.NO_PAGE));
-        }
-    }
-
-    /** ADR 0018 §3: the keyboard ships Mist on Home pages and Clear on Display pages. */
-    @Test
-    public void theKeyboardShipsItsOwnLookPerKind() {
-        java.util.Map<Integer, LookGrid.Kind> kinds = new java.util.HashMap<>();
-        kinds.put(1, LookGrid.Kind.HOME);
-        kinds.put(2, LookGrid.Kind.TERMINAL);
-        kinds.put(3, LookGrid.Kind.DISPLAY);
-        LookGrid grid = new LookGrid(new LookGrid.MemoryStore(), kinds::get,
-            SurfacePresets.SHIPPED_BY_KIND);
-        SurfacePresets.ShippedLook mist = SurfacePresets.shippedLook(
-            AppearanceLooks.stopForPresetId("frost"));
-        SurfacePresets.ShippedLook clear = SurfacePresets.shippedLook(
-            AppearanceLooks.stopForPresetId("minimal"));
-        LookGrid.Element keyboard = LookGrid.Element.KEYBOARD;
-
-        assertEquals(FrostStops.MIST, grid.value(LookGrid.Property.FROST, keyboard, 1));
-        assertEquals(60, grid.value(LookGrid.Property.OPACITY, keyboard, 1));
-        assertEquals(mist.tint, grid.value(LookGrid.Property.TINT, keyboard, 1));
-        assertTrue("grain on", grid.value(LookGrid.Property.GRAIN, keyboard, 1) > 0);
-        assertEquals(LookGrid.Cell.SHIPPED, grid.resolve(LookGrid.Property.OPACITY, keyboard, 1).cell);
-
-        assertEquals(FrostStops.CLEAR, clear.frostStop);
-        assertEquals(clear.frostStop, grid.value(LookGrid.Property.FROST, keyboard, 3));
-        assertEquals(10, grid.value(LookGrid.Property.OPACITY, keyboard, 3));
-        assertEquals(10, grid.value(LookGrid.Property.OPACITY, keyboard, LookGrid.Kind.DISPLAY));
-
-        // The Terminal page, the wall and every other element ship one look for every kind.
-        for (LookGrid.Property property : new LookGrid.Property[] {LookGrid.Property.FROST,
-                LookGrid.Property.OPACITY, LookGrid.Property.TINT, LookGrid.Property.GRAIN}) {
-            int plain = new LookGrid(new LookGrid.MemoryStore(), null, null)
-                .value(property, keyboard, LookGrid.NO_PAGE);
-            assertEquals(property.key, plain, grid.value(property, keyboard, 2));
-            assertEquals(property.key, plain, grid.value(property, keyboard, LookGrid.NO_PAGE));
-            for (LookGrid.Element element : LookGrid.Element.values()) {
-                if (element == keyboard) continue;
-                for (int page = 1; page <= 3; page++)
-                    assertEquals(element + " " + property.key + " on " + page,
-                        new LookGrid(new LookGrid.MemoryStore(), null, null)
-                            .value(property, element, LookGrid.NO_PAGE),
-                        grid.value(property, element, page));
-            }
-        }
-    }
-
-    /** The seed writes the app's own kind looks as cells: Mist on Home, Clear on Display. */
-    @Test
-    public void theSeedWritesTheShippedKindLooks() {
-        LookGrid.MemoryStore store = new LookGrid.MemoryStore();
-        assertEquals(6, com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(store,
-            SurfacePresets.SHIPPED_BY_KIND));
-        LookGrid grid = new LookGrid(store, null, null);
-        LookGrid.Element keyboard = LookGrid.Element.KEYBOARD;
-        assertEquals(FrostStops.MIST, grid.value(LookGrid.Property.FROST, keyboard, LookGrid.Kind.HOME));
-        assertEquals(60, grid.value(LookGrid.Property.OPACITY, keyboard, LookGrid.Kind.HOME));
-        assertEquals(0, grid.value(LookGrid.Property.TINT, keyboard, LookGrid.Kind.HOME));
-        assertEquals(FrostStops.CLEAR,
-            grid.value(LookGrid.Property.FROST, keyboard, LookGrid.Kind.DISPLAY));
-        assertEquals(10, grid.value(LookGrid.Property.OPACITY, keyboard, LookGrid.Kind.DISPLAY));
-        assertEquals(0, grid.value(LookGrid.Property.TINT, keyboard, LookGrid.Kind.DISPLAY));
-        assertEquals(LookGrid.Cell.ELEMENT_ON_KIND,
-            grid.resolve(LookGrid.Property.OPACITY, keyboard, LookGrid.Kind.DISPLAY).cell);
-    }
 }

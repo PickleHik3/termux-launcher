@@ -69,6 +69,20 @@ public final class FontSettings {
         preferences.edit().remove(KEY_ACTIVE_FAMILY).apply();
     }
 
+    /**
+     * Forgets the active family and its toggles, as a new install has none; the metered-download
+     * answer is kept. The appearance reset on upgrade calls it after removing the managed config.
+     */
+    public void forgetFamily() {
+        preferences.edit()
+            .remove(KEY_ACTIVE_FAMILY)
+            .remove(KEY_NERD_ICONS)
+            .remove(KEY_LIGATURES)
+            .remove(KEY_RECOMMENDED_FEATURES)
+            .remove(KEY_WEIGHT)
+            .commit();
+    }
+
     /** Whether the user already accepted downloading over a metered connection. */
     public boolean isMeteredWarningSuppressed() {
         return preferences.getBoolean(KEY_METERED_ACK, false);

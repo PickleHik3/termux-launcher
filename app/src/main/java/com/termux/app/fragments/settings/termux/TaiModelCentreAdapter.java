@@ -61,6 +61,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
     static final int TYPE_HEADER = 8;
     /** One Functions row. */
     static final int TYPE_FUNCTION = 9;
+    /** The "Check the GPU" row, last in the Functions list while the GPU is unconfirmed. */
+    static final int TYPE_GPU_CHECK = 10;
 
     /** What a tap on the list asks the fragment to do. */
     interface Callbacks {
@@ -88,6 +90,9 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         void onFunctionClicked(@NonNull TaiFunction function);
         /** A Functions row's "Check how it runs on this phone" was tapped. */
         default void onFunctionCheckOffer(@NonNull TaiFunction function) {
+        }
+        /** The "Check the GPU" row was tapped. */
+        default void onGpuCheck() {
         }
         /** A Functions row's offer was dismissed with "Not now". */
         default void onFunctionCheckOfferDismissed(@NonNull TaiFunction function) {
@@ -302,6 +307,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             case TYPE_MODEL: return new ModelHolder(inflater.inflate(R.layout.item_tai_centre_model, parent, false));
             case TYPE_HEADER: return new HeaderHolder(inflater.inflate(R.layout.item_tai_centre_header, parent, false));
             case TYPE_FUNCTION: return new FunctionHolder(inflater.inflate(R.layout.item_tai_centre_function, parent, false));
+            case TYPE_GPU_CHECK: return new GpuCheckHolder(inflater.inflate(R.layout.item_tai_centre_function, parent, false));
             case TYPE_SETTING: return new SettingHolder(inflater.inflate(R.layout.item_tai_centre_setting, parent, false));
             default: return new EmptyHolder(inflater.inflate(R.layout.item_tai_centre_empty, parent, false));
         }
@@ -821,6 +827,16 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             warning.setVisibility(next.warnBackground ? View.VISIBLE : View.GONE);
             offerBar.setVisibility(next.offerCheck ? View.VISIBLE : View.GONE);
             core.setContentDescription(itemView.getContext().getString(R.string.tai_fn_row_desc, next.name, next.summary));
+        }
+    }
+
+    /** The "Check the GPU" row: the Functions row's card with a title and one line, opening the feature check. */
+    private final class GpuCheckHolder extends RecyclerView.ViewHolder {
+        GpuCheckHolder(@NonNull View view) {
+            super(view);
+            ((TextView) view.findViewById(R.id.tai_fn_name)).setText(R.string.tai_fn_gpu_check);
+            ((TextView) view.findViewById(R.id.tai_fn_summary)).setText(R.string.tai_fn_gpu_check_summary);
+            view.findViewById(R.id.tai_centre_shell).setOnClickListener(v -> callbacks.onGpuCheck());
         }
     }
 

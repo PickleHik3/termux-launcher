@@ -46,7 +46,7 @@ final class ReviewSection implements SetupSection {
             state.useAs() == UseAs.TERMINAL ? R.string.setup_value_terminal
                 : R.string.setup_value_home_screen);
         addRow(context, page, R.string.setup_row_start_in,
-            state.startInChanges() ? R.string.setup_value_workspace
+            state.startInChanges() ? R.string.setup_value_terminal
                 : R.string.setup_value_unchanged);
         SetupState.Values v = state.values();
         addRow(context, page, R.string.setup_row_multiplexer, onOff(context, v.multiplexer));

@@ -28,14 +28,15 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The card header (appearance-cards overhaul §1): main cards wear the Customization | Home |
- * Workspace pill and the phone glyph; element cards ←, the name and the Show switch where the
+ * Terminal pill and the phone glyph; element cards ←, the name and the Show switch where the
  * object can be hidden (Status bar, Dock, Keyboard). Both end in ⋮, whose Reset asks nothing.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class EditorCardHeaderTest {
 
@@ -47,11 +48,16 @@ public class EditorCardHeaderTest {
     @Test
     public void eachCardWearsItsKindOfHeader() {
         for (float scale : new float[] {1f, 1.3f}) {
+            // One sheet per font scale; each card is raised on it in turn.
+            Fixture f = null;
             for (EditorCard card : EditorCard.values()) {
-                Fixture f = new Fixture(card, scale);
+                if (f == null)
+                    f = new Fixture(card, scale);
+                else
+                    f.show(card);
                 String at = card + " at " + scale;
                 boolean main = EditorCardSheet.isMainCard(card);
-                // Main cards: the Customization | Home | Workspace pill and the phone glyph.
+                // Main cards: the Customization | Home | Terminal pill and the phone glyph.
                 assertEquals(at + ": the pill", main, f.sheet.mainPill().getVisibility() == View.VISIBLE);
                 assertEquals(at + ": the phone glyph", main, f.sheet.phoneGlyph().getVisibility() == View.VISIBLE);
                 assertFalse(at + ": the glyph is no button", f.sheet.phoneGlyph().isClickable());
@@ -81,7 +87,7 @@ public class EditorCardHeaderTest {
     public void thePillOpensTheOtherMainCard() {
         Fixture f = new Fixture(EditorCard.HOME, 1f);
         f.sheet.mainPill().getChildAt(2).performClick();
-        assertEquals(EditorCard.WORKSPACE, f.opened);
+        assertEquals(EditorCard.TERMINAL, f.opened);
     }
 
     @Test
@@ -119,8 +125,13 @@ public class EditorCardHeaderTest {
 
     @Test
     public void noCardHasAVisibleSwitchRow() {
+        // One sheet; each card is raised on it in turn.
+        Fixture f = null;
         for (EditorCard card : EditorCard.values()) {
-            Fixture f = new Fixture(card, 1f);
+            if (f == null)
+                f = new Fixture(card, 1f);
+            else
+                f.show(card);
             assertFalse(card + " has no Visible row", hasText(f.sheet.rows(),
                 f.themed.getString(R.string.appearance_row_visible)));
         }
@@ -158,6 +169,8 @@ public class EditorCardHeaderTest {
         final FrameLayout parent;
         final EditorCardSheet sheet;
         final Model model;
+        private final int width;
+        private final int height;
         int resets;
         int backs;
         EditorCard opened;
@@ -168,8 +181,8 @@ public class EditorCardHeaderTest {
             themed = new ContextThemeWrapper(activity,
                 R.style.Theme_TermuxActivity_DayNight_NoActionBar);
             float density = themed.getResources().getDisplayMetrics().density;
-            int width = Math.round(411 * density);
-            int height = Math.round(914 * density);
+            width = Math.round(411 * density);
+            height = Math.round(914 * density);
             parent = new FrameLayout(themed);
             activity.setContentView(parent, new ViewGroup.LayoutParams(width, height));
             model = new Model(themed);
@@ -188,6 +201,11 @@ public class EditorCardHeaderTest {
             sheet.attach(parent);
             int full = Math.round(height * 0.55f);
             sheet.setGeometry(full, full, Math.round(24 * density));
+            show(card);
+        }
+
+        /** Raises {@code card} on the sheet, and lays the parent out. */
+        void show(@NonNull EditorCard card) {
             sheet.show(card, EditorRows.rows(card, new EditorRows.Offers(true, true)),
                 card == EditorCard.DOCK ? "Reset dock" : "Reset", false);
             parent.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),

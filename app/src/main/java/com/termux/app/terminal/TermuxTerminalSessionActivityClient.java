@@ -72,6 +72,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
 
+    /** Reads the name of a program asking for the clipboard from /proc, off the main thread. */
+    private static final java.util.concurrent.ExecutorService PROGRAM_NAME_READER =
+        java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "termux-clipboard-program");
+            thread.setDaemon(true);
+            return thread;
+        });
+
     private boolean mTerminalScreenUpdatePending;
     /** Sessions with a coalesced screen-update posted but not yet drawn (one entry per pane). */
     private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
@@ -127,8 +135,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     @NonNull private final ShellSignals mSignals;
 
+    /** Which program-status records have already alerted, and when each session last did. */
+    @NonNull private final ProgramStatusAlerts mProgramStatusAlerts = new ProgramStatusAlerts();
+
     /** Pastes, and a program's picture reads and writes: see {@link TerminalClipboard}. */
     @NonNull private final TerminalClipboard mClipboard;
+
+    /** Asks before a program reads the clipboard; built at the first request. */
+    @Nullable private ClipboardReadConsent mClipboardConsent;
 
     public TermuxTerminalSessionActivityClient(@NonNull Context context, @NonNull TerminalHost host) {
         this.mContext = context;
@@ -204,6 +218,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // while the launcher is in the background, and a frozen process only hears of the exits
         // as it comes back, before the notice pill can show anything.
         mResumed = true;
+        onFrontPaneMaybeChanged();
         if (!mHeldKilledShellNotices.isEmpty())
             mMainHandler.postDelayed(this::sayHeldKilledShellNotices, KILLED_SHELL_NOTICE_DELAY_MS);
     }
@@ -248,12 +263,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
         android.content.SharedPreferences store = preferences == null ? null : preferences.getSharedPreferences();
         if (store == null) return;
-        store.registerOnSharedPreferenceChangeListener(mLazyModeListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mLazyModeListener);
         mLazyModeStore = store;
     }
 
     private void unwatchLazyMode() {
-        if (mLazyModeStore != null) mLazyModeStore.unregisterOnSharedPreferenceChangeListener(mLazyModeListener);
+        if (mLazyModeStore != null) com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mLazyModeStore, mLazyModeListener);
         mLazyModeStore = null;
         mLazyModeEnabled = null;
     }
@@ -328,7 +343,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // until a resize or a stop jogs it. A plain post always runs.
         boolean pumpFrames = isLazyModeEnabled() && changedView.isAttachedToWindow();
         if (pumpFrames) {
-            changedView.postOnAnimation(redraw);
+            com.termux.app.window.FirstLayout.nextFrame(changedView, redraw);
         } else {
             mUiHandler.post(redraw);
         }
@@ -441,6 +456,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // running in it (tlstore-ui's `keyboard.hide --hold`) must not leave it stuck down just
         // because the shell exited instead of asking nicely with `keyboard.show`.
         TerminalActionDispatcher.getInstance().onSessionFinished(finishedSession);
+        mProgramStatusAlerts.forget(finishedSession);
+        mSignals.sessionFinished(finishedSession);
+        if (mClipboardConsent != null) mClipboardConsent.onSessionFinished(finishedSession);
         // Before anything below drops its pane: the host reads its status and whether it is the
         // shell on screen.
         mHost.onShellFinished(finishedSession);
@@ -615,11 +633,115 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         return mSignals.clipboardRead();
     }
 
+    /**
+     * A clipboard read on the Fast engine: whether the program may have it is
+     * {@link ClipboardReadConsent}'s call, which may ask on a sheet.
+     */
+    @Override
+    public void onClipboardReadRequest(@NonNull TerminalSession session,
+                                       @NonNull com.termux.terminal.ClipboardReadRequest request) {
+        clipboardConsent().onRequest(session, new ClipboardReadConsent.Request() {
+            @Override public void allow(@Nullable String text) { request.allow(text); }
+            @Override public void deny() { request.deny(); }
+            @Override public boolean isPasted() { return request.isPasted(); }
+            @Override public boolean isListingOnly() { return request.isListingOnly(); }
+        });
+    }
+
+    /** The front pane or the launcher's visibility may have changed: queued clipboard reads may be due. */
+    public void onFrontPaneMaybeChanged() {
+        if (mClipboardConsent != null) mClipboardConsent.onFrontMaybeChanged();
+        mSignals.frontMaybeChanged();
+    }
+
+    @NonNull
+    private ClipboardReadConsent clipboardConsent() {
+        if (mClipboardConsent == null) {
+            mClipboardConsent = new ClipboardReadConsent(new ClipboardReadConsent.Ui() {
+                private boolean mSheetOpen;
+                /** The card this policy showed; closing closes it and no other. */
+                @Nullable private android.view.View mSheetCard;
+
+                @Override public boolean isReadSettingOn() {
+                    com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+                        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(mContext, false);
+                    return preferences != null && preferences.isOsc52ClipboardReadEnabled();
+                }
+
+                @Override public boolean isTerminalShowing() {
+                    return mHost.isVisible() && mHost.isTerminalShowing();
+                }
+
+                @Nullable @Override public Object frontSession() {
+                    return mHost.currentSession();
+                }
+
+                @Override public void resolveProgramName(@NonNull Object session,
+                                                         @NonNull ClipboardReadConsent.NameCallback done) {
+                    // The process group is taken now, so the name belongs to the program that
+                    // asked; /proc is read off the main thread.
+                    final int pgid = ((TerminalSession) session).getForegroundProcessGroup();
+                    if (pgid <= 0) {
+                        done.onName(null);
+                        return;
+                    }
+                    PROGRAM_NAME_READER.execute(() -> {
+                        final String name = TerminalSession.programNameOf(pgid);
+                        mUiHandler.post(() -> done.onName(name));
+                    });
+                }
+
+                @Nullable @Override public String readClipboard() {
+                    return com.termux.shared.interact.ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
+                }
+
+                @Override public boolean showSheet(@Nullable String programName,
+                                                   @NonNull ClipboardReadConsent.Callback callback) {
+                    TerminalSheetController sheet = mHost.sheetController();
+                    android.widget.LinearLayout body = TerminalSheetViews.body(mContext);
+                    TerminalSheetViews.addMenuRow(body, mContext.getString(R.string.clipboard_read_deny),
+                        () -> callback.onChoice(ClipboardReadConsent.Choice.DENY));
+                    TerminalSheetViews.addMenuRow(body, mContext.getString(R.string.clipboard_read_once),
+                        () -> callback.onChoice(ClipboardReadConsent.Choice.ONCE));
+                    TerminalSheetViews.addMenuRow(body, mContext.getString(R.string.clipboard_read_session),
+                        () -> callback.onChoice(ClipboardReadConsent.Choice.SESSION));
+                    if (programName != null)
+                        TerminalSheetViews.addMenuRow(body,
+                            mContext.getString(R.string.clipboard_read_always, programName),
+                            () -> callback.onChoice(ClipboardReadConsent.Choice.ALWAYS));
+                    String title = programName != null
+                        ? mContext.getString(R.string.clipboard_read_title, programName)
+                        : mContext.getString(R.string.clipboard_read_title_unnamed);
+                    mSheetOpen = true;
+                    boolean shown = sheet.show(title, body, false, null, () -> {
+                        mSheetOpen = false;
+                        mSheetCard = null;
+                        callback.onDismissed();
+                    });
+                    if (!shown) mSheetOpen = false;
+                    else if (mSheetOpen) mSheetCard = sheet.topCard();
+                    return shown;
+                }
+
+                @Override public void closeSheet() {
+                    if (!mSheetOpen) return;
+                    mSheetOpen = false;
+                    android.view.View card = mSheetCard;
+                    mSheetCard = null;
+                    mHost.sheetController().dismiss(card);
+                }
+            }, new ClipboardReadGrants(
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(mContext, false)));
+        }
+        return mClipboardConsent;
+    }
+
     @Override
     public void onBell(@NonNull TerminalSession session) {
         // Marked before the visibility and behaviour gates: the pill is not a sound, and a bell that
         // rang while the launcher was in the background is exactly the one the user needs to find.
         mHost.noteShellAttention(session);
+        mSignals.bell(session);
         if (!mHost.isVisible())
             return;
         // Whatever the bell behaviour, ignore included: the tear is the pane's, not a sound.
@@ -648,7 +770,46 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     @Override
     public void onNotification(@NonNull TerminalSession session, String title, String body) {
-        mSignals.notice(session, title, body);
+        mSignals.terminalMessage(session, title, body);
+    }
+
+    /**
+     * A program's own status moved. The window bar is asked to repaint (the host coalesces those
+     * into one pass per refresh interval), and a record that needs the user, finished or failed
+     * is shown as an in-app notice when its pane is not the one in front.
+     */
+    @Override
+    public void onProgramStatusChanged(@NonNull TerminalSession session,
+                                       @NonNull java.util.List<com.termux.terminal.ProgramStatus> raised) {
+        mHost.scheduleWindowBarRefresh();
+        TerminalEmulator current = session.getEmulator();
+        if (current != null) mProgramStatusAlerts.retainCurrent(session, current.getProgramStatus());
+        if (current != null) mSignals.programStatus(session, raised, current.getProgramStatus());
+        if (raised.isEmpty()) return;
+        boolean inFront = mHost.isVisible() && mHost.isTerminalShowing()
+            && session == mHost.currentSession();
+        if (inFront) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        TerminalEmulator emulator = session.getEmulator();
+        for (com.termux.terminal.ProgramStatus record : raised) {
+            if (!mProgramStatusAlerts.shouldAlert(session, record, now)) continue;
+            String app = emulator == null ? "" : emulator.getProgramStatus().resolvedApp(record);
+            String tag = mSignals.sessionTag(session);
+            String name = !app.isEmpty() ? app : record.title;
+            boolean named = !name.isEmpty();
+            if (!named) name = tag == null ? "" : tag;
+            String headline;
+            switch (record.state) {
+                case BLOCKED: headline = mContext.getString(R.string.notice_program_needs_input, name); break;
+                case DONE: headline = mContext.getString(R.string.notice_program_done, name); break;
+                default: headline = mContext.getString(R.string.notice_program_error, name); break;
+            }
+            String detail = ProgramStatusLabel.oneLine(record.message, 200);
+            if (named && tag != null && !tag.isEmpty()) {
+                detail = detail.isEmpty() ? tag : detail + " · " + tag;
+            }
+            mSignals.statusNotice(session, headline, detail);
+        }
     }
 
     /** OSC 99: the phone's notification shade, through the same path the local API uses. */
@@ -690,7 +851,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         AppNotice.shell(mContext,
             mContext.getString(R.string.notice_shell_wants_attention, title),
-            null, "\uf0f3" /* nf-fa-bell */, true, () -> setCurrentSession(session));
+            null, R.drawable.ic_rl_bell, true, () -> setCurrentSession(session));
     }
 
     @Override
@@ -978,11 +1139,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     /**
      * Whether the service keeps running once it holds no shell: Home stays on screen after the
-     * Workspace's last shell, so the activity must outlive it, and the activity finishes when its
-     * service stops. See {@link TerminalHost#staysWhenWorkspaceEmpty()}.
+     * Terminal's last shell, so the activity must outlive it, and the activity finishes when its
+     * service stops. See {@link TerminalHost#staysWhenTerminalEmpty()}.
      */
     public boolean keepsServiceWhenEmpty() {
-        return mHost.staysWhenWorkspaceEmpty();
+        return mHost.staysWhenTerminalEmpty();
     }
 
     public void removeFinishedSession(TerminalSession finishedSession) {
@@ -996,7 +1157,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         int index = service.killTermuxSession(finishedSession);
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
-            // The home screen does not close with its last shell: the Workspace is simply empty.
+            // The home screen does not close with its last shell: the Terminal is simply empty.
             mHost.rebuildDrawerSessions();
         } else {
             if (index >= size) {
@@ -1047,6 +1208,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private static final long KILLED_SHELL_NOTICE_DELAY_MS = 600L;
 
     private void showKilledShellNotice(@NonNull TerminalSession session) {
+        // Ahead of the quiet window: the notice in Settings and the sheets is its own, and the
+        // pane stays only for a signal nobody here sent (KilledShellNotice.keepsPane).
+        com.termux.app.processlimit.ProcessLimitNotice.get(mContext).onChildKilled(
+            com.termux.app.processlimit.ProcessLimitPolicy.isKillSignal(-session.getExitStatus()), false);
         long now = android.os.SystemClock.uptimeMillis();
         if (now - mLastKilledShellNoticeAt < KilledShellNotice.QUIET_MS) return;
         mLastKilledShellNoticeAt = now;
@@ -1120,8 +1285,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // that ink, and judging the ink again there flips it (see decidedInk).
                 com.termux.app.chrome.ChromeInk.Polarity band = mHost.terminalBandPolarity();
                 com.termux.app.chrome.ChromeInk.Polarity leaning = decidedInk(band, ground);
-                // The glass floors follow the Debugging switch, read before the build.
-                MaterialTerminalColorScheme.setGlassFloors(mHost.preferences().isGlassEvenOutEnabled());
+                // The glass floors are on while the panes are evened out, set before the build.
+                MaterialTerminalColorScheme.setGlassFloors(true);
                 props = MaterialTerminalColorScheme.create(mContext, level, ground, leaning,
                     band != null);
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);

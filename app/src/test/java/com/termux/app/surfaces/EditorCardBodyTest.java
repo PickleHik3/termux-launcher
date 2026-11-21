@@ -36,9 +36,10 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /**
- * The Keyboard, Home, Global and Workspace cards drawn with the redesigned rows (editor-redesign
+ * The Keyboard, Home, Global and Terminal cards drawn with the redesigned rows (editor-redesign
  * §2) on pong's width, at the default text size and at Large (1.3): every row of the card is
  * there, every control stands inside the 16dp gutter with a 48dp target and no word cut, the
  * sections carry their notes, and the keyboard's opacity link stands between its two strips and
@@ -46,12 +47,12 @@ import java.util.List;
  * EditorCardSheet.Model#rowView} to a {@link CardBody}. Native graphics, so text has real metrics.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class EditorCardBodyTest {
 
     private static final EditorCard[] CARDS = {EditorCard.KEYBOARD, EditorCard.HOME,
-        EditorCard.APPEARANCE, EditorCard.WORKSPACE};
+        EditorCard.APPEARANCE};
     private static final float[] SCALES = {1f, 1.3f};
 
     @After
@@ -147,10 +148,11 @@ public class EditorCardBodyTest {
     public void theSectionsCarryTheirNamesAndNotes() {
         Fixture home = new Fixture(EditorCard.HOME, 1f);
         List<String> texts = texts(home.sheet.rows());
-        // Home's sections (overhaul §2): Home · More options · Layout · Appearance · Links.
+        // Home's sections (spec §3, Home): Home · More options · Widgets · Layout · Links; its
+        // Wallpaper dim is the Terminal's Background's since #287.
         for (int res : new int[] {R.string.appearance_card_home,
-            R.string.editor_section_more_options, R.string.editor_section_layout,
-            R.string.editor_section_appearance, R.string.editor_section_links})
+            R.string.editor_section_more_options, R.string.editor_section_widgets,
+            R.string.editor_section_layout, R.string.editor_section_links})
             assertTrue("Home shows " + home.themed.getString(res),
                 texts.contains(home.themed.getString(res)));
         // Section titles are W1b's collapsible headers: a section's note is no longer drawn.
@@ -160,6 +162,8 @@ public class EditorCardBodyTest {
         assertFalse(globalTexts.contains(global.themed.getString(
             R.string.editor_hint_glass_material)));
         assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_section_colours)));
+        assertFalse("Home has no Appearance section",
+            texts.contains(home.themed.getString(R.string.editor_section_appearance)));
     }
 
     @Test
@@ -207,8 +211,15 @@ public class EditorCardBodyTest {
                 button.getText()))
                 assertEquals(Typeface.MONOSPACE, button.getTypeface());
         }
-        assertTrue(names.contains(f.themed.getString(R.string.editor_home_icon_default)));
         assertTrue(names.contains(f.themed.getString(R.string.appearance_folders_roomy)));
+        // Icon size is Global's Shape (spec §3).
+        Fixture global = new Fixture(EditorCard.APPEARANCE, 1f);
+        List<String> globalNames = new ArrayList<>();
+        for (MaterialButton button : views(global.sheet.rows(), MaterialButton.class)) {
+            CharSequence name = GlyphNames.of(button);
+            if (name != null) globalNames.add(name.toString());
+        }
+        assertTrue(globalNames.contains(f.themed.getString(R.string.editor_home_icon_default)));
     }
 
     // ------------------------------------------------------------------------------- the drive
@@ -381,7 +392,7 @@ public class EditorCardBodyTest {
         @Nullable @Override public CharSequence summary(@NonNull Row row) {
             switch (row) {
                 case SECTION_LOOK: return mContext.getString(mCard == EditorCard.HOME
-                    ? R.string.editor_note_home_only : R.string.editor_note_workspace_only);
+                    ? R.string.editor_note_home_only : R.string.editor_note_terminal_only);
                 case SECTION_GLASS: return mCard == EditorCard.HOME
                     ? mContext.getString(R.string.editor_note_home_glass) : null;
                 case SECTION_GLASS_MATERIAL:

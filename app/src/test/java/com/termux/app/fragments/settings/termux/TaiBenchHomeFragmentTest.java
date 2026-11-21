@@ -176,4 +176,17 @@ public class TaiBenchHomeFragmentTest {
         // The Text / Voice choice, the device card and the empty state; the action floats over the list.
         assertEquals(3, adapter.getItemCount());
     }
+
+    @Test
+    public void theFirstFillOfTheDeviceCardDoesNotLeaveTheEmptyStateMidMove() throws Exception {
+        TaiBenchHomeFragment home = launch();
+        RecyclerView list = home.requireView().findViewById(R.id.tai_bench_list);
+        list.measure(android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(2400, android.view.View.MeasureSpec.EXACTLY));
+        list.layout(0, 0, 1080, 2400);
+        for (int i = 0; i < list.getChildCount(); i++) {
+            assertEquals(0f, list.getChildAt(i).getTranslationY(), 0f);
+        }
+        assertFalse(list.isAnimating());
+    }
 }

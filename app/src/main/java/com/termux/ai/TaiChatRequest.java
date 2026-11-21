@@ -29,6 +29,9 @@ public final class TaiChatRequest {
     /** OpenAI-compatible terminal sequences applied by runtimes before tool parsing and usage. */
     public final List<String> stopSequences;
 
+    /** The raw prompt of a plain completion; null for a chat request. */
+    @Nullable public final String completionPrompt;
+
     /** @deprecated Use {@link #messagesJson}. Kept for source compatibility with older plugins. */
     @Deprecated public final JSONArray openAiMessages;
     /** @deprecated Use {@link #toolDefinitions}. */
@@ -71,6 +74,23 @@ public final class TaiChatRequest {
         @Nullable Object toolChoice,
         @NonNull List<String> stopSequences
     ) {
+        this(systemPrompt, initialMessages, message, tools, reusableConversation, messagesJson,
+            toolDefinitions, toolChoice, stopSequences, null);
+    }
+
+    private TaiChatRequest(
+        @NonNull String systemPrompt,
+        @NonNull List<Message> initialMessages,
+        @NonNull Message message,
+        @NonNull List<ToolProvider> tools,
+        boolean reusableConversation,
+        @NonNull JSONArray messagesJson,
+        @Nullable JSONArray toolDefinitions,
+        @Nullable Object toolChoice,
+        @NonNull List<String> stopSequences,
+        @Nullable String completionPrompt
+    ) {
+        this.completionPrompt = completionPrompt;
         this.systemPrompt = systemPrompt;
         this.initialMessages = Collections.unmodifiableList(new ArrayList<>(initialMessages));
         this.message = message;
@@ -93,6 +113,23 @@ public final class TaiChatRequest {
     @NonNull
     public static TaiChatRequest oneShot(@NonNull String systemPrompt, @NonNull String userPrompt) {
         return text(systemPrompt, userPrompt, false);
+    }
+
+    /** A plain completion of {@code prompt}: one turn, no system prompt, never a reused conversation. */
+    @NonNull
+    public static TaiChatRequest completion(@NonNull String prompt) {
+        return new TaiChatRequest("", Collections.emptyList(), Message.Companion.user(prompt), Collections.emptyList(),
+            false, new JSONArray(), new JSONArray(), null, Collections.emptyList(), prompt);
+    }
+
+    public boolean isCompletion() {
+        return completionPrompt != null;
+    }
+
+    /** The mode the runtimes report back: {@code "completion"} or {@code "chat"}. */
+    @NonNull
+    public String mode() {
+        return isCompletion() ? "completion" : "chat";
     }
 
     @NonNull

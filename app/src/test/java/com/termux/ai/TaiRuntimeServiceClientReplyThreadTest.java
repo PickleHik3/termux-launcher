@@ -32,6 +32,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The runtime's replies are handled on the client's own reply thread, never the main looper: the
@@ -39,6 +41,7 @@ import static org.junit.Assert.assertTrue;
  * out. Each stream's events still arrive in the order the runtime sent them.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiRuntimeServiceClientReplyThreadTest {
     private static final long PROMPT_MS = 5_000L;
     private static final int STREAM_EVENTS = 20;

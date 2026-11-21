@@ -27,9 +27,9 @@ import java.util.Map;
  *       strengths are its amounts and its family becomes {@code scheme}; any other family's
  *       become 0, its own colour), and every blur and grain pair moves to the nearest Glass
  *       position's ({@link GlassControls#snapped}), Solid's no-blur pair excepted.</li>
- *   <li>The blur wallpaper mode remembers for its return moves onto the curve beside Base's grain
+ *   <li>The blur wallpaper mode remembers for its return moves onto the curve beside Global's grain
  *       ({@link GlassControls#blurWithGrain}),
- *       and the Glass slider's positions are written for Base and every detached surface.</li>
+ *       and the Glass slider's positions are written for Global and every detached surface.</li>
  *   <li>The saved Custom look is rewritten in the current format ({@link SurfacePresets#fromLegacy},
  *       {@link SurfacePresets#rescaleTintAmounts}).</li>
  *   <li>Format 2: every Tint amount moves onto the stretched scale ({@link #FORMAT}).</li>
@@ -47,7 +47,7 @@ public final class GlassControlsMigration {
 
     /**
      * The format this build brings a store to. 1 is the unification above; 2 stretched the Tint
-     * scale so 100 reaches the accent's container, and every stored amount, the base and each
+     * scale so 100 reaches the accent's container, and every stored amount, Global and each
      * per-surface cell, is scaled to draw the colour it drew
      * ({@link com.termux.app.chrome.GlassLook#amountForLegacyPercent}: the Tint Look's 100 is 35).
      * A store at 0 takes both in the same edit; the saved Custom look is scaled on read
@@ -72,7 +72,7 @@ public final class GlassControlsMigration {
      * As {@link #runAtStartUp(TermuxAppSharedPreferences)}, with freshness decided by the caller
      * before any start-up migration wrote a key ({@link TermuxAppSharedPreferences#isFreshInstall}).
      * A fresh install was just written whole in this build's format (Clear, every surface linked
-     * to Base), so it has no legacy Tint to pin or carry across: doing so gives every surface its
+     * to Global), so it has no legacy Tint to pin or carry across: doing so gives every surface its
      * own Tint cell, and the Look row then reads Custom.
      */
     public static void runAtStartUp(@NonNull TermuxAppSharedPreferences prefs,
@@ -138,7 +138,7 @@ public final class GlassControlsMigration {
             int at = key.lastIndexOf(PageLookKeys.PAGE_SEPARATOR);
             com.termux.shared.termux.settings.preferences.LookGrid.Key cell =
                 com.termux.shared.termux.settings.preferences.LookGrid.parse(key);
-            if ((at > 0 && PageLookKeys.DETACHABLE.contains(key.substring(0, at)))
+            if ((at > 0 && PageLookKeys.everHeld().contains(key.substring(0, at)))
                     || (cell != null && cell.page >= 0))
                 values.put(key, entry.getValue());
         }
@@ -167,7 +167,7 @@ public final class GlassControlsMigration {
 
     /**
      * The blur wallpaper mode puts back when it is turned on again, on the curve: the position
-     * nearest that blur with Base's grain, as it will be worn. No blur stays no blur.
+     * nearest that blur with Global's grain, as it will be worn. No blur stays no blur.
      */
     private static void snapRememberedBlur(@NonNull TermuxAppSharedPreferences prefs,
                                            @NonNull SharedPreferences store) {
@@ -175,15 +175,15 @@ public final class GlassControlsMigration {
             return;
         int remembered = prefs.getWallpaperEnabledExtraKeysBlurRadius();
         int blur = GlassControls.blurWithGrain(remembered,
-            prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+            prefs.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         if (blur != remembered)
             prefs.setWallpaperEnabledExtraKeysBlurRadius(blur);
     }
 
-    /** The Glass slider's position for Base, and for each surface with its own blur or grain. */
+    /** The Glass slider's position for Global, and for each surface with its own blur or grain. */
     private static void writeGlassPositions(@NonNull TermuxAppSharedPreferences prefs) {
-        int blur = prefs.getSurfaceBaseValue(SurfaceProperty.BLUR);
-        int grain = prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN);
+        int blur = prefs.getSurfaceGlobalValue(SurfaceProperty.BLUR);
+        int grain = prefs.getSurfaceGlobalValue(SurfaceProperty.GRAIN);
         prefs.setSurfaceGlassPosition(null, GlassControls.glassFor(blur, grain));
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             boolean ownBlur = !prefs.isSurfaceInheriting(slot, SurfaceProperty.BLUR);
@@ -197,16 +197,16 @@ public final class GlassControlsMigration {
     }
 
     /**
-     * Every stored Tint amount, the base and each per-surface cell, from the scale before format
+     * Every stored Tint amount, Global and each per-surface cell, from the scale before format
      * 2 to its own, so each draws the colour it drew. A cell the store never set reads its
      * default, 0, which stays 0.
      */
     private static void rescaleTintAmounts(@NonNull TermuxAppSharedPreferences prefs,
                                            @NonNull SharedPreferences store) {
-        int base = prefs.getSurfaceBaseValue(SurfaceProperty.TINT);
-        int scaledBase = com.termux.app.chrome.GlassLook.amountForLegacyPercent(base);
-        if (scaledBase != base)
-            prefs.setSurfaceBaseValue(SurfaceProperty.TINT, scaledBase);
+        int global = prefs.getSurfaceGlobalValue(SurfaceProperty.TINT);
+        int scaledGlobal = com.termux.app.chrome.GlassLook.amountForLegacyPercent(global);
+        if (scaledGlobal != global)
+            prefs.setSurfaceGlobalValue(SurfaceProperty.TINT, scaledGlobal);
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             if (prefs.isSurfaceInheriting(slot, SurfaceProperty.TINT,
                     TermuxAppSharedPreferences.PAGE_WALL))
@@ -221,10 +221,10 @@ public final class GlassControlsMigration {
     /** Writes the old default strength into every tint key the store never set. */
     private static void pinLegacyTintStrengths(@NonNull TermuxAppSharedPreferences prefs,
                                                @NonNull SharedPreferences store) {
-        // A surface following Base reads Base's pin; one with its own cell already has a number.
+        // A surface following Global reads Global's pin; one with its own cell already has a number.
         if (!prefs.lookGrid().has(com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT,
-                null, com.termux.shared.termux.settings.preferences.LookGrid.NO_PAGE))
-            prefs.setSurfaceBaseValue(SurfaceProperty.TINT, SurfacePresets.LEGACY_TINT_STRENGTH);
+                null))
+            prefs.setSurfaceGlobalValue(SurfaceProperty.TINT, SurfacePresets.LEGACY_TINT_STRENGTH);
     }
 
     /** The live look, not a shipped one, carried across with its look kept. */
@@ -235,14 +235,14 @@ public final class GlassControlsMigration {
             // numbers stay here, and format 2's scaling follows.
             prefs.setSurfaceGlassTint(TERMUX_APP.GLASS_TINT_SCHEME);
         } else {
-            prefs.setSurfaceBaseValue(SurfaceProperty.TINT, 0);
+            prefs.setSurfaceGlobalValue(SurfaceProperty.TINT, 0);
             for (SurfaceSlot slot : SurfaceSlot.values()) {
                 if (TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.TINT) != null)
                     prefs.setSurfaceRawValue(slot, SurfaceProperty.TINT, 0);
             }
         }
-        int baseBlur = prefs.getSurfaceBaseValue(SurfaceProperty.BLUR);
-        int baseGrain = prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN);
+        int globalBlur = prefs.getSurfaceGlobalValue(SurfaceProperty.BLUR);
+        int globalGrain = prefs.getSurfaceGlobalValue(SurfaceProperty.GRAIN);
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             if (TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.BLUR) == null
                 || TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.GRAIN) == null)
@@ -252,13 +252,13 @@ public final class GlassControlsMigration {
             if (!ownBlur && !ownGrain)
                 continue;
             int[] pair = GlassControls.snapped(
-                ownBlur ? prefs.getSurfaceOverrideValue(slot, SurfaceProperty.BLUR) : baseBlur,
-                ownGrain ? prefs.getSurfaceOverrideValue(slot, SurfaceProperty.GRAIN) : baseGrain);
+                ownBlur ? prefs.getSurfaceOverrideValue(slot, SurfaceProperty.BLUR) : globalBlur,
+                ownGrain ? prefs.getSurfaceOverrideValue(slot, SurfaceProperty.GRAIN) : globalGrain);
             prefs.detachSurfaceValue(slot, SurfaceProperty.BLUR, pair[0]);
             prefs.detachSurfaceValue(slot, SurfaceProperty.GRAIN, pair[1]);
         }
-        int[] base = GlassControls.snapped(baseBlur, baseGrain);
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, base[0]);
-        prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, base[1]);
+        int[] global = GlassControls.snapped(globalBlur, globalGrain);
+        prefs.setSurfaceGlobalValue(SurfaceProperty.BLUR, global[0]);
+        prefs.setSurfaceGlobalValue(SurfaceProperty.GRAIN, global[1]);
     }
 }

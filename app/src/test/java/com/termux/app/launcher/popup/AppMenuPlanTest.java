@@ -1,9 +1,11 @@
 package com.termux.app.launcher.popup;
 
+import static com.termux.app.launcher.popup.AppMenuPlan.Row.ADD_TO_FOLDER;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.ADD_TO_HOME;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.APP_INFO;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.CHANGE_ICON;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.EDIT_DOCK;
+import static com.termux.app.launcher.popup.AppMenuPlan.Row.HIDE;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.MORE_SHORTCUTS;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.MOVE_TO_DOCK;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.NOTIFICATIONS;
@@ -124,6 +126,53 @@ public class AppMenuPlanTest {
     }
 
     @Test
+    public void aLinuxAppInTheDrawer_endsWithHide() {
+        AppMenuPlan.Inputs in = linuxDrawerApp();
+        assertEquals(Collections.singletonList(Arrays.asList(PIN, CHANGE_ICON, HIDE)),
+            AppMenuPlan.groups(in));
+        in.source = AppMenuPlan.Source.PINNED;
+        assertEquals(Collections.singletonList(Arrays.asList(UNPIN, CHANGE_ICON, HIDE)),
+            AppMenuPlan.groups(in));
+        in.customIcon = true;
+        assertEquals(Collections.singletonList(Arrays.asList(UNPIN, CHANGE_ICON, RESET_ICON, HIDE)),
+            AppMenuPlan.groups(in));
+    }
+
+    @Test
+    public void hide_neverShowsOnTheDockHomeOrAFolderOrForAnAndroidApp() {
+        AppMenuPlan.Inputs onDock = linuxDrawerApp();
+        onDock.source = AppMenuPlan.Source.PINNED;
+        onDock.onDock = true;
+        assertFalse(AppMenuPlan.hidesFromDrawer(onDock));
+
+        AppMenuPlan.Inputs home = linuxDrawerApp();
+        home.source = AppMenuPlan.Source.HOME;
+        assertFalse(AppMenuPlan.hidesFromDrawer(home));
+
+        AppMenuPlan.Inputs folder = linuxDrawerApp();
+        folder.source = AppMenuPlan.Source.FOLDER_MEMBER;
+        assertFalse(AppMenuPlan.hidesFromDrawer(folder));
+
+        AppMenuPlan.Inputs android = dockApp();
+        android.source = AppMenuPlan.Source.UNPINNED;
+        android.canHide = true;
+        assertFalse(AppMenuPlan.hidesFromDrawer(android));
+
+        AppMenuPlan.Inputs unoffered = linuxDrawerApp();
+        unoffered.canHide = false;
+        assertFalse(AppMenuPlan.hidesFromDrawer(unoffered));
+    }
+
+    private static AppMenuPlan.Inputs linuxDrawerApp() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.source = AppMenuPlan.Source.UNPINNED;
+        in.androidPackage = false;
+        in.canAddToHome = false;
+        in.canHide = true;
+        return in;
+    }
+
+    @Test
     public void aFolderMember_tradesPinForMoveAndRemove() {
         AppMenuPlan.Inputs in = dockApp();
         in.source = AppMenuPlan.Source.FOLDER_MEMBER;
@@ -199,5 +248,31 @@ public class AppMenuPlanTest {
         assertTrue(AppMenuPlan.movesToCategory(in));
         in.androidPackage = false;
         assertFalse(AppMenuPlan.movesToCategory(in));
+    }
+
+    @Test
+    public void aDrawerAppWithAFolderToJoin_offersAddToFolderAfterAddToHome() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.source = AppMenuPlan.Source.UNPINNED;
+        in.canAddToFolder = true;
+        assertEquals(Collections.singletonList(
+                Arrays.asList(WIDGETS, APP_INFO, ADD_TO_HOME, ADD_TO_FOLDER, PIN, CHANGE_ICON, UNINSTALL)),
+            AppMenuPlan.groups(in));
+    }
+
+    @Test
+    public void addToFolderIsNeverOnTheDockHomeOrAFolderMember() {
+        for (AppMenuPlan.Source source : AppMenuPlan.Source.values()) {
+            AppMenuPlan.Inputs in = dockApp();
+            in.source = source;
+            in.canAddToFolder = true;
+            boolean shown = AppMenuPlan.groups(in).get(0).contains(ADD_TO_FOLDER);
+            assertEquals(source.toString(), source == AppMenuPlan.Source.UNPINNED
+                || source == AppMenuPlan.Source.PINNED, shown);
+        }
+        AppMenuPlan.Inputs onDock = dockApp();
+        onDock.canAddToFolder = true;
+        onDock.onDock = true;
+        assertFalse(AppMenuPlan.groups(onDock).get(0).contains(ADD_TO_FOLDER));
     }
 }

@@ -44,9 +44,37 @@ public final class AssistantRows {
         /** An error row offers "Use Gemma E2B" (memory, E2B on the phone). */
         public final boolean offerE2b;
         @NonNull public final String key;
+        /** The answer's speed numbers; {@code durationMs} 0 for none, {@code tokens} -1 for no count. */
+        public final long durationMs;
+        public final long ttftMs;
+        public final int tokens;
+        /** What the model thought, "" for none; how long it thought (-1 while it does); still thinking, no answer yet. */
+        @NonNull public final String thinking;
+        public final long thinkingMs;
+        public final boolean thinkingLive;
 
         Row(@NonNull Type type, long messageId, @NonNull String text, boolean streaming, boolean stopped,
             boolean copyShare, boolean retry, @Nullable ErrorKind error, boolean offerE2b, @NonNull String key) {
+            this(type, messageId, text, streaming, stopped, copyShare, retry, error, offerE2b, key, 0L, 0L, -1);
+        }
+
+        Row(@NonNull Type type, long messageId, @NonNull String text, boolean streaming, boolean stopped,
+            boolean copyShare, boolean retry, @Nullable ErrorKind error, boolean offerE2b, @NonNull String key,
+            long durationMs, long ttftMs, int tokens) {
+            this(type, messageId, text, streaming, stopped, copyShare, retry, error, offerE2b, key,
+                durationMs, ttftMs, tokens, "", -1L, false);
+        }
+
+        Row(@NonNull Type type, long messageId, @NonNull String text, boolean streaming, boolean stopped,
+            boolean copyShare, boolean retry, @Nullable ErrorKind error, boolean offerE2b, @NonNull String key,
+            long durationMs, long ttftMs, int tokens, @NonNull String thinking, long thinkingMs,
+            boolean thinkingLive) {
+            this.thinking = thinking;
+            this.thinkingMs = thinkingMs;
+            this.thinkingLive = thinkingLive;
+            this.durationMs = durationMs;
+            this.ttftMs = ttftMs;
+            this.tokens = tokens;
             this.type = type;
             this.messageId = messageId;
             this.text = text;
@@ -65,7 +93,21 @@ public final class AssistantRows {
             Row r = (Row) o;
             return type == r.type && messageId == r.messageId && text.equals(r.text)
                 && streaming == r.streaming && stopped == r.stopped && copyShare == r.copyShare
-                && retry == r.retry && error == r.error && offerE2b == r.offerE2b && key.equals(r.key);
+                && retry == r.retry && error == r.error && offerE2b == r.offerE2b && key.equals(r.key)
+                && durationMs == r.durationMs && ttftMs == r.ttftMs && tokens == r.tokens
+                && thinking.equals(r.thinking) && thinkingMs == r.thinkingMs && thinkingLive == r.thinkingLive;
+        }
+
+        /** The same row with the model's thinking on it. */
+        @NonNull
+        Row withThinking(@NonNull String thinking, long thinkingMs, boolean thinkingLive) {
+            return new Row(type, messageId, text, streaming, stopped, copyShare, retry, error, offerE2b, key,
+                durationMs, ttftMs, tokens, thinking, thinkingMs, thinkingLive);
+        }
+
+        /** Whether the row shows a thinking line above the answer. */
+        public boolean hasThinking() {
+            return !thinking.isEmpty();
         }
 
         @Override
@@ -118,19 +160,25 @@ public final class AssistantRows {
             if (AssistantMessage.STATE_STREAMING.equals(state) && !live) state = AssistantMessage.STATE_STOPPED;
             boolean newest = i == last;
             String key = "a" + m.id;
+            String thinking = m.thinking == null ? "" : m.thinking;
+            long thinkingMs = m.thinkingMs == null ? -1L : m.thinkingMs;
+            boolean thinkingLive = AssistantMessage.STATE_STREAMING.equals(state) && text.isEmpty()
+                && thinkingMs < 0L && !thinking.isEmpty();
+            int before = rows.size();
             switch (state) {
                 case AssistantMessage.STATE_STREAMING:
-                    if (text.isEmpty()) {
+                    if (text.isEmpty() && thinking.isEmpty()) {
                         rows.add(new Row(Type.WORKING, m.id, "", true, false, false, false, null, false, "w" + m.id));
                     } else {
                         rows.add(new Row(Type.ANSWER, m.id, text, true, false, false, false, null, false, key));
                     }
                     break;
                 case AssistantMessage.STATE_STOPPED:
-                    rows.add(new Row(Type.ANSWER, m.id, text, false, true, !text.isEmpty(), newest, null, false, key));
+                    rows.add(new Row(Type.ANSWER, m.id, text, false, true, !text.isEmpty(), newest, null, false, key,
+                        speedDuration(m, text), speedTtft(m, text), speedTokens(m)));
                     break;
                 case AssistantMessage.STATE_ERROR:
-                    if (!text.isEmpty()) {
+                    if (!text.isEmpty() || !thinking.isEmpty()) {
                         rows.add(new Row(Type.ANSWER, m.id, text, false, false, false, false, null, false, key));
                     }
                     ErrorKind kind = errorKind(m.errorCode);
@@ -141,8 +189,15 @@ public final class AssistantRows {
                     rows.add(new Row(Type.WAITING, m.id, "", false, false, false, false, null, false, "q" + m.id));
                     break;
                 default:
-                    rows.add(new Row(Type.ANSWER, m.id, text, false, false, !text.isEmpty(), newest, null, false, key));
+                    rows.add(new Row(Type.ANSWER, m.id, text, false, false, !text.isEmpty(), newest, null, false, key,
+                        speedDuration(m, text), speedTtft(m, text), speedTokens(m)));
                     break;
+            }
+            if (!thinking.isEmpty()) {
+                for (int j = before; j < rows.size(); j++) {
+                    Row r = rows.get(j);
+                    if (r.type == Type.ANSWER) rows.set(j, r.withThinking(thinking, thinkingMs, thinkingLive));
+                }
             }
         }
         for (int i = 0; i < context.sending.size(); i++) {
@@ -152,6 +207,18 @@ public final class AssistantRows {
             rows.add(new Row(Type.WORKING, 0, "", true, false, false, false, null, false, "sw"));
         }
         return rows;
+    }
+
+    private static long speedDuration(@NonNull AssistantMessage m, @NonNull String text) {
+        return m.durationMs != null && m.ttftMs != null && !text.isEmpty() ? Math.max(1L, m.durationMs) : 0L;
+    }
+
+    private static long speedTtft(@NonNull AssistantMessage m, @NonNull String text) {
+        return speedDuration(m, text) > 0L ? m.ttftMs : 0L;
+    }
+
+    private static int speedTokens(@NonNull AssistantMessage m) {
+        return m.outputTokens != null ? m.outputTokens : -1;
     }
 
     @NonNull

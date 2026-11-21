@@ -2,7 +2,9 @@ package com.termux.app.launcher.drawer;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -97,7 +99,20 @@ public final class AppDrawerSearchResultRowView extends AppDrawerAppCellView {
     @Override
     protected void refreshBackground() {
         float density = getResources().getDisplayMetrics().density;
-        setBackground(isKeyboardHighlighted() ? highlightDrawable(density) : rowBackground(density));
+        // The row keeps its own wash under the bead, which hugs the icon and both text lines.
+        setBackground(isKeyboardHighlighted()
+            ? new LayerDrawable(new Drawable[] {rowBackground(density), beadDrawable()})
+            : rowBackground(density));
+    }
+
+    @Override
+    protected boolean centersHighlightOnIcon() {
+        return false;
+    }
+
+    @Override
+    protected void unionExtraContent(@NonNull int[] box) {
+        unionTextBounds(category, box);
     }
 
     @NonNull

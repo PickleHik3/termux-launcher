@@ -5,7 +5,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
@@ -52,17 +52,21 @@ public class HalfLookTest {
             HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId()));
     }
 
+    /** The chrome wears one look on every page (ADR 0031): a page names no look of its own. */
     @Test
-    public void stackLook_isPartOfTheStacksDress() {
-        // Base is wall-wide: the halves differ by the Terminal page's own dock value.
+    public void bothHalvesWearOneLook() {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.terminalPageId(), 5);
+        preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
+            TermuxAppSharedPreferences.terminalPageId(), 90);
+        preferences.setInAppKeyboardBackdropOpacity(TermuxAppSharedPreferences.terminalPageId(), 40);
         HalfLook home = HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL);
-        HalfLook workspace = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
+        HalfLook terminal = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
 
-        assertFalse(home.stackEquals(workspace));
-        assertNotEquals(SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, home),
-            SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, workspace));
+        assertTrue(home.stackEquals(terminal));
+        assertTrue(home.statusEquals(terminal));
+        assertEquals(SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, home),
+            SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, terminal));
     }
 
     /**
@@ -74,67 +78,39 @@ public class HalfLookTest {
         preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
             TermuxAppSharedPreferences.terminalPageId(), 5);
         HalfLook home = HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL);
-        HalfLook workspace = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
+        HalfLook terminal = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
         SeamDress.StackDress a = SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, home);
-        assertTrue(a.structureEquals(SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, workspace)));
+        assertTrue(a.structureEquals(SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, terminal)));
         assertFalse(a.structureEquals(SeamDress.StackDress.of(
             WallShape.of(LayoutStyle.DOCKED, -1, 16), 1f, 1f, 0, home)));
         assertFalse(a.structureEquals(SeamDress.StackDress.of(SHAPE, 0.8f, 1f, 0, home)));
     }
 
     @Test
-    public void statusLookAlone_leavesTheStacksDressAlike() {
-        preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
-            TermuxAppSharedPreferences.terminalPageId(), 90);
-        HalfLook home = HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL);
-        HalfLook workspace = HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId());
-
-        assertTrue(home.stackEquals(workspace));
-        assertFalse(home.statusEquals(workspace));
-        assertNotEquals(home, workspace);
-        SeamDress.StackDress a = SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, home);
-        SeamDress.StackDress b = SeamDress.StackDress.of(SHAPE, 1f, 1f, 0, workspace);
-        assertEquals(a, b);
-        assertEquals(a.hashCode(), b.hashCode());
-    }
-
-    @Test
-    public void keyboardsOwnFade_isPartOfTheStack() {
-        preferences.setInAppKeyboardBackdropOpacity(TermuxAppSharedPreferences.terminalPageId(), 40);
-        assertFalse(HalfLook.read(preferences, TermuxAppSharedPreferences.PAGE_WALL)
-            .stackEquals(HalfLook.read(preferences, TermuxAppSharedPreferences.terminalPageId())));
-    }
-
-    @Test
     public void lookHalf_followsTheDressEachSurfaceWears() {
-        PaneWallPage home = PaneWallPage.WIDGETS;
-        PaneWallPage window = PaneWallPage.TERMINAL;
+        PageKind home = PageKind.HOME;
+        PageKind window = PageKind.TERMINAL;
         // At rest, every surface wears its committed half's look.
         for (SeamDress.Surface surface : SeamDress.Surface.values()) {
-            assertEquals(PaneWallPage.WIDGETS, SeamDress.lookPage(surface, home, home, false));
-            assertEquals(PaneWallPage.TERMINAL, SeamDress.lookPage(surface, window, window, false));
+            assertEquals(PageKind.HOME, SeamDress.lookPage(surface, home, home, false));
+            assertEquals(PageKind.TERMINAL, SeamDress.lookPage(surface, window, window, false));
         }
         // Mid-slide from Home: the stack wears the half whose rows it stands, the status bar the
-        // Workspace's, the frame the committed half's.
-        assertEquals(PaneWallPage.TERMINAL,
+        // Terminal's, the frame the committed half's.
+        assertEquals(PageKind.TERMINAL,
             SeamDress.lookPage(SeamDress.Surface.STACK, home, window, true));
-        assertEquals(PaneWallPage.WIDGETS,
+        assertEquals(PageKind.HOME,
             SeamDress.lookPage(SeamDress.Surface.STACK, home, home, true));
-        assertEquals(PaneWallPage.TERMINAL,
+        assertEquals(PageKind.TERMINAL,
             SeamDress.lookPage(SeamDress.Surface.STATUS, home, home, true));
-        assertEquals(PaneWallPage.WIDGETS,
+        assertEquals(PageKind.HOME,
             SeamDress.lookPage(SeamDress.Surface.FRAME, home, window, true));
     }
 
     @Test
     public void halfOf_namesThePagesHalf() {
-        assertEquals(PaneWallPage.WIDGETS, SeamDress.screenOf(PaneWallPage.WIDGETS));
-        assertEquals(PaneWallPage.TERMINAL, SeamDress.screenOf(PaneWallPage.TERMINAL));
+        assertEquals(PageKind.HOME, SeamDress.screenOf(PageKind.HOME));
+        assertEquals(PageKind.TERMINAL, SeamDress.screenOf(PageKind.TERMINAL));
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

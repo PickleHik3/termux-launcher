@@ -23,7 +23,6 @@ import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -217,7 +216,7 @@ public class KeyboardPreferencesFragmentTest {
         SegmentedPillPreference method = fragment.getPreferenceScreen()
             .findPreference("keyboard_input_method");
         assertNotNull(method);
-        String[] builtInOnly = {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"};
+        String[] builtInOnly = {"keyboard_sub_layout", "keyboard_sub_typing"};
         String[] always = {"keyboard_sub_voice", "keyboard_sub_hardware", "edit_extra_keys_row",
             "extra_keys_text_all_caps"};
         assertEnabled(fragment, true, builtInOnly);

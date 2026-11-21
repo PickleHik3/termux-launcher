@@ -246,7 +246,8 @@ public final class TaiFeaturePlan {
             acceleratorReason = gpuGone ? Reason.DEFAULT : Reason.PICK;
         } else {
             boolean gpuAllowed = path == TaiPlatformCaps.GpuPath.YES || path == TaiPlatformCaps.GpuPath.UNKNOWN;
-            String fallback = gpuAllowed ? TaiTierPolicy.ACCEL_GPU : TaiTierPolicy.ACCEL_CPU;
+            // Unconfirmed starts on the CPU; the GPU stays usable, so a measured faster GPU can still win.
+            String fallback = path == TaiPlatformCaps.GpuPath.YES ? TaiTierPolicy.ACCEL_GPU : TaiTierPolicy.ACCEL_CPU;
             // CPU-first (a failed verdict) or no GPU: the plan names the CPU, even when the CPU has failed
             // here; the preflight still moves a load off a failed accelerator, and the plan does not call
             // that measured.

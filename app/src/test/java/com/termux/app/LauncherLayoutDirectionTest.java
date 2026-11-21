@@ -11,7 +11,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 import com.termux.R;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 import com.termux.view.TerminalView;
 
 import org.junit.After;
@@ -91,7 +91,7 @@ public class LauncherLayoutDirectionTest {
         assertEquals("column 0 is on the left outside the shell too", View.LAYOUT_DIRECTION_LTR,
             terminal.getLayoutDirection());
 
-        ExtraKeysView keys = new ExtraKeysView(activity, null);
+        ExtraKeysPageView keys = new ExtraKeysPageView(activity, null);
         resolve(keys);
         assertEquals(View.LAYOUT_DIRECTION_LTR, keys.getLayoutDirection());
     }

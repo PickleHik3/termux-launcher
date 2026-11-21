@@ -12,7 +12,7 @@ import com.termux.app.place.PlaceOrientation;
  * by {@code PlaceLayoutStore} behind its own flag.
  *
  * <p>Per kind a layout held the dock's design, search field, drawer tile and the tile's place, the
- * status bar's edge and whether it rests compact, so a swipe between Home and the Workspace laid
+ * status bar's edge and whether it rests compact, so a swipe between Home and the Terminal laid
  * the chrome out again mid-slide. Now the Home document holds each of them for every page
  * ({@link LayoutsJson#SHARED_WIDE_FIELDS}, {@link LayoutsJson#SHARED_ORIENTATION_FIELDS}): what
  * Home wore stays, every other kind's copy is dropped, and a kind's {@code status_bar} keeps only

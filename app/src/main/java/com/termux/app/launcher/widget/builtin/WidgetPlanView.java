@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.text.TextPaint;
@@ -16,6 +17,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.widget.builtin.WidgetLayoutPlan.Part;
+import com.termux.app.statusbar.WeatherIconDrawable;
+import com.termux.app.statusbar.WeatherIcons;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -122,6 +125,18 @@ final class WidgetPlanView extends View {
             }
             case GLYPH: {
                 if (part.text.isEmpty() || width <= 0f) return null;
+                WeatherIcons.Icon sky = WeatherIcons.forKey(part.text);
+                if (sky != null) return skyOp(sky, part, left, top, width, height);
+                Drawable icon = WidgetIcons.drawable(getContext(), part.text, color(part.ink));
+                if (icon != null) {
+                    // A Roundline icon fills its square box; the box is the plan's, as the ink was.
+                    float side = Math.min(width, height);
+                    float x = left + (width - side) / 2f;
+                    float y = top + (height - side) / 2f;
+                    icon.setBounds(Math.round(x), Math.round(y), Math.round(x + side),
+                        Math.round(y + side));
+                    return new IconOp(icon);
+                }
                 TextPaint paint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
                 if (style.nerd != null) paint.setTypeface(style.nerd);
                 paint.setTextSize(PROBE_PX);
@@ -186,6 +201,23 @@ final class WidgetPlanView extends View {
         paint.setTextSize(sizePx);
     }
 
+    /**
+     * A weather picture in its box: the cloud in the part's ink (the sky's own tone only warms or
+     * cools the accent layer, so a sunny day's cloud is not painted gold) and the sun, moon or
+     * bolt in the tone's accent.
+     */
+    @NonNull private Op skyOp(@NonNull WeatherIcons.Icon sky, @NonNull Part part, float left,
+                              float top, float width, float height) {
+        boolean tone = part.ink == WidgetLayoutPlan.Ink.SUN || part.ink == WidgetLayoutPlan.Ink.MOON;
+        int ink = tone ? color(WidgetLayoutPlan.Ink.CLOUD) : color(part.ink);
+        int accent = part.ink == WidgetLayoutPlan.Ink.SUN ? style.warm : style.primary;
+        WeatherIconDrawable drawable = new WeatherIconDrawable(getContext());
+        drawable.set(sky, ink, accent);
+        drawable.setBounds(Math.round(left), Math.round(top), Math.round(left + width),
+            Math.round(top + height));
+        return drawable::draw;
+    }
+
     @ColorInt private int color(@NonNull WidgetLayoutPlan.Ink ink) {
         switch (ink) {
             case STRONG: return style.onSurface;
@@ -213,6 +245,14 @@ final class WidgetPlanView extends View {
         }
 
         @Override public void draw(@NonNull Canvas canvas) { canvas.drawText(text, x, baseline, paint); }
+    }
+
+    private static final class IconOp implements Op {
+        @NonNull final Drawable icon;
+
+        IconOp(@NonNull Drawable icon) { this.icon = icon; }
+
+        @Override public void draw(@NonNull Canvas canvas) { icon.draw(canvas); }
     }
 
     private static final class TrackOp implements Op {

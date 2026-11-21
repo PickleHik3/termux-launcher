@@ -5,11 +5,11 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
-import com.termux.app.wall.PaneWallPage;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -61,14 +61,9 @@ public class FreshInstallLookTest {
         com.termux.app.WallReworkMigration.migrateIfNeeded(store);
         store.edit().putInt(com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID, 0).apply();
         preferences.migrateLookGrid(java.util.Collections.emptyList(), fresh);
-        com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore grid =
-            new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(store);
-        com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(grid, fresh);
-        // The glass controls' migration (and its re-adoption of moved Looks), then the kind seed,
-        // as TermuxApplication runs them.
+        // The glass controls' migration (and its re-adoption of moved Looks), as
+        // TermuxApplication runs it.
         GlassControlsMigration.runAtStartUp(preferences, fresh);
-        com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(grid,
-            SurfacePresets.SHIPPED_BY_KIND);
     }
 
     @Test
@@ -78,12 +73,12 @@ public class FreshInstallLookTest {
         // Clear names no Tint cell, so no surface may hold one of its own: a per-surface Tint
         // detaches that row and the Look row reads Custom.
         for (TermuxAppSharedPreferences.SurfaceSlot slot : TermuxAppSharedPreferences.SurfaceSlot.values())
-            assertTrue(slot + " follows Base's Tint",
+            assertTrue(slot + " follows Global's Tint",
                 preferences.isSurfaceInheriting(slot, SurfaceProperty.TINT));
         assertEquals(Integer.valueOf(GlassControlsMigration.FORMAT),
             store.getAll().get(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT));
-        // What the editor's Look row reads on Home and on the Workspace.
-        for (PaneWallPage half : new PaneWallPage[]{PaneWallPage.WIDGETS, PaneWallPage.TERMINAL}) {
+        // What the editor's Look row reads on Home and on the Terminal.
+        for (PageKind half : new PageKind[]{PageKind.HOME, PageKind.TERMINAL}) {
             assertTrue(half + " wears Clear", SurfacePresets.wornOn(preferences, clearFor(), half));
             assertTrue(half + " matches Clear", SurfacePresets.matches(preferences, clearFor(), half));
         }
@@ -110,7 +105,6 @@ public class FreshInstallLookTest {
         // move nothing); every other stored value, the LookGrid cells included, is untouched.
         java.util.Map<String, Object> afterSecond = new java.util.HashMap<>(store.getAll());
         assertEquals(Boolean.TRUE, afterSecond.remove("look_grid_migrated"));
-        assertEquals(Boolean.TRUE, afterSecond.remove("look_grid_kind_migrated"));
         assertEquals("every stored value, the LookGrid cells included", afterFirst, afterSecond);
         assertEquals(90, GlassEdgeControls.depthFor(preferences.getFancierGlassBendDp(),
             preferences.getFancierGlassEdgeWidthDp()));
@@ -132,11 +126,11 @@ public class FreshInstallLookTest {
         launch();
 
         assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(stored(SurfacePresets.cellKey(null, SurfaceProperty.BLUR))),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR));
         assertEquals(stored(SurfacePresets.cellKey(null, SurfaceProperty.OPACITY)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         assertEquals(stored(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN)),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_BEND), preferences.getFancierGlassBendDp());
         assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH),
             preferences.getFancierGlassEdgeWidthDp());

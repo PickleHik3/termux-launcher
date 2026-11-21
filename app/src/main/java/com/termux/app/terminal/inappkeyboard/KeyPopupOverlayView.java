@@ -10,6 +10,7 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -22,6 +23,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
+import juloo.keyboard2.Keyboard2View;
 import juloo.keyboard2.LabelFace;
 
 /**
@@ -94,6 +96,10 @@ public final class KeyPopupOverlayView extends View {
     @Nullable private Typeface mKeyFont;
     @Nullable private Typeface mSymbolFont;
     private boolean mReducedMotion;
+    @Nullable private IconSource mIcons;
+    /** The tint last handed to the shared icon, so a repeated ink allocates nothing. */
+    private int mIconInk;
+    @Nullable private android.graphics.ColorFilter mIconTint;
 
     private final Rect mInvalidateRect = new Rect();
 
@@ -128,6 +134,23 @@ public final class KeyPopupOverlayView extends View {
         mKeyFont = keyFont;
         mSymbolFont = symbolFont;
         mFaces.clear();
+    }
+
+    /** Where a popup's glyph can come from a drawable instead of text: the keyboard's own cache. */
+    public interface IconSource {
+        /** The drawable that draws [label] on its cap, or null to draw it as text. */
+        @Nullable Drawable iconFor(@NonNull String label, boolean keyFont);
+    }
+
+    public void setIconSource(@Nullable IconSource icons) {
+        mIcons = icons;
+        invalidate();
+    }
+
+    @Nullable
+    private Drawable iconFor(@NonNull String label, boolean keyFont) {
+        IconSource icons = mIcons;
+        return icons == null ? null : icons.iconFor(label, keyFont);
     }
 
     public void setReducedMotion(boolean reduced) {
@@ -284,6 +307,24 @@ public final class KeyPopupOverlayView extends View {
                            boolean labelKeyFont, @NonNull KeyPopupGeometry.Metrics metrics,
                            float alpha, float dy, float density) {
         if (alpha <= 0f) return;
+        Drawable icon = iconFor(label, labelKeyFont);
+        if (icon != null) {
+            // The glow follows a letterform; a drawn icon is lit by its ink alone.
+            float half = metrics.glyphSizePx * Keyboard2View.SYMBOL_ICON_EM / 2f;
+            float centreY = popup.anchorY + dy;
+            int ink = ColorUtils.setAlphaComponent(mPalette.ink,
+                Math.round(Color.alpha(mPalette.ink) * alpha));
+            if (mIconTint == null || mIconInk != ink) {
+                mIconTint = new android.graphics.PorterDuffColorFilter(ink,
+                    android.graphics.PorterDuff.Mode.SRC_IN);
+                mIconInk = ink;
+            }
+            icon.setBounds(Math.round(popup.anchorX - half), Math.round(centreY - half),
+                Math.round(popup.anchorX + half), Math.round(centreY + half));
+            icon.setColorFilter(mIconTint);
+            icon.draw(canvas);
+            return;
+        }
         Paint paint = mGlyphPaint;
         paint.setTypeface(faceFor(labelKeyFont, usesLabelFont(label), metrics.monospace,
             metrics.weight));
@@ -341,6 +382,9 @@ public final class KeyPopupOverlayView extends View {
     /** Half the width the label actually paints, so the clamp is measured, not guessed. */
     private float halfWidthPx(@NonNull String label, boolean labelKeyFont,
                               @NonNull KeyPopupGeometry.Metrics metrics) {
+        if (iconFor(label, labelKeyFont) != null) {
+            return metrics.glyphSizePx * Keyboard2View.SYMBOL_ICON_EM / 2f;
+        }
         mMeasurePaint.setTypeface(faceFor(labelKeyFont, usesLabelFont(label), metrics.monospace,
             metrics.weight));
         mMeasurePaint.setTextSize(metrics.glyphSizePx);

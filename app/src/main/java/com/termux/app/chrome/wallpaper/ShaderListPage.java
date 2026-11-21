@@ -28,7 +28,7 @@ import java.util.concurrent.Executors;
 /**
  * The Shader half of the wallpaper picker: the saved shaders in three columns, each a
  * phone-proportioned {@link SceneThumbView} with its name under it and a border on the one in
- * use, then New shader, and Back to photo while a video or a shader is in use. Tapping a shader
+ * use, then New shader beside From a photo, and Back to photo while a video or a shader is in use. Tapping a shader
  * applies it ({@link Listener#onPick}); its pencil opens the editor ({@link Listener#onOpen}). The shaders are read off the main thread.
  */
 public final class ShaderListPage {
@@ -49,6 +49,9 @@ public final class ShaderListPage {
 
         void onNew();
 
+        /** From a photo: the steps card. */
+        void onFromPhoto();
+
         void onBackToPhoto();
     }
 
@@ -63,11 +66,14 @@ public final class ShaderListPage {
         @NonNull final ShaderStore.Entry entry;
         @Nullable final String source;
         @Nullable final File texture;
+        @Nullable final File depth;
 
-        Loaded(@NonNull ShaderStore.Entry entry, @Nullable String source, @Nullable File texture) {
+        Loaded(@NonNull ShaderStore.Entry entry, @Nullable String source, @Nullable File texture,
+               @Nullable File depth) {
             this.entry = entry;
             this.source = source;
             this.texture = texture;
+            this.depth = depth;
         }
     }
 
@@ -97,6 +103,7 @@ public final class ShaderListPage {
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
         mRatio = LiveSceneLogic.frameHeight(1000, dm.widthPixels, dm.heightPixels) / 1000f;
         mRoot.findViewById(R.id.shader_new).setOnClickListener(v -> mListener.onNew());
+        mRoot.findViewById(R.id.shader_from_photo).setOnClickListener(v -> mListener.onFromPhoto());
         mBack.setOnClickListener(v -> mListener.onBackToPhoto());
     }
 
@@ -155,11 +162,12 @@ public final class ShaderListPage {
             for (ShaderStore.Entry e : ShaderStore.list(app)) {
                 String source = ShaderStore.readText(ShaderStore.sourceFile(app, e.id));
                 ShaderStore.Meta meta = ShaderStore.readMeta(app, e.id);
-                loaded.add(new Loaded(e, source, ShaderStore.textureFile(app, e.id, meta)));
+                loaded.add(new Loaded(e, source, ShaderStore.textureFile(app, e.id, meta),
+                    ShaderStore.depthFile(app, e.id, meta)));
             }
             final List<Loaded> examples = new ArrayList<>();
             for (ShaderExamples.Example e : ShaderExamples.load(app)) {
-                examples.add(new Loaded(new ShaderStore.Entry(e.slug, e.name), e.source, null));
+                examples.add(new Loaded(new ShaderStore.Entry(e.slug, e.name), e.source, null, null));
             }
             mRoot.post(() -> {
                 if (mReleased || generation != mGeneration) return;
@@ -209,7 +217,7 @@ public final class ShaderListPage {
             final String id = l.entry.id;
             View tile = inflater.inflate(R.layout.live_scene_tile, mGrid, false);
             ((LiveAspectFrame) tile.findViewById(R.id.live_scene_frame)).setRatio(mRatio);
-            ((SceneThumbView) tile.findViewById(R.id.live_scene_thumb)).setShader(l.source, l.texture);
+            ((SceneThumbView) tile.findViewById(R.id.live_scene_thumb)).setShader(l.source, l.texture, l.depth);
             TextView name = tile.findViewById(R.id.live_scene_name);
             name.setText(l.entry.name);
             boolean inUse = !example && LiveSceneLogic.inUse(stored, id);
@@ -257,6 +265,11 @@ public final class ShaderListPage {
     @NonNull
     View newButton() {
         return mRoot.findViewById(R.id.shader_new);
+    }
+
+    @NonNull
+    View fromPhotoButton() {
+        return mRoot.findViewById(R.id.shader_from_photo);
     }
 
     @NonNull

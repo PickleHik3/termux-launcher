@@ -273,7 +273,10 @@ public final class LauncherToolRegistry {
                 TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,
                 TOOL_SESSION_CLOSE_CURRENT,
                 // The pill says it: listening, then what became of the text.
-                TOOL_VOICE_DICTATE));
+                TOOL_VOICE_DICTATE,
+                // The drawer coming up is the read-out; its name on the pill sat over the
+                // drawer's own search field (developer, 2026-11-20).
+                TOOL_APP_OPEN_APP_DRAWER));
 
         /**
          * Categories whose every tool acts on the focused pane: its text, selection, URLs,
@@ -501,6 +504,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
+    /** The page switcher panel, opened above the key row as a tap on its key would. */
+    public static final String TOOL_APP_PAGE_SWITCHER = "app.page_switcher";
     public static final String TOOL_APP_LAUNCH = "app.launch";
     /** A contact's card, by the lookup key that survives a rename. */
     public static final String TOOL_CONTACT_OPEN = "contact.open";
@@ -1137,6 +1142,14 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_command_palette, R.string.tool_desc_app_command_palette,
             Binding.all("ctrl+alt+shift+p", "ctrl+alt+space>p"));
+        // The key's own touch is handled by the row (it slides along the panel); this is the
+        // plain click: an accessibility tap or a script, which opens the panel as a tap would.
+        addUi(map, TOOL_APP_PAGE_SWITCHER,
+            "Open the page switcher above the key row.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_app_page_switcher, R.string.tool_desc_app_page_switcher,
+            null);
         // Required 'query' keeps this out of the palette's tool rows; the palette
         // contributes one Apps row per installed app instead, and each row runs
         // this tool. Unbound by default: which app deserves a stroke is personal.

@@ -16,6 +16,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * A live picture's colours equal the stored frame's for the same wallpaper and the same inputs:
@@ -23,7 +24,7 @@ import org.robolectric.annotation.Config;
  * recording is the wallpaper under the wall's dim, and the parity takes the one to the other.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.TIRAMISU)
+@Config(sdk = Build.VERSION_CODES.TIRAMISU, application = Application.class)
 public class LiveStoredParityTest {
 
     /** A frame tint in a warm hue at a third of the way, as the Tint amount bakes one. */

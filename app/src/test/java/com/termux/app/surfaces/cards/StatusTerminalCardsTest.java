@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
+import android.app.Application;
 
 /**
  * The Status bar and Terminal cards (editor-redesign §2): their tables, the policy that maps
@@ -48,7 +49,7 @@ import java.util.List;
  * font metrics.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class StatusTerminalCardsTest {
 
@@ -65,28 +66,33 @@ public class StatusTerminalCardsTest {
 
     @Test
     public void theStatusBarCardReadsPositionGlassClockOptionsIndicators() {
-        assertEquals(Arrays.asList(Row.STATUS_INDICATORS,
+        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS,
             Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
-            Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-            Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_LINKS,
-            Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS), rows(StatusBarCard.rows(ALL)));
+            Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST,
+            Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
+            rows(StatusBarCard.rows(ALL)));
         List<Row> rows = rows(StatusBarCard.rows(ALL));
         assertFalse("the Visible switch is the header's eye", rows.contains(Row.VISIBLE));
         assertFalse("12 h · 24 h is the card's own pair", rows.contains(Row.CLOCK_12H));
     }
 
     @Test
-    public void theTerminalCardReadsGlassContrastTrailEffectAndFont() {
-        assertEquals(Arrays.asList(Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS,
-            Row.CURSOR_TRAIL, Row.EFFECT, Row.SPLIT_GAP, Row.MULTIPLEXER,
-            Row.AUTO_TILING, Row.FOCUS_GROWS, Row.SECTION_LAYOUT,
-            Row.ELEMENTS, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-            Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.SECTION_LINKS, Row.LINK_FONT),
+    public void theTerminalCardReadsBackgroundContrastTrailEffectAndFont() {
+        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
+            Row.LINK_FONT,
+            Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
+            Row.SECTION_PANES,
+            Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
+            Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
+            Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
+            Row.MINIMAL),
             rows(TerminalCard.rows(ALL)));
         assertFalse("no Screen effect where its shader does not run",
             rows(TerminalCard.rows(NONE)).contains(Row.EFFECT));
-        assertTrue("the Terminal card owns Text size",
-            rows(TerminalCard.rows(NONE)).contains(Row.TEXT_SIZE));
+        assertTrue("the Terminal card owns its Font size",
+            rows(TerminalCard.rows(NONE)).contains(Row.FONT_SIZE));
+        assertFalse("no Screen effect switches where its shader does not run",
+            rows(TerminalCard.rows(NONE)).contains(Row.SCREEN_EVENTS));
     }
 
     // ------------------------------------------------------------------------------ policy
@@ -256,7 +262,7 @@ public class StatusTerminalCardsTest {
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
         f.layOut(indicators.view);
         List<MaterialButton> indicatorTiles = buttons(indicators.view);
-        assertEquals(6, indicatorTiles.size());
+        assertEquals(7, indicatorTiles.size());
         assertEquals("Clock is the first Elements tile", "Clock",
             indicatorTiles.get(StatusBarCard.INDICATOR_CLOCK).getText().toString());
         assertFalse("Notifications starts off",
@@ -331,7 +337,7 @@ public class StatusTerminalCardsTest {
             Fixture f = new Fixture(scale);
             FakeTerminal host = new FakeTerminal();
             String at = "at " + scale;
-            for (Row row : new Row[] {Row.GLASS_SECTION, Row.CONTRAST, Row.CURSOR_TRAIL,
+            for (Row row : new Row[] {Row.CONTRAST, Row.CURSOR_TRAIL,
                 Row.EFFECT, Row.LINK_FONT}) {
                 CardRowView built = TerminalCard.view(f.themed, row, f.width, host);
                 assertNotNull(row + " is the card's own", built);
@@ -398,7 +404,7 @@ public class StatusTerminalCardsTest {
         int face = 5;
         int align;
         final boolean[] options = {false, false, false, true};
-        final boolean[] indicators = {true, true, true, true, false, true};
+        final boolean[] indicators = {true, true, true, true, false, true, false};
         int cameraGapOpened;
 
         @Override public int position() { return position; }

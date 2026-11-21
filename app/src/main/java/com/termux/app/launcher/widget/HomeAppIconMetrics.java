@@ -46,7 +46,7 @@ public final class HomeAppIconMetrics {
         int gap = Math.round(LABEL_GAP_DP * density);
         int labelled = heightPx - 2 * inset - labelPx - gap;
         int withLabel = Math.min(wanted, Math.min(across, labelled));
-        // The label hides by Launcher3's rule (hideWorkspaceLabelsIfNotEnoughSpace) before the
+        // The label hides by Launcher3's rule (hideTerminalLabelsIfNotEnoughSpace) before the
         // icon gives up its step for it: one grid serves both orientations (ADR 0020 §12), so a
         // turn shortens the cells and the labels go, the icons stay the size chosen.
         if (!labelsCrowded(heightPx, wanted, gap, labelPx)
@@ -58,7 +58,7 @@ public final class HomeAppIconMetrics {
     }
 
     /**
-     * Launcher3's rule for hiding the workspace's labels: the cell's height less the icon, its
+     * Launcher3's rule for hiding the Terminal's labels: the cell's height less the icon, its
      * padding and the label leaves less than one label's height.
      */
     public static boolean labelsCrowded(int cellHeightPx, int iconPx, int drawablePaddingPx,

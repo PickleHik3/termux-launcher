@@ -205,7 +205,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         runtimePoll.run(() -> {
             JSONObject benchmarks;
             try {
-                benchmarks = TaiManager.getInstance(appContext).benchmarks();
+                benchmarks = TaiManager.getInstance(appContext).benchHost().benchmarks();
             } catch (JSONException | RuntimeException e) {
                 benchmarks = null;
             }

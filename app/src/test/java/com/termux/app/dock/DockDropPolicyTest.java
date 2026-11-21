@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.launcher.widget.WidgetPaneController;
+
 import org.junit.Test;
 
 /** Where an icon carried onto the dock's row lands, and what the row does around it. */
@@ -59,40 +61,44 @@ public class DockDropPolicyTest {
     // ---- what a release over an icon makes
 
     @Test
-    public void theMiddleOfAnIconMakesAFolderItsSidesGoBeside() {
+    public void anArmedRestOnAnAppMakesAFolderAnyOtherReleaseGoesBeside() {
         assertEquals(DockDropPolicy.Outcome.MAKE_FOLDER,
-            DockDropPolicy.outcome(false, true, false, false, true, 0.5f));
+            DockDropPolicy.outcome(false, true, false, false, true, true));
         assertEquals(DockDropPolicy.Outcome.INSERT,
-            DockDropPolicy.outcome(false, true, false, false, true, 0.1f));
-        assertEquals(DockDropPolicy.Outcome.INSERT,
-            DockDropPolicy.outcome(false, true, false, false, true, 0.9f));
+            DockDropPolicy.outcome(false, true, false, false, true, false));
         assertTrue(DockDropPolicy.onIcon(0.28f));
         assertFalse(DockDropPolicy.onIcon(0.27f));
     }
 
     @Test
-    public void aFolderTakesItAnywhereOverItWhileItHasRoom() {
+    public void anArmedRestOnAFolderJoinsItWhileItHasRoom() {
         assertEquals(DockDropPolicy.Outcome.ADD_TO_FOLDER,
-            DockDropPolicy.outcome(false, false, true, false, true, 0.1f));
+            DockDropPolicy.outcome(false, false, true, false, true, true));
         assertEquals(DockDropPolicy.Outcome.FOLDER_FULL,
-            DockDropPolicy.outcome(false, false, true, false, false, 0.5f));
+            DockDropPolicy.outcome(false, false, true, false, false, true));
         assertEquals(DockDropPolicy.Outcome.ALREADY_THERE,
-            DockDropPolicy.outcome(false, false, true, true, true, 0.5f));
+            DockDropPolicy.outcome(false, false, true, true, true, true));
+    }
+
+    @Test
+    public void aFolderThatIsNotArmedTakesNothing() {
+        assertEquals(DockDropPolicy.Outcome.INSERT,
+            DockDropPolicy.outcome(false, false, true, false, true, false));
     }
 
     /** The row never holds an app twice: one already pinned stays where it is. */
     @Test
     public void anAppAlreadyInTheRowIsRefused() {
         assertEquals(DockDropPolicy.Outcome.ALREADY_THERE,
-            DockDropPolicy.outcome(true, true, false, false, true, 0.5f));
+            DockDropPolicy.outcome(true, true, false, false, true, true));
         assertEquals(DockDropPolicy.Outcome.ALREADY_THERE,
-            DockDropPolicy.outcome(true, false, false, false, true, 0.5f));
+            DockDropPolicy.outcome(true, false, false, false, true, false));
     }
 
     @Test
     public void overEmptySlotsItGoesIn() {
         assertEquals(DockDropPolicy.Outcome.INSERT,
-            DockDropPolicy.outcome(false, false, false, false, true, 0.5f));
+            DockDropPolicy.outcome(false, false, false, false, true, false));
     }
 
     // ---- the ends of the row
@@ -118,8 +124,9 @@ public class DockDropPolicyTest {
     }
 
     @Test
-    public void theHoldAndBandAreHomes() {
-        assertEquals(350L, DockDropPolicy.EDGE_HOLD_MS);
+    public void theRowHoldsTwiceAsLongAsHomeOnItsBand() {
+        assertEquals(700L, DockDropPolicy.EDGE_HOLD_MS);
+        assertEquals(350L, WidgetPaneController.EDGE_FLIP_DELAY_MS);
         assertEquals(24, DockDropPolicy.EDGE_BAND_DP);
     }
 
@@ -135,8 +142,13 @@ public class DockDropPolicyTest {
     @Test
     public void aFingerWellAboveTheRowIsHomes() {
         assertTrue(DockDropPolicy.handsOverToHome(500f, 1952f, 0f, 2000f, 1000f, 2100f, 2f));
-        assertTrue("past a side too",
-            DockDropPolicy.handsOverToHome(1060f, 2050f, 0f, 2000f, 1000f, 2100f, 2f));
+        assertTrue(DockDropPolicy.handsOverToHome(500f, 2148f, 0f, 2000f, 1000f, 2100f, 2f));
+    }
+
+    @Test
+    public void aFingerBesideTheRowStaysTheRows() {
+        assertFalse(DockDropPolicy.handsOverToHome(1060f, 2050f, 0f, 2000f, 1000f, 2100f, 2f));
+        assertFalse(DockDropPolicy.handsOverToHome(-80f, 2050f, 0f, 2000f, 1000f, 2100f, 2f));
     }
 
     // ---- Undo
@@ -146,5 +158,47 @@ public class DockDropPolicyTest {
         assertEquals(3, DockDropPolicy.restoreIndex(3, 9));
         assertEquals(2, DockDropPolicy.restoreIndex(3, 2));
         assertEquals(0, DockDropPolicy.restoreIndex(-1, 4));
+    }
+
+    // ---- a second finger turning the page while an icon is carried
+
+    private static final float COMMIT_PX = 120f;
+    private static final float DENSITY = 2f;
+
+    @Test
+    public void aSecondFingerSwipedLeftTurnsForwardAndRightBack() {
+        assertEquals(1, DockDropPolicy.secondFingerTurn(-300f, 10f, 0f, COMMIT_PX, DENSITY, 1, 3));
+        assertEquals(-1, DockDropPolicy.secondFingerTurn(300f, 10f, 0f, COMMIT_PX, DENSITY, 1, 3));
+    }
+
+    @Test
+    public void aShortOrVerticalSwipeTurnsNothing() {
+        assertEquals(0, DockDropPolicy.secondFingerTurn(-40f, 0f, 0f, COMMIT_PX, DENSITY, 1, 3));
+        assertEquals(0, DockDropPolicy.secondFingerTurn(-300f, 400f, 0f, COMMIT_PX, DENSITY, 1, 3));
+    }
+
+    @Test
+    public void aFlingTurnsOnAShortTravel() {
+        assertEquals(1, DockDropPolicy.secondFingerTurn(-80f, 0f, -3000f, COMMIT_PX, DENSITY, 0, 2));
+    }
+
+    @Test
+    public void itDoesNotWrapPastEitherEndOrTurnOnePage() {
+        assertEquals(0, DockDropPolicy.secondFingerTurn(300f, 0f, 0f, COMMIT_PX, DENSITY, 0, 3));
+        assertEquals(0, DockDropPolicy.secondFingerTurn(-300f, 0f, 0f, COMMIT_PX, DENSITY, 2, 3));
+        assertEquals(0, DockDropPolicy.secondFingerTurn(-300f, 0f, 0f, COMMIT_PX, DENSITY, 0, 1));
+    }
+
+    /** A carried icon is always somewhere: over the row for a drop, or Home's; never neither. */
+    @Test
+    public void aCarriedIconIsOverTheRowUntilItIsHomes() {
+        float top = 2187f, bottom = 2313f, density = 2.75f;
+        // The finger near the row's top edge after the lift sank the row by 12 px (emulator).
+        assertTrue(DockDropPolicy.carriedOverRow(2182f, top, bottom, density));
+        for (float y = top - 400f; y <= bottom + 400f; y += 1f) {
+            boolean row = DockDropPolicy.carriedOverRow(y, top, bottom, density);
+            boolean home = DockDropPolicy.handsOverToHome(500f, y, 0f, top, 1080f, bottom, density);
+            assertTrue("y=" + y, row != home);
+        }
     }
 }

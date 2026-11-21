@@ -32,6 +32,8 @@ import java.util.LinkedHashSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Regression tests for API and security seams: LAN binding, auth, CORS,
@@ -41,6 +43,7 @@ import static org.junit.Assert.assertTrue;
  * MNN native runtime or network access.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class ApiSecuritySeamsTest {
     private Context context;
     private LauncherCtlApiServer server;
@@ -182,7 +185,7 @@ public class ApiSecuritySeamsTest {
         File tempFile = File.createTempFile("litert-model", ".litertlm");
         tempFile.deleteOnExit();
         TaiManager manager = TaiManager.getInstance(context);
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "litert-embed-model")
             .toString());
@@ -207,7 +210,7 @@ public class ApiSecuritySeamsTest {
         File tempFile = File.createTempFile("chat-model", ".mnn");
         tempFile.deleteOnExit();
         TaiManager manager = TaiManager.getInstance(context);
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "chat-only-mnn")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_CHAT))
@@ -232,7 +235,7 @@ public class ApiSecuritySeamsTest {
         File tempFile = File.createTempFile("embed-model", ".mnn");
         tempFile.deleteOnExit();
         TaiManager manager = TaiManager.getInstance(context);
-        manager.importModel(new JSONObject()
+        manager.modelManagement().importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
             .put("modelId", "embed-capable-mnn")
             .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))

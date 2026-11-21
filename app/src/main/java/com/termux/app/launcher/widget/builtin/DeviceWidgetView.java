@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.os.Environment;
 import android.os.StatFs;
 import android.os.SystemClock;
@@ -472,36 +473,30 @@ public class DeviceWidgetView extends BuiltinWidgetView
 
     // ----- the bolt -------------------------------------------------------------------------
 
-    /** A Nerd glyph fit to its box, centred, in one colour: the charging bolt. */
+    /** A Roundline icon fit to its box, centred, in one colour: the charging bolt. */
     static final class GlyphView extends View {
-        private static final float PROBE_PX = 100f;
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Rect bounds = new Rect();
         @NonNull private String glyph = "";
+        @Nullable private Drawable icon;
 
         GlyphView(@NonNull Context context, @NonNull BuiltinWidgetStyle style) {
             super(context);
-            if (style.nerd != null) paint.setTypeface(style.nerd);
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         }
 
         void set(@NonNull String glyph, @ColorInt int color) {
+            if (!glyph.equals(this.glyph)) icon = WidgetIcons.drawable(getContext(), glyph, color);
             this.glyph = glyph;
-            paint.setColor(color);
+            if (icon != null) icon.setTint(color | 0xFF000000);
             invalidate();
         }
 
         @Override protected void onDraw(@NonNull Canvas canvas) {
-            if (glyph.isEmpty() || getWidth() <= 0 || getHeight() <= 0) return;
-            paint.setTextSize(PROBE_PX);
-            paint.getTextBounds(glyph, 0, glyph.length(), bounds);
-            if (bounds.width() <= 0 || bounds.height() <= 0) return;
-            float scale = Math.min(getWidth() / (float) bounds.width(),
-                getHeight() / (float) bounds.height());
-            paint.setTextSize(PROBE_PX * scale);
-            paint.getTextBounds(glyph, 0, glyph.length(), bounds);
-            canvas.drawText(glyph, getWidth() / 2f - (bounds.left + bounds.right) / 2f,
-                getHeight() / 2f - (bounds.top + bounds.bottom) / 2f, paint);
+            if (icon == null || getWidth() <= 0 || getHeight() <= 0) return;
+            int side = Math.min(getWidth(), getHeight());
+            int left = (getWidth() - side) / 2;
+            int top = (getHeight() - side) / 2;
+            icon.setBounds(left, top, left + side, top + side);
+            icon.draw(canvas);
         }
     }
 }

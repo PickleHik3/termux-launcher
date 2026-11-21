@@ -37,6 +37,7 @@
     <string name="editor_link_pinned_notifications_summary">Settings › Notifications</string>
     <string name="editor_st_indicator_cpu">CPU</string>
     <string name="editor_st_indicator_ram">RAM</string>
+    <string name="editor_st_indicator_battery">Battery</string>
     <string name="editor_st_indicator_weather">Weather</string>
     <string name="editor_st_indicator_notifications">Notifications</string>
     <string name="editor_st_indicator_notifications_hint">Notifications: a bell with the count while notifications wait</string>

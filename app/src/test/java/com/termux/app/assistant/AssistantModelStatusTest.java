@@ -7,6 +7,8 @@ import static org.junit.Assert.assertTrue;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.ModelAvailability;
+
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -19,17 +21,19 @@ import java.util.Set;
 public class AssistantModelStatusTest {
     private static final class FakeSource implements AssistantModelStatus.Source {
         String defaultId = AssistantModelStatus.MODEL_E2B;
-        boolean loaded;
-        boolean loading;
-        String runtimeId;
+        final Set<String> loadedIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        final Set<String> loadingIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
         final Set<String> downloaded = java.util.concurrent.ConcurrentHashMap.newKeySet();
         final Map<String, AssistantModelStatus.Download> downloads = new HashMap<>();
 
         @NonNull @Override public String defaultModelId() { return defaultId; }
-        @Override public boolean runtimeLoaded() { return loaded; }
-        @Override public boolean runtimeLoading() { return loading; }
-        @Nullable @Override public String runtimeModelId() { return runtimeId; }
-        @Override public boolean isDownloaded(@NonNull String id) { return downloaded.contains(id); }
+        @NonNull @Override public ModelAvailability.State stateOf(@NonNull String id) {
+            if (loadedIds.contains(id)) return ModelAvailability.State.LOADED;
+            if (loadingIds.contains(id)) return ModelAvailability.State.LOADING;
+            AssistantModelStatus.Download d = downloads.get(id);
+            if (d != null && d.inProgress) return ModelAvailability.State.DOWNLOADING;
+            return downloaded.contains(id) ? ModelAvailability.State.ON_PHONE : ModelAvailability.State.MISSING;
+        }
         @Nullable @Override public AssistantModelStatus.Download download(@NonNull String id) { return downloads.get(id); }
     }
 
@@ -85,8 +89,7 @@ public class AssistantModelStatusTest {
         FakeSource src = new FakeSource();
         src.downloaded.add(E2B);
         src.downloaded.add(E4B);
-        src.loaded = true;
-        src.runtimeId = E4B;
+        src.loadedIds.add(E4B);
         AssistantModelStatus.Snapshot s = AssistantModelStatus.compute(src);
         assertEquals(AssistantModelStatus.Kind.READY, kind(s.gemmaE4b));
         assertEquals(AssistantModelStatus.Kind.DOWNLOADED, kind(s.gemmaE2b));
@@ -95,30 +98,14 @@ public class AssistantModelStatusTest {
     }
 
     @Test
-    public void visionScopedIdOfTheLoadedFileCountsAsTheSameModel() {
+    public void loadingIsLoadingWithoutAPercent() {
         FakeSource src = new FakeSource();
-        src.downloaded.add(E2B);
-        src.loaded = true;
-        src.runtimeId = E2B + "-vision";
-        assertEquals(AssistantModelStatus.Kind.READY, kind(AssistantModelStatus.compute(src).gemmaE2b));
-    }
-
-    @Test
-    public void loadingNamedAndUnnamed() {
-        FakeSource src = new FakeSource();
-        src.downloaded.add(E2B);
         src.downloaded.add(E4B);
-        src.loading = true;
-        src.runtimeId = E4B;
-        AssistantModelStatus.Snapshot named = AssistantModelStatus.compute(src);
-        assertEquals(AssistantModelStatus.Kind.LOADING, kind(named.gemmaE4b));
-        assertEquals(-1, named.gemmaE4b.state.percent);
-        assertEquals(AssistantModelStatus.Kind.DOWNLOADED, kind(named.gemmaE2b));
-        src.runtimeId = null;
-        AssistantModelStatus.Snapshot unnamed = AssistantModelStatus.compute(src);
-        assertEquals(AssistantModelStatus.Kind.LOADING, kind(unnamed.gemmaE2b));
-        assertEquals(AssistantModelStatus.Kind.LOADING, kind(unnamed.defaultModel));
-        assertEquals(AssistantModelStatus.Kind.DOWNLOADED, kind(unnamed.gemmaE4b));
+        src.loadingIds.add(E4B);
+        AssistantModelStatus.Snapshot s = AssistantModelStatus.compute(src);
+        assertEquals(AssistantModelStatus.Kind.LOADING, kind(s.gemmaE4b));
+        assertEquals(-1, s.gemmaE4b.state.percent);
+        assertEquals(AssistantModelStatus.Kind.NOT_DOWNLOADED, kind(s.gemmaE2b));
     }
 
     @Test

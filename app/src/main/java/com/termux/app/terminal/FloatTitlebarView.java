@@ -89,7 +89,9 @@ public final class FloatTitlebarView extends FrameLayout {
         for (int i = 0; i < mActions.length; i++) {
             final int action = mActions[i];
             ImageButton button = new ImageButton(context);
-            button.setScaleType(ImageButton.ScaleType.CENTER);
+            button.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
+            button.setPadding(0, dp(FloatTitlebarPolicy.GLYPH_AIR_DP), 0,
+                dp(FloatTitlebarPolicy.GLYPH_AIR_DP));
             if (ripple.resourceId != 0) button.setBackgroundResource(ripple.resourceId);
             else button.setBackground(null);
             button.setOnClickListener(v -> listener.onTitlebarAction(action));
@@ -330,19 +332,19 @@ public final class FloatTitlebarView extends FrameLayout {
             ImageButton button = mButtons[i];
             switch (mActions[i]) {
                 case FloatTitlebarPolicy.ACTION_MINIMISE:
-                    button.setImageResource(R.drawable.ic_titlebar_minimise);
+                    button.setImageResource(R.drawable.ic_rl_minimise);
                     button.setContentDescription(getContext().getString(
                         R.string.titlebar_minimise_description));
                     break;
                 case FloatTitlebarPolicy.ACTION_MAXIMISE:
                     button.setImageResource(mMaximised
-                        ? R.drawable.ic_titlebar_restore : R.drawable.ic_titlebar_maximise);
+                        ? R.drawable.ic_rl_restore : R.drawable.ic_rl_maximise);
                     button.setContentDescription(getContext().getString(mMaximised
                         ? R.string.titlebar_restore_description
                         : R.string.titlebar_maximise_description));
                     break;
                 default:
-                    button.setImageResource(R.drawable.ic_titlebar_close);
+                    button.setImageResource(R.drawable.ic_rl_close);
                     button.setContentDescription(getContext().getString(
                         R.string.titlebar_close_description));
                     break;

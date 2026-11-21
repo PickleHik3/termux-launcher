@@ -13,6 +13,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 import com.termux.R;
+import com.termux.app.wall.SurfaceStandIn;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -156,6 +157,64 @@ public class X11PaneFrameHostSizeHoldTest {
             View.MeasureSpec.makeMeasureSpec(560, View.MeasureSpec.EXACTLY));
         page.layout(0, 0, 600, 560);
         assertEquals(560, display.getHeight());
+    }
+
+    /**
+     * The wall jumps with the keyboard up: the copy is asked for, and the keyboard leaving grows the
+     * frame before the surface is down. Resized then, the surface has no buffer until X draws one
+     * at the new size, and the wallpaper shows through for those frames (pong, DSPGAP run "j":
+     * surface-changed 1038x2117 between the copy landing and the stand-in's first frame). The
+     * display keeps its size from the copy's request until the surface is down, and then takes
+     * the frame's in one pass.
+     */
+    @Test
+    public void theLiveSurfaceKeepsItsSizeUntilTheStandInHasCoveredIt() {
+        HeightRecorder display = new HeightRecorder(page.getContext());
+        display.setId(R.id.x11_display_view);
+        page.addView(display, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        idle(0);
+        assertEquals(800, display.getHeight());
+
+        SurfaceStandIn still = page.still();
+        assertEquals(SurfaceStandIn.Begin.COPY, still.begin(true, true, 600, 800, 0L));
+        display.heights.clear();
+        relayout(1200);
+        assertFalse("measured at " + display.heights + " while the copy was on its way",
+            display.heights.contains(1200));
+        assertEquals(800, display.getHeight());
+
+        assertEquals(SurfaceStandIn.Copied.SHOW, still.copied(still.copyGeneration(),
+            still.copyEpoch(), true, 600, 800, 16L));
+        relayout(1200);
+        assertFalse("measured at " + display.heights + " while the stand-in covered it",
+            display.heights.contains(1200));
+        assertEquals(800, display.getHeight());
+
+        // The wall comes to rest before the surface went down: the hold goes, in one new pass.
+        page.releaseStill();
+        assertTrue("the display is laid out again at the frame's size", page.isLayoutRequested());
+        relayout(1200);
+        assertEquals(1200, display.getHeight());
+    }
+
+    @Test
+    public void aMotionWithNoLiveSurfaceHoldsNothing() {
+        HeightRecorder display = new HeightRecorder(page.getContext());
+        display.setId(R.id.x11_display_view);
+        page.addView(display, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        idle(0);
+
+        assertEquals(SurfaceStandIn.Begin.NOTHING, page.still().begin(true, false, 600, 800, 0L));
+        relayout(1200);
+        assertEquals(1200, display.getHeight());
+    }
+
+    private void relayout(int height) {
+        page.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        page.layout(0, 0, 600, height);
     }
 
     /** Stands in for the display view, which cannot exist on the JVM: notes each measured height. */

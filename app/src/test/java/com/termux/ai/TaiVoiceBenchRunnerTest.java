@@ -263,11 +263,11 @@ public class TaiVoiceBenchRunnerTest {
 
     @Test
     public void aSpeechRequestNamesItsProcessorOrFollowsTheSetting() throws Exception {
-        assertEquals("gpu", TaiManager.sttAcceleratorFor(new JSONObject().put("accelerator", "GPU"), "auto"));
-        assertEquals("cpu", TaiManager.sttAcceleratorFor(new JSONObject().put("accelerator", "cpu"), "gpu"));
-        assertEquals("auto", TaiManager.sttAcceleratorFor(new JSONObject(), "auto"));
+        assertEquals("gpu", TaiSpeech.sttAcceleratorFor(new JSONObject().put("accelerator", "GPU"), "auto"));
+        assertEquals("cpu", TaiSpeech.sttAcceleratorFor(new JSONObject().put("accelerator", "cpu"), "gpu"));
+        assertEquals("auto", TaiSpeech.sttAcceleratorFor(new JSONObject(), "auto"));
         // The Interpreter is the shell bench's, never a request's.
-        assertEquals("cpu", TaiManager.sttAcceleratorFor(new JSONObject().put("accelerator", "interp"), "cpu"));
+        assertEquals("cpu", TaiSpeech.sttAcceleratorFor(new JSONObject().put("accelerator", "interp"), "cpu"));
     }
 
     /** The Run screen's reducer over a real voice run's events: entries, phases, the dial and the fallback. */

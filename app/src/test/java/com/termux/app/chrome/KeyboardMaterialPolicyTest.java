@@ -131,11 +131,22 @@ public class KeyboardMaterialPolicyTest {
     @Test
     public void onlyTheOverlayKeyboardSeesThroughToTheDisplay() {
         for (KeyboardForm form : new KeyboardForm[] {KeyboardForm.DOCKED, KeyboardForm.SPLIT}) {
-            assertTrue(KeyboardMaterialPolicy.seesThroughToDisplay(form, true, true));
+            assertTrue(KeyboardMaterialPolicy.seesThroughToDisplay(form, true, true, true));
             // Resize mode: the bed lies beside the display, over the wallpaper, in its glass.
-            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, false, true));
-            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, true, false));
-            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, false, false));
+            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, false, true, true));
+            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, true, false, true));
+            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, false, false, true));
+        }
+    }
+
+    @Test
+    public void aBedPartlyOverTheWallpaperWearsTheWallpaperGlassWhole() {
+        // Overlay mode with rows over the keyboard: their room at rest is below the display, so
+        // the bed's lower strip lies over the wallpaper and the whole bed wears its glass.
+        for (KeyboardForm form : new KeyboardForm[] {KeyboardForm.DOCKED, KeyboardForm.SPLIT}) {
+            assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(form, true, true, false));
+            assertEquals(Material.GLASS,
+                KeyboardMaterialPolicy.hostMaterial(form, true, false, true));
         }
     }
 
@@ -143,7 +154,7 @@ public class KeyboardMaterialPolicyTest {
     public void theFloatingCardStaysThePanelOverADisplayPage() {
         assertEquals(Material.NONE,
             KeyboardMaterialPolicy.hostMaterial(KeyboardForm.FLOATING, true, false, true));
-        assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(KeyboardForm.FLOATING, true, true));
+        assertFalse(KeyboardMaterialPolicy.seesThroughToDisplay(KeyboardForm.FLOATING, true, true, true));
     }
 
     @Test

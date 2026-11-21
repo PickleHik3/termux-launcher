@@ -35,9 +35,9 @@ final class ClockWidgetSupport {
     static final String SAMPLE_SUNSET = "17:22";
 
     /** The Nerd glyphs the clocks use: a clock face, the sun, the moon. */
-    static final String GLYPH_CLOCK = "";
-    static final String GLYPH_SUN = "";
-    static final String GLYPH_MOON = "";
+    static final String GLYPH_CLOCK = WidgetIcons.CLOCK;
+    static final String GLYPH_SUN = WidgetIcons.SUN;
+    static final String GLYPH_MOON = WidgetIcons.MOON;
 
     private ClockWidgetSupport() { }
 

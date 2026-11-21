@@ -9,8 +9,8 @@ import com.termux.app.dock.DockPlacement;
 import com.termux.app.dock.DockRows;
 import com.termux.app.dock.DockSurfaceSpec;
 import com.termux.app.dock.UnderKeyboardBand;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Stack layout (ADR 0011): the whole bottom stack as a pure function of one snapshot. The dock's
@@ -67,8 +67,11 @@ public final class StackLayout {
         public boolean keyboardOverlays;
         /** The committed page is Home: the dock floats over its grid. */
         public boolean dockOverlays;
-        /** The content reaches under the whole stack: {@link KeyboardOverlayPolicy#contentUnderStack}. */
-        public boolean contentUnderStack;
+        /**
+         * Home's keyboard is always on: the cover does not apply, Home's rows ride the keyboard
+         * as before #309 ({@link HomeKeyboardCover#liftsRows(PageKind, boolean)}).
+         */
+        public boolean homeKeyboardAlwaysOn;
         public int systemImeTakePx;
         /** A slide holds the content, and the reservation it was committed with. */
         public boolean travelHoldsContent;
@@ -128,7 +131,8 @@ public final class StackLayout {
             DockLayout probe = geometry.layout(unsqueezed);
             // The stack wears the Style of the half whose rows it stands, from its arrangement.
             Base base = new Base(probe, in.dock.rowsHalf(), in.dock.arrangement,
-                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dock.rows.kind);
+                in.toolbarShown, in.keyboardShown, in.imeLiftPx, in.dock.rows.kind,
+                in.homeKeyboardAlwaysOn);
             int ceilingPx = in.ceilingBeforeMarginPx == NO_CEILING ? NO_CEILING
                 : Math.max(0, in.ceilingBeforeMarginPx - Math.max(0, base.marginPx));
             int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
@@ -167,18 +171,16 @@ public final class StackLayout {
             stackHeightPx = stackHeightPx(dockContentHeightPx, flushPaddingPx,
                 in.keyboardHeightPx);
             homeFloatDockPx = dockContentHeightPx + flushPaddingPx;
-            homeFloatImePushPx = in.systemImeTakePx + (base.lifted ? Math.max(0, in.imeLiftPx) : 0);
+            // The IME's real push, which floats read: on Home the dock no longer rides it (the
+            // margin carries no lift there), but the push is still what the keyboard raised.
+            homeFloatImePushPx = in.systemImeTakePx
+                + (in.toolbarShown || in.keyboardShown ? Math.max(0, in.imeLiftPx) : 0);
 
             // On a Home page the dock floats with the keyboard, either keyboard: the grid keeps
             // its whole height.
             int imeReachPx = in.dockOverlays ? in.systemImeTakePx : 0;
             int overlapPx = KeyboardOverlayPolicy.overlapPx(in.dockOverlays, stackHeightPx,
                 base.marginPx, keyboardOverlapPx, imeReachPx);
-            // A Display page in overlay mode: the display runs on under the whole stack, keyboard
-            // up or down, and a system keyboard still takes its room.
-            if (in.contentUnderStack && !in.dockOverlays)
-                overlapPx = KeyboardOverlayPolicy.overlapPx(true, stackHeightPx, base.marginPx,
-                    0, 0);
             sideStackOverlapPx = KeyboardOverlayPolicy.overlapPx(true, stackHeightPx,
                 base.marginPx, 0, imeReachPx);
             // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
@@ -217,7 +219,10 @@ public final class StackLayout {
      */
     private static final class Base {
         final int edgeGapPx;
-        /** Whether the IME's lift stands under the stack: only while it holds rows or a keyboard. */
+        /**
+         * Whether the IME's lift stands under the stack: only while it holds rows or a keyboard,
+         * and never on a page whose rows no keyboard lifts ({@link HomeKeyboardCover}).
+         */
         final boolean lifted;
         final int marginPx;
         final boolean bandsUnderKeyboard;
@@ -225,15 +230,15 @@ public final class StackLayout {
 
         Base(@NonNull DockLayout dock, @NonNull DockGeometry.Half half,
              @NonNull PlaceLayout arrangement, boolean toolbarShown, boolean keyboardShown,
-             int imeLiftPx, @NonNull PaneWallPage rowsPage) {
+             int imeLiftPx, @NonNull PageKind rowsPage, boolean homeKeyboardAlwaysOn) {
             // On Home the card stands on the keyboard too (D11), so Floating's gap goes with it.
             // Read for the page whose rows the stack stands, as the activity dresses the dock.
             boolean peekCardStands = DockPlacement.peekCardStandsOn(rowsPage,
-                DockSurfaceSpec.forStyle(half.design).peek, toolbarShown, arrangement, false,
+                homeKeyboardAlwaysOn, DockSurfaceSpec.forStyle(half.design).peek, toolbarShown, arrangement, false,
                 keyboardShown, imeLiftPx > 0, dock.promptFieldBandPx > 0);
             edgeGapPx = ChromePolicy.bottomEdgeGapPx(
                 DockPlacement.floats(half.floating, peekCardStands), dock.capsuleBottomGapPx);
-            lifted = toolbarShown || keyboardShown;
+            lifted = (toolbarShown || keyboardShown) && HomeKeyboardCover.liftsRows(rowsPage, homeKeyboardAlwaysOn);
             marginPx = (lifted ? imeLiftPx : 0) + edgeGapPx;
             bandsUnderKeyboard = toolbarShown
                 && !EdgeStackPolicy.underKeyboard(arrangement).isEmpty();
@@ -249,6 +254,17 @@ public final class StackLayout {
     }
 
     /** The stack's height: its rows, the terminal's padding and the keyboard. */
+    /**
+     * The flush padding a pass stands the stack with. While a crossing is live it is the arriving
+     * place's rest value ({@code restFlushPx}): the live reading comes off the terminal's
+     * geometry, which a crossing has pre-sized and displaced, and differs from the rest's by a few
+     * px, so the container's height would change on the landing frame. At rest, the live reading.
+     */
+    public static int flushPx(boolean crossing, int restFlushPx, @NonNull FlushRule live,
+                              int contentPx, int marginPx) {
+        return crossing ? Math.max(0, restFlushPx) : live.paddingPx(contentPx, marginPx);
+    }
+
     public static int stackHeightPx(int dockContentHeightPx, int flushPaddingPx,
                                     int keyboardHeightPx) {
         return Math.max(0, dockContentHeightPx)
@@ -302,9 +318,12 @@ public final class StackLayout {
         public boolean keyboardShown;
         public int keyboardHeightPx;
         public boolean keyboardOverlays;
-        /** The content reaches under the whole stack: {@link KeyboardOverlayPolicy#contentUnderStack}. */
-        public boolean contentUnderStack;
         public int flushPaddingPx;
+        /**
+         * Home's keyboard is always on: the cover does not apply, Home's rows ride the keyboard
+         * as before #309.
+         */
+        public boolean homeKeyboardAlwaysOn;
 
         public RestInput(@NonNull DockGeometry.Snapshot dock, @NonNull PageRef page) {
             this.dock = dock;
@@ -336,6 +355,18 @@ public final class StackLayout {
     }
 
     /**
+     * {@code page}'s dock rows at rest with its own extra-keys row, nothing squeezed, 0 while its
+     * dock is away: the band the side stands over the keyboard. The taller of the two sides' is the
+     * band the stack lays out once ({@link StackLanes#slackPx}).
+     */
+    public static int restRowsPx(@NonNull RestInput in) {
+        return in.toolbarShown
+            ? DockGeometry.compute(in.dock.restOf(in.page))
+                .combinedHeight(in.toolbarHeightPx, in.extraKeysRowEnabled)
+            : 0;
+    }
+
+    /**
      * The room {@code page}'s chrome leaves the content at rest, built from the stack's parts the
      * way {@link #layout} builds them: its own dock rows in its own Style, its own status band,
      * the terminal's padding, the keyboard when it is up and the margin under all of that. Home's
@@ -345,13 +376,13 @@ public final class StackLayout {
         DockGeometry.Half half = in.dock.half(in.page);
         DockLayout rest = DockGeometry.compute(in.dock.restOf(in.page));
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx, in.page.kind);
+            in.imeLiftPx, in.page.kind, in.homeKeyboardAlwaysOn);
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);
-        // Home's chrome takes no room, and nor does a Display page's in overlay mode.
-        return KeyboardOverlayPolicy.restReservationPx(in.page.isHome() || in.contentUnderStack,
-            dockContentPx,
+        // Home's chrome takes no room. A Display page's rows take theirs in either mode, below the
+        // display; an overlaying keyboard hands back only its own height.
+        return KeyboardOverlayPolicy.restReservationPx(in.page.isHome(), dockContentPx,
             in.flushPaddingPx, in.keyboardShown, in.keyboardOverlays,
             Math.max(0, in.keyboardHeightPx), base.marginPx);
     }
@@ -366,7 +397,7 @@ public final class StackLayout {
     public static int restGridDockReservePx(@NonNull RestInput in, @NonNull DockLayout rest) {
         DockGeometry.Half half = in.dock.half(in.page);
         Base base = new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx, in.page.kind);
+            in.imeLiftPx, in.page.kind, in.homeKeyboardAlwaysOn);
         int statusBandPx = statusAlongTheBottom(half.layout) ? in.statusBand.px(half.floating) : 0;
         int dockContentPx = base.dockContentPx(rest, in.toolbarShown, in.toolbarHeightPx,
             in.extraKeysRowEnabled, statusBandPx);
@@ -374,6 +405,17 @@ public final class StackLayout {
             statusBandPx > 0);
         return KeyboardOverlayPolicy.homeGridDockReservePx(in.page.isHome() && stackShown,
             dockContentPx, base.edgeGapPx);
+    }
+
+    /**
+     * The edge gap {@code page}'s dock keeps above the pane's bottom at rest, built the way
+     * {@link #layout} builds {@link Result#stackEdgeGapPx}: the page bar's pill stands that far up
+     * when no dock rows stand under it.
+     */
+    public static int restGridEdgeGapPx(@NonNull RestInput in, @NonNull DockLayout rest) {
+        DockGeometry.Half half = in.dock.half(in.page);
+        return new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
+            in.imeLiftPx, in.page.kind, in.homeKeyboardAlwaysOn).edgeGapPx;
     }
 
     /** Whether {@code layout} stands the status bar along the bottom, a band of the stack. */

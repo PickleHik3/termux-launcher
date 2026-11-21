@@ -12,7 +12,7 @@ public class TravelImeHandOverTest {
     public void aTravelShowLeavesTheImeWithThePlaceThatHadIt() {
         // Home holds it with the keyboard down; the slide toward the terminal brings the keys up.
         assertTrue(TermuxInAppKeyboard.placeHoldsSystemIme(true, true, true, false, false, true));
-        // Even once the landing says the Workspace owns nothing: it waits for landTravelShow.
+        // Even once the landing says the Terminal owns nothing: it waits for landTravelShow.
         assertTrue(TermuxInAppKeyboard.placeHoldsSystemIme(true, true, false, false, false, true));
     }
 
@@ -23,7 +23,7 @@ public class TravelImeHandOverTest {
 
     @Test
     public void onceLandedTheAnswerIsThePlacesAgain() {
-        // The Workspace owns no fields: the keyboard up takes the IME back.
+        // The Terminal owns no fields: the keyboard up takes the IME back.
         assertFalse(TermuxInAppKeyboard.placeHoldsSystemIme(true, false, false, false, false, true));
         // Home with the keyboard down holds it; up, it gives it back unless it keeps it.
         assertTrue(TermuxInAppKeyboard.placeHoldsSystemIme(false, false, true, false, false, false));

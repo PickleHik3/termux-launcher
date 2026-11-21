@@ -5,19 +5,12 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
-import android.app.Application;
-import android.os.Build;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.Config;
 
 import java.util.Arrays;
 
 /** Every edit the page editor can make, on the JVM. org.json needs Robolectric's implementation. */
-@RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class ExtraKeysDraftTest {
 
     private static ExtraKeysDraft draft(String one, String two) {
@@ -156,5 +149,25 @@ public class ExtraKeysDraftTest {
         draft.removeKey(0, draft.page(0).row(0).get(0));
         draft.restore(snapshot);
         assertEquals(before, draft.valueFor(0));
+    }
+
+    @Test
+    public void movingTheKeySizeChangesTheFingerprintAndBackAgainRestoresIt() {
+        ExtraKeysDraft draft = draft("[[ESC]]", "[]");
+        String before = draft.fingerprint();
+        draft.setKeySizeTenths(20);
+        assertNotEquals(before, draft.fingerprint());
+        draft.setKeySizeTenths(ExtraKeysDraft.KEY_SIZE_DEFAULT_TENTHS);
+        assertEquals(before, draft.fingerprint());
+        draft.setKeySizeTenths(99);
+        assertEquals(30, draft.keySizeTenths());
+    }
+
+    @Test
+    public void theKeySizeWritesWithOneDecimal() {
+        assertEquals("1.0", ExtraKeysDraft.keySizeProperty(10));
+        assertEquals("0.4", ExtraKeysDraft.keySizeProperty(4));
+        assertEquals("3.0", ExtraKeysDraft.keySizeProperty(30));
+        assertEquals("1.7", ExtraKeysDraft.keySizeProperty(17));
     }
 }

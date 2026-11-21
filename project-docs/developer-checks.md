@@ -10,6 +10,53 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Page bar and keyboard settings (2026-11-21, #298)
+- 2026-11-21 · 09ef9a875 · How the page bar looks and feels: filled glyphs, the pill hugged and centred above the dock (at the dock's bottom line when every dock row is hidden), full width from the page switcher key, the stack of windows, the bubble while sliding. Passes when it reads as one piece with the dock and the widgets on pong's wallpapers · pong.
+- 2026-11-21 · 09ef9a875 · Decide: a press on the page switcher key with no slide leaves the bar up for one use and the next touch anywhere, the key included, puts it away. On the emulator that read as every second hold "doing nothing". Keep, or have a second press on the key keep the bar · pong.
+- 2026-11-21 · 733986e1d · Decide: holding Home's grabber over the dock opens the Apps row menu and the bar does not brighten under the finger (it does while the keyboard swipe moves it). Keep, or brighten on touch · pong.
+- 2026-11-21 · a343af9ad · Decide: the pill's light-mode look changed with the night fix: it now wears the widget's card and lift over the glass, and its glyphs take the widget's tinted text colour. Passes when that still reads as glass to you; the Look's frost is not part of the ink's solve (a shared-recipe change if wanted) · pong.
+- 2026-11-21 · 94dcc60ba · Possible product bug behind a test fix: the dock's Drawer tile went missing on page 0 when animations ran at zero duration in tests. Check on a phone with Developer options → Animator duration scale off that the Drawer tile is still in the dock · pong or the emulator.
+- 2026-11-21 · fa42beebe · Layouts page preview and the cycle chips on Keyboard theme: taste, height and whether the default layout's chip name "Launcher layout" is the right short name · pong.
+
+## Photo shader wallpapers (2026-11-18, #277)
+- 2026-11-18 · feat/photo-shader-picker · The real model's memory and run time: Generate depth on a 12 MP photo on pong (one run seen 11-18: about 6 s, lowest free memory 3.3 GB, but the model process was still alive at about 283 MB afterwards). Passes when peak memory (`dumpsys meminfo` during the run) stays within what the model estimate promised, the run takes about as long as a model load plus one image, and PSS returns to its idle ground afterwards (nothing from the model stays resident) · pong.
+- 2026-11-18 · feat/photo-shader-picker · The lotus round trip with a real AI tool: copy the instructions, give them to an AI tool with the lotus photo, choose the photo, paste the answer with Paste at the bottom, Apply. Passes when the photo moves calmly in place, a compile error pasted back gets a fixed shader, and the page reads as three plain steps in order · pong.
+- 2026-11-18 · feat/photo-shader-picker · The same round trip with Generate depth. Passes when leaves move more than the far sky, the view leans as pages slide, a touch pushes the picture and it settles over about 2 s, and it looks right again after Remove on the Depth row · pong.
+- 2026-11-18 · feat/photo-shader-picker · Power against the 2026-11-09 video numbers: a photo shader with depth on the wallpaper for a battery-stats window. Passes when the cost is about a video wallpaper's and the heavy-frame guard never steps it down at the default half quality, 30 fps · pong.
+- 2026-11-18 · feat/photo-shader-picker · How the picker feels: two entry buttons, the one-page photo flow, and the Photo and Depth rows. Passes when the rows read as part of the editor and the thumbnails look right at 36 dp · pong.
+- 2026-11-18 · photo-editor-rework · Choosing or removing a photo or a depth image in the editor: scroll down to Photo, choose an image from the system picker. Passes when the page returns at the same scroll position, with no keyboard, and Generate depth is in view · pong.
+
+## Extra-keys bar core (2026-11-14)
+- 2026-11-14 · feat/extra-keys-bar · Press feel: a press glows from the touch point and the rim and fades over 220 ms; a modifier armed shows its dot and locked shows the bar on a filled cap; a held arrow repeats every 80 ms with a pulse and a light tick; a swipe-up shows the bubble growing above the cap and fires past 24 dp. Passes when each reads as in the prototype, in light, dark, black, Material You and scheme chrome, and at font scale 1.3 labels stay on one line · pong.
+- 2026-11-14 · feat/extra-keys-bar · Key pages of 1 and 2 rows: the page lands, then the bar grows or shrinks over 160 ms and the terminal resizes once with no jitter; a flip starts at about a third of the width; rows never overlap. Passes on Docked and Floating, keyboard up and down, on a Display page and in the Assistant · pong.
+- 2026-11-14 · feat/extra-keys-bar · Key size from Settings › Keyboard & extra keys: set 0.4, 1 and 3, tap Save, return to the terminal. Passes when both pages scale and Back before Save asks to discard · pong.
+- 2026-11-14 · feat/extra-keys-bar · The morph between key sets: Terminal window to a Display page and back. Passes when keys both sets share stay put while the others scale and fade over 180 ms, as one motion after the page lands with no second motion; with a taller and a shorter set the glass and the terminal step once · pong.
+- 2026-11-14 · feat/extra-keys-bar · Key size per place: in Settings › Keyboard & extra keys give Terminal 0.6 and Display 1.6, Save. Passes when each place's bar shows its own size and a place without a size follows Global · pong.
+- 2026-11-15 · feat/extra-keys-bar · The Home pill by hand (no switch UI yet: set `place.dress.home.<portrait|landscape>.extra_keys` to true in the launcher's shared preferences with `run-as` + `sed` before a force-stop). Taste calls: is the glass, shadow and 46 dp height right beside the dock; does the lift (scale and shadow, firm haptic) read as picked up; is the Edit keys chip easy to reach and does 2.6 s feel right; does the flight to the docked bar and the ride with the keyboard feel like one object; which UI should switch Home's keys on · pong.
+
+
+## Ghostty parity: Fast engine input (2026-11-12)
+- 2026-11-12 · feat/ghostty-parity · Keys on Fast now come from libghostty's encoders. By hand in a shell, vim or neovim, and Claude Code: type with the in-app keyboard and with Gboard, use the extra-keys row with sticky Ctrl and Alt, hold a key to repeat. Passes when nothing you type daily prints stray characters or loses a modifier. Known changes to judge, as Ghostty does them: Shift+Enter sends `\e[27;2;13~` and Alt+Tab sends `\e^I` in normal mode; the full table is `project-docs/reference/terminal/ghostty-parity-input-differences-2026-11-11.md`. If something breaks, `setprop debug.tl.terminal_input java` and a new pane restores the old bytes · pong.
+- 2026-11-12 · feat/ghostty-parity · Touch as mouse on Fast: in a mouse-aware program (htop, neovim with mouse on, tmux) tap, drag a selection or a split border, and scroll with two fingers. Passes when clicks land on the cell under the finger and drags and scrolls track it. A one-finger swipe in drag-reporting modes scrolls instead of dragging; that is the view's older behaviour, not this change · pong.
+- 2026-11-12 · feat/ghostty-parity · Hardware keyboard on Fast: modifiers, function keys, numpad, key release in a kitty-keyboard program, dead keys and AltGr on a non-US layout. None of these ran on a device · pong with a keyboard attached.
+
+## Dock carry feel (2026-11-11, #155 rework)
+- 2026-11-11 · fix/dock-carry-feel · By hand on pong, Docked and Floating, keyboard down and up:
+  a dock icon carried over another place parts the row about 0.2 s after it settles; resting on an
+  icon's middle still swells it within about a third of a second and a release makes a folder,
+  and the faster parting does not make a folder hard to aim for · pong.
+- 2026-11-11 · fix/dock-carry-feel · Hold a dock icon and a drawer icon until the menu opens, then
+  slide it up, diagonally and down: each lifts the icon after a short slide, and the drawer no
+  longer closes under the finger. Note what you lose: a slide from the held icon onto a menu row
+  now lifts the icon instead of choosing the row (Home already worked this way) · pong.
+- 2026-11-11 · fix/dock-carry-feel · Several dock pages: a carried icon held at either end of the
+  row turns the page after about 0.7 s, and again only after another full hold; with one finger
+  carrying, a sideways swipe by a second finger on the row turns the page both ways and the gap
+  opens on the new page; lifting the carrying finger first drops the icon there · pong.
+- 2026-11-11 · fix/dock-carry-feel · Pick up an app in the drawer: the drawer closes by itself and
+  Home with its dock shows under the finger; let go on the row (it pins at that slot) and on a
+  Home cell (it is placed there); with Home's layout locked, the drawer stays open as before · pong.
+
 ## Swipe stalls (2026-11-08)
 - 2026-11-08 · 96f3c94ae, 30270fe41 · Bench `set.sh` x3, H2 ↔ WS and WS ↔ AI, against
   9dae2f26e: the landed frame (`Wall.landed`) under 16.7 ms; `Wall.pageSettled` now runs in the
@@ -339,5 +386,8 @@ cut the developer works this list or accepts what is left (recorded as in
   Only a real kill shows it: the Saga reporter on #191 is the device, or pong with memory filled
   by other apps during a cold GPU load · pong or the reporter's reply on #191.
 
+- 2026-11-17 · feat/wr-step3 · the keyboard following the finger in a Home ⇄ Terminal swipe (it now sinks over the middle of the way on the look's curve instead of being gone by half, and the chrome rests over the first and last fifth of the way): does it read right under the thumb, slow and fast, and with Stack, Depth and Fade page transitions · pong.
+
 ## Editor motion (2026-10-31, moved from device-checks.md)
 - 2026-10-31 · look grid W2/W3 editor springs · on pong, by eye: a card swap (dock, then the status bar) fades the title, glyph, chips and rows out and back relabelled with the rows rising a little and the ring flying from one to the other, the sheet staying at half; opening the editor drops the bar in and the Appearance ring grows to stand 4dp out round the whole frame, not clipped; changing page with a card up fades the ring out and back in on the new page's surface once it lands; the Wallpaper page rises over the card and falls on Back with no flash at the end and the card at its old detent, Done closing both in one reveal; Reset this row springs the slider with a small overshoot and fades the dot, Reset card moves the rows one after another, quickly, top to bottom; with Remove animations on, moves jump while fades still run · pong.
+- 2026-11-20 · fix/herdr-snapback · Typing with the cursor trail on (Default style, kitty.conf naming no trail): press Enter, then type a word at a normal pace, in herdr and in fish directly, Fast engine. Passes when no key leaves a cursor-coloured block on the cell behind the cursor (the "snap back"), while a newline, a Home or a pane switch still draws its trail · pong.

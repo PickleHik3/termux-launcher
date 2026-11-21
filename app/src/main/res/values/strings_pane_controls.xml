@@ -3,6 +3,10 @@
 <resources>
     <string name="pane_controls_edit_widgets">Edit widgets</string>
     <string name="pane_controls_add_page">Add page</string>
+    <string name="app_drawer_corner_edit">Edit</string>
+    <string name="app_drawer_corner_done">Done</string>
+    <string name="app_drawer_corner_grid_size">Grid size</string>
+    <string name="app_drawer_corner_grid_size_tab">%1$s \u00d7 %2$s</string>
     <string name="pane_controls_keep_changes">Keep changes</string>
     <string name="pane_controls_discard_changes">Discard changes</string>
     <string name="pane_controls_more">More</string>

@@ -639,7 +639,17 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         folderDensity = density;
     }
 
-    /** The dots under the grid, or none (Settings › Home › Page indicator). */
+    /** The page bar under the grid: what the wall has pages for and where the user is. */
+    public void setPageBar(@Nullable com.termux.app.wall.pageswitch.PageBarModel model) {
+        pane.setPageBar(model);
+    }
+
+    /** Where a touch on the page bar goes. */
+    public void setPageBarEntry(@Nullable com.termux.app.wall.pageswitch.PageBarView.Entry entry) {
+        pane.setPageBarEntry(entry);
+    }
+
+    /** The glyphs under the grid, or none (Settings › Home › Page indicator). */
     public void setPageIndicator(@NonNull com.termux.app.launcher.home.HomePageIndicator indicator) {
         pane.setPageIndicator(indicator);
     }
@@ -1355,7 +1365,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     /**
      * How long a dragged widget rests in an edge band before the page turns under it. The dock's
-     * row turns its pages under a carried icon after the same rest ({@code DockDropPolicy}).
+     * row waits twice as long under a carried icon ({@code DockDropPolicy.EDGE_HOLD_MS}).
      */
     public static final long EDGE_FLIP_DELAY_MS = 350L;
     /** How wide that band is, measured in from the pane's leading and trailing edges. */
@@ -1364,8 +1374,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private final Runnable edgeFlip = this::flipDragPage;
     /** The hover over a merge target has lasted long enough: say so with the ghost. */
     private final Runnable mergeArm = this::armMergeTarget;
-    /** How much a merge target swells once a release would merge into it. */
-    private static final float MERGE_TARGET_SCALE = 1.12f;
+    private static final float MERGE_TARGET_SCALE = HomeFolderPolicy.MERGE_TARGET_SCALE;
     private final int[] paneLocation = new int[2];
 
     /** The layout as the edit session found it; the cross on the border tab puts it back. */
@@ -1669,6 +1678,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             if (cell == null) return;
             cell.setTranslationX(translationX);
             cell.setTranslationY(translationY);
+            // The carried cell draws over its neighbours by child order; the 8 dp lift is its shadow.
+            com.termux.app.window.WindowLayers.raiseWithin(cell);
             cell.setTranslationZ(dp(8));
         }
         placeCarried(rawX, rawY);
@@ -2795,6 +2806,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         /** The free cell nearest the finger on the page under it; null off the grid or when full. */
         @Nullable WidgetCellRect cell;
         float lastRawX, lastRawY;
+        /** The dock's row took the finger last time (its gap is open): the page offers nothing. */
+        boolean overDock;
         /** The cell the finger was over when the target was last worked out, to skip repeats. */
         int lastColumn = -1, lastRow = -1, lastPage = -1;
         AppDropState(@NonNull HomeAppDrop drop, int page, float rawX, float rawY) {
@@ -2917,8 +2930,42 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         state.lastRawX = rawX;
         state.lastRawY = rawY;
         pane.widgetDragLayer().moveTo(appDropBounds(rawX, rawY));
+        if (appDropOverDock(state, rawX, rawY)) return;
         watchPageEdge(state.turn, rawX);
         updateAppDropTarget(state, false);
+    }
+
+    /**
+     * An app from the drawer is over the dock's row: the row opens a gap at the finger and the page
+     * offers nothing meanwhile. Only an app of its own takes the row; a shortcut, or an icon its
+     * carrier has already shown to the dock, does not.
+     */
+    private boolean appDropOverDock(@NonNull AppDropState state, float rawX, float rawY) {
+        com.termux.app.dock.DockDrop dock = dockTakesAppDrop(state.drop) ? host.dockDrop() : null;
+        boolean over = dock != null && dock.hoverApp(rawX, rawY);
+        if (over == state.overDock) return over;
+        state.overDock = over;
+        if (over) {
+            pane.removeCallbacks(edgeFlip);
+            state.turn.edgeDirection = 0;
+            clearAppDropTarget(state);
+        } else if (dock != null) {
+            dock.leave();
+        }
+        return over;
+    }
+
+    private static boolean dockTakesAppDrop(@NonNull HomeAppDrop drop) {
+        return !drop.isCarriedOutside() && drop.shortcut() == null
+            && LiftDropPolicy.accepts(LiftDropPolicy.Item.DRAWER_APP, LiftDropPolicy.Place.DOCK);
+    }
+
+    /** The drag ended with the row's gap open: it closes. */
+    private void leaveAppDropDock(@NonNull AppDropState state) {
+        if (!state.overDock) return;
+        state.overDock = false;
+        com.termux.app.dock.DockDrop dock = host.dockDrop();
+        if (dock != null) dock.leave();
     }
 
     /**
@@ -2984,7 +3031,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * goes there (the picture settles onto it); over a full page the page says it has no room;
      * anywhere else nothing is put down. A page the drag made and left empty goes again.
      *
-     * @return whether the icon was put down
+     * @return whether the icon was put down, on Home or in the dock's row
      */
     private boolean endAppDrop(float rawX, float rawY, boolean canceled) {
         AppDropState state = appDrop;
@@ -2993,11 +3040,26 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         state.drop.follow(null);
         pane.removeCallbacks(edgeFlip);
         state.turn.edgeDirection = 0;
-        if (!canceled) {
+        if (!canceled && !state.overDock) {
             state.lastRawX = rawX;
             state.lastRawY = rawY;
             updateAppDropTarget(state, true);
         }
+        com.termux.app.dock.DockDrop dock = !canceled && state.overDock ? host.dockDrop() : null;
+        if (dock != null) {
+            boolean taken = dock.dropApp(state.drop.app, rawX, rawY);
+            leaveAppDropDock(state);
+            if (taken) {
+                // The row shows the pin; the picture simply goes, with no cell to settle onto.
+                pane.widgetDragLayer().setGhost(null, true);
+                pane.widgetDragLayer().drop(null, appDropIconPx(), false);
+                trimDragPage(state.turn, true);
+                return true;
+            }
+            // Refused: the row has said why, and it goes as a cancel does.
+            canceled = true;
+        }
+        leaveAppDropDock(state);
         Rect picture = appDropBounds(rawX, rawY);
         HomeAppDropPolicy.Outcome outcome = HomeAppDropPolicy.resolve(canceled,
             host.isOverDock(rawX, rawY), overGrid(picture.centerX(), picture.centerY()),
@@ -3037,6 +3099,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (state == null) return;
         appDrop = null;
         state.drop.follow(null);
+        leaveAppDropDock(state);
         pane.removeCallbacks(edgeFlip);
         pane.widgetDragLayer().setGhost(null, true);
         pane.releaseWidgetDragLayer();
@@ -3130,31 +3193,29 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     /**
-     * The Home card's "Glass widgets" switch moved: every built-in widget's own On or Off goes
-     * back to following it ({@link com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass#followPage}),
-     * and the page draws again.
-     *
-     * @return what each cleared widget held, by id, for the editor's Undo
+     * The Home card's "Glass widgets" switch moved: every built-in widget's own On or Off is shown
+     * following it, in the Appearance editor's draft
+     * ({@link LauncherWidgetRepository#draftGlassFollowsPage}), and the page draws again.
      */
-    @NonNull
-    public java.util.Map<Integer, String> clearBuiltinGlassChoices() {
-        java.util.Map<Integer, String> cleared = new java.util.LinkedHashMap<>();
-        java.util.List<LauncherWidgetRecord> changed =
-            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.followPage(
-                widgets.repository().records(), cleared);
-        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+    public void draftBuiltinGlassFollowsPage() {
+        if (widgets.repository().draftGlassFollowsPage())
             render();
-        return cleared;
     }
 
-    /** The editor's Undo of {@link #clearBuiltinGlassChoices}. */
-    public void restoreBuiltinGlassChoices(@NonNull java.util.Map<Integer, String> choices) {
-        if (choices.isEmpty())
-            return;
-        java.util.List<LauncherWidgetRecord> changed =
-            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.withChoices(
-                widgets.repository().records(), choices);
-        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+    /** Whether the editor's glass draft shows a widget other than the store holds it. */
+    public boolean isBuiltinGlassDraftDirty() {
+        return widgets.repository().isGlassDraftDirty();
+    }
+
+    /** The editor's Done: the glass draft is written, once. */
+    public void commitBuiltinGlassDraft() {
+        if (widgets.repository().commitGlassDraft())
+            render();
+    }
+
+    /** The editor's Discard or Undo: the glass draft goes and the widgets show the store again. */
+    public void discardBuiltinGlassDraft() {
+        if (widgets.repository().discardGlassDraft())
             render();
     }
 

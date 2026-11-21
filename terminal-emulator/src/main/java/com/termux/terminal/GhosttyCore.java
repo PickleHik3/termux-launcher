@@ -20,6 +20,10 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     static final String CORE_PROPERTY = "debug.tl.terminal_core";
     static final String CORE_GHOSTTY = "ghostty";
 
+    /** The system property that keeps the Java input encoders on this core when its value is "java". */
+    static final String INPUT_PROPERTY = "debug.tl.terminal_input";
+    static final String INPUT_JAVA = "java";
+
     /**
      * Bytes one Ghostty page takes at most, to bound how many rows a page holds. Its standard page
      * (215 x 215 cells plus style and grapheme tables) is under this; wider styles trade rows away.
@@ -153,6 +157,27 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
         GhosttyNative.nativeWrite(mHandle, data, offset, length);
     }
 
+    /** The bytes for a key event (see {@link GhosttyNative#nativeEncodeKey}), null once freed or on failure. */
+    byte[] encodeKey(int key, int action, int mods, int consumedMods, int unshiftedCodePoint, byte[] utf8,
+                     boolean composing) {
+        if (mHandle == 0) return null;
+        return GhosttyNative.nativeEncodeKey(mHandle, key, action, mods, consumedMods, unshiftedCodePoint, utf8,
+            composing);
+    }
+
+    /** The bytes for a mouse event (see {@link GhosttyNative#nativeEncodeMouse}), null once freed or on failure. */
+    byte[] encodeMouse(int action, int button, int mods, float x, float y, int screenWidth, int screenHeight,
+                       int cellWidth, int cellHeight, boolean anyButtonPressed) {
+        if (mHandle == 0) return null;
+        return GhosttyNative.nativeEncodeMouse(mHandle, action, button, mods, x, y, screenWidth, screenHeight,
+            cellWidth, cellHeight, anyButtonPressed);
+    }
+
+    /** The focus report bytes, or null when the library is not loaded. */
+    static byte[] encodeFocus(boolean gained) {
+        return GhosttyNative.isAvailable() ? GhosttyNative.nativeEncodeFocus(gained) : null;
+    }
+
     void setHistoryLimit(int rows) {
         if (mHandle == 0) return;
         GhosttyNative.nativeSetHistoryLimit(mHandle, rows);
@@ -170,6 +195,17 @@ final class GhosttyCore implements GhosttyNative.Sink, GhosttyMirror.HistorySour
     void reset() {
         if (mSixel != null) mSixel.abort();
         if (mHandle != 0) GhosttyNative.nativeReset(mHandle);
+    }
+
+    /** Set the scheme for DSR 996; returns the 2031 report to write when it flipped under that mode, else null. */
+    byte[] setColorScheme(boolean dark) {
+        return mHandle != 0 ? GhosttyNative.nativeSetColorScheme(mHandle, dark) : null;
+    }
+
+    /** The TERM the session exports, which XTGETTCAP TN answers with. */
+    void setTerminfoName(String name) {
+        if (mHandle != 0 && name != null && !name.isEmpty())
+            GhosttyNative.nativeSetTerminfoName(mHandle, name.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     /** End a render hold (mode 2026) the program has not ended; the next sync takes a fresh frame. */

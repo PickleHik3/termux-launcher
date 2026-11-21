@@ -47,11 +47,11 @@ public final class StatusBarCard {
     /** Every row of the card, tier by tier, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
-        EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.STATUS_INDICATORS)
+        return new EditorRows.CardRows()
+            .tier(1, Row.STATUS_POSITION, Row.STATUS_INDICATORS)
             .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
-                Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT);
-        return com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
+                Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT)
+            .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST)
             .tier(3, Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS)
             .build();
     }
@@ -130,7 +130,8 @@ public final class StatusBarCard {
     public static final int INDICATOR_WEATHER = 3;
     public static final int INDICATOR_NOTIFICATIONS = 4;
     public static final int INDICATOR_MEDIA = 5;
-    static final int INDICATOR_COUNT = 6;
+    public static final int INDICATOR_BATTERY = 6;
+    static final int INDICATOR_COUNT = 7;
 
     /**
      * Whether {@code row} is one of the Clock &amp; Weather section's clock rows, which stand
@@ -398,7 +399,9 @@ public final class StatusBarCard {
                 context.getString(R.string.editor_st_indicator_notifications),
                 context.getString(R.string.editor_st_indicator_notifications_hint)),
             new TileGrid.Tile(R.drawable.ic_ms_music_note,
-                context.getString(R.string.editor_st_indicator_media)));
+                context.getString(R.string.editor_st_indicator_media)),
+            new TileGrid.Tile(R.drawable.ic_ms_battery_full,
+                context.getString(R.string.editor_st_indicator_battery)));
         // "Elements" is a plain label inside the Status bar section, not a section heading.
         boolean[] on = new boolean[INDICATOR_COUNT];
         for (int i = 0; i < on.length; i++)

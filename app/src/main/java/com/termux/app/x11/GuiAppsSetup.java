@@ -149,13 +149,25 @@ public final class GuiAppsSetup {
     /** XFCE's package name: the same on Debian, Ubuntu and Arch (a group there). */
     static final String DESKTOP_PACKAGE = "xfce4";
 
+    /**
+     * What a ticked desktop installs from Termux's x11 repository. Its {@code xfce4} metapackage
+     * has no xfdesktop (a black desktop with no wallpaper), so the pieces of a whole desktop are
+     * named here: panel plugins, whisker menu, file and archive tools, screenshots, clipboard,
+     * image viewer, editor and an icon theme.
+     */
+    static final String[] DESKTOP_TERMUX_PACKAGES = {
+        "xfce4", "xfdesktop", "xfce4-pulseaudio-plugin", "pavucontrol",
+        "xfce4-whiskermenu-plugin", "tumbler", "thunar-archive-plugin", "xarchiver",
+        "xfce4-screenshooter", "xfce4-clipman-plugin", "ristretto", "mousepad",
+        "papirus-icon-theme"};
+
     /** One of the four apps the screen offers to install alongside the route. */
     public enum StarterApp {
         BROWSER("browser"),
         FILE_MANAGER("files"),
         TEXT_EDITOR("editor"),
         TERMINAL("terminal"),
-        /** A whole desktop (XFCE) inside a distro; offered on the distro route only, off until ticked. */
+        /** A whole desktop (XFCE) inside a distro; offered on the distro route and Termux's, off until ticked. */
         DESKTOP("desktop");
 
         /** The value this app is stored under. */
@@ -456,8 +468,15 @@ public final class GuiAppsSetup {
         if (!vaj) packages.add(AUDIO_PACKAGE);
         for (StarterApp app : StarterApp.values()) {
             if (vaj && app == StarterApp.BROWSER) continue;
-            // A desktop is a distro-route choice; the x11 route never installs one.
-            if (app == StarterApp.DESKTOP) continue;
+            // VAJ's repository has not been checked for the desktop's packages.
+            if (vaj && app == StarterApp.DESKTOP) continue;
+            if (app == StarterApp.DESKTOP) {
+                if (!starters.contains(app)) continue;
+                for (String name : DESKTOP_TERMUX_PACKAGES) {
+                    if (!packages.contains(name)) packages.add(name);
+                }
+                continue;
+            }
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
         }
         String install = "pkg install -y " + join(packages);

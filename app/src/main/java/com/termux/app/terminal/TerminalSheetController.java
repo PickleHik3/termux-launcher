@@ -458,7 +458,21 @@ public final class TerminalSheetController
     public TerminalSheetController(@NonNull Host host) {
         mHost = host;
         mDensity = host.context().getResources().getDisplayMetrics().density;
+        mFieldEditor = new com.termux.app.terminal.inappkeyboard.FieldEditor(
+            ClipboardText.forContext(host.context()));
     }
+
+    /**
+     * The in-app keyboard's editing keys on the top sheet (FieldKeys' rule). A sheet's text lives
+     * in its own view, out of reach, so only paste acts; the other edits do nothing.
+     */
+    private final com.termux.app.terminal.inappkeyboard.FieldEditor mFieldEditor;
+    private final com.termux.app.terminal.inappkeyboard.FieldEditor.Field mSheetField =
+        new com.termux.app.terminal.inappkeyboard.FieldEditor.Field() {
+            @Nullable @Override public String fieldText() { return null; }
+            @Override public void replaceFieldText(@NonNull String text) {}
+            @Override public void insertFieldText(@NonNull String text) { text(text); }
+        };
 
     public boolean isOpen() {
         return !mStack.isEmpty();
@@ -558,6 +572,35 @@ public final class TerminalSheetController
         if (mStack.isEmpty()) onEmptied();
         // A bare card leaving can uncover one that does want the backdrop, and the other way round.
         else applyBackdropMaterial();
+    }
+
+    /**
+     * Closes one specific card, wherever it sits. On top it is {@link #dismiss()}; under another
+     * card it is removed and the cards above stay open and showing. Its onDismiss runs once. Does
+     * nothing when the card is not in the stack, so a caller holding a card that already closed
+     * cannot take down another.
+     *
+     * @return whether the card was in the stack
+     */
+    public boolean dismiss(@Nullable View card) {
+        if (card == null) return false;
+        int index = -1;
+        for (int i = 0; i < mStack.size(); i++) {
+            if (mStack.get(i).card == card) { index = i; break; }
+        }
+        if (index < 0) return false;
+        if (index == mStack.size() - 1) {
+            dismiss();
+            return true;
+        }
+        Sheet sheet = mStack.remove(index);
+        animateOut(sheet.card, sheet.foot, sheet.leading, sheet.scrim);
+        // A card is hidden only while the one above it covers it; recount without the removed one.
+        for (int i = 0; i < mStack.size() - 1; i++)
+            mStack.get(i).card.setVisibility(mStack.get(i + 1).coversPrevious ? View.GONE : View.VISIBLE);
+        if (sheet.onDismiss != null) sheet.onDismiss.run();
+        applyBackdropMaterial();
+        return true;
     }
 
     /**
@@ -809,7 +852,7 @@ public final class TerminalSheetController
         ImageView frost = mHost.findView(R.id.terminal_sheet_wallpaper_backdrop);
         View blur = mHost.findView(R.id.terminal_sheet_blur);
         if (mBackdrop == null && blur instanceof ImageView) {
-            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur);
+            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, "sheet");
         }
         if (allBare()) {
             // Every open card asked for no backdrop, so the plane draws nothing of its own and what
@@ -1189,44 +1232,34 @@ public final class TerminalSheetController
             // Travel is the card's own width, which is only known once it has been laid out, so
             // the drawer waits a frame rather than guessing at it.
             card.setAlpha(1f);
-            card.getViewTreeObserver().addOnPreDrawListener(
-                new android.view.ViewTreeObserver.OnPreDrawListener() {
-                    @Override public boolean onPreDraw() {
-                        card.getViewTreeObserver().removeOnPreDrawListener(this);
-                        card.setTranslationX(TerminalDrawerMetrics.enterTranslationX(
-                            card.getWidth(), isRtl()));
-                        clipSlidingDrawer(card);
-                        card.animate().translationX(0f).setDuration(DRAWER_ENTER_DURATION_MS)
-                            .setInterpolator(EMPHASIZED_DECELERATE)
-                            .setUpdateListener(animation -> clipSlidingDrawer(card))
-                            .withEndAction(() -> {
-                                card.animate().setUpdateListener(null);
-                                card.setClipBounds(null);
-                                restLiveBlur();
-                            })
-                            .start();
-                        return true;
-                    }
-                });
+            com.termux.app.window.FirstLayout.beforeNextDraw(card, () -> {
+                card.setTranslationX(TerminalDrawerMetrics.enterTranslationX(
+                    card.getWidth(), isRtl()));
+                clipSlidingDrawer(card);
+                card.animate().translationX(0f).setDuration(DRAWER_ENTER_DURATION_MS)
+                    .setInterpolator(EMPHASIZED_DECELERATE)
+                    .setUpdateListener(animation -> clipSlidingDrawer(card))
+                    .withEndAction(() -> {
+                        card.animate().setUpdateListener(null);
+                        card.setClipBounds(null);
+                        restLiveBlur();
+                    })
+                    .start();
+            });
             return;
         }
         if (foot) {
             // A foot panel peeks out of the terminal's bottom edge, so it rises rather than
             // appears: the travel is its own height, which is only known once it has been laid out.
             card.setAlpha(0f);
-            card.getViewTreeObserver().addOnPreDrawListener(
-                new android.view.ViewTreeObserver.OnPreDrawListener() {
-                    @Override public boolean onPreDraw() {
-                        card.getViewTreeObserver().removeOnPreDrawListener(this);
-                        card.setAlpha(1f);
-                        card.setTranslationY(card.getHeight());
-                        card.animate().translationY(0f).setDuration(ENTER_DURATION_MS)
-                            .setInterpolator(new PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
-                            .withEndAction(TerminalSheetController.this::restLiveBlur)
-                            .start();
-                        return true;
-                    }
-                });
+            com.termux.app.window.FirstLayout.beforeNextDraw(card, () -> {
+                card.setAlpha(1f);
+                card.setTranslationY(card.getHeight());
+                card.animate().translationY(0f).setDuration(ENTER_DURATION_MS)
+                    .setInterpolator(new PathInterpolator(0.2f, 0.8f, 0.2f, 1f))
+                    .withEndAction(this::restLiveBlur)
+                    .start();
+            });
             return;
         }
         com.termux.app.chrome.GlassMotionPlayer.enter(card, mHost.glassMotion(),
@@ -1314,6 +1347,7 @@ public final class TerminalSheetController
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {
         if (mStack.isEmpty()) return false;
+        if (mFieldEditor.handle(mSheetField, value, ctrl, alt, shift)) return true;
         switch (value.getKind()) {
             case Char:
                 if (!ctrl && !alt) text(String.valueOf(value.getChar()));

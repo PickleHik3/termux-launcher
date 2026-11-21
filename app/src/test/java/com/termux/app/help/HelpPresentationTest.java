@@ -9,12 +9,12 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import com.termux.R;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.launcher.widget.WidgetGridView;
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import org.junit.Before;
@@ -40,7 +40,7 @@ public class HelpPresentationTest {
     private View status;
     private View dock;
     /** Built by the tests that are about the extra keys row; laid out with everything else. */
-    private ExtraKeysView keys;
+    private ExtraKeysPageView keys;
     private Rect keysBounds = new Rect(0, 560, 400, 620);
     private HelpOverlayView overlay;
     private HelpTargets.ViewFinder finder;
@@ -117,14 +117,14 @@ public class HelpPresentationTest {
         keyRects.put("config", new Rect(330, 700, 370, 740));
     }
 
-    private void overview(PaneWallPage place) {
+    private void overview(PageKind place) {
         overlay.overview(place);
         layout();
         overlay.refresh();
         layout();
     }
 
-    private void explore(PaneWallPage place) {
+    private void explore(PageKind place) {
         overlay.explore(place, null);
         layout();
         overlay.refresh();
@@ -209,7 +209,7 @@ public class HelpPresentationTest {
     }
 
     /** The curated controls this bare harness could measure, whatever else is on screen. */
-    private java.util.SortedSet<String> curatedOnScreen(PaneWallPage place) {
+    private java.util.SortedSet<String> curatedOnScreen(PageKind place) {
         java.util.SortedSet<String> ids = new java.util.TreeSet<>();
         for (String targetId : HelpPresentationModel.OVERVIEW_TARGET_IDS) {
             if (HelpTopics.forTarget(place, targetId) == null) continue;
@@ -259,19 +259,19 @@ public class HelpPresentationTest {
      */
     @Test public void theOverviewDrawsTheCuratedCardsAndNothingElse() {
         keyboardUp();
-        overview(PaneWallPage.TERMINAL);
+        overview(PageKind.TERMINAL);
         assertTrue(overlay.isShowing());
         assertTrue("the overview marks nothing", overlay.markerTargetIds().isEmpty());
         assertNull("the overview has no exploration toolbar", overlay.toolbarBounds());
         assertNull("no single card is seated", overlay.cardBounds());
         assertEquals("nothing was left out", java.util.Collections.emptyList(),
             overlay.unplacedOverviewIds());
-        java.util.SortedSet<String> curated = curatedOnScreen(PaneWallPage.TERMINAL);
+        java.util.SortedSet<String> curated = curatedOnScreen(PageKind.TERMINAL);
         assertTrue("this test needs the keyboard's own controls", curated.contains("prefix"));
         assertTrue(curated.contains("settings"));
         assertEquals(curated, new java.util.TreeSet<>(overlay.overviewCardIds()));
         for (String id : overlay.overviewCardIds()) {
-            HelpTopics.Entry entry = HelpTopics.forTarget(PaneWallPage.TERMINAL, id);
+            HelpTopics.Entry entry = HelpTopics.forTarget(PageKind.TERMINAL, id);
             assertNotNull(id + "'s card is not its topic",
                 exactly(string(entry.titleRes) + "\n" + string(entry.actionRes)));
         }
@@ -280,8 +280,8 @@ public class HelpPresentationTest {
 
     /** With the keyboard down its own controls are not there, and they get no card. */
     @Test public void theOverviewDropsTheCardsWhoseControlsAreNotOnScreen() {
-        overview(PaneWallPage.TERMINAL);
-        java.util.SortedSet<String> curated = curatedOnScreen(PaneWallPage.TERMINAL);
+        overview(PageKind.TERMINAL);
+        java.util.SortedSet<String> curated = curatedOnScreen(PageKind.TERMINAL);
         assertFalse("the keyboard is down in this test", curated.contains("prefix"));
         assertEquals(curated, new java.util.TreeSet<>(overlay.overviewCardIds()));
         assertTrue(overlay.overviewCardIds().contains("dock"));
@@ -290,7 +290,7 @@ public class HelpPresentationTest {
 
     /** Every place opens on its own overview, and every one of them stays on one page. */
     @Test public void everyPlaceHasAnOverviewOfItsOwn() {
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             keyboardUp();
             overview(place);
             assertTrue(place.name(), overlay.isShowing());
@@ -306,7 +306,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void theOverviewsButtonsOpenTheGuideAndCloseHelp() {
-        overview(PaneWallPage.TERMINAL);
+        overview(PageKind.TERMINAL);
         View guide = described(string(R.string.help_overview_guide_action));
         assertNotNull("no way into the guide", guide);
         assertTrue("the Guide button is too small for a thumb", guide.getHeight() >= 48);
@@ -317,7 +317,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void aCardOnTheOverviewOpensItsTopic() {
-        overview(PaneWallPage.TERMINAL);
+        overview(PageKind.TERMINAL);
         View card = overlay.overviewCardView("dock");
         assertNotNull(card);
         card.performClick();
@@ -326,7 +326,7 @@ public class HelpPresentationTest {
 
     /** Back on the overview is the launcher's to answer: it is where help opens. */
     @Test public void backOnTheOverviewIsNotConsumed() {
-        overview(PaneWallPage.TERMINAL);
+        overview(PageKind.TERMINAL);
         assertFalse(overlay.onBackPressed());
         assertTrue(overlay.isShowing());
         assertEquals(0, closed);
@@ -334,7 +334,7 @@ public class HelpPresentationTest {
 
     /** Nothing to put away on the overview, so the empty space around it is the way out. */
     @Test public void tappingEmptySpaceInTheOverviewClosesHelp() {
-        overview(PaneWallPage.TERMINAL);
+        overview(PageKind.TERMINAL);
         float[] point = emptyPoint();
         tap(point[0], point[1]);
         assertNull(read);
@@ -343,7 +343,7 @@ public class HelpPresentationTest {
 
     /** A finger that travelled was a swipe over the launcher, not a tap on the empty space. */
     @Test public void aFingerThatMovedIsNotAWayOutOfTheOverview() {
-        overview(PaneWallPage.TERMINAL);
+        overview(PageKind.TERMINAL);
         float[] point = emptyPoint();
         swipe(point[0], point[1], point[0] + 300, point[1] + 300);
         assertTrue(overlay.isShowing());
@@ -352,7 +352,7 @@ public class HelpPresentationTest {
 
     /** A dock that is a rail down one edge is swiped inward, and its card says so. */
     @Test public void aDockThatIsARailSaysSwipeInward() {
-        overview(PaneWallPage.TERMINAL);
+        overview(PageKind.TERMINAL);
         assertNotNull(exactly(string(HelpTopics.entry("dock").titleRes) + "\n"
             + string(R.string.help_topic_dock_action)));
         // The wall off the left edge, and the dock a column beside it.
@@ -366,7 +366,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void everyPlaceMarksItsControlsAndSeatsNoCard() {
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             explore(place);
             assertTrue(place.name(), overlay.isShowing());
             assertFalse(place.name() + " marked nothing", overlay.markerTargetIds().isEmpty());
@@ -382,7 +382,7 @@ public class HelpPresentationTest {
 
     /** A marker carries its number and its control's name, and no two sit on each other. */
     @Test public void everyMarkerIsNumberedNamedAndClearOfTheOthers() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         java.util.List<String> ids = overlay.markerTargetIds();
         assertTrue("the terminal marks more than one control", ids.size() > 1);
         java.util.List<Rect> seen = new java.util.ArrayList<>();
@@ -391,7 +391,7 @@ public class HelpPresentationTest {
             assertNotNull(marker);
             assertEquals("marker " + i + " is not numbered", String.valueOf(i + 1),
                 ((TextView) marker).getText().toString());
-            HelpTopics.Entry entry = HelpTopics.forTarget(PaneWallPage.TERMINAL, ids.get(i));
+            HelpTopics.Entry entry = HelpTopics.forTarget(PageKind.TERMINAL, ids.get(i));
             assertEquals("marker " + i + " is not named", string(entry.titleRes),
                 marker.getContentDescription().toString());
             assertTrue("marker " + i + " is too small for a finger", marker.getWidth() >= 24);
@@ -403,7 +403,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void aMarkerTapSeatsOneCardClearOfEverything() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("status");
         assertEquals("status", overlay.selectedTopicId());
         assertClearOfEverything();
@@ -414,14 +414,14 @@ public class HelpPresentationTest {
     }
 
     @Test public void tappingTheControlItselfAlsoSeatsItsCard() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tap(300, 20);
         assertEquals("status", overlay.selectedTopicId());
         assertClearOfEverything();
     }
 
     @Test public void tappingAnotherControlSwitchesTheOneCard() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("status");
         assertEquals("status", overlay.selectedTopicId());
         tapMarker("dock");
@@ -431,7 +431,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void tappingEmptySpaceLeavesTheScreenMarkedWithNoCard() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("status");
         assertNotNull(overlay.cardBounds());
         tap(200, 400);
@@ -444,7 +444,7 @@ public class HelpPresentationTest {
 
     /** With no card up there is nothing left to put away, so the next tap outside closes help. */
     @Test public void aSecondTapOnEmptySpaceClosesHelp() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("status");
         tap(200, 400);
         assertEquals(0, closed);
@@ -453,7 +453,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void backPutsTheCardAwayFirstAndThenHandsBackToHelp() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("status");
         assertTrue("back with a card up is consumed", overlay.onBackPressed());
         assertNull(overlay.cardBounds());
@@ -463,7 +463,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void readTopicHandsTheTopicOver() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("status");
         TextView readTopic = exactly(string(R.string.help_explore_read));
         assertNotNull(readTopic);
@@ -473,7 +473,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void theToolbarLeadsBackAndOut() {
-        explore(PaneWallPage.WIDGETS);
+        explore(PageKind.HOME);
         described(string(R.string.help_explore_back)).performClick();
         assertEquals(1, backToHelp);
         described(string(R.string.help_close_action)).performClick();
@@ -482,7 +482,7 @@ public class HelpPresentationTest {
 
     /** The toolbar goes to the edge farthest from the control, so the card keeps the near one. */
     @Test public void theToolbarSitsAtTheEdgeFarthestFromTheControl() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("status");
         Rect high = overlay.toolbarBounds();
         assertTrue("a control at the top leaves the toolbar at the bottom", high.top > 400);
@@ -497,7 +497,7 @@ public class HelpPresentationTest {
      * moved to some other control.
      */
     @Test public void aVanishedControlIsSaidRatherThanRedirected() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("dock");
         assertEquals("dock", overlay.selectedTopicId());
         dock.setVisibility(View.GONE);
@@ -513,7 +513,7 @@ public class HelpPresentationTest {
     /** Asking for a control this screen does not have is answered, not silently dropped. */
     @Test public void showOnScreenForAControlThatIsNotThereIsSaid() {
         dock.setVisibility(View.GONE);
-        overlay.explore(PaneWallPage.TERMINAL, "dock");
+        overlay.explore(PageKind.TERMINAL, "dock");
         layout();
         overlay.refresh();
         layout();
@@ -530,7 +530,7 @@ public class HelpPresentationTest {
         status.layout(0, 0, 200, 30);
         dock.setVisibility(View.GONE);
         overlay.layout(0, 0, 200, 200);
-        overlay.explore(PaneWallPage.TERMINAL, null);
+        overlay.explore(PageKind.TERMINAL, null);
         overlay.refresh();
         tapMarker("status");
         assertEquals("status", noSeat);
@@ -540,7 +540,7 @@ public class HelpPresentationTest {
 
     /** The demonstration is the topic's own movement, and a rail is swiped inward off itself. */
     @Test public void aDemonstrationPlaysTheGestureTheTopicCarries() {
-        overlay.demonstrate(PaneWallPage.TERMINAL, "dock");
+        overlay.demonstrate(PageKind.TERMINAL, "dock");
         layout();
         overlay.refresh();
         layout();
@@ -552,7 +552,7 @@ public class HelpPresentationTest {
     @Test public void aDockThatIsARailIsSwipedInwardInstead() {
         HelpTopics.Entry dockTopic = HelpTopics.entry("dock");
         assertEquals(HelpGesture.DRAG_DOWN, dockTopic.gesture);
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         assertEquals("a row along the bottom is still pulled down",
             HelpGesture.DRAG_DOWN, overlay.gestureFor(dockTopic, new Rect(0, 600, 400, 700)));
         // The wall off the left edge, and the dock a column beside it: the same topic, and the
@@ -570,7 +570,7 @@ public class HelpPresentationTest {
     @Test public void aTopicWithNoGesturePlaysNothingAndStillShowsItsCard() {
         HelpTopics.Entry corners = HelpTopics.entry("corners");
         assertNull("this test is about a topic with no gesture", corners.gesture);
-        overlay.demonstrate(PaneWallPage.TERMINAL, "corners");
+        overlay.demonstrate(PageKind.TERMINAL, "corners");
         layout();
         overlay.refresh();
         layout();
@@ -585,10 +585,10 @@ public class HelpPresentationTest {
      * {@link #onlyTheLaunchersOwnKeysAreLabelled} is where the shipped row is checked.
      */
     private void launcherKeys(int height) throws Exception {
-        keys = new ExtraKeysView(activity, null);
+        keys = new ExtraKeysPageView(activity, null);
         root.addView(keys, new FrameLayout.LayoutParams(keysBounds.width(), keysBounds.height()));
-        keys.reload(new ExtraKeysInfo("[['tool:wall.widgets','tool:wall.terminal','tool:mouse.toggle']]",
-            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), height);
+        keys.setKeys(new ExtraKeysInfo("[['tool:wall.widgets','tool:wall.terminal','tool:mouse.toggle']]",
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES));
     }
 
     /**
@@ -598,7 +598,7 @@ public class HelpPresentationTest {
     @Test public void onlyTheLaunchersOwnKeysAreLabelled() throws Exception {
         ExtraKeysInfo launcher = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
             "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES);
-        assertEquals(7, launcher.getMatrix()[0].length);
+        assertEquals(4, launcher.getMatrix()[0].length);
         for (ExtraKeyButton key : launcher.getMatrix()[0])
             assertTrue(key.getKey() + " is the launcher's own", HelpCopy.isLauncherKey(key));
         ExtraKeysInfo upstream = new ExtraKeysInfo("[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]",
@@ -612,13 +612,13 @@ public class HelpPresentationTest {
 
     /** Upstream's row of plain terminal keys says nothing: there is nothing to explain. */
     @Test public void aRowOfPlainTerminalKeysIsNotLabelledAtAll() throws Exception {
-        keys = new ExtraKeysView(activity, null);
+        keys = new ExtraKeysPageView(activity, null);
         root.addView(keys, new FrameLayout.LayoutParams(400, 60));
-        keys.reload(new ExtraKeysInfo("[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]",
-            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), 60);
-        overview(PaneWallPage.TERMINAL);
+        keys.setKeys(new ExtraKeysInfo("[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]",
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES));
+        overview(PageKind.TERMINAL);
         assertTrue("a plain terminal key was labelled", overlay.keyCardBounds().isEmpty());
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("keys");
         assertTrue("a plain terminal key was labelled", overlay.keyCardBounds().isEmpty());
     }
@@ -626,7 +626,7 @@ public class HelpPresentationTest {
     /** The overview labels the keys without being asked: the row is what the labels are about. */
     @Test public void theOverviewLabelsEveryLauncherKey() throws Exception {
         launcherKeys(60);
-        overview(PaneWallPage.TERMINAL);
+        overview(PageKind.TERMINAL);
         assertEquals("one label per launcher key", 3, overlay.keyCardBounds().size());
         assertTheOverviewIsClear();
     }
@@ -637,7 +637,7 @@ public class HelpPresentationTest {
      */
     @Test public void theExtraKeysRowBringsALabelForEveryKey() throws Exception {
         launcherKeys(60);
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         assertTrue("the row was not measured", overlay.markerTargetIds().contains("keys"));
         assertTrue("no key cards until the row is selected", overlay.keyCardBounds().isEmpty());
         tapMarker("keys");
@@ -657,16 +657,16 @@ public class HelpPresentationTest {
      * toolbar is not one of them. It is an excluded region now, so the labels take the other side.
      */
     @Test public void keyCardsKeepOffTheToolbarWhenTheRowRunsDownTheMiddle() throws Exception {
-        keys = new ExtraKeysView(activity, null);
+        keys = new ExtraKeysPageView(activity, null);
         // A row of tall caps down the middle: its lanes used to reach the bottom edge, where the
         // toolbar is, because only the measured controls were obstacles.
         keysBounds = new Rect(0, 150, 200, 620);
         root.addView(keys, new FrameLayout.LayoutParams(keysBounds.width(), keysBounds.height()));
-        keys.reload(new ExtraKeysInfo("[[{key:'tool:pane.split',popup:'tool:window.new'},"
+        keys.setKeys(new ExtraKeysInfo("[[{key:'tool:pane.split',popup:'tool:window.new'},"
             + "{key:'tool:session.browser',popup:'tool:session.new'}]]",
-            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES), keysBounds.height());
+            "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES));
         dock.setVisibility(View.GONE);
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         Rect row = overlay.measuredRect("keys");
         assertNotNull("the row was not measured", row);
         assertTrue("this test needs the row's centre near the middle of the screen",
@@ -719,7 +719,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void noExtraKeyCardsUnlessTheExtraKeysRowIsTheSelectedControl() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         assertTrue(overlay.keyCardBounds().isEmpty());
         tapMarker("status");
         assertTrue("the status bar has no key cards", overlay.keyCardBounds().isEmpty());
@@ -727,7 +727,7 @@ public class HelpPresentationTest {
 
     /** A control that only moved must not cost the screen its markers: rebuilding them is the flash. */
     @Test public void aRemeasureThatOnlyMovedAControlKeepsTheSameMarkers() {
-        explore(PaneWallPage.WIDGETS);
+        explore(PageKind.HOME);
         View before = overlay.markerView("status");
         assertNotNull(before);
         int children = overlay.getChildCount();
@@ -739,7 +739,7 @@ public class HelpPresentationTest {
     }
 
     @Test public void dismissTakesEverythingWithIt() {
-        explore(PaneWallPage.TERMINAL);
+        explore(PageKind.TERMINAL);
         tapMarker("status");
         overlay.dismiss();
         assertFalse(overlay.isShowing());
@@ -768,7 +768,7 @@ public class HelpPresentationTest {
         assertNotNull(plus);
         Rect windows = null;
         for (HelpTargets.Target target : new HelpTargets(finder, overlay)
-                .measure(PaneWallPage.TERMINAL).targets) {
+                .measure(PageKind.TERMINAL).targets) {
             if ("windows".equals(target.id)) windows = target.rect;
         }
         assertNotNull(windows);
@@ -861,8 +861,8 @@ public class HelpPresentationTest {
             "default", ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         assertEquals("Split", HelpCopy.keyLabel(activity, keys.getMatrix()[0][0]));
         assertEquals("new window", HelpCopy.keyLabel(activity, keys.getMatrix()[0][0].getPopup()));
-        assertEquals(keys.getMatrix()[0][1].getDisplay(),
-            HelpCopy.keyLabel(activity, keys.getMatrix()[0][1]));
+        // LEFT draws an icon by default, which is no label: it reads by its key name.
+        assertEquals("LEFT", HelpCopy.keyLabel(activity, keys.getMatrix()[0][1]));
     }
 
     @Test public void emptyWidgetRegionUsesGridMetrics() {

@@ -54,7 +54,7 @@ public final class ArrangementRecovery {
      * @param launchAsksForSession the launch names a shell of its own (New session, failsafe)
      * @param saved what the autosave slot holds; only read on a cold start with no live shell
      * @param startIn the Start in preference ({@link WallRow#START_IN_HOME} or
-     *                {@link WallRow#START_IN_WORKSPACE})
+     *                {@link WallRow#START_IN_TERMINAL})
      */
     @NonNull
     public static Start decide(boolean hasLayout, boolean liveSessions, boolean coldProcess,
@@ -70,11 +70,21 @@ public final class ArrangementRecovery {
                 return Start.REBUILD;
             case EMPTY:
                 // Exactly what was left: nothing. Start in = Workspace still wants a window.
-                return WallRow.START_IN_WORKSPACE.equals(startIn) ? Start.FRESH : Start.EMPTY;
+                return WallRow.START_IN_TERMINAL.equals(startIn) ? Start.FRESH : Start.EMPTY;
             case NONE:
             default:
                 return Start.FRESH;
         }
+    }
+
+    /**
+     * Whether a start with no live shell counts as cold: the process has not started its first
+     * shell, or there is no Home to show ({@code hasHome} false, {@link
+     * WallRow#lastShellClosedShowsHome}). Without Home, closing the last shell ended the app, so
+     * its next start begins again from the autosave even while Android kept the process cached.
+     */
+    public static boolean coldStart(boolean firstShellStarted, boolean hasHome) {
+        return !firstShellStarted || !hasHome;
     }
 
     /**
@@ -85,7 +95,7 @@ public final class ArrangementRecovery {
      */
     @Nullable
     public static String effectiveStartIn(@Nullable String startIn, boolean hasHome) {
-        return hasHome ? startIn : WallRow.START_IN_WORKSPACE;
+        return hasHome ? startIn : WallRow.START_IN_TERMINAL;
     }
 
     /**
@@ -93,7 +103,7 @@ public final class ArrangementRecovery {
      * the rebuild left the row with no window (its windows were all Home floats).
      */
     public static boolean rebuildWantsFreshWindow(int rowWindows, @Nullable String startIn) {
-        return rowWindows <= 0 && WallRow.START_IN_WORKSPACE.equals(startIn);
+        return rowWindows <= 0 && WallRow.START_IN_TERMINAL.equals(startIn);
     }
 
     /**

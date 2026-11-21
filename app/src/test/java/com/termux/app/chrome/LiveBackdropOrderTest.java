@@ -20,13 +20,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import android.app.Application;
 
 /**
  * Which siblings Live blur records beneath a glass: those that draw before it, in ViewGroup's
  * order (drawing order, then a stable sort by Z), never the glass itself or anything above it.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.TIRAMISU)
+@Config(sdk = Build.VERSION_CODES.TIRAMISU, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class LiveBackdropOrderTest {
 

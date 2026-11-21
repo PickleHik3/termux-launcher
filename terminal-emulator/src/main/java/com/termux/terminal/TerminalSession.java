@@ -8,6 +8,7 @@ import android.os.Trace;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
+import androidx.annotation.NonNull;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -16,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
@@ -30,8 +32,10 @@ import java.util.function.LongSupplier;
  * The child process may be exited forcefully by using the {@link #finishIfRunning()} method.
  * <p>
  * NOTE: The terminal session may outlive the EmulatorView, so be careful with callbacks!
+ * <p>
+ * Not final only so that tests can stand in for the shell side with a capturing subclass.
  */
-public final class TerminalSession extends TerminalOutput {
+public class TerminalSession extends TerminalOutput {
 
     /** Per-session instrumentation seam; returning true consumes native resizing in tests. */
     public interface SizeUpdateObserver {
@@ -132,6 +136,20 @@ public final class TerminalSession extends TerminalOutput {
     private final Integer mTranscriptRows;
 
     private static final String LOG_TAG = "TerminalSession";
+
+    @Override
+    public String getTerminfoName() {
+        return termValue(mEnv);
+    }
+
+    /** The value of the {@code TERM=} entry of an environment array, or null when there is none. */
+    static String termValue(String[] env) {
+        if (env == null) return null;
+        for (String entry : env) {
+            if (entry != null && entry.startsWith("TERM=")) return entry.substring(5);
+        }
+        return null;
+    }
 
     public TerminalSession(String shellPath, String cwd, String[] args, String[] env, Integer transcriptRows, TerminalSessionClient client) {
         this(shellPath, cwd, args, env, transcriptRows, client, null);
@@ -476,6 +494,40 @@ public final class TerminalSession extends TerminalOutput {
         return mShellPid != -1;
     }
 
+    /**
+     * The process group in the foreground of this session's pty (tcgetpgrp, no file I/O), or -1
+     * when the session is not running or it cannot be read. {@link #programNameOf} names it.
+     */
+    public int getForegroundProcessGroup() {
+        final int fd;
+        synchronized (this) {
+            if (mShellPid == -1) return -1;
+            fd = mTerminalFileDescriptor;
+        }
+        try {
+            final int pgid = JNI.getForegroundProcessGroup(fd);
+            return pgid > 0 ? pgid : -1;
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /**
+     * The name of process {@code pgid} from /proc/pgid/comm, or null when it cannot be read.
+     * File I/O: call it off the main thread.
+     */
+    @androidx.annotation.Nullable
+    public static String programNameOf(int pgid) {
+        if (pgid <= 0) return null;
+        try {
+            final byte[] raw = java.nio.file.Files.readAllBytes(new File("/proc/" + pgid + "/comm").toPath());
+            final String name = new String(raw, StandardCharsets.UTF_8).trim();
+            return name.isEmpty() ? null : name;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     /** Whether the process ended because {@link #finishIfRunning()} asked it to. */
     public boolean isFinishRequested() {
         return mFinishRequested;
@@ -504,6 +556,11 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     @Override
+    public void onClipboardReadRequest(@NonNull ClipboardReadRequest request) {
+        mClient.onClipboardReadRequest(this, request);
+    }
+
+    @Override
     public void onReadClipboard(boolean pasted, KittyClipboard.ReadCallback callback) {
         mClient.onReadClipboard(this, pasted, callback);
     }
@@ -526,6 +583,11 @@ public final class TerminalSession extends TerminalOutput {
     @Override
     public void onKittyNotification(KittyNotification notification) {
         mClient.onKittyNotification(this, notification);
+    }
+
+    @Override
+    public void onProgramStatusChanged(@NonNull List<ProgramStatus> raised) {
+        mClient.onProgramStatusChanged(this, raised);
     }
 
     @Override
@@ -846,6 +908,8 @@ public final class TerminalSession extends TerminalOutput {
                 drainProcessOutputBeforeExit();
                 int exitCode = (Integer) msg.obj;
                 cleanupResources(exitCode);
+                // Working and blocked records end with the process (OSC 7501); done and error stay.
+                if (mEmulator != null) mEmulator.onProgramStatusProcessExit();
                 String exitDescription = "\r\n[Process completed";
                 if (exitCode > 0) {
                     // Non-zero process exit.

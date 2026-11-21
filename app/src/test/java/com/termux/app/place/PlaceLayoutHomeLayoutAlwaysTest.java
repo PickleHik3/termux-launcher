@@ -11,8 +11,8 @@ import android.os.Build;
 
 import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -25,7 +25,7 @@ import org.robolectric.annotation.ConscryptMode;
 
 /**
  * Version 14 of the migration (editor-redesign §9): the Own layout switch is gone, so every
- * install holds a Home layout. A Home that wore the shared layout gets a copy of the Workspace's,
+ * install holds a Home layout. A Home that wore the shared layout gets a copy of the Terminal's,
  * hidden stack and Dock design included, and reads the keyboard's chin (Bottom padding) linked,
  * so nothing on screen moves.
  */
@@ -74,7 +74,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         // A Home layout that differs lives on as the Home page's own (version 16).
         assertFalse(upgraded.hasHomeLayout());
         assertEquals(KindFixtures.HOME_PAGE,
-            DressResolver.of(upgraded).layoutOf(PaneWallPage.WIDGETS));
+            DressResolver.of(upgraded).layoutOf(PageKind.HOME));
         assertEquals(Edge.BOTTOM, upgraded.forVariant(KindFixtures.HOME_PAGE)
             .slot(PlaceOrientation.PORTRAIT, Element.APPS).edge);
     }
@@ -85,7 +85,7 @@ public class PlaceLayoutHomeLayoutAlwaysTest {
         assertFalse(fresh.hasHomeLayout());
         assertEquals(PlaceLayoutStore.MIGRATION_VERSION,
             prefs.getInt(PlaceLayoutStore.KEY_MIGRATED, 0));
-        assertEquals(LayoutVariant.HOME, DressResolver.of(fresh).layoutOf(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.HOME, DressResolver.of(fresh).layoutOf(PageKind.HOME));
     }
 
     /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */

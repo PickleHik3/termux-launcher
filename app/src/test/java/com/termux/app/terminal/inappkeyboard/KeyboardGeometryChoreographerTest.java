@@ -27,21 +27,13 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Pins the in-app keyboard's reveal protocol on a fake {@link
- * KeyboardGeometryChoreographer.Surface}: the ordering that keeps a blurred glass keyboard from
- * flashing base-colour glass on its first frame, the fail-safe that stops the gate from wedging the
- * window, the close-seam cover, and the system-IME inset gate.
- *
- * <p>The fake's {@code applyChromeSpec} calls back into
- * {@link KeyboardGeometryChoreographer#completePendingOpenReveal(ChromeSpec)} and
- * {@link KeyboardGeometryChoreographer#completePendingCloseGeometry(ChromeSpec)} exactly where
- * {@code TermuxActivity.applyChromeSpec()} does, so the gates here settle the same way they do on a
- * device — with a recorded call log instead of a display.</p>
+ * Pins the in-app keyboard's visibility request on a fake {@link
+ * KeyboardGeometryChoreographer.Surface}: the keyboard is visible on the call that asks for it,
+ * neither open nor close installs a pre-draw listener, and the measurement cache and the
+ * system-IME inset gate behave.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28, application = Application.class)
@@ -55,19 +47,6 @@ public class KeyboardGeometryChoreographerTest {
     public void setUp() {
         mSurface = new FakeSurface(RuntimeEnvironment.getApplication());
         mChoreographer = new KeyboardGeometryChoreographer(mSurface);
-    }
-
-    // ------------------------------------------------------------ deferral predicate
-
-    @Test
-    public void deferralNeedsAFreshOpenOfBlurredGlassWithoutItsBackdrop() {
-        assertTrue(KeyboardGeometryChoreographer.shouldDeferReveal(true, true, true, false));
-        // A backdrop that is already installed, a re-show that never went GONE, an opaque keyboard
-        // and a blur-less one each have nothing to wait for.
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(true, true, true, true));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(false, true, true, false));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(true, false, true, false));
-        assertFalse(KeyboardGeometryChoreographer.shouldDeferReveal(true, true, false, false));
     }
 
     // ------------------------------------------------------------ put-away pre-measure
@@ -118,99 +97,66 @@ public class KeyboardGeometryChoreographerTest {
     // ------------------------------------------------------------------- open reveal
 
     @Test
-    public void blurredGlassOpenLaysOutInvisibleAndPaintsTheSurfaceBeforeAnyKeyIsVisible() {
-        mSurface.glassSurface = true;
+    public void aKeyboardAskedToShowIsVisibleOnThatCallEvenWithItsBackdropNotReady() {
         mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
+        assertEquals(View.GONE, mSurface.keyboardContainer.getVisibility());
+        int before = countPreDrawListeners(mSurface.gateHost.getViewTreeObserver());
 
         mChoreographer.onVisibilityRequested(true);
 
-        // INVISIBLE participates in destination layout without allowing a draw.
-        assertEquals(View.INVISIBLE, mSurface.keyboardContainer.getVisibility());
-        assertTrue(mChoreographer.isOpenRevealPending());
-        assertNotNull("a deferred open must arm the pre-draw gate",
-            mChoreographer.openPreDrawListener());
-        // Crops are invalidated, then the spec is built, then the keyboard surface is painted —
-        // all strictly before anything can become visible.
-        assertEquals(List.of("invalidateTransitionCrops", "buildChromeSpec",
-                "keyboardBackdropReady", "keyboardGlassSurface", "applyKeyboardSurfaceState"),
-            mSurface.log);
-        // And the backstop is armed so the keyboard cannot stay invisible forever.
-        assertEquals(1, mSurface.posted.size());
-        assertEquals(KeyboardGeometryChoreographer.OPEN_REVEAL_BACKSTOP_MS,
-            mSurface.posted.get(0).delayMs);
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
+        assertEquals("no pre-draw listener is added to the root", before,
+            countPreDrawListeners(mSurface.gateHost.getViewTreeObserver()));
     }
 
     @Test
-    public void revealWaitsForTheDestinationBackdropAndThenHappensInOnePass() {
-        mSurface.glassSurface = true;
-        mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
+    public void closingInstallsNoPreDrawListener() {
         mChoreographer.onVisibilityRequested(true);
+        int before = countPreDrawListeners(mSurface.gateHost.getViewTreeObserver());
 
-        mChoreographer.completePendingOpenReveal(spec(true));
-        assertEquals("a render pass without the crop must not reveal keys",
-            View.INVISIBLE, mSurface.keyboardContainer.getVisibility());
-        assertTrue(mChoreographer.isOpenRevealPending());
+        mChoreographer.onVisibilityRequested(false);
+        assertEquals(before, countPreDrawListeners(mSurface.gateHost.getViewTreeObserver()));
 
-        mSurface.backdropReady = true;
-        mChoreographer.completePendingOpenReveal(spec(true));
-
-        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
-        assertFalse(mChoreographer.isOpenRevealPending());
-        assertNull("the gate must be released with the reveal",
-            mChoreographer.openPreDrawListener());
+        mSurface.staysLaidOut = false;
+        mChoreographer.onVisibilityRequested(true);
+        mChoreographer.onVisibilityRequested(false);
+        assertEquals(before, countPreDrawListeners(mSurface.gateHost.getViewTreeObserver()));
+        assertEquals(View.GONE, mSurface.keyboardContainer.getVisibility());
     }
 
-    @Test
-    public void openGateBlocksTheFrameAndReRendersUntilTheBackdropLands() {
-        mSurface.glassSurface = true;
-        mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
-        mChoreographer.onVisibilityRequested(true);
-        ViewTreeObserver.OnPreDrawListener gate = mChoreographer.openPreDrawListener();
-        assertNotNull(gate);
-        mSurface.log.clear();
-
-        assertFalse("a frame with the stale dock-only crop must not be allowed to draw",
-            gate.onPreDraw());
-        assertEquals(1, mChoreographer.openRevealBlockedFrames());
-        // The gate refreshes the spec synchronously — a posted render would let the stale crop draw.
-        assertTrue(mSurface.log.contains("applyChromeSpec"));
-        assertTrue(mSurface.log.contains("requestAccessoryRenderSync"));
-
-        mSurface.backdropReady = true;
-        assertTrue(gate.onPreDraw());
-        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
-        assertFalse(mChoreographer.isOpenRevealPending());
-        assertNull(mChoreographer.openPreDrawListener());
-        assertEquals("no backstop may outlive the gate", 0, mSurface.posted.size());
+    /** Counts listeners through the observer's own bookkeeping, since there is no getter. */
+    private static int countPreDrawListeners(@NonNull ViewTreeObserver observer) {
+        try {
+            java.lang.reflect.Field field =
+                ViewTreeObserver.class.getDeclaredField("mOnPreDrawListeners");
+            field.setAccessible(true);
+            Object list = field.get(observer);
+            if (list == null) return 0;
+            java.lang.reflect.Method size = list.getClass().getDeclaredMethod("size");
+            size.setAccessible(true);
+            return (Integer) size.invoke(list);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
     }
 
     @Test
     public void aKeyboardOpeningBelowTheScreenIsRevealedAtOnceWithOneRenderPassAndNoGate() {
         // A seam crossing's pre-roll: the travel holds the keyboard below the screen, so no frame
         // of the drag is held back for its backdrop, and no chrome pass runs inside a frame.
-        mSurface.glassSurface = true;
         mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
 
         mChoreographer.onVisibilityRequested(true, true);
 
         assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
-        assertFalse(mChoreographer.isOpenRevealPending());
-        assertNull("a below-screen open arms no pre-draw gate", mChoreographer.openPreDrawListener());
         assertFalse("no chrome pass runs synchronously", mSurface.log.contains("applyChromeSpec"));
         assertEquals("one posted render pass cuts its crop", 1,
             java.util.Collections.frequency(mSurface.log, "requestAccessoryRenderSync"));
-        assertEquals("no backstop for a reveal that already happened", 0, mSurface.posted.size());
     }
 
     @Test
     public void aBelowScreenOpenLeavesTheKeyboardsDressToTheFramesOwnApply() {
-        mSurface.glassSurface = true;
         mSurface.blurEnabled = true;
-        mSurface.backdropReady = true;
 
         mChoreographer.onVisibilityRequested(true, true);
 
@@ -231,188 +177,47 @@ public class KeyboardGeometryChoreographerTest {
         assertFalse(mSurface.log.contains("requestApplyThisFrame"));
     }
 
-    @Test
-    public void aBelowScreenOpenReleasesAGateAnEarlierOpenLeftArmed() {
-        mSurface.glassSurface = true;
-        mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
-        mChoreographer.onVisibilityRequested(true);
-        assertNotNull(mChoreographer.openPreDrawListener());
-
-        mChoreographer.onVisibilityRequested(true, true);
-
-        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
-        assertFalse(mChoreographer.isOpenRevealPending());
-        assertNull(mChoreographer.openPreDrawListener());
-        assertEquals(0, mSurface.posted.size());
-    }
-
-    @Test
-    public void openGateRevealsAnywayOnceItHasHeldTheCapNumberOfFrames() {
-        mSurface.glassSurface = true;
-        mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
-        mChoreographer.onVisibilityRequested(true);
-        ViewTreeObserver.OnPreDrawListener gate = mChoreographer.openPreDrawListener();
-        assertNotNull(gate);
-
-        for (int frame = 1; frame < KeyboardGeometryChoreographer.MAX_OPEN_REVEAL_BLOCKED_FRAMES;
-             frame++) {
-            assertFalse("frame " + frame + " must still be held", gate.onPreDraw());
-            assertEquals(frame, mChoreographer.openRevealBlockedFrames());
-            assertEquals(View.INVISIBLE, mSurface.keyboardContainer.getVisibility());
-        }
-
-        // Worst case is the old one-frame crop mismatch, never a frozen window.
-        assertTrue(gate.onPreDraw());
-        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
-        assertFalse(mChoreographer.isOpenRevealPending());
-        assertNull(mChoreographer.openPreDrawListener());
-    }
-
-    @Test
-    public void backstopRevealsTheKeyboardWhenNoFrameEverDraws() {
-        mSurface.glassSurface = true;
-        mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
-        mChoreographer.onVisibilityRequested(true);
-        assertEquals(View.INVISIBLE, mSurface.keyboardContainer.getVisibility());
-
-        mSurface.runPosted();
-
-        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
-        assertFalse(mChoreographer.isOpenRevealPending());
-    }
-
-    @Test
-    public void anOpaqueOrBlurLessKeyboardIsVisibleInTheSamePass() {
-        mSurface.glassSurface = false;
-        mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
-
-        mChoreographer.onVisibilityRequested(true);
-
-        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
-        assertFalse(mChoreographer.isOpenRevealPending());
-        assertNull("nothing to wait for means no gate", mChoreographer.openPreDrawListener());
-        assertEquals("and no backstop either", 0, mSurface.posted.size());
-    }
-
-    @Test
-    public void aRevealPendingFromAnEarlierOpenSurvivesAReShow() {
-        mSurface.glassSurface = true;
-        mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
-        mChoreographer.onVisibilityRequested(true);
-
-        // The container is INVISIBLE now, so this second request is not "opening from GONE" — but
-        // the outstanding promise must still hold, or the keys draw over the stale crop.
-        mChoreographer.onVisibilityRequested(true);
-
-        assertTrue(mChoreographer.isOpenRevealPending());
-        assertEquals(View.INVISIBLE, mSurface.keyboardContainer.getVisibility());
-    }
-
-    @Test
-    public void aRenderPassThatNoLongerWantsTheKeyboardDropsThePromise() {
-        mSurface.glassSurface = true;
-        mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
-        mChoreographer.onVisibilityRequested(true);
-
-        mChoreographer.completePendingOpenReveal(spec(false));
-
-        assertFalse(mChoreographer.isOpenRevealPending());
-        assertNull(mChoreographer.openPreDrawListener());
-    }
-
     // -------------------------------------------------------------------- close path
 
     @Test
-    public void closeGoesGoneAndKeepsTheSeamCoveredUntilDockOnlyLayoutIsObserved() {
-        mSurface.glassSurface = true;
+    public void aDownKeyboardStaysLaidOutAndNeverGoesGone() {
         mSurface.blurEnabled = true;
-        mSurface.backdropReady = true;
         mChoreographer.onVisibilityRequested(true);
         mSurface.log.clear();
+        int rests = mSurface.stackRests;
 
         mChoreographer.onVisibilityRequested(false);
 
+        assertEquals("down is the scene's translation, not GONE", View.VISIBLE,
+            mSurface.keyboardContainer.getVisibility());
+        assertEquals("the stack's renderer is asked for the rest", rests + 1, mSurface.stackRests);
+        assertEquals(List.of("invalidateTransitionCrops", "onKeyboardClosed",
+            "requestAccessoryRenderSync"), mSurface.log);
+
+        // A second hide while down changes nothing and arms nothing again.
+        mSurface.log.clear();
+        mChoreographer.onVisibilityRequested(false);
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
+        assertFalse(mSurface.log.contains("invalidateTransitionCrops"));
+    }
+
+    @Test
+    public void aKeyboardThatWasNeverShownIsPutDownLaidOutNotGone() {
         assertEquals(View.GONE, mSurface.keyboardContainer.getVisibility());
-        assertTrue(mChoreographer.isCloseGeometryPending());
-        assertNotNull(mChoreographer.closePreDrawListener());
-        assertEquals(List.of("invalidateTransitionCrops", "onKeyboardClosed"), mSurface.log);
 
-        // Still expanded: the destination has not been laid out, so the cover stays.
-        mSurface.log.clear();
-        mChoreographer.completePendingCloseGeometry(spec(true));
-        assertTrue(mChoreographer.isCloseGeometryPending());
+        mChoreographer.onVisibilityRequested(false);
 
-        // Dock-only spec, but the accessory stack has not reached its new exact height yet.
-        mSurface.accessoryContainer.getLayoutParams().height = 300;
-        mSurface.accessoryContainer.layout(0, 0, 1080, 120);
-        mChoreographer.completePendingCloseGeometry(spec(false));
-        assertTrue("a mid-relayout pass must not retire the conservative cover",
-            mChoreographer.isCloseGeometryPending());
-        assertFalse(mSurface.log.contains("invalidateCloseSettledCrops"));
-
-        mSurface.accessoryContainer.layout(0, 0, 1080, 300);
-        mChoreographer.completePendingCloseGeometry(spec(false));
-
-        assertFalse(mChoreographer.isCloseGeometryPending());
-        assertEquals(List.of("invalidateCloseSettledCrops", "requestAccessoryRenderSync"),
-            mSurface.log);
+        assertEquals(View.VISIBLE, mSurface.keyboardContainer.getVisibility());
     }
 
     @Test
-    public void closeCorrectionHoldsTheFrameUntilTheDockCropIsSafeForTheDestination() {
-        mChoreographer.onVisibilityRequested(true);
-        mChoreographer.onVisibilityRequested(false);
-        ViewTreeObserver.OnPreDrawListener correction = mChoreographer.closePreDrawListener();
-        assertNotNull(correction);
-        mSurface.log.clear();
-
-        mSurface.keyboardShown = false;
-        mSurface.dockBackdropSafe = false;
-        assertFalse(correction.onPreDraw());
-        // The dock-only crop is rebuilt synchronously, before that geometry may draw.
-        assertEquals(List.of("buildChromeSpec", "invalidateAccessoryCrop", "applyChromeSpec",
-            "dockBackdropSafeForDestination"), mSurface.log);
-        assertNotNull(mChoreographer.closePreDrawListener());
-
-        mSurface.dockBackdropSafe = true;
-        assertTrue(correction.onPreDraw());
-        assertNull(mChoreographer.closePreDrawListener());
-    }
-
-    @Test
-    public void reopeningReleasesTheCloseCorrectionAndItsCover() {
-        mChoreographer.onVisibilityRequested(true);
-        mChoreographer.onVisibilityRequested(false);
-        assertNotNull(mChoreographer.closePreDrawListener());
-
-        mChoreographer.onVisibilityRequested(true);
-
-        assertNull(mChoreographer.closePreDrawListener());
-        assertFalse(mChoreographer.isCloseGeometryPending());
-    }
-
-    @Test
-    public void stoppingDropsEveryPendingFrameScopedPromise() {
-        mSurface.glassSurface = true;
-        mSurface.blurEnabled = true;
-        mSurface.backdropReady = false;
-        mChoreographer.onVisibilityRequested(true);
-        mChoreographer.onVisibilityRequested(false);
-        assertTrue(mChoreographer.isCloseGeometryPending());
+    public void stoppingDropsThePendingPreviewSync() {
+        mChoreographer.requestPreviewGeometrySync();
+        assertEquals(1, mSurface.posted.size());
 
         mChoreographer.onStop();
 
-        assertNull(mChoreographer.openPreDrawListener());
-        assertNull(mChoreographer.closePreDrawListener());
-        assertFalse(mChoreographer.isCloseGeometryPending());
-        assertEquals("a gate left armed across a stop would hold the next window's first draw",
-            0, mSurface.posted.size());
+        assertEquals(0, mSurface.posted.size());
     }
 
     // ------------------------------------------------------------------- measurement
@@ -571,18 +376,9 @@ public class KeyboardGeometryChoreographerTest {
     // ---------------------------------------------------------------- system-IME gate
 
     @Test
-    public void imeInsetsAreIgnoredUntilAnInActivityFlowAsksForTheSystemKeyboard() {
-        // Insets can retain the previous app's mid-transition IME snapshot across a home resume.
-        assertFalse(mChoreographer.acceptsSystemImeInsets());
-
-        mChoreographer.onSystemImeRequested();
-
-        assertTrue(mChoreographer.acceptsSystemImeInsets());
-        assertTrue("the request must re-deliver insets, or the gate opens a frame late",
-            mSurface.log.contains("requestApplyInsets"));
-
-        mChoreographer.onSystemImeReleased();
-        assertFalse(mChoreographer.acceptsSystemImeInsets());
+    public void aSystemKeyboardRequestRedeliversInsets() {
+        mChoreographer.requestApplyInsets();
+        assertTrue(mSurface.log.contains("requestApplyInsets"));
     }
 
     @Test
@@ -663,12 +459,12 @@ public class KeyboardGeometryChoreographerTest {
 
         @Nullable KeyboardGeometryChoreographer.HostReference floatingReference;
 
-        boolean glassSurface;
         boolean blurEnabled = true;
-        boolean backdropReady;
-        boolean dockBackdropSafe = true;
         boolean keyboardShown = true;
         boolean activityAlive = true;
+        /** The docked in-app keyboard stays laid out while down; false is GONE. */
+        boolean staysLaidOut = true;
+        int stackRests;
         /** The next dress changes the host's margins or padding. */
         boolean redressPending;
         int dressPasses;
@@ -682,6 +478,16 @@ public class KeyboardGeometryChoreographerTest {
             accessoryContainer = new View(context);
             accessoryContainer.setLayoutParams(new ViewGroup.LayoutParams(1080, 0));
             metrics = context.getResources().getDisplayMetrics();
+        }
+
+        @Override
+        public boolean keyboardStaysLaidOut() {
+            return staysLaidOut;
+        }
+
+        @Override
+        public void requestStackRest() {
+            stackRests++;
         }
 
         @Nullable
@@ -728,14 +534,6 @@ public class KeyboardGeometryChoreographerTest {
         }
 
         @Override
-        public void applyChromeSpec(@NonNull ChromeSpec chromeSpec) {
-            log.add("applyChromeSpec");
-            // Exactly where TermuxActivity.applyChromeSpec() settles the two promises.
-            mChoreographer.completePendingOpenReveal(chromeSpec);
-            mChoreographer.completePendingCloseGeometry(chromeSpec);
-        }
-
-        @Override
         public void applyKeyboardSurfaceState(@NonNull ChromeSpec chromeSpec) {
             log.add("applyKeyboardSurfaceState");
         }
@@ -756,36 +554,8 @@ public class KeyboardGeometryChoreographerTest {
         }
 
         @Override
-        public boolean keyboardGlassSurface() {
-            log.add("keyboardGlassSurface");
-            return glassSurface;
-        }
-
-        @Override
-        public boolean keyboardBackdropReady(@NonNull ChromeSpec chromeSpec) {
-            log.add("keyboardBackdropReady");
-            return backdropReady;
-        }
-
-        @Override
-        public boolean dockBackdropSafeForDestination(@NonNull ChromeSpec chromeSpec) {
-            log.add("dockBackdropSafeForDestination");
-            return dockBackdropSafe;
-        }
-
-        @Override
         public void invalidateTransitionCrops() {
             log.add("invalidateTransitionCrops");
-        }
-
-        @Override
-        public void invalidateCloseSettledCrops() {
-            log.add("invalidateCloseSettledCrops");
-        }
-
-        @Override
-        public void invalidateAccessoryCrop() {
-            log.add("invalidateAccessoryCrop");
         }
 
         @Override

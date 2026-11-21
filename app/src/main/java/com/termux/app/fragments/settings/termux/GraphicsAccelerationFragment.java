@@ -33,12 +33,10 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.radiobutton.MaterialRadioButton;
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.notice.AppNotice;
-import com.termux.app.x11.LinuxAppCatalog;
 import com.termux.app.x11.X11CliInstaller;
 import com.termux.app.x11.X11GpuBenchmarkEstimate;
 import com.termux.app.x11.X11GpuBenchmarkRun;
@@ -58,9 +56,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -68,8 +64,9 @@ import java.util.concurrent.Executors;
  * Graphics acceleration (#162): the user, not the launcher, picks how Linux apps draw. The phone's
  * graphics chip on top, a warning when it is one known to freeze with the virgl profiles, every
  * profile that fits it with whether it is installed and its last benchmark result, picked like a
- * radio list (Automatic keeps the launcher's ranking), a note that software always works, and the
- * apps that draw in software whatever the pick. Run benchmark floats over the list's foot.
+ * radio list (Automatic keeps the launcher's ranking), and a note that software always works. Run
+ * benchmark floats over the list's foot. Which single apps draw in software is on each app's page
+ * under Apps.
  *
  * <p>The benchmark's Home is the model, in shape and in parts: one list rebuilt whole on every
  * change and diffed by {@link TaiBenchListAdapter}, rows built in code from {@link TaiBenchViews},
@@ -90,7 +87,6 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
     private static final int TYPE_SECTION = 2;
     static final int TYPE_PROFILE = 3;
     private static final int TYPE_NOTE = 4;
-    private static final int TYPE_APPS = 5;
 
     /**
      * The run panel's terminal text: as large as fits {@link #TERMINAL_COLUMNS} across the panel,
@@ -116,18 +112,13 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         @NonNull final X11GpuProbe.Result gpu;
         @NonNull final String pick;
         @Nullable final X11GpuProfileStore.Results results;
-        @NonNull final Set<String> softwareApps;
-        @NonNull final List<LinuxAppCatalog.LinuxApp> apps;
         final boolean scriptInstalled;
 
         Facts(@NonNull X11GpuProbe.Result gpu, @NonNull String pick,
-              @Nullable X11GpuProfileStore.Results results, @NonNull Set<String> softwareApps,
-              @NonNull List<LinuxAppCatalog.LinuxApp> apps, boolean scriptInstalled) {
+              @Nullable X11GpuProfileStore.Results results, boolean scriptInstalled) {
             this.gpu = gpu;
             this.pick = pick;
             this.results = results;
-            this.softwareApps = softwareApps;
-            this.apps = apps;
             this.scriptInstalled = scriptInstalled;
         }
     }
@@ -283,7 +274,7 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         super.onDestroy();
     }
 
-    /** Probes, takes in a newer results file and reads the store and the apps, off the main thread. */
+    /** Probes, takes in a newer results file and reads the store, off the main thread. */
     private void refresh() {
         Context context = getContext();
         X11GpuProfileStore kept = store;
@@ -295,13 +286,7 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
                 X11GpuProbe.Result override = probeForTest;
                 X11GpuProbe.Result gpu = override != null ? override : X11GpuProbe.probe(app);
                 kept.importResults(new File(X11GpuProfileStore.RESULTS_FILE_PATH));
-                List<LinuxAppCatalog.LinuxApp> apps;
-                try {
-                    apps = LinuxAppCatalog.scan(LinuxAppCatalog.roots());
-                } catch (RuntimeException e) {
-                    apps = Collections.emptyList();
-                }
-                gathered = new Facts(gpu, kept.pick(), kept.results(), kept.softwareApps(), apps,
+                gathered = new Facts(gpu, kept.pick(), kept.results(),
                     new File(X11CliInstaller.GPU_SETUP_SCRIPT_PATH).isFile());
             } catch (RuntimeException e) {
                 Logger.logStackTraceWithMessage("GraphicsAcceleration", "The graphics page could not be read", e);
@@ -321,7 +306,7 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         Facts f = facts;
         X11GpuProfileStore kept = store;
         if (f == null || kept == null) return;
-        facts = new Facts(f.gpu, kept.pick(), f.results, kept.softwareApps(), f.apps, f.scriptInstalled);
+        facts = new Facts(f.gpu, kept.pick(), f.results, f.scriptInstalled);
         rebuild();
     }
 
@@ -353,13 +338,6 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
             }
             String note = getString(R.string.settings_x11_gpu_note_software);
             items.add(new TaiBenchListAdapter.Item(TYPE_NOTE, "note", note, note));
-            if (!f.apps.isEmpty()) {
-                StringBuilder signature = new StringBuilder();
-                for (LinuxAppCatalog.LinuxApp app : f.apps) {
-                    signature.append(app.id).append(f.softwareApps.contains(app.id) ? "+" : "-").append('|');
-                }
-                items.add(new TaiBenchListAdapter.Item(TYPE_APPS, "apps", signature.toString(), f));
-            }
         }
         adapter.submit(items);
         bindBar(f);
@@ -392,7 +370,6 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
             case TYPE_HINT: return createHint(context);
             case TYPE_SECTION: return TaiBenchViews.sectionHeader(context, "", "");
             case TYPE_PROFILE: return createProfile(context);
-            case TYPE_APPS: return createApps(context);
             default: return createNote(context);
         }
     }
@@ -404,7 +381,6 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
             case TYPE_HINT: break;
             case TYPE_SECTION: ((TextView) ((ViewGroup) view).getChildAt(0)).setText((String) item.data); break;
             case TYPE_PROFILE: bindProfile(view, (ProfileRow) item.data); break;
-            case TYPE_APPS: bindApps(view, (Facts) item.data); break;
             default: ((TextView) view.findViewById(R.id.x11_gpu_text)).setText((String) item.data); break;
         }
     }
@@ -547,45 +523,6 @@ public class GraphicsAccelerationFragment extends Fragment implements TaiBenchLi
         note.setId(R.id.x11_gpu_text);
         note.setPadding(TaiBenchViews.dp(context, 22), TaiBenchViews.dp(context, 8), TaiBenchViews.dp(context, 22), TaiBenchViews.dp(context, 4));
         return note;
-    }
-
-    @NonNull
-    private View createApps(@NonNull Context context) {
-        TaiBenchViews.Card card = TaiBenchViews.card(context);
-        card.core.addView(TaiBenchViews.title(context, getString(R.string.settings_x11_gpu_apps_title)));
-        card.core.addView(TaiBenchViews.body(context, getString(R.string.settings_x11_gpu_apps_summary)),
-            TaiBenchViews.block(context, 2));
-        LinearLayout rows = new LinearLayout(context);
-        rows.setOrientation(LinearLayout.VERTICAL);
-        rows.setId(R.id.x11_gpu_rows);
-        card.core.addView(rows, TaiBenchViews.block(context, 6));
-        return card.outer;
-    }
-
-    private void bindApps(@NonNull View view, @NonNull Facts f) {
-        Context context = view.getContext();
-        LinearLayout rows = view.findViewById(R.id.x11_gpu_rows);
-        rows.removeAllViews();
-        for (LinuxAppCatalog.LinuxApp app : f.apps) {
-            LinearLayout line = new LinearLayout(context);
-            line.setOrientation(LinearLayout.HORIZONTAL);
-            line.setGravity(Gravity.CENTER_VERTICAL);
-            line.setMinimumHeight(TaiBenchViews.dp(context, 48));
-            TextView name = TaiBenchViews.body(context, app.name);
-            line.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            MaterialSwitch toggle = new MaterialSwitch(context);
-            toggle.setChecked(f.softwareApps.contains(app.id));
-            toggle.setContentDescription(app.name);
-            String id = app.id;
-            toggle.setOnCheckedChangeListener((button, checked) -> {
-                X11GpuProfileStore kept = store;
-                if (kept == null) return;
-                kept.setDrawsInSoftware(id, checked);
-                reread();
-            });
-            line.addView(toggle);
-            rows.addView(line, TaiBenchViews.block(context, 2));
-        }
     }
 
     // ---- the floating bar ----

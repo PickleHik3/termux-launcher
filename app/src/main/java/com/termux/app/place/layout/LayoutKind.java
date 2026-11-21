@@ -2,12 +2,12 @@ package com.termux.app.place.layout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.app.page.PageKind;
 
-import com.termux.app.wall.WallPages.PageKind;
 
 /**
- * The layouts a page can wear (ADR 0020 §1, ADR 0025): Home's, the Workspace's, and
- * Workspace-minimal, which the Workspace wears while minimal mode is on. The Workspace is every
+ * The layouts a page can wear (ADR 0020 §1, ADR 0025): Home's, the Terminal's, and
+ * Terminal-minimal, which the Terminal wears while minimal mode is on. The Terminal is every
  * page that is not Home: Terminal pages, Display pages and the Assistant page wear one layout
  * between them. Home ignores minimal mode.
  *
@@ -17,8 +17,8 @@ import com.termux.app.wall.WallPages.PageKind;
  */
 public enum LayoutKind {
     HOME("home", "Home layout"),
-    TERMINAL("terminal", "Workspace layout"),
-    TERMINAL_MINIMAL("terminal_minimal", "Workspace minimal layout"),
+    TERMINAL("terminal", "Terminal layout"),
+    TERMINAL_MINIMAL("terminal_minimal", "Terminal minimal layout"),
     /** Retired (ADR 0025): Display pages wear {@link #TERMINAL}. */
     DISPLAY("display", "Display layout"),
     /** Retired (ADR 0025): the Assistant page wears {@link #TERMINAL}. */
@@ -36,7 +36,7 @@ public enum LayoutKind {
 
     /**
      * The layout a page of {@code kind} wears, minimal mode being {@code minimal}: Home's on a Home
-     * page, the Workspace's (or Workspace-minimal) on every other page (ADR 0025).
+     * page, the Terminal's (or Terminal-minimal) on every other page (ADR 0025).
      */
     @NonNull
     public static LayoutKind of(@NonNull PageKind kind, boolean minimal) {
@@ -50,7 +50,7 @@ public enum LayoutKind {
     }
 
     /**
-     * The document a read or write of this kind lands on: the Workspace's for a retired one,
+     * The document a read or write of this kind lands on: the Terminal's for a retired one,
      * else itself.
      */
     @NonNull

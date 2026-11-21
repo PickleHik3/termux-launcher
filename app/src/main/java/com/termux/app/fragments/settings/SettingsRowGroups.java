@@ -104,6 +104,7 @@ public final class SettingsRowGroups {
         R.layout.preference_settings_status_card,
         R.layout.preference_status_action_card,
         R.layout.preference_settings_search,
+        R.layout.preference_process_limit_notice,
         R.layout.preference_tai_model));
 
     @NonNull

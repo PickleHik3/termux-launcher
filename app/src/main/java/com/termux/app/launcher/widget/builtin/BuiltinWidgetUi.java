@@ -75,10 +75,10 @@ public final class BuiltinWidgetUi {
         return view;
     }
 
-    /** A Nerd Font glyph; falls back to the plain character when the symbol font is missing. */
+    /** A Nerd Font glyph, or the Roundline icon a {@link WidgetIcons} glyph stands for; falls back to the plain character when the symbol font is missing. */
     @NonNull public TextView glyph(@NonNull String glyph, float sp, @ColorInt int color) {
         TextView view = new TextView(context);
-        view.setText(glyph);
+        view.setText(WidgetIcons.label(context, glyph));
         view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         if (style.nerd != null) view.setTypeface(style.nerd);
         view.setTextColor(color);

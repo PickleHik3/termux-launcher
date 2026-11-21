@@ -13,7 +13,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.TermuxService;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeyModifiers;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
@@ -236,8 +236,10 @@ class FakeTerminalHost implements TerminalHost {
         return currentSession;
     }
 
-    @Override @Nullable public ExtraKeysView extraKeysView() {
-        return null;
+    private final ExtraKeyModifiers extraKeyModifiers = new ExtraKeyModifiers();
+
+    @Override @NonNull public ExtraKeyModifiers extraKeyModifiers() {
+        return extraKeyModifiers;
     }
 
     @Override @Nullable public EditText toolbarTextInput() {
@@ -881,6 +883,10 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public void showCommandPalette() {
         record("showCommandPalette");
+    }
+
+    @Override public void showPageSwitcher() {
+        record("showPageSwitcher");
     }
 
     @Override public void showExtraKeysRowEditor() {

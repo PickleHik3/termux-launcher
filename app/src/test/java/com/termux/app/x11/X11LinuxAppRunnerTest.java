@@ -42,7 +42,8 @@ public class X11LinuxAppRunnerTest {
 
         assertEquals("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n"
-            + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.inputMethodBlock(":1")
+            + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.cursorBlock()
+            + X11LinuxAppRunner.inputMethodBlock(":1")
             + "cd \"$HOME\"\n"
             + "exec firefox --new-window\n", script);
     }
@@ -72,7 +73,7 @@ public class X11LinuxAppRunnerTest {
             X11CliInstaller.imBusPath(":0"));
     }
 
-    @Test public void aContainerAppAndADesktopAreNotGivenTheInputMethod() {
+    @Test public void aContainerAppAndAContainerDesktopAreNotGivenTheInputMethod() {
         // The helper's fcitx5 is the prefix's; a container has neither it nor its modules.
         ProotDistro.Container debian =
             new ProotDistro.Container("debian", temp.getRoot(), "", "");
@@ -80,8 +81,64 @@ public class X11LinuxAppRunnerTest {
             "gedit", "gedit", "", "", "", false);
         assertFalse(X11LinuxAppRunner.script(inDebian, ":1", Collections.emptyList())
             .contains("IM_MODULE"));
+        assertFalse(X11LinuxAppRunner.sessionScript(
+            session(debian, "xfce", "startxfce4", "XFCE"), ":1", Collections.emptyList(), null)
+            .contains("IM_MODULE"));
+    }
+
+    @Test public void aPrefixDesktopIsGivenTheInputMethodAfterTheEnvironment() {
+        // XFCE's apps are the prefix's, so a focused text field must reach fcitx5 and open the
+        // Android keyboard, as it does for a prefix app.
+        String script = X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"),
+            ":1", Arrays.asList("FOO=bar"), null);
+        String block = X11LinuxAppRunner.inputMethodBlock(":1");
+        assertTrue(script.contains(block));
+        assertTrue(script.indexOf(block) > script.indexOf("export FOO=bar"));
+        assertTrue(script.indexOf(block) < script.indexOf("cd \"$HOME\""));
+    }
+
+    @Test public void aPrefixDesktopsMenuListsTheStoresAppsAndAContainerOneIsLeftAlone() {
+        // The store puts its menu entries under $PREFIX/local/share/applications.
+        String prefix = com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        assertEquals("export XDG_DATA_DIRS='" + prefix + "/local/share':\"${XDG_DATA_DIRS:-"
+            + prefix + "/share}\"\n", X11LinuxAppRunner.menuDirsBlock());
+        assertTrue(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
+            Collections.emptyList(), null).contains(X11LinuxAppRunner.menuDirsBlock()));
+        ProotDistro.Container debian =
+            new ProotDistro.Container("debian", temp.getRoot(), "", "");
+        assertFalse(X11LinuxAppRunner.sessionScript(session(debian, "xfce", "startxfce4", "XFCE"),
+            ":1", Collections.emptyList(), null).contains("XDG_DATA_DIRS"));
+    }
+
+    @Test public void aPrefixAppGetsTheCursorLinesBeforeTheInputMethod() {
+        String script = X11LinuxAppRunner.script(app("herdr"), ":1", Collections.emptyList());
+        String block = X11LinuxAppRunner.cursorBlock();
+        assertTrue(script.contains(block));
+        assertTrue(script.indexOf(block)
+            < script.indexOf(X11LinuxAppRunner.inputMethodBlock(":1")));
+    }
+
+    @Test public void aContainerAppAndADesktopAreNotGivenTheCursorLines() {
+        ProotDistro.Container debian =
+            new ProotDistro.Container("debian", temp.getRoot(), "", "");
+        LinuxAppCatalog.LinuxApp inDebian = new LinuxAppCatalog.LinuxApp(debian, "gedit",
+            "gedit", "gedit", "", "", "", false);
+        assertFalse(X11LinuxAppRunner.script(inDebian, ":1", Collections.emptyList())
+            .contains("XCURSOR"));
         assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
-            Collections.emptyList(), null).contains("IM_MODULE"));
+            Collections.emptyList(), null).contains("XCURSOR"));
+    }
+
+    @Test public void theCursorBlockKeepsWhatIsSetAndOnlyFillsAnEmptyTheme() {
+        String block = X11LinuxAppRunner.cursorBlock();
+        String prefix = com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        assertTrue(block.contains("export XCURSOR_PATH=\"${XCURSOR_PATH:-"));
+        assertTrue(block.contains(prefix + "/share/icons:" + prefix + "/share/pixmaps}"));
+        assertTrue(block.contains("-z \"${XCURSOR_THEME:-}\""));
+        assertTrue(block.contains("'" + prefix + "/share/icons/default'"));
+        assertTrue(block.contains("'" + prefix + "/share/icons/Adwaita/cursors'"));
+        assertTrue(block.contains("export XCURSOR_THEME=Adwaita\n"));
+        assertTrue(block.contains("export XCURSOR_THEME=core\n"));
     }
 
     @Test public void noScriptStartsASoundServerOfItsOwn() {
@@ -166,10 +223,20 @@ public class X11LinuxAppRunnerTest {
 
     @Test public void aProfilesServerIsStartedOnceAndDetachedBeforeTheApp() {
         assertEquals("", X11LinuxAppRunner.gpuServerBlock(null));
-        assertEquals("if ! pgrep -f 'virgl_test_server_android' >/dev/null 2>&1; then\n"
+        assertEquals("if ! pgrep -f '^([^ ]*/)?virgl_test_server_android( |$)' >/dev/null 2>&1; then\n"
             + "(virgl_test_server_android --angle-gl >/dev/null 2>&1 &)\n"
             + "sleep 1\n"
             + "fi\n", X11LinuxAppRunner.gpuServerBlock("virgl_test_server_android --angle-gl"));
+    }
+
+    @Test public void theServerCheckDoesNotFindTheScriptThatRunsIt() {
+        // The block runs as `bash -c <script>`; pgrep -f sees that shell's command line.
+        String block = X11LinuxAppRunner.gpuServerBlock("virgl_test_server_android");
+        java.util.regex.Pattern running = java.util.regex.Pattern.compile(
+            X11LinuxAppRunner.serverPattern("virgl_test_server_android"));
+        assertFalse(running.matcher("bash -c " + block).find());
+        assertTrue(running.matcher("virgl_test_server_android --angle-gl").find());
+        assertTrue(running.matcher("/data/data/com.termux/files/usr/bin/virgl_test_server_android").find());
     }
 
     @Test public void aPickThatIsNotInstalledDrawsInSoftwareAndSaysSo() {
@@ -229,12 +296,14 @@ public class X11LinuxAppRunnerTest {
             ":1", Collections.emptyList(), null);
 
         // Everything an app's script does, first and unchanged.
-        assertTrue(script.startsWith("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\ncd \"$HOME\"\n"));
-        // Then the three things only a desktop needs, the directory made before it is used.
+        assertTrue(script.startsWith("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
+            + X11LinuxAppRunner.inputMethodBlock(":1") + X11LinuxAppRunner.menuDirsBlock()
+            + "cd \"$HOME\"\n"));
+        // Then what only a desktop needs. The runtime directory stays the shells' own, so a
+        // socket kept there (herdr-core's) is the same one inside the desktop and outside it.
+        assertFalse(script.contains("XDG_RUNTIME_DIR"));
         assertTrue(script.contains(
-            "export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/termux-x11-runtime\"\n"
-            + "mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n"
-            + "export XDG_SESSION_TYPE=x11\n"
+            "export XDG_SESSION_TYPE=x11\n"
             + "export XDG_CURRENT_DESKTOP='XFCE'\n"));
         assertTrue("the desktop is what the shell becomes", script.endsWith("exec startxfce4\n"));
         // An app's own script exports none of it.
@@ -290,7 +359,7 @@ public class X11LinuxAppRunnerTest {
             stopAt < script.indexOf("exec startxfce4"));
         // Nothing is stopped when there is no manager at all.
         assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
-            Collections.emptyList(), null).contains("kill"));
+            Collections.emptyList(), null).contains("kill \"$wm\""));
     }
 
     @Test public void theShellWritesDownThePidItIsAboutToBecome() {
@@ -403,5 +472,27 @@ public class X11LinuxAppRunnerTest {
         java.util.List<String> env = X11LinuxAppRunner.installedEnv(X11GpuProbe.evaluate(in));
         org.junit.Assert.assertTrue(env.toString(), env.contains("GALLIUM_DRIVER=llvmpipe"));
         org.junit.Assert.assertFalse(X11LinuxAppRunner.usesVirgl(env));
+    }
+
+    @Test public void aDesktopWritesToALogFileNotTheHostsPipes() {
+        String script = X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"),
+            ":1", Collections.emptyList(), null);
+        String redirect = "exec > '" + X11LinuxAppRunner.SESSION_LOG_PATH + "' 2>&1\n";
+        int log = script.indexOf(redirect);
+        assertTrue(script, log >= 0);
+        assertTrue("before the desktop runs", log < script.indexOf("exec startxfce4"));
+    }
+
+    @Test public void theStopScriptKillsOnlyAProcessCarryingTheSessionMarker() {
+        String stop = X11LinuxAppRunner.stopSessionScript();
+        String check = "grep -qx \"" + X11LinuxAppRunner.SESSION_MARKER_VAR + "=$pid\" || exit 0\n";
+        assertTrue(stop, stop.contains(check));
+        assertTrue("the check comes before any kill", stop.indexOf(check) < stop.indexOf("kill "));
+        String script = X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"),
+            ":1", Collections.emptyList(), null);
+        assertTrue("the session exports the marker as its own pid",
+            script.contains("export " + X11LinuxAppRunner.SESSION_MARKER_VAR + "=$$\n"));
+        assertTrue("before it writes the pid file", script.indexOf(
+            "export " + X11LinuxAppRunner.SESSION_MARKER_VAR) < script.indexOf("echo $$ >"));
     }
 }

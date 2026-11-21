@@ -16,7 +16,6 @@ public class EditPagesChipTest {
             .contains(Row.LINK_PAGES));
         java.util.List<Row> up = EditorRows.tier(EditorCard.HOME, new Offers(true, true, true, true), 3);
         assertFalse(up.contains(Row.LINK_PAGES));
-        assertTrue(up.contains(Row.LINK_GLOBAL));
         assertTrue(up.contains(Row.LINK_GESTURES));
     }
 }

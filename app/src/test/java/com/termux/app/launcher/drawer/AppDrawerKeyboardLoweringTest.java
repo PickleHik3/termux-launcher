@@ -99,7 +99,66 @@ public class AppDrawerKeyboardLoweringTest {
         docked();
         host.closeLowersKeyboard = true;
         startClose();
-        assertDockAndKeyboardLeaveTogether();
+        // Docked's plane stays the card to the end: its top lands on the dock's, its bottom on the
+        // card's keyboard-down rest (no full-width sheet shrinking into the dock).
+        assertDockAndKeyboardLeaveTogether(HEIGHT - 21f);
+    }
+
+    /**
+     * Back close on pong (card4/back f011–f026): the drawer's own keyboard faded while it dropped,
+     * its keys translucent over bare wallpaper. Through a Docked close it now stays opaque in its
+     * card, slid by the open drawer's slide (keyboardSlidePx) on the close's own frames, with the
+     * card's bottom one gap above its live top (cardBottomOverKeyboardPx).
+     */
+    @Test public void dockedCloseSlidesTheDrawersKeyboardAwayInItsCard() {
+        docked();
+        host.closeLowersKeyboard = true;
+        startClose();
+        float previousSlide = -1f;
+        for (float p : CLOSE) {
+            if (p < AppDrawerController.GLASS_FADE_END) break;
+            applyFrame(p);
+            float k = AppDrawerKeyboardLowering.reveal(1f, p);
+            float slide = AppDrawerKeyboardSeparation.keyboardSlidePx(HEIGHT, KEYBOARD_TOP, k);
+            if (k <= 0f) continue;
+            assertEquals("opaque at p=" + p, 1f, keyboard.getAlpha(), 0f);
+            assertEquals("slid at p=" + p, slide, keyboard.getTranslationY(), 1e-3f);
+            assertTrue("following the close at p=" + p, slide >= previousSlide);
+            previousSlide = slide;
+            Frame frame = plane.getFrame();
+            assertEquals("the card rides on it at p=" + p,
+                AppDrawerKeyboardSeparation.cardBottomOverKeyboardPx(HEIGHT - 21f,
+                    KEYBOARD_TOP + slide, 21f), frame.bottom, 1e-3f);
+        }
+    }
+
+    /**
+     * The same close under Floating: the drawer's own keyboard no longer fades (its glass, dim and
+     * keys thinning out over bare wallpaper), it stays opaque and slides off the bottom on the
+     * close's own frames, and the panel's bottom never reaches below one gap above its live top.
+     */
+    @Test public void floatingCloseSlidesTheDrawersKeyboardAwayOpaque() {
+        floating();
+        host.closeLowersKeyboard = true;
+        startClose();
+        float gap = (Float) ReflectionHelpers.callInstanceMethod(controller, "planeGapPx");
+        float previousSlide = -1f;
+        int checked = 0;
+        for (float p : CLOSE) {
+            if (p < AppDrawerController.GLASS_FADE_END) break;
+            applyFrame(p);
+            float k = AppDrawerKeyboardLowering.reveal(1f, p);
+            if (k <= 0f) continue;
+            float slide = AppDrawerKeyboardSeparation.keyboardSlidePx(HEIGHT, KEYBOARD_TOP, k);
+            assertEquals("opaque at p=" + p, 1f, keyboard.getAlpha(), 0f);
+            assertEquals("slid at p=" + p, slide, keyboard.getTranslationY(), 1e-3f);
+            assertTrue("following the close at p=" + p, slide >= previousSlide);
+            previousSlide = slide;
+            assertTrue("the panel rides above it at p=" + p,
+                plane.getFrame().bottom <= KEYBOARD_TOP + slide - gap + 1e-3f);
+            checked++;
+        }
+        assertTrue(checked > 0);
     }
 
     /** A Back or fling close: the drawer is no longer open and the reveal is on its way down. */
@@ -152,6 +211,10 @@ public class AppDrawerKeyboardLoweringTest {
     // ------------------------------------------------------------------ helpers
 
     private void assertDockAndKeyboardLeaveTogether() {
+        assertDockAndKeyboardLeaveTogether(REST_DOCK.bottom);
+    }
+
+    private void assertDockAndKeyboardLeaveTogether(float planeBottomAtRest) {
         float previousDockTop = -Float.MAX_VALUE;
         for (float p : CLOSE) {
             applyFrame(p);
@@ -171,7 +234,7 @@ public class AppDrawerKeyboardLoweringTest {
         assertEquals(REST_DOCK.top, dockTop(), 1e-3f);
         Frame frame = plane.getFrame();
         assertEquals(REST_DOCK.top, frame.top, 1e-3f);
-        assertEquals(REST_DOCK.bottom, frame.bottom, 1e-3f);
+        assertEquals(planeBottomAtRest, frame.bottom, 1e-3f);
     }
 
     private float dockTop() {
@@ -184,8 +247,9 @@ public class AppDrawerKeyboardLoweringTest {
 
     private void docked() {
         ReflectionHelpers.setField(controller, "mRoundedStyle", false);
+        host.marginPx = 21f;
         ReflectionHelpers.setField(controller, "mOpenRect",
-            new Frame(0f, -40f, WIDTH, HEIGHT + 40f));
+            ReflectionHelpers.callInstanceMethod(controller, "resolveOpenRect"));
     }
 
     private void floating() {

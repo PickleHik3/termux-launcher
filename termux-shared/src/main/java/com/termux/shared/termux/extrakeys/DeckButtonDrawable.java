@@ -16,9 +16,9 @@ import androidx.annotation.NonNull;
  * one dp down in the key colour. Pressed, the foot goes and the face moves a quarter of the way
  * to the foot colour. An active button also draws a bar in the lit colour.
  */
-final class DeckButtonDrawable extends Drawable {
+public final class DeckButtonDrawable extends Drawable {
 
-    static final float RADIUS_DP = 4f;
+    public static final float RADIUS_DP = 4f;
     static final float FOOT_DP = 2f;
     static final float FACE_TOP_DP = 1f;
     static final float PRESSED_FACE_MIX = 0.25f;
@@ -33,7 +33,7 @@ final class DeckButtonDrawable extends Drawable {
     private final RectF mRect = new RectF();
     private boolean mPressed;
 
-    DeckButtonDrawable(float density, int key, int keyTop, int keyFoot, int lit, boolean active) {
+    public DeckButtonDrawable(float density, int key, int keyTop, int keyFoot, int lit, boolean active) {
         mDensity = density;
         mKey = key;
         mKeyTop = keyTop;

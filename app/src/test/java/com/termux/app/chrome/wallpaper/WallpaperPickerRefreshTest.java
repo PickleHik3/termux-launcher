@@ -19,10 +19,11 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
 import java.io.File;
+import android.app.Application;
 
 /** The Photo page reads the slots again after Live changed them, keeping a choice the user has not applied yet. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h780dp-mdpi")
+@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h780dp-mdpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class WallpaperPickerRefreshTest {
 

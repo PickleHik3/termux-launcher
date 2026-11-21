@@ -24,6 +24,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
 import java.util.concurrent.TimeUnit;
+import android.app.Application;
 
 /**
  * The hand-off between a slab's stored frame and Live blur's picture: the stored frame stays up
@@ -31,7 +32,7 @@ import java.util.concurrent.TimeUnit;
  * no frame shows the glass empty in between.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.TIRAMISU})
+@Config(sdk = {Build.VERSION_CODES.TIRAMISU}, application = Application.class)
 public class LiveGlassHandoffTest {
 
     private PaneGlassBackdropView mSlab;

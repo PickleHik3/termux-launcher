@@ -146,10 +146,7 @@ public final class TaiEvidenceFiles implements TaiEvidence {
         String key = null;
         try {
             if (installed == null) {
-                TaiModelStore store = new TaiModelStore(context);
-                Map<String, TaiModelSpec> specs = new HashMap<>(store.getDownloadedReadableModels());
-                specs.putAll(store.getInstalledUserModels());
-                installed = specs;
+                installed = ModelAvailability.get(context).models();
             }
             TaiModelSpec spec = installed.get(baseId);
             if (spec == null) {

@@ -1,12 +1,13 @@
 package com.termux.app.wall;
 
+import com.termux.app.look.WallPagesMigration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.DisplayPagePolicy.Landing;
-import com.termux.app.wall.WallPages.PageKind;
 
 import org.junit.Test;
 
@@ -21,6 +22,14 @@ public class DisplayPageLandingTest {
 
     private static Landing landNoAutostart(String binding, boolean running, boolean starting) {
         return DisplayPagePolicy.landing(binding, false, running, starting, false, false, false);
+    }
+
+    @Test public void autostartStartsOnLandingOnlyUntilADisplayHasRun() {
+        assertTrue(DisplayPagePolicy.landingAutostarts(true, false));
+        // Stopped by the user after it ran: coming back shows Start, it does not restart.
+        assertFalse(DisplayPagePolicy.landingAutostarts(true, true));
+        assertFalse(DisplayPagePolicy.landingAutostarts(false, false));
+        assertFalse(DisplayPagePolicy.landingAutostarts(false, true));
     }
 
     @Test public void unboundPageOnlyShowsStartWithAutostartOff() {

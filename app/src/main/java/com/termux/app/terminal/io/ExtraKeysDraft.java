@@ -1,6 +1,7 @@
 package com.termux.app.terminal.io;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,38 @@ public final class ExtraKeysDraft {
     }
 
     private final List<ExtraKeysLayoutModel> pages = new ArrayList<>();
+
+    /** The bar's key size, in tenths: 4 to 30, as {@code terminal-toolbar-height} (0.4 to 3). */
+    public static final int KEY_SIZE_MIN_TENTHS = 4;
+    public static final int KEY_SIZE_MAX_TENTHS = 30;
+    public static final int KEY_SIZE_DEFAULT_TENTHS = 10;
+
+    private int keySizeTenths = KEY_SIZE_DEFAULT_TENTHS;
+
+    /**
+     * A stored {@code terminal-toolbar-height} as tenths. Unparsable or out of range reads as the
+     * default, as the terminal itself reads it.
+     */
+    public static int keySizeTenthsFromProperty(@Nullable String value) {
+        float scale = com.termux.shared.termux.settings.properties.TermuxSharedProperties
+            .getTerminalToolbarHeightScaleFactorInternalPropertyValueFromValue(value);
+        return Math.max(KEY_SIZE_MIN_TENTHS,
+            Math.min(KEY_SIZE_MAX_TENTHS, Math.round(scale * 10f)));
+    }
+
+    /** Tenths as the properties file writes a float: one decimal, "1.5". */
+    @NonNull
+    public static String keySizeProperty(int tenths) {
+        return (tenths / 10) + "." + (tenths % 10);
+    }
+
+    public int keySizeTenths() {
+        return keySizeTenths;
+    }
+
+    public void setKeySizeTenths(int tenths) {
+        keySizeTenths = Math.max(KEY_SIZE_MIN_TENTHS, Math.min(KEY_SIZE_MAX_TENTHS, tenths));
+    }
 
     /**
      * Builds a draft from the loaded pages, in order. Page one is kept even when empty; a later
@@ -212,6 +245,7 @@ public final class ExtraKeysDraft {
     public String fingerprint() {
         StringBuilder out = new StringBuilder();
         for (int i = 0; i < MAX_PAGES; i++) out.append(valueFor(i)).append('\n');
+        out.append(keySizeTenths);
         return out.toString();
     }
 

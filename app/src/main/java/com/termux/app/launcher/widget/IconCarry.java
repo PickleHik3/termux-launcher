@@ -103,13 +103,25 @@ public final class IconCarry {
             layout = overlay.showTargets(targets, host.targetBand(band) ? band : null,
                 host.targetDress(), !host.reducedMotion());
         }
-        if (!overlay.carry(picture, sizePx, sizePx, dx, dy, rawX, rawY)) {
+        if (!overlay.carry(ownCopy(picture), sizePx, sizePx, dx, dy, rawX, rawY)) {
             overlay.release();
             layout = null;
             return false;
         }
         move(rawX, rawY);
         return true;
+    }
+
+    /**
+     * A picture of its own for the overlay, which moves its bounds and takes its callback: the
+     * icon the slot left is the same drawable, and drawn through those it would show nothing
+     * when the slot is shown again.
+     */
+    @NonNull
+    private Drawable ownCopy(@NonNull Drawable picture) {
+        Drawable.ConstantState state = picture.getConstantState();
+        Drawable copy = state == null ? null : state.newDrawable(anchor.getResources());
+        return copy == null ? picture : copy.mutate();
     }
 
     /** The finger moved to ({@code rawX}, {@code rawY}). */

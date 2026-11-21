@@ -1,5 +1,6 @@
 package com.termux.app.wall;
 
+import com.termux.app.look.WallPagesMigration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -7,8 +8,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.WallPages.ChangeType;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.app.wall.WallPages.Result;
 
 import org.junit.Test;

@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /**
  * The display window owns everything inside its edges: no border, pill box or seam band of the
@@ -96,9 +97,35 @@ public class BorderReachTest {
 
     @Test
     public void onlyTheDisplayWindowInFrontOwnsItsContent() {
-        assertTrue("a Display page", BorderReach.ownsContent(PaneWallPage.DISPLAY));
-        assertFalse("a terminal window", BorderReach.ownsContent(PaneWallPage.TERMINAL));
-        assertFalse("a Home page", BorderReach.ownsContent(PaneWallPage.WIDGETS));
+        assertTrue("a Display page", BorderReach.ownsContent(PageKind.DISPLAY, true));
+        assertFalse("a terminal window", BorderReach.ownsContent(PageKind.TERMINAL, true));
+        assertFalse("a Home page", BorderReach.ownsContent(PageKind.HOME, true));
+    }
+
+    /**
+     * A Display page with no display running shows only its empty state, so it owns nothing
+     * (pong, 2026-11-11): a plain sideways swipe on it, which the listener gives away
+     * ({@link PaneWallPolicy#bodySwipePages}), arms and pages as on a terminal's text. Owned, the
+     * same press arms nothing, whatever the listener says.
+     */
+    @Test
+    public void anIdleDisplayPageOwnsNothingAndPagesByAPlainSwipe() {
+        assertFalse(BorderReach.ownsContent(PageKind.DISPLAY, false));
+        boolean gives = PaneWallPolicy.bodySwipePages(PageKind.DISPLAY, false, false, false);
+        assertTrue(gives);
+        float[] c = new float[4];
+        BorderDrag.Zone idle = zone(SCREENS[0], 12f, Foot.KEYBOARD_DOWN, true,
+            BorderReach.ownsContent(PageKind.DISPLAY, false));
+        assertTrue(BorderReach.contentBounds(idle, c));
+        float x = (c[0] + c[2]) / 2f;
+        float y = (c[1] + c[3]) / 2f;
+        BorderDrag drag = new BorderDrag();
+        assertTrue("armed on the empty state",
+            drag.down(x, y, idle, SLOP, true, true, true, 0f, gives));
+        assertEquals(BorderDrag.Claim.PAGING, drag.move(x + 3f * SLOP, y));
+        BorderDrag running = new BorderDrag();
+        assertFalse("a running display's picture keeps it",
+            running.down(x, y, displayAtRest(), SLOP, true, true, true, 0f, true));
     }
 
     // ---- The display window ------------------------------------------------------------------

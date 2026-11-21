@@ -54,7 +54,7 @@ import java.util.List;
  *       rect the user moved it to.</li>
  *   <li>Split halves are as wide as {@link Input.Builder#splitHalfWidth}, each against its screen
  *       edge (a Margin in under Floating); between them the frame is open.</li>
- *   <li>Panes divide the opening equally along one axis, each with {@code min(Margin,
+ *   <li>Panes divide the opening equally along one axis, each with {@code min(paneGap,
  *       paneGapCap)} between. Under Floating each is a card over the wallpaper; under Docked each is
  *       its own rounded insert over the frame glass, and there is no divider line.</li>
  *   <li>Under Docked the frame is always a card, even with every bar put away (fullscreen): it
@@ -122,7 +122,7 @@ public final class ChromeShapeModel {
         final float openingVerticalGap;
         final float screenRadius;
         final float paneGapCap;
-        final float paneGapFloor;
+        final float paneGap;
         final float dividerThickness;
         final int paneCount;
         @NonNull final SplitAxis axis;
@@ -141,7 +141,7 @@ public final class ChromeShapeModel {
             openingVerticalGap = b.openingVerticalGap;
             screenRadius = b.screenRadius;
             paneGapCap = b.paneGapCap;
-            paneGapFloor = b.paneGapFloor;
+            paneGap = b.paneGap;
             dividerThickness = b.dividerThickness;
             paneCount = Math.max(1, b.paneCount);
             axis = b.axis;
@@ -179,7 +179,7 @@ public final class ChromeShapeModel {
             private float openingVerticalGap = -1f;
             private float screenRadius;
             private float paneGapCap = Float.MAX_VALUE;
-            private float paneGapFloor;
+            private float paneGap;
             private float dividerThickness = 1f;
             private int paneCount = 1;
             @NonNull private SplitAxis axis = SplitAxis.SIDE_BY_SIDE;
@@ -220,7 +220,7 @@ public final class ChromeShapeModel {
 
             /**
              * The air the opening keeps from what lies above and below it, in place of Margin:
-             * the Workspace's terminal stands this close to its bars, so it gets the rows. Never
+             * the Terminal's terminal stands this close to its bars, so it gets the rows. Never
              * more than Margin; negative (the default) is Margin itself. The sides keep Margin.
              */
             @NonNull public Builder openingVerticalGap(float value) {
@@ -241,12 +241,11 @@ public final class ChromeShapeModel {
             }
 
             /**
-             * The least gap between split panes, 10dp in the caller's units: the strip the divider
-             * is grabbed by, so it holds even when Margin is smaller. Margin above it still wins,
-             * up to the cap.
+             * The gap between split panes, in the caller's units: Inner gap, under both Styles and
+             * whatever Margin is, up to the cap. The divider's touch strip has its own minimum.
              */
-            @NonNull public Builder paneGapFloor(float value) {
-                paneGapFloor = value;
+            @NonNull public Builder paneGap(float value) {
+                paneGap = value;
                 return this;
             }
 
@@ -294,7 +293,7 @@ public final class ChromeShapeModel {
             b.openingVerticalGap = openingVerticalGap;
             b.screenRadius = screenRadius;
             b.paneGapCap = paneGapCap;
-            b.paneGapFloor = paneGapFloor;
+            b.paneGap = paneGap;
             b.dividerThickness = dividerThickness;
             b.paneCount = paneCount;
             b.axis = axis;
@@ -363,7 +362,7 @@ public final class ChromeShapeModel {
         final float m = floating ? Math.max(0f, in.margin) : 0f;
         // The gutter: Margin as the Docked insert's air from the bars and the screen's edge.
         final float gutter = Math.max(0f, in.margin);
-        // The opening's air above and below: Margin, or the closer gap a Workspace terminal asks.
+        // The opening's air above and below: Margin, or the closer gap a Terminal terminal asks.
         final float verticalGap = in.openingVerticalGap < 0f ? gutter
             : Math.min(in.openingVerticalGap, gutter);
         final PlaceLayout layout = in.layout;
@@ -502,13 +501,11 @@ public final class ChromeShapeModel {
 
         Opening opening = openingOf(openingBox, in);
 
-        // The panes. Each is its own card-sized shape with min(Margin, cap) between: over the
+        // The panes. Each is its own card-sized shape with min(Inner gap, cap) between: over the
         // wallpaper under Floating, over the frame glass under Docked. No divider line either way.
         List<Pane> panes = new ArrayList<>(in.paneCount);
         List<Divider> dividers = Collections.emptyList();
-        float gap = Math.min(floating ? m : gutter, Math.max(0f, in.paneGapCap));
-        // Split panes keep a strip between them to drag the divider by, whatever Margin is.
-        if (in.paneCount > 1) gap = Math.max(gap, Math.max(0f, in.paneGapFloor));
+        float gap = Math.min(Math.max(0f, in.paneGap), Math.max(0f, in.paneGapCap));
         boolean across = in.axis == SplitAxis.SIDE_BY_SIDE;
         float span = across ? openingBox.width() : openingBox.height();
         float each = Math.max(0f, (span - gap * (in.paneCount - 1)) / in.paneCount);

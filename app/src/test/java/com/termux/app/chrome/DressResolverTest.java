@@ -10,11 +10,10 @@ import androidx.annotation.NonNull;
 
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.DockSurfaceSpec;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.WallShape;
-import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import org.junit.Test;
@@ -23,16 +22,16 @@ import java.util.EnumMap;
 
 /**
  * What a page wears, as the Dress resolver answers it (ADR 0009, build step 1). One layout dresses
- * both halves: with the Home layout off, a Home page wears the Workspace's normal layout (minimal
- * mode is the windows' alone) less the extra keys, in the Workspace's Style,
+ * both halves: with the Home layout off, a Home page wears the Terminal's normal layout (minimal
+ * mode is the windows' alone) less the extra keys, in the Terminal's Style,
  * Corners and Margin, its dock in the Dock design that layout holds. With the Home layout on, a
  * Home page wears its own copy and its own shape, as ADR 0008 had it. A window wears the
- * Workspace's layout whole, its dock in the Dock design that layout holds (#93), the minimal
+ * Terminal's layout whole, its dock in the Dock design that layout holds (#93), the minimal
  * layout's own while minimal mode is on.
  */
 public class DressResolverTest {
 
-    private static final WallShape WORKSPACE = WallShape.of(LayoutStyle.DOCKED, 12, 8);
+    private static final WallShape TERMINAL = WallShape.of(LayoutStyle.DOCKED, 12, 8);
 
     /** The Home page in front and the Terminal page, as the Source names them. */
     private static final int HOME_ID = 2;
@@ -47,7 +46,7 @@ public class DressResolverTest {
         final java.util.Map<LayoutVariant, DockStyle> designs = new java.util.HashMap<>();
         final java.util.Map<LayoutVariant, Boolean> searchFields = new java.util.HashMap<>();
         final java.util.Map<LayoutVariant, Boolean> drawerTiles = new java.util.HashMap<>();
-        WallShape workspace = WORKSPACE;
+        WallShape terminal = TERMINAL;
         /** Kind visibility as a test sets it; what is absent is Home without the extra keys. */
         final java.util.Map<String, Boolean> kindShown = new java.util.HashMap<>();
 
@@ -68,8 +67,8 @@ public class DressResolverTest {
         int homeInFront = HOME_ID;
         final java.util.Set<Integer> otherPageLayouts = new java.util.HashSet<>();
 
-        @Override public int pageIdOf(@NonNull PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? homeInFront : TERMINAL_ID;
+        @Override public int pageIdOf(@NonNull PageKind page) {
+            return page == PageKind.HOME ? homeInFront : TERMINAL_ID;
         }
         @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant layout) {
             return designs.getOrDefault(layout, DockStyle.GLASS_TRAY);
@@ -81,7 +80,7 @@ public class DressResolverTest {
             return drawerTiles.getOrDefault(layout, false);
         }
         @NonNull @Override public WallShape shape() {
-            return workspace;
+            return terminal;
         }
         @Override public boolean shows(@NonNull PageKind kind, @NonNull Element element) {
             Boolean set = kindShown.get(kind + "." + element);
@@ -101,25 +100,25 @@ public class DressResolverTest {
     private final DressResolver dresses = new DressResolver(stored);
 
     private Dress home() {
-        return dresses.dressOf(PaneWallPage.WIDGETS);
+        return dresses.dressOf(PageKind.HOME);
     }
 
     private Dress terminal() {
-        return dresses.dressOf(PaneWallPage.TERMINAL);
+        return dresses.dressOf(PageKind.TERMINAL);
     }
 
     // ------------------------------------------------------------------ one layout (Home layout off)
 
 
-    /** A Display page wears the Workspace's dress, so the Terminal kind's visibility is read (ADR 0025). */
+    /** A Display page wears the Terminal's dress, so the Terminal kind's visibility is read (ADR 0025). */
     @Test
-    public void aDisplayPageWearsTheWorkspacesKind() {
-        assertEquals(com.termux.app.wall.WallPages.PageKind.TERMINAL,
-            DressResolver.kindOf(PaneWallPage.DISPLAY));
-        assertEquals(com.termux.app.wall.WallPages.PageKind.TERMINAL,
-            DressResolver.kindOf(PaneWallPage.TERMINAL));
-        assertEquals(com.termux.app.wall.WallPages.PageKind.HOME,
-            DressResolver.kindOf(PaneWallPage.WIDGETS));
+    public void aDisplayPageWearsTheTerminalsKind() {
+        assertEquals(com.termux.app.page.PageKind.TERMINAL,
+            DressResolver.dressKindOf(PageKind.DISPLAY));
+        assertEquals(com.termux.app.page.PageKind.TERMINAL,
+            DressResolver.dressKindOf(PageKind.TERMINAL));
+        assertEquals(com.termux.app.page.PageKind.HOME,
+            DressResolver.dressKindOf(PageKind.HOME));
     }
 
     /** The bar on Home (#90): Home wears the status bar, and still not the extra keys. */
@@ -127,8 +126,8 @@ public class DressResolverTest {
     public void homeWearsTheStatusBarStillNotTheExtraKeys() {
         assertTrue(home().wears(Element.STATUS));
         assertFalse(home().wears(Element.EXTRA_KEYS));
-        assertTrue(dresses.wears(PaneWallPage.WIDGETS, Element.STATUS));
-        assertFalse(dresses.wears(PaneWallPage.WIDGETS, Element.EXTRA_KEYS));
+        assertTrue(dresses.wears(PageKind.HOME, Element.STATUS));
+        assertFalse(dresses.wears(PageKind.HOME, Element.EXTRA_KEYS));
     }
 
     /** With the Home layout on too: the bar is an element of Home's own layout, offered there. */
@@ -156,8 +155,8 @@ public class DressResolverTest {
     public void homeLayoutOnHomeWearsItsOwnLayoutInTheWallsShape() {
         stored.homeLayout = true;
         assertEquals(HOME_PAGE, home().layout());
-        assertEquals(WORKSPACE, home().shape());
-        assertEquals(WORKSPACE, terminal().shape());
+        assertEquals(TERMINAL, home().shape());
+        assertEquals(TERMINAL, terminal().shape());
         assertEquals(LayoutVariant.NORMAL, terminal().layout());
     }
 
@@ -182,7 +181,7 @@ public class DressResolverTest {
         stored.designs.put(HOME_PAGE, DockStyle.LENS_BEADS);
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.WALL_STRIP);
         assertEquals(DockStyle.LENS_BEADS, home().dockDesign());
-        assertEquals("a window keeps the Workspace's", DockStyle.WALL_STRIP,
+        assertEquals("a window keeps the Terminal's", DockStyle.WALL_STRIP,
             terminal().dockDesign());
     }
 
@@ -200,7 +199,7 @@ public class DressResolverTest {
         stored.homeLayout = true;
         assertEquals(terminal().shape(), home().shape());
         assertEquals("window to window", terminal().shape(),
-            dresses.dressOf(PaneWallPage.DISPLAY).shape());
+            dresses.dressOf(PageKind.DISPLAY).shape());
     }
 
     // ------------------------------------------------------------------ both ways
@@ -276,7 +275,7 @@ public class DressResolverTest {
             stored.homeLayout = homeLayout;
             for (boolean minimal : new boolean[] {false, true}) {
                 stored.minimal = minimal;
-                for (PaneWallPage page : PaneWallPage.values())
+                for (PageKind page : PageKind.values())
                     assertEquals(page + (minimal ? " minimal" : "") + (homeLayout ? " own" : ""),
                         dresses.dressOf(page).layout(), dresses.layoutOf(page));
             }
@@ -289,7 +288,7 @@ public class DressResolverTest {
         stored.designs.put(HOME_PAGE, DockStyle.WALL_STRIP);
         for (boolean homeLayout : new boolean[] {false, true}) {
             stored.homeLayout = homeLayout;
-            for (PaneWallPage page : PaneWallPage.values())
+            for (PageKind page : PageKind.values())
                 assertEquals(page.name(), dresses.dressOf(page).dockDesign(),
                     dresses.dockDesignOf(page));
         }
@@ -300,8 +299,8 @@ public class DressResolverTest {
     public void aLayoutAndAPageWearWhatTheDressWears() {
         for (Element element : Element.values()) {
             assertEquals(element.name(), home().wears(element),
-                dresses.wears(PaneWallPage.WIDGETS, element));
-            assertTrue(dresses.wears(PaneWallPage.TERMINAL, element));
+                dresses.wears(PageKind.HOME, element));
+            assertTrue(dresses.wears(PageKind.TERMINAL, element));
             assertEquals(element.name(), home().wears(element),
                 DressResolver.wornOn(HOME_PAGE, element));
             assertTrue(DressResolver.wornOn(LayoutVariant.NORMAL, element));
@@ -320,7 +319,7 @@ public class DressResolverTest {
         stored.kindShown.put("TERMINAL.AZ", false);
         stored.kindShown.put("HOME.EXTRA_KEYS", true);
         stored.kindShown.put("HOME.APPS", false);
-        Dress terminal = dresses.dressOf(PaneWallPage.TERMINAL);
+        Dress terminal = dresses.dressOf(PageKind.TERMINAL);
         assertFalse(terminal.wears(Element.APPS));
         assertFalse(terminal.wears(Element.AZ));
         assertTrue(terminal.wears(Element.EXTRA_KEYS));
@@ -328,52 +327,52 @@ public class DressResolverTest {
         assertTrue(home().wears(Element.EXTRA_KEYS));
         assertFalse(home().wears(Element.APPS));
         assertTrue(home().wears(Element.AZ));
-        assertFalse(dresses.wears(PaneWallPage.WIDGETS, Element.APPS));
-        assertTrue(dresses.wears(PaneWallPage.TERMINAL, Element.EXTRA_KEYS));
+        assertFalse(dresses.wears(PageKind.HOME, Element.APPS));
+        assertTrue(dresses.wears(PageKind.TERMINAL, Element.EXTRA_KEYS));
     }
 
     @Test
     public void minimalModeIsStillTheWindowsAloneAndKindsDoNotChangeIt() {
         stored.minimal = true;
         stored.kindShown.put("TERMINAL.APPS", false);
-        assertEquals(LayoutVariant.MINIMAL, dresses.layoutOf(PaneWallPage.TERMINAL));
-        assertEquals(LayoutVariant.HOME, dresses.layoutOf(PaneWallPage.WIDGETS));
+        assertEquals(LayoutVariant.MINIMAL, dresses.layoutOf(PageKind.TERMINAL));
+        assertEquals(LayoutVariant.HOME, dresses.layoutOf(PageKind.HOME));
         assertTrue(home().wears(Element.APPS));
     }
 
     @Test
     public void aResolverOverNoStoreWearsTheKindDefaults() {
         DressResolver empty = DressResolver.over(() -> null);
-        assertTrue(empty.dressOf(PaneWallPage.WIDGETS).wears(Element.APPS));
-        assertTrue(empty.dressOf(PaneWallPage.WIDGETS).wears(Element.AZ));
-        assertFalse(empty.dressOf(PaneWallPage.WIDGETS).wears(Element.EXTRA_KEYS));
-        assertTrue(empty.dressOf(PaneWallPage.TERMINAL).wears(Element.EXTRA_KEYS));
-        assertFalse(empty.dressOf(PaneWallPage.TERMINAL).wears(Element.APPS));
-        assertTrue(empty.dressOf(PaneWallPage.TERMINAL).wears(Element.STATUS));
+        assertTrue(empty.dressOf(PageKind.HOME).wears(Element.APPS));
+        assertTrue(empty.dressOf(PageKind.HOME).wears(Element.AZ));
+        assertFalse(empty.dressOf(PageKind.HOME).wears(Element.EXTRA_KEYS));
+        assertTrue(empty.dressOf(PageKind.TERMINAL).wears(Element.EXTRA_KEYS));
+        assertFalse(empty.dressOf(PageKind.TERMINAL).wears(Element.APPS));
+        assertTrue(empty.dressOf(PageKind.TERMINAL).wears(Element.STATUS));
     }
 
     // ------------------------------------------------------------------ page layouts (ADR 0015 §3)
 
     @Test
     public void aHomePageWithoutAPageLayoutWearsTheNormalLayout() {
-        assertSame(LayoutVariant.HOME, dresses.layoutOf(PaneWallPage.WIDGETS));
+        assertSame(LayoutVariant.HOME, dresses.layoutOf(PageKind.HOME));
         stored.homeLayout = true;
         stored.homeInFront = 3;
         assertSame("page 2's layout is not page 3's", LayoutVariant.HOME,
-            dresses.layoutOf(PaneWallPage.WIDGETS));
+            dresses.layoutOf(PageKind.HOME));
     }
 
 
     @Test
     public void theTerminalPageWearsItsPageLayoutUnlessMinimal() {
-        assertSame(LayoutVariant.NORMAL, dresses.layoutOf(PaneWallPage.TERMINAL));
+        assertSame(LayoutVariant.NORMAL, dresses.layoutOf(PageKind.TERMINAL));
         stored.terminalLayout = true;
-        LayoutVariant own = dresses.layoutOf(PaneWallPage.TERMINAL);
+        LayoutVariant own = dresses.layoutOf(PageKind.TERMINAL);
         assertSame(LayoutVariant.NORMAL, own);
         assertFalse(own.isHomeKind());
         assertTrue(own.offers(Element.EXTRA_KEYS));
         stored.minimal = true;
-        assertSame(LayoutVariant.MINIMAL, dresses.layoutOf(PaneWallPage.TERMINAL));
+        assertSame(LayoutVariant.MINIMAL, dresses.layoutOf(PageKind.TERMINAL));
     }
 
 
@@ -382,25 +381,25 @@ public class DressResolverTest {
         stored.terminalLayout = true;
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
         assertEquals(DockStyle.effectiveStyle(DockStyle.LENS_BEADS),
-            dresses.dockDesignOf(PaneWallPage.TERMINAL));
+            dresses.dockDesignOf(PageKind.TERMINAL));
         assertEquals(DockStyle.effectiveStyle(DockStyle.GLASS_TRAY),
-            dresses.dockDesignOf(PaneWallPage.WIDGETS));
+            dresses.dockDesignOf(PageKind.HOME));
     }
 
     // ------------------------------------------------- one layout per page kind (ADR 0020 §1)
 
     private Dress display() {
-        return dresses.dressOf(PaneWallPage.DISPLAY);
+        return dresses.dressOf(PageKind.DISPLAY);
     }
 
     @Test
     public void eachPageWearsItsKindsLayout() {
         assertEquals(LayoutVariant.HOME, home().layout());
         assertEquals("the Terminal's layout", LayoutVariant.NORMAL, terminal().layout());
-        assertEquals("the Workspace's layout (ADR 0025)", LayoutVariant.NORMAL, display().layout());
+        assertEquals("the Terminal's layout (ADR 0025)", LayoutVariant.NORMAL, display().layout());
         assertFalse("Home leaves the extra keys out", home().wears(Element.EXTRA_KEYS));
         assertTrue(home().wears(Element.APPS));
-        assertEquals(WORKSPACE, home().shape());
+        assertEquals(TERMINAL, home().shape());
     }
 
     @Test
@@ -415,7 +414,7 @@ public class DressResolverTest {
     public void everyHomePageWearsHomesLayoutWhateverItsId() {
         stored.designs.put(LayoutVariant.HOME, DockStyle.LENS_BEADS);
         Dress inFront = home();
-        Dress beside = dresses.dressOf(com.termux.app.wall.PageRef.of(PaneWallPage.WIDGETS, 9));
+        Dress beside = dresses.dressOf(com.termux.app.wall.PageRef.of(PageKind.HOME, 9));
         assertEquals(LayoutVariant.HOME, beside.layout());
         assertEquals("a swipe between Home pages moves nothing", inFront, beside);
         stored.minimal = true;
@@ -426,14 +425,14 @@ public class DressResolverTest {
     public void eachLayoutDrawsItsOwnDockDesign() {
         stored.designs.put(LayoutVariant.HOME, DockStyle.LENS_BEADS);
         assertEquals(DockStyle.LENS_BEADS, home().dockDesign());
-        assertEquals(DockStyle.LENS_BEADS, dresses.dockDesignOf(PaneWallPage.WIDGETS));
+        assertEquals(DockStyle.LENS_BEADS, dresses.dockDesignOf(PageKind.HOME));
         assertEquals("the Terminal keeps its own", DockStyle.GLASS_TRAY, terminal().dockDesign());
         assertEquals(DockStyle.GLASS_TRAY, display().dockDesign());
 
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.LENS_BEADS);
-        assertEquals("one Workspace (ADR 0025)", terminal().dockDesign(), display().dockDesign());
+        assertEquals("one Terminal (ADR 0025)", terminal().dockDesign(), display().dockDesign());
         assertEquals(terminal().dockDesign(),
-            dresses.dressOf(PaneWallPage.ASSISTANT).dockDesign());
+            dresses.dressOf(PageKind.ASSISTANT).dockDesign());
         stored.designs.put(LayoutVariant.NORMAL, DockStyle.GLASS_TRAY);
 
         stored.minimal = true;
@@ -448,12 +447,12 @@ public class DressResolverTest {
         stored.searchFields.put(LayoutVariant.HOME, true);
         stored.drawerTiles.put(LayoutVariant.NORMAL, true);
         assertTrue(home().searchField());
-        assertTrue(dresses.searchFieldOf(PaneWallPage.WIDGETS));
+        assertTrue(dresses.searchFieldOf(PageKind.HOME));
         assertFalse(terminal().searchField());
         assertFalse(display().searchField());
         assertTrue(terminal().drawerTile());
         assertFalse(home().drawerTile());
-        assertTrue("the Display wears the Workspace's (ADR 0025)", display().drawerTile());
+        assertTrue("the Display wears the Terminal's (ADR 0025)", display().drawerTile());
         assertNotEquals("a field on one layout only sets them apart", home(), terminal());
     }
 
@@ -469,32 +468,32 @@ public class DressResolverTest {
     @Test
     public void aResolverOverNoStoreYetDressesEveryKindByItsLayout() {
         DressResolver empty = new DressResolver(new Stored());
-        assertSame(LayoutVariant.HOME, empty.layoutOf(PaneWallPage.WIDGETS));
-        assertSame(LayoutVariant.NORMAL, empty.layoutOf(PaneWallPage.TERMINAL));
-        assertSame(LayoutVariant.NORMAL, empty.layoutOf(PaneWallPage.DISPLAY));
-        assertSame(LayoutVariant.NORMAL, empty.layoutOf(PaneWallPage.ASSISTANT));
+        assertSame(LayoutVariant.HOME, empty.layoutOf(PageKind.HOME));
+        assertSame(LayoutVariant.NORMAL, empty.layoutOf(PageKind.TERMINAL));
+        assertSame(LayoutVariant.NORMAL, empty.layoutOf(PageKind.DISPLAY));
+        assertSame(LayoutVariant.NORMAL, empty.layoutOf(PageKind.ASSISTANT));
     }
 
-    // ---- the Assistant page: of the Workspace (ADR 0025) -----------------------------------------
+    // ---- the Assistant page: of the Terminal (ADR 0025) -----------------------------------------
 
     @Test
-    public void theAssistantPageWearsTheWorkspacesKind() {
-        assertEquals(PageKind.TERMINAL, DressResolver.kindOf(PaneWallPage.ASSISTANT));
+    public void theAssistantPageWearsTheTerminalsKind() {
+        assertEquals(PageKind.TERMINAL, DressResolver.dressKindOf(PageKind.ASSISTANT));
     }
 
     @Test
-    public void theAssistantPageWearsTheWorkspacesDress() {
+    public void theAssistantPageWearsTheTerminalsDress() {
         stored.kindShown.put(PageKind.TERMINAL + "." + Element.APPS, true);
-        Dress assistant = dresses.dressOf(PaneWallPage.ASSISTANT);
+        Dress assistant = dresses.dressOf(PageKind.ASSISTANT);
         assertEquals(terminal(), assistant);
         assertEquals(terminal(), display());
         assertTrue(assistant.wears(Element.APPS));
     }
 
     @Test
-    public void minimalModeDressesTheAssistantPageWithTheWorkspace() {
+    public void minimalModeDressesTheAssistantPageWithTheTerminal() {
         stored.minimal = true;
-        assertEquals(LayoutVariant.MINIMAL, dresses.layoutOf(PaneWallPage.ASSISTANT));
-        assertEquals(terminal(), dresses.dressOf(PaneWallPage.ASSISTANT));
+        assertEquals(LayoutVariant.MINIMAL, dresses.layoutOf(PageKind.ASSISTANT));
+        assertEquals(terminal(), dresses.dressOf(PageKind.ASSISTANT));
     }
 }

@@ -326,6 +326,7 @@ public class LinuxAppCatalogTest {
         assertEquals("proot-distro login debian -u amal --shared-x11"
             + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
             + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS}"
+            + " " + String.join(" ", ProotDistro.FORWARDED_SCALE_ENV)
             + " -- /bin/sh -c 'greet --title '\\''My App'\\'''", app.command());
         // What a later phase appends goes to the app, inside the wrapper.
         assertTrue(app.commandWith("--no-sandbox")
@@ -350,6 +351,7 @@ public class LinuxAppCatalogTest {
         assertEquals("proot-distro login debian -u amal --shared-x11"
             + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
             + " ${TERMUX_LAUNCHER_DISTRO_BUS:+-e DBUS_SESSION_BUS_ADDRESS=$TERMUX_LAUNCHER_DISTRO_BUS}"
+            + " " + String.join(" ", ProotDistro.FORWARDED_SCALE_ENV)
             + " -- /bin/sh -c 'htop'", app.command());
     }
 

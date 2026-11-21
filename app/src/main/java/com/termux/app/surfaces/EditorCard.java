@@ -5,15 +5,14 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
-import com.termux.app.wall.PaneWallPage;
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 
 /**
- * The objects the Appearance editor has a card for (appearance-and-settings-rework §2–§3): the
- * five surfaces a tap in the frame lands on, the Workspace screen's own card (editor-redesign §1,
- * Home's twin), and the Appearance card the editor bar's palette opens. One card per object; what
- * each card holds is {@link EditorRows}.
+ * The Appearance editor's six cards (appearance-one-look spec §3): Global (the palette's
+ * {@link #APPEARANCE}), the two page cards Home and Terminal, and the Status bar, Dock and
+ * Keyboard. One card per object; what each card holds is {@link EditorRows}.
  *
  * <p>{@link #key} is the name a door passes ({@link AppearanceEditorEntry}): the section names
  * Settings' deep links have always used ({@code dock}, {@code keyboard}, {@code status},
@@ -21,32 +20,24 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.
  */
 public enum EditorCard {
     HOME("home", null, R.string.appearance_card_home, R.drawable.ic_symbol_home),
-    /**
-     * The Workspace screen: its Look and its glass (the Workspace half's Base, which the bars on
-     * the Workspace wear while they follow it), and Match Home styling.
-     */
-    WORKSPACE("workspace", null, R.string.appearance_card_workspace,
-        R.drawable.ic_editor_workspace),
     STATUS("status", SurfaceSlot.STATUS, R.string.appearance_card_status,
         R.drawable.ic_editor_status_bar),
+    /**
+     * The Terminal's pages (Terminal, Display, Assistant): the terminal's own rows and the page's
+     * (its Layout, Minimal layout). The old Workspace card merged into it (spec §3).
+     */
     TERMINAL("terminal", SurfaceSlot.CANVAS, R.string.appearance_card_terminal,
-        R.drawable.ic_symbol_terminal),
+        R.drawable.ic_rl_terminal),
     DOCK("dock", SurfaceSlot.DOCK, R.string.appearance_card_dock,
-        R.drawable.ic_symbol_dock_glass_tray),
+        R.drawable.ic_rl_dock_tray),
     KEYBOARD("keyboard", SurfaceSlot.KEYBOARD, R.string.appearance_card_keyboard,
         R.drawable.ic_symbol_keyboard),
     APPEARANCE("appearance", null, R.string.appearance_card_customization,
-        R.drawable.ic_symbol_palette),
-    /** The Card-form widgets' glass: a plain glass card (ADR 0017). */
-    WIDGETS("widgets", SurfaceSlot.WIDGETS, R.string.editor_element_widgets,
-        R.drawable.ic_symbol_stacks),
-    /** The sheets' glass (drawer, menus, palette): a plain glass card with no surface in the frame. */
-    SHEETS("sheets", SurfaceSlot.SHEETS, R.string.editor_element_sheets,
-        R.drawable.ic_symbol_grid_view);
+        R.drawable.ic_symbol_palette);
 
     /** The name a door and a deep link use. */
     @NonNull public final String key;
-    /** The surface the card tunes, or null for the two screens' cards and the Appearance card. */
+    /** The surface the card tunes (the terminal's for Terminal), or null for Home and Global. */
     @Nullable public final SurfaceSlot slot;
     @StringRes public final int titleRes;
     @DrawableRes public final int iconRes;
@@ -57,15 +48,6 @@ public enum EditorCard {
         this.slot = slot;
         this.titleRes = titleRes;
         this.iconRes = iconRes;
-    }
-
-    /**
-     * Whether the card's values are held per half: the dock, the status bar and the keyboard (their glass), and the Appearance card (the half's
-     * Look). The terminal stands only on the Workspace and Home only on Home; the two screens'
-     * cards meet through their Match rows instead.
-     */
-    public boolean perHalf() {
-        return this == STATUS || this == DOCK || this == KEYBOARD || this == APPEARANCE;
     }
 
     /**
@@ -80,19 +62,24 @@ public enum EditorCard {
 
     /**
      * Whether the card's object stands on the {@code screen} kind of page ({@link
-     * PaneWallPage#WIDGETS} is Home's, anything else the Terminal's): Home only on Home, the
-     * Workspace and the terminal only on the Terminal's, everything else on both.
+     * PageKind#HOME} is Home's, anything else the Terminal's): Home only on Home, the Terminal
+     * only on the Terminal's, everything else on both.
      */
-    public boolean standsOn(@NonNull PaneWallPage screen) {
-        if (this == HOME || this == WIDGETS) return screen == PaneWallPage.WIDGETS;
-        if (this == TERMINAL || this == WORKSPACE) return screen != PaneWallPage.WIDGETS;
+    public boolean standsOn(@NonNull PageKind screen) {
+        if (this == HOME) return screen == PageKind.HOME;
+        if (this == TERMINAL) return screen != PageKind.HOME;
         return true;
     }
 
-    /** The card of the screen kind: Home's on Home, the Workspace's on the Terminal's. */
+    /** Whether the card is a page's own: Home's or the Terminal's. */
+    public boolean isPageCard() {
+        return this == HOME || this == TERMINAL;
+    }
+
+    /** The card of the screen kind: Home's on Home, the Terminal's on the Terminal's. */
     @NonNull
-    public static EditorCard forScreen(@NonNull PaneWallPage screen) {
-        return screen == PaneWallPage.WIDGETS ? HOME : WORKSPACE;
+    public static EditorCard forScreen(@NonNull PageKind screen) {
+        return screen == PageKind.HOME ? HOME : TERMINAL;
     }
 
     /** The card a surface opens. */
@@ -109,8 +96,9 @@ public enum EditorCard {
 
     /**
      * The card a door or a deep link names, or null for none (the editor opens at rest). The old
-     * section names are kept: {@code canvas} and {@code other} were the terminal's, and
-     * {@code sessions} the status bar's.
+     * section names are kept: {@code canvas}, {@code other}, {@code workspace} and
+     * {@code display} are the Terminal's, {@code sessions} the status bar's, {@code widgets}
+     * Home's (Glass widgets), and {@code sheets} Global's (menus wear Global).
      */
     @Nullable
     public static EditorCard forKey(@Nullable String key) {
@@ -120,12 +108,15 @@ public enum EditorCard {
         switch (name) {
             case "canvas":
             case "other":
+            case "workspace":
+            case "display":
                 return TERMINAL;
             case "sessions":
                 return STATUS;
-            case "display":
-                // The Display card is gone: Display pages are the Workspace's (overhaul §1).
-                return WORKSPACE;
+            case "widgets":
+                return HOME;
+            case "sheets":
+                return APPEARANCE;
             default:
                 break;
         }

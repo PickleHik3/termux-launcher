@@ -8,6 +8,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.FeatureRequest;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -64,6 +66,9 @@ public final class AssistantEngine {
     @Nullable private Generation current;
     private volatile boolean modelReady = true;
 
+    /** Where the running answer is, from the request's events. */
+    public enum AnswerPhase { NONE, WAITING, LOADING, STARTED }
+
     private static final class Generation {
         final long chatId;
         /** The user text of a send; null for a retry. */
@@ -72,15 +77,27 @@ public final class AssistantEngine {
         final long retryMessageId;
         volatile long messageId;
         final StringBuilder text = new StringBuilder();
+        /** The model's thinking, as streamed; guarded by the generation like {@link #text}. */
+        final StringBuilder thinking = new StringBuilder();
+        /** First thinking delta and the first answer text after it (or the end); -1 until then. */
+        long thinkStartMs = -1L;
+        long thinkEndMs = -1L;
+        long lastThinkPersistMs;
         @Nullable String errorCode;
         boolean finishSeen;
         boolean done;
         volatile boolean stopped;
-        /** True once the runtime has answered the request: its generation is ours to cancel. */
-        volatile boolean started;
+        /** This answer's request; null until the transport has started it. */
+        @Nullable volatile ChatTransport.Call call;
+        volatile AnswerPhase phase = AnswerPhase.NONE;
         final AtomicBoolean cancelSent = new AtomicBoolean();
         long lastPersistMs;
         long lastNotifyMs;
+        /** Request start (queue wait and model load excluded), first token and the runtime's token count; -1 when unknown. */
+        volatile long startMs = -1L;
+        volatile long firstTokenMs = -1L;
+        volatile int outputTokens = -1;
+        volatile boolean loading;
 
         Generation(long chatId, @Nullable String userText, long retryMessageId) {
             this.chatId = chatId;
@@ -144,6 +161,14 @@ public final class AssistantEngine {
     public long generatingMessageId() {
         synchronized (lock) {
             return current == null || current.stopped ? 0L : current.messageId;
+        }
+    }
+
+    /** The phase of the answer being written; NONE when there is none. */
+    @NonNull
+    public AnswerPhase answerPhase() {
+        synchronized (lock) {
+            return current == null || current.stopped ? AnswerPhase.NONE : current.phase;
         }
     }
 
@@ -239,8 +264,8 @@ public final class AssistantEngine {
     }
 
     /**
-     * Stops the running answer. It is marked stopped at once, keeping the text it has; the runtime
-     * is told to cancel only if it has begun this answer.
+     * Stops the running answer. It is marked stopped at once, keeping the text it has; its own
+     * request is cancelled (a waiting one leaves the queue), no other.
      */
     public void stop() {
         final Generation g;
@@ -250,15 +275,16 @@ public final class AssistantEngine {
             g.stopped = true;
         }
         controlExecutor.execute(() -> {
-            if (g.started) cancelRuntime(g);
+            cancelCall(g);
             finish(g, AssistantMessage.STATE_STOPPED, null);
         });
     }
 
-    private void cancelRuntime(Generation g) {
-        if (!g.cancelSent.compareAndSet(false, true)) return;
+    private void cancelCall(Generation g) {
+        ChatTransport.Call call = g.call;
+        if (call == null || !g.cancelSent.compareAndSet(false, true)) return;
         try {
-            transport.cancel();
+            call.cancel();
         } catch (Exception e) {
             Log.w(LOG_TAG, "Cancel failed: " + e.getMessage());
         }
@@ -282,6 +308,7 @@ public final class AssistantEngine {
         } else {
             g.messageId = g.retryMessageId;
             store.updateMessage(g.messageId, "", AssistantMessage.STATE_STREAMING, null, now);
+            store.setThinking(g.messageId, null, null);
         }
         notifyChats();
         notifyMessage(g.chatId, g.messageId);
@@ -307,29 +334,12 @@ public final class AssistantEngine {
             return;
         }
         try {
-            transport.stream(body, new ChatTransport.Sink() {
-                @Override
-                public void onEvent(@NonNull JSONObject event) throws IOException {
-                    g.started = true;
-                    if (g.stopped) {
-                        // The runtime may still be generating for nobody: end it, then stop reading.
-                        cancelRuntime(g);
-                        throw new IOException("stopped");
-                    }
-                    StreamEvent parsed = StreamEvent.parse(event);
-                    if (parsed.isError()) {
-                        g.errorCode = parsed.errorCode;
-                        Log.w(LOG_TAG, "Answer failed: " + parsed.rawErrorCode);
-                        return;
-                    }
-                    if (parsed.finished) g.finishSeen = true;
-                    if (!parsed.delta.isEmpty()) appendDelta(g, parsed.delta);
-                }
-
-                @Override
-                public void onDone() {
-                }
-            });
+            g.startMs = clock.getAsLong();
+            ChatTransport.Call call = transport.start(body, event -> onEvent(g, event));
+            g.call = call;
+            // A Stop that came before the request existed.
+            if (g.stopped) cancelCall(g);
+            call.await();
         } catch (Exception e) {
             if (!g.stopped) {
                 Log.w(LOG_TAG, "Answer failed: " + e);
@@ -349,6 +359,59 @@ public final class AssistantEngine {
         } else {
             finish(g, AssistantMessage.STATE_COMPLETE, null);
         }
+    }
+
+    private void onEvent(Generation g, FeatureRequest.Event event) throws IOException {
+        if (g.loading && event.type != FeatureRequest.Event.Type.LOADING) {
+            // The model is up and the queue is clear: load and wait time are not the answer's.
+            g.loading = false;
+            g.startMs = clock.getAsLong();
+        }
+        if (event.usage != null && event.usage.has("completion_tokens")) {
+            g.outputTokens = Math.max(0, event.usage.optInt("completion_tokens", 0));
+        }
+        switch (event.type) {
+            case WAITING:
+                g.loading = true;
+                setPhase(g, AnswerPhase.WAITING);
+                return;
+            case LOADING:
+                g.loading = true;
+                setPhase(g, AnswerPhase.LOADING);
+                return;
+            case ERROR:
+                g.errorCode = AssistantMessage.errorFor(event.errorCode);
+                Log.w(LOG_TAG, "Answer failed: " + event.errorCode);
+                return;
+            case DONE:
+                return;
+            default:
+                break;
+        }
+        // TEXT
+        setPhase(g, AnswerPhase.STARTED);
+        if (g.stopped) {
+            // The request may still be generating for nobody: end it, then stop reading.
+            cancelCall(g);
+            throw new IOException("stopped");
+        }
+        if (event.finishReason != null) g.finishSeen = true;
+        if (!event.reasoning.isEmpty()) {
+            if (g.firstTokenMs < 0L) g.firstTokenMs = clock.getAsLong();
+            appendThinking(g, event.reasoning);
+        }
+        if (!event.text.isEmpty()) {
+            long now = clock.getAsLong();
+            if (g.firstTokenMs < 0L) g.firstTokenMs = now;
+            endThinking(g, now);
+            appendDelta(g, event.text);
+        }
+    }
+
+    private void setPhase(Generation g, AnswerPhase phase) {
+        if (g.phase == phase) return;
+        g.phase = phase;
+        notifyMessage(g.chatId, g.messageId);
     }
 
     private void appendDelta(Generation g, String delta) {
@@ -373,6 +436,38 @@ public final class AssistantEngine {
         if (notify || persist) notifyMessage(g.chatId, g.messageId);
     }
 
+    private void appendThinking(Generation g, String delta) {
+        long now = clock.getAsLong();
+        String snapshot = null;
+        boolean notify;
+        synchronized (g) {
+            if (g.done) return;
+            if (g.thinkStartMs < 0L) g.thinkStartMs = now;
+            g.thinking.append(delta);
+            if (now - g.lastThinkPersistMs >= PERSIST_INTERVAL_MS) {
+                g.lastThinkPersistMs = now;
+                snapshot = g.thinking.toString();
+            }
+            notify = now - g.lastNotifyMs >= NOTIFY_INTERVAL_MS;
+            if (notify) g.lastNotifyMs = now;
+        }
+        if (snapshot != null) store.setThinking(g.messageId, snapshot, null);
+        if (notify || snapshot != null) notifyMessage(g.chatId, g.messageId);
+    }
+
+    /** The first answer text after thinking ends it: saves the thinking with its time at once. */
+    private void endThinking(Generation g, long now) {
+        String snapshot;
+        long ms;
+        synchronized (g) {
+            if (g.done || g.thinkStartMs < 0L || g.thinkEndMs >= 0L) return;
+            g.thinkEndMs = now;
+            ms = now - g.thinkStartMs;
+            snapshot = g.thinking.toString();
+        }
+        store.setThinking(g.messageId, snapshot, ms);
+    }
+
     private static String textOf(Generation g) {
         synchronized (g) {
             return g.text.toString();
@@ -382,12 +477,31 @@ public final class AssistantEngine {
     /** Ends the answer once: saves it in its final state and lets the next one start. */
     private void finish(Generation g, String state, @Nullable String errorCode) {
         String text;
+        String thinking = null;
+        Long thinkingMs = null;
+        long now = clock.getAsLong();
         synchronized (g) {
             if (g.done || g.messageId <= 0L) return;
             g.done = true;
             text = g.text.toString();
+            if (g.thinkStartMs >= 0L) {
+                if (g.thinkEndMs < 0L) g.thinkEndMs = now;
+                thinking = g.thinking.toString();
+                thinkingMs = g.thinkEndMs - g.thinkStartMs;
+            }
         }
-        store.updateMessage(g.messageId, text, state, errorCode, clock.getAsLong());
+        Long duration = null;
+        Long ttft = null;
+        Integer tokens = null;
+        boolean answered = AssistantMessage.STATE_COMPLETE.equals(state)
+            || (AssistantMessage.STATE_STOPPED.equals(state) && !text.isEmpty());
+        if (answered && g.startMs >= 0L && g.firstTokenMs >= g.startMs) {
+            duration = now - g.startMs;
+            ttft = g.firstTokenMs - g.startMs;
+            if (g.outputTokens >= 0) tokens = g.outputTokens;
+        }
+        store.updateMessage(g.messageId, text, state, errorCode, now, duration, ttft, tokens);
+        store.setThinking(g.messageId, thinking, thinkingMs);
         clear(g);
         notifyMessage(g.chatId, g.messageId);
         notifyChats();
@@ -406,8 +520,9 @@ public final class AssistantEngine {
         for (ContextFitter.Sent sent : fit.sent) {
             messages.put(new JSONObject().put("role", sent.role).put("content", sent.text));
         }
-        // No "model": the runtime falls back to the default assistant model.
-        return new JSONObject().put("messages", messages).put("stream", true).toString();
+        // No "model": Feature request picks the Assistant's model.
+        return new JSONObject().put("messages", messages).put("stream", true)
+            .put("stream_options", new JSONObject().put("include_usage", true)).toString();
     }
 
     private void notifyMessage(long chatId, long messageId) {

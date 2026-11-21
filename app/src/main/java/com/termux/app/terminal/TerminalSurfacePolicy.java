@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.ChromeInk;
+import com.termux.app.page.PageKind;
 
 /**
  * Whether the terminal paints its own surface — the "terminal opacity" tint — over what is behind
@@ -58,6 +59,23 @@ public final class TerminalSurfacePolicy {
     public static int pageGround(boolean terminalPage, boolean glassPane, int terminalSurfaceColor,
                                  int wallpaperDim) {
         return terminalPage ? wallGround(glassPane, terminalSurfaceColor, wallpaperDim) : wallpaperDim;
+    }
+
+    /**
+     * A wall page's wallpaper dim, percent (ADR 0031 §4): the Terminal's one dim on every page of
+     * the Terminal (a terminal window, a Display page, the Assistant page), none on Home's.
+     *
+     * @param page the page's kind, or null for none (no dim)
+     * @param terminalDim the Terminal card's Wallpaper dim, percent
+     */
+    public static int pageDimPercent(@Nullable PageKind page, int terminalDim) {
+        return com.termux.app.wall.PaneWallPolicy.isTerminalPlace(page)
+            ? Math.max(0, Math.min(100, terminalDim)) : 0;
+    }
+
+    /** A dim percent as the black it paints: black at the slider's own alpha. */
+    public static int dimColor(int percent) {
+        return Math.round(Math.max(0, Math.min(100, percent)) / 100f * 255f) << 24;
     }
 
     /**

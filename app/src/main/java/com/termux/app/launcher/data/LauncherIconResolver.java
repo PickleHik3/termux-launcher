@@ -311,6 +311,13 @@ public final class LauncherIconResolver {
      * from what it draws: it is never cut. Done here, when the icon is resolved, so every surface
      * showing it benefits and no frame pays for it.
      */
+    /** The per-icon pixel cap scaled pack artwork is redrawn at; the store's cap, set by the provider. */
+    private volatile int artworkCapPx = com.termux.app.launcher.icon.IconArtworkPolicy.BASE_PX;
+
+    public void setArtworkCapPx(int capPx) {
+        artworkCapPx = capPx;
+    }
+
     @Nullable
     private Drawable packArtwork(@Nullable IconPack pack, @Nullable Drawable drawable) {
         if (drawable == null || pack == null) return drawable;
@@ -318,7 +325,7 @@ public final class LauncherIconResolver {
         if (packScale <= 1f) return drawable;
         float scale = ArtworkFootprint.iconScale(packScale, DrawablePixels.stockIconExtent(),
             DrawablePixels.drawnCentredExtent(drawable));
-        return DrawablePixels.scaleAboutCentre(context.getResources(), drawable, scale);
+        return DrawablePixels.scaleAboutCentre(context.getResources(), drawable, scale, artworkCapPx);
     }
 
     /**

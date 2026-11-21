@@ -99,7 +99,7 @@ public class LayoutStyleMigrationTest {
     // ---------------------------------------------------------------- the retired keys
 
     @Test
-    public void perSurfaceCornerAndSideGapOverridesAreDroppedForBase() {
+    public void perSurfaceCornerAndSideGapOverridesAreDroppedForGlobal() {
         store.edit()
             .putInt(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS, 30)
             .putInt(TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS, 17)
@@ -120,9 +120,9 @@ public class LayoutStyleMigrationTest {
                 && (key.endsWith("_corner_radius") || key.endsWith("_side_gap")));
         }
 
-        // Every surface reads the Base values now.
-        int baseCorners = preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS);
-        int baseGap = preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
+        // Every surface reads the Global values now.
+        int baseCorners = preferences.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS);
+        int baseGap = preferences.getSurfaceGlobalValue(SurfaceProperty.SIDE_GAP);
         assertEquals(baseCorners, preferences.getAppLauncherDockCornerRadius());
         assertEquals(baseCorners, preferences.getStatusBarCornerRadius());
         assertEquals(baseGap, preferences.getDockHorizontalInset());
@@ -172,17 +172,17 @@ public class LayoutStyleMigrationTest {
         // Corners joined the look values (ADR 0017): the status bar's own corner is a cell now.
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS,
             SurfaceProperty.CORNER_RADIUS));
-        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP),
+        assertEquals(preferences.getSurfaceGlobalValue(SurfaceProperty.SIDE_GAP),
             preferences.getDockHorizontalInset());
     }
 
     @Test
-    public void aPerSurfaceSetterMovesBaseNowThatNothingCanDetach() {
+    public void aPerSurfaceSetterMovesGlobalNowThatNothingCanDetach() {
         preferences.migrateLookGrid(java.util.Collections.emptyList());
 
         preferences.setStatusBarCornerRadius(22);
 
-        assertEquals(22, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+        assertEquals(22, preferences.getSurfaceGlobalValue(SurfaceProperty.CORNER_RADIUS));
         assertEquals(22, preferences.getAppLauncherDockCornerRadius());
         assertFalse(store.contains(TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS));
     }

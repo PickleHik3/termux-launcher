@@ -121,6 +121,23 @@ public final class PaneGlass {
     public static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
                                 @Nullable PaneGlassBackdropView backdrop,
                                 float requestedRadiusPx, boolean terminalPane) {
+        return apply(style, frame, backdrop, requestedRadiusPx, terminalPane, true);
+    }
+
+    /**
+     * {@link #apply(PaneSurfaceStyle, View, PaneGlassBackdropView, float)} for a small slab whose
+     * radius is its own (the page bar's capsule and bubble): {@code requestedRadiusPx} is used as
+     * given, not capped against {@code frame}'s size.
+     */
+    public static boolean applyAtRadius(@Nullable PaneSurfaceStyle style, @NonNull View frame,
+                                        @Nullable PaneGlassBackdropView backdrop,
+                                        float requestedRadiusPx) {
+        return apply(style, frame, backdrop, requestedRadiusPx, false, false);
+    }
+
+    private static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
+                                 @Nullable PaneGlassBackdropView backdrop,
+                                 float requestedRadiusPx, boolean terminalPane, boolean capRadius) {
         if (backdrop == null) return false;
         if (!isActive(style)) {
             backdrop.setVeilSource(null);
@@ -134,8 +151,8 @@ public final class PaneGlass {
         }
         // Against the frame's own size, not the window's: after four or five splits a pane is a
         // few rows tall and the window's radius would be half of it.
-        float radiusPx = PaneShape.radiusForBounds(requestedRadiusPx,
-            frame.getWidth(), frame.getHeight());
+        float radiusPx = capRadius ? PaneShape.radiusForBounds(requestedRadiusPx,
+            frame.getWidth(), frame.getHeight()) : requestedRadiusPx;
         backdrop.setGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
             style.paneGlassTintColor(), style.paneGlassGrainLayer(),
             style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter(),
@@ -234,12 +251,10 @@ public final class PaneGlass {
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
                 tab.getContext(), false);
-        // The window tab is a transient control over the pane (a Home float's too): the Sheets
-        // element's grain (ADR 0017), not the dock's.
-        tab.setGrainPercent(preferences == null ? 0 : preferences.getSurfaceValue(
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot.SHEETS,
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty.GRAIN,
-            pageId));
+        // The window tab is a transient control over the pane (a Home float's too): Global's
+        // grain as it is, with no sheet floor (ADR 0031).
+        tab.setGrainPercent(preferences == null ? 0
+            : com.termux.app.chrome.SheetGlass.global(preferences).grainPercent);
         if (style == null) {
             tab.setPaneGlass(null, EMPTY_RECT, null);
             return;
@@ -257,10 +272,9 @@ public final class PaneGlass {
      * such move has to re-aim the matrix.
      *
      * <p>A wall page sliding is not a layout move — the wall translates its pages — and this
-     * listener never sees it. The wall's owner re-aims every slab per frame of a slide instead
-     * ({@code onWallMoved} on the pages, {@code invalidatePaneGlassPositions} on the terminal),
-     * and the slab reads the page's translation off the wall itself, so the frost stays glued to
-     * the wallpaper while the page travels over it.</p>
+     * listener never sees it. The glass service asks every registered slab on each frame that
+     * draws ({@code SlabAim}), and the slab reads the page's translation off the wall itself, so
+     * the frost stays glued to the wallpaper while the page travels over it.</p>
      */
     public static void followLayout(@Nullable PaneGlassBackdropView backdrop) {
         if (backdrop == null) return;

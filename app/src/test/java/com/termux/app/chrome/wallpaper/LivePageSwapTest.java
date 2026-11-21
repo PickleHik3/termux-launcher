@@ -14,10 +14,11 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
 import java.util.concurrent.TimeUnit;
+import android.app.Application;
 
 /** The Live picker's page cross-fade: a fade by default, a flip under reduced motion, one page up at the end. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.TIRAMISU})
+@Config(sdk = {android.os.Build.VERSION_CODES.TIRAMISU}, application = Application.class)
 public class LivePageSwapTest {
 
     @Test

@@ -12,7 +12,7 @@ public class AppDrawerHorizontalGridMetricsTest {
 
     @Test public void autoAndExplicitDimensionsResolveIndependentCapacity() {
         AppDrawerHorizontalGridMetrics auto = AppDrawerHorizontalGridMetrics.resolve(
-            1080f, 900f, 3f, 33f, 0, 0);
+            1080f, 960f, 3f, 33f, 0, 0);
         assertEquals(4, auto.columns);
         assertEquals(4, auto.rows);
         assertEquals(16, auto.itemsPerPage);
@@ -55,11 +55,11 @@ public class AppDrawerHorizontalGridMetricsTest {
     }
 
     @Test public void theRowsShareThePageHeightInsteadOfLeavingItUnderTheLast() {
-        // 900 px of page with rows that need less than a quarter each: four rows, and the
+        // 960 px of page with rows that need less than a quarter each: four rows, and the
         // leftover spread between them, so the last row ends at the page's foot.
         AppDrawerHorizontalGridMetrics auto = AppDrawerHorizontalGridMetrics.resolve(
-            1080f, 900f, 3f, 33f, 0, 0);
-        assertEquals(900f, auto.rowHeightPx * auto.rows, EPS);
+            1080f, 960f, 3f, 33f, 0, 0);
+        assertEquals(960f, auto.rowHeightPx * auto.rows, EPS);
         AppDrawerHorizontalGridMetrics explicit = AppDrawerHorizontalGridMetrics.resolve(
             1080f, 900f, 3f, 33f, 6, 3);
         assertEquals(300f, explicit.rowHeightPx, EPS);

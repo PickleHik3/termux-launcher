@@ -86,12 +86,15 @@ final class SoundFiles {
     /**
      * The server's command line. Not daemonized, so the launcher's thread can wait on the process
      * itself; never idle-exiting (decision 1); its own startup file and nothing of
-     * {@code default.pa} ({@code -n}).
+     * {@code default.pa} ({@code -n}). No pid file: the launcher waits on its own child and finds
+     * a leftover one by its command line. A pid file outlives a killed server, and once Android
+     * hands that pid to another app the server cannot read it in {@code /proc} and refuses to
+     * start ("Failed to validate PID file") until the file is deleted.
      */
     @NonNull
     static List<String> serverArgv(@NonNull String pulseaudio, @NonNull String startupFile) {
         return Arrays.asList(pulseaudio, "-n", "-F", startupFile, "--daemonize=no",
-            "--exit-idle-time=-1", "--use-pid-file=yes", "--system=no", "--log-target=stderr");
+            "--exit-idle-time=-1", "--use-pid-file=no", "--system=no", "--log-target=stderr");
     }
 
     /**

@@ -58,6 +58,28 @@ public class Keyboard2View extends View
    */
   static final float PASTE_PICTURE_SCALE = 0.78f;
 
+  /**
+   * A drawable symbol's box side, in the text size its glyph would have been drawn at. The
+   * Roundline vectors keep 2/24 padding each side, so their ink is 20/24 of the box: at 1.0 the
+   * ink is about 0.83 em, between the key font's glyphs (about 0.75 em) and the Nerd icons (a
+   * full em). One number for caps, corners and popups.
+   */
+  public static final float SYMBOL_ICON_EM = 1.0f;
+
+  /** Most distinct symbols the icon cache holds; far above the keys a layout carries. */
+  private static final int SYMBOL_ICON_CACHE_MAX = 96;
+  /** Most distinct ink colours the tint cache holds before it starts over. */
+  private static final int SYMBOL_TINT_CACHE_MAX = 64;
+  /** Cached stand-in for a label the host has no drawable for. */
+  private static final android.graphics.drawable.Drawable NO_ICON =
+      new android.graphics.drawable.ColorDrawable(0);
+
+  private final java.util.HashMap<String, android.graphics.drawable.Drawable> _symbolIcons =
+      new java.util.HashMap<>();
+  private final java.util.HashMap<String, android.graphics.drawable.Drawable> _keyFontSymbolIcons =
+      new java.util.HashMap<>();
+  private final SparseArray<android.graphics.ColorFilter> _symbolTints = new SparseArray<>();
+
   private Pointers _pointers;
 
   private Pointers.Modifiers _mods;
@@ -268,6 +290,7 @@ public class Keyboard2View extends View
 
   private void applyTheme()
   {
+    clearSymbolIconCaches();
     _trailPaint.setColor(_theme.pressedColor);
     _trailPaint.setStrokeWidth(_config.swipeTrailWidthPx);
     _fxFillPaint.setColor(_theme.pressedColor);
@@ -1389,6 +1412,13 @@ public class Keyboard2View extends View
     float width = p.measureText(label, 0, label_len);
     float top = baseline + p.ascent();
     float bottom = baseline + p.descent();
+    if (symbolIcon(label, drawnInKeyFont(kv)) != null)
+    {
+      width = iconTextSize(kv, false) * SYMBOL_ICON_EM;
+      float centre = baseline + (p.ascent() + p.descent()) / 2f;
+      top = centre - width / 2f;
+      bottom = centre + width / 2f;
+    }
     // A font with no metrics for the glyph would give the caller an empty rect, which reads as
     // "not there"; the label's own size is a box the right shape in the right corner.
     if (width <= 0f)
@@ -1502,6 +1532,18 @@ public class Keyboard2View extends View
     invalidate();
   }
 
+  /**
+   * Local addition (see UPSTREAM.md, "Palette blend"): {@link #setPalette} for a palette that
+   * differs from the current one in colours alone. No layout is requested; only the keys repaint.
+   */
+  public void setPaletteColors(Theme.Palette palette)
+  {
+    requireMainThread();
+    _theme = new Theme(getContext(), Objects.requireNonNull(palette, "palette"));
+    applyTheme();
+    invalidate();
+  }
+
   public void setShiftLocked(boolean locked)
   {
     requireMainThread();
@@ -1551,7 +1593,16 @@ public class Keyboard2View extends View
   /** The text a cap, corner or popup draws for [kv], already modified. */
   private String drawnString(KeyValue kv)
   {
-    return showsPictureGlyph(kv) ? PASTE_PICTURE_GLYPH : kv.getString();
+    if (showsPictureGlyph(kv))
+      return PASTE_PICTURE_GLYPH;
+    SymbolIcons icons = _config.symbolIcons;
+    if (icons != null && kv.getKind() == KeyValue.Kind.Launcher_tool)
+    {
+      KeyValue.LauncherTool tool = kv.getLauncherTool();
+      String label = icons.toolLabel(tool.toolId, kv.getString());
+      return label == null ? kv.getString() : label;
+    }
+    return kv.getString();
   }
 
   /** Whether [kv], already modified, is drawn in the bundled key font. */
@@ -1742,7 +1793,7 @@ public class Keyboard2View extends View
         android.os.Trace.beginSection("Keyboard.down");
         try
         {
-          KeyboardData.Key key = getKeyAtPosition(tx, ty);
+          KeyboardData.Key key = getKeyForPress(tx, ty);
           if (key != null)
           {
             startTouchFx(event.getPointerId(p), key, tx, ty, event.getTouchMajor(p));
@@ -1975,7 +2026,7 @@ public class Keyboard2View extends View
    * inside the key's own rectangle, not in the gap to its neighbours (half a key margin on each
    * side) nor on the margins around the rows (above the top row, beside and under the rows). Those
    * are the keyboard's frame rather than any key's. A press still starts a key by its whole cell,
-   * as {@link #onTouch} reads it. The long-press popup does not use this: it reads
+   * and on the frame by the outer key beside it ({@link #getKeyForPress}). The long-press popup does not use this: it reads
    * {@link #drawnKeyRectAt} and keeps only a key's core, so gaps, key edges and margins open it.
    */
   public boolean hasKeyAt(float tx, float ty)
@@ -2057,7 +2108,63 @@ public class Keyboard2View extends View
 
   private KeyboardData.Key getKeyAtPosition(float tx, float ty)
   {
+    return getKeyInRow(getRowAtPosition(ty), tx);
+  }
+
+  /** How far beside a row's first or last key a press still starts it, in key widths. */
+  private static final float EDGE_REACH_KEY_WIDTHS = 0.5f;
+
+  /**
+   * The key a press at ({@code tx}, {@code ty}) starts: the key whose cell holds the point, or,
+   * for a press on the keyboard's frame, the outer key beside it. The frame is the margin above
+   * the top row, the margin under the bottom row, the side margins, and a row's indent up to
+   * {@link #EDGE_REACH_KEY_WIDTHS} from its first or last key: the usual half-key indent is all
+   * the key's, the far part of a wider blank is nobody's. Space between two keys of a row, and
+   * anything past the bottom margin, still starts nothing.
+   */
+  private KeyboardData.Key getKeyForPress(float tx, float ty)
+  {
+    if (_keyboard == null || _tc == null || _keyboard.rows.isEmpty())
+      return null;
     KeyboardData.Row row = getRowAtPosition(ty);
+    if (row == null)
+    {
+      float top = getPaddingTop() + _config.marginTopPx;
+      float bottom = top;
+      for (KeyboardData.Row r : _keyboard.rows)
+        bottom += (r.shift + r.height) * _tc.row_height;
+      if (ty >= 0f && ty < top)
+        row = _keyboard.rows.get(0);
+      else if (ty >= bottom && ty < bottom + _marginBottom)
+        row = _keyboard.rows.get(_keyboard.rows.size() - 1);
+      else
+        return null;
+    }
+    if (row.keys.isEmpty())
+      return null;
+    KeyboardData.Key key = getKeyInRow(row, tx);
+    if (key != null)
+      return key;
+    if (tx < 0f || tx >= getWidth())
+      return null;
+    // A press on a side margin counts as one at the rows' own edge.
+    float left = _marginLeft;
+    float right = left;
+    for (KeyboardData.Key k : row.keys)
+      right += (k.shift + k.width) * _keyWidth;
+    float rowsRight = Math.max(right, getWidth() - _marginRight);
+    float x = Math.max(left, Math.min(tx, rowsRight));
+    float reach = EDGE_REACH_KEY_WIDTHS * _keyWidth;
+    float firstLeft = left + row.keys.get(0).shift * _keyWidth;
+    if (x <= firstLeft)
+      return firstLeft - x <= reach ? row.keys.get(0) : null;
+    if (x >= right)
+      return x - right <= reach ? row.keys.get(row.keys.size() - 1) : null;
+    return null;
+  }
+
+  private KeyboardData.Key getKeyInRow(KeyboardData.Row row, float tx)
+  {
     float x = _marginLeft;
     if (row == null || tx < x)
       return null;
@@ -2079,23 +2186,69 @@ public class Keyboard2View extends View
     VibratorCompat.vibrate(this, _config);
   }
 
-  private final Rect _exclusion_rect = new Rect();
-  private final java.util.List<Rect> _exclusion_rects =
-      java.util.Collections.singletonList(_exclusion_rect);
-
   @Override
   protected void onLayout(boolean changed, int left, int top, int right, int bottom)
   {
     super.onLayout(changed, left, top, right, bottom);
-    if (Build.VERSION.SDK_INT < 29 || !changed)
+    if (changed)
+      publishBackExclusion();
+  }
+
+  @Override
+  public android.view.WindowInsets onApplyWindowInsets(android.view.WindowInsets insets)
+  {
+    // The back swipe's reach is a system setting; follow it without waiting for a relayout.
+    publishBackExclusion();
+    return super.onApplyWindowInsets(insets);
+  }
+
+  /**
+   * Unlike an IME window, an activity-embedded keyboard gets no automatic system-gesture
+   * exclusion, so edge-column swipes would be recognized as Back gestures and cancelled. Only the
+   * two side strips the back swipe starts in are asked for: an exclusion anywhere else does
+   * nothing for Back, and where it reaches the navigation handle it turns off the system's
+   * sideways swipe to the previous app (Quickstep disables quick switch for a touch that lands
+   * inside an app's exclusion). Upstream had an equivalent SDK-29 block over the whole view in
+   * parent-relative coordinates, which only worked because the IME view sat at (0,0); exclusion
+   * rects are in view-local coordinates.
+   */
+  private void publishBackExclusion()
+  {
+    if (Build.VERSION.SDK_INT < 29)
       return;
-    // Unlike an IME window, an activity-embedded keyboard gets no automatic
-    // system-gesture exclusion, so edge-column swipes would be recognized as
-    // Back gestures and cancelled. Upstream had an equivalent SDK-29 block; it
-    // used parent-relative coordinates, which only worked because the IME view
-    // sat at (0,0) — exclusion rects are in view-local coordinates.
-    _exclusion_rect.set(0, 0, right - left, bottom - top);
-    setSystemGestureExclusionRects(_exclusion_rects);
+    android.view.WindowInsets insets = getRootWindowInsets();
+    int width = getWidth();
+    int height = getHeight();
+    java.util.List<Rect> rects;
+    if (insets == null)
+    {
+      // Not attached yet: keep the old whole-view request until the insets arrive.
+      rects = Collections.singletonList(new Rect(0, 0, width, height));
+    }
+    else
+    {
+      android.graphics.Insets gestures = insets.getSystemGestureInsets();
+      rects = backExclusionRects(width, height, gestures.left, gestures.right);
+    }
+    setSystemGestureExclusionRects(rects);
+  }
+
+  /**
+   * The view-local strips a keyboard {@code width} x {@code height} asks the back swipe to leave
+   * it: one along each side, as wide as that side's system-gesture inset. A keyboard away from
+   * the screen edge asks for a strip of its own keys no back swipe reaches, which costs nothing.
+   */
+  static java.util.List<Rect> backExclusionRects(int width, int height, int leftInset,
+      int rightInset)
+  {
+    java.util.List<Rect> rects = new ArrayList<>(2);
+    if (width <= 0 || height <= 0)
+      return rects;
+    if (leftInset > 0)
+      rects.add(new Rect(0, 0, Math.min(width, leftInset), height));
+    if (rightInset > 0)
+      rects.add(new Rect(Math.max(0, width - rightInset), 0, width, height));
+    return rects;
   }
 
   @Override
@@ -2826,6 +2979,85 @@ public class Keyboard2View extends View
     return (upper == c) ? kv : kv.withSymbol(String.valueOf(upper));
   }
 
+  /** Forgets every resolved symbol drawable and tint; the next draw asks the host again. */
+  void clearSymbolIconCaches()
+  {
+    _symbolIcons.clear();
+    _keyFontSymbolIcons.clear();
+    _symbolTints.clear();
+  }
+
+  /** The plain key theme as last measured; for tests. */
+  Theme.Computed.Key themeKeyForTest()
+  {
+    return _tc == null ? null : _tc.key;
+  }
+
+  /** Entries held by the symbol icon cache; for tests. */
+  int symbolIconCacheSize()
+  {
+    return _symbolIcons.size() + _keyFontSymbolIcons.size();
+  }
+
+  /**
+   * The drawable that draws [label] in place of its font glyph, or null to draw it as text. The
+   * host is asked once per distinct label; the answer (or its absence) is kept, bounded, until
+   * the theme changes. A host that throws or answers nothing leaves the font in charge.
+   */
+  public android.graphics.drawable.Drawable symbolIcon(String label, boolean keyFont)
+  {
+    SymbolIcons host = _config.symbolIcons;
+    if (host == null || label == null || label.isEmpty())
+      return null;
+    java.util.HashMap<String, android.graphics.drawable.Drawable> cache =
+        keyFont ? _keyFontSymbolIcons : _symbolIcons;
+    android.graphics.drawable.Drawable d = cache.get(label);
+    if (d == null)
+    {
+      try
+      {
+        d = host.iconFor(label, keyFont);
+      }
+      catch (RuntimeException e)
+      {
+        d = null;
+      }
+      if (d != null)
+        d = d.mutate();
+      if (cache.size() >= SYMBOL_ICON_CACHE_MAX)
+        cache.clear();
+      cache.put(label, d == null ? NO_ICON : d);
+    }
+    return d == NO_ICON ? null : d;
+  }
+
+  /** Draws [icon] centred on ([cx], [cy]) in [ink], a box [textSize] em wide. */
+  void drawSymbolIcon(Canvas canvas, android.graphics.drawable.Drawable icon, float cx, float cy,
+      float textSize, int ink)
+  {
+    float half = textSize * SYMBOL_ICON_EM / 2f;
+    android.graphics.ColorFilter tint = _symbolTints.get(ink);
+    if (tint == null)
+    {
+      if (_symbolTints.size() >= SYMBOL_TINT_CACHE_MAX)
+        _symbolTints.clear();
+      tint = new android.graphics.PorterDuffColorFilter(ink,
+          android.graphics.PorterDuff.Mode.SRC_IN);
+      _symbolTints.put(ink, tint);
+    }
+    icon.setBounds(Math.round(cx - half), Math.round(cy - half),
+        Math.round(cx + half), Math.round(cy + half));
+    icon.setColorFilter(tint);
+    icon.draw(canvas);
+  }
+
+  /** [scaleTextSize] for a drawable: the paste picture's shrink is for its font glyph only. */
+  private float iconTextSize(KeyValue kv, boolean mainLabel)
+  {
+    float size = scaleTextSize(kv, mainLabel);
+    return showsPictureGlyph(kv) ? size / PASTE_PICTURE_SCALE : size;
+  }
+
   private void drawLabel(Canvas canvas, KeyValue kv, float x, float y,
       float keyH, boolean isKeyDown, Theme.Computed.Key tc, boolean hasColorOverride,
       int colorOverride)
@@ -2837,6 +3069,13 @@ public class Keyboard2View extends View
     float textSize = scaleTextSize(kv, true);
     int color = hasColorOverride ? colorOverride : labelColor(kv, isKeyDown, false, tc);
     String label = drawnString(kv);
+    android.graphics.drawable.Drawable icon = symbolIcon(label, drawnInKeyFont(kv));
+    if (icon != null)
+    {
+      drawSymbolIcon(canvas, icon, x, y + keyH / 2f, iconTextSize(kv, true),
+          tc.label_ink(color));
+      return;
+    }
     Paint p = tc.label_paint(drawnInKeyFont(kv), label, color, textSize);
     canvas.drawText(label, x, (keyH - p.ascent() - p.descent()) / 2f + y, p);
   }
@@ -2868,6 +3107,16 @@ public class Keyboard2View extends View
       x += keyW / 2f;
     else
       x += (a == Paint.Align.LEFT) ? subPadding : keyW - subPadding;
+    android.graphics.drawable.Drawable icon = symbolIcon(label, drawnInKeyFont(kv));
+    if (icon != null)
+    {
+      float size = iconTextSize(kv, false);
+      float half = size * SYMBOL_ICON_EM / 2f;
+      float cx = (a == Paint.Align.CENTER) ? x : (a == Paint.Align.LEFT) ? x + half : x - half;
+      drawSymbolIcon(canvas, icon, cx, y + (p.ascent() + p.descent()) / 2f, size,
+          tc.label_ink(color));
+      return;
+    }
     int label_len = label.length();
     // Limit the label of string keys to 3 characters
     if (label_len > 3 && kv.getKind() == KeyValue.Kind.String)

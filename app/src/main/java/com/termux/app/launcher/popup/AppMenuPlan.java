@@ -13,7 +13,7 @@ import java.util.List;
  * top to bottom: the notifications row (only while the app is badged), the app's shortcuts, Move to category
  * (alone, where the drawer can sort the app), then the
  * actions in Launcher3's order — Widgets, App info, Add to home, Pin or Unpin, Change icon (with
- * Reset icon beside it once a custom icon is set), Uninstall. An app in a dock folder trades Pin for
+ * Reset icon beside it once a custom icon is set), Uninstall (a Linux app in the drawer ends with Hide instead). An app in a dock folder trades Pin for
  * Move to dock and Remove from folder, the two things only a folder member can do. An icon on Home
  * has no Add to home (it is there already) and offers Remove from Home before Uninstall: the same
  * thing its drag onto the Remove target does. An icon on the dock adds Edit dock, alone in the last
@@ -32,6 +32,7 @@ public final class AppMenuPlan {
         WIDGETS,
         APP_INFO,
         ADD_TO_HOME,
+        ADD_TO_FOLDER,
         PIN,
         UNPIN,
         MOVE_TO_DOCK,
@@ -40,6 +41,7 @@ public final class AppMenuPlan {
         CHANGE_ICON,
         RESET_ICON,
         UNINSTALL,
+        HIDE,
         EDIT_DOCK
     }
 
@@ -72,6 +74,10 @@ public final class AppMenuPlan {
         public boolean onDock;
         /** The drawer can reassign categories (the host has its picker); see {@link #movesToCategory}. */
         public boolean canMoveToCategory;
+        /** The drawer has a folder this app can still join; see {@link #addsToFolder}. */
+        public boolean canAddToFolder;
+        /** The host can hide this app from the drawer (a Linux app); see {@link #hidesFromDrawer}. */
+        public boolean canHide;
     }
 
     private AppMenuPlan() {
@@ -92,6 +98,22 @@ public final class AppMenuPlan {
     public static boolean movesToCategory(@NonNull Inputs in) {
         return in.canMoveToCategory && in.androidPackage && !in.onDock
             && in.source != Source.FOLDER_MEMBER;
+    }
+
+    /** Whether Add to folder shows: from the drawer, on an app that is not in a folder or on Home. */
+    public static boolean addsToFolder(@NonNull Inputs in) {
+        return in.canAddToFolder && !in.onDock
+            && (in.source == Source.UNPINNED || in.source == Source.PINNED);
+    }
+
+    /**
+     * Whether Hide shows: a Linux app pressed in the drawer (its grid, search results or category
+     * tiles), where Android apps have Uninstall instead. Never on the dock, on Home or in a dock
+     * folder, where the app is a pin rather than a drawer entry.
+     */
+    public static boolean hidesFromDrawer(@NonNull Inputs in) {
+        return in.canHide && !in.androidPackage && !in.onDock
+            && (in.source == Source.UNPINNED || in.source == Source.PINNED);
     }
 
     /** The groups, top to bottom; never an empty group. */
@@ -116,6 +138,7 @@ public final class AppMenuPlan {
         if (in.canAddToHome && in.source != Source.FOLDER_MEMBER && in.source != Source.HOME) {
             actions.add(Row.ADD_TO_HOME);
         }
+        if (addsToFolder(in)) actions.add(Row.ADD_TO_FOLDER);
         switch (in.source) {
             case FOLDER_MEMBER:
                 actions.add(Row.MOVE_TO_DOCK);
@@ -135,6 +158,7 @@ public final class AppMenuPlan {
         if (in.customIcon) actions.add(Row.RESET_ICON);
         if (in.source == Source.HOME) actions.add(Row.REMOVE_FROM_HOME);
         if (in.androidPackage) actions.add(Row.UNINSTALL);
+        if (hidesFromDrawer(in)) actions.add(Row.HIDE);
         groups.add(actions);
         if (in.onDock) groups.add(Collections.singletonList(Row.EDIT_DOCK));
         return groups;

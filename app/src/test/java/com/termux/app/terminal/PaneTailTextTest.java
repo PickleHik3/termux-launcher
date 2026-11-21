@@ -7,9 +7,12 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 import static org.junit.Assert.assertEquals;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** A pane read takes its last lines from the bottom rows only, and says the same as the whole transcript. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class PaneTailTextTest {
 
     private static final int COLUMNS = 6, SCREEN_ROWS = 4;

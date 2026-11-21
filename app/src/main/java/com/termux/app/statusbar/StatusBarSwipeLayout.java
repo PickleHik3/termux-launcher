@@ -208,7 +208,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     private void begin(MotionEvent event) {
         clearTracking();
-        boolean inWindowBar = isInsideView(findViewById(R.id.terminal_window_bar), event);
+        boolean inWindowBar = isInsideView(findViewById(R.id.terminal_window_bar), event)
+            || isInsideView(findViewById(R.id.terminal_home_float_bar), event);
         boolean interactive = isInsideInteractiveChild(this, event);
         boolean nestedChildOwned = isInsideNestedScrollingChild(this, event);
         Listener listener = mListener;
@@ -303,7 +304,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
             // transparent to this hit test. Its actual controls are still found recursively: a
             // session chip or the add button remains child-owned, while space between/after them
             // can arm the status gesture.
-            if (child.getId() == R.id.terminal_window_bar) {
+            if (child.getId() == R.id.terminal_window_bar
+                || child.getId() == R.id.terminal_home_float_bar) {
                 if (child instanceof ViewGroup
                     && isInsideInteractiveChild((ViewGroup) child, event)) return true;
                 continue;

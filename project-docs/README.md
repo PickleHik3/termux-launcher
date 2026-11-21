@@ -32,10 +32,12 @@ Three rules keep this directory from rotting:
 
 | | |
 |---|---|
+| [`active/window-restructure-2026-11-17.md`](active/window-restructure-2026-11-17.md) | The window restructure: one writer per view property and one frame order (ADRs 0028 to 0030), in eight steps with their checks and the docs each step owes. Decided; step 1 not started. |
 | [`active/fancier-glass/SPEC.md`](active/fancier-glass/SPEC.md) | Fancier Glass: refraction, motions and their bug list. Partly built. |
 | [`active/agsl-effects-and-touch-latency-2026-10-22.md`](active/agsl-effects-and-touch-latency-2026-10-22.md) | Shader effects and touch latency: measure tap-to-echo on pong with cheap fixes first, then built-in event effects (bell flash, focus pulse, find-cursor, typing sparks). Spec; not started. |
 | [`active/glass-plan-2026-10-16.md`](active/glass-plan-2026-10-16.md) | The next glass round: gathered-light edge, a per-spot film under Clear, small glass that picks its own ink. Rounds 0 and 1 built, Round 1 always on (the switch is gone); the rest is spec. |
 | [`active/wall-rework-2026-10-17.md`](active/wall-rework-2026-10-17.md) | The wall rework: Home pages as a conventional launcher, then the Workspace with terminal and display windows in one row; usage mode and the Display place retire (ADR 0008). Spec; not started. |
+- `active/edit-session-2026-11-10.md`: one edit session for Done, Undo and Back in the Appearance editor, with the wallpaper as a part. Designed; waits for the ADR 0018 waves.
 - `active/wall-rework-phase2-2026-10-18.md`: phase two of the wall rework, slices in order (the capsule status bar, built and removed; Home pills, built and removed for no status bar on Home).
 | [`active/dock-geometry-2026-10-22.md`](active/dock-geometry-2026-10-22.md) | Dock geometry, Dock rows and Stack layout (#133, ADR 0011): one owner for the dock's measurements. Built on `feat/dock-geometry`, suite green; the slide still arrives in the departing half's dress on the emulator. Diagnosis owed. |
 | [`active/home-dock-styles-2026-10-20.md`](active/home-dock-styles-2026-10-20.md) | Home's dock as five styles picked in Layouts (Glass tray default, Lens beads, Taskbar, Prompt line, Wall strip), with the shared glass shelf and icon reflections; ledger in `active/home-dock-styles-ledger.md`. In progress. |
@@ -48,6 +50,7 @@ Three rules keep this directory from rotting:
 | [`device-checks.md`](device-checks.md) | Device checks owed, rolling: Agent and Developer items, deleted once seen; read before every drop and cut. |
 | [`active/release-promotion-heuristics-research.md`](active/release-promotion-heuristics-research.md) | When a pre-release feature is ready for a stable: the sources behind the promotion rules in `docs/agents/releasing.md`. Decided 2026-10-14. |
 | [`active/obtainium-channels-research.md`](active/obtainium-channels-research.md) | How Obtainium picks a release and an APK from our one repo of three editions and two channels, what went wrong in the real history, and the fixes: draft-first publishing with Termux last, and six one-tap import links. Draft-first publishing and the import links adopted 2026-10-14. |
+| [`active/terminal-notifications-2026-11-12.md`](active/terminal-notifications-2026-11-12.md) | Which terminal notices reach Android, on which channels, and the guarded reply. Decided 2026-11-12, not built. |
 
 ## Reference: delivered records
 

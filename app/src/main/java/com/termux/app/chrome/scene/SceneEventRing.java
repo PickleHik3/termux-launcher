@@ -47,7 +47,7 @@ final class SceneEventRing {
     }
 
     /** Consumer: applies every waiting record to {@code touch}, in order; the count applied. */
-    int drainInto(SceneTouch touch) {
+    int drainInto(SceneTouch touch, double nowSec) {
         long head = mHead;
         long tail = mTail;
         int n = 0;
@@ -56,7 +56,7 @@ final class SceneEventRing {
             switch (mKind[i]) {
                 case DOWN: touch.down(mX[i], mY[i]); break;
                 case MOVE: touch.move(mX[i], mY[i]); break;
-                case UP: touch.up(mX[i], mY[i]); break;
+                case UP: touch.up(mX[i], mY[i], nowSec); break;
                 default: break;
             }
             tail++;

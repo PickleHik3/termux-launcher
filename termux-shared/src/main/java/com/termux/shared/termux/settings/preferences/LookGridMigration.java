@@ -17,15 +17,15 @@ import java.util.List;
  *
  * <p>It carries its own table of the old keys and their meaning, so nothing of the old resolver
  * has to stay alive for it. The old rule, per surface, property and page: the surface's own value
- * on that page ({@code <own key>@<page>}) when present; else Base while the surface's inherit flag
+ * on that page ({@code <own key>@<page>}) when present; else Global while the surface's inherit flag
  * ({@code surface_inherit_<slot>_<property>}, default on) holds; else the surface's own key, or its
  * own shipped number when the key was never written. Corners and margin were one value each, read
- * from Base whatever a flag said.</p>
+ * from Global whatever a flag said.</p>
  *
- * <p>Mapping: Base → {@code look.<p>}; a surface detached on the wall → {@code look.<p>.<element>};
+ * <p>Mapping: Global → {@code look.<p>}; a surface detached on the wall → {@code look.<p>.<element>};
  * a page's own value → {@code look.<p>.<element>@<page>}; blur → the Frost stop nearest by blur,
  * grain kept exactly wherever the stop's own grain is not the old number; Vibrancy, tint colour,
- * rim, the bend (Depth) and dispersion (Edge) → Base; the drawer's corner → the Sheets corner;
+ * rim, the bend (Depth) and dispersion (Edge) → Global; the drawer's corner → the Sheets corner;
  * {@code widgets_on_glass} off → solid Widgets (opacity 100, Frost 0). A final pass compares every
  * (element, property, page) with the old rule and pins the element cell wherever the grid would
  * answer otherwise. Every key read is then deleted.</p>
@@ -36,23 +36,23 @@ public final class LookGridMigration {
 
     public static final String KEY_MIGRATED = "look_grid_migrated";
 
-    static final String INHERIT_PREFIX = "surface_inherit_";
+    public static final String INHERIT_PREFIX = "surface_inherit_";
 
     /** The four old glass properties. */
     enum OldProperty {
-        BLUR("blur", "surface_base_blur", TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR),
-        OPACITY("opacity", "surface_base_opacity", TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY),
-        GRAIN("grain", "surface_base_grain", TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN),
-        TINT("tint", "surface_base_tint", TERMUX_APP.DEFAULT_SURFACE_BASE_TINT);
+        BLUR("blur", "surface_base_blur", TERMUX_APP.DEFAULT_SURFACE_GLOBAL_BLUR),
+        OPACITY("opacity", "surface_base_opacity", TERMUX_APP.DEFAULT_SURFACE_GLOBAL_OPACITY),
+        GRAIN("grain", "surface_base_grain", TERMUX_APP.DEFAULT_SURFACE_GLOBAL_GRAIN),
+        TINT("tint", "surface_base_tint", TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT);
 
         final String key;
-        final String baseKey;
-        final int baseDefault;
+        final String globalKey;
+        final int globalDefault;
 
-        OldProperty(String key, String baseKey, int baseDefault) {
+        OldProperty(String key, String globalKey, int globalDefault) {
             this.key = key;
-            this.baseKey = baseKey;
-            this.baseDefault = baseDefault;
+            this.globalKey = globalKey;
+            this.globalDefault = globalDefault;
         }
     }
 
@@ -63,26 +63,26 @@ public final class LookGridMigration {
                 TERMUX_APP.KEY_DOCK_GLASS_GRAIN, TERMUX_APP.KEY_DOCK_TINT_STRENGTH},
             new int[] {TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS,
                 TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY, TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
-                TERMUX_APP.DEFAULT_SURFACE_BASE_TINT}),
+                TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT}),
         KEYBOARD("keyboard", Element.KEYBOARD,
             new String[] {TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS,
                 TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY, TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN,
                 TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH},
-            new int[] {TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
+            new int[] {TERMUX_APP.DEFAULT_SURFACE_GLOBAL_BLUR,
                 TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY,
-                TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT}),
+                TERMUX_APP.DEFAULT_SURFACE_GLOBAL_GRAIN, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT}),
         STATUS("status", Element.STATUS,
             new String[] {TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.KEY_STATUS_BAR_OPACITY,
                 TERMUX_APP.KEY_STATUS_BAR_GRAIN, TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH},
             new int[] {TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY,
-                TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT}),
+                TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT}),
         CANVAS("canvas", Element.TERMINAL,
             new String[] {TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS,
                 TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN,
                 TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH},
             new int[] {TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS,
                 TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY,
-                TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT});
+                TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN, TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT});
 
         final String key;
         final Element element;
@@ -100,7 +100,7 @@ public final class LookGridMigration {
         int ownDefault(OldProperty property) { return ownDefaults[property.ordinal()]; }
     }
 
-    /** Keys whose plain value goes to Base, or only to deletion: shapes and retired switches. */
+    /** Keys whose plain value goes to Global, or only to deletion: shapes and retired switches. */
     private static final String[] RETIRED = {
         "surface_base_corner_radius", "surface_base_side_gap",
         TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS, TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS,
@@ -162,15 +162,15 @@ public final class LookGridMigration {
             }
         }
 
-        // Base. Frost always (the old shipped pair is no stop); grain wherever the stop's is not it.
-        int baseBlur = store.getInt(OldProperty.BLUR.baseKey, OldProperty.BLUR.baseDefault);
-        int baseGrain = store.getInt(OldProperty.GRAIN.baseKey, OldProperty.GRAIN.baseDefault);
-        int baseStop = FrostStops.nearestStopByBlur(baseBlur);
-        grid.write(Property.FROST, null, LookGrid.NO_PAGE, baseStop);
-        if (FrostStops.grainPercentFor(baseStop) != baseGrain)
-            grid.write(Property.GRAIN, null, LookGrid.NO_PAGE, baseGrain);
-        copyInt(store, grid, OldProperty.OPACITY.baseKey, Property.OPACITY, null);
-        copyInt(store, grid, OldProperty.TINT.baseKey, Property.TINT, null);
+        // Global. Frost always (the old shipped pair is no stop); grain wherever the stop's is not it.
+        int globalBlur = store.getInt(OldProperty.BLUR.globalKey, OldProperty.BLUR.globalDefault);
+        int globalGrain = store.getInt(OldProperty.GRAIN.globalKey, OldProperty.GRAIN.globalDefault);
+        int globalStop = FrostStops.nearestStopByBlur(globalBlur);
+        grid.write(Property.FROST, null, globalStop);
+        if (FrostStops.grainPercentFor(globalStop) != globalGrain)
+            grid.write(Property.GRAIN, null, globalGrain);
+        copyInt(store, grid, OldProperty.OPACITY.globalKey, Property.OPACITY, null);
+        copyInt(store, grid, OldProperty.TINT.globalKey, Property.TINT, null);
         copyInt(store, grid, "surface_base_corner_radius", Property.CORNERS, null);
         copyInt(store, grid, "surface_base_side_gap", Property.MARGIN, null);
         copyInt(store, grid, TERMUX_APP.KEY_SURFACE_GLASS_VIBRANCY, Property.VIBRANCY, null);
@@ -179,12 +179,12 @@ public final class LookGridMigration {
         copyInt(store, grid, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_CORNER_RADIUS, Property.CORNERS,
             Element.SHEETS);
         String hue = store.getString(TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE, null);
-        if (hue != null) grid.write(Property.TINT_HUE, null, LookGrid.NO_PAGE, tintHueOf(hue));
+        if (hue != null) grid.write(Property.TINT_HUE, null, tintHueOf(hue));
         String rim = store.getString(TERMUX_APP.KEY_SURFACE_GLASS_RIM, null);
-        if (rim != null) grid.write(Property.RIM, null, LookGrid.NO_PAGE, rimOf(rim));
+        if (rim != null) grid.write(Property.RIM, null, rimOf(rim));
         if (!store.getBoolean(TERMUX_APP.KEY_WIDGETS_ON_GLASS, TERMUX_APP.DEFAULT_VALUE_WIDGETS_ON_GLASS)) {
-            grid.write(Property.OPACITY, Element.WIDGETS, LookGrid.NO_PAGE, 100);
-            grid.write(Property.FROST, Element.WIDGETS, LookGrid.NO_PAGE, FrostStops.SOLID);
+            grid.write(Property.OPACITY, Element.WIDGETS, 100);
+            grid.write(Property.FROST, Element.WIDGETS, FrostStops.SOLID);
         }
 
         // Each surface: detached on the wall → its element cell; a page's own value → that page's.
@@ -217,7 +217,7 @@ public final class LookGridMigration {
     }
 
     /**
-     * An install from before Base existed: Base takes the dock's number, and a surface follows it
+     * An install from before Global existed: Global takes the dock's number, and a surface follows it
      * unless it stored a number of its own that differs (none does once tuning was normalised).
      */
     private static void foldPreInheritance(@NonNull LookGrid.Store store) {
@@ -225,16 +225,16 @@ public final class LookGridMigration {
         boolean normalized = store.getBoolean(TERMUX_APP.KEY_SURFACE_TUNING_NORMALIZED,
             TERMUX_APP.DEFAULT_VALUE_SURFACE_TUNING_NORMALIZED);
         for (OldProperty property : OldProperty.values()) {
-            int base = store.getInt(OldSlot.DOCK.ownKey(property), OldSlot.DOCK.ownDefault(property));
-            store.putInt(property.baseKey, base);
+            int global = store.getInt(OldSlot.DOCK.ownKey(property), OldSlot.DOCK.ownDefault(property));
+            store.putInt(property.globalKey, global);
             for (OldSlot slot : OldSlot.values()) {
                 String own = slot.ownKey(property);
                 boolean matches = normalized || !store.contains(own)
-                    || store.getInt(own, slot.ownDefault(property)) == base;
+                    || store.getInt(own, slot.ownDefault(property)) == global;
                 store.putBoolean(flagKey(slot, property), matches);
             }
         }
-        // Corners and the edge gap were one value each, read from Base, which took the dock's.
+        // Corners and the edge gap were one value each, read from Global, which took the dock's.
         store.putInt("surface_base_corner_radius", store.getInt(
             TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS,
             TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS));
@@ -243,7 +243,7 @@ public final class LookGridMigration {
         store.putBoolean(TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true);
     }
 
-    /** A keyboard detached at the old opacity sentinel follows Base again. */
+    /** A keyboard detached at the old opacity sentinel follows Global again. */
     private static void healKeyboardOpacitySentinel(@NonNull LookGrid.Store store) {
         if (store.getBoolean(TERMUX_APP.KEY_KEYBOARD_OPACITY_SENTINEL_HEALED, false)) return;
         if (!inherits(store, OldSlot.KEYBOARD, OldProperty.OPACITY)
@@ -278,14 +278,14 @@ public final class LookGridMigration {
             if (store.contains(pageKey)) return store.getInt(pageKey, slot.ownDefault(property));
         }
         if (inherits(store, slot, property))
-            return store.getInt(property.baseKey, property.baseDefault);
+            return store.getInt(property.globalKey, property.globalDefault);
         return store.getInt(own, slot.ownDefault(property));
     }
 
     private static boolean inherits(@NonNull LookGrid.Store store, @NonNull OldSlot slot,
                                     @NonNull OldProperty property) {
         return store.getBoolean(flagKey(slot, property),
-            TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE);
+            TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_GLOBAL);
     }
 
     /**
@@ -303,14 +303,13 @@ public final class LookGridMigration {
                 return grid.store().getInt(pageCell, Integer.MIN_VALUE) == expected;
             page = LookGrid.NO_PAGE;
         }
-        return grid.value(target, element, page) == expected;
+        return grid.value(target, element) == expected;
     }
 
     /**
      * Writes one old value. A page's own value goes to that page's cell
-     * ({@code look.<p>.<element>@<page>}), never through the grid's kind lookup: the wall's page
-     * kinds are not installed yet when this runs, and the layouts migration (step 17, ADR 0020 §7)
-     * folds the Start-in Home page's and the Terminal page's cells into their kinds' cells later.
+     * ({@code look.<p>.<element>@<page>}), which no build reads any more (ADR 0031): the one-look
+     * reset deletes it.
      */
     private static void writeOld(@NonNull LookGrid grid, @NonNull Element element,
                                  @NonNull OldProperty property, int page, int value) {
@@ -319,7 +318,7 @@ public final class LookGridMigration {
         if (page >= 0)
             grid.store().putInt(LookGrid.key(target, element, page), target.clamp(stored));
         else
-            grid.write(target, element, page, stored);
+            grid.write(target, element, stored);
     }
 
     @NonNull
@@ -336,7 +335,7 @@ public final class LookGridMigration {
                                 @NonNull String oldKey, @NonNull Property property,
                                 @Nullable Element element) {
         if (store.contains(oldKey))
-            grid.write(property, element, LookGrid.NO_PAGE, store.getInt(oldKey, property.shipped));
+            grid.write(property, element, store.getInt(oldKey, property.shipped));
     }
 
     static int tintHueOf(@NonNull String hue) {
@@ -351,11 +350,11 @@ public final class LookGridMigration {
         return LookGrid.RIM_OFF;
     }
 
-    /** Every old key this fold reads: Base, own keys and their page values, flags, retired keys. */
+    /** Every old key this fold reads: Global, own keys and their page values, flags, retired keys. */
     private static void deleteOldKeys(@NonNull LookGrid.Store store) {
         List<String> plain = new ArrayList<>();
         for (OldProperty property : OldProperty.values()) {
-            plain.add(property.baseKey);
+            plain.add(property.globalKey);
             for (OldSlot slot : OldSlot.values()) plain.add(slot.ownKey(property));
         }
         for (String key : RETIRED) plain.add(key);

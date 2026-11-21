@@ -183,7 +183,7 @@ public final class AnchoredMenu {
         ViewCompat.setImportantForAccessibility(content,
             ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
         ViewCompat.setAccessibilityPaneTitle(content, paneTitle);
-        popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, placement.x, placement.y);
+        showAtScreen(popup, placement.x, placement.y);
         animateAppMenuOpen(content, placement.pivotX, placement.pivotY);
         return popup;
     }
@@ -245,7 +245,7 @@ public final class AnchoredMenu {
                 frame.right, frame.bottom, 0, xy);
             grewRight = xy[0] > mainLoc[0];
         }
-        popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, xy[0], xy[1]);
+        showAtScreen(popup, xy[0], xy[1]);
         animateAppMenuOpen(card.view, grewRight ? 0f : width, height / 2f);
         return popup;
     }
@@ -303,6 +303,18 @@ public final class AnchoredMenu {
         return path;
     }
 
+    /**
+     * Shows {@code popup} at a position given in screen coordinates. showAtLocation takes the
+     * parent window's coordinates, which differ from the screen's in split screen and freeform.
+     */
+    private void showAtScreen(@NonNull PopupWindow popup, int screenX, int screenY) {
+        int[] origin = new int[2];
+        host.getRootView().getLocationOnScreen(origin);
+        popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT,
+            AnchoredMenuGeometry.toWindowX(screenX, origin[0]),
+            AnchoredMenuGeometry.toWindowY(screenY, origin[1]));
+    }
+
     @NonNull
     private Rect visibleFrame() {
         int screenW = host.getResources().getDisplayMetrics().widthPixels;
@@ -341,7 +353,7 @@ public final class AnchoredMenu {
         AnchoredMenuGeometry.sideAlignedPosition(mainLoc[0], main.getWidth(),
             rowLoc[1] + (rowAnchor.getHeight() / 2), popup.getWidth(), popup.getHeight(),
             screenW, screenH, dp(AnchoredMenuGeometry.GAP_DP), xy);
-        popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, xy[0], xy[1]);
+        showAtScreen(popup, xy[0], xy[1]);
         return popup;
     }
 
@@ -377,7 +389,7 @@ public final class AnchoredMenu {
             int[] xy = new int[2];
             AnchoredMenuGeometry.anchoredPosition(anchorRect, popup.getWidth(), popup.getHeight(),
                 screenW, visibleFrame, gap, xy);
-            popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, xy[0], xy[1]);
+            showAtScreen(popup, xy[0], xy[1]);
         } else {
             popup.showAtLocation(host, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 0,
                 host.getHeight() + gap);

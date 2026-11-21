@@ -18,8 +18,11 @@ import org.robolectric.annotation.GraphicsMode;
 
 import java.io.File;
 import java.util.List;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class AssistantChatStoreTest {
     private File file;
@@ -151,5 +154,97 @@ public class AssistantChatStoreTest {
         } finally {
             reopened.close();
         }
+    }
+
+    @Test
+    public void freshDatabaseHasTheSpeedColumns() {
+        long chat = store.createChat(1);
+        long id = store.appendMessage(chat, AssistantMessage.ROLE_ASSISTANT, "", AssistantMessage.STATE_STREAMING, 2);
+        assertNull(store.message(id).durationMs);
+        store.updateMessage(id, "hi", AssistantMessage.STATE_COMPLETE, null, 3, 4100L, 500L, 51);
+        AssistantMessage m = store.message(id);
+        assertEquals(Long.valueOf(4100), m.durationMs);
+        assertEquals(Long.valueOf(500), m.ttftMs);
+        assertEquals(Integer.valueOf(51), m.outputTokens);
+        store.updateMessage(id, "hi", AssistantMessage.STATE_COMPLETE, null, 4, null, null, null);
+        assertNull(store.message(id).durationMs);
+        assertNull(store.message(id).outputTokens);
+    }
+
+    @Test
+    public void versionOneDatabaseUpgradesAndKeepsItsMessages() {
+        android.database.sqlite.SQLiteDatabase old =
+            android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(file, null);
+        old.execSQL("CREATE TABLE chats (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '', "
+            + "created_ms INTEGER NOT NULL, updated_ms INTEGER NOT NULL)");
+        old.execSQL("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            + "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE, "
+            + "role TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, "
+            + "error_code TEXT, created_ms INTEGER NOT NULL)");
+        old.execSQL("INSERT INTO chats (id, title, created_ms, updated_ms) VALUES (1, 't', 1, 1)");
+        old.execSQL("INSERT INTO messages (chat_id, role, text, state, created_ms) "
+            + "VALUES (1, 'assistant', 'old answer', 'complete', 2)");
+        old.setVersion(1);
+        old.close();
+        List<AssistantMessage> messages = store.messages(1);
+        assertEquals(1, messages.size());
+        assertEquals("old answer", messages.get(0).text);
+        assertNull(messages.get(0).durationMs);
+        assertNull(messages.get(0).outputTokens);
+        store.updateMessage(messages.get(0).id, "old answer", AssistantMessage.STATE_COMPLETE, null, 5,
+            1000L, 100L, 20);
+        assertEquals(Integer.valueOf(20), store.message(messages.get(0).id).outputTokens);
+    }
+
+    private void createVersion(int version, boolean withSpeed) {
+        android.database.sqlite.SQLiteDatabase old =
+            android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(file, null);
+        old.execSQL("CREATE TABLE chats (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL DEFAULT '', "
+            + "created_ms INTEGER NOT NULL, updated_ms INTEGER NOT NULL)");
+        old.execSQL("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            + "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE, "
+            + "role TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, "
+            + "error_code TEXT, created_ms INTEGER NOT NULL"
+            + (withSpeed ? ", duration_ms INTEGER, ttft_ms INTEGER, output_tokens INTEGER" : "") + ")");
+        old.execSQL("INSERT INTO chats (id, title, created_ms, updated_ms) VALUES (1, 't', 1, 1)");
+        old.execSQL("INSERT INTO messages (chat_id, role, text, state, created_ms) "
+            + "VALUES (1, 'assistant', 'old answer', 'complete', 2)");
+        old.setVersion(version);
+        old.close();
+    }
+
+    private void assertThinkingColumnsWork() {
+        List<AssistantMessage> messages = store.messages(1);
+        assertEquals(1, messages.size());
+        assertEquals("old answer", messages.get(0).text);
+        assertNull(messages.get(0).thinking);
+        assertNull(messages.get(0).thinkingMs);
+        assertTrue(store.setThinking(messages.get(0).id, "hmm", 1500L));
+        assertEquals("hmm", store.message(messages.get(0).id).thinking);
+        assertEquals(Long.valueOf(1500), store.message(messages.get(0).id).thinkingMs);
+        assertTrue(store.setThinking(messages.get(0).id, null, null));
+        assertNull(store.message(messages.get(0).id).thinking);
+        assertNull(store.message(messages.get(0).id).thinkingMs);
+    }
+
+    @Test
+    public void versionOneDatabaseUpgradesToThinking() {
+        createVersion(1, false);
+        assertThinkingColumnsWork();
+    }
+
+    @Test
+    public void versionTwoDatabaseUpgradesToThinking() {
+        createVersion(2, true);
+        assertThinkingColumnsWork();
+    }
+
+    @Test
+    public void freshDatabaseHasThinking() {
+        long chat = chatWith("q", "a", 1);
+        long id = store.messages(chat).get(1).id;
+        assertTrue(store.setThinking(id, "t", 10L));
+        assertEquals("t", store.message(id).thinking);
+        assertEquals(Long.valueOf(10), store.message(id).thinkingMs);
     }
 }

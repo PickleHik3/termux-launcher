@@ -22,10 +22,11 @@ import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.app.Application;
 
 /** The Terminal entry is pinned to the dock once, at the end, and never again (ADR 0008). */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class TerminalEntryPinTest {
 
     private static final class Store implements LauncherConfigRepository.PreferencesStore {

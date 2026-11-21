@@ -79,7 +79,7 @@ public final class DockRowViews implements DockRows.Views {
                 break;
             case TICKS:
             default:
-                // The row's ticks show or hide it themselves (SuggestionBarView#publishPageIndicator).
+                // The row's ticks show or hide it themselves (SuggestionBarView#publishPageTicks).
                 break;
         }
     }
@@ -108,18 +108,19 @@ public final class DockRowViews implements DockRows.Views {
         return height(R.id.apps_bar_indicator_band, px);
     }
 
+    @Override public boolean setPageBandAir(int px) {
+        View band = mFinder.find(R.id.apps_bar_indicator_band);
+        return band instanceof com.termux.app.launcher.paging.PageTickStripView
+            && ((com.termux.app.launcher.paging.PageTickStripView) band).setAirBelowPx(px);
+    }
+
     @Override public boolean pageTicksAreTheDocks() {
         View band = mFinder.find(R.id.apps_bar_indicator_band);
         return band != null && mTicks.areBoundTo(band);
     }
 
     private static int rowId(@NonNull Element row) {
-        switch (row) {
-            case APPS: return R.id.apps_bar_viewpager;
-            case AZ: return R.id.apps_bar_az_row;
-            case EXTRA_KEYS: return R.id.terminal_toolbar_view_pager;
-            default: return 0;
-        }
+        return SideRowViews.id(row, SideRowViews.Part.ROW);
     }
 
     private void show(int viewId, boolean shown) {

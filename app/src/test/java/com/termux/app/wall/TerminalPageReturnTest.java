@@ -5,9 +5,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.wall.WallPages.PageKind;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /** A wall without its Terminal page takes it back, after Home, once a terminal window opens. */
 public class TerminalPageReturnTest {

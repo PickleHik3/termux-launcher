@@ -20,7 +20,7 @@ import androidx.annotation.NonNull;
  * (opacity 46) therefore draws exactly what it drew before.</p>
  *
  * <p>It is one int: the strength in the alpha byte (0 is {@link #NONE}) and the hue in the rest,
- * so the frame cache keys on it as it keys on Vibrancy. It follows the shared glass (Base's Tint,
+ * so the frame cache keys on it as it keys on Vibrancy. It follows the shared glass (Global's Tint,
  * hue and Opacity), as Vibrancy does: the frame is one for every surface of a radius. Pure ints
  * and floats, no {@code Context}.</p>
  */

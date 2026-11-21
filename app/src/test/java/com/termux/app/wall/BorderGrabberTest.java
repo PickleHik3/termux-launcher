@@ -10,6 +10,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * The border swipes' grabber: a short pill centred on the page's bottom edge for the keyboard, or
@@ -18,7 +19,7 @@ import org.robolectric.annotation.Config;
  * and scaled with a sunk page.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class BorderGrabberTest {
 
     private static final float DENSITY = 2.75f;

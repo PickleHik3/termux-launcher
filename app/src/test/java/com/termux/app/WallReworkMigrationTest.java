@@ -28,10 +28,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import android.app.Application;
 
 /** An install from before the wall rework lands in the new model once, and only once (ADR 0008). */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class WallReworkMigrationTest {
 
     private SharedPreferences store;
@@ -49,8 +50,8 @@ public class WallReworkMigrationTest {
         return store.getString(TERMUX_APP.KEY_LAUNCHER_START_IN, null);
     }
 
-    @Test public void theTerminalAloneStartsInTheWorkspace() {
-        assertEquals(WallRow.START_IN_WORKSPACE,
+    @Test public void theTerminalAloneStartsInTheTerminal() {
+        assertEquals(WallRow.START_IN_TERMINAL,
             startInAfterMigrating(TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL));
     }
 
@@ -69,7 +70,7 @@ public class WallReworkMigrationTest {
             startInAfterMigrating(TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_LAUNCHER));
         assertEquals(WallRow.START_IN_HOME, WallReworkMigration.startInFor("something"));
         assertEquals(WallRow.START_IN_HOME, WallReworkMigration.startInFor(null));
-        assertEquals(WallRow.START_IN_WORKSPACE, WallReworkMigration.startInFor(" terminal "));
+        assertEquals(WallRow.START_IN_TERMINAL, WallReworkMigration.startInFor(" terminal "));
     }
 
     @Test public void aStartInAlreadyChosenStands() {
@@ -161,7 +162,7 @@ public class WallReworkMigrationTest {
         store.edit().putString(TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
             TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_HOME).commit();
         assertFalse(WallReworkMigration.migrateIfNeeded(store));
-        assertEquals(WallRow.START_IN_WORKSPACE,
+        assertEquals(WallRow.START_IN_TERMINAL,
             store.getString(TERMUX_APP.KEY_LAUNCHER_START_IN, null));
     }
 

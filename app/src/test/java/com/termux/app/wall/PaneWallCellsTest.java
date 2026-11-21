@@ -1,5 +1,6 @@
 package com.termux.app.wall;
 
+import com.termux.app.look.WallPagesMigration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -20,6 +21,8 @@ import org.robolectric.annotation.Config;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import android.app.Application;
+import com.termux.app.page.PageKind;
 
 /**
  * The wall lays out one cell per page (ADR 0016): every page of the list, in order, by page id;
@@ -29,12 +32,28 @@ import java.util.List;
  * what the user sees: the page landed on, the cells in order, which page of each kind is live.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class PaneWallCellsTest {
 
     private static final int WIDTH = 1080;
 
-    private static final class Host implements PaneWallController.Host {
+    private static final class Host implements WallFacts, WallHome, WallDisplay {
+        final WallTerminal terminal = new WallTerminal() {
+            @Override public int count() { return innerCount(PageKind.TERMINAL); }
+            @Override public int index() { return innerIndex(PageKind.TERMINAL); }
+            @Override public void show(int index) { showInnerPage(PageKind.TERMINAL, index); }
+            @Override public boolean canStartShell() { return canStartTerminal(); }
+            @Override public boolean startShell() { return startTerminalShell(); }
+        };
+        final WallLanding landing = new WallLanding() {
+            @Override public void committed(PageKind page) { onWallPageChanged(page); }
+        };
+        @Override public int count() { return innerCount(PageKind.HOME); }
+        @Override public int index() { return innerIndex(PageKind.HOME); }
+        @Override public void show(int index) { showInnerPage(PageKind.HOME, index); }
+        @Override public void bindRun(int first, int last) { }
+        @Override public int pressPage() { return homePress; }
+        @Override public float shiftFraction() { return 0f; }
         WallPages pages;
         boolean reduced = true;
         boolean hasWindow = true;
@@ -46,14 +65,14 @@ public class PaneWallCellsTest {
         int shellsStarted;
         int boundDisplay = -1;
         int landedDisplay = -1;
-        final List<PaneWallPage> changes = new ArrayList<>();
+        final List<PageKind> changes = new ArrayList<>();
         /** False until the controller's constructor has returned. */
         boolean constructed = true;
         int callsWhileConstructing;
 
         @Override public boolean reducedMotion() { return reduced; }
-        @Override public boolean canStartWorkspace() { return canStart; }
-        @Override public boolean startWorkspaceShell() {
+        public boolean canStartTerminal() { return canStart; }
+        public boolean startTerminalShell() {
             shellsStarted++;
             hasWindow = true;
             windows = 1;
@@ -62,25 +81,24 @@ public class PaneWallCellsTest {
         }
         @Override public boolean hasWindow() { return hasWindow; }
         @Override public WallPages wallPages() { return pages; }
-        @Override public int homePressPage() { return homePress; }
-        @Override public void bindDisplayPage(int pageId) { boundDisplay = pageId; }
-        @Override public void onDisplayPageLanded(int pageId) { landedDisplay = pageId; }
-        @Override public void onWallPageChanged(PaneWallPage page) {
+        @Override public void bind(int pageId) { boundDisplay = pageId; }
+        @Override public void landed(int pageId) { landedDisplay = pageId; }
+        public void onWallPageChanged(PageKind page) {
             if (!constructed) callsWhileConstructing++;
             changes.add(page);
         }
-        @Override public int innerCount(PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? Math.max(1, pages.homePages().size())
-                : page == PaneWallPage.TERMINAL ? (hasWindow ? windows : 0) : 1;
+        public int innerCount(PageKind page) {
+            return page == PageKind.HOME ? Math.max(1, pages.homePages().size())
+                : page == PageKind.TERMINAL ? (hasWindow ? windows : 0) : 1;
         }
-        @Override public int innerIndex(PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? homePage
-                : page == PaneWallPage.TERMINAL ? current : 0;
+        public int innerIndex(PageKind page) {
+            return page == PageKind.HOME ? homePage
+                : page == PageKind.TERMINAL ? current : 0;
         }
-        @Override public void showInnerPage(PaneWallPage page, int index) {
+        public void showInnerPage(PageKind page, int index) {
             if (!constructed) callsWhileConstructing++;
-            if (page == PaneWallPage.WIDGETS) homePage = index;
-            if (page == PaneWallPage.TERMINAL) current = index;
+            if (page == PageKind.HOME) homePage = index;
+            if (page == PageKind.TERMINAL) current = index;
         }
     }
 
@@ -105,7 +123,7 @@ public class PaneWallCellsTest {
 
     /** [Home 1][Terminal][Display]: ids 1, 2, 3; the sweep's wall. */
     private static WallPages homeTerminalDisplay() {
-        return homeTerminal().add(WallPages.PageKind.DISPLAY, 2, null).pages;
+        return homeTerminal().add(PageKind.DISPLAY, 2, null).pages;
     }
 
     private void start(WallPages pages) {
@@ -119,10 +137,15 @@ public class PaneWallCellsTest {
         layout.addView(display);
         host.constructed = false;
         controller = new PaneWallController(layout, host);
+        controller.setHome(host);
+        controller.setDisplay(host);
+        controller.setTerminal(host.terminal);
+        controller.setLanding(host.landing);
+        controller.refreshPages();
         host.constructed = true;
         controller.attachTerminalPage(terminal);
-        layout.setPageView(PaneWallPage.WIDGETS, widgets);
-        layout.setPageView(PaneWallPage.DISPLAY, display);
+        layout.setPageView(PageKind.HOME, widgets);
+        layout.setPageView(PageKind.DISPLAY, display);
         layout.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(1800, View.MeasureSpec.EXACTLY));
         layout.layout(0, 0, WIDTH, 1800);
@@ -164,7 +187,7 @@ public class PaneWallCellsTest {
 
     @Test public void aColdStartOnTheTerminalLandsThere() {
         start(homeTerminalDisplay());
-        controller.landOnColdStart(WallRow.START_IN_WORKSPACE);
+        controller.landOnColdStart(WallRow.START_IN_TERMINAL);
         assertEquals(2, on());
         assertTrue(wall.isLive(2));
     }
@@ -270,12 +293,12 @@ public class PaneWallCellsTest {
         assertTrue(wall.isLive(1));
         assertFalse(wall.isLive(2));
         assertEquals(0, host.shellsStarted);
-        assertFalse(host.changes.contains(PaneWallPage.TERMINAL));
+        assertFalse(host.changes.contains(PageKind.TERMINAL));
     }
 
     @Test public void twoDisplayPagesSideBySideEachBindTheDisplayOnLanding() {
         // [Home 1][Terminal][Display 3][Display 4].
-        start(homeTerminalDisplay().add(WallPages.PageKind.DISPLAY, 3, null).pages);
+        start(homeTerminalDisplay().add(PageKind.DISPLAY, 3, null).pages);
         controller.landOnColdStart(WallRow.START_IN_HOME);
         assertEquals(Arrays.asList(1, 2, 3, 4), cellIds());
         controller.goTo("display");
@@ -291,8 +314,8 @@ public class PaneWallCellsTest {
     }
 
     @Test public void removingTheNeighbourOfThePageArrivingMidSlideKeepsTheArrival() {
-        start(homeTerminalDisplay().add(WallPages.PageKind.DISPLAY, 3, null).pages);
-        controller.goTo(PaneWallPage.TERMINAL, false);
+        start(homeTerminalDisplay().add(PageKind.DISPLAY, 3, null).pages);
+        controller.goTo(PageKind.TERMINAL, false);
         host.reduced = false;
         controller.refreshPages();
         assertTrue(controller.goTo("right"));
@@ -308,14 +331,14 @@ public class PaneWallCellsTest {
     // ---- the layout ------------------------------------------------------------------------
 
     @Test public void theLayoutHasACellPerPageAndEachViewAtItsBoundCell() {
-        start(homeTerminalDisplay().add(WallPages.PageKind.DISPLAY, 3, null).pages);
-        controller.goTo(PaneWallPage.TERMINAL, false);
+        start(homeTerminalDisplay().add(PageKind.DISPLAY, 3, null).pages);
+        controller.goTo(PageKind.TERMINAL, false);
         assertEquals(4, wall.cells().size());
         assertEquals(2, on());
         // Home 1 one cell left, Display 3 one right; Display 4 a card two cells right.
         assertEquals(-WIDTH, widgets.getTranslationX(), 0.5f);
         assertEquals(WIDTH, display.getTranslationX(), 0.5f);
-        assertEquals(3, wall.boundPageId(PaneWallPage.DISPLAY));
+        assertEquals(3, wall.boundPageId(PageKind.DISPLAY));
         PageCardView card = wall.cardOf(4);
         assertNotNull(card);
         assertEquals(2f * WIDTH, card.getTranslationX(), 0.5f);
@@ -323,7 +346,7 @@ public class PaneWallCellsTest {
     }
 
     @Test public void aFarJumpPosesOneWidthFromAStandOff() {
-        start(homeTerminalDisplay().add(WallPages.PageKind.DISPLAY, 3, null).pages);
+        start(homeTerminalDisplay().add(PageKind.DISPLAY, 3, null).pages);
         controller.landOnColdStart(WallRow.START_IN_HOME);
         wall.setReducedMotion(false);
         assertTrue(wall.goToCell(4, true));
@@ -401,9 +424,41 @@ public class PaneWallCellsTest {
         assertEquals(2, on());
     }
 
+    @Test public void aFarJumpFromTheTerminalToHomeTravelsTheChromeTowardHome() {
+        // [Home 1][Home 3][Terminal], on the Terminal with its keyboard up; the house key's far
+        // jump to Home 1 slides the Terminal page away beside it, over Home 3.
+        start(homeTerminal().add(PageKind.HOME, 1, null).pages);
+        assertEquals(Arrays.asList(1, 3, 2), cellIds());
+        controller.landOnColdStart(WallRow.START_IN_TERMINAL);
+        assertEquals(2, on());
+        assertEquals(controller.cellKinds(), controller.slideCellKinds());
+        wall.setReducedMotion(false);
+        assertTrue(wall.goToCell(1, true));
+        assertTrue(wall.isMoving());
+        com.termux.app.place.PlaceChromeTravel.States states = place ->
+            new com.termux.app.place.PlaceChromeTravel.Rest(place == PageKind.TERMINAL, false);
+        // Half way: the frame names the Terminal it leaves and the Home it arrives at, so the
+        // crossing gives the keyboard's room back to Home before it lands.
+        float offset = WIDTH * 0.5f * Math.signum(wall.offsetPx());
+        com.termux.app.place.PlaceChromeTravel.Frame frame =
+            com.termux.app.place.PlaceChromeTravel.at(controller.slideCellKinds(),
+                controller.currentCellIndex(), offset, WIDTH, states, null);
+        assertEquals(PageKind.HOME,
+            com.termux.app.place.PlaceChromeTravel.arriving(frame, PageKind.TERMINAL));
+        assertTrue(frame.keyboardInPlay);
+        // From the stand-off on, the frame is the Terminal's, never Home with itself.
+        com.termux.app.place.PlaceChromeTravel.Frame first =
+            com.termux.app.place.PlaceChromeTravel.at(controller.slideCellKinds(),
+                controller.currentCellIndex(), wall.offsetPx(), WIDTH, states, null);
+        assertEquals(1f, first.keyboardReveal, 0.001f);
+        idle();
+        assertEquals(1, on());
+        assertEquals(controller.cellKinds(), controller.slideCellKinds());
+    }
+
     @Test public void aChangedListMidFarJumpDropsTheStandOff() {
         farJumpHomeFromDisplayMidSlide();
-        host.pages = host.pages.add(WallPages.PageKind.DISPLAY, 3, null).pages;
+        host.pages = host.pages.add(PageKind.DISPLAY, 3, null).pages;
         controller.refreshPages();
         assertEquals(Arrays.asList(1, 2, 3, 4), cellIds());
         // The cells between come into the rest of the slide.
@@ -487,7 +542,7 @@ public class PaneWallCellsTest {
 
     @Test public void theDisplayKeyGoesToTheLastUsedDisplayPageElseTheNearest() {
         // [Display 3][Home 1][Terminal 2][Display 4].
-        start(homeTerminalDisplay().move(3, 0).pages.add(WallPages.PageKind.DISPLAY, 2, null)
+        start(homeTerminalDisplay().move(3, 0).pages.add(PageKind.DISPLAY, 2, null)
             .pages);
         controller.landOnColdStart(WallRow.START_IN_HOME);
         assertEquals(Arrays.asList(3, 1, 2, 4), cellIds());
@@ -505,7 +560,7 @@ public class PaneWallCellsTest {
     /** [Home 1][Terminal 3][Home 2][Display 4]: two Home runs, home page 1. */
     private static WallPages twoHomeRuns() {
         return WallPagesMigration.seed("home", 0, "home", 2).move(3, 1).pages
-            .add(WallPages.PageKind.DISPLAY, 2, null).pages;
+            .add(PageKind.DISPLAY, 2, null).pages;
     }
 
     @Test public void theHomeKeyAndWallWidgetsGoWhereTheHomePressGoes() {
@@ -542,7 +597,7 @@ public class PaneWallCellsTest {
         controller.goHome(false);
         assertEquals(2, on());
         host.changes.clear();
-        host.pages = host.pages.add(WallPages.PageKind.HOME, 1, null).pages;
+        host.pages = host.pages.add(PageKind.HOME, 1, null).pages;
         controller.refreshPages();
         assertEquals(Arrays.asList(1, 5, 3, 2, 4), cellIds());
         assertEquals(2, on());
@@ -560,7 +615,7 @@ public class PaneWallCellsTest {
         host.pages = host.pages.remove(2).pages;
         controller.refreshPages();
         assertEquals("the page on its left, not the far Home page", 3, on());
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
 
     @Test public void removingTheOnlyDisplayPageWhileOnItHandsTheWallToItsLeft() {
@@ -585,7 +640,7 @@ public class PaneWallCellsTest {
         assertTrue(controller.goTo("right"));
         assertTrue(wall.isMoving());
         assertEquals("the frame stays on the run it was on", 1,
-            wall.boundPageId(PaneWallPage.WIDGETS));
+            wall.boundPageId(PageKind.HOME));
         assertEquals(0, host.homePage);
         assertFalse("the second run shows its still", wall.isLive(2));
         assertNotNull(wall.cardOf(2));
@@ -605,7 +660,7 @@ public class PaneWallCellsTest {
         assertTrue(wall.isMoving());
         swipe(600f);
         assertEquals(3, on());
-        assertEquals(1, wall.boundPageId(PaneWallPage.WIDGETS));
+        assertEquals(1, wall.boundPageId(PageKind.HOME));
         assertEquals(0, host.homePage);
         assertTrue(wall.isLive(1));
     }
@@ -614,12 +669,12 @@ public class PaneWallCellsTest {
 
     /** Every kind at its own rest: only the Terminal page's keyboard is up. */
     private static final com.termux.app.place.PlaceChromeTravel.States STATES = place ->
-        new com.termux.app.place.PlaceChromeTravel.Rest(place == PaneWallPage.TERMINAL, false);
+        new com.termux.app.place.PlaceChromeTravel.Rest(place == PageKind.TERMINAL, false);
 
     /** The chrome's frame for where the wall stands now, read off the cells. */
     private com.termux.app.place.PlaceChromeTravel.Frame dress() {
         return com.termux.app.place.PlaceChromeTravel.at(controller.cellKinds(),
-            controller.currentCellIndex(), wall.offsetPx(), WIDTH, STATES, null, null);
+            controller.currentCellIndex(), wall.offsetPx(), WIDTH, STATES, null);
     }
 
     @Test public void aDragFromTheSecondHomeRunTowardTheTerminalDressesForTheTerminal() {
@@ -628,24 +683,24 @@ public class PaneWallCellsTest {
         host.homePress = 1;
         controller.goHome(false);
         assertEquals(2, on());
-        assertEquals(Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL,
-            PaneWallPage.WIDGETS), controller.cellKinds());
+        assertEquals(Arrays.asList(PageKind.HOME, PageKind.TERMINAL,
+            PageKind.HOME), controller.cellKinds());
         assertEquals(2, controller.currentCellIndex());
-        assertEquals(PaneWallPage.TERMINAL, controller.kindAt(-1));
+        assertEquals(PageKind.TERMINAL, controller.kindAt(-1));
         assertEquals(null, controller.kindAt(1));
         wall.beginPlainDrag();
         wall.dragTo(300f);
-        assertEquals("the arriving kind", PaneWallPage.TERMINAL, controller.kindAt(-1));
+        assertEquals("the arriving kind", PageKind.TERMINAL, controller.kindAt(-1));
         com.termux.app.place.PlaceChromeTravel.Frame frame = dress();
-        assertEquals("the dress heads for the Terminal page", PaneWallPage.TERMINAL, frame.from);
-        assertEquals(PaneWallPage.WIDGETS, frame.toward);
+        assertEquals("the dress heads for the Terminal page", PageKind.TERMINAL, frame.from);
+        assertEquals(PageKind.HOME, frame.toward);
         wall.cancelDrag();
         idle();
     }
 
     @Test public void aDragFromTheSecondDisplayPageTowardTheTerminalDressesForTheTerminal() {
         // [Home 1][Display 3][Terminal 2][Display 4].
-        start(homeTerminalDisplay().move(3, 1).pages.add(WallPages.PageKind.DISPLAY, 2, null)
+        start(homeTerminalDisplay().move(3, 1).pages.add(PageKind.DISPLAY, 2, null)
             .pages);
         controller.landOnColdStart(WallRow.START_IN_HOME);
         assertEquals(Arrays.asList(1, 3, 2, 4), cellIds());
@@ -654,8 +709,8 @@ public class PaneWallCellsTest {
         assertEquals(3, controller.currentCellIndex());
         wall.beginPlainDrag();
         wall.dragTo(300f);
-        assertEquals(PaneWallPage.TERMINAL, controller.kindAt(-1));
-        assertEquals(PaneWallPage.TERMINAL, dress().from);
+        assertEquals(PageKind.TERMINAL, controller.kindAt(-1));
+        assertEquals(PageKind.TERMINAL, dress().from);
         wall.cancelDrag();
         idle();
     }

@@ -30,6 +30,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * Below Android 12 a panel's Snapshot is drawn in software: one when it opens, none while it
@@ -37,12 +38,13 @@ import org.robolectric.annotation.GraphicsMode;
  * crash.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class PanelBackdropSoftwareSnapshotTest {
 
     private ImageView mSurface;
     private PanelBackdrop mBackdrop;
+    private final com.termux.app.glass.GlassService mGlass = new com.termux.app.glass.GlassService(null);
     private int mBlurs;
     private boolean mBlurThrows;
 
@@ -75,8 +77,8 @@ public class PanelBackdropSoftwareSnapshotTest {
                 return recorder;
             }
 
-            @Override public boolean liveBlur() {
-                return true;
+            @Nullable @Override public com.termux.app.glass.GlassService glass() {
+                return mGlass;
             }
         });
         controller.start().resume().visible();
@@ -100,6 +102,22 @@ public class PanelBackdropSoftwareSnapshotTest {
         assertEquals(1, mBackdrop.snapshotsTaken());
         assertEquals(1, mBlurs);
         assertNotNull(mSurface.getDrawable());
+    }
+
+    /**
+     * The drawer's keyboard went away under its card: the scene beneath changed while the panel
+     * rested, and the picture is taken again at once rather than showing the old keyboard as a
+     * ghost through the glass. A shut panel takes none.
+     */
+    @Test
+    public void aRetakeTakesOneNowAndNoneWhenShut() {
+        assertTrue(mBackdrop.open(20f));
+        assertEquals(1, mBackdrop.snapshotsTaken());
+        mBackdrop.retake();
+        assertEquals(2, mBackdrop.snapshotsTaken());
+        mBackdrop.close();
+        mBackdrop.retake();
+        assertEquals(2, mBackdrop.snapshotsTaken());
     }
 
     @Test
@@ -134,5 +152,20 @@ public class PanelBackdropSoftwareSnapshotTest {
         mBackdrop.close();
         assertNull(mSurface.getDrawable());
         assertNull(mBackdrop.kind());
+    }
+
+    @Test
+    public void anOpenPanelHoldsOneSheetsEntryUntilItShuts() {
+        assertEquals(0, mGlass.size());
+        assertTrue(mBackdrop.open(20f));
+        assertEquals(1, mGlass.size());
+        // Below Android 12 it is a Snapshot panel: asked for and granted, and never Live.
+        assertEquals(com.termux.app.glass.GlassKind.SNAPSHOT, mGlass.granted("panel@"
+            + Integer.toHexString(System.identityHashCode(mSurface))));
+        // Opening again while open changes nothing.
+        assertTrue(mBackdrop.open(20f));
+        assertEquals(1, mGlass.size());
+        mBackdrop.close();
+        assertEquals(0, mGlass.size());
     }
 }

@@ -16,14 +16,13 @@ import android.os.Build;
 import androidx.appcompat.app.AlertDialog;
 
 import com.termux.app.layouteditor.LayoutEditorController;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.LayoutVariant;
-import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -40,6 +39,7 @@ import org.robolectric.util.ReflectionHelpers;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import android.app.Application;
 
 /**
  * Leaving the editor (AGENTS.md, "the Appearance editor commits only on Done"): Back takes a card
@@ -47,7 +47,7 @@ import java.util.ArrayList;
  * Discard puts everything back as it was at open, both halves and every layout; Done keeps.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class SurfaceEditorLeaveTest {
 
     private TermuxAppSharedPreferences preferences;
@@ -67,9 +67,9 @@ public class SurfaceEditorLeaveTest {
     }
 
     @Test
-    public void backTakesTheCardToPeekThenAWorkspaceChangeAsks() {
-        SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.TERMINAL, null);
-        assertEquals(PaneWallPage.TERMINAL, editor.screen());
+    public void backTakesTheCardToPeekThenATerminalChangeAsks() {
+        SurfaceEditorController editor = open(EditorCard.DOCK, PageKind.TERMINAL, null);
+        assertEquals(PageKind.TERMINAL, editor.screen());
         model(editor).onValue(Row.OPACITY, 21, false);
         model(editor).onReleased(Row.OPACITY);
 
@@ -90,14 +90,14 @@ public class SurfaceEditorLeaveTest {
     @Test
     public void discardPutsBothHalvesBackAsTheyWereAtOpen() {
         String atOpen = AppearanceSnapshot.signatureOf(preferences);
-        SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.TERMINAL, null);
+        SurfaceEditorController editor = open(EditorCard.DOCK, PageKind.TERMINAL, null);
         model(editor).onValue(Row.OPACITY, 21, false);
         model(editor).onReleased(Row.OPACITY);
         model(editor).onValue(Row.TINT, 73, false);
         model(editor).onReleased(Row.TINT);
-        editor.present(EditorCard.DOCK, PaneWallPage.WIDGETS, null);
+        editor.present(EditorCard.DOCK, PageKind.HOME, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals(PaneWallPage.WIDGETS, editor.screen());
+        assertEquals(PageKind.HOME, editor.screen());
         model(editor).onValue(Row.OPACITY, 73, false);
         model(editor).onReleased(Row.OPACITY);
         assertNotEquals(atOpen, AppearanceSnapshot.signatureOf(preferences));
@@ -115,9 +115,8 @@ public class SurfaceEditorLeaveTest {
     @Test
     public void aHiddenDockComesBackOnDiscard() {
         LayoutEditorController layout = layoutEditor();
-        SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.TERMINAL, layout);
-        String normal = PlaceArrangeSnapshot.capture(places, LayoutVariant.NORMAL).signature();
-        String home = PlaceArrangeSnapshot.capture(places, LayoutVariant.HOME).signature();
+        SurfaceEditorController editor = open(EditorCard.DOCK, PageKind.TERMINAL, layout);
+        com.termux.app.place.layout.Layouts atOpen = places.layouts().current();
         assertTrue(layout.isShown(Element.APPS));
 
         model(editor).onValue(Row.VISIBLE, 0, false);
@@ -128,13 +127,11 @@ public class SurfaceEditorLeaveTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         click(DialogInterface.BUTTON_NEGATIVE);
 
-        assertEquals(normal, PlaceArrangeSnapshot.capture(places, LayoutVariant.NORMAL).signature());
-        assertEquals(home, PlaceArrangeSnapshot.capture(places, LayoutVariant.HOME).signature());
-    }
+        assertEquals("every layout as the editor found it", atOpen, places.layouts().current());    }
 
     @Test
     public void doneKeepsAndAsksNothing() {
-        SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.TERMINAL, null);
+        SurfaceEditorController editor = open(EditorCard.DOCK, PageKind.TERMINAL, null);
         model(editor).onValue(Row.OPACITY, 21, false);
         model(editor).onReleased(Row.OPACITY);
         boolean[] done = {false};
@@ -150,7 +147,7 @@ public class SurfaceEditorLeaveTest {
 
     @Test
     public void nothingChangedLeavesWithoutAsking() {
-        SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.TERMINAL, null);
+        SurfaceEditorController editor = open(EditorCard.DOCK, PageKind.TERMINAL, null);
         boolean[] left = {false};
         editor.requestLeave(() -> left[0] = true);
         assertTrue(left[0]);
@@ -159,7 +156,7 @@ public class SurfaceEditorLeaveTest {
 
     // ------------------------------------------------------------------------------- the drive
 
-    private SurfaceEditorController open(EditorCard card, PaneWallPage place,
+    private SurfaceEditorController open(EditorCard card, PageKind place,
                                          LayoutEditorController layout) {
         EditorTestHarness harness = new EditorTestHarness(preferences,
             (method, args) -> "layoutEditor".equals(method) ? layout : null);
@@ -177,7 +174,7 @@ public class SurfaceEditorLeaveTest {
                 switch (method.getName()) {
                     case "context": return context;
                     case "places": return places;
-                    case "placeOnScreen": return PaneWallPage.TERMINAL;
+                    case "placeOnScreen": return PageKind.TERMINAL;
                     case "placeOrientation": return PlaceOrientation.PORTRAIT;
                     case "extraKeySlots": return new ArrayList<>();
                     case "extraKeyCount":

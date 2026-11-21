@@ -52,6 +52,24 @@ public final class CrossfadeDrawable extends Drawable {
         return mShare >= 0.5f ? mThere : mHere;
     }
 
+    /**
+     * The blend to put up again after a pass dressed its surface with {@code now} mid-crossing:
+     * {@code now} is the end on the side the pass was dressed for ({@code there} when the blend
+     * {@code arrives}, else {@code here}), the other end kept. A pass that put up nothing is an
+     * end only where {@code nothingIsAnEnd} says so; otherwise the blend goes back up as it was
+     * (the end with nothing is already one of its ends), so the surface is never bare
+     * mid-crossing. Null when nothing is to be put up: the pass's {@code now} stands.
+     */
+    @Nullable
+    public static CrossfadeDrawable afterPass(@NonNull CrossfadeDrawable blend,
+                                              @Nullable Drawable now, boolean arrives,
+                                              boolean nothingIsAnEnd, float share) {
+        if (now == blend) return blend;
+        if (now == null) return nothingIsAnEnd ? null : blend;
+        return arrives ? new CrossfadeDrawable(blend.here(), now, share)
+            : new CrossfadeDrawable(now, blend.there(), share);
+    }
+
     /** The share moved; whether it did. */
     public boolean setShare(float share) {
         float s = clamp01(share);

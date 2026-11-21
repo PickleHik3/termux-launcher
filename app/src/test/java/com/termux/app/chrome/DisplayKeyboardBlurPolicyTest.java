@@ -75,4 +75,13 @@ public class DisplayKeyboardBlurPolicyTest {
         assertEquals(10, scaled[0]);
         assertEquals(20, scaled[1]);
     }
+
+    @Test
+    public void theCompositorNeedsAndroid12TheBlurSwitchNoBatterySaverAndAHealthyLayer() {
+        assertTrue(DisplayKeyboardBlurPolicy.compositorAvailable(31, true, false, false));
+        assertFalse(DisplayKeyboardBlurPolicy.compositorAvailable(30, true, false, false));
+        assertFalse(DisplayKeyboardBlurPolicy.compositorAvailable(31, false, false, false));
+        assertFalse(DisplayKeyboardBlurPolicy.compositorAvailable(31, true, true, false));
+        assertFalse(DisplayKeyboardBlurPolicy.compositorAvailable(31, true, false, true));
+    }
 }

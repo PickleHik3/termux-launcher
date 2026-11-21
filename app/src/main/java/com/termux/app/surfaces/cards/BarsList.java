@@ -21,7 +21,6 @@ import androidx.annotation.StringRes;
 import androidx.core.view.ViewCompat;
 
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.place.Element;
 import com.termux.app.surfaces.rows.EditorGlyphs;
@@ -38,7 +37,8 @@ import java.util.Map;
  * The Dock card's Bars list (editor-redesign §2 Dock, §8): one rounded list of the dock's bars,
  * each row the extra-keys editor's handle row (the handle, the row height and the "Hold the
  * handle to reorder" hint) with the bar's glyph and name, a sliders glyph that opens the bar's
- * settings in place, and an eye where the extra-keys editor has its ⋮. A hidden bar greys out.
+ * settings in place. Whether a bar shows is set on the page cards' Layout lists (spec §3, Dock);
+ * a bar hidden on the page shown greys out here.
  * A row moves by its handle, or by a hold anywhere on it; the order itself is
  * {@link BarOrder}'s.
  */
@@ -50,8 +50,8 @@ public final class BarsList {
         @NonNull List<Element> order();
         /** Whether the page being edited wears {@code bar}; its row stands only if it does. */
         boolean offers(@NonNull Element bar);
+        /** Whether the page being edited shows {@code bar}; a hidden one greys out. */
         boolean shown(@NonNull Element bar);
-        void setShown(@NonNull Element bar, boolean shown);
         /** The rows were dragged into {@code order}. */
         void reorder(@NonNull List<Element> order);
         /** {@code bar}'s settings, for a list row {@code widthPx} wide. */
@@ -97,25 +97,20 @@ public final class BarsList {
         @NonNull final TextView title;
         /** The trailing ›, turned down while the bar's settings stand open. */
         @NonNull final ImageView chevron;
-        @NonNull final MaterialSwitch toggle;
         @NonNull final FrameLayout panel;
 
         Item(@NonNull Element bar, @NonNull LinearLayout container, @NonNull LinearLayout header,
              @NonNull ImageView glyph, @NonNull TextView title, @NonNull ImageView chevron,
-             @NonNull MaterialSwitch toggle, @NonNull FrameLayout panel) {
+             @NonNull FrameLayout panel) {
             this.bar = bar;
             this.container = container;
             this.header = header;
             this.glyph = glyph;
             this.title = title;
             this.chevron = chevron;
-            this.toggle = toggle;
             this.panel = panel;
         }
     }
-
-    /** A restatement sets the switches; only a touch reports. */
-    private boolean mRestating;
 
     private BarsList(@NonNull Context context, @NonNull Host host, int widthPx) {
         mContext = context;
@@ -164,7 +159,7 @@ public final class BarsList {
             case AZ: return R.drawable.ic_ms_sort_by_alpha;
             case EXTRA_KEYS: return R.drawable.ic_ms_keyboard_command_key;
             case APPS:
-            default: return R.drawable.ic_symbol_apps;
+            default: return R.drawable.ic_rl_apps;
         }
     }
 
@@ -229,17 +224,6 @@ public final class BarsList {
             item.glyph.setAlpha(alpha);
             item.title.setAlpha(alpha);
         }
-        if (item.toggle.isChecked() != shown) {
-            mRestating = true;
-            try {
-                item.toggle.setChecked(shown);
-            } finally {
-                mRestating = false;
-            }
-        }
-        String name = mContext.getString(nameOf(bar));
-        item.toggle.setContentDescription(mContext.getString(shown
-            ? R.string.editor_dock_bar_hide : R.string.editor_dock_bar_show, name));
         boolean open = bar == mExpanded;
         float turn = open ? 90f : 0f;
         if (item.chevron.getRotation() != turn)
@@ -296,15 +280,7 @@ public final class BarsList {
         header.addView(title, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        // Show/hide is a switch, then the trailing › (overhaul §4); a tap on the rest of the
-        // row opens the bar's settings in place.
-        MaterialSwitch toggle = new MaterialSwitch(context);
-        toggle.setContentDescription(context.getString(R.string.editor_dock_bar_hide, name));
-        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        toggleParams.setMarginStart(RowKit.dp(context, 8));
-        header.addView(toggle, toggleParams);
-
+        // The trailing › (overhaul §4); a tap on the row opens the bar's settings in place.
         ImageView chevron = new ImageView(context);
         chevron.setImageResource(R.drawable.ic_editor_chevron_right);
         chevron.setImageTintList(ColorStateList.valueOf(RowKit.color(context,
@@ -324,7 +300,7 @@ public final class BarsList {
         container.addView(panel, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        Item item = new Item(bar, container, header, glyph, title, chevron, toggle, panel);
+        Item item = new Item(bar, container, header, glyph, title, chevron, panel);
 
         // A tap on the row opens the bar's settings in place.
         View.OnClickListener open = v -> {
@@ -334,10 +310,6 @@ public final class BarsList {
             restate();
         };
         header.setOnClickListener(open);
-        toggle.setOnCheckedChangeListener((button, checked) -> {
-            if (!mRestating)
-                mHost.setShown(bar, checked);
-        });
 
         handle.setOnTouchListener((v, event) -> {
             switch (event.getActionMasked()) {

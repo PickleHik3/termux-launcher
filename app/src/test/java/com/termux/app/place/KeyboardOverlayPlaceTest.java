@@ -2,11 +2,11 @@ package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -23,33 +23,33 @@ public class KeyboardOverlayPlaceTest {
 
     @Test
     public void aDisplayInFrontReadsTheStoredChoice() {
-        assertEquals(true, KeyboardOverlayPolicy.overlays(PaneWallPage.DISPLAY, true,
+        assertEquals(true, KeyboardOverlayPolicy.overlays(PageKind.DISPLAY, true,
             layout(KeyboardMode.OVERLAY)));
-        assertEquals(false, KeyboardOverlayPolicy.overlays(PaneWallPage.DISPLAY, true,
+        assertEquals(false, KeyboardOverlayPolicy.overlays(PageKind.DISPLAY, true,
             layout(KeyboardMode.RESIZE)));
     }
 
     @Test
     public void aTerminalWindowInFrontResizesWhateverTheDisplayChoiceIs() {
         for (KeyboardMode mode : KeyboardMode.values()) {
-            assertEquals(false, KeyboardOverlayPolicy.overlays(PaneWallPage.TERMINAL, false,
+            assertEquals(false, KeyboardOverlayPolicy.overlays(PageKind.TERMINAL, false,
                 layout(mode)));
         }
     }
 
     @Test
     public void aDisplayPlaceLeftUnrecordedFallsBackToTheTerminal() {
-        assertEquals(PaneWallPage.TERMINAL,
-            KeyboardOverlayPolicy.keyboardPlace(PaneWallPage.DISPLAY, false));
-        assertEquals(false, KeyboardOverlayPolicy.overlays(PaneWallPage.DISPLAY, false,
+        assertEquals(PageKind.TERMINAL,
+            KeyboardOverlayPolicy.keyboardPlace(PageKind.DISPLAY, false));
+        assertEquals(false, KeyboardOverlayPolicy.overlays(PageKind.DISPLAY, false,
             layout(KeyboardMode.OVERLAY)));
     }
 
     @Test
     public void otherPlacesAreNotDerivedFromTheDisplay() {
-        assertEquals(PaneWallPage.TERMINAL,
-            KeyboardOverlayPolicy.keyboardPlace(PaneWallPage.TERMINAL, true));
-        assertEquals(true, KeyboardOverlayPolicy.overlays(PaneWallPage.WIDGETS, false,
+        assertEquals(PageKind.TERMINAL,
+            KeyboardOverlayPolicy.keyboardPlace(PageKind.TERMINAL, true));
+        assertEquals(true, KeyboardOverlayPolicy.overlays(PageKind.HOME, false,
             layout(KeyboardMode.RESIZE)));
     }
 }

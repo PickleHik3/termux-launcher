@@ -18,15 +18,16 @@ public final class DockDropPolicy {
 
     /**
      * How long a carried icon rests in the band at either end of the row before the row turns a
-     * page: Home's own edge hold.
+     * page, and again before each turn after it: twice Home's edge hold, since the row's ends sit
+     * where an icon is put at the end of a page, so a turn has to be meant.
      */
-    public static final long EDGE_HOLD_MS = WidgetPaneController.EDGE_FLIP_DELAY_MS;
+    public static final long EDGE_HOLD_MS = 2L * WidgetPaneController.EDGE_FLIP_DELAY_MS;
     /** That band's width, measured in from each end of the row: Home's edge band. */
     public static final int EDGE_BAND_DP = WidgetPaneController.EDGE_BAND_DP;
 
     /**
-     * The middle share of an icon's slot, as a fraction of its width, where a release makes a
-     * folder (or joins the folder there) rather than going beside it.
+     * The middle share of an icon's slot, as a fraction of its width, where a rest can arm a
+     * folder (or joining the folder there) rather than going beside it.
      */
     static final float FOLDER_BAND_START = 0.28f;
     static final float FOLDER_BAND_END = 0.72f;
@@ -47,30 +48,34 @@ public final class DockDropPolicy {
 
     private DockDropPolicy() {}
 
-    /** Whether a release at {@code dropXRatio} across an icon's slot lands on the icon itself. */
+    /**
+     * Whether a finger at {@code dropXRatio} across an icon's slot is on the icon itself, where a
+     * rest can arm a folder, rather than beside it.
+     */
     public static boolean onIcon(float dropXRatio) {
         return dropXRatio >= FOLDER_BAND_START && dropXRatio <= FOLDER_BAND_END;
     }
 
     /**
      * What a release does with an app carried in from outside the row, over a slot holding an app
-     * ({@code overApp}), a folder ({@code overFolder}) or nothing. The dock's own drag already
-     * does the same with its pins: a folder takes whatever is dropped on it, an icon makes a folder
-     * only from the middle of its slot.
+     * ({@code overApp}), a folder ({@code overFolder}) or nothing. A rest on an icon that
+     * {@link DockReorderPolicy} armed ({@code merge}) makes a folder of an app and joins a folder;
+     * a release anywhere else goes in beside.
      *
      * @param alreadyDocked  the app is a pin of the row's own already (not inside a folder)
      * @param folderHasIt    the folder under the finger holds the app already
      * @param folderHasRoom  the folder under the finger can take one more app
+     * @param merge          the rest on the icon or folder under the finger armed it
      */
     @NonNull
     public static Outcome outcome(boolean alreadyDocked, boolean overApp, boolean overFolder,
-                                  boolean folderHasIt, boolean folderHasRoom, float dropXRatio) {
-        if (overFolder) {
+                                  boolean folderHasIt, boolean folderHasRoom, boolean merge) {
+        if (merge && overFolder) {
             if (folderHasIt) return Outcome.ALREADY_THERE;
             return folderHasRoom ? Outcome.ADD_TO_FOLDER : Outcome.FOLDER_FULL;
         }
         if (alreadyDocked) return Outcome.ALREADY_THERE;
-        return overApp && onIcon(dropXRatio) ? Outcome.MAKE_FOLDER : Outcome.INSERT;
+        return merge && overApp ? Outcome.MAKE_FOLDER : Outcome.INSERT;
     }
 
     /**
@@ -121,15 +126,42 @@ public final class DockDropPolicy {
     }
 
     /**
+     * The page a second finger's swipe turns to while an icon is carried: the plain swipe's rule
+     * ({@code DockPagingModel.commitPageDelta}, +1 forward when the finger moved left), but 0 when
+     * it would go before the first page or past the last (a carried icon does not wrap round, as in
+     * {@link #edgeDirection}) and on a single page.
+     */
+    public static int secondFingerTurn(float dx, float dy, float vx, float commitDistancePx,
+                                       float density, int page, int pageCount) {
+        if (pageCount <= 1) return 0;
+        int delta = com.termux.app.launcher.paging.DockPagingModel.commitPageDelta(dx, dy, vx,
+            commitDistancePx, density);
+        int target = page + delta;
+        return target < 0 || target >= pageCount ? 0 : delta;
+    }
+
+    /**
      * Whether an icon lifted out of the row, now at ({@code x}, {@code y}) on screen, has left the
      * row ({@code left}, {@code top}, {@code right}, {@code bottom}) far enough to be Home's: as an
-     * icon leaves the drawer, a finger {@link DrawerHandOverPolicy#CROSS_DP} past its edge. A
-     * finger that only wanders off the row while reordering it does not turn the wall to Home.
+     * icon leaves the drawer, a finger {@link DrawerHandOverPolicy#CROSS_DP} above or below it. A
+     * finger that only wanders off the row while reordering it does not turn the wall to Home,
+     * and neither does one beside the row: the row stops short of the screen's edge, and an icon
+     * carried to that edge is being put at the row's end, not taken off it.
      */
     public static boolean handsOverToHome(float x, float y, float left, float top, float right,
                                           float bottom, float density) {
-        float outside = Math.max(Math.max(left - x, x - right), Math.max(top - y, y - bottom));
+        float outside = Math.max(top - y, y - bottom);
         return outside >= DrawerHandOverPolicy.CROSS_DP * density;
+    }
+
+    /**
+     * Whether an icon carried at screen height {@code y} is still over the row
+     * ({@code top}..{@code bottom}) for a drop: anywhere it has not left far enough to be Home's
+     * ({@link #handsOverToHome}), so the band either side of the row reorders rather than sending
+     * the icon back. The row itself may move under the finger as the lift plays.
+     */
+    public static boolean carriedOverRow(float y, float top, float bottom, float density) {
+        return !handsOverToHome(0f, y, 0f, top, 0f, bottom, density);
     }
 
     /**

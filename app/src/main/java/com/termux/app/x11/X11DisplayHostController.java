@@ -72,6 +72,13 @@ public final class X11DisplayHostController {
 
     private final Runnable connectRetry = this::tryConnect;
 
+    /** The front app's touch mode override, kept so a handler attached later gets it too. */
+    @Nullable private String touchModeOverride;
+    /** The front app's paste shortcut override, read when the keyboard's paste key is pressed. */
+    @Nullable private String pasteShortcutOverride;
+    @Nullable private X11AppSettingsStore pasteStore;
+    @NonNull private final DisplayFrontAppTouchMode frontTouchMode;
+
     /** A preference changed — from the settings page or {@code termux-x11-preference}. */
     private final android.content.BroadcastReceiver preferencesReceiver =
         new android.content.BroadcastReceiver() {
@@ -85,6 +92,17 @@ public final class X11DisplayHostController {
                                     @NonNull LorieHost.Callbacks callbacks) {
         this.appContext = context.getApplicationContext();
         this.host = new LorieHost(appContext, callbacks);
+        this.frontTouchMode = new DisplayFrontAppTouchMode(appContext,
+            new DisplayFrontAppTouchMode.Callback() {
+                @Override public void onTouchModeOverride(@Nullable String mode) {
+                    touchModeOverride = mode;
+                    applyTouchModeOverride();
+                }
+
+                @Override public void onPasteShortcutOverride(@Nullable String shortcut) {
+                    pasteShortcutOverride = shortcut;
+                }
+            });
         this.textFocus = new DisplayTextFocusPolicy(
             new DisplayTextFocusPolicy.Keyboard() {
                 @Override public void showKeyboardForTextFocus() {
@@ -162,6 +180,8 @@ public final class X11DisplayHostController {
         clipboardSync.deactivate();
         this.view = view;
         host.setLorieView(view);
+        // The host built a fresh input handler, which knows nothing of the front app.
+        applyTouchModeOverride();
         // The server repeats the current cursor name when a host attaches, so the policy starts
         // with the name the pointer is actually showing rather than with nothing.
         view.setCursorNameListener(name -> handler.post(() -> textFocus.onCursorName(name)));
@@ -190,6 +210,7 @@ public final class X11DisplayHostController {
      */
     public void destroy() {
         destroyed = true;
+        frontTouchMode.release();
         handler.removeCallbacks(connectRetry);
         try {
             appContext.unregisterReceiver(preferencesReceiver);
@@ -327,6 +348,8 @@ public final class X11DisplayHostController {
      */
     public void reloadPreferences() {
         reloadTextFocusPreferences();
+        // The per-app store may have changed with this broadcast; the answer arrives later.
+        frontTouchMode.onPreferencesReloaded();
         LorieView live = view;
         if (live == null) return;
         com.termux.x11.Prefs prefs = LorieHost.getPrefs();
@@ -335,6 +358,33 @@ public final class X11DisplayHostController {
         // Clipboard sharing can be switched off and on while the page is showing.
         syncClipboard();
         live.requestLayout();
+    }
+
+    /** The window class in front on the display (null or empty for none): its app's touch mode applies. */
+    public void setFrontWindowClass(@Nullable String wmClass) {
+        if (destroyed) return;
+        frontTouchMode.onFrontWindowClass(wmClass);
+    }
+
+    /**
+     * Whether the keyboard's paste key presses Ctrl+Shift+V now: the front app's own shortcut, or
+     * the display's, which also rules while a desktop session runs.
+     */
+    public boolean pasteWithShift() {
+        try {
+            X11AppSettingsStore store = pasteStore;
+            if (store == null) pasteStore = store = new X11AppSettingsStore(appContext);
+            return X11AppSettingsResolver.pasteWithShift(store.globalPasteShortcut(),
+                pasteShortcutOverride, X11LinuxAppRunner.isDesktopRunning());
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private void applyTouchModeOverride() {
+        com.termux.x11.input.TouchInputHandler input = host.mInputHandler;
+        com.termux.x11.Prefs prefs = LorieHost.getPrefs();
+        if (input != null && prefs != null) input.setTouchModeOverride(touchModeOverride, prefs);
     }
 
     /**

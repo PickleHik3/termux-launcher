@@ -283,7 +283,7 @@ public class GhosttySixelTest extends TerminalTestCase {
     public void testDa1ReportsSixelOnGhostty() {
         if (!ghostty(10, 3)) return;
         enterString("\033[c");
-        assertEquals("\033[?62;4;22c", mOutput.getOutputAndClear());
+        assertEquals("\033[?62;4;22;52c", mOutput.getOutputAndClear());
         // The secondary answer stays the library's.
         enterString("\033[>c");
         assertEquals("\033[>1;0;0c", mOutput.getOutputAndClear());

@@ -21,23 +21,23 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
- * A floating window's glass takes Live blur's picture only while the float can be seen and the
- * slab is its own and shown; the slab holds the picture while it shows it and lets it go after.
+ * A floating window's glass asks for Live blur's picture while the slab is its own and shown; the slab holds the picture while it shows it and lets it go after.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.TIRAMISU})
+@Config(sdk = {Build.VERSION_CODES.TIRAMISU}, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class FloatLiveGlassTest {
 
     @Test
-    public void wantsOnlyAShownSlabInsideAShownFloat() {
-        for (int bits = 0; bits < 8; bits++) {
-            boolean shown = (bits & 1) != 0;
-            boolean inFloat = (bits & 2) != 0;
-            boolean slab = (bits & 4) != 0;
-            assertEquals("bits " + bits, bits == 7, FloatLiveGlass.wants(shown, inFloat, slab));
+    public void wantsOnlyAShownSlabInsideItsFloat() {
+        // Whether the float can be seen is no input: a minimise or a swipe never moves its kind.
+        for (int bits = 0; bits < 4; bits++) {
+            boolean inFloat = (bits & 1) != 0;
+            boolean slab = (bits & 2) != 0;
+            assertEquals("bits " + bits, bits == 3, FloatLiveGlass.wants(inFloat, slab));
         }
     }
 

@@ -28,6 +28,7 @@ import com.termux.app.HomeAppChooser;
 import com.termux.app.ReducedMotion;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.termux.EssentialNotificationRulesFragment;
+import com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
@@ -108,6 +109,10 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     private boolean mClipped;
     private int mNavInsetPx;
     private int mWindowHeightPx;
+    /** A check that opens the cards when they are due is still to run in this session. */
+    private boolean mCardsOfferPending;
+    /** Finish or Skip asked for wallpaper access; the cards open when it is answered. */
+    private boolean mCardsAfterWallpaperAsk;
 
     public SetupWizardController(@NonNull Host host) {
         mHost = host;
@@ -120,6 +125,16 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     /** The card sheet after the wizard is up (the wizard's own sheet does not count). */
     public boolean isCardSheetShowing() {
         return mOpen && mCards != null;
+    }
+
+    /** The launch is about to check whether the cards are due; until then due cards come first. */
+    public void expectCardsOffer() {
+        mCardsOfferPending = true;
+    }
+
+    /** A check that opens the cards when they are due is still to run in this session. */
+    public boolean isCardsOfferPending() {
+        return mCardsOfferPending;
     }
 
     /** Open and showing: false while the wallpaper picker has the screen. */
@@ -140,7 +155,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         if (mOpen)
             return;
         View root = mHost.findView(R.id.terminal_root_container);
-        FrameLayout content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (root == null || content == null)
             return;
         mOpen = true;
@@ -179,8 +194,9 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.BOTTOM);
         mLayer.addView(mSheet, params);
-        content.addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR)
+            .addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
         showSection(mIndex, false);
     }
 
@@ -250,8 +266,16 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         showSection(mIndex, false);
     }
 
-    /** The storage permission was answered: Customize shows whether the wallpaper reads now. */
+    /**
+     * The storage permission was answered: Customize shows whether the wallpaper reads now, or,
+     * when Finish or Skip asked, the cards open. Declined, the look stays as it can be drawn.
+     */
     public void onWallpaperPermissionResult() {
+        if (mCardsAfterWallpaperAsk) {
+            mCardsAfterWallpaperAsk = false;
+            openCardsIfDue();
+            return;
+        }
         refreshCustomize();
     }
 
@@ -279,7 +303,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     }
 
     private void layout(boolean animate) {
-        FrameLayout content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         SetupSheetView sheet = mSheet;
         View root = mRoot;
         if (content == null || sheet == null || root == null || mSuspended)
@@ -385,6 +409,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     // ---------------------------------------------------------------------------------- finish
 
     private void close(boolean animate) {
+        mCardsOfferPending = false;
         if (!mOpen)
             return;
         mOpen = false;
@@ -409,12 +434,30 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         mHost.holdPaneWall(false);
     }
 
-    /** Records that this wizard version ran. */
-    private void markDone() {
+    /**
+     * Records that this wizard version ran.
+     *
+     * @param cardsSeen every card that exists now counts as shown, so none is due (Keep)
+     */
+    private void markDone(boolean cardsSeen) {
         TermuxAppSharedPreferences prefs = mHost.preferences();
         if (prefs == null)
             return;
         prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
+        // A user finishing setup now starts with nothing seen, so the sheet that opens right after
+        // Finish or Skip shows every card once. Keep leaves every card seen, as the launch-time
+        // seeding does for earlier users, so nothing is due after it.
+        Context context = mHost.context();
+        SetupCards.Stored stored = SetupCardSystem.stored(context);
+        boolean changed = cardsSeen ? stored.markSeen(SetupCardSystem.cards(context))
+            : stored.startSeen();
+        // The page indicator note is for users who had the indicator; a new user never did.
+        if (!stored.isDismissed(SetupCards.PAGE_INDICATOR)) {
+            stored.setDismissed(SetupCards.PAGE_INDICATOR, true);
+            changed = true;
+        }
+        if (changed)
+            SetupCardSystem.save(context, stored);
         // The old tour is gone, but this stays the "has used the app before" marker the gate
         // reads, and older code paths that read it still see the tour as done (8 is its last run).
         if (prefs.getFirstBootTourCompletedVersion() < 8)
@@ -429,8 +472,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     @Override
     public void onSkip() {
-        markDone();
-        close(true);
+        exit(SetupWizardExit.Way.SKIP);
     }
 
     @Override
@@ -439,22 +481,41 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             showSection(mIndex + 1, true);
             return;
         }
-        SetupState state = mState;
-        if (state != null)
-            state.apply();
-        markDone();
-        close(true);
-        // Right after Finish: the cards, when any is still open.
-        openCardsIfDue();
+        exit(SetupWizardExit.Way.FINISH);
     }
 
     @Override
     public void onKeepCurrent() {
+        exit(SetupWizardExit.Way.KEEP);
+    }
+
+    /** Leaves the wizard: the choices kept or put back, the wizard done, then the cards. */
+    private void exit(@NonNull SetupWizardExit.Way way) {
         SetupState state = mState;
-        if (state != null)
-            state.restore(state.snapshot());
-        markDone();
+        if (state != null) {
+            if (SetupWizardExit.restoresSnapshot(way))
+                state.restore(state.snapshot());
+            else if (SetupWizardExit.appliesChoices(way))
+                state.apply();
+        }
+        markDone(SetupWizardExit.marksCardsSeen(way));
         close(true);
+        if (!SetupWizardExit.offersCards(way))
+            return;
+        // A look that follows the system wallpaper needs storage access to draw its glass: asked
+        // here, once, before the cards; the cards open when it is answered.
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        Context context = mHost.context();
+        if (prefs != null && SetupWizardExit.asksWallpaperRead(way,
+                !CustomizeSection.wallpaperReadable(context),
+                prefs.isWallpaperReadPermissionPrompted())) {
+            mCardsAfterWallpaperAsk = true;
+            mCardsOfferPending = true;
+            mHost.requestWallpaperRead();
+            return;
+        }
+        // Right after Finish or Skip: the cards, when any is due.
+        openCardsIfDue();
     }
 
     @Override
@@ -466,14 +527,27 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     // ------------------------------------------------------------------------------ card sheet
 
-    /** The cards are due: the wizard is done and a card is neither done nor dismissed. */
+    /**
+     * The cards are due at launch: the wizard is done and a card that is open and completable has
+     * never been shown in the sheet. A user who finished setup before the seen set existed gets it
+     * seeded here with every card that exists now, without showing the sheet.
+     */
     public boolean isCardSheetDue() {
         TermuxAppSharedPreferences prefs = mHost.preferences();
         if (prefs == null)
             return false;
-        return SetupCards.isDue(prefs.getSetupWizardVersion() >= SetupWizardGate.CURRENT,
-            SetupCardSystem.cards(mHost.context()),
-            !AiModelDownloads.selected(mHost.context()).isEmpty());
+        boolean wizardDone = prefs.getSetupWizardVersion() >= SetupWizardGate.CURRENT;
+        if (!wizardDone)
+            return false;
+        Context context = mHost.context();
+        List<SetupCards.Card> cards = SetupCardSystem.cards(context);
+        SetupCards.Stored stored = SetupCardSystem.stored(context);
+        if (!stored.isSeenKnown()) {
+            stored.markSeen(cards);
+            SetupCardSystem.save(context, stored);
+        }
+        return SetupCards.isDueForLaunch(true, cards,
+            !AiModelDownloads.selected(context).isEmpty(), stored);
     }
 
     /**
@@ -492,6 +566,8 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     /** Opens the card sheet when it is due; true when it is up. */
     public boolean openCardsIfDue() {
+        // The session's chance: due cards that do not open now wait for the next start.
+        mCardsOfferPending = false;
         if (mOpen)
             return true;
         if (mHost.isAppearanceEditorOpen())
@@ -504,7 +580,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     /**
      * The Appearance editor is opening: a card sheet that is up steps aside for this start. No
-     * card is marked dismissed, so the sheet comes back on the next start while any is due. The
+     * card is marked dismissed; it was already marked seen when it opened, so it does not return by itself. The
      * wizard's own sheet is left alone.
      */
     public void stepAsideForEditor() {
@@ -522,13 +598,14 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
      * Learn the basics and Models for this phone rows).
      */
     public void openCards(@Nullable String pageId) {
+        mCardsOfferPending = false;
         if (mOpen) {
             if (pageId != null)
                 showPage(pageId);
             return;
         }
         View root = mHost.findView(R.id.terminal_root_container);
-        FrameLayout content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (root == null || content == null)
             return;
         mOpen = true;
@@ -541,9 +618,15 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         mCards = sheet;
         mLayer.addView(sheet, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
-        content.addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
-        sheet.bindList(SetupCardSystem.cards(mHost.context()), false);
+        com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR)
+            .addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        List<SetupCards.Card> shown = SetupCardSystem.cards(mHost.context());
+        // Saved now, not on close, so a process kill cannot bring the sheet back.
+        SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
+        if (stored.markSeen(shown))
+            SetupCardSystem.save(mHost.context(), stored);
+        sheet.bindList(shown, false);
         layoutCards();
         if (pageId != null)
             showPage(pageId);
@@ -551,7 +634,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     /** The sheet is 78% of the window; the launcher root stays at rest beneath it. */
     private void layoutCards() {
-        FrameLayout content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         SetupCardSheet sheet = mCards;
         View root = mRoot;
         if (content == null || sheet == null || root == null)
@@ -645,6 +728,24 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             case SetupCards.HOME:
                 HomeAppChooser.open(context);
                 break;
+            case SetupCards.PAGE_INDICATOR: {
+                startSafely(SettingsActivity.createFragmentIntent(context,
+                    ExtraKeysEditorFragment.class, R.string.settings_edit_extra_keys_title,
+                    null, null));
+                SetupCards.Stored stored = SetupCardSystem.stored(context);
+                stored.completeStep(id, 0);
+                SetupCardSystem.save(context, stored);
+                break;
+            }
+            case SetupCards.PAGE_SWITCHER: {
+                SetupCardSystem.addPageSwitcherKey(context);
+                // Marks the card done even when no bar had a row to put the key on.
+                SetupCards.Stored stored = SetupCardSystem.stored(context);
+                stored.completeStep(id, 0);
+                SetupCardSystem.save(context, stored);
+                refreshCards();
+                break;
+            }
             default:
                 showPage(id);
                 break;

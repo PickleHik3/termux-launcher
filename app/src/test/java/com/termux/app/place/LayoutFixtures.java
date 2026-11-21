@@ -7,12 +7,12 @@ import com.termux.app.dock.DockGeometry.Half;
 import com.termux.app.dock.DockGeometry.Snapshot;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,6 +43,12 @@ public final class LayoutFixtures {
     public static final int KEYBOARD_PX = 670;
     /** One row of extra keys: the pager's 37.5dp at 420 dpi, 98 px. */
     public static final int EXTRA_KEYS_ROW_PX = Math.round(37.5f * DENSITY);
+    /** The floating keyboard's width share in the fixtures. */
+    public static final float FLOATING_KEYBOARD_WIDTH_SCALE = 0.9f;
+    /** Pong's gesture-navigation band, 24dp at 420 dpi. */
+    public static final int KEPT_BAND_PX = Math.round(24f * DENSITY);
+    /** A flush padding the terminal's rule might stand. */
+    public static final int FLUSH_PX = 30;
     /** Pong's text row. */
     public static final int TEXT_ROW_PX = 32;
     /** A Docked status bar along the bottom: its 28dp at 420 dpi. */
@@ -79,11 +85,23 @@ public final class LayoutFixtures {
         @NonNull public final PlaceLayout home;
         /** The terminal's tiled panes. */
         public final int paneCount;
-        /** Home's Dock design; the Terminal's is the tray. */
+        /** Home's Dock design; the Terminal's is the tray unless {@link #withDesign} set it. */
         @NonNull public final DockStyle homeDesign;
+        /** The Terminal's Dock design. */
+        @NonNull public final DockStyle terminalDesign;
+
+        /** The navigation band the content keeps clear under the gesture pill; 0 stands none. */
+        public final int keptBandPx;
+        /** What the terminal's flush rule pads the stack by wherever it may act; 0 stands none. */
+        public final int flushPx;
 
         Fixture(@NonNull String name, int widthPx, int heightPx, @NonNull PlaceLayout window,
                 int paneCount) {
+            this(name, widthPx, heightPx, window, HOME, paneCount);
+        }
+
+        Fixture(@NonNull String name, int widthPx, int heightPx, @NonNull PlaceLayout window,
+                @NonNull PlaceLayout home, int paneCount) {
             this.name = name;
             this.widthPx = widthPx;
             this.heightPx = heightPx;
@@ -92,13 +110,18 @@ public final class LayoutFixtures {
             this.extraKeysRowPx = EXTRA_KEYS_ROW_PX;
             this.textRowPx = TEXT_ROW_PX;
             this.window = window;
-            this.home = HOME;
+            this.home = home;
             this.paneCount = paneCount;
             this.homeDesign = DockStyle.GLASS_TRAY;
+            this.terminalDesign = DockStyle.GLASS_TRAY;
+            this.keptBandPx = 0;
+            this.flushPx = 0;
         }
 
-        private Fixture(@NonNull Fixture of, @NonNull DockStyle homeDesign) {
-            this.name = of.name + " (Home " + homeDesign + ")";
+        private Fixture(@NonNull Fixture of, @NonNull DockStyle homeDesign,
+                        @NonNull DockStyle terminalDesign, @NonNull String name, int keptBandPx,
+                        int flushPx) {
+            this.name = name;
             this.widthPx = of.widthPx;
             this.heightPx = of.heightPx;
             this.density = of.density;
@@ -109,12 +132,33 @@ public final class LayoutFixtures {
             this.home = of.home;
             this.paneCount = of.paneCount;
             this.homeDesign = homeDesign;
+            this.terminalDesign = terminalDesign;
+            this.keptBandPx = keptBandPx;
+            this.flushPx = flushPx;
+        }
+
+        /**
+         * This fixture with a navigation band kept under the gesture pill and the terminal's
+         * flush rule padding the stack, so the foot and the flush padding are not 0.
+         */
+        @NonNull
+        public Fixture withFoot(int keptBandPx, int flushPx) {
+            return new Fixture(this, homeDesign, terminalDesign, name + " with a foot",
+                keptBandPx, flushPx);
         }
 
         /** This fixture with Home's dock in {@code design}. */
         @NonNull
         public Fixture withHomeDesign(@NonNull DockStyle design) {
-            return new Fixture(this, design);
+            return new Fixture(this, design, terminalDesign,
+                name + " (Home " + design + ")", keptBandPx, flushPx);
+        }
+
+        /** This fixture with the one Dock design both sides wear, as the setting is global. */
+        @NonNull
+        public Fixture withDesign(@NonNull DockStyle design) {
+            return new Fixture(this, design, design, name + " (" + design + ")", keptBandPx,
+                flushPx);
         }
 
         public boolean floatingKeyboard() {
@@ -142,7 +186,7 @@ public final class LayoutFixtures {
 
         private Half half(@NonNull PlaceLayout layout, boolean dockFloating) {
             return Half.builder(layout).floating(dockFloating).dockHeightScale(1.95f)
-                .design(layout == home ? homeDesign : DockStyle.GLASS_TRAY).build();
+                .design(layout == home ? homeDesign : terminalDesign).build();
         }
 
         /** The device's dock snapshot with {@code rows}' rows standing, on {@code arrangement}. */
@@ -176,6 +220,8 @@ public final class LayoutFixtures {
             in.keyboardOverlays = KeyboardOverlayPolicy.overlays(place(page), layout);
             in.dockOverlays = home;
             in.flushAllowed = !home && paneCount <= 1;
+            final int flush = flushPx;
+            in.flush = (content, margin) -> flush;
             return in;
         }
 
@@ -205,6 +251,65 @@ public final class LayoutFixtures {
             return in;
         }
 
+        /**
+         * {@code page}'s rest as the per-rest card answer reads it, filled the way the activity's
+         * pass would: the kept band, the Terminal's rest flush padding, the keyboard measured
+         * with the foot it wears, and the floating-form keyboard parked in its room.
+         */
+        @NonNull
+        public RestCards.Rest cardsRest(@NonNull PageRef page, boolean keyboardUp,
+                                        boolean dockFloating) {
+            return cardsRest(page, keyboardUp, keyboardUp, dockFloating);
+        }
+
+        /**
+         * {@link #cardsRest} with the other side's own rest keyboard {@code otherKeyboardUp}
+         * ({@link SideCards#restKeyboardUp}): what the activity hands the answer for the side
+         * not in front, whatever the front's keyboard is.
+         */
+        @NonNull
+        public RestCards.Rest cardsRest(@NonNull PageRef page, boolean keyboardUp,
+                                        boolean otherKeyboardUp, boolean dockFloating) {
+            RestCards.Rest rest = cardsRestOf(page, keyboardUp, dockFloating);
+            // The other side's rest, one level, as the answer reads it.
+            rest.other = cardsRestOf(page.isHome() ? PageRef.TERMINAL : PageRef.HOME,
+                otherKeyboardUp, dockFloating);
+            return rest;
+        }
+
+        /** {@link #cardsRest} for one side alone: no other side's rest. */
+        @NonNull
+        public RestCards.Rest cardsRestOf(@NonNull PageRef page, boolean keyboardUp,
+                                          boolean dockFloating) {
+            StackLayout.Input pass = pass(page, keyboardUp, dockFloating);
+            StackLayout.Result r = StackLayout.layout(pass, new DockGeometry());
+            boolean floatingForm = floatingKeyboard();
+            boolean laidOut = keyboardLaidOutPx() > 0;
+            int foot = BottomInsets.keyboardFootPx(keptBandPx, BottomInsets.keyboardWearsFoot(
+                dockFloating || floatingForm, floatingForm, false, r.bandsUnderKeyboard,
+                laidOut));
+            RestCards.Rest rest = new RestCards.Rest(pass, page, widthPx, heightPx, density,
+                extraKeysRowPx, laidOut ? keyboardLaidOutPx() + foot : 0,
+                com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false,
+                    density),
+                com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false,
+                    density));
+            rest.keptBandPx = keptBandPx;
+            rest.restFlushPaddingPx = settle(PageRef.TERMINAL, false, dockFloating).flushPaddingPx;
+            if (floatingForm) {
+                rest.floatingKeyboardRoom = floatingKeyboardRoom();
+                rest.floatingKeyboardHeightPx = keyboardPx;
+                rest.floatingKeyboardWidthScale = FLOATING_KEYBOARD_WIDTH_SCALE;
+            }
+            return rest;
+        }
+
+        /** The floating keyboard's room: the screen under the status bar. */
+        @NonNull
+        public ChromeShape.Box floatingKeyboardRoom() {
+            return new ChromeShape.Box(0f, Math.round(28f * density), widthPx, heightPx);
+        }
+
         /** {@link #rest} from Home. */
         public int restReservationPx(@NonNull PageRef page, boolean keyboardUp,
                                      boolean dockFloating) {
@@ -219,8 +324,8 @@ public final class LayoutFixtures {
 
     /** The wall place a page stands for. */
     @NonNull
-    public static PaneWallPage place(@NonNull PageRef page) {
-        return page.isHome() ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL;
+    public static PageKind place(@NonNull PageRef page) {
+        return page.isHome() ? PageKind.HOME : PageKind.TERMINAL;
     }
 
     /** Pong: dock rows under the docked keyboard, extra keys above it, status bar on top. */
@@ -244,6 +349,52 @@ public final class LayoutFixtures {
 
     public static final List<Fixture> ALL = Collections.unmodifiableList(Arrays.asList(
         PONG, TL16, FLOATING_KEYBOARD, STATUS_BOTTOM, SPLIT_PANE));
+
+    /** Pong with its keyboard split. */
+    public static final Fixture SPLIT_KEYBOARD = new Fixture("split keyboard", 1080, 2412,
+        appsUnder(window(Edge.TOP, KeyboardForm.SPLIT)), 1);
+    /** The A–Z bar as a row of the dock on both sides, Home's riding its pinned apps. */
+    public static final Fixture AZ_ON_DOCK = new Fixture("a-z on the dock", 1080, 2400,
+        new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.BOTTOM,
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5),
+        new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.HIDDEN,
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5), 1);
+
+    /**
+     * A new install's layouts: the Terminal shows the status bar on top and the extra keys along
+     * the bottom over the keyboard, no apps row; Home is {@link #HOME}.
+     */
+    public static final Fixture DEFAULT_INSTALL = new Fixture("default install", 1080, 2412,
+        new PlaceLayout(Edge.TOP, RowPlacement.HIDDEN, false, Edge.BOTTOM, RowPlacement.BOTTOM,
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5), HOME, 1);
+
+    /**
+     * The fixtures the per-rest card answer is held to: {@link #ALL}, pong and tl16 with a foot
+     * and flush padding, a split keyboard and the A–Z bar on the dock, each in every design. Kept
+     * apart from {@link #ALL}, whose numbers other tests pin.
+     */
+    @NonNull
+    public static List<Fixture> cardFixtures() {
+        List<Fixture> base = new ArrayList<>(ALL);
+        base.add(PONG.withFoot(KEPT_BAND_PX, FLUSH_PX));
+        base.add(TL16.withFoot(KEPT_BAND_PX, FLUSH_PX));
+        base.add(SPLIT_KEYBOARD);
+        base.add(AZ_ON_DOCK);
+        base.add(DEFAULT_INSTALL);
+        List<Fixture> out = new ArrayList<>();
+        for (Fixture fixture : base)
+            for (DockStyle design : DockStyle.CHOICES) out.add(fixture.withDesign(design));
+        return out;
+    }
+
+    /** Every fixture in each of the four Dock designs, worn on both sides (one setting). */
+    @NonNull
+    public static List<Fixture> allDesigns() {
+        List<Fixture> out = new ArrayList<>();
+        for (Fixture fixture : ALL)
+            for (DockStyle design : DockStyle.CHOICES) out.add(fixture.withDesign(design));
+        return out;
+    }
 
     /** {@link #ALL} as JUnit's {@code Parameterized} wants them, named by {@link Fixture#name}. */
     @NonNull

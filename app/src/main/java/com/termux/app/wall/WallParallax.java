@@ -1,6 +1,7 @@
 package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
+import com.termux.app.page.PageKind;
 
 /**
  * Where the wallpaper sits under the wall: the parallax's geometry, pure and tested.
@@ -9,7 +10,7 @@ import androidx.annotation.NonNull;
  * is spread over the whole row (ADR 0008): Home page 1 at the picture's left edge, the row's last
  * window — the display window among them when it is last — at its right edge, and every page
  * between at an even step. The pan is a continuous function of the row's live position, so a
- * Home page swipe, the seam into the Workspace and a border drag between windows all move the
+ * Home page swipe, the seam into the Terminal and a border drag between windows all move the
  * picture on their own curve and timing, with no jump where one stretch of the row meets the
  * next. Nothing here knows about frames or views; the activity turns the
  * answer into an x-offset every glass surface samples the shared frame at.
@@ -64,12 +65,12 @@ public final class WallParallax {
      * and window {@code index} — the display window by its place in the row — comes after every
      * Home page. An index past its kind's end is held at the kind's last page.
      */
-    public static int rowIndex(@NonNull PaneWallPage kind, int index, int homeCount,
+    public static int rowIndex(@NonNull PageKind kind, int index, int homeCount,
                                int windowCount) {
         int homes = Math.max(1, homeCount);
         int windows = Math.max(0, windowCount);
         switch (kind) {
-            case WIDGETS:
+            case HOME:
                 return clamp(index, 0, homes - 1);
             case TERMINAL:
             default:
@@ -124,7 +125,7 @@ public final class WallParallax {
      * what is coming into view is on the current page's left), and the position runs from the
      * current page's {@code currentAt} to the incoming one's {@code neighbourAt} by the fraction
      * of a width travelled. A drag that commits re-bases the offset against the new page, which
-     * lands on the same value from either side, so the seam between Home and the Workspace is
+     * lands on the same value from either side, so the seam between Home and the Terminal is
      * crossed without a jump.
      */
     public static float slidePosition(float currentAt, float neighbourAt, float wallOffsetPx,
@@ -150,6 +151,16 @@ public final class WallParallax {
         float last = rowCount - 1;
         float position = Math.max(0f, Math.min(last, rowPosition));
         return position / last * sparePx;
+    }
+
+    /**
+     * How far the row has slid, 0 at Home page 1 and 1 at the last page, the same stretch
+     * {@link #offsetPx} pans the wallpaper over; what a shader reads as {@code tlPageOffset}.
+     * 0 for a row of one page; held to 0..1 past either end.
+     */
+    public static float pageFraction(float rowPosition, int rowCount) {
+        if (rowCount <= 1) return 0f;
+        return Math.max(0f, Math.min(1f, rowPosition / (rowCount - 1)));
     }
 
     /**

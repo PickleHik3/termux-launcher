@@ -1,7 +1,7 @@
 # The Linux display
 
 The launcher can show a Linux desktop or any X11 app in a **display window**: a window of the
-Workspace, in the row with your terminal windows, that shows one X display whole. The display's own window
+Terminal, in the row with your terminal windows, that shows one X display whole. The display's own window
 manager arranges the apps inside it. The display server runs in your shell like any other command,
 so everything you know from Termux:X11 (its flags, its preferences, `pkill termux-x11`) works the
 same way. This page is the short route from installing the pieces to running a desktop in a proot.
@@ -47,7 +47,7 @@ edition that package can't be installed beside the launcher's, and isn't needed.
 
 ## Every day
 
-- **Get to it** like any window: drag along the Workspace from a window's border, or tap its chip
+- **Get to it** like any window: drag along the Terminal from a window's border, or tap its chip
   in the status bar. Hold its chip and drag it to move the display window to another place in the
   row, as you would any window. Opening a Linux app or **Display** again brings it in front, and
   moves it into the session you are in if another session's row holds it. In the sessions drawer,
@@ -83,7 +83,7 @@ edition that package can't be installed beside the launcher's, and isn't needed.
   docked); it switches the orientation the phone is in, and each orientation keeps its own. If an
   older version left the display making room in portrait without you choosing it, the update
   puts it back to floating once; the same button switches it back.
-  Settings → Linux apps → Input → Keyboard over the window switches both orientations
+  Settings → Linux apps → Input → Keyboard behavior (Overlay or Resize display) sets both orientations
   at once.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts or stops the display, and the cog opens its settings. A
@@ -129,8 +129,9 @@ edition that package can't be installed beside the launcher's, and isn't needed.
   terminal window or on Home; only the picture is put away.
 - **Options.** **Settings → Linux apps** holds them: its own rows, then four pages. A
   running display picks a change up at once.
-  - On the page itself: **Show Linux apps in drawer**, **Set up Linux apps**, **Hidden Linux
-    apps** and **Window manager**.
+  - On the page itself, under **Apps**: **Set up Linux apps** and **Per-app settings**; under
+    **Desktop**: **Start with**; and under **Advanced**: **Graphics acceleration** and
+    **Window manager**.
   - **Input**: **Touch**, **Use Android keyboard**, **Keyboard pops up** and **Share the clipboard**.
   - **Resolution and scaling**: **Resolution**, **Scale**, **Fixed size** or **Custom size**,
     **Scaling** (filtering) and **Display density**.
@@ -171,9 +172,9 @@ things) and the display server passes that name on. Only the name seen in the mo
 counts, so a pointer crossing a text field on its way somewhere else opens nothing. An app that
 never asks for a text cursor, or a session with no cursor theme installed, cannot be recognised
 this way; the keyboard key, the display's Back button and the signal below all still work.
-GTK and Qt apps pick up the Adwaita theme that ships with them; core X apps such as xterm only
-use it with `XCURSOR_THEME=Adwaita` in their environment (or a `default` cursor theme that
-inherits it).
+GTK and Qt apps pick up the Adwaita theme that ships with them. Apps opened from the drawer get
+the Adwaita cursors when they are installed, and a `default` cursor theme of your own wins. Apps
+you start from a terminal still need `XCURSOR_THEME=Adwaita` in their environment.
 
 **Your input method's own focus.** Exact, and on by itself once fcitx5 is installed. fcitx5 knows
 when a text field takes focus and when it loses it, whether you tapped, pressed Tab, or a dialog
@@ -204,7 +205,7 @@ passes them on. This is not yet device-verified.
 launcher while you are on the display window, until you leave it or switch the setting off:
 
 - a field taking focus brings the keyboard up, tap or no tap;
-- a field losing focus puts it away 150 ms later, unless another field takes focus first, so
+- a field losing focus puts it away 300 ms later, unless another field takes focus first, so
   moving from one field to the next leaves the keyboard where it is;
 - a tap over a text cursor only brings the keyboard back if a field has focus, so tapping a
   terminal or the text of a page no longer opens it;
@@ -213,7 +214,7 @@ launcher while you are on the display window, until you leave it or switch the s
 Until the first focus signal of a visit, and always without fcitx5, the pointer's shape decides as
 above. A keyboard you opened yourself, and a keyboard you switched off, win over focus as they do
 over taps. Under `adb logcat -s X11TextFocus` every decision names the signal behind it:
-`focus in -> show`, `focus out -> hide in 150 ms`, `hide cancelled: focus in`,
+`focus in -> show`, `focus out -> hide in 300 ms`, `hide cancelled: focus in`,
 `tap over xterm ignored: no focus`.
 
 This section is for the Termux edition. On the Nix edition the helper is not started yet; see
@@ -235,7 +236,7 @@ asking, which pins the keyboard until you put it down again.
 
 The launcher runs one PulseAudio server for everything: terminal sessions, Linux apps from the
 drawer and proot distros. It needs `pulseaudio`, which "Set up Linux apps" installs
-(`pkg install pulseaudio` does too), and two switches under **Settings › Terminal › Linux apps ›
+(`pkg install pulseaudio` does too), and two switches under **Settings › General ›
 Audio** control it, both on by default.
 
 - **Sound.** The server starts with your first terminal or Linux app and keeps running when you
@@ -337,7 +338,7 @@ Two things make this work:
   Windows fill the display to its rounded corners, as on any rounded desktop, so a terminal that
   wants its first and last cells clear of the arcs pads its own window (`window_padding_width` in
   kitty, `window.padding` in alacritty).
-- **Show Linux apps in drawer**, in **Settings → Linux apps**, can be switched off if
+- **Show Linux apps in drawer**, in **Settings → Apps**, can be switched off if
   you would rather start apps from a shell.
 
 When an app is started from the drawer, the launcher exports the GPU settings from the table

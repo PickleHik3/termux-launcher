@@ -12,20 +12,13 @@ import org.junit.Test;
 public class LiveSceneLogicTest {
 
     @Test
-    public void kindOf_followsTheStoredMotion() {
-        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.kindOf(WallpaperMotion.photo()));
-        assertEquals(LiveSceneLogic.Kind.VIDEO, LiveSceneLogic.kindOf(WallpaperMotion.video("loop.mp4")));
-        assertEquals(LiveSceneLogic.Kind.SHADER, LiveSceneLogic.kindOf(WallpaperMotion.shader("abc")));
-    }
-
-    @Test
     public void picker_opensOnTheKindInUseOnlyWhenSupported() {
-        assertEquals(LiveSceneLogic.Kind.SHADER, LiveSceneLogic.startKind(WallpaperMotion.shader("abc"), true));
-        assertEquals(LiveSceneLogic.Kind.VIDEO, LiveSceneLogic.startKind(WallpaperMotion.video("loop.mp4"), true));
-        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.startKind(WallpaperMotion.photo(), true));
+        assertEquals(WallpaperMotion.Kind.SHADER, LiveSceneLogic.startKind(WallpaperMotion.shader("abc"), true));
+        assertEquals(WallpaperMotion.Kind.VIDEO, LiveSceneLogic.startKind(WallpaperMotion.video("loop.mp4"), true));
+        assertEquals(WallpaperMotion.Kind.PHOTO, LiveSceneLogic.startKind(WallpaperMotion.photo(), true));
         // Below Android 10 a stored motion cannot run: the picker stays on Photo.
-        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.startKind(WallpaperMotion.shader("abc"), false));
-        assertEquals(LiveSceneLogic.Kind.PHOTO, LiveSceneLogic.startKind(WallpaperMotion.video("loop.mp4"), false));
+        assertEquals(WallpaperMotion.Kind.PHOTO, LiveSceneLogic.startKind(WallpaperMotion.shader("abc"), false));
+        assertEquals(WallpaperMotion.Kind.PHOTO, LiveSceneLogic.startKind(WallpaperMotion.video("loop.mp4"), false));
     }
 
     @Test

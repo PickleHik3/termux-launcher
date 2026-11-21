@@ -240,7 +240,11 @@ public final class WallpaperBackdropView extends View {
         if (Color.alpha(mDimColor) > 0) canvas.drawRect(mDest, mDimPaint);
     }
 
-    private void drawFrame(@NonNull Canvas canvas, @NonNull Bitmap frame, int alpha) {
+    private void drawFrame(@NonNull Canvas canvas, @NonNull Bitmap held, int alpha) {
+        // A software canvas (a page picture, a snapshot) cannot draw a HARDWARE frame: it gets
+        // the frame's small software copy, scaled up to the same rect.
+        Bitmap frame = canvas.isHardwareAccelerated() ? held : HardwareFrame.readable(held);
+        if (frame == null) return;
         boolean sameSize = frame.getWidth() == mDest.width() && frame.getHeight() == mDest.height();
         // The frame was captured at exactly this size; drawing it 1:1 skips the filter, same as
         // before there was an alpha to set at all.

@@ -98,6 +98,100 @@ public final class LauncherAppDataProvider {
             });
         // A pack the main thread drew stand-ins for has been parsed: every surface draws again.
         this.iconPackRepository.setPackLandedListener(this::onIconPackLanded);
+        watchIconSizes();
+    }
+
+    /** Held so the preferences' weak reference to it lives as long as the provider. */
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener iconSizeListener =
+        (prefs, key) -> {
+            if (com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_APP_LAUNCHER_DRAWER_ICON_SIZE.equals(key)) {
+                // A raised cap dropped the store; the renders and catalogue made from the old
+                // artwork are stale with it.
+                if (applyIconSizes(prefs)) invalidateIconArtwork(true);
+            }
+        };
+
+    /**
+     * Keeps the store's artwork cap on the largest icon any surface will draw: the drawer's Icon
+     * size step (Auto is 48dp) and Home's size preset, never less than the dock's 48dp. A larger
+     * icon on a dense screen needs more pixels than the base cap keeps.
+     */
+    private void watchIconSizes() {
+        android.content.SharedPreferences prefs = context.getSharedPreferences(
+            com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE);
+        applyIconSizes(prefs);
+        prefs.registerOnSharedPreferenceChangeListener(iconSizeListener);
+        // Home draws IconSizeCap.effective(layout size, published cap): the cap is published after
+        // layout and the layout size can change on its own, so both re-run the policy, off the
+        // layout pass, coalesced.
+        com.termux.app.dock.IconSizeCap.setPublishListener(publishListener);
+        com.termux.app.place.layout.LayoutStore.shared(context).addListener(layoutListener);
+    }
+
+    private final Runnable publishListener = this::scheduleIconSizeRefresh;
+    private final com.termux.app.place.layout.LayoutStore.Listener layoutListener =
+        layouts -> scheduleIconSizeRefresh();
+
+    /**
+     * Test-only: drops the shared instance and the listeners it registered, so a test that
+     * builds a fresh provider leaves none behind on a dead one. The app keeps one for the process.
+     */
+    @androidx.annotation.VisibleForTesting
+    public static synchronized void resetForTest() {
+        if (instance == null) return;
+        instance.stopWatchingIconSizes();
+        instance = null;
+    }
+
+    private void stopWatchingIconSizes() {
+        context.getSharedPreferences(
+            com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(iconSizeListener);
+        com.termux.app.dock.IconSizeCap.clearPublishListener(publishListener);
+        com.termux.app.place.layout.LayoutStore.shared(context).removeListener(layoutListener);
+        iconSizeHandler.removeCallbacks(iconSizeRefresh);
+        executor.shutdown();
+    }
+
+    private final android.os.Handler iconSizeHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable iconSizeRefresh = this::refreshIconSizes;
+
+    private void refreshIconSizes() {
+        if (applyIconSizes(context.getSharedPreferences(
+                com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+                Context.MODE_PRIVATE))) {
+            invalidateIconArtwork(true);
+        }
+    }
+
+    private void scheduleIconSizeRefresh() {
+        iconSizeHandler.removeCallbacks(iconSizeRefresh);
+        iconSizeHandler.post(iconSizeRefresh);
+    }
+
+    /** @return true when the store's cap rose and it was dropped. */
+    private boolean applyIconSizes(@NonNull android.content.SharedPreferences prefs) {
+        float largest = com.termux.app.launcher.widget.HomeIconSize.DOCK_ICON_DP;
+        try {
+            String drawer = prefs.getString(com.termux.shared.termux.settings.preferences
+                .TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE, null);
+            if (drawer != null) largest = Math.max(largest, Integer.parseInt(drawer.trim()));
+        } catch (RuntimeException ignored) {
+            // "auto" and garbage read as Auto's 48dp.
+        }
+        try {
+            // The size Home really draws (layout size held to the dock's published cap).
+            largest = Math.max(largest,
+                com.termux.app.launcher.home.HomeSettings.iconStyle(context).iconDp);
+        } catch (RuntimeException ignored) {
+            // An unreadable Home size draws at the dock's.
+        }
+        boolean raised = iconStore.setLargestIconDp(largest);
+        iconResolver.setArtworkCapPx(iconStore.capPx());
+        return raised;
     }
 
     /**
@@ -456,6 +550,22 @@ public final class LauncherAppDataProvider {
         return loaded;
     }
 
+    /**
+     * Test-only: starts the catalogue scan and returns once it has run, so the warm-up callbacks
+     * are already posted and {@link #hasLoadedApps()} holds. A test then drains the main looper
+     * once and nothing from the scan can land later.
+     */
+    @androidx.annotation.VisibleForTesting
+    public void loadBlockingForTest() {
+        warmAsync(null);
+        try {
+            // One worker, FIFO: this runs after the scan.
+            executor.submit(() -> { }).get(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            throw new IllegalStateException("catalogue scan did not finish", e);
+        }
+    }
+
     public void warmAsync(@Nullable Runnable callback) {
         boolean shouldStartLoad = false;
         int generationToLoad = -1;
@@ -682,7 +792,7 @@ public final class LauncherAppDataProvider {
         if (entry == null && com.termux.app.launcher.LauncherEntries.isAlwaysListed(ref)) {
             // Terminal is in every catalogue, so it resolves even while none is loaded (before
             // the first load, after an invalidate): the dock's prune of unresolvable pins must
-            // never take the way back to the Workspace off the row.
+            // never take the way back to the Terminal off the row.
             entry = com.termux.app.launcher.LauncherEntries.ASSISTANT.equals(
                 com.termux.app.launcher.LauncherEntries.idOf(ref)) ? assistantEntry() : terminalEntry();
         }

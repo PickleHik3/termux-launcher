@@ -26,7 +26,7 @@ import org.robolectric.util.ReflectionHelpers;
 /**
  * The dock prunes pins that no longer resolve (an uninstalled app). The Terminal entry is in
  * every catalogue, so it must resolve whatever state the catalogue is in, or the prune takes the
- * way back to the Workspace off the dock for good: its once-only pin never comes back.
+ * way back to the Terminal off the dock for good: its once-only pin never comes back.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -36,7 +36,7 @@ public class LauncherAppDataProviderTerminalEntryTest {
 
     @Before public void setUp() {
         context = RuntimeEnvironment.getApplication();
-        ReflectionHelpers.setStaticField(LauncherAppDataProvider.class, "instance", null);
+        LauncherAppDataProvider.resetForTest();
     }
 
     @Test public void terminalResolvesBeforeAnyCatalogueIsLoaded() {

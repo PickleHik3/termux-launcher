@@ -189,7 +189,7 @@ public final class AzTabPolicy {
      * the pane's frame and its corners' clearance.
      *
      * <p>Along the side the tab then leads from the text box's ends, not the canvas's. The canvas
-     * is not where the pane stands: on the Workspace it reaches up under the bar while the wall
+     * is not where the pane stands: on the Terminal it reaches up under the bar while the wall
      * moves and comes back down at rest, the pane keeping its place on screen by a top inset
      * either way, so a tab led from the canvas's top rested higher or lower depending on which
      * reach it was last laid out in. The text box does not move with the reach, so the tab rests

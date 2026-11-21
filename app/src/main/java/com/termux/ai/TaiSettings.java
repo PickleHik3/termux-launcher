@@ -115,6 +115,14 @@ public final class TaiSettings {
 
     @NonNull
     public String getDefaultAssistantModel() {
+        // No pick stored: the Default model is what Automatic resolves for the assistant, the same model
+        // the Model Centre row and a Feature request show; the constant only when Automatic has none.
+        if (getFunctionValue(KEY_ROLE_DEFAULT_ASSISTANT).isEmpty()) {
+            TaiFunctionModels.Resolution automatic = TaiFunctionModels.forContext(appContext).resolve(TaiFunction.ASSISTANT);
+            if (!automatic.isRemote() && automatic.modelId != null && !automatic.modelId.isEmpty()) {
+                return automatic.modelId;
+            }
+        }
         String modelId = preferences.getString(KEY_ROLE_DEFAULT_ASSISTANT, TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
         if (modelId == null) modelId = TaiModelRegistry.MODEL_GEMMA_4_E2B_IT;
         String migratedModelId = migrateBuiltInModelId(modelId);
@@ -124,8 +132,7 @@ public final class TaiSettings {
         }
         if (new TaiModelRegistry().getModel(modelId) != null) return modelId;
         TaiModelStore store = new TaiModelStore(appContext);
-        if (store.getInstalledUserModels().containsKey(modelId)
-            || store.getDownloadedReadableModels().containsKey(modelId)
+        if (ModelAvailability.get(appContext).isOnPhone(modelId)
             || store.onDiskModelSpec(modelId) != null) {
             return modelId;
         }

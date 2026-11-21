@@ -3,7 +3,7 @@ package com.termux.app.launcher.paging;
 import com.termux.app.place.PlaceLayout;
 
 /**
- * The "minimal ticks" page indicator's geometry: how long each tick is at a given fractional page
+ * The dock's page capsules' geometry (the page bar's own look, under its pill): how long each capsule is at a given fractional page
  * position, how much air goes between them, and where each one's centre lands along the strip.
  *
  * <p>One copy for both axes. A row's ticks run across its width and a rail's run down its height,
@@ -21,18 +21,27 @@ public final class PageTickStrip {
 
     private PageTickStrip() {}
 
-    /** A tick at rest, along the strip. */
-    public static final float INACTIVE_LENGTH_DP = 13f;
-    /** The active page's tick, along the strip. */
-    public static final float ACTIVE_LENGTH_DP = 24f;
-    /** A tick across the strip. */
-    public static final float THICKNESS_DP = 2.5f;
-    /** The air between two ticks, before the fit-to-length squeeze. */
-    public static final float GAP_DP = 4f;
+    /** A capsule at rest, along the strip. */
+    public static final float INACTIVE_LENGTH_DP = 10f;
+    /** The active page's capsule, along the strip. */
+    public static final float ACTIVE_LENGTH_DP = 28f;
+    /** A capsule across the strip. */
+    public static final float THICKNESS_DP = 5f;
+    /** A capsule's corner radius: a full cap, so it is derived from the thickness. */
+    public static final float CORNER_RADIUS_DP = THICKNESS_DP / 2f;
+    /** The air between two capsules, before the fit-to-length squeeze. */
+    public static final float GAP_DP = 6f;
     /** The air the strip keeps at each end, so the ticks never run into the bar's own corners. */
     public static final float END_MARGIN_DP = 18f;
     /** The band the strip claims across itself: the tick and the air either side of it. */
     public static final float BAND_DP = 9f;
+
+    /**
+     * The air between the capsules and the dock's own surface on the side they face: the slab's
+     * top edge, or the icons' tops where no edge stands there. The one number the dock reads
+     * ({@code DockLayoutPolicy}) for how far below the strip its slab starts.
+     */
+    public static final float SURFACE_AIR_DP = 6f;
 
     /** The band a strip claims across itself, which is what its host reserves for it. */
     public static int bandPx(float density) {
@@ -46,6 +55,16 @@ public final class PageTickStrip {
      */
     public static float edgeGapPx(int bandPx, float density) {
         return Math.max(0f, (bandPx - THICKNESS_DP * Math.max(0f, density)) * 0.5f);
+    }
+
+    /**
+     * What a slab standing under a strip {@code bandPx} across needs added below the band so the
+     * capsules keep {@link #SURFACE_AIR_DP} from its top edge: the air asked for, less the
+     * band's own air under the capsules ({@link #edgeGapPx}).
+     */
+    public static int surfaceExtraPx(int bandPx, float density) {
+        float want = SURFACE_AIR_DP * Math.max(0f, density);
+        return Math.round(Math.max(0f, want - edgeGapPx(bandPx, density)));
     }
 
     /**
@@ -124,45 +143,57 @@ public final class PageTickStrip {
     }
 
     /** Which way the ticks run: down the strip for a rail, across it for a row. */
+    /**
+     * Whether the dock's capsules stand on the bare wallpaper rather than on the dock's slab:
+     * above the slab, for a style whose dashes float over it ({@code DockLayout.slabTopInsetPx}
+     * above 0, Peek glass's card included, whose top runs through the icons' centres), or on a
+     * dock that draws no slab (Lens beads drawn). Their ink is then the bare-text ink measured on
+     * the wallpaper behind them; anywhere else, the dock surface's. Off the dock it stays the
+     * surface the host hands down.
+     */
+    public static boolean standsOnWallpaper(boolean onDock, boolean dashesAboveSlab,
+                                            boolean beadsDrawn) {
+        return onDock && (dashesAboveSlab || beadsDrawn);
+    }
+
     public static boolean verticalOn(PlaceLayout.Edge edge) {
         return edge != null && edge.isOnSide();
     }
 
     /**
-     * The tick at rest, as a fraction of the accent's opacity, and the one under the active page at
+     * A capsule at rest, as a fraction of the ink's opacity, and the one under the active page at
      * full. Everything keys off proximity to the fractional position, so the morph is continuous
-     * across a swipe and two adjacent ticks share it at the midpoint.
+     * across a swipe and two adjacent capsules share it at the midpoint.
      *
-     * <p>How muted a resting tick <em>looks</em>, not how faint it is allowed to be: once the glass
-     * under the strip has been measured this is the opacity {@code PageTickStripView} asks
-     * {@code GlassInk} for, and it is raised where 40% of a tick cannot clear the decoration floor
-     * on that band. A fade towards nothing is a fade towards the band.</p>
+     * <p>How muted a resting capsule <em>looks</em>, not how faint it is allowed to be: once the
+     * glass under the strip has been measured this is the opacity {@code PageTickStripView} asks
+     * {@code GlassInk} for, and it is raised where half of it cannot clear the decoration floor.</p>
      */
-    public static final float INACTIVE_ALPHA = 0.40f;
+    public static final float INACTIVE_ALPHA = 0.50f;
 
-    /** How near a tick is to the active page: 1 on it, 0 a whole page away. */
+    /** While the page bar slides, the current page's capsule falls to this share of its alpha. */
+    public static final float DIMMED_ACTIVE_FACTOR = 0.45f;
+    /** While the page bar slides, the others fall to this share of their own (0.25 absolute). */
+    public static final float DIMMED_INACTIVE_FACTOR = 0.50f;
+
+    /** How near a capsule is to the active page: 1 on it, 0 a whole page away. */
     public static float proximity(int page, float position) {
         return Math.max(0f, 1f - Math.abs(page - position));
     }
 
-    /** A tick's opacity at that proximity: muted at rest, the accent's own at the active page. */
+    /** A capsule's opacity at that proximity: muted at rest, full at the active page. */
     public static float alphaFor(float proximity) {
         float p = Math.max(0f, Math.min(1f, proximity));
         return INACTIVE_ALPHA + ((1f - INACTIVE_ALPHA) * p);
     }
 
     /**
-     * The warm tint the "most-used" page's tick carries: distinguishable from the accent ticks
-     * beside it, harmonised rather than neon. Damped further while that page is not the active one,
-     * so a sleeping page never steals attention. A seed, like the accent: what it becomes on the
-     * band it is drawn on is {@code GlassInk}'s answer.
+     * The share of its alpha a capsule keeps while the page bar slides: the active one 0.45, the
+     * others 0.5 (0.25 of full), blended by proximity so a swipe's midpoint stays continuous.
      */
-    public static final int DYNAMIC_TICK_COLOR = 0xFFE0A338;
-
-    /** The extra damp a dynamic tick carries while its page is not the one being shown. */
-    public static float dynamicDampFor(float proximity) {
+    public static float dimFactor(float proximity) {
         float p = Math.max(0f, Math.min(1f, proximity));
-        return 0.55f + (0.45f * p);
+        return DIMMED_INACTIVE_FACTOR + ((DIMMED_ACTIVE_FACTOR - DIMMED_INACTIVE_FACTOR) * p);
     }
 
 }

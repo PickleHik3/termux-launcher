@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 
 import com.termux.R;
 import com.termux.app.chrome.scene.LiveWallpaperChoice;
+import com.termux.app.chrome.scene.WallpaperMotion;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -20,10 +21,11 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /** Below Android 10 (API 29) moving wallpapers are not offered at all: no Photo | Video | Shader row, and the picker is the Photo page alone. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w411dp-h891dp-xxhdpi")
+@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w411dp-h891dp-xxhdpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class WallpaperLiveHostBelow29Test {
 
@@ -49,7 +51,7 @@ public class WallpaperLiveHostBelow29Test {
         activity.setContentView(host.root());
 
         assertFalse(LiveWallpaperChoice.isSupported());
-        assertEquals(LiveSceneLogic.Kind.PHOTO, host.kind());
+        assertEquals(WallpaperMotion.Kind.PHOTO, host.kind());
         assertNull(host.list());
         assertNull(host.editor());
         assertNull(host.video());

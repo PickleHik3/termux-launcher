@@ -51,15 +51,15 @@ public class StackLayoutTest {
             .design(DockStyle.GLASS_TRAY).searchField(searchField).build();
     }
 
-    private static Snapshot.Builder device(Half home, Half workspace) {
-        return Snapshot.builder(home, workspace)
+    private static Snapshot.Builder device(Half home, Half terminal) {
+        return Snapshot.builder(home, terminal)
             .density(DENSITY).widthPx(WIDTH)
             .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(DENSITY))
             .pinnedSlotCount(7)
             .preferencesAvailable(true);
     }
 
-    /** The Workspace at rest, a window with its extra keys row. */
+    /** The Terminal at rest, a window with its extra keys row. */
     private static StackLayout.Input window(boolean keyboardShown) {
         Snapshot s = device(half(HOME, false), half(WINDOW, false))
             .rows(PageRef.TERMINAL).arrangement(WINDOW).build();
@@ -228,7 +228,7 @@ public class StackLayoutTest {
     // ---- overlap ----
 
     @Test
-    public void onTheWorkspaceTheKeyboardIsTheOnlyThingTheContentReachesUnder() {
+    public void onTheTerminalTheKeyboardIsTheOnlyThingTheContentReachesUnder() {
         StackLayout.Input in = window(true);
         assertEquals("a keyboard that resizes the content takes its room", 0,
             run(in).contentOverlapPx);
@@ -246,7 +246,7 @@ public class StackLayoutTest {
         StackLayout.Result r = run(in);
         assertEquals(r.stackHeightPx + r.bottomMarginPx + 25, r.contentOverlapPx);
         assertEquals(25, r.homeImeReachPx);
-        assertEquals("the side rail ends above the dock as on the Workspace", r.contentOverlapPx,
+        assertEquals("the side rail ends above the dock as on the Terminal", r.contentOverlapPx,
             r.sideStackOverlapPx);
         assertEquals("a Home page's chrome takes no room", 0, r.contentReservationPx);
         assertEquals("the grid ends above the rows and the gap under them",
@@ -256,29 +256,87 @@ public class StackLayoutTest {
     }
 
     @Test
-    public void aDisplayPageInOverlayModeKeepsTheWholeHeightKeyboardUpOrDown() {
-        for (boolean keyboardShown : new boolean[] {true, false}) {
-            StackLayout.Input in = window(keyboardShown);
-            in.keyboardOverlays = true;
-            in.contentUnderStack = true;
-            in.systemImeTakePx = 25;
-            StackLayout.Result r = run(in);
-            assertEquals(r.stackHeightPx + r.bottomMarginPx, r.contentOverlapPx);
-            assertEquals("the display runs on to the screen's bottom", 0,
-                r.contentReservationPx);
-            assertEquals("Home's band and IME reach stay Home's", 0, r.homeGridDockReservePx);
-            assertEquals(0, r.homeImeReachPx);
-        }
+    public void aDisplayPageInOverlayModeKeepsItsRowsBelowItAndOneSizeKeyboardUpOrDown() {
+        StackLayout.Input down = window(false);
+        down.keyboardOverlays = true;
+        down.statusBandPx = 33;
+        StackLayout.Result rest = run(down);
+        assertEquals("the extra keys and a bottom status bar take their room below the display",
+            rest.dockContentHeightPx + rest.bottomMarginPx, rest.contentReservationPx);
+        assertEquals("nothing in the stack lies over the display at rest", 0,
+            rest.contentOverlapPx);
+        StackLayout.Input up = window(true);
+        up.keyboardOverlays = true;
+        up.statusBandPx = 33;
+        StackLayout.Result open = run(up);
+        assertEquals("the keyboard lies over the display, which keeps its size",
+            rest.contentReservationPx, open.contentReservationPx);
+        assertEquals(KEYBOARD, open.contentOverlapPx);
     }
 
     @Test
-    public void theWorkspaceReservesTheStackAndItsMarginLessWhatTheKeyboardHandsBack() {
+    public void aDisplayPagesRestReservationIsThePassItLaysOutKeyboardUpOrDown() {
+        // The travel's rest reservation (CrossingController) and the pass agree, so a crossing
+        // onto a Display page in overlay mode lands without a jump.
+        StackLayout.RestInput in = rest(committedTo(PageRef.TERMINAL, 0f),
+            PageRef.of(com.termux.app.page.PageKind.DISPLAY));
+        in.keyboardOverlays = true;
+        StackLayout.Input down = window(false);
+        down.keyboardOverlays = true;
+        assertEquals(run(down).contentReservationPx, StackLayout.restReservationPx(in));
+        in.keyboardShown = true;
+        StackLayout.Input up = window(true);
+        up.keyboardOverlays = true;
+        assertEquals(run(up).contentReservationPx, StackLayout.restReservationPx(in));
+        assertTrue("the rows take their room", StackLayout.restReservationPx(in) > 0);
+    }
+
+    @Test
+    public void theTerminalReservesTheStackAndItsMarginLessWhatTheKeyboardHandsBack() {
         StackLayout.Input in = window(true);
         StackLayout.Result r = run(in);
         assertEquals(r.stackHeightPx + r.bottomMarginPx, r.contentReservationPx);
         in.keyboardOverlays = true;
         StackLayout.Result floated = run(in);
         assertEquals(r.contentReservationPx - KEYBOARD, floated.contentReservationPx);
+    }
+
+    /** The Home page at rest with the toolbar and keyboard up, {@code lift} the IME's lift. */
+    private static StackLayout.Result homeWithLift(int lift) {
+        return homeWithLift(lift, false);
+    }
+
+    private static StackLayout.Result homeWithLift(int lift, boolean alwaysOn) {
+        Snapshot s = device(half(HOME, false), half(WINDOW, false))
+            .rows(PageRef.HOME).arrangement(HOME).build();
+        StackLayout.Input in = new StackLayout.Input(s);
+        in.toolbarShown = true;
+        in.toolbarHeightPx = TOOLBAR;
+        in.keyboardShown = true;
+        in.keyboardHeightPx = KEYBOARD;
+        in.imeLiftPx = lift;
+        in.homeKeyboardAlwaysOn = alwaysOn;
+        return run(in);
+    }
+
+    @Test
+    public void anAlwaysOnHomeKeepsItsDockRidingTheImeAsBefore() {
+        assertEquals("the lift grows an always-on Home's margin",
+            homeWithLift(0, true).bottomMarginPx + 50, homeWithLift(50, true).bottomMarginPx);
+    }
+
+    @Test
+    public void homesMarginCarriesNoImeLiftWhileTheTerminalsDoes() {
+        assertEquals("Home's dock does not ride the IME",
+            homeWithLift(0).bottomMarginPx, homeWithLift(50).bottomMarginPx);
+        assertEquals("floats still read the IME's real push", 50,
+            homeWithLift(50).homeFloatImePushPx);
+        StackLayout.Input t0 = window(true);
+        t0.imeLiftPx = 0;
+        StackLayout.Input t50 = window(true);
+        t50.imeLiftPx = 50;
+        assertEquals("the Terminal's grows by the lift", run(t0).bottomMarginPx + 50,
+            run(t50).bottomMarginPx);
     }
 
     // ---- reservation during travel ----
@@ -453,22 +511,25 @@ public class StackLayoutTest {
         StackLayout.Result tray = run(home(homeIn(DockStyle.GLASS_TRAY, true, false), false, 0));
         int gap = tray.stackEdgeGapPx;
         // D11 (ADR 0018 §4): on Home the keyboard no longer refuses the card; it stands on the
-        // keyboard, flush, and Floating's gap goes. The Workspace's tray keeps it (below).
+        // keyboard, flush, and Floating's gap goes. The Terminal's tray keeps it (below).
         assertEquals("the keyboard up on Home: the card stands on it", 0,
             run(home(peek, true, 0)).stackEdgeGapPx);
-        // The Workspace in Peek, Floating, keyboard up: the card does not stand, the gap stays.
-        Half workspacePeek = Half.builder(WINDOW).floating(true).dockHeightScale(1.95f)
+        // The Terminal in Peek, Floating, keyboard up: the card does not stand, the gap stays.
+        Half terminalPeek = Half.builder(WINDOW).floating(true).dockHeightScale(1.95f)
             .design(DockStyle.PEEK_GLASS).build();
-        StackLayout.Input workspace = new StackLayout.Input(device(half(HOME, false),
-            workspacePeek).rows(PageRef.TERMINAL).arrangement(WINDOW).build());
-        workspace.toolbarShown = true;
-        workspace.keyboardShown = true;
-        workspace.keyboardHeightPx = KEYBOARD;
-        assertTrue("the keyboard up on the Workspace keeps Floating's gap",
-            run(workspace).stackEdgeGapPx > 0);
+        StackLayout.Input terminal = new StackLayout.Input(device(half(HOME, false),
+            terminalPeek).rows(PageRef.TERMINAL).arrangement(WINDOW).build());
+        terminal.toolbarShown = true;
+        terminal.keyboardShown = true;
+        terminal.keyboardHeightPx = KEYBOARD;
+        assertTrue("the keyboard up on the Terminal keeps Floating's gap",
+            run(terminal).stackEdgeGapPx > 0);
+        // #309: on Home the system keyboard covers the dock too, so its lift neither refuses the
+        // card nor stands under the stack: the card keeps its rest, flush, with no lift margin.
         StackLayout.Result lifted = run(home(peek, false, LIFT));
-        assertEquals("lifted over the system keyboard", gap, lifted.stackEdgeGapPx);
-        assertEquals(gap + LIFT, lifted.bottomMarginPx);
+        assertEquals("the system keyboard up on Home: the card stands at its rest", 0,
+            lifted.stackEdgeGapPx);
+        assertEquals(0, lifted.bottomMarginPx);
         assertEquals("the Search field under the row", gap,
             run(home(homeIn(DockStyle.PEEK_GLASS, true, true), false, 0)).stackEdgeGapPx);
         StackLayout.Input away = home(peek, false, 0);
@@ -484,6 +545,18 @@ public class StackLayoutTest {
             .stackEdgeGapPx);
         assertEquals(0, run(home(homeIn(DockStyle.PEEK_GLASS, false, false), true, 0))
             .stackEdgeGapPx);
+    }
+
+    @Test
+    public void theEdgeGapAHomeRestKeepsIsThePassesForTheFloatingAndTheFlushDock() {
+        for (boolean floating : new boolean[] {false, true}) {
+            Snapshot s = homeIn(DockStyle.GLASS_TRAY, floating, false);
+            DockLayout rest = DockGeometry.compute(s.restOf(PageRef.HOME));
+            StackLayout.RestInput in = new StackLayout.RestInput(s, PageRef.HOME);
+            in.toolbarShown = true;
+            assertEquals("floating=" + floating, run(home(s, false, 0)).stackEdgeGapPx,
+                StackLayout.restGridEdgeGapPx(in, rest));
+        }
     }
 
     @Test

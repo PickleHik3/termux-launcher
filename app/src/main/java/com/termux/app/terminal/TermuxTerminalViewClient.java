@@ -51,6 +51,7 @@ import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
+import com.termux.terminal.GhosttyKeys;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalLinks;
@@ -318,7 +319,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onSingleTapUp(MotionEvent e) {
-        // The Workspace may be empty (no shell at all); a tap then has nothing to reach.
+        // The Terminal may be empty (no shell at all); a tap then has nothing to reach.
         TerminalSession session = mHost.currentSession();
         TerminalEmulator term = session == null ? null : session.getEmulator();
         if (term == null) return;
@@ -487,6 +488,15 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         return handleRegistryKeybinds(e, false);
     }
 
+    /**
+     * A chord from the in-app keyboard, offered to the user's bindings before whatever surface
+     * is typing gets it. Unlike a terminal stroke an unbound chord is never swallowed here: it
+     * goes on to the field or the shell exactly as it would have.
+     */
+    public boolean consumeInAppKeyboardChord(@NonNull KeyEvent e) {
+        return handleRegistryKeybinds(e, false);
+    }
+
     private boolean handleRegistryKeybinds(KeyEvent e) {
         return handleRegistryKeybinds(e, true);
     }
@@ -651,6 +661,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
             if (action.type == TerminalBindingConfig.ActionType.SEND_KEY) {
                 TerminalSession session = mHost.currentSession();
+                // The Fast engine's library encoder writes the key itself; Standard goes on to the Java one.
+                if (session != null && TerminalBindingKeyEncoder.sendOnLibrary(action.value, session.getEmulator()) >= 0) {
+                    handled = true;
+                    continue;
+                }
                 String encoded = session == null ? null
                     : TerminalBindingKeyEncoder.encode(action.value, session.getEmulator());
                 if (encoded == null) {
@@ -809,14 +824,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     public boolean readExtraKeysSpecialButton(SpecialButton specialButton) {
-        if (mHost.extraKeysView() == null)
-            return false;
-        Boolean state = mHost.extraKeysView().readSpecialButton(specialButton, true);
-        if (state == null) {
-            Logger.logError(LOG_TAG, "Failed to read an unregistered " + specialButton + " special button value from extra keys.");
-            return false;
-        }
-        return state;
+        return mHost.extraKeyModifiers().read(specialButton, true);
     }
 
     /**
@@ -841,7 +849,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onShowNotice(CharSequence text) {
-        AppNotice.confirm(mContext, "⧉", text);
+        AppNotice.confirm(mContext, R.drawable.ic_rl_copy, text);
     }
 
     @Override
@@ -974,9 +982,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
             if (resultingKeyCode != -1) {
                 TerminalEmulator term = session.getEmulator();
-                session.write(KeyHandler.getCode(resultingKeyCode, 0, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode()));
+                // The Fast engine's library encoder takes the key; Standard writes the Java sequence.
+                boolean sent = term.usesLibraryInputEncoders() && term.sendLibraryKey(
+                    GhosttyKeys.fromAndroidKeyCode(resultingKeyCode), GhosttyKeys.ACTION_PRESS, 0, 0, 0, "", false) >= 0;
+                if (!sent)
+                    session.write(KeyHandler.getCode(resultingKeyCode, 0, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode()));
             } else if (resultingCodePoint != -1) {
-                session.writeCodePoint(altDown, resultingCodePoint);
+                if (TerminalBindingKeyEncoder.sendCodePointOnLibrary(session.getEmulator(), resultingCodePoint, altDown) < 0)
+                    session.writeCodePoint(altDown, resultingCodePoint);
             }
             return true;
         } else if (ctrlDown) {
@@ -1269,8 +1282,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     public boolean toggleKeyboardTurnedOff() {
         boolean off = !isKeyboardTurnedOff();
         setKeyboardTurnedOff(off);
-        AppNotice.show(mContext, off ? R.string.notice_keyboard_turned_off
-            : R.string.notice_keyboard_turned_on);
+        AppNotice.show(mContext, R.drawable.ic_rl_keyboard, mContext.getString(off
+            ? R.string.notice_keyboard_turned_off : R.string.notice_keyboard_turned_on), false);
         return !off;
     }
 

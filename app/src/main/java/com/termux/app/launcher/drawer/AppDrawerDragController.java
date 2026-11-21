@@ -60,6 +60,12 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
          * ({@link DrawerHandOverPolicy}); NaN while there is none, and nothing is handed over.
          */
         default float handOverTopRawY() { return Float.NaN; }
+
+        /**
+         * Whether a carried app may go to Home at all. False while the drawer is being edited:
+         * the drag stays the drawer's, and only a folder drop on an app or folder takes effect.
+         */
+        default boolean dragMayLeaveDrawer() { return true; }
     }
 
     private final SuggestionBarView dock;
@@ -122,9 +128,16 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
         boolean started = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
             ? source.startDragAndDrop(clip, shadow, drop, 0)
             : source.startDrag(clip, shadow, drop, 0);
-        if (!started) cleanup();
-        else host.onDragStateChanged(true);
-        return started;
+        if (!started) {
+            cleanup();
+            return false;
+        }
+        host.onDragStateChanged(true);
+        // Launcher3's way: an app picked up goes to Home at once, which closes the drawer and
+        // shows Home and its dock under the finger. Where Home cannot take it, the drag stays the
+        // drawer's (its folders), and leaving through the top edge tries again.
+        handOverToHome();
+        return true;
     }
 
     /**
@@ -134,7 +147,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
      */
     public void onDragMoved(float rawX, float rawY) {
         LocalState state = active;
-        if (state == null || state.homeDrop == null) return;
+        if (state == null || state.homeDrop == null || !host.dragMayLeaveDrawer()) return;
         lastRawX = rawX;
         lastRawY = rawY;
         long now = SystemClock.uptimeMillis();
@@ -181,6 +194,7 @@ public final class AppDrawerDragController implements AppDrawerPickupDelegate {
     private boolean handOverToHome() {
         LocalState state = active;
         if (state == null || state.homeDrop == null) return false;
+        if (!host.dragMayLeaveDrawer()) return false;
         HomeAppDrop.Target home = host.homeAppDropTarget();
         if (home == null || !home.canTakeAppDrop()) return false;
         HomeAppDrop drop = state.homeDrop;

@@ -20,6 +20,7 @@ import androidx.annotation.Nullable;
 import com.google.android.material.button.MaterialButton;
 import com.termux.R;
 import com.termux.ai.TaiDownloadHub;
+import com.termux.ai.TaiPlatformCaps;
 import com.termux.ai.TaiTierPolicy;
 
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The AI card's page: a row per capability with its model and size, ticked by tier, a Wi-Fi only
@@ -49,6 +51,37 @@ final class AiCardPage implements SetupCardPage {
     @Nullable private List<String> mQueued;
     private boolean mFinished;
     @Nullable private TaiDownloadHub.Listener mListener;
+
+    /** Asks for the GPU probe off the main thread; {@code onProbed} runs there once the facts are known. */
+    interface ProbeRequest {
+        void request(@NonNull Context appContext, @NonNull Runnable onProbed);
+    }
+
+    /** The real request: as the Model Centre does, start the runtime for the probe on a daemon thread. */
+    static final ProbeRequest RUNTIME_PROBE = (app, onProbed) -> {
+        TaiPlatformCaps caps = TaiPlatformCaps.cached(app);
+        if (caps.probed || !caps.anyLocalBackend()) return;
+        Thread thread = new Thread(() -> {
+            boolean probed;
+            try {
+                probed = TaiPlatformCaps.probeInRuntime(app).probed;
+            } catch (RuntimeException e) {
+                probed = false;
+            }
+            if (probed) onProbed.run();
+        }, "tai-setup-gpu-probe");
+        thread.setDaemon(true);
+        thread.start();
+    };
+
+    /** Seams for tests: the probe request and the phone's env. */
+    static ProbeRequest sProbeRequest = RUNTIME_PROBE;
+    static Function<Context, TaiTierPolicy.Env> sEnvSource = TaiTierPolicy.Env::forDevice;
+
+    /** Bumped whenever the page is built or torn down; a probe result for an older one is dropped. */
+    private int mGeneration;
+    /** The user ticked or unticked a row, so a late probe result must not re-tick. */
+    private boolean mUserTicked;
 
     private static final long UPDATE_INTERVAL_MS = 250L;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
@@ -73,7 +106,9 @@ final class AiCardPage implements SetupCardPage {
         mFinished = false;
         mNeedWifiNote = false;
         mQueued = null;
-        mEnv = TaiTierPolicy.Env.forDevice(context);
+        mUserTicked = false;
+        mGeneration++;
+        mEnv = sEnvSource.apply(context);
         mSizes = AiModelDownloads.catalogSizes();
         mWifiOnly = AiModelDownloads.wifiOnly(context);
         mRows = AiModelRows.rows(mEnv, AiModelDownloads.installedIds(context), mSizes);
@@ -82,7 +117,31 @@ final class AiCardPage implements SetupCardPage {
         mRoot = new LinearLayout(context);
         mRoot.setOrientation(LinearLayout.VERTICAL);
         render();
+        final int generation = mGeneration;
+        sProbeRequest.request(context.getApplicationContext(),
+            () -> mHandler.post(() -> onProbeLanded(generation)));
         return mRoot;
+    }
+
+    /** The probe facts landed: re-read the phone, keep a choice the user made, else re-tick. */
+    void onProbeLanded(int generation) {
+        if (generation != mGeneration || mContext == null || mRoot == null) return;
+        mEnv = sEnvSource.apply(mContext);
+        mRows = AiModelRows.rows(mEnv, AiModelDownloads.installedIds(mContext), mSizes);
+        if (!mUserTicked && mQueued == null) {
+            mTicked.clear();
+            mTicked.addAll(AiModelRows.initialTicks(mRows));
+        } else {
+            Set<String> ids = new LinkedHashSet<>();
+            for (AiModelRows.Row row : mRows) ids.add(row.id);
+            mTicked.retainAll(ids);
+        }
+        render();
+    }
+
+    /** For tests: the ids ticked now. */
+    Set<String> tickedForTest() {
+        return new LinkedHashSet<>(mTicked);
     }
 
     @Override
@@ -91,6 +150,7 @@ final class AiCardPage implements SetupCardPage {
     }
 
     private void detach() {
+        mGeneration++;
         mHandler.removeCallbacks(mUpdate);
         mUpdatePending = false;
         if (mListener != null && mContext != null) {
@@ -349,6 +409,7 @@ final class AiCardPage implements SetupCardPage {
                 box.setChecked(ticked);
                 box.setContentDescription(context.getString(row.titleRes));
                 box.setOnCheckedChangeListener((b, checked) -> {
+                    mUserTicked = true;
                     if (checked) mTicked.add(row.id); else mTicked.remove(row.id);
                     render();
                 });

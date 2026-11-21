@@ -12,12 +12,15 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Where speech-to-text runs is remembered per speech model: the model's own pick wins, a model
  * with none follows the single value older builds stored, and with neither it is auto.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiSettingsSttAcceleratorTest {
     private SharedPreferences preferences;
     private TaiSettings settings;

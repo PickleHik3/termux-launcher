@@ -13,8 +13,8 @@ import com.termux.R;
 import com.termux.app.fragments.settings.termux.AppearanceSettingsStore;
 import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.launcher.widget.HomeIconSize;
+import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -25,6 +25,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
+import android.app.Application;
 
 /**
  * The Keyboard, Home and Global cards through the controller (editor-redesign §2, §6): the
@@ -33,7 +34,7 @@ import org.robolectric.util.ReflectionHelpers;
  * stands at any Look, and the sections carry their notes.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class KeyboardHomeGlobalCardsTest {
 
     private TermuxAppSharedPreferences preferences;
@@ -102,7 +103,7 @@ public class KeyboardHomeGlobalCardsTest {
             com.termux.app.place.layout.LayoutStore.shared(context);
         documents.load();
         EditorTestHarness harness = new EditorTestHarness(preferences, null);
-        harness.editor.present(EditorCard.HOME, PaneWallPage.WIDGETS, null);
+        harness.editor.present(EditorCard.HOME, PageKind.HOME, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         EditorCardSheet.Model model = model(harness.editor);
         assertEquals(EditorCard.HOME, harness.editor.shownCard());
@@ -128,7 +129,7 @@ public class KeyboardHomeGlobalCardsTest {
     public void globalsGlassMaterialStandsAtAnyLookAndItsTintColourIsThreeSwatches() {
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
         EditorCardSheet.Model model = model(editor);
-        assertFalse("the Workspace is on a Look, not Custom",
+        assertFalse("the Terminal is on a Look, not Custom",
             AppearanceLooks.isCustomStop(model.value(Row.LOOK)));
         assertTrue(model.shown(Row.VIBRANCY));
         assertTrue(model.shown(Row.GLASS_EDGE));
@@ -165,7 +166,7 @@ public class KeyboardHomeGlobalCardsTest {
 
     // ------------------------------------------------------------------------------- the drive
 
-    private SurfaceEditorController open(EditorCard card, PaneWallPage place) {
+    private SurfaceEditorController open(EditorCard card, PageKind place) {
         EditorTestHarness harness = new EditorTestHarness(preferences, null);
         harness.editor.present(card, place, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();

@@ -32,6 +32,7 @@ import org.robolectric.util.ReflectionHelpers;
 import java.lang.reflect.Proxy;
 import java.util.EnumMap;
 import java.util.Map;
+import android.app.Application;
 
 /**
  * A Blur or Tint drag on a card: each tick is one light glass pass at most, and the
@@ -39,7 +40,7 @@ import java.util.Map;
  * and palette, and the window bar's full refresh) runs not at all until the release, then once.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class GlassDragPreviewTest {
 
     private static final int TICKS = 12;

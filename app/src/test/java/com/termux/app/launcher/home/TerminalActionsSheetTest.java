@@ -26,10 +26,11 @@ import org.robolectric.annotation.GraphicsMode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import android.app.Application;
 
 /** The terminal's More menu drawn on Home's sheet, and Home's own rows still as they were. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28, qualifiers = "w411dp-h918dp-420dpi")
+@Config(sdk = 28, qualifiers = "w411dp-h918dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class TerminalActionsSheetTest {
 
@@ -133,7 +134,7 @@ public class TerminalActionsSheetTest {
         for (HomeActionsSheetPolicy.Item item : HomeActionsSheetPolicy.itemsFor(true, true, false, 1, false)) {
             assertNotNull(item.name(), sheet.rowFor(item));
         }
-        assertEquals(R.drawable.ic_symbol_terminal, HomeActionsSheet.iconFor(HomeActionsSheetPolicy.Item.TERMINAL));
+        assertEquals(R.drawable.ic_rl_terminal, HomeActionsSheet.iconFor(HomeActionsSheetPolicy.Item.TERMINAL));
         assertEquals(R.string.home_actions_terminal, HomeActionsSheet.labelFor(HomeActionsSheetPolicy.Item.TERMINAL));
     }
 

@@ -10,8 +10,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -24,6 +24,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.ReflectionHelpers;
+import android.app.Application;
 
 /**
  * The editor's cards through the controller: a card writes the half the frame shows, Reset puts
@@ -31,7 +32,7 @@ import org.robolectric.util.ReflectionHelpers;
  * covers both halves, and Undo puts both back.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class SurfaceEditorCardsTest {
 
     private TermuxAppSharedPreferences preferences;
@@ -49,16 +50,16 @@ public class SurfaceEditorCardsTest {
 
     @Test
     public void aDockSliderOnHomeWritesHomeAlone() {
-        SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.WIDGETS);
-        assertEquals(PaneWallPage.WIDGETS, editor.screen());
-        int workspace = opacity(PaneWallPage.TERMINAL);
+        SurfaceEditorController editor = open(EditorCard.DOCK, PageKind.HOME);
+        assertEquals(PageKind.HOME, editor.screen());
+        int terminal = opacity(PageKind.TERMINAL);
 
         model(editor).onValue(Row.OPACITY, 23, false);
         model(editor).onReleased(Row.OPACITY);
 
-        assertEquals(23, opacity(PaneWallPage.WIDGETS));
-        // Home's value is the wall's: the Workspace's dock wears it unless it holds its own.
-        assertEquals("the Workspace's dock follows the wall", 23, opacity(PaneWallPage.TERMINAL));
+        assertEquals(23, opacity(PageKind.HOME));
+        // Home's value is the wall's: the Terminal's dock wears it unless it holds its own.
+        assertEquals("the Terminal's dock follows the wall", 23, opacity(PageKind.TERMINAL));
         assertTrue("the dot: Home's own value", model(editor).ownValue(Row.OPACITY));
     }
 
@@ -82,7 +83,7 @@ public class SurfaceEditorCardsTest {
 
     @Test
     public void resetPutsTheSurfaceBackOnTheHalfsLook() {
-        SurfaceEditorController editor = open(EditorCard.STATUS, PaneWallPage.WIDGETS);
+        SurfaceEditorController editor = open(EditorCard.STATUS, PageKind.HOME);
         model(editor).onValue(Row.TINT, 80, false);
         model(editor).onReleased(Row.TINT);
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT,
@@ -98,14 +99,15 @@ public class SurfaceEditorCardsTest {
     @Test
     public void oneDirtyStateCoversBothHalvesAndUndoPutsBothBack() {
         String atOpen = AppearanceSnapshot.signatureOf(preferences);
-        SurfaceEditorController editor = open(EditorCard.DOCK, PaneWallPage.WIDGETS);
+        SurfaceEditorController editor = open(EditorCard.DOCK, PageKind.HOME);
         assertFalse(isDirty(editor));
 
         model(editor).onValue(Row.OPACITY, 15, false);
         model(editor).onReleased(Row.OPACITY);
         assertTrue("a Home write is unsaved", isDirty(editor));
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
-            TermuxAppSharedPreferences.terminalPageId(), 9);
+        preferences.overDraft(com.termux.shared.settings.preferences.PreferenceDraft.current())
+            .detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
+                TermuxAppSharedPreferences.terminalPageId(), 9);
 
         editor.undo();
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
@@ -127,8 +129,8 @@ public class SurfaceEditorCardsTest {
 
     @Test
     public void theTerminalsCardIsNotOfferedOnHome() {
-        SurfaceEditorController editor = open(EditorCard.TERMINAL, PaneWallPage.WIDGETS);
-        assertEquals("the terminal stands on the Workspace alone: Home's card stands at peek",
+        SurfaceEditorController editor = open(EditorCard.TERMINAL, PageKind.HOME);
+        assertEquals("the terminal stands on the Terminal alone: Home's card stands at peek",
             EditorCard.HOME, editor.shownCard());
         editor.present(EditorCard.HOME, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
@@ -137,8 +139,8 @@ public class SurfaceEditorCardsTest {
 
     @Test
     public void frostOnASurfaceWritesItsOwnBlurAndGrainOnTheHalf() {
-        SurfaceEditorController editor = open(EditorCard.STATUS, PaneWallPage.WIDGETS);
-        int workspaceBlur = preferences.getSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
+        SurfaceEditorController editor = open(EditorCard.STATUS, PageKind.HOME);
+        int terminalBlur = preferences.getSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
             TermuxAppSharedPreferences.terminalPageId());
 
         model(editor).onValue(Row.FROST, 40, false);
@@ -148,7 +150,7 @@ public class SurfaceEditorCardsTest {
             SurfaceSlot.STATUS, SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(GlassControls.grainForGlass(40), preferences.getSurfaceValue(
             SurfaceSlot.STATUS, SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals("the Workspace's status bar wears the wall's value",
+        assertEquals("the Terminal's status bar wears the wall's value",
             GlassControls.blurForGlass(40),
             preferences.getSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
                 TermuxAppSharedPreferences.terminalPageId()));
@@ -157,9 +159,9 @@ public class SurfaceEditorCardsTest {
     }
 
     @Test
-    public void allSurfacesStandsAtTheCustomStopAndWritesBase() {
+    public void allSurfacesStandsAtTheCustomStopAndWritesGlobal() {
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
-        assertEquals(PaneWallPage.TERMINAL, editor.screen());
+        assertEquals(PageKind.TERMINAL, editor.screen());
         EditorCardSheet.Model model = model(editor);
         // Overhaul §2: Customization's Appearance shows every slider at every preset stop.
         assertTrue("a Look stop shows its sliders", model.shown(Row.FROST));
@@ -174,20 +176,20 @@ public class SurfaceEditorCardsTest {
         assertTrue(model.shown(Row.FROST));
         assertTrue(model.shown(Row.TEXT_SIZE));
 
-        // Global writes Base, which every page wears (ADR 0015 §6): no half of its own.
+        // Global writes Global, which every page wears (ADR 0015 §6): no half of its own.
         model.onValue(Row.OPACITY, 33, false);
         model.onReleased(Row.OPACITY);
-        assertEquals("Global writes Base", 33,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
-        assertEquals("the dock wears it on every page", 33, opacity(PaneWallPage.WIDGETS));
-        assertEquals(33, opacity(PaneWallPage.TERMINAL));
+        assertEquals("Global writes Global", 33,
+            preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY, TermuxAppSharedPreferences.PAGE_WALL));
+        assertEquals("the dock wears it on every page", 33, opacity(PageKind.HOME));
+        assertEquals(33, opacity(PageKind.TERMINAL));
 
         model.onValue(Row.FROST, 75, false);
         model.onReleased(Row.FROST);
         assertEquals(GlassControls.blurForGlass(75),
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.BLUR, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(GlassControls.grainForGlass(75),
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
+            preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN, TermuxAppSharedPreferences.PAGE_WALL));
         assertEquals(75, model.value(Row.FROST));
 
         model.onValue(Row.LOOK, 1, false);
@@ -197,12 +199,12 @@ public class SurfaceEditorCardsTest {
 
     @Test
     public void openingAndAThemeChangeNeverWriteHome() {
-        // Home on its own look (Tint), the Workspace on Mist: unequal halves.
+        // Home on its own look (Tint), the Terminal on Mist: unequal halves.
         SurfacePresets.applyLook(preferences, SurfacePresets.presets(preferences).get(2),
-            PaneWallPage.WIDGETS);
+            PageKind.HOME);
         java.util.Map<String, Object> home = homeKeys();
-        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PaneWallPage.WIDGETS);
-        assertEquals(PaneWallPage.WIDGETS, editor.screen());
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.HOME);
+        assertEquals(PageKind.HOME, editor.screen());
 
         model(editor).onValue(Row.THEME, 2, false);
         model(editor).onReleased(Row.THEME);
@@ -217,57 +219,77 @@ public class SurfaceEditorCardsTest {
         java.util.List<SurfacePresets.Preset> looks = SurfacePresets.presets(preferences);
         // A saved Custom on Solid's numbers; the wall on another Look. Global is the wall, so
         // Custom there brings the saved numbers back on it (the page side is EditorScreenLookTest).
-        SurfacePresets.applyLook(preferences, looks.get(3), PaneWallPage.WIDGETS);
-        int saved = opacity(PaneWallPage.WIDGETS);
+        SurfacePresets.applyLook(preferences, looks.get(3), PageKind.HOME);
+        int saved = opacity(PageKind.HOME);
         SurfacePresets.saveCustom(preferences);
-        SurfacePresets.applyLook(preferences, looks.get(2), PaneWallPage.WIDGETS);
+        SurfacePresets.applyLook(preferences, looks.get(2), PageKind.HOME);
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, null);
-        assertEquals(PaneWallPage.TERMINAL, editor.screen());
+        assertEquals(PageKind.TERMINAL, editor.screen());
 
         model(editor).onValue(Row.LOOK, AppearanceLooks.CUSTOM_STOP, false);
         model(editor).onReleased(Row.LOOK);
 
         assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
-        assertEquals("the saved Custom's dock is the wall's", saved, opacity(PaneWallPage.WIDGETS));
+        assertEquals("the saved Custom's dock is the wall's", saved, opacity(PageKind.HOME));
+    }
+
+    /** The widgets' glass draft as the editor sees it, recording what it was asked. */
+    private static final class FakeWidgetGlass implements SurfaceEditorController.WidgetGlassDraft {
+        final java.util.List<String> calls = new java.util.ArrayList<>();
+        boolean held;
+
+        @Override public void followPage() { calls.add("follow"); held = true; }
+        @Override public boolean isDirty() { return held; }
+        @Override public void commit() { calls.add("commit"); held = false; }
+        @Override public void discard() { calls.add("discard"); held = false; }
+    }
+
+    private SurfaceEditorController openOnHome(FakeWidgetGlass glass) {
+        EditorTestHarness harness = new EditorTestHarness(preferences,
+            (method, args) -> method.equals("widgetGlassDraft") ? glass : null);
+        SurfaceEditorController editor = harness.editor;
+        editor.present(EditorCard.HOME, PageKind.HOME, null);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        glass.calls.clear();
+        return editor;
     }
 
     @Test
-    public void theGlassWidgetsSwitchAppliesToEveryWidgetAndUndoGivesTheirChoicesBack() {
-        java.util.List<String> calls = new java.util.ArrayList<>();
-        java.util.Map<Integer, String> held = java.util.Collections.singletonMap(-1, "on");
-        Object[] restored = {null};
-        EditorTestHarness harness = new EditorTestHarness(preferences, (method, args) -> {
-            if (method.equals("clearWidgetGlassChoices")) {
-                calls.add("clear");
-                return held;
-            }
-            if (method.equals("restoreWidgetGlassChoices")) {
-                calls.add("restore");
-                restored[0] = args[0];
-            }
-            return null;
-        });
-        SurfaceEditorController editor = harness.editor;
-        editor.present(EditorCard.HOME, PaneWallPage.WIDGETS, null);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+    public void theGlassWidgetsSwitchDraftsEveryWidgetAndUndoDropsTheDraft() {
+        FakeWidgetGlass glass = new FakeWidgetGlass();
+        SurfaceEditorController editor = openOnHome(glass);
         assertEquals(EditorCard.HOME, editor.shownCard());
         assertTrue("the row says it applies to every widget",
             model(editor).summary(Row.GLASS_WIDGETS) != null);
 
         model(editor).onValue(Row.GLASS_WIDGETS, 0, false);
         model(editor).onValue(Row.GLASS_WIDGETS, 1, false);
-        assertEquals(java.util.Arrays.asList("clear", "clear"), calls);
+        assertEquals(java.util.Arrays.asList("follow", "follow"), glass.calls);
+        assertTrue("a widget shown other than stored is unsaved", isDirty(editor));
 
         editor.undo();
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
-        assertEquals(java.util.Arrays.asList("clear", "clear", "restore"), calls);
-        assertEquals("each widget's choice as it first stood", held, restored[0]);
+        assertTrue("Undo drops the draft", glass.calls.contains("discard"));
+        assertFalse("and stores nothing", glass.calls.contains("commit"));
+        assertFalse(isDirty(editor));
+    }
+
+    @Test
+    public void doneStoresTheWidgetsGlassDraft() {
+        FakeWidgetGlass glass = new FakeWidgetGlass();
+        SurfaceEditorController editor = openOnHome(glass);
+        model(editor).onValue(Row.GLASS_WIDGETS, 1, false);
+        editor.done();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals("written once, before the session's end drops what is left",
+            "commit", glass.calls.get(1));
+        assertEquals(1, java.util.Collections.frequency(glass.calls, "commit"));
     }
 
     // ------------------------------------------------------------------------------- the drive
 
-    private SurfaceEditorController open(EditorCard card, PaneWallPage place) {
+    private SurfaceEditorController open(EditorCard card, PageKind place) {
         EditorTestHarness harness = new EditorTestHarness(preferences, null);
         harness.editor.present(card, place, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
@@ -285,8 +307,8 @@ public class SurfaceEditorCardsTest {
     /** Every key the store holds for Home's half alone, with its value. */
     private java.util.Map<String, Object> homeKeys() {
         java.util.Map<String, Object> out = new java.util.TreeMap<>();
-        // Home is the wall now: its own look is the plain per-half keys (Base, the surfaces'
-        // cells and links, the material point), which a Workspace edit must leave alone.
+        // Home is the wall now: its own look is the plain per-half keys (Global, the surfaces'
+        // cells and links, the material point), which a Terminal edit must leave alone.
         java.util.Map<String, ?> all = preferences.getSharedPreferences().getAll();
         for (String key : AppearanceSnapshot.halfAbleKeys()) {
             if (all.containsKey(key))
@@ -296,13 +318,8 @@ public class SurfaceEditorCardsTest {
         return out;
     }
 
-    private int opacity(PaneWallPage half) {
+    private int opacity(PageKind half) {
         return preferences.getSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, SurfacePresets.pageOf(half));
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

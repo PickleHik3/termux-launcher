@@ -30,7 +30,7 @@ import org.robolectric.annotation.ConscryptMode;
 
 /**
  * The settings root by the wall's halves (settings restructure 10-19, refiled 10-24): the search
- * box, then Your launcher (Home, Dock, Terminal, Linux apps), Everywhere (Appearance,
+ * box, then Your launcher (Home, Apps, Terminal, Linux apps), Everywhere (Appearance,
  * Keyboard, Notifications, On-device AI) and System (General). Each row opens its section's page,
  * as SettingsTree names it; Appearance opens the editor.
  */
@@ -62,10 +62,12 @@ public class RootPreferencesSearchIndexTest {
     public void theRootIsSearchThenTheThreeGroupsInPlanOrder() {
         SettingsActivity.RootPreferencesFragment root = launch();
         PreferenceScreen screen = root.getPreferenceScreen();
-        assertEquals("settings_search", screen.getPreference(0).getKey());
-        assertEquals(1 + EXPECTED_GROUPS.length, screen.getPreferenceCount());
+        // The process-limit notice stands over the search; it takes no height without a notice.
+        assertEquals("process_limit_notice", screen.getPreference(0).getKey());
+        assertEquals("settings_search", screen.getPreference(1).getKey());
+        assertEquals(2 + EXPECTED_GROUPS.length, screen.getPreferenceCount());
         for (int g = 0; g < EXPECTED_GROUPS.length; g++) {
-            PreferenceCategory group = (PreferenceCategory) screen.getPreference(1 + g);
+            PreferenceCategory group = (PreferenceCategory) screen.getPreference(2 + g);
             assertEquals(EXPECTED_GROUPS[g], group.getKey());
             assertEquals(EXPECTED_ROWS[g].length, group.getPreferenceCount());
             for (int i = 0; i < EXPECTED_ROWS[g].length; i++) {

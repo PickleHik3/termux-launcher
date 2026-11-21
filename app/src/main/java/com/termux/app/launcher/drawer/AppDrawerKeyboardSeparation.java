@@ -1,20 +1,23 @@
 package com.termux.app.launcher.drawer;
 
+import androidx.annotation.NonNull;
+
 /**
  * How the open drawer stands apart from the built-in keyboard its search raised: the same way the
- * terminal pane stands apart from the keyboard on the Workspace.
+ * terminal pane stands apart from the keyboard on the Terminal.
  *
- * <p>Three numbers, all pure so they can be tested without a view tree:
+ * <p>All pure so they can be tested without a view tree:
  * <ul>
- *   <li>the gap between the plane's bottom and the keyboard's top — the pane gap, the air the
- *       terminal pane leaves above the keyboard, rather than the 4dp the dock happened to stand
- *       off the extra-keys row at the pull;</li>
- *   <li>the plane's corner radius — under Docked the plane runs off the bezel and its only corners
- *       that show are the two the reveal brings up above the keyboard, so they take the terminal
- *       pane's corners; under Floating the panel keeps its own all round;</li>
+ *   <li>Docked's card — the plane is a card of its own, keyboard up or down: Margin in from the
+ *       screen's sides, Margin below the status bar and Margin above the navigation band or the
+ *       keyboard card, with the wallpaper round it; the keyboard moves only its bottom;</li>
+ *   <li>the gap between the plane's bottom and the keyboard's top — under Docked, Margin; under
+ *       Floating the pane gap;</li>
+ *   <li>the plane's corner radius — under Docked the card's four corners are the terminal pane's;
+ *       under Floating the panel keeps its own all round;</li>
  *   <li>the under-pill strip's opacity — the drawer fades the strip out as its glass arrives under
  *       it, but once the keyboard is revealed the plane stops above the keyboard and the strip
- *       under the pill is the keyboard's glass run on, exactly as on the Workspace.</li>
+ *       under the pill is the keyboard's glass run on, exactly as on the Terminal.</li>
  * </ul>
  */
 final class AppDrawerKeyboardSeparation {
@@ -29,6 +32,107 @@ final class AppDrawerKeyboardSeparation {
      */
     static float revealGapPx(float paneGapPx, float capturedGapPx) {
         return paneGapPx >= 0f ? paneGapPx : Math.max(0f, capturedGapPx);
+    }
+
+    /**
+     * Whether the open drawer stands as a card of its own above the built-in keyboard: under
+     * Docked, where the keyboard is the frame's bottom slice running edge to edge. Floating's panel
+     * is a card already, and a system keyboard is a window of its own the drawer only ends above.
+     */
+    static boolean dockedCard(boolean rounded, boolean imePinned) {
+        return !rounded && !imePinned;
+    }
+
+    /**
+     * The air left at the plane's bottom above the keyboard. Docked's card takes Margin, the same
+     * air it leaves at its sides, so the wallpaper shows round it on three sides and between it
+     * and the keyboard card. Floating and a system keyboard keep {@code gapPx}. One owner for the
+     * content's bottom ({@code contentRect}) and the plane's ({@code applyFrame}).
+     *
+     * @param marginPx Margin; a negative value means the host gave none
+     */
+    static float planeGapPx(boolean rounded, boolean imePinned, float gapPx, float marginPx) {
+        return dockedCard(rounded, imePinned) ? Math.max(0f, marginPx) : gapPx;
+    }
+
+    /**
+     * The top of Docked's card: Margin below the status bar's inset, where a terminal pane's card
+     * starts below the bar, so the system's status icons stand on the wallpaper, not on the card.
+     * The content starts there too ({@code contentRect}).
+     *
+     * @param statusInsetPx the status bar's inset the host reaches through (0 when it does not)
+     * @param marginPx Margin; a negative value means the host gave none
+     */
+    static float dockedCardTopPx(float statusInsetPx, float marginPx) {
+        return Math.max(0f, statusInsetPx) + Math.max(0f, marginPx);
+    }
+
+    /**
+     * Docked's card with the keyboard down: the rectangle the plane opens to and the content is laid
+     * out in, so the grid, its labels and the A–Z strip are sized for the card and never for the
+     * screen. Margin in from the sides, its top at {@link #dockedCardTopPx}, its bottom Margin above
+     * where the Docked frame ends (the top of the navigation band the host reaches through). A
+     * keyboard only ever moves the bottom up from here ({@link #cardBottomPx}).
+     *
+     * @param statusInsetPx the status bar's inset the host reaches through (0 when it does not)
+     * @param bottomBandPx  the navigation band at the bottom the host reaches through
+     * @param marginPx      Margin; a negative value means the host gave none
+     */
+    static AppDrawerTransitionGeometry.Frame dockedCardRestFrame(float hostWidthPx,
+            float hostHeightPx, float statusInsetPx, float bottomBandPx, float marginPx) {
+        float m = Math.max(0f, marginPx);
+        float top = dockedCardTopPx(statusInsetPx, marginPx);
+        float bottom = Math.max(top, hostHeightPx - Math.max(0f, bottomBandPx) - m);
+        return new AppDrawerTransitionGeometry.Frame(m, top, Math.max(m, hostWidthPx - m), bottom);
+    }
+
+    /**
+     * The card's bottom at reveal {@code k}: its keyboard-down bottom at 0, {@code gapPx} above the
+     * keyboard's top at 1. The one owner of the number two phases read: the content rect at the
+     * keyboard decision (the reveal's target) and the plane on every frame of the reveal (its value),
+     * so the content ends where the plane comes to rest.
+     */
+    static float cardBottomPx(float restBottomPx, float keyboardTopPx, float gapPx, float reveal) {
+        return AppDrawerTransitionGeometry.resolveSearchPlaneBottom(restBottomPx, keyboardTopPx,
+            gapPx, reveal);
+    }
+
+    /**
+     * The plane's corner radius once open: Docked's card takes the terminal pane's corners all
+     * round, keyboard up or down; Floating keeps the drawer's own. A negative pane radius means none
+     * was given and the drawer's own is kept.
+     */
+    static float openRadiusPx(boolean rounded, float drawerRadiusPx, float paneRadiusPx) {
+        return revealRadiusPx(rounded, drawerRadiusPx, paneRadiusPx, 1f);
+    }
+
+    /**
+     * Docked's plane at reveal {@code k} while the plane is still growing from its seed: the frame
+     * as it is at 0, at 1 pulled into the card (Margin in from the left and right edges, its top at
+     * {@code topPx}, {@link #dockedCardTopPx}), its bottom at {@code bottomPx}. Once open the frame
+     * already is the card ({@link #dockedCardRestFrame}) and only the bottom moves; early in an open
+     * whose keyboard stays up it is what makes the plane a card above the keyboard from the first
+     * frame. An edge already further in than the card's is left where it is.
+     *
+     * @param frame the plane's frame before the reveal
+     * @param hostWidthPx the host's width, whose right edge Margin is measured from
+     * @param marginPx Margin; a negative value means the host gave none
+     * @param topPx the card's top at full reveal
+     * @param bottomPx the plane's bottom at this reveal
+     */
+    static AppDrawerTransitionGeometry.Frame dockedCardFrame(
+            @NonNull AppDrawerTransitionGeometry.Frame frame,
+            float hostWidthPx, float marginPx, float topPx, float bottomPx, float reveal) {
+        float k = AppDrawerTransitionGeometry.clamp01(reveal);
+        float m = Math.max(0f, marginPx);
+        float left = AppDrawerTransitionGeometry.lerp(frame.left, Math.max(frame.left, m), k);
+        float right = AppDrawerTransitionGeometry.lerp(frame.right,
+            Math.min(frame.right, hostWidthPx - m), k);
+        float top = AppDrawerTransitionGeometry.lerp(frame.top, Math.max(frame.top, topPx), k);
+        // A seed that reaches below the card's bottom (the dock beside the keyboard, early in an
+        // open that starts revealed) is a card of no height on that bottom, never one turned over.
+        return new AppDrawerTransitionGeometry.Frame(left, Math.min(top, bottomPx), right,
+            bottomPx);
     }
 
     /** The plane's bottom edge with the keyboard fully revealed, in host coordinates. */
@@ -59,13 +163,72 @@ final class AppDrawerKeyboardSeparation {
         return Math.min(frameTopPx, -radiusPx);
     }
 
+
     /**
-     * The under-pill strip's opacity: the drawer's cross-fade {@code 1 - p}, given back as the
-     * keyboard is revealed below the plane. At {@code reveal 0} this is the old fade exactly.
+     * Whether the built-in keyboard keeps its place for the drawer's whole open and close: under
+     * either dock style, with the keyboard up before the drawer was pulled (the Terminal's
+     * keyboard, as when the palette opens the drawer). Under Floating the panel rests above it
+     * ({@link #cardBottomOverKeyboardPx}). A system keyboard is a window of its own, never this. It is not the drawer's to take down or bring back, so it neither
+     * dips under the plane nor goes with the close, and the drawer card closes as one card above it.
+     * A keyboard the drawer's own search raised (down at the pull) keeps the reveal.
      */
-    static float navStripAlpha(float progress, float reveal) {
-        float p = AppDrawerTransitionGeometry.clamp01(progress);
-        float k = AppDrawerTransitionGeometry.clamp01(reveal);
-        return 1f - p * (1f - k);
+    static boolean keyboardStaysUp(boolean rounded, boolean imePinned, boolean textFieldSearch,
+                                   boolean keyboardUpAtPull) {
+        return !imePinned && !textFieldSearch && keyboardUpAtPull;
+    }
+
+    /**
+     * The reveal spring's target: none without a keyboard to reveal, all of it while the keyboard
+     * stays up ({@link #keyboardStaysUp}), open or closing, else the content's ask while open.
+     */
+    static float revealTarget(boolean revealable, boolean open, boolean staysUp,
+                              float contentFraction) {
+        if (!revealable) return 0f;
+        if (staysUp) return 1f;
+        return open ? AppDrawerTransitionGeometry.clamp01(contentFraction) : 0f;
+    }
+
+    /**
+     * The reveal an open starts from: already at its target while the keyboard stays up
+     * ({@link #keyboardStaysUp}), so the plane is a card above the keyboard from the first frame and
+     * never a sheet that rises over the keys and then shortens off them; else where it is.
+     */
+    static float revealAtOpen(boolean staysUp, float target, float current) {
+        return staysUp ? target : current;
+    }
+
+    /**
+     * The reveal the keyboard's bands are choreographed at: identity (1) while the keyboard stays
+     * up, so the plane never pushes it down or fades it, else the spring's {@code reveal}.
+     */
+    static float bandRevealFraction(boolean staysUp, float reveal) {
+        return staysUp ? 1f : reveal;
+    }
+
+    /**
+     * The drawer's own keyboard under either dock style (the one the drawer's search raised) comes and goes as a card: never
+     * faded, slid by this much below its resting top, from 0 at reveal 1 to off the bottom of the
+     * screen at reveal 0. It keeps its whole card look on the way (the drawer's sheet glass and
+     * dim it wears, its own rounded top); a fade of the container is what thinned the glass out
+     * under its keys and read as loose keys.
+     *
+     * @param hostHeightPx  the screen's bottom, in host coordinates
+     * @param keyboardTopPx the keyboard's resting top
+     */
+    static float keyboardSlidePx(float hostHeightPx, float keyboardTopPx, float reveal) {
+        return Math.max(0f, hostHeightPx - keyboardTopPx)
+            * (1f - AppDrawerTransitionGeometry.clamp01(reveal));
+    }
+
+    /**
+     * Docked's card bottom over a keyboard sliding as a card: one gap above the keyboard's live top,
+     * never below its keyboard-down bottom. Read with the keyboard where {@link #keyboardSlidePx}
+     * puts it on this frame, so the two edges move on the same frames with no timing of their own;
+     * at reveal 1 it is {@link #cardBottomPx} at 1, at reveal 0 the rest bottom, so the content rect
+     * (laid out at the reveal's target) still ends where the card comes to rest.
+     */
+    static float cardBottomOverKeyboardPx(float restBottomPx, float keyboardLiveTopPx,
+                                          float gapPx) {
+        return Math.min(restBottomPx, keyboardLiveTopPx - gapPx);
     }
 }

@@ -138,6 +138,15 @@ public final class SessionsIndicatorView extends LinearLayout implements TextSca
      */
     public void setBandInk(@NonNull com.termux.app.chrome.ChromeInk ink,
                            @NonNull com.termux.app.chrome.OnGlass.Resolution band) {
+        // Written again only for a band that reads differently (the bar asks on every settle).
+        com.termux.app.chrome.OnGlass.Resolution held = mBand;
+        if (mInk == ink && held != null && mBandSurface != null && mBandSurface == band.surface
+            && (held == band || (held.veil == band.veil && held.surface == band.surface
+                && held.ink == band.ink && held.veilCapped == band.veilCapped
+                && held.inkFlipped == band.inkFlipped && held.shortfall == band.shortfall))) {
+            mBand = band;
+            return;
+        }
         mInk = ink;
         mBand = band;
         mBandSurface = band.surface;

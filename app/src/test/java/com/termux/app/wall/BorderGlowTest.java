@@ -18,6 +18,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * The hold's glow: lit the moment a finger lands where its hold could page, brighter over the
@@ -25,7 +26,7 @@ import org.robolectric.annotation.Config;
  * once both ways under reduced motion. It asks for frames only while it rises or fades.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class BorderGlowTest {
 
     private static final float EPS = 0.001f;

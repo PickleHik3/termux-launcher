@@ -4,8 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -15,7 +15,7 @@ public class CommitDockDressTest {
     private static CommitDockDress.Inputs inputs(DockStyle design, boolean drawerTile,
                                                  int revision, boolean statusCompact,
                                                  boolean keyboardUp, int halfRedresses) {
-        return new CommitDockDress.Inputs(PaneWallPage.WIDGETS, PaneWallPage.WIDGETS, design,
+        return new CommitDockDress.Inputs(PageKind.HOME, PageKind.HOME, design,
             false, drawerTile, revision, statusCompact, PlaceLayout.Edge.TOP, keyboardUp,
             halfRedresses);
     }
@@ -46,17 +46,17 @@ public class CommitDockDressTest {
         assertFalse(dress.worn(inputs(DockStyle.GLASS_TRAY, true, 3, true, true, 0)));
         assertFalse("a half re-dress ran after it",
             dress.worn(inputs(DockStyle.GLASS_TRAY, true, 3, true, false, 1)));
-        assertFalse(dress.worn(new CommitDockDress.Inputs(PaneWallPage.TERMINAL,
-            PaneWallPage.WIDGETS, DockStyle.GLASS_TRAY, false, true, 3, true,
+        assertFalse(dress.worn(new CommitDockDress.Inputs(PageKind.TERMINAL,
+            PageKind.HOME, DockStyle.GLASS_TRAY, false, true, 3, true,
             PlaceLayout.Edge.TOP, false, 0)));
-        assertFalse(dress.worn(new CommitDockDress.Inputs(PaneWallPage.WIDGETS,
-            PaneWallPage.TERMINAL, DockStyle.GLASS_TRAY, false, true, 3, true,
+        assertFalse(dress.worn(new CommitDockDress.Inputs(PageKind.HOME,
+            PageKind.TERMINAL, DockStyle.GLASS_TRAY, false, true, 3, true,
             PlaceLayout.Edge.TOP, false, 0)));
-        assertFalse(dress.worn(new CommitDockDress.Inputs(PaneWallPage.WIDGETS,
-            PaneWallPage.WIDGETS, DockStyle.GLASS_TRAY, true, true, 3, true,
+        assertFalse(dress.worn(new CommitDockDress.Inputs(PageKind.HOME,
+            PageKind.HOME, DockStyle.GLASS_TRAY, true, true, 3, true,
             PlaceLayout.Edge.TOP, false, 0)));
-        assertFalse(dress.worn(new CommitDockDress.Inputs(PaneWallPage.WIDGETS,
-            PaneWallPage.WIDGETS, DockStyle.GLASS_TRAY, false, true, 3, true,
+        assertFalse(dress.worn(new CommitDockDress.Inputs(PageKind.HOME,
+            PageKind.HOME, DockStyle.GLASS_TRAY, false, true, 3, true,
             PlaceLayout.Edge.BOTTOM, false, 0)));
     }
 

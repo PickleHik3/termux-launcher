@@ -9,6 +9,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.core.content.ContextCompat;
 
@@ -36,9 +37,9 @@ final class CustomizeSection implements SetupSection {
         R.string.termux_surface_preset_frost, R.string.termux_surface_preset_stock,
         R.string.termux_surface_preset_solid};
     /** The appearance card's dock glyphs and words (surfaces/cards/DockCard), in DockStyle.CHOICES order. */
-    private static final int[] DOCK_GLYPHS = {R.drawable.ic_symbol_dock_glass_tray,
-        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip,
-        R.drawable.ic_symbol_dock_peek_glass};
+    private static final int[] DOCK_GLYPHS = {R.drawable.ic_rl_dock_tray,
+        R.drawable.ic_rl_dock_beads, R.drawable.ic_rl_dock_strip,
+        R.drawable.ic_rl_dock_peek};
     private static final int[] DOCK_WORDS = {R.string.layout_editor_dock_style_glass_tray,
         R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip,
         R.string.layout_editor_dock_style_peek_glass};
@@ -176,21 +177,34 @@ final class CustomizeSection implements SetupSection {
             chip.setCheckable(true);
             chip.setCheckedIconVisible(false);
             chip.setEnsureMinTouchTargetSize(true);
-            chip.setChecked(LOOK_IDS[i].equals(state.values().lookId));
+            dressLook(chip, LOOK_IDS[i], state.values().lookId, readable);
             final int index = i;
             chip.setOnClickListener(v -> {
                 state.setLook(LOOK_IDS[index]);
                 for (int j = 0; j < chips.size(); j++)
-                    chips.get(j).setChecked(j == index);
+                    dressLook(chips.get(j), LOOK_IDS[j], state.values().lookId, readable);
             });
-            if (!readable && !SetupState.LOOK_SOLID.equals(LOOK_IDS[i])) {
-                chip.setAlpha(0.4f);
-                chip.setEnabled(false);
-            }
             chips.add(chip);
             group.addView(chip);
         }
         return group;
+    }
+
+    /**
+     * Whether a Look chip can be picked: any while the wallpaper reads; without it only Solid,
+     * which needs no wallpaper, and the Look the wall wears, which stays shown as picked.
+     */
+    static boolean lookChipEnabled(@NonNull String id, @Nullable String worn, boolean readable) {
+        return readable || SetupState.LOOK_SOLID.equals(id) || id.equals(worn);
+    }
+
+    /** Checked and dimmed from the one value the wall wears, so the screen and its reading agree. */
+    private static void dressLook(@NonNull Chip chip, @NonNull String id, @Nullable String worn,
+                                  boolean readable) {
+        boolean enabled = lookChipEnabled(id, worn, readable);
+        chip.setChecked(id.equals(worn));
+        chip.setEnabled(enabled);
+        chip.setAlpha(enabled ? 1f : 0.4f);
     }
 
     /** The Dock designs with the appearance card's glyphs, through the editor's own chip row. */

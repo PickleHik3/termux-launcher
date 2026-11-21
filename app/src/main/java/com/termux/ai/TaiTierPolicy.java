@@ -21,7 +21,7 @@ import java.util.Locale;
  *
  * <p>The platform only takes things away: with no usable
  * ABI there are no local models; with no GPU path the Tier 2 and 3 assistant runs E2B on the CPU,
- * and categories run E4B on the CPU; a CPU-first GPU preselects the CPU.
+ * and categories run E4B on the CPU; an unconfirmed or CPU-first GPU preselects the CPU.
  *
  * <p>Image generation is deliberately absent: it has no function, no catalogue row, no welcome row
  * and no suggestion (spec §3.6). It stays reachable through the API, {@code tai image} and import.
@@ -36,7 +36,7 @@ public final class TaiTierPolicy {
     public static final String ACCEL_GPU = "gpu";
     public static final String ACCEL_CPU = "cpu";
 
-    /** The picker's note for a GPU that is preselected but not confirmed (decision 3). */
+    /** The picker's note for a GPU that is not confirmed (decision 3). */
     public static final String NOTE_GPU_UNCONFIRMED = "Not confirmed on this GPU yet";
     /** The picker's note on the GPU choice of a CPU-first phone. */
     public static final String NOTE_GPU_OFTEN_FAILS = "Often fails on this GPU";
@@ -169,12 +169,11 @@ public final class TaiTierPolicy {
         return env.localModelsSupported();
     }
 
-    /** {@code "gpu"} when the GPU path is yes or unconfirmed, {@code "cpu"} when it is CPU-first or absent. */
+    /** {@code "gpu"} only when the GPU path is yes; unconfirmed, CPU-first and absent start on {@code "cpu"}. */
     @NonNull
     public static String defaultAccelerator(@NonNull Env env) {
         switch (env.gpuPath) {
             case YES:
-            case UNKNOWN:
                 return ACCEL_GPU;
             default:
                 return ACCEL_CPU;

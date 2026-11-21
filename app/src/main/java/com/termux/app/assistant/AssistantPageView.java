@@ -9,12 +9,17 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.Page;
+import com.termux.app.page.PageHost;
+import com.termux.app.page.PageKind;
+import com.termux.app.page.Rest;
 import com.termux.app.terminal.PaneBorderStyle;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
+import com.termux.app.terminal.inappkeyboard.TypingPage;
 
 /**
  * The Assistant page (ADR 0022): one glass pane holding the chat and, over it, the Chats list. The
@@ -22,7 +27,7 @@ import com.termux.app.terminal.PaneSurfaceStyle;
  * and with glass off a solid surfaceContainerHigh. Everything inside is opaque and takes its colour
  * roles from the theme. The wall owns this view; it builds it through {@link AssistantPageHost}.
  */
-public class AssistantPageView extends PaneContentFrame {
+public class AssistantPageView extends PaneContentFrame implements Page, TypingPage {
 
     private final PaneGlassBackdropView glass;
     /**
@@ -45,6 +50,10 @@ public class AssistantPageView extends PaneContentFrame {
     @Nullable private PaneSurfaceStyle style;
 
     public AssistantPageView(@NonNull Context context) {
+        this(context, PageHost.NONE);
+    }
+
+    public AssistantPageView(@NonNull Context context, @NonNull PageHost host) {
         super(context);
         setClipChildren(true);
         glass = new PaneGlassBackdropView(context);
@@ -73,7 +82,7 @@ public class AssistantPageView extends PaneContentFrame {
             ViewGroup.LayoutParams.MATCH_PARENT));
         addView(chats, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
-        controller = new AssistantPageController(context, this, chat, chats, palette);
+        controller = new AssistantPageController(context, this, host, this, chat, chats, palette);
         holder[0] = controller;
         applyStyle(null);
         // The views were made with the theme's roles; the first dress always reaches them.
@@ -121,12 +130,14 @@ public class AssistantPageView extends PaneContentFrame {
     private void measureInk(boolean slab, float radiusPx, @NonNull AssistantUi.Palette dressed) {
         com.termux.app.chrome.WidgetInkSource ink = inkSource(style);
         int color = AssistantInk.NO_VEIL;
+        if (!slab || ink == null) glass.setEvenOut(null);
         if (slab && ink != null && style != null && getWidth() > 0 && getHeight() > 0) {
             com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, inkLocation, inkRootLocation);
             inkRect.set(inkLocation[0], inkLocation[1], inkLocation[0] + getWidth(),
                 inkLocation[1] + getHeight());
             color = ink.widgetInk(inkRect, style.paneGlassTintColor(),
                 AssistantInk.veilColor(dressed), dressed.onSurfaceVariant, dressed.primary).veil;
+            glass.setEvenOut(ink.widgetEvenOut(inkRect));
         }
         if (color == veilColor && radiusPx == veilRadiusPx) return;
         veilColor = color;
@@ -169,15 +180,58 @@ public class AssistantPageView extends PaneContentFrame {
         return false;
     }
 
-    /** The wall moved this page, or the wallpaper panned under it: the slab re-aims. */
-    public void onWallMoved() {
-        glass.invalidateGlassPosition();
-    }
-
     /** How much of the page's rim the wall's slide leaves showing. */
     public void setOutlineTravelAlpha(float alpha) {
         rim.setTravelAlpha(alpha);
     }
+
+    @Nullable private AssistantFieldKeys fieldKeys;
+
+    /** Whether one of the page's text fields holds focus, which is when the launcher's keyboard types into it. */
+    @Override
+    public boolean isTyping() {
+        return chat.composer().isTyping() || chats.isSearchTyping();
+    }
+
+    /**
+     * The in-app keyboard's interceptor for this page: its keys edit whichever field has focus.
+     * Enter sends from the composer and does nothing in the search.
+     */
+    @NonNull
+    @Override
+    public com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler.KeyValueInterceptor typingKeys() {
+        if (fieldKeys == null) {
+            AssistantComposer composer = chat.composer();
+            fieldKeys = new AssistantFieldKeys(
+                () -> chats.isSearchTyping() ? chats.search()
+                    : composer.isTyping() ? composer.field() : null,
+                field -> { if (field == composer.field()) composer.submit(); },
+                com.termux.app.terminal.ClipboardText.forContext(getContext()));
+        }
+        return fieldKeys;
+    }
+
+    @NonNull @Override public PageKind kind() { return PageKind.ASSISTANT; }
+
+    @NonNull @Override public View view() { return this; }
+
+    @NonNull
+    @Override
+    public Rest rest(@NonNull Rest.Inputs in) {
+        return AssistantRest.of(in);
+    }
+
+    /** No work: the chat follows the view's visibility, and the keys follow the front through the host's typing claim. */
+    @Override public void onFront() { }
+
+    @Override public void offFront() { }
+
+    @Override
+    public boolean onBack() {
+        return handleBack();
+    }
+
+    // declareGlass: none yet; the page's pane glass joins the glass service with the pane slabs.
 
     /** Back closes the Chats list first; false when there is nothing for it to do. */
     public boolean handleBack() {

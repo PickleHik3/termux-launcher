@@ -1,11 +1,11 @@
 package com.termux.app.statusbar;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.statusbar.StatusBarLensMetrics.Bar;
 import com.termux.app.statusbar.StatusBarLensMetrics.Mark;
 import com.termux.app.statusbar.StatusBarLensPolicy.Growth;
 import com.termux.app.statusbar.StatusBarLensPolicy.Placement;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -19,20 +19,20 @@ import static org.junit.Assert.assertTrue;
 /** The place icons: where each sits and how present it is as the wall moves. */
 public class StatusBarLensPolicyTest {
 
-    private static final List<PaneWallPage> ROW = Arrays.asList(PaneWallPage.WIDGETS,
-        PaneWallPage.TERMINAL, PaneWallPage.DISPLAY);
+    private static final List<PageKind> ROW = Arrays.asList(PageKind.HOME,
+        PageKind.TERMINAL, PageKind.DISPLAY);
 
     @Test public void neighboursRestOneWidthAwayOnTheSideTheySlideInFrom() {
-        assertEquals(-1f, StatusBarLensPolicy.distance(ROW, PaneWallPage.TERMINAL,
-            PaneWallPage.WIDGETS, 0f, 400), 0.001f);
-        assertEquals(1f, StatusBarLensPolicy.distance(ROW, PaneWallPage.TERMINAL,
-            PaneWallPage.DISPLAY, 0f, 400), 0.001f);
-        assertEquals(0f, StatusBarLensPolicy.distance(ROW, PaneWallPage.TERMINAL,
-            PaneWallPage.TERMINAL, 0f, 400), 0.001f);
+        assertEquals(-1f, StatusBarLensPolicy.distance(ROW, PageKind.TERMINAL,
+            PageKind.HOME, 0f, 400), 0.001f);
+        assertEquals(1f, StatusBarLensPolicy.distance(ROW, PageKind.TERMINAL,
+            PageKind.DISPLAY, 0f, 400), 0.001f);
+        assertEquals(0f, StatusBarLensPolicy.distance(ROW, PageKind.TERMINAL,
+            PageKind.TERMINAL, 0f, 400), 0.001f);
         // The wall is a line, not a ring (ADR 0008): from the Display, Home is two widths to the
         // left, where it is.
-        assertEquals(-2f, StatusBarLensPolicy.distance(ROW, PaneWallPage.DISPLAY,
-            PaneWallPage.WIDGETS, 0f, 400), 0.001f);
+        assertEquals(-2f, StatusBarLensPolicy.distance(ROW, PageKind.DISPLAY,
+            PageKind.HOME, 0f, 400), 0.001f);
     }
 
     @Test public void allThreeIconsAreWholeWithinAWidthAndTheLeavingOneDissolves() {
@@ -193,7 +193,7 @@ public class StatusBarLensPolicyTest {
 
     /**
      * With the bar on both halves every place mark goes (decided 2026-10-21, #90): not the house,
-     * not the Workspace's prompt beside the clock, not the Display's. The bar is the clock, the
+     * not the Terminal's prompt beside the clock, not the Display's. The bar is the clock, the
      * readings and the window chips, wherever the wall is and however the bar stands.
      */
     @Test public void noPlaceMarksAtAll() {
@@ -203,7 +203,7 @@ public class StatusBarLensPolicyTest {
                 Bar bar = vertical ? Bar.of(COMPACT_H, 600, DENSITY, true, state)
                     : Bar.of(BAR_W, height, DENSITY, false, state);
                 int wall = vertical ? 600 : BAR_W;
-                for (PaneWallPage current : ROW) {
+                for (PageKind current : ROW) {
                     for (float offset : new float[] {0f, -wall / 2f, wall / 2f, wall}) {
                         List<Mark> marks =
                             StatusBarLensMetrics.marks(bar, ROW, current, offset, wall);

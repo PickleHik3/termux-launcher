@@ -213,7 +213,8 @@ public class DockSurfaceSpecLayoutTest {
                     .surface(DockSurfaceSpec.GLASS_TRAY).build());
                 assertEquals(plain.appsRowIconPx, tray.appsRowIconPx);
                 assertEquals(plain.iconScale, tray.iconScale, 0f);
-                // The stack grows by the air the dashes no longer stand in, and nothing else.
+                // The stack grows by the air the dashes no longer stand in, and the capsules' air
+                // over the slab, and nothing else.
                 assertEquals(plain.appsRowBandPx + (tray.appsBottomPaddingPx
                         + tray.appsRowStripBandPx - plain.appsRowTickSideAirPx),
                     tray.appsRowBandPx);
@@ -222,12 +223,25 @@ public class DockSurfaceSpecLayoutTest {
     }
 
     @Test
-    public void theDashesStandASmallGapOverTheSlab() {
-        for (boolean alone : new boolean[] {false, true}) {
-            DockLayout tray = DockLayoutPolicy.compute(inputs(true, alone, true,
-                DockLayoutPolicy.sizePreset(2)).surface(DockSurfaceSpec.GLASS_TRAY).build());
-            float gap = PageTickStrip.edgeGapPx(tray.slabTopInsetPx, DENSITY);
-            assertTrue("alone=" + alone + ": " + gap, gap >= 1.5f * DENSITY && gap <= 4f * DENSITY);
+    public void theDashesKeepTheirAirOverTheSlabOnEveryKind() {
+        // The capsules are centred in their band, so the band's own air under them plus what the
+        // slab starts below the band is the gap to the slab's top edge (the icons' own air where
+        // no edge stands, Peek and Beads). It is PageTickStrip.SURFACE_AIR_DP on every surface,
+        // with and without a lone row, to the pixel.
+        DockSurfaceSpec[] kinds = {DockSurfaceSpec.GLASS_TRAY, DockSurfaceSpec.WALL_STRIP,
+            DockSurfaceSpec.PEEK_GLASS, DockSurfaceSpec.LENS_BEADS};
+        for (DockSurfaceSpec kind : kinds) {
+            for (boolean alone : new boolean[] {false, true}) {
+                DockLayout l = DockLayoutPolicy.compute(inputs(true, alone, true,
+                    DockLayoutPolicy.sizePreset(2)).surface(kind).build());
+                // Centred in the band less its foot air, then the foot air to the slab's edge.
+                float below = PageTickStrip.edgeGapPx(
+                    l.appsRowStripBandPx - l.appsRowStripAirPx, DENSITY) + l.appsRowStripAirPx;
+                assertEquals(kind.name + " alone=" + alone + ": " + below / DENSITY + "dp",
+                    PageTickStrip.SURFACE_AIR_DP * DENSITY, below, 1f);
+                assertTrue(kind.name + " alone=" + alone,
+                    below >= PageTickStrip.SURFACE_AIR_DP * DENSITY - 1f);
+            }
         }
     }
 

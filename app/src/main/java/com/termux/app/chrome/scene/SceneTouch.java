@@ -13,10 +13,14 @@ import androidx.annotation.NonNull;
  */
 public final class SceneTouch {
 
+    /** {@code tlTouchAge} before the first touch: long enough that any ease has finished. */
+    public static final float AGE_BEFORE_TOUCH = 100000f;
+
     private float mX, mY, mClickX, mClickY;
     private boolean mDown;
     private boolean mClickFresh;
     private boolean mEver;
+    private double mUpSec;
 
     public void down(float x, float y) {
         mX = x;
@@ -34,11 +38,23 @@ public final class SceneTouch {
         mY = y;
     }
 
-    public void up(float x, float y) {
+    /** {@code nowSec} is the scene clock ({@code iTime}) when the pointer lifted. */
+    public void up(float x, float y, double nowSec) {
         if (!mDown) return;
         mX = x;
         mY = y;
         mDown = false;
+        mUpSec = nowSec;
+    }
+
+    /**
+     * {@code tlTouchAge}: 0 while the pointer is down, the seconds since it lifted after that, and
+     * {@link #AGE_BEFORE_TOUCH} before the first touch. {@code nowSec} is the scene clock.
+     */
+    public float age(double nowSec) {
+        if (!mEver) return AGE_BEFORE_TOUCH;
+        if (mDown) return 0f;
+        return (float) Math.max(0.0, nowSec - mUpSec);
     }
 
     public boolean isDown() {

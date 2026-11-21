@@ -7,23 +7,24 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
-import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The layout session under the Appearance editor. It owns one session: the arrangement the editor opened on, its share of the editor's one dirty
- * state, Undo and Done ({@link #isDirty}, {@link #revert}, {@link #end}), and every write the
+ * The layout session under the Appearance editor. It owns one session: its share of the editor's
+ * one dirty state and Undo ({@link #isDirty}, {@link #revert}, {@link #end}), and every write the
  * cards make to the arrangement: whether an element shows, the edge it stands on, the dock's and
  * keyboard's heights, the Strip's height, the Dock design, the Search field and the keyboard's
- * form. Every write goes straight through, so the live place under the editor follows it. The
+ * form. Every write lands in the editor's draft over the layouts ({@code LayoutStore#beginDraft},
+ * opened and closed by the Appearance editor with its own), so the live place under the editor
+ * follows it, Done stores it and Discard drops it. The
  * session edits the orientation the phone is in and turns with it (editor-redesign §1: the
  * shrunken Layout mode, with its canvas, its drags and its handles, is retired; its controls are
  * rows on the cards).
@@ -41,7 +42,7 @@ public final class LayoutEditorController {
         @Nullable PlaceLayoutStore places();
 
         /** The place the chrome on screen belongs to: what an unnamed door opens the editor on. */
-        @NonNull PaneWallPage placeOnScreen();
+        @NonNull PageKind placeOnScreen();
 
         /** The orientation the phone is in, which is the only one the live place can follow. */
         @NonNull PlaceOrientation placeOrientation();
@@ -56,13 +57,13 @@ public final class LayoutEditorController {
          * Bring the pane wall to the place the editor is open on and hold its gestures, or hand
          * them back.
          */
-        void holdPaneWallOnPlace(@NonNull PaneWallPage place, boolean held);
+        void holdPaneWallOnPlace(@NonNull PageKind place, boolean held);
 
         /**
          * Slide the held wall to {@code place}, the way the wall slides between its halves, and
          * keep its gestures held. Jumps where the host cannot slide.
          */
-        default void slidePaneWallToPlace(@NonNull PaneWallPage place) {
+        default void slidePaneWallToPlace(@NonNull PageKind place) {
             holdPaneWallOnPlace(place, true);
         }
     }
@@ -88,7 +89,7 @@ public final class LayoutEditorController {
 
     /** The place the session is open on, or null while it is not. */
     @Nullable
-    public PaneWallPage editedPlace() {
+    public PageKind editedPlace() {
         return mPlan == null ? null : mPlan.place();
     }
 
@@ -108,26 +109,19 @@ public final class LayoutEditorController {
 
     // ------------------------------------------------------------------------------------ entry
 
-    /** Opens the session on one place, the place on screen for null. */
-    public boolean begin(@Nullable PaneWallPage place) {
-        return begin(place, null);
-    }
-
     /**
-     * {@link #begin(PaneWallPage)}, continuing a session whose arrangement at open was
-     * {@code carriedEntry} (a configuration relaunch). A session already open moves to the place
-     * instead, so Undo still puts back the arrangement it opened on.
+     * Opens the session on one place, the place on screen for null. A session already open moves
+     * to the place instead.
      *
      * @return false where there is no store to edit yet
      */
-    public boolean begin(@Nullable PaneWallPage place,
-                         @Nullable List<PlaceArrangeSnapshot> carriedEntry) {
+    public boolean begin(@Nullable PageKind place) {
         PlaceLayoutStore places = mHost.places();
         if (places == null)
             return false;
-        PaneWallPage target = place != null ? place : mHost.placeOnScreen();
+        PageKind target = place != null ? place : mHost.placeOnScreen();
         if (mPlan == null) {
-            mPlan = LayoutEditorPlan.enter(places, target, mHost.placeOrientation(), carriedEntry);
+            mPlan = LayoutEditorPlan.enter(places, target, mHost.placeOrientation());
         } else {
             mPlan.showPlace(target);
         }
@@ -136,18 +130,12 @@ public final class LayoutEditorController {
         return true;
     }
 
-    /** Whether anything has moved since the session opened, in either orientation. */
+    /** Whether the draft holds an arrangement the store does not, in either orientation. */
     public boolean isDirty() {
         return mPlan != null && mPlan.isDirty();
     }
 
-    /** The arrangements the open session found, or null with none open. */
-    @Nullable
-    public List<PlaceArrangeSnapshot> entryArrangement() {
-        return mPlan == null ? null : mPlan.entries();
-    }
-
-    /** Undo: every bar back where the session found it, without leaving the editor. */
+    /** Undo: the draft's arrangement goes, without leaving the editor. */
     public void revert() {
         if (mPlan == null)
             return;
@@ -158,12 +146,12 @@ public final class LayoutEditorController {
         sync();
     }
 
-    /** Closes the session, keeping what is written; the wall's gestures are handed back. */
+    /** Closes the session (the draft is the editor's to store or drop); the wall's gestures are handed back. */
     public void end() {
         if (mPlan == null)
             return;
         relayHeldWrites();
-        PaneWallPage place = mPlan.place();
+        PageKind place = mPlan.place();
         mPlan = null;
         mHost.holdPaneWallOnPlace(place, false);
     }
@@ -200,7 +188,7 @@ public final class LayoutEditorController {
             else mHost.holdPaneWallOnPlace(plan.place(), true);
             return;
         }
-        PaneWallPage place = plan.showHome(home);
+        PageKind place = plan.showHome(home);
         if (animate) mHost.slidePaneWallToPlace(place);
         else mHost.holdPaneWallOnPlace(place, true);
         if (mOnPlaceShown != null)
@@ -226,7 +214,7 @@ public final class LayoutEditorController {
 
     /** The kind of the page the chip is about, or null with no session. */
     @Nullable
-    public com.termux.app.wall.WallPages.PageKind pageLayoutKind() {
+    public com.termux.app.page.PageKind pageLayoutKind() {
         return mPlan == null ? null : mPlan.pageKind();
     }
 

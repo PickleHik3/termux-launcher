@@ -117,16 +117,6 @@
         <item>normal</item>
         <item>high</item>
     </string-array>
-    <string-array name="termux_theme_mode_entries">
-        <item>@string/termux_theme_mode_system</item>
-        <item>@string/termux_theme_mode_light</item>
-        <item>@string/termux_theme_mode_dark</item>
-    </string-array>
-    <string-array name="termux_theme_mode_values">
-        <item>system</item>
-        <item>false</item>
-        <item>true</item>
-    </string-array>
     <string-array name="app_launcher_az_lock_method_entries">
         <item>@string/termux_app_launcher_az_lock_method_off</item>
         <item>@string/termux_app_launcher_az_lock_method_shizuku</item>
@@ -146,14 +136,52 @@
         <item>floating</item>
     </string-array>
     <string-array name="app_launcher_drawer_view_type_entries">
+        <item>@string/settings_app_drawer_view_type_default</item>
         <item>@string/settings_app_drawer_view_type_vertical</item>
         <item>@string/settings_app_drawer_view_type_horizontal</item>
         <item>@string/settings_app_drawer_view_type_categories</item>
     </string-array>
     <string-array name="app_launcher_drawer_view_type_values">
+        <item>default</item>
         <item>vertical</item>
         <item>horizontal</item>
         <item>categories</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_icon_size_entries">
+        <item>@string/settings_drawer_grid_auto</item>
+        <item>@string/settings_drawer_icon_size_small</item>
+        <item>@string/settings_drawer_icon_size_medium</item>
+        <item>@string/settings_drawer_icon_size_large</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_icon_size_values" translatable="false">
+        <item>auto</item>
+        <item>48</item>
+        <item>54</item>
+        <item>60</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_columns_entries" translatable="false">
+        <item>@string/settings_drawer_grid_auto</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_columns_values" translatable="false">
+        <item>auto</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_rows_entries" translatable="false">
+        <item>@string/settings_drawer_grid_auto</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+    </string-array>
+    <string-array name="app_launcher_drawer_rows_values" translatable="false">
+        <item>auto</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
     </string-array>
     <string-array name="app_launcher_drawer_az_side_entries">
         <item>@string/settings_drawer_az_side_left</item>
@@ -367,22 +395,6 @@
         <item>exact</item>
         <item>custom</item>
     </string-array>
-    <string-array name="settings_terminal_cursor_trail_style_entries">
-        <item>Default</item>
-        <item>Motion blur</item>
-        <item>Railgun</item>
-        <item>Torpedo</item>
-        <item>Pixie dust</item>
-        <item>Comet</item>
-    </string-array>
-    <string-array name="settings_terminal_cursor_trail_style_values">
-        <item>default</item>
-        <item>motion_blur</item>
-        <item>railgun</item>
-        <item>torpedo</item>
-        <item>pixiedust</item>
-        <item>comet</item>
-    </string-array>
     <string-array name="appearance_editor_cursor_trail_entries">
         <item>Off</item>
         <item>Default</item>
@@ -444,5 +456,69 @@
         <item>crt_amber</item>
         <item>crt_material</item>
         <item>tft</item>
+    </string-array>
+    <string-array name="settings_x11_app_graphics_entries">
+        <item>@string/settings_x11_app_follow</item>
+        <item>@string/settings_x11_app_graphics_software</item>
+    </string-array>
+    <string-array name="settings_x11_app_graphics_values">
+        <item>follow</item>
+        <item>software</item>
+    </string-array>
+    <string-array name="settings_x11_app_touch_entries">
+        <item>@string/settings_x11_app_follow</item>
+        <item>@string/settings_x11_app_touch_trackpad</item>
+        <item>@string/settings_x11_app_touch_touch</item>
+        <item>@string/settings_x11_app_touch_direct</item>
+    </string-array>
+    <string-array name="settings_x11_app_touch_values">
+        <item>follow</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </string-array>
+    <string-array name="x11_paste_shortcut_entries">
+        <item>@string/settings_x11_paste_ctrl_v</item>
+        <item>@string/settings_x11_paste_ctrl_shift_v</item>
+    </string-array>
+    <string-array name="x11_paste_shortcut_values">
+        <item>ctrl_v</item>
+        <item>ctrl_shift_v</item>
+    </string-array>
+    <string-array name="settings_x11_app_paste_entries">
+        <item>@string/settings_x11_app_follow</item>
+        <item>@string/settings_x11_paste_ctrl_v</item>
+        <item>@string/settings_x11_paste_ctrl_shift_v</item>
+    </string-array>
+    <string-array name="settings_x11_app_paste_values">
+        <item>follow</item>
+        <item>ctrl_v</item>
+        <item>ctrl_shift_v</item>
+    </string-array>
+    <string-array name="settings_x11_app_scale_entries">
+        <item>@string/settings_x11_app_follow</item>
+        <item>1×</item>
+        <item>1.25×</item>
+        <item>1.5×</item>
+        <item>2×</item>
+        <item>2.5×</item>
+        <item>3×</item>
+    </string-array>
+    <string-array name="settings_x11_app_scale_values">
+        <item>follow</item>
+        <item>1</item>
+        <item>1.25</item>
+        <item>1.5</item>
+        <item>2</item>
+        <item>2.5</item>
+        <item>3</item>
+    </string-array>
+    <string-array name="settings_x11_app_drawer_entries">
+        <item>@string/settings_x11_app_follow</item>
+        <item>@string/settings_x11_app_drawer_hide</item>
+    </string-array>
+    <string-array name="settings_x11_app_drawer_values">
+        <item>follow</item>
+        <item>hide</item>
     </string-array>
 </resources>

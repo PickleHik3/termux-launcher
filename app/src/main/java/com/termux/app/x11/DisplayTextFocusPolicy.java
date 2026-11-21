@@ -66,8 +66,12 @@ public final class DisplayTextFocusPolicy {
     /** How long after a tap a cursor name still counts as that tap's answer. */
     public static final long TAP_WINDOW_MS = 150L;
 
-    /** How long a focus-out waits for the focus-in that would cancel it. */
-    public static final long HIDE_GRACE_MS = 150L;
+    /**
+     * How long a focus-out waits for the focus-in that would cancel it: long enough for a window
+     * that briefly gives focus up and takes it back (a panel switching between normal and full
+     * size) to keep the keyboard up, short enough that a field really left still puts it away.
+     */
+    public static final long HIDE_GRACE_MS = 300L;
 
     /** The cursor names an X client draws over text. Anything else, or nothing, is not text. */
     private static final String[] TEXT_CURSORS = {"xterm", "text", "ibeam", "vertical-text"};

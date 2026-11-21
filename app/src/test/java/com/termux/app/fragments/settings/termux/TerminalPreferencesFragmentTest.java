@@ -1,6 +1,7 @@
 package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -53,7 +54,7 @@ public class TerminalPreferencesFragmentTest {
         TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();
         String[] rows = {"terminal_layout_editor", "terminal_sub_windows", "status_bar",
-            "terminal_sub_text", "terminal_sub_clipboard"};
+            "terminal_sub_text", "terminal_sub_tui_themes", "terminal_sub_clipboard", "terminal_notifications"};
         assertEquals(rows.length, screen.getPreferenceCount());
         for (int i = 0; i < rows.length; i++) assertEquals(rows[i], screen.getPreference(i).getKey());
         assertEquals(StatusBarPreferencesFragment.class.getName(),
@@ -68,14 +69,22 @@ public class TerminalPreferencesFragmentTest {
     @Test
     public void everyTerminalRowIsOnItsSubpageWithItsKey() {
         PreferenceScreen windows = launch(TerminalWindowsPreferencesFragment.class).getPreferenceScreen();
-        for (String key : new String[] {"split_pane_controls", "show_key_hints", "pane_dwindle_default",
-            "pane_focus_grows", "pane_agent_api"}) {
+        for (String key : new String[] {"show_key_hints", "pane_agent_api"}) {
             assertTrue(key, windows.findPreference(key) instanceof SwitchPreferenceCompat);
         }
+        // One home per setting: how the panes tile and split is the editor's Terminal card.
+        for (String key : new String[] {"split_pane_controls", "pane_dwindle_default", "pane_focus_grows"}) {
+            assertNull(key, windows.findPreference(key));
+        }
+        assertNotNull(windows.findPreference("terminal_windows_layout_editor"));
         PreferenceScreen text = launch(TerminalTextPreferencesFragment.class).getPreferenceScreen();
         assertNull("Full screen is the Appearance editor's", text.findPreference("fullscreen"));
         assertNull("Edge colours follow Wallpaper colors", text.findPreference("terminal_padding_fill"));
-        assertTrue(text.findPreference("terminal_cursor_trail_style") != null);
+        for (String key : new String[] {"terminal_cursor_trail_style", "terminal_retro_effect",
+            "terminal_screen_events", "terminal_retro_composite"}) {
+            assertNull(key + " is the editor's Terminal card", text.findPreference(key));
+        }
+        assertNotNull(text.findPreference("terminal_text_layout_editor"));
         PreferenceScreen clipboard = launch(TerminalClipboardPreferencesFragment.class).getPreferenceScreen();
         assertTrue(clipboard.findPreference("terminal_margin_adjustment") instanceof SwitchPreferenceCompat);
         assertTrue(clipboard.findPreference("terminal_osc52_clipboard_read_enabled") instanceof SwitchPreferenceCompat);
@@ -88,20 +97,6 @@ public class TerminalPreferencesFragmentTest {
             assertNull(screen.findPreference("top_pane_clock_style"));
             assertNull(screen.findPreference("status_widget_cpu"));
         }
-    }
-
-    @Test
-    public void splitPaneControlsInvertsIntoTheCompatibilityModeKey() {
-        Application app = RuntimeEnvironment.getApplication();
-        TerminalIOPreferencesDataStore io = TerminalIOPreferencesDataStore.getInstance(app);
-        io.putBoolean("compatibility_mode", false);
-
-        TerminalWindowsPreferencesFragment fragment = launch(TerminalWindowsPreferencesFragment.class);
-        SwitchPreferenceCompat splitPanes = fragment.findPreference("split_pane_controls");
-        assertTrue(splitPanes.isChecked());
-
-        splitPanes.setChecked(false);
-        assertTrue(io.getBoolean("compatibility_mode", false));
     }
 
     @Test
@@ -123,6 +118,25 @@ public class TerminalPreferencesFragmentTest {
             com.termux.app.fragments.settings.SettingsSearchIndex.build(RuntimeEnvironment.getApplication()).entries())
             searchable |= "terminal_engine".equals(entry.key);
         assertEquals("search finds it exactly when the row shows", available, searchable);
+    }
+
+    @Test
+    public void theResetRowIsOnTheClipboardPageAndClearsTheAlwaysGrants() {
+        Application app = RuntimeEnvironment.getApplication();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(app, false);
+        assertTrue(preferences != null);
+        preferences.addClipboardReadAlways("claude");
+        assertTrue(preferences.getClipboardReadAlways().contains("claude"));
+
+        TerminalClipboardPreferencesFragment fragment = launch(TerminalClipboardPreferencesFragment.class);
+        androidx.preference.Preference row = fragment.findPreference("terminal_clipboard_read_reset");
+        assertTrue(row != null);
+        assertEquals("Reset clipboard permissions", row.getTitle().toString());
+        assertEquals("shown only where the Fast engine can run",
+            com.termux.terminal.TerminalEngine.isAvailable(), row.isVisible());
+        row.performClick();
+        assertTrue(preferences.getClipboardReadAlways().isEmpty());
     }
 
     private static String activityTitle(Fragment fragment) {

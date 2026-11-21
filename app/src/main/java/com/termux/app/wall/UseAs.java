@@ -3,7 +3,7 @@ package com.termux.app.wall;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.surfaces.EditorCard;
+import com.termux.app.page.PageKind;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -13,7 +13,7 @@ import java.util.List;
  * Use as (editor-redesign §1): the launcher is the phone's Home screen, or the terminal only. The
  * one place every surface asks what Terminal only takes away: the Home page from the wall, Home's
  * settings, Home from Start in, the Home card and both Match rows. Everything else (the
- * Workspace, its card, the dock, the keyboard, Global) is the same either way, and so is whether
+ * Terminal, its card, the dock, the keyboard, Global) is the same either way, and so is whether
  * the app is the system's home app: Terminal only still works as a home app showing the terminal.
  *
  * <p>A door that leads to something Terminal only took away opens nothing of it: the editor's
@@ -23,9 +23,9 @@ import java.util.List;
  * <p>Pure: the stored value goes in through {@link #read}, and the answers come out.
  */
 public enum UseAs {
-    /** Home pages, widgets and the Workspace: the launcher as it always was. */
+    /** Home pages, widgets and the Terminal: the launcher as it always was. */
     HOME("home"),
-    /** The Workspace alone: no Home page, no Home settings, no Home in Start in. */
+    /** The Terminal alone: no Home page, no Home settings, no Home in Start in. */
     TERMINAL("terminal");
 
     /** The tag a hidden door's line is logged under. */
@@ -61,31 +61,31 @@ public enum UseAs {
 
     /**
      * The page kinds the wall shows before it has the page list ({@link PaneWallPolicy#rowPages}
-     * with a window): under Terminal only the Workspace alone, so the wall never falls back to a
+     * with a window): under Terminal only the Terminal alone, so the wall never falls back to a
      * Home page it does not have.
      */
     @NonNull
-    public List<PaneWallPage> rowPages() {
+    public List<PageKind> rowPages() {
         if (this == HOME) return PaneWallPolicy.rowPages(true);
-        return Collections.singletonList(PaneWallPage.TERMINAL);
+        return Collections.singletonList(PageKind.TERMINAL);
     }
 
     /** Where the home press lands, and where a page taken away hands the wall. */
     @NonNull
-    public PaneWallPage homePage() {
-        return this == HOME ? PaneWallPolicy.homePage() : PaneWallPage.TERMINAL;
+    public PageKind homePage() {
+        return this == HOME ? PaneWallPolicy.homePage() : PageKind.TERMINAL;
     }
 
     /**
      * Start in as this mode reads it ({@code startIn} already {@link StartInPolicy#effective}):
-     * Home is the Workspace under Terminal only. The stored value is left alone, so going back to
+     * Home is the Terminal under Terminal only. The stored value is left alone, so going back to
      * Home screen finds it again.
      */
     @NonNull
     public String startIn(@Nullable String startIn) {
         String value = StartInPolicy.read(startIn);
         if (this == TERMINAL && WallRow.START_IN_HOME.equals(value))
-            return WallRow.START_IN_WORKSPACE;
+            return WallRow.START_IN_TERMINAL;
         return value;
     }
 
@@ -104,32 +104,21 @@ public enum UseAs {
         return Collections.unmodifiableList(kept);
     }
 
-    /** Whether {@code card} can be opened: the Home card is gone under Terminal only. */
-    public boolean reaches(@Nullable EditorCard card) {
-        return card == null || this == HOME || card != EditorCard.HOME;
-    }
-
-    /** The card a door opens under this mode: the editor at rest (null) for a card it took away. */
-    @Nullable
-    public EditorCard doorCard(@Nullable EditorCard card) {
-        return reaches(card) ? card : null;
-    }
-
     /**
      * The page the editor is asked to stand on: under Terminal only a Home page is never one, and
      * the editor stands on the page on screen (null) instead.
      */
     @Nullable
-    public PaneWallPage editorPlace(@Nullable PaneWallPage place) {
-        return this == TERMINAL && place == PaneWallPage.WIDGETS ? null : place;
+    public PageKind editorPlace(@Nullable PageKind place) {
+        return this == TERMINAL && place == PageKind.HOME ? null : place;
     }
 
     /**
      * Whether a switch to this mode with {@code onScreen} in front moves the wall: choosing
-     * Terminal only while on the Home page goes to the Workspace.
+     * Terminal only while on the Home page goes to the Terminal.
      */
-    public boolean leaves(@Nullable PaneWallPage onScreen) {
-        return this == TERMINAL && onScreen == PaneWallPage.WIDGETS;
+    public boolean leaves(@Nullable PageKind onScreen) {
+        return this == TERMINAL && onScreen == PageKind.HOME;
     }
 
     /** The line a door to something this mode took away logs: {@code "<door> hidden by terminal -> REST"}. */

@@ -6,10 +6,10 @@ import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 /**
- * The material macro's curves: one (family, intensity) point in, the Base glass triple out.
+ * The material macro's curves: one (family, intensity) point in, the Global glass triple out.
  *
  * <p>Three families, each a straight line through blur/opacity/grain space. Glass passes through
- * the shipped Base triple (8 / 34 / 18) at intensity 50, so the shipped look reads as a point on
+ * the shipped Global triple (8 / 34 / 18) at intensity 50, so the shipped look reads as a point on
  * the default curve rather than as "Custom". The macro never runs the other way: a triple the
  * curves cannot reproduce simply is Custom, and the editor leaves it alone until the user touches
  * the macro again.
@@ -28,7 +28,7 @@ public final class SurfaceMaterials {
     public static final int GRAIN = 2;
 
     /**
-     * The Base triple a family produces at {@code intensity}. An unknown family reads as glass,
+     * The Global triple a family produces at {@code intensity}. An unknown family reads as glass,
      * the default, so a stored value from a newer build degrades to something sensible.
      */
     @NonNull

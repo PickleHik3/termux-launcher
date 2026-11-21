@@ -369,13 +369,9 @@ public final class AppNoticeHostView extends LinearLayout {
         // Where the terminal's rim and the chrome's bottom edge are, as of this frame — not as of
         // whenever the host was attached, which may have been before either was laid out.
         if (mPlacementRefresh != null) mPlacementRefresh.run();
-        // Above anything added to the content root after the pill was: the first-boot tour
-        // overlay, a transition overlay. A notice nobody can see is worse than no notice.
-        View outermost = getParent() instanceof ViewGroup ? (View) getParent() : this;
-        ViewGroup parent = outermost.getParent() instanceof ViewGroup
-            ? (ViewGroup) outermost.getParent() : null;
-        if (parent != null && parent.getChildAt(parent.getChildCount() - 1) != outermost)
-            outermost.bringToFront();
+        // Over the other things in the notices layer (help, a reset card): a notice nobody can see
+        // is worse than no notice.
+        com.termux.app.window.WindowLayers.raiseWithin(getParent() instanceof ViewGroup ? (View) getParent() : this);
         setVisibility(VISIBLE);
         appear();
         startHold(item);
@@ -399,14 +395,17 @@ public final class AppNoticeHostView extends LinearLayout {
         // A mark only where it means something: a confirmation, a warning, a failure, an undo. The
         // plain-message case — most of the app's notices — is just the sentence, and a decorative
         // chevron in front of it made a simple pill look like a widget.
-        boolean marked = item.attention || item.kind != AppNoticeItem.Kind.INFO
-            || !TextUtils.isEmpty(item.glyph);
+        boolean marked = item.hasMark();
         mGlyph.setVisibility(marked ? VISIBLE : GONE);
         if (marked) {
-            // Spanned so a nerd-symbol glyph (the attention bell) renders from the bundled symbol
-            // face; plain glyphs pass through untouched.
-            mGlyph.setText(com.termux.shared.termux.font.NerdFontSpans.span(
-                getContext(), item.resolvedGlyph()));
+            // An icon is one drawn character in the mark's own text, sized and tinted by the text
+            // like the glyph it replaces; a text glyph is spanned so a nerd-symbol glyph renders
+            // from the bundled symbol face.
+            int icon = item.resolvedIcon();
+            mGlyph.setText(icon != 0
+                ? com.termux.shared.termux.font.NerdFontSpans.iconSpan(getContext(), icon)
+                : com.termux.shared.termux.font.NerdFontSpans.span(
+                    getContext(), item.resolvedGlyph()));
             mGlyph.setTextColor(accent);
         }
 

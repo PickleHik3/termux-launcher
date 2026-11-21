@@ -6,8 +6,6 @@
         <ListPreference app:key="termux_api_log_level" app:title="@string/settings_termux_api_log_level_title" />
         <SwitchPreferenceCompat app:key="terminal_view_key_logging_enabled"
             app:title="@string/settings_log_terminal_keys_title" app:summary="@string/settings_log_terminal_keys_summary" />
-        <SwitchPreferenceCompat app:key="glass_even_out_enabled"
-            app:title="@string/settings_glass_even_out_title" app:summary="@string/settings_glass_even_out_summary" />
         <SwitchPreferenceCompat app:key="motion_log_enabled"
             app:title="@string/settings_motion_log_title" app:summary="@string/settings_motion_log_summary" />
     </PreferenceCategory>
@@ -20,6 +18,9 @@
     <PreferenceCategory app:title="@string/settings_diagnostics_checks_header">
         <Preference app:key="privileged_backend_smoke_test"
             app:title="@string/settings_test_backend_title" app:summary="@string/settings_test_backend_summary" />
+        <!-- Android's limit on the launcher's programs; the summary is set from code. -->
+        <Preference app:key="process_limit" app:persistent="false"
+            app:title="@string/settings_process_limit_title" />
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/settings_diagnostic_actions_header">
         <Preference app:key="copy_diagnostics" app:title="@string/settings_copy_diagnostics_title" app:summary="@string/settings_copy_diagnostics_summary" />

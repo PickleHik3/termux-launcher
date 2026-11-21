@@ -71,18 +71,24 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_extension, "plugin_error_notifications_enabled");
         key(R.drawable.ic_ms_bug_report, "crash_report_notifications_enabled");
         key(R.drawable.ic_ms_science, "privileged_backend_smoke_test");
+        key(R.drawable.ic_ms_memory, "process_limit");
         key(R.drawable.ic_ms_content_copy, "copy_diagnostics", "gui_apps_copy");
         key(R.drawable.ic_ms_ios_share, "export_logs");
         key(R.drawable.ic_ms_delete_sweep, "clear_logs");
 
         // Drawer
         key(R.drawable.ic_ms_grid_view, "app_launcher_drawer_view_type");
+        key(R.drawable.ic_drawer_icon_size, "app_launcher_drawer_icon_size");
+        key(R.drawable.ic_drawer_columns, "app_launcher_drawer_columns");
+        key(R.drawable.ic_drawer_rows, "app_launcher_drawer_rows");
         key(R.drawable.ic_ms_sort_by_alpha, "app_launcher_drawer_az_side");
         key(R.drawable.ic_ms_keyboard_alt, "app_launcher_drawer_search_android_keyboard");
+        key(R.drawable.ic_drawer_search_position, "app_launcher_drawer_search_bottom");
         key(R.drawable.ic_ms_bookmark, "app_launcher_drawer_remember_position");
         key(R.drawable.ic_ms_vertical_align_bottom, "app_launcher_drawer_lower_start");
         key(R.drawable.ic_ms_category, "app_launcher_category_sort");
         key(R.drawable.ic_ms_refresh, "app_launcher_category_refresh");
+        key(R.drawable.ic_ms_restart_alt, "app_launcher_category_order_reset");
 
         // Backup
         key(R.drawable.ic_ms_upload, "settings_backup_export");
@@ -112,10 +118,10 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_folder, "gui_apps_starter_files");
         key(R.drawable.ic_ms_developer_board, "x11_gpu", "status_widget_cpu");
         key(R.drawable.ic_ms_apps, "display", "x11_drawer_apps");
-        key(R.drawable.ic_ms_volume_up, "launcher_sound");
+        key(R.drawable.ic_ms_volume_up, "launcher_sound", "launcher_sound_status");
         key(R.drawable.ic_ms_play_circle, "launcher_media_controls");
         key(R.drawable.ic_ms_install_desktop, "x11_gui_apps_setup");
-        key(R.drawable.ic_ms_visibility_off, "x11_hidden_apps");
+        key(R.drawable.ic_ms_tune, "x11_apps");
         key(R.drawable.ic_ms_desktop_windows, "x11_window_manager");
         key(R.drawable.ic_ms_play_circle, "x11_start_with");
         key(R.drawable.ic_ms_terminal, "x11_start_with_command");
@@ -125,7 +131,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_build, "x11_sub_troubleshooting", "tai_advanced");
         key(R.drawable.ic_ms_keyboard_double_arrow_up, "x11_keyboard_follows_text");
         key(R.drawable.ic_ms_layers, "x11_keyboard_over_display");
-        key(R.drawable.ic_ms_content_paste, "clipboardEnable", "terminal_osc52_clipboard_read_enabled",
+        key(R.drawable.ic_ms_content_paste, "clipboardEnable", "x11_paste_shortcut", "terminal_osc52_clipboard_read_enabled",
             "terminal_sub_clipboard");
         key(R.drawable.ic_ms_aspect_ratio, "displayResolutionMode", "app_launcher_home_icon_scale");
         key(R.drawable.ic_ms_zoom_in, "displayScale");
@@ -140,7 +146,9 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_swap_horiz, "x11_force_bgra");
 
         // Home
-        key(R.drawable.ic_ms_palette, "home_layout_editor", "terminal_layout_editor");
+        key(R.drawable.ic_ms_palette, "home_layout_editor", "terminal_layout_editor",
+            "status_layout_editor", "terminal_text_layout_editor", "terminal_windows_layout_editor",
+            "fonts_layout_editor");
         key(R.drawable.ic_ms_format_size, "app_launcher_home_label_size", "fonts_size");
         key(R.drawable.ic_ms_wrap_text, "app_launcher_home_label_two_lines");
         key(R.drawable.ic_ms_shadow, "app_launcher_home_label_shadow");
@@ -167,7 +175,6 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_push_pin, "app_launcher_default_buttons", "essential_notification_rules_manage");
         key(R.drawable.ic_ms_star, "app_launcher_most_used_page");
         key(R.drawable.ic_ms_grid_view, "app_launcher_drawer_layout");
-        key(R.drawable.ic_ms_desktop_windows, "linux_apps_in_drawer");
         key(R.drawable.ic_ms_search, "app_launcher_sub_search");
         key(R.drawable.ic_ms_tag, "app_launcher_input_char");
         key(R.drawable.ic_ms_rocket_launch, "app_launcher_drawer_open_only_match");
@@ -180,6 +187,7 @@ public final class SettingsRowIcons {
         // Battery & performance
         key(R.drawable.ic_ms_bedtime, "lazy_mode");
         key(R.drawable.ic_ms_memory, "low_memory_preset", "status_widget_ram", "tai_memory_limits");
+        key(R.drawable.ic_ms_battery_full, "status_widget_battery");
         key(R.drawable.ic_ms_blur_on, "fancier_glass");
         key(R.drawable.ic_ms_auto_awesome, "fancier_glass_motion_light");
         key(R.drawable.ic_ms_tv, "terminal_retro_effect");
@@ -221,6 +229,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_cleaning_services, "terminal_clipboard_cleanup");
         key(R.drawable.ic_ms_height, "terminal_margin_adjustment", "in_app_keyboard_floating_height");
         key(R.drawable.ic_ms_speed, "terminal_engine");
+        key(R.drawable.ic_ms_delete_sweep, "terminal_clipboard_read_reset");
         key(R.drawable.ic_ms_view_quilt, "terminal_sub_windows");
         key(R.drawable.ic_ms_toolbar, "status_bar");
         key(R.drawable.ic_ms_text_fields, "terminal_sub_text");
@@ -244,7 +253,6 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_language, "pass_ctrl_space_to_android", "keyboard_sub_layout", "keyboard_voice_language");
         key(R.drawable.ic_ms_favorite, "keyboard_credits_text");
         key(R.drawable.ic_ms_shop, "keyboard_credits_play");
-        key(R.drawable.ic_ms_open_in_full, "keyboard_sub_size");
         key(R.drawable.ic_ms_match_case, "extra_keys_text_all_caps");
         key(R.drawable.ic_ms_keyboard_external_input, "keyboard_sub_hardware");
         key(R.drawable.ic_ms_width, "in_app_keyboard_floating_width");
@@ -268,7 +276,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_dark_mode, "theme_mode");
         key(R.drawable.ic_ed_wallpaper_colours, "terminal_dynamic_colors_enabled");
         key(R.drawable.ic_ms_contrast, "terminal_contrast_level");
-        key(R.drawable.ic_ms_format_paint, "theme_templates_enabled");
+        key(R.drawable.ic_ms_format_paint, "theme_templates_enabled", "terminal_sub_tui_themes");
         key(R.drawable.ic_ed_show_wallpaper, "use_system_wallpaper");
         key(R.drawable.ic_ed_monochrome, "app_launcher_bw_icons");
 

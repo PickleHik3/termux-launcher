@@ -42,9 +42,10 @@ import java.util.List;
  * comes from the launcher's menu module ({@link AnchoredMenu#buildDetached}, the shell from
  * {@link MenuRowFactory}), so it has the dock folder's glass, but it is shown in a
  * {@link HomeFolderOverlay} over the Home pane rather than in a window of its own: the in-app
- * keyboard a rename is typed with stays over it and pressable, and undimmed. It springs in and
- * out as a dock folder does. The title is the dock's {@link FolderRenameTitleView}: a tap on it
- * starts the dock's own focusless rename through the activity ({@link Callbacks#onBeginRename}).
+ * keyboard a rename is typed with stays over it and pressable, and nothing dims. It grows out of
+ * its icon and back into it ({@link com.termux.app.launcher.folder.FolderExpandMotion}). The
+ * title is the dock's {@link FolderRenameTitleView}: a tap on it starts the dock's own focusless
+ * rename through the activity ({@link Callbacks#onBeginRename}).
  *
  * <p>The apps are laid out as they are on the page ({@link HomeAppIconView}: icon and label), up to
  * four across at the default density ({@link HomeFolderDensity}). A tap launches the app and

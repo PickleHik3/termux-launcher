@@ -2,6 +2,7 @@
     <item name="help_split_divider" type="id" />
     <!-- The decor view's tag holding the panels' backdrop source (PanelBackdrop.install). -->
     <item name="panel_backdrop_source" type="id" />
+    <item name="glass_service" type="id" />
     <!-- The Appearance editor header ⋮ menu's Reset item. -->
     <item name="editor_header_reset" type="id" />
 
@@ -17,7 +18,6 @@
     <item name="x11_gpu_detail" type="id" />
     <item name="x11_gpu_radio" type="id" />
     <item name="x11_gpu_pill" type="id" />
-    <item name="x11_gpu_rows" type="id" />
 
     <!-- The benchmark screens (Home, Choose, Run, Result), built in code: their lists and the
          views a row binds by id. -->

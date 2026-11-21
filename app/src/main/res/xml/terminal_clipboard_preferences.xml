@@ -9,6 +9,10 @@
             app:title="@string/settings_osc52_clipboard_read_title"
             app:summary="@string/settings_osc52_clipboard_read_summary"
             android:defaultValue="true" />
+        <Preference
+            app:key="terminal_clipboard_read_reset"
+            app:title="@string/settings_clipboard_read_reset_title"
+            app:summary="@string/settings_clipboard_read_reset_summary" />
         <SwitchPreferenceCompat
             app:key="terminal_clipboard_cleanup"
             app:title="@string/settings_clipboard_cleanup_title"

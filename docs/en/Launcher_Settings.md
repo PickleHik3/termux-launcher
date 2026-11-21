@@ -7,8 +7,9 @@ Open Settings by holding a corner of the terminal and tapping the cog, by long-p
 terminal and choosing **Settings**, from **Settings** in the command palette on Home, or from the
 **Settings** shortcut on the app icon in another launcher. **Search settings** at the top finds any
 setting inside every page, so `fonts`, `ligatures` or `Shizuku` lead straight to the right place.
-Search also finds the settings that live in the Appearance editor (theme, wallpaper, icon pack,
-full screen and the rest) and opens the editor for them.
+Search also finds the settings that live in the Appearance editor (theme, wallpaper, icon size,
+cursor trail, the floating keyboard's width and the rest) and opens the editor on the card that
+holds them.
 
 Settings is grouped in three: **Your launcher** (Home, Dock, Terminal, Linux apps),
 **Everywhere** (Appearance, Keyboard, Notifications, On-device AI) and **System** (General).
@@ -18,7 +19,7 @@ Settings is grouped in three: **Your launcher** (Home, Dock, Terminal, Linux app
 ### Home
 
 "Pages, widgets, gestures and where you start". **Appearance** opens the Appearance editor on
-Home. Then **Icons and labels**, **Folders**, **Gestures**, **Home widgets** and **Pages** (**Page indicator**, **Edit pages** (the order of the wall's pages), **Wallpaper scrolls with pages**, **Lock Home layout** and **Start in**).
+Home. Then **Gestures**, **Home widgets** and **Pages** (**Edit pages** (the order of the wall's pages), **Lock Home layout** and **Start in**). Icon and label sizes, folders, the page dots and wallpaper scrolling are on the editor's Home card.
 
 **Gestures** holds every gesture in one place: the five on a Home page's free area (swipe up,
 swipe down, double-tap, two-finger swipe up and down), then **Double-tap to lock** (its page picks
@@ -26,7 +27,7 @@ the lock method), **Swipe up on app icons for quick reply** (on by default; off,
 notification dot behaves like on any other icon) and **Swipe on the terminal to switch windows**.
 
 **Start in** is **Home** (the default) or **Terminal**: where the launcher opens after a restart
-and where the Home button takes you; **Terminal** opens the Workspace with one fresh shell window. See
+and where the Home button takes you; **Terminal** opens the Terminal with one fresh shell window. See
 [Home screen and apps](Home_Screen_And_Apps.md) and [Widgets](Widgets.md).
 
 ### Dock
@@ -39,8 +40,10 @@ apps in the drawer**, which opens the Linux apps section. See
 ### Terminal
 
 "Windows, panes, status bar and text". **Appearance** opens the Appearance editor on the
-Terminal, then the **Windows & panes**, **Status bar**, **Text & display** (font,
-cursor trail, terminal effect) and **Clipboard & compatibility** pages. **Terminal engine**, on
+Terminal, then the **Windows & panes**, **Status bar**, **Text & display** (the font),
+**Tool colours** and **Clipboard & compatibility** pages. How panes split and tile, the cursor trail
+and the screen effect are set on the editor's Terminal card, and the clock and the readings on its
+Status bar card. **Terminal engine**, on
 Clipboard & compatibility, picks what reads terminal output for panes you open next; see
 [Terminal engine](Terminal_Kitty_Protocols.md#terminal-engine). See
 [Panes, windows and sessions](Panes_Windows_And_Sessions.md), [Status bar](Status_Bar.md),
@@ -49,8 +52,9 @@ Whether scripts may open panes is covered on [launcherctl](LauncherCtl.md).
 
 ### Linux apps
 
-"Desktop apps, their windows and how they start": **Show Linux apps in drawer**, **Set up Linux
-apps**, **Hidden Linux apps**, **Window manager**, then the **Input**, **Resolution and scaling**,
+"Desktop apps, their windows and how they start": **Set up Linux
+apps** and **Per-app settings**, **Start with**, the **Input** and **Resolution and scaling**
+pages, then under **Advanced** the **Graphics acceleration** row, **Window manager** and the
 **Startup** and **Fixes** pages. There is nothing to switch on: the display starts when a Linux app
 asks for it. Builds made without the display leave this row out. See
 [The Linux display](X11_Display.md) and [Linux apps from a distro](Linux_Apps_From_A_Distro.md).
@@ -59,22 +63,23 @@ asks for it. Builds made without the display leave this row out. See
 
 ### Appearance
 
-"Wallpaper, glass, theme, icons and layout". Not a page: the row opens the Appearance editor over
-the live launcher, where you change how everything looks and where it sits. Every way into the
-editor is called **Appearance**: this row, the Appearance rows on Home, Terminal and Keyboard, and
-the corner tab. See [Look and themes](Look_And_Themes.md) and
+"Wallpaper, glass, theme, icons and layout". Not a page: the row opens the Appearance editor on
+its **Global** card, over the live launcher, where you change how everything looks and where it
+sits. The editor has six cards: **Global**, **Home**, **Terminal**, **Status bar**, **Dock** and
+**Keyboard**. Every way into the editor is called **Appearance**: this row, the Appearance rows on
+Home, Terminal and Keyboard, and the corner tab; each opens its own card. See [Look and themes](Look_And_Themes.md) and
 [Layout and full screen](Layout_And_Full_Screen.md).
 
-Turning **Wallpaper colors** off, or applying a Termux:Styling scheme, builds the launcher's colours
+Turning **Wallpaper colours** (on the Global card) off, or applying a Termux:Styling scheme, builds the launcher's colours
 from `~/.termux/colors.properties`. See
 [Look and themes](Look_And_Themes.md#theming-from-a-color-scheme).
 
 ### Keyboard
 
 "Layouts, size, typing, voice and look": **On-screen keyboard** (**Built-in**, **Android** or
-**Off**) and **Voice input**; the built-in keyboard's **Layouts**, **Size and position** and
-**Typing and feedback** pages; **Appearance** and **Keyboard theme**; **Terminal extra keys**; and
-**Hardware keyboard** in a group of its own. See [Keyboard](Keyboard.md),
+**Off**) and **Voice input**; **Keyboard & extra keys**, with the built-in keyboard's **Layouts**,
+**Size and position** and **Typing and feedback** pages, **Extra keys** and **Uppercase key
+labels**; **Appearance** and **Keyboard theme**; and **Hardware keyboard** in a group of its own. See [Keyboard](Keyboard.md),
 [Extra keys](Extra_Keys.md) and [Voice input](Voice_Input.md).
 
 ### Notifications
@@ -102,7 +107,7 @@ launcher**.
 **Battery & performance** holds **Reduce idle activity** (lazy mode) and **Low-memory preset**,
 with shortcuts to the motion it trims. See
 [Look and themes](Look_And_Themes.md#reduce-idle-activity). **Low-memory preset** is a switch: on,
-it sets the Solid look, an opaque terminal, no cursor trail or terminal effect, no wallpaper
+it sets the Solid look, an opaque terminal, no cursor trail or screen effect, no wallpaper
 parallax and Reduce idle activity; off, it puts back what it replaced. **Live blur** (Android 13 and later): glass blurs whatever
 moves behind it. Uses more battery.
 
@@ -160,7 +165,8 @@ if you want the feature that needs it. See [Shizuku](Shizuku.md).
 
 "Logs and troubleshooting", the one place for logging: **Log level** (the launcher's),
 **Termux:API log level** (shown while Termux:API is installed), **Log keyboard input**, plugin and
-crash alerts, **Test privileged backend**, **Copy diagnostics**, **Export logs** and **Clear
+crash alerts, **Test privileged backend**, **Process limit** (whether Android stops the launcher's
+programs past its limit, and with Shizuku a way back to Android's default), **Copy diagnostics**, **Export logs** and **Clear
 logs**. Diagnostics can contain device, package and path details; review them before posting. See
 [Troubleshooting](Launcher_Troubleshooting.md).
 

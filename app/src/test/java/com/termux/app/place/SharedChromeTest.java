@@ -73,7 +73,7 @@ public class SharedChromeTest {
     }
 
     @Test
-    public void homesValueWinsWhereHomeAndTheWorkspaceDiffer() {
+    public void homesValueWinsWhereHomeAndTheTerminalDiffer() {
         Layouts folded = SharedChromeFold.fold(layouts(
             kind(DockStyle.LENS_BEADS.storageValue(), true, false, "bottom", true),
             kind(DockStyle.GLASS_TRAY.storageValue(), false, true, "top", false)));

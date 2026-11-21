@@ -74,4 +74,13 @@ public class PeekRimDrawableTest {
     private static Rect boundsOf(View v) {
         return new Rect(v.getLeft(), v.getTop(), v.getRight(), v.getBottom());
     }
+
+    @Test
+    public void aBlendedCutInsetsTheRimToIt() {
+        ColorDrawable inner = new ColorDrawable(0x80FFFFFF);
+        PeekRimDrawable rim = PeekRimDrawable.forCut(inner,
+            new float[] {16.4f, 47.6f, 1064f, 1000f, 50f}, 1080);
+        rim.setBounds(0, 0, 1080, 709);
+        assertEquals(new Rect(16, 48, 1064, 709), inner.getBounds());
+    }
 }

@@ -16,9 +16,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** The evidence as {@link TaiEvidenceFiles} reads it from this phone's files. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiEvidenceFilesTest {
     private static final String MODEL = "user-chat";
     private static final String MNN = TaiModelSpec.BACKEND_MNN_LLM;

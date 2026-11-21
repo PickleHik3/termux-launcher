@@ -406,6 +406,13 @@ public final class GlassRefraction {
         public final int faceClarityPercent;
         public final int dimPercent;
         public final int sizeLensPercent;
+        /**
+         * The glass sinks into the page instead of standing out of it: the program draws the
+         * picture through the concave lens ({@link GlassRefraction#concavePullPx}) and nothing
+         * else, none of the convex rim's bend, gathered light or colour split. Not stored; the
+         * page bar asks for it ({@code PageBarGlassStyle}).
+         */
+        public final boolean concave;
 
         public Look(int bendDp, int edgeWidthDp, int edgeLightPercent) {
             this(bendDp, edgeWidthDp, edgeLightPercent, 0, 0, 0);
@@ -431,6 +438,14 @@ public final class GlassRefraction {
         private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
                      int dispersionPercent, int clarityPercent, int coverPercent,
                      int faceClarityPercent, int dimPercent, int sizeLensPercent) {
+            this(bendDp, edgeWidthDp, edgeLightPercent, specularPercent, dispersionPercent,
+                clarityPercent, coverPercent, faceClarityPercent, dimPercent, sizeLensPercent, false);
+        }
+
+        private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
+                     int dispersionPercent, int clarityPercent, int coverPercent,
+                     int faceClarityPercent, int dimPercent, int sizeLensPercent, boolean concave) {
+            this.concave = concave;
             this.faceClarityPercent = Math.max(0, Math.min(100, faceClarityPercent));
             this.dimPercent = Math.max(0, Math.min(100, dimPercent));
             this.sizeLensPercent = Math.max(0, Math.min(100, sizeLensPercent));
@@ -454,14 +469,23 @@ public final class GlassRefraction {
             if (percent == coverPercent) return this;
             return new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
                 dispersionPercent, clarityPercent, percent, faceClarityPercent, dimPercent,
-                sizeLensPercent);
+                sizeLensPercent, concave);
+        }
+
+        /** This look sunk into the page ({@link #concave}), or standing out of it as every other glass. */
+        @NonNull
+        public Look withConcave(boolean concave) {
+            if (concave == this.concave) return this;
+            return new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
+                dispersionPercent, clarityPercent, coverPercent, faceClarityPercent, dimPercent,
+                sizeLensPercent, concave);
         }
 
         /** This look with Clear's face terms set (percentages, 0 for none). */
         @NonNull
         public Look withFaceTerms(int faceClarity, int dim, int sizeLens) {
             Look next = new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
-                dispersionPercent, clarityPercent, coverPercent, faceClarity, dim, sizeLens);
+                dispersionPercent, clarityPercent, coverPercent, faceClarity, dim, sizeLens, concave);
             return next.equals(this) ? this : next;
         }
 
@@ -581,14 +605,16 @@ public final class GlassRefraction {
                 && faceClarityPercent == that.faceClarityPercent
                 && dimPercent == that.dimPercent
                 && sizeLensPercent == that.sizeLensPercent
-                && coverPercent == that.coverPercent;
+                && coverPercent == that.coverPercent
+                && concave == that.concave;
         }
 
         @Override
         public int hashCode() {
-            return ((((((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
+            return (((((((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
                 + dispersionPercent) * 31 + clarityPercent) * 31 + coverPercent) * 31
-                + faceClarityPercent) * 31 + dimPercent) * 31 + sizeLensPercent;
+                + faceClarityPercent) * 31 + dimPercent) * 31 + sizeLensPercent) * 31
+                + (concave ? 1 : 0);
         }
 
         @NonNull
@@ -597,7 +623,7 @@ public final class GlassRefraction {
             return "Look{bend=" + bendDp + "dp, edge=" + edgeWidthDp + "dp, light=" + edgeLightPercent + "%, specular="
                 + specularPercent + "%, dispersion=" + dispersionPercent + "%, clarity=" + clarityPercent
                 + "%, cover=" + coverPercent + "%, face=" + faceClarityPercent + "%, dim=" + dimPercent
-                + "%, sizeLens=" + sizeLensPercent + "%}";
+                + "%, sizeLens=" + sizeLensPercent + "%" + (concave ? ", concave" : "") + "}";
         }
     }
 
@@ -765,6 +791,15 @@ public final class GlassRefraction {
         "uniform float uLensRadius;\n" +
         "uniform float uLensStrength;\n" +
         "uniform float uLensFeather;\n" +
+        // The concave lens (Look.concave): x 1 to draw it, 0 for every other surface, which then
+        // draws exactly as before; y the deepest its band reaches, px. setLook in Java.
+        "uniform float2 uConcave;\n" +
+        // Its band as the most of the short side, its pull as a share of the band, and the
+        // steepest the pull may rise across the lip. CONCAVE_BAND_MAX_SHARE, CONCAVE_PULL_SHARE
+        // and CONCAVE_LIP_MAX_SLOPE in Java.
+        "const float kConcaveBandShare = " + GlassRefraction.CONCAVE_BAND_MAX_SHARE + ";\n" +
+        "const float kConcavePullShare = " + GlassRefraction.CONCAVE_PULL_SHARE + ";\n" +
+        "const float kConcaveLipSlope = " + GlassRefraction.CONCAVE_LIP_MAX_SLOPE + ";\n" +
         // The outermost width the pull eases in across, a dp never under two px.
         // Look.RIM_WIDTH_DP and MIN_RIM_WIDTH_PX in Java.
         "const float kRimDp = 1.0;\n" +
@@ -898,6 +933,14 @@ public final class GlassRefraction {
         // ring (a kink in a gradient's slope is where a Mach band shows). softProfile in Java.
         // The centre x of the bead nearest x: twelve compares, no loop and no array, so the
         // program compiles everywhere AGSL does. nearestBeadX in Java.
+        // The concave lens's pull at y px in from the rim, outward: up from nothing at the rim
+        // across the lip cL on a smoothstep to cP, then down to nothing at the band's inner edge
+        // cB on another. concavePullPx in Java.
+        "float concavePull(float y, float cB, float cP, float cL) {\n" +
+        "    if (y <= 0.0 || y >= cB) { return 0.0; }\n" +
+        "    if (y < cL) { return cP * smoothstep(0.0, cL, y); }\n" +
+        "    return cP * (1.0 - smoothstep(cL, cB, y));\n" +
+        "}\n" +
         "float nearestBead(float x) {\n" +
         "    float bx = uBeadXA.x;\n" +
         "    float bd = abs(x - uBeadXA.x);\n" +
@@ -1053,6 +1096,20 @@ public final class GlassRefraction {
         // pulled the pull turns smoothly; snapped round a small corner, it mitred into a crease
         // that ran in from each corner and met its twin at the centre line as a chevron.
         "    float hs = min(b.x, b.y);\n" +
+        // The concave lens (a well, the page bar): each pixel shows the picture from further out
+        // along the rim's normal, so the wallpaper is drawn in toward the centre line and pressed
+        // together in the band; nothing on the face and nothing at the outline, which shows the
+        // picture right there. The pull never rises faster than kConcaveLipSlope, so the sample
+        // never passes the one before it (no fold, no stretch into streaks) and never leaves the
+        // outline. One sample; none of the convex rim's light, split or motion. concaveOffset in
+        // Java.
+        "    if (uConcave.x > 0.0) {\n" +
+        "        float cB = min(uConcave.y, kConcaveBandShare * 2.0 * hs);\n" +
+        "        float cP = kConcavePullShare * cB;\n" +
+        "        float cL = 1.5 * cP / kConcaveLipSlope;\n" +
+        "        float2 cn = rectNormal(p, b, min(max(cr * 1.5, cB), hs));\n" +
+        "        return content.eval(framePx(fragCoord + cn * concavePull(inside, cB, cP, cL)));\n" +
+        "    }\n" +
         // Size lens (Clear): the band, the bend and the dock's soft band scale with the surface's
         // short side, a thicker slab bending more and reaching deeper; exactly 1 at 0, so the
         // other Looks multiply by one. The caps at hs below still hold. sizeLensK in Java.
@@ -1474,6 +1531,88 @@ public final class GlassRefraction {
     static float pullPx(float insidePx, float bandPx, float strengthPx, float halfShortPx, float rimWidthPx) {
         float t = Math.max(0f, Math.min(1f, insidePx / heldBandPx(bandPx, halfShortPx)));
         return edgeProfile(t) * Math.min(strengthPx, halfShortPx) * smoothstep(0f, rimWidthPx, insidePx);
+    }
+
+    // ------------------------------------------------------------------------ the concave lens
+
+    /**
+     * Which way the picture is pulled along the rim's outward normal: a convex rim samples from
+     * further in ({@code -n * pull}, the picture swells out to the rim), the concave lens from
+     * further out ({@code +n * pull}, the picture is drawn in toward the centre line).
+     */
+    public static final int CONVEX_SIGN = -1;
+    public static final int CONCAVE_SIGN = 1;
+    /** How deep the concave band reaches at most, dp: the program's {@code uConcave.y}. */
+    public static final float CONCAVE_BAND_DP = 12f;
+    /**
+     * The most of the surface's short side the concave band takes ({@code kConcaveBandShare}).
+     * Under a half, so the top and bottom bands never meet: on a 30 dp slab they leave the middle
+     * fifth untouched.
+     */
+    public static final float CONCAVE_BAND_MAX_SHARE = 0.4f;
+    /** The deepest pull, as a share of the band ({@code kConcavePullShare}). */
+    public static final float CONCAVE_PULL_SHARE = 0.2f;
+    /**
+     * The steepest the pull rises across the lip, px per px ({@code kConcaveLipSlope}). Under 1,
+     * so a pixel's sample never passes its outer neighbour's: the picture is never folded back,
+     * and never stretched by more than {@code 1 / (1 - slope)}, where a steeper bend smears one
+     * row of the backdrop down a column (the old convex bend on this slab, whose pull fell
+     * 2.7 px per px). At a half the outermost px are stretched at most twice and every sample
+     * stays inside the outline ({@link #concavePullPx}).
+     */
+    public static final float CONCAVE_LIP_MAX_SLOPE = 0.5f;
+
+    /** The concave band on a surface whose short side is {@code shortSidePx}: {@link #CONCAVE_BAND_DP}, held at {@link #CONCAVE_BAND_MAX_SHARE} of it. */
+    public static float concaveBandPx(float density, float shortSidePx) {
+        return Math.max(0f, Math.min(CONCAVE_BAND_DP * density,
+            CONCAVE_BAND_MAX_SHARE * Math.max(0f, shortSidePx)));
+    }
+
+    /** The deepest pull in a concave band {@code bandPx} deep. */
+    public static float concavePeakPx(float bandPx) {
+        return CONCAVE_PULL_SHARE * bandPx;
+    }
+
+    /**
+     * How far in the pull rises to its peak: just wide enough that a smoothstep's steepest slope
+     * (1.5 times its mean) stays at {@link #CONCAVE_LIP_MAX_SLOPE}. Three fifths of the band.
+     */
+    public static float concaveLipPx(float bandPx) {
+        return 1.5f * concavePeakPx(bandPx) / CONCAVE_LIP_MAX_SLOPE;
+    }
+
+    /**
+     * The program's {@code concavePull}: how far out, px, a pixel {@code insidePx} in from the
+     * rim of a concave band {@code bandPx} deep takes its picture from. Nothing at the outline,
+     * rising across the lip ({@link #concaveLipPx}) to the peak, then falling to nothing at the
+     * band's inner edge, both on a smoothstep, so the pull and its slope are continuous
+     * everywhere. Its rise is at most {@link #CONCAVE_LIP_MAX_SLOPE} px per px, so the sample
+     * {@code insidePx - pull} only ever moves inward with the pixel (no fold), and since the
+     * pull is at most 0.375 of {@code insidePx} the sample stays inside the outline.
+     */
+    public static float concavePullPx(float insidePx, float bandPx) {
+        if (!(insidePx > 0f) || insidePx >= bandPx) return 0f;
+        float peak = concavePeakPx(bandPx);
+        float lip = concaveLipPx(bandPx);
+        if (insidePx < lip) return peak * smoothstep(0f, lip, insidePx);
+        return peak * (1f - smoothstep(lip, bandPx, insidePx));
+    }
+
+    /**
+     * Where a pixel at {@code (px, py)} (from the centre) of a surface of half size
+     * {@code (bx, by)} and corner {@code cr} samples from under the concave lens, as an offset
+     * into {@code out}: {@code CONCAVE_SIGN * n * pull} along the same eased normal the convex
+     * bend uses. The program's concave branch in Java; allocates nothing.
+     */
+    public static void concaveOffset(@NonNull float[] out, float px, float py, float bx, float by,
+                                     float cr, float density) {
+        float hs = Math.min(bx, by);
+        float band = concaveBandPx(density, 2f * hs);
+        float inside = insidePx(px, py, bx, by, cr);
+        rectNormal(out, px, py, bx, by, Math.min(Math.max(1.5f * cr, band), hs));
+        float pull = CONCAVE_SIGN * concavePullPx(inside, band);
+        out[0] *= pull;
+        out[1] *= pull;
     }
 
     /**
@@ -2647,6 +2786,8 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uDisp", look.dispersion());
             mShader.setFloatUniform("uEdgeGain", look.edgeGain());
             mShader.setFloatUniform("uSizeLens", look.sizeLens());
+            mShader.setFloatUniform("uConcave", look.concave ? 1f : 0f,
+                CONCAVE_BAND_DP * mDensity);
             syncClarity();
         }
 

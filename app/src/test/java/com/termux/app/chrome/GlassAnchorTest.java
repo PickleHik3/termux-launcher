@@ -26,6 +26,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * The wall's glass shows wallpaper fixed to the screen. A page that slides, sinks under a held
@@ -34,7 +35,7 @@ import org.robolectric.annotation.GraphicsMode;
  * it — lined up with the backdrop beside the page — while the slab's own layers move.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.Q)
+@Config(sdk = Build.VERSION_CODES.Q, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class GlassAnchorTest {
 

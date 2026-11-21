@@ -109,6 +109,16 @@ public final class WallpaperBlurCache {
         default int glassFrameTint() {
             return GlassFrameTint.NONE;
         }
+
+        /**
+         * True to publish each frame as a {@code HARDWARE} twin with a small sampling copy
+         * ({@link HardwareFrame}) instead of the full-size software bitmap: the glass draws it as a
+         * texture uploaded once rather than on every frame. Off by default, so a source that never
+         * says so keeps the software frames.
+         */
+        default boolean publishesHardwareFrames() {
+            return false;
+        }
     }
 
     /**
@@ -792,10 +802,32 @@ public final class WallpaperBlurCache {
                 // Vibrancy and the frame tint are the glass's, baked here once, in one pass;
                 // radius 0 is the wallpaper itself.
                 if (GlassVibrancy.bakes(blurRadiusDp, vibrancy)
-                    || GlassFrameTint.bakes(blurRadiusDp, frameTint))
-                    return GlassVibrancy.baked(blurredBitmap, vibrancy, frameTint);
+                    || GlassFrameTint.bakes(blurRadiusDp, frameTint)) {
+                    blurredBitmap = GlassVibrancy.baked(blurredBitmap, vibrancy, frameTint);
+                    if (blurredBitmap == null) return null;
+                }
             }
-            return blurredBitmap;
+            return publish(blurredBitmap, wallpaperBitmap);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * The frame as it is handed out: its {@code HARDWARE} twin when the source publishes those
+     * and the twin could be made, the software frame otherwise. A blurred frame nobody else holds
+     * is recycled once its twin exists; the capture itself (radius 0) is the capture's own to let
+     * go, which {@link #settleCapture} does now that it is no longer the frame handed out.
+     */
+    @NonNull
+    private Bitmap publish(@NonNull Bitmap frame, @NonNull Bitmap capture) {
+        if (!mSource.publishesHardwareFrames()) return frame;
+        Trace.beginSection("Blur.publish");
+        try {
+            Bitmap twin = HardwareFrame.publish(frame);
+            if (twin == null) return frame;
+            if (twin != frame && frame != capture) frame.recycle();
+            return twin;
         } finally {
             Trace.endSection();
         }

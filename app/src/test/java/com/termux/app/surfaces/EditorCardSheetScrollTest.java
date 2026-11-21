@@ -26,6 +26,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
 import java.util.List;
+import android.app.Application;
 
 
 /**
@@ -34,7 +35,7 @@ import java.util.List;
  * otherwise the content scrolls as it does without the sheet.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi")
+@Config(sdk = android.os.Build.VERSION_CODES.P, qualifiers = "w411dp-h914dp-420dpi", application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class EditorCardSheetScrollTest {
 
@@ -129,7 +130,15 @@ public class EditorCardSheetScrollTest {
     public void upOnARowFromTheParentGrowsTheSheetOnEveryCard() {
         for (EditorCard card : EditorCard.values()) {
             for (int step = 0; step < 6; step++) {
-                setUp(card);
+                // One sheet per card; a step starts it back where a freshly shown card stands:
+                // at the half detent, the content at its top, laid out.
+                if (step == 0) {
+                    setUp(card);
+                } else {
+                    mSheet.setDetent(EditorCardSheet.DETENT_HALF, false);
+                    mSheet.scroll().scrollTo(0, 0);
+                    layOut();
+                }
                 float top = mHeight - (mHeight * 0.4f);
                 float y = top + 160 + step * (mHeight * 0.4f - 220) / 6f;
                 float x = 100f;
@@ -273,8 +282,8 @@ public class EditorCardSheetScrollTest {
         }
 
         @Nullable @Override public int[] chipIcons(@NonNull Row row) {
-            return row == Row.DESIGN ? new int[] {R.drawable.ic_symbol_dock_glass_tray,
-                R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip}
+            return row == Row.DESIGN ? new int[] {R.drawable.ic_rl_dock_tray,
+                R.drawable.ic_rl_dock_beads, R.drawable.ic_rl_dock_strip}
                 : null;
         }
 

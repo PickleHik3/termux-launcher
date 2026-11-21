@@ -300,6 +300,51 @@ public final class Theme
       this.deckLitFoot = 0;
     }
 
+    /**
+     * Local addition (see UPSTREAM.md, "Palette blend"): the palette {@code t} of the way from
+     * {@code from} to {@code to}, every colour blended channel by channel in ARGB; geometry,
+     * dimming factors, the indicator and the deck are {@code from}'s. Exactly {@code from} at 0 and
+     * {@code to} at 1. The host blends the legends between two looks as a crossing moves, so they
+     * drift from one ink to the other instead of flipping.
+     */
+    public static Palette blend(Palette from, Palette to, float t)
+    {
+      if (!(t > 0f)) return from;
+      if (t >= 1f) return to;
+      Palette p = new Palette(
+          mix(from.keyboardBackground, to.keyboardBackground, t),
+          mix(from.keyBackground, to.keyBackground, t),
+          mix(from.actionKeyBackground, to.actionKeyBackground, t),
+          mix(from.spaceBarBackground, to.spaceBarBackground, t),
+          mix(from.activatedKeyBackground, to.activatedKeyBackground, t),
+          mix(from.labelColor, to.labelColor, t),
+          mix(from.subLabelColor, to.subLabelColor, t),
+          mix(from.activatedLabelColor, to.activatedLabelColor, t),
+          mix(from.pressedLabelColor, to.pressedLabelColor, t),
+          mix(from.lockedModifierColor, to.lockedModifierColor, t),
+          mix(from.borderColor, to.borderColor, t), from.borderEnabled, from.borderWidth,
+          from.borderRadius, from.opacity, from.secondaryDimming, from.greyedDimming,
+          mix(from.actionLabelColor, to.actionLabelColor, t),
+          mix(from.actionSubLabelColor, to.actionSubLabelColor, t), from.indicatorColors,
+          mix(from.keyGradientTopOverlay, to.keyGradientTopOverlay, t),
+          mix(from.keyGradientBottomOverlay, to.keyGradientBottomOverlay, t),
+          mix(from.functionKeyBackground, to.functionKeyBackground, t),
+          mix(from.functionLabelColor, to.functionLabelColor, t));
+      return from.deck
+          ? p.withDeck(from.deckBed, from.deckBedTop, from.deckKey, from.deckKeyTop,
+              from.deckKeyFoot, from.deckLit, from.deckLitInk, from.deckLitFoot)
+          : p;
+    }
+
+    private static int mix(int a, int b, float t)
+    {
+      int ar = (a >>> 24) & 0xFF, rr = (a >>> 16) & 0xFF, gr = (a >>> 8) & 0xFF, br = a & 0xFF;
+      return (Math.round(ar + (((b >>> 24) & 0xFF) - ar) * t) << 24)
+          | (Math.round(rr + (((b >>> 16) & 0xFF) - rr) * t) << 16)
+          | (Math.round(gr + (((b >>> 8) & 0xFF) - gr) * t) << 8)
+          | Math.round(br + ((b & 0xFF) - br) * t);
+    }
+
     private Palette(Palette p, int bed, int bedTop, int key, int keyTop,
         int keyFoot, int lit, int litInk, int litFoot)
     {
@@ -642,6 +687,12 @@ public final class Theme
         p.setColor((color & 0x00FFFFFF) | _label_alpha_bits);
         p.setTextSize(text_size);
         return p;
+      }
+
+      /** The colour a label drawn in [color] ends up with, as {@link #label_paint} sets it. */
+      public int label_ink(int color)
+      {
+        return (color & 0x00FFFFFF) | _label_alpha_bits;
       }
 
       private static Paint pick(LabelFace face, Paint key, Paint symbol, Paint text)

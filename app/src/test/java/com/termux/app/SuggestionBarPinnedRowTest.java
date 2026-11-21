@@ -52,7 +52,7 @@ public class SuggestionBarPinnedRowTest {
     private SuggestionBarView bar;
 
     @Before public void setUp() {
-        ReflectionHelpers.setStaticField(LauncherAppDataProvider.class, "instance", null);
+        LauncherAppDataProvider.resetForTest();
         activity = Robolectric.buildActivity(Activity.class).setup().get();
         host = new FrameLayout(activity);
         activity.setContentView(host, new ViewGroup.LayoutParams(1058, 140));

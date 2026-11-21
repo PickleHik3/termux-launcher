@@ -196,6 +196,47 @@ public class DockPlankContentLayersTest {
         assertTrue(f.rows[0].getRotationY() > 0.5f);
     }
 
+    /**
+     * A plank at rest is not a writer: a crossing sinks the dock's glass host (the plank while the
+     * keyboard is up) by translation, and the chrome re-apply that runs mid-crossing re-enables
+     * the plank. Writing its resting answer then would stand the glass at its rest, apart from the
+     * rows still travelling below it, until the next frame that moves the sink.
+     */
+    @Test public void aRestingPlankLeavesAnotherWritersTranslationAlone() {
+        for (boolean hinge : new boolean[]{true, false}) {
+            Fixture f = fixture(hinge, false);
+            f.plank.setTranslationY(270f);
+            f.rows[0].setTranslationY(270f);
+
+            // What the chrome's apply pass does (DockController.refreshDockPlankFx).
+            f.controller.setMotionEnabled(true);
+            f.controller.setHingeMode(hinge);
+            f.controller.setEnabled(true);
+            run(f.controller, 5);
+            // The swap lays the host out at the arriving stack's span mid-crossing.
+            f.plank.layout(0, 0, 1080, 400);
+            f.controller.setEnabled(true);
+            run(f.controller, 5);
+
+            assertEquals(270f, f.plank.getTranslationY(), 0f);
+            assertEquals(270f, f.rows[0].getTranslationY(), 0f);
+        }
+    }
+
+    /** Resting writes nothing, but a touch and a reset still write the plank's whole answer. */
+    @Test public void aTouchAndAResetStillWriteThePlanksAnswer() {
+        Fixture f = fixture(false, false);
+        f.controller.onPointerDown(0.95f, 0.05f);
+        run(f.controller, 30);
+        assertTrue(f.plank.getRotationY() > 0.5f);
+        assertTrue(f.plank.getTranslationY() != 0f);
+
+        f.controller.reset();
+        assertEquals(0f, f.plank.getRotationY(), 0f);
+        assertEquals(0f, f.plank.getTranslationY(), 0f);
+        assertEquals(0f, f.rows[0].getTranslationY(), 0f);
+    }
+
     private static void run(DockPlankController controller, int frames) {
         long nanos = 0L;
         for (int i = 0; i < frames; i++) {

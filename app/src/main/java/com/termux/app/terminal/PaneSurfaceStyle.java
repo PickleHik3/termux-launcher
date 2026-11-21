@@ -72,7 +72,7 @@ public interface PaneSurfaceStyle {
     }
     /**
      * A token that changes whenever what {@link #paneGlassEvenOut} answers may have changed
-     * without any pane moving (the Debugging switch, the Contrast level, a re-measure). A laid-out
+     * without any pane moving (the Opacity, the Contrast level, a re-measure). A laid-out
      * pane polls it in onDraw, a plain int compare, and re-asks when it moved.
      */
     default int paneGlassGeneration() {
@@ -177,7 +177,7 @@ public interface PaneSurfaceStyle {
     @Nullable default android.graphics.Bitmap paneGlassClearFrame() { return null; }
 
     /**
-     * The Look's own glass, Base's values rather than this surface's, which Home's widgets wear
+     * The Look's own glass, Global's values rather than this surface's, which Home's widgets wear
      * whatever a detached surface does; null where nothing supplies one. Carried here so it rides
      * the pass that dresses the wall's pages, and so a Look change re-dresses them
      * ({@link PaneStyleKey}).

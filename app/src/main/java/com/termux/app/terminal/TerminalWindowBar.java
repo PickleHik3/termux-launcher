@@ -145,6 +145,46 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         /** Whether this is a Home float's chip while the float is minimised (#91). */
         public final boolean minimised;
 
+        /**
+         * What a program in this window reports about itself, rolled up over its panes, or null
+         * when none does (or only idle). While set, the pill shows its text in place of the title.
+         */
+        @Nullable public final Status status;
+
+        /** A program's own status as the pill shows it. */
+        public static final class Status {
+            public enum Kind { WORKING, BLOCKED, DONE, ERROR }
+
+            @NonNull public final Kind kind;
+            /** The whole reading, such as "claude needs input 40%": what the pill is read out as. */
+            @NonNull public final String text;
+            /** What the pill shows, such as "claude 40%": the colour says the rest. */
+            @NonNull public final String pill;
+
+            public Status(@NonNull Kind kind, @NonNull String text) {
+                this(kind, text, text);
+            }
+
+            public Status(@NonNull Kind kind, @NonNull String text, @NonNull String pill) {
+                this.kind = kind;
+                this.text = text;
+                this.pill = pill.isEmpty() ? text : pill;
+            }
+
+            @Override
+            public boolean equals(@Nullable Object other) {
+                if (this == other) return true;
+                if (!(other instanceof Status)) return false;
+                Status that = (Status) other;
+                return kind == that.kind && text.equals(that.text) && pill.equals(that.pill);
+            }
+
+            @Override
+            public int hashCode() {
+                return 31 * (31 * kind.hashCode() + text.hashCode()) + pill.hashCode();
+            }
+        }
+
         public static final int NO_PERCENTAGE = -1;
         /** A minimised float's chip, as an alpha: reduced emphasis against an open window's. */
         public static final float MINIMISED_ALPHA = 0.75f;
@@ -200,6 +240,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                           boolean attention, int progress, boolean progressError, boolean done,
                           boolean doneFailed, @Nullable AgentStatus.State agentState,
                           @Nullable Bitmap icon, boolean minimised) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, doneFailed,
+                agentState, icon, minimised, null);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed, @Nullable AgentStatus.State agentState,
+                          @Nullable Bitmap icon, boolean minimised, @Nullable Status status) {
+            this.status = status;
             this.minimised = minimised;
             this.label = label;
             this.spokenLabel = spokenLabel;
@@ -222,14 +271,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withBusy(boolean busy) {
             return busy == this.busy ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
             return attention == this.attention ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         @NonNull
@@ -242,7 +291,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withDone(boolean done, boolean failed) {
             return done == this.done && failed == this.doneFailed ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    failed, agentState, icon, minimised);
+                    failed, agentState, icon, minimised, status);
         }
 
         /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
@@ -250,7 +299,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withProgress(int progress, boolean progressError) {
             return progress == this.progress && progressError == this.progressError ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         /** The rolled-up agent reading for this window's panes; null leaves it to the shell. */
@@ -258,7 +307,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withAgentState(@Nullable AgentStatus.State agentState) {
             return agentState == this.agentState ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         /**
@@ -270,7 +319,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withIcon(@Nullable Bitmap icon) {
             return icon == this.icon ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         /**
@@ -281,7 +330,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withHomeFloat(int page, @NonNull String spokenMark) {
             return new WindowItem(label + HomeFloatPolicy.chipPageMark(page),
                 spokenLabel + ", " + spokenMark, busy, attention, progress, progressError, done,
-                doneFailed, agentState, icon, minimised);
+                doneFailed, agentState, icon, minimised, status);
         }
 
         /**
@@ -293,7 +342,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public WindowItem withMinimised(boolean minimised) {
             return minimised == this.minimised ? this
                 : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
-                    doneFailed, agentState, icon, minimised);
+                    doneFailed, agentState, icon, minimised, status);
+        }
+
+        /** A program's own status; null leaves the pill to the title and the shell's marks. */
+        @NonNull
+        public WindowItem withStatus(@Nullable Status status) {
+            return java.util.Objects.equals(status, this.status) ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon, minimised, status);
         }
 
         /** The alpha this chip rests at: dimmed while it is a minimised float's. */
@@ -307,7 +364,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 && doneFailed == other.doneFailed
                 && progress == other.progress && progressError == other.progressError
                 && agentState == other.agentState && icon == other.icon
-                && minimised == other.minimised;
+                && minimised == other.minimised
+                && java.util.Objects.equals(status, other.status);
         }
 
         /**
@@ -344,6 +402,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             hash = 31 * hash + progress;
             hash = 31 * hash + (progressError ? 1 : 0);
             hash = 31 * hash + (agentState == null ? 0 : agentState.hashCode());
+            hash = 31 * hash + (status == null ? 0 : status.hashCode());
             return hash;
         }
     }
@@ -479,7 +538,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private static final float AUTO_SCROLL_STEP_DP = 6f;
 
     @Nullable private OnWindowChipMovedListener mMoveListener;
-    /** How many chips, from the first, stand for the Workspace's windows and so can be moved. */
+    /** How many chips, from the first, stand for the Terminal's windows and so can be moved. */
     private int mMovableChipCount;
     /** The long press that lifts {@link #mPendingLiftIndex}, armed at DOWN on a movable chip. */
     @Nullable private Runnable mPendingLift;
@@ -615,7 +674,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * Whether a tap on the selected chip offers its ×: on the Workspace, where that window is on
+     * Whether the selected chip's window is on screen on {@code page}: on the Terminal and the
+     * Display it is; on Home and the Assistant the chip stands for a window to go to.
+     */
+    public static boolean selectedChipOnScreen(@Nullable com.termux.app.page.PageKind page) {
+        return page == com.termux.app.page.PageKind.TERMINAL
+            || page == com.termux.app.page.PageKind.DISPLAY;
+    }
+
+    /**
+     * Whether a tap on the selected chip offers its ×: on the Terminal, where that window is on
      * screen. On Home the same chip stands for the window in front of the row, which a tap brings
      * on screen instead (the selected chip could not be reached from Home at all, #90).
      */
@@ -964,6 +1032,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         chip.setPressed(false);
         chip.setScaleX(LIFT_SCALE);
         chip.setScaleY(LIFT_SCALE);
+        // Over its neighbours by draw order; the lift is the chip's shadow.
+        mTabs.setDrawnLast(chip);
         chip.setTranslationZ(dpF(LIFT_ELEVATION_DP));
         com.termux.app.haptics.Haptics.tick(this, android.view.HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
@@ -1100,6 +1170,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private void resetChipTransforms() {
+        mTabs.setDrawnLast(null);
         for (int i = 0; i < mTabs.getChildCount(); i++) {
             View child = mTabs.getChildAt(i);
             child.setTranslationX(0f);
@@ -1328,11 +1399,29 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * reused across a refresh, and a rebuilt row loses the selection slide.
      */
     @NonNull
+    /**
+     * The box the add and close icons occupy, in dp. The old 10dp marks drew a 1.3dp stroke; the
+     * Roundline window icons are 24-unit outlines with a 2-unit stroke, so 16dp gives them a
+     * 1.33dp stroke (13dp of ink) and leaves air in the 24dp row.
+     */
+    static final int WINDOW_ICON_DP = 16;
+
+    /** {@code res} reporting {@link #WINDOW_ICON_DP} as its size, so a CENTER image view keeps it. */
+    @NonNull
+    static android.graphics.drawable.Drawable windowIcon(@NonNull Context context, int res) {
+        android.graphics.drawable.Drawable icon = ContextCompat.getDrawable(context, res);
+        final int side = Math.round(WINDOW_ICON_DP * context.getResources().getDisplayMetrics().density);
+        return new android.graphics.drawable.DrawableWrapper(icon.mutate()) {
+            @Override public int getIntrinsicWidth() { return side; }
+            @Override public int getIntrinsicHeight() { return side; }
+        };
+    }
+
     private AppCompatImageButton ensureCloseButton() {
         AppCompatImageButton close = mCloseButton;
         if (close == null) {
             close = new AppCompatImageButton(getContext());
-            close.setImageResource(R.drawable.ic_status_bar_close_window);
+            close.setImageDrawable(windowIcon(getContext(), R.drawable.ic_rl_window_close));
             close.setScaleType(ImageView.ScaleType.CENTER);
             close.setPadding(0, 0, 0, 0);
             // Clickable and focusable on purpose: the status bar's gesture treats a clickable
@@ -1402,6 +1491,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             // re-inflate the whole pill row and kill the selection slide.
             String agent = agentStateWord(getContext(), item.agentState);
             if (agent != null) description += " · " + agent + ".";
+            if (item.status != null) description += " · " + item.status.text + ".";
             mTabs.getChildAt(i).setContentDescription(description);
         }
     }
@@ -1420,7 +1510,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             Object shown = child.getTag(R.id.terminal_window_tab_state);
             if (!force && shown instanceof WindowItem && ((WindowItem) shown).sameActivity(item)
                 && ((WindowItem) shown).label.equals(item.label)) continue;
-            if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)) {
+            if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)
+                || !java.util.Objects.equals(((WindowItem) shown).status, item.status)) {
                 setTitle((TextView) child, item);
             }
             MinimisedDotDrawable.wear((TextView) child, item.minimised);
@@ -1432,7 +1523,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * The pill's text: the window's title, and nothing else. Every indicator the label used to
+     * The pill's text: the window's title, and nothing else, except that a program's own status
+     * ({@link WindowItem#status}) replaces the title while it has one. Every indicator the label used to
      * spend characters on — the process glyph, the ring, the bell, the tick, the agent's reading — is
      * drawn by {@link ChipWatermarkDrawable} behind and around the title instead, so nine
      * characters of a directory are nine characters of a directory.
@@ -1442,6 +1534,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     @NonNull
     private CharSequence tabText(@NonNull WindowItem item) {
+        if (item.status != null) return item.status.pill;
         String title = titleOf(item.label);
         return TerminalLabelSymbolSpans.apply(
             com.termux.shared.termux.font.NerdFontSpans.span(getContext(), title), mSymbolMaps);
@@ -1449,13 +1542,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /** The pill's text, and the width that text may take. */
     private void setTitle(@NonNull TextView tab, @NonNull WindowItem item) {
-        tab.setMaxWidth(dp(WHOLE_NAMES.contains(titleOf(item.label)) ? WIDE_CHIP_MAX_DP : 104));
+        // A program's status ("demo 40%") is a name the pill's colour reads out; it stays whole.
+        tab.setMaxWidth(dp(item.status != null ? STATUS_CHIP_MAX_DP
+            : WHOLE_NAMES.contains(titleOf(item.label)) ? WIDE_CHIP_MAX_DP : 104));
         tab.setText(tabText(item));
     }
 
     /** The label without the process glyph the factories put in front of it. */
     @NonNull
-    static String titleOf(@NonNull String label) {
+    public static String titleOf(@NonNull String label) {
         int glyphEnd = leadingGlyphEnd(label);
         if (glyphEnd == 0) return label;
         return glyphEnd < label.length() ? label.substring(glyphEnd + 1) : "";
@@ -1482,6 +1577,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     @NonNull
     static ChipWatermarkDrawable.Mark markFor(@NonNull WindowItem item) {
+        if (item.status != null) {
+            switch (item.status.kind) {
+                case BLOCKED: return ChipWatermarkDrawable.Mark.ATTENTION;
+                case ERROR: return ChipWatermarkDrawable.Mark.FAILED;
+                case DONE: return ChipWatermarkDrawable.Mark.DONE;
+                default: return ChipWatermarkDrawable.Mark.NONE;
+            }
+        }
         if (item.agentState != null) {
             if (item.agentState == AgentStatus.State.BLOCKED) {
                 return ChipWatermarkDrawable.Mark.ATTENTION;
@@ -1879,9 +1982,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * How many chips, counted from the first, stand for the Workspace's windows and may be dragged
+     * How many chips, counted from the first, stand for the Terminal's windows and may be dragged
      * to reorder them. The chips after them — the display's, the Home floats' — and every chip of
-     * a place whose row is not the Workspace's (Home, Display) pass 0 and never lift.
+     * a place whose row is not the Terminal's (Home, Display) pass 0 and never lift.
      */
     public void setMovableChipCount(int count) {
         mMovableChipCount = Math.max(0, count);
@@ -1945,7 +2048,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             : MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(context, R.color.termux_primary));
         AppCompatImageButton add = new AppCompatImageButton(context);
-        add.setImageResource(R.drawable.ic_status_bar_add_window);
+        add.setImageDrawable(windowIcon(context, R.drawable.ic_rl_window_add));
         ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(plusTint(accent)));
         add.setScaleType(ImageView.ScaleType.CENTER);
         add.setBackground(null);
@@ -2445,6 +2548,26 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         /** How far the chips after the segment are currently pushed, so an offset never doubles. */
         private int mAppliedShiftPx;
 
+        /** The chip drawn over its neighbours (the lifted one, until it has settled), or null. */
+        @Nullable private View mDrawnLast;
+
+        /** Draws {@code chip} after the others, whatever its place in the row. */
+        void setDrawnLast(@Nullable View chip) {
+            if (mDrawnLast == chip) return;
+            mDrawnLast = chip;
+            // Only while a chip is out of its place: the row draws in plain child order at rest.
+            setChildrenDrawingOrderEnabled(chip != null);
+            invalidate();
+        }
+
+        @Override
+        protected int getChildDrawingOrder(int childCount, int drawingPosition) {
+            int at = mDrawnLast == null ? -1 : indexOfChild(mDrawnLast);
+            if (at < 0 || at >= childCount) return drawingPosition;
+            if (drawingPosition < at) return drawingPosition;
+            return drawingPosition == childCount - 1 ? at : drawingPosition + 1;
+        }
+
         SelectionStrip(@NonNull Context context) {
             super(context);
             setWillNotDraw(false);
@@ -2700,6 +2823,21 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
+     * The width of the chip in front: the selected one, else the first shown. The least the bar
+     * must be given for one whole chip to show; 0 when there are none.
+     */
+    public int frontChipWidthPx() {
+        View chip = selectedTabView();
+        if (chip == null || chip.getVisibility() == GONE) {
+            chip = null;
+            for (int i = 0; i < mTabs.getChildCount() && chip == null; i++) {
+                if (mTabs.getChildAt(i).getVisibility() != GONE) chip = mTabs.getChildAt(i);
+            }
+        }
+        return chip == null ? 0 : chip.getMeasuredWidth();
+    }
+
+    /**
      * The selected tab's view, so a surface can anchor itself to the window it belongs to. Null
      * before the row is populated or while nothing is selected.
      */
@@ -2813,6 +2951,12 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     /** The widest chip, for a {@link #WHOLE_NAMES} label: sixteen characters at 10.5sp. */
     private static final int WIDE_CHIP_MAX_DP = 124;
+
+    /**
+     * A chip showing a program's status: about 22 characters at 10.5sp, so "claude needs input
+     * 40%" stays whole; a longer name still ends in an ellipsis.
+     */
+    private static final int STATUS_CHIP_MAX_DP = 176;
 
     @NonNull
     public static String truncateProcess(@NonNull String process) {

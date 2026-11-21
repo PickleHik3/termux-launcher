@@ -3,8 +3,6 @@ package com.termux.app;
 import android.annotation.SuppressLint;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.animation.AnimatorSet;
-import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.ActivityOptions;
@@ -141,7 +139,9 @@ import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.DockPagingModel;
 import com.termux.app.dock.DockDropPolicy;
-import com.termux.app.launcher.paging.PageTickStripView;
+import com.termux.app.dock.DockReorderPolicy;
+import com.termux.app.launcher.paging.PageTicks;
+import com.termux.app.launcher.paging.PageTicksListener;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.theme.ThemeUtils;
@@ -223,9 +223,6 @@ public final class SuggestionBarView extends GridLayout
     private static final String PAGING_LOG_TAG = "DockPaging";
     private static final char[] AZ_ORDER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".toCharArray();
     private static final long APP_LAUNCH_TOUCH_DELAY_MS = 120L;
-    private static final long PICKUP_DECISION_WINDOW_MS = 650L;
-    private static final float PICKUP_X_AXIS_SLOP_FACTOR = 0.9f;
-    private static final float PICKUP_Y_INTENT_SLOP_FACTOR = 1.8f;
     private static final float MENU_SELECTION_ARM_SLOP_FACTOR = 0.8f;
     /**
      * The pinned folder's shell — the disc that says these four icons are one thing. Seeds: white
@@ -326,6 +323,7 @@ public final class SuggestionBarView extends GridLayout
     private boolean rowHapticsEnabled = true;
     @NonNull private Set<String> notificationBadgePackages = Collections.emptySet();
     @Nullable private LauncherNotificationBadgeStore.Listener notificationBadgeListener;
+    /** The band the dock gave the row lying down ({@link #restHeightPx}). */
     private int dockRowHeightHintPx = 0;
     /**
      * The icon one slot draws lying down, as the dock resolved it: final, its slot fit and bead
@@ -376,7 +374,7 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private FolderEntryDragState activeFolderEntryDragState;
     /** Identifies a folder-member drag in windows the drag's local state does not reach. */
     static final String FOLDER_ENTRY_CLIP_LABEL = "folder-entry";
-    /** The half of the wall whose dock glass the menus wear; the Workspace until the host says. */
+    /** The half of the wall whose dock glass the menus wear; the Terminal until the host says. */
     @NonNull private java.util.function.Supplier<Integer> lookPageSupplier = () -> com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId();
 
     public void setLookPageSupplier(@NonNull java.util.function.Supplier<Integer> supplier) {
@@ -385,7 +383,7 @@ public final class SuggestionBarView extends GridLayout
 
     /**
      * The launcher's look-and-feel, read live by the popup module. Menus and folders are sheets:
-     * their opacity, blur and grain are the Sheets element's (ADR 0017), not the dock's; whether
+     * they wear Global's glass with the sheets' opacity floor (ADR 0031); whether
      * blur can run at all (the wallpaper blurs here) stays the host's call ({@link #setBlurConfig}).
      */
     private final AnchoredMenuTheme menuTheme = new AnchoredMenuTheme() {
@@ -395,7 +393,7 @@ public final class SuggestionBarView extends GridLayout
             com.termux.app.chrome.ElementGlass sheets = sheetsGlass();
             return sheets == null ? appBarOpacity : sheets.opacityPercent;
         }
-        // Blur runs where the wallpaper blurs and the Sheets Frost stop is above 0 (ADR 0017).
+        // Blur runs where the wallpaper blurs and Global's Frost stop is above 0 (ADR 0031).
         @Override public boolean blurEnabled() {
             return com.termux.app.chrome.ChromePolicy.dockBlurEnabled(blurRadiusDp());
         }
@@ -410,13 +408,11 @@ public final class SuggestionBarView extends GridLayout
         }
     };
 
-    /** The Sheets element on the page the menus open over; null without a store. */
+    /** Global's glass at the sheets' opacity floor, which the menus wear; null without a store. */
     @androidx.annotation.Nullable
     private com.termux.app.chrome.ElementGlass sheetsGlass() {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
-        return preferences == null ? null : com.termux.app.chrome.ElementGlass.of(preferences,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS,
-            lookPageSupplier.get());
+        return preferences == null ? null : com.termux.app.chrome.SheetGlass.of(preferences);
     }
     private final MenuRowFactory menuRows = new MenuRowFactory(getContext(), menuTheme);
 
@@ -568,8 +564,8 @@ public final class SuggestionBarView extends GridLayout
     private final int[] badgedIconLocation = new int[2];
     /** Set once a badged icon's quick reply has given its stream up to the drawer. */
     private boolean quickReplyHandedOff;
-    /** The page ticks this row carries off the dock; null while it is the dock's own row. */
-    @Nullable private PageTickStripView pageIndicator;
+    /** Whoever draws this row's page ticks; told them on every publish. */
+    @Nullable private PageTicksListener pageTicksListener;
     /**
      * How many most-used apps the column on screen holds after its last pin: what the last
      * committed render put there, so the rail's ticks follow the column as drawn rather than a
@@ -609,33 +605,6 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private ValueAnimator swipePreviewReboundAnimator;
     private VelocityTracker swipeVelocityTracker;
     private boolean pageSwitchAnimating = false;
-    private boolean pendingDeferredRender = false;
-    private boolean suppressDrawUntilStableLayout = true;
-    private boolean stableLayoutRerenderPosted = false;
-    private boolean childLayoutPending = true;
-    private long stableLayoutSuppressedSinceUptimeMs = 0L;
-    private static final int MAX_DEFERRED_RENDER_ATTEMPTS = 8;
-    private int deferredRenderAttempts;
-    /**
-     * A render was turned away for want of stable bounds and nothing has rendered since. The
-     * bounded retries can be spent while the row is hidden (Minimal mode, a re-parenting), so this
-     * outlives them: the next layout pass that leaves the row stable re-issues the render.
-     */
-    private boolean renderLostWhileUnstable;
-    /**
-     * When a render was first turned away for want of stable bounds, and nothing has rendered
-     * since. It is the row's own clock: draw suppression keeps a separate one, which a release
-     * resets while the row may well still be deferring.
-     */
-    private long renderDeferredSinceUptimeMs = 0L;
-    /**
-     * Set once the row has waited out the anti-flicker window, or spent its retries, without ever
-     * reaching the height the dock's hint asked for. The hint stops deciding then: it is somebody
-     * else's idea of the band, and a home screen holding its icons back for a height it may never
-     * be given is worse off than one drawn a few pixels small. A new size, or a new hint, gives it
-     * its say back.
-     */
-    private boolean rowHeightHintWaived = false;
     private int lastSurfaceRenderSignature = 0;
     private boolean pendingPinnedMutationFeedback = false;
     private boolean suppressContextLongPressForSwipe = false;
@@ -645,7 +614,6 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private List<ShortcutInfo> activeAppMenuShortcuts;
     /** Rows being composed for the menu currently under construction, before it is shown. */
     private final List<MenuRow> pendingMenuRows = new ArrayList<>();
-    private static final long STABLE_LAYOUT_MAX_SUPPRESS_MS = 180L;
     @Nullable private TextView shortcutsMainRowView;
     private final Runnable azResetRunnable = this::clearAzPreviewWithFade;
     private static final long AZ_LAUNCH_CLEAR_DELAY_MS = 1000L;
@@ -664,6 +632,8 @@ public final class SuggestionBarView extends GridLayout
     @Nullable private LauncherUsageStatsStore usageStatsStore;
     @Nullable private Runnable appCatalogChangedListener;
     @Nullable private Runnable drawerConfigChangedListener;
+    /** Tells the drawer the hidden set moved, which the catalogue listener does not carry. */
+    @Nullable private Runnable hiddenAppsChangedListener;
     /** A config change that landed while the folder popup was up; replayed when it closes. */
     private boolean pendingDrawerConfigRefresh;
     /** A catalogue swap that landed while the host was hidden; rows re-render on return. */
@@ -695,12 +665,24 @@ public final class SuggestionBarView extends GridLayout
     private boolean rowInteractionActive = false;
     @Nullable private String azFocusedEntryKey;
     @Nullable private View azFocusedView;
-    @Nullable private Animator azFocusAnimator;
+    @Nullable private AzFocusSink azFocusSink;
     private long lastAzFocusBounceUptimeMs = 0L;
     private long azFocusLastSeenUptimeMs = 0L;
     private static final long AZ_FOCUS_BOUNCE_COOLDOWN_MS = 320L;
     private static final long AZ_FOCUS_LOSS_GRACE_MS = 180L;
-    private static final float AZ_FOCUS_REST_ALPHA = 0.26f;
+
+    /** Who writes the A-Z focus onto the focused launch view; the row decides which one. */
+    public interface AzFocusSink {
+        /** {@code target} is focused now; {@code bounce} asks for the dip on arrival. */
+        void focus(@NonNull View target, boolean bounce);
+        /** The focus is gone; the view it was on is put back. */
+        void clear();
+    }
+
+    /** The A-Z gesture's owner; with none the row writes nothing onto a launch view. */
+    public void setAzFocusSink(@Nullable AzFocusSink sink) {
+        azFocusSink = sink;
+    }
 
     public static final int AZ_EDGE_NONE = 0;
     public static final int AZ_EDGE_LEFT = -1;
@@ -804,20 +786,7 @@ public final class SuggestionBarView extends GridLayout
         super.onAttachedToWindow();
         setClipChildren(false);
         setClipToPadding(false);
-        prepareForWindowReentry();
         resetTransientVisualState();
-        ViewParent parent = getParent();
-        if (parent instanceof ViewGroup) {
-            ViewGroup parentGroup = (ViewGroup) parent;
-            parentGroup.setClipChildren(false);
-            parentGroup.setClipToPadding(false);
-            ViewParent grandParent = parentGroup.getParent();
-            if (grandParent instanceof ViewGroup) {
-                ViewGroup grandParentGroup = (ViewGroup) grandParent;
-                grandParentGroup.setClipChildren(false);
-                grandParentGroup.setClipToPadding(false);
-            }
-        }
         attachNotificationBadgeListener();
         // Renders parked while the window was away, for cells still waiting on them.
         iconBinder.resumeAll();
@@ -856,20 +825,10 @@ public final class SuggestionBarView extends GridLayout
         carryLeave();
         // Nothing is rendered, or kept queued, for a window that has gone.
         iconBinder.cancelAll();
-        // A morph never outlives the window: a row that comes back lays out the dock's last
-        // answer rather than waiting for a landing that went with the window.
-        com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
-        if (dockMorphing && laidOut != null) endDockMorph(laidOut);
-        dockMorphing = false;
-        dockMorphSettling = false;
-        removeCallbacks(dockMorphSettleBackstop);
     }
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
-        if (suppressDrawUntilStableLayout) {
-            return;
-        }
         if (swipePageDragging && Math.abs(swipeVisualOffsetPx) > 0.5f) {
             int currentAlpha = clamp(Math.round(255f * (1f - (0.10f * swipeDragProgress))), 0, 255);
             // Clipped along the paging axis only: the page-swap is contained to the bar's own
@@ -902,37 +861,8 @@ public final class SuggestionBarView extends GridLayout
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        // A genuine layout pass is new information: the bounded defer in renderButtons may try
-        // its full budget again, and the dock's height hint gets its say back now that the row is
-        // a size it never had when the hint was overruled.
-        if (changed) {
-            deferredRenderAttempts = 0;
-            renderDeferredSinceUptimeMs = 0L;
-            rowHeightHintWaived = false;
-        }
-        scheduleStableDrawReleaseIfPossible();
-        if (renderLostWhileUnstable) post(this::reissueLostRender);
         // A render ends in a layout pass, so this is where the ticks learn what the row now holds.
-        publishPageIndicator();
-    }
-
-    /**
-     * Re-issues a render the row had to drop while it had no stable bounds. Posted from
-     * {@link #onLayout} because the bounds are only readable once the pass has finished; a row
-     * that is still unstable leaves the flag set for the next pass.
-     */
-    private void reissueLostRender() {
-        if (!renderLostWhileUnstable || !hostVisible || !isAttachedToWindow()
-            || !hasStableRenderBounds()) {
-            return;
-        }
-        renderLostWhileUnstable = false;
-        reload();
-    }
-
-    /** Whether a render is still owed to the row because it was dropped while unstable. */
-    boolean isRenderLostWhileUnstable() {
-        return renderLostWhileUnstable;
+        publishPageTicks();
     }
 
     /**
@@ -989,6 +919,8 @@ public final class SuggestionBarView extends GridLayout
     private int floatTileColumn = -1;
     /** The page's app slots in that render where it held a tile, by app index; else empty. */
     @NonNull private final List<View> tileRowAppViews = new ArrayList<>();
+    /** The page's drawn pins' views by drawn position in that render, tile row or not. */
+    @NonNull private final List<View> pageAppViews = new ArrayList<>();
     /** Whether a long press has picked a still tile (Drawer or palette) up and a drag moves it. */
     private boolean drawerTileDragging;
     /**
@@ -1021,7 +953,7 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null && activeAzLetter == null
             && TextUtils.isEmpty(lastInput.trim()) && !drawerTileDragging) {
             reload();
-            publishPageIndicator();
+            publishPageTicks();
         }
     }
 
@@ -1063,7 +995,7 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null && activeAzLetter == null
             && TextUtils.isEmpty(lastInput.trim()) && !drawerTileDragging) {
             reload();
-            publishPageIndicator();
+            publishPageTicks();
         }
     }
 
@@ -1094,7 +1026,7 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null && activeAzLetter == null
             && TextUtils.isEmpty(lastInput.trim()) && !drawerTileDragging) {
             reload();
-            publishPageIndicator();
+            publishPageTicks();
         }
     }
 
@@ -1122,7 +1054,7 @@ public final class SuggestionBarView extends GridLayout
         tile.setPadding(0, 0, 0, 0);
         tile.setBackground(createPinnedFolderShellBackground());
         tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
-        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_status_bar_add_window);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_rl_window_add);
         floatTileGlyph = null;
         if (glyph != null) {
             glyph = DrawableCompat.wrap(glyph.mutate());
@@ -1168,7 +1100,7 @@ public final class SuggestionBarView extends GridLayout
         tile.setPadding(0, 0, 0, 0);
         tile.setBackground(createPinnedFolderShellBackground());
         tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
-        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_symbol_terminal);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_rl_terminal);
         paletteTileGlyph = null;
         if (glyph != null) {
             glyph = DrawableCompat.wrap(glyph.mutate());
@@ -1204,19 +1136,58 @@ public final class SuggestionBarView extends GridLayout
         if (tileFace == face && tileInkTarget == target) return;
         tileFace = face;
         tileInkTarget = target;
-        int ink = tileGlyphInk();
-        for (Drawable glyph : new Drawable[] {drawerTileGlyph, paletteTileGlyph, floatTileGlyph}) {
-            if (glyph == null) continue;
-            DrawableCompat.setTint(glyph, ink);
-            glyph.invalidateSelf();
-        }
+        // A crossing is drifting the glyphs between two inks; the landing's face comes after it.
+        if (tileInkBlending) return;
+        tintTileGlyphs(tileGlyphInk());
+    }
+
+    private void tintTileGlyphs(int ink) {
+        tintTileGlyph(drawerTileGlyph, ink);
+        tintTileGlyph(paletteTileGlyph, ink);
+        tintTileGlyph(floatTileGlyph, ink);
+    }
+
+    private static void tintTileGlyph(@Nullable Drawable glyph, int ink) {
+        if (glyph == null) return;
+        DrawableCompat.setTint(glyph, ink);
+        glyph.invalidateSelf();
     }
 
     /** The tiles' glyph ink: the theme's, held legible on the shell over the dock's face. */
     private int tileGlyphInk() {
-        return com.termux.app.chrome.WallpaperInk.tileInk(tileFace,
+        return tileGlyphInkOn(tileFace, tileInkTarget);
+    }
+
+    private int tileGlyphInkOn(int face, double target) {
+        return com.termux.app.chrome.WallpaperInk.tileInk(face,
             com.termux.app.chrome.ChromeShade.fill(PINNED_FOLDER_FILL_COLOR),
-            getLauncherTextColor(), tileInkTarget);
+            getLauncherTextColor(), target);
+    }
+
+    private boolean tileInkBlending;
+    private int tileInkFrom;
+    private int tileInkTo;
+
+    /**
+     * A look-only crossing begins: the glyphs' ink at each end is chosen on the face rest kept for
+     * that page ({@link #tileGlyphInkOn}) and {@link #setTileInkBlend} drifts between the two, so
+     * the glyphs never flip. Nothing is measured.
+     */
+    public void beginTileInkBlend(int faceFrom, int faceTo, double target) {
+        tileInkFrom = tileGlyphInkOn(faceFrom, target);
+        tileInkTo = tileGlyphInkOn(faceTo, target);
+        tileInkBlending = true;
+    }
+
+    /** The glyphs' ink {@code share} of the way from the leaving page's to the arriving page's. */
+    public void setTileInkBlend(float share) {
+        if (!tileInkBlending) return;
+        tintTileGlyphs(com.termux.app.glass.LegibilityBlend.color(tileInkFrom, tileInkTo, share));
+    }
+
+    /** The blend is over; the landing's face inks the glyphs for the page it lands on. */
+    public void endTileInkBlend() {
+        tileInkBlending = false;
     }
 
     /**
@@ -1348,7 +1319,7 @@ public final class SuggestionBarView extends GridLayout
         tile.setPadding(0, 0, 0, 0);
         tile.setBackground(createPinnedFolderShellBackground());
         tile.setScaleType(ImageButton.ScaleType.FIT_CENTER);
-        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_symbol_apps);
+        Drawable glyph = ContextCompat.getDrawable(getContext(), R.drawable.ic_rl_apps);
         drawerTileGlyph = null;
         if (glyph != null) {
             glyph = DrawableCompat.wrap(glyph.mutate());
@@ -1561,15 +1532,6 @@ public final class SuggestionBarView extends GridLayout
     @Override
     protected boolean drawChild(@NonNull Canvas canvas, @NonNull View child, long drawingTime) {
         if (!drawingStillTilesUnshifted && swipeOffsetDrawn() && isStillTile(child)) return false;
-        // A crossing's morph draws the slot at the frame's icon and its share of the frame's row.
-        if (slotMorph(child)) {
-            int save = canvas.save();
-            canvas.translate(slotMorphOut[0], 0f);
-            canvas.scale(slotMorphOut[1], slotMorphOut[1], slotMorphOut[2], slotMorphOut[3]);
-            boolean more = super.drawChild(canvas, child, drawingTime);
-            canvas.restoreToCount(save);
-            return more;
-        }
         return super.drawChild(canvas, child, drawingTime);
     }
 
@@ -1608,7 +1570,6 @@ public final class SuggestionBarView extends GridLayout
         // The slots on screen were laid along the old axis; the next render says what stands now.
         railMostUsedSlots = 0;
         lastSurfaceRenderSignature = 0;
-        childLayoutPending = true;
         requestLayout();
         return true;
     }
@@ -1691,20 +1652,18 @@ public final class SuggestionBarView extends GridLayout
      * page swipe) answers where it was laid out.
      */
     public int layoutIconBoxes(@NonNull float[] out) {
-        return iconBoxes(out, false);
+        return iconBoxes(out);
     }
 
     /**
-     * The same boxes where a crossing's morph draws them ({@link #slotMorph}): each moved to its
-     * share of the frame's row and scaled to the frame's icon about its centre, and as laid out
-     * whenever no morph draws the row. A swipe's offset is still not in them. The dock's Lens
-     * beads stand on these, so a bead and its icon never part, at rest or mid-slide.
+     * The same boxes where the row draws them: as laid out, a swipe's offset still not in them.
+     * The dock's Lens beads stand on these, so a bead and its icon never part.
      */
     public int drawnIconBoxes(@NonNull float[] out) {
-        return iconBoxes(out, true);
+        return iconBoxes(out);
     }
 
-    private int iconBoxes(@NonNull float[] out, boolean drawn) {
+    private int iconBoxes(@NonNull float[] out) {
         if (vertical) return 0;
         int max = out.length / 4;
         int count = 0;
@@ -1735,12 +1694,6 @@ public final class SuggestionBarView extends GridLayout
             float halfH = box.getHeight() * 0.5f;
             float cx = left + halfW;
             float cy = top + halfH;
-            if (drawn && slotMorph(slot)) {
-                // The same shift and scale the slot is drawn at, about the same centre.
-                cx += slotMorphOut[0];
-                halfW *= slotMorphOut[1];
-                halfH *= slotMorphOut[1];
-            }
             out[count * 4] = cx - halfW;
             out[count * 4 + 1] = cy - halfH;
             out[count * 4 + 2] = cx + halfW;
@@ -1988,33 +1941,7 @@ public final class SuggestionBarView extends GridLayout
         if (Math.abs(this.iconScale - iconScale) < 0.0001f) return;
         this.iconScale = iconScale;
         invalidateRenderedIconCaches();
-        childLayoutPending = true;
         requestLayout();
-        scheduleSlotIconResize();
-    }
-
-    /**
-     * The dock row's height, for the form that lies down. It is remembered while the bar stands
-     * up — the dock keeps handing its own row height over whichever edge the bar is on — but it
-     * changes nothing there: a rail's icons and slots come from the rail's own metrics.
-     */
-    public void setDockRowHeightHintPx(int dockRowHeightHintPx) {
-        int clamped = Math.max(0, dockRowHeightHintPx);
-        if (this.dockRowHeightHintPx == clamped) {
-            return;
-        }
-        this.dockRowHeightHintPx = clamped;
-        if (vertical) {
-            return;
-        }
-        // A new hint is a new question, so it is asked afresh even if the last one was overruled.
-        rowHeightHintWaived = false;
-        renderDeferredSinceUptimeMs = 0L;
-        invalidateRenderedIconCaches();
-        childLayoutPending = true;
-        requestLayout();
-        invalidate();
-        scheduleStableDrawReleaseIfPossible();
         scheduleSlotIconResize();
     }
 
@@ -2034,10 +1961,8 @@ public final class SuggestionBarView extends GridLayout
             return;
         }
         invalidateRenderedIconCaches();
-        childLayoutPending = true;
         requestLayout();
         invalidate();
-        scheduleStableDrawReleaseIfPossible();
         // The slots already built keep the size they were built at until something resizes
         // them; nothing else re-renders the row when only the dock's size moved.
         scheduleSlotIconResize();
@@ -2048,20 +1973,8 @@ public final class SuggestionBarView extends GridLayout
      * lies in (its hint), the icon one of its slots draws lying down, and the rail's icon and slot
      * standing up. The row draws exactly these and works none of them out of its own.
      *
-     * <p>While a crossing's morph draws the row ({@link #beginDockMorph}) a pass's answer is only
-     * noted, as the layout the row's slots stand in, and the row's own sizes wait for the landing
-     * ({@link #endDockMorph}): no frame of a slide re-renders the row or lays it out.
      */
     public void setDockLayout(@NonNull com.termux.app.dock.DockLayout layout) {
-        dockLaidOutLayout = layout;
-        if (dockMorphing) return;
-        if (dockMorphSettling) {
-            // The dock's answer after a landing: the row is laid out in it by the pass that
-            // draws next, its icons at its own size once their resize has run.
-            dockMorphLandedBase = true;
-            // With no new icon size in it, nothing is left to resize; otherwise the resize ends it.
-            if (Math.max(0, layout.slotIconPx) == dockIconSizePx) settleDockMorphIfLaidOut();
-        }
         int hint = Math.max(0, layout.appsRowBandHintPx);
         int icon = Math.max(0, layout.slotIconPx);
         int railIcon = Math.max(0, layout.railIconSizePx);
@@ -2077,16 +1990,9 @@ public final class SuggestionBarView extends GridLayout
         dockRailIconPx = railIcon;
         dockRailSlotLengthPx = railSlot;
         if (vertical && !railChanged) return;
-        // A new hint is a new question, so it is asked afresh even if the last one was overruled.
-        if (hintChanged) {
-            rowHeightHintWaived = false;
-            renderDeferredSinceUptimeMs = 0L;
-        }
         invalidateRenderedIconCaches();
-        childLayoutPending = true;
         requestLayout();
         invalidate();
-        scheduleStableDrawReleaseIfPossible();
         if (vertical) {
             // A rail's slots are its pitch long, so they are built again at the new one.
             post(this::reload);
@@ -2095,185 +2001,6 @@ public final class SuggestionBarView extends GridLayout
         // The slots already built keep the size they were built at until something resizes
         // them; nothing else re-renders the row when only the dock's size moved.
         scheduleSlotIconResize();
-    }
-
-    // ------------------------------------------------------------------ the dock's morph
-    //
-    // A crossing between Home and the Workspace (ADR 0012) morphs the dock's dress with the wall:
-    // the slot's icon and the row's width and inset go from the leaving half's rest to the
-    // arriving one's. The row cannot be laid out per frame, so it is drawn instead: rendered once
-    // at the larger of the two icons, and each frame every slot is scaled down to the frame's icon
-    // and moved to its share of the frame's row, about the centre its icon is laid out at.
-
-    /** Whether a crossing's morph draws the row, from its begin to its landing. */
-    private boolean dockMorphing;
-    /**
-     * Whether the boxes are still drawn at the row's icon rather than the size they were built at:
-     * from a morph's landing until the slots are resized to the landed size, so the frame between
-     * the two draws the landed icon rather than the one rendered for the slide.
-     */
-    private boolean dockMorphSettling;
-    /** The dock's last answer, whose insets and width the row's slots are laid out in. */
-    @Nullable private com.termux.app.dock.DockLayout dockLaidOutLayout;
-    /** The frame's icon, and the inset and width of the row it is drawn at. */
-    private int morphIconPx;
-    private int morphInsetPx;
-    private int morphWidthPx;
-    /** One slot's draw as {@link #slotMorph} answers it: its shift, scale and pivot. */
-    private final float[] slotMorphOut = new float[4];
-
-    /**
-     * A crossing begins between {@code leaving}'s rest and {@code arriving}'s: the slots are
-     * rendered once at the larger icon of the two, and drawn at {@code leaving}'s until the first
-     * frame ({@link #dockMorphFrame}). A rail on either side, or a row standing up, has no row
-     * lying down to morph and draws as it is laid out.
-     */
-    public void beginDockMorph(@NonNull com.termux.app.dock.DockLayout leaving,
-                               @NonNull com.termux.app.dock.DockLayout arriving) {
-        if (vertical || leaving.railActive || arriving.railActive) return;
-        dockMorphing = true;
-        dockMorphSettling = false;
-        dockMorphLandedBase = false;
-        removeCallbacks(dockMorphSettleBackstop);
-        morphIconPx = Math.max(0, leaving.slotIconPx);
-        morphInsetPx = leaving.appsRowEdgeInsetPx;
-        morphWidthPx = leaving.appsRowUsableWidthPx;
-        int larger = Math.max(Math.max(0, leaving.slotIconPx), Math.max(0, arriving.slotIconPx));
-        if (larger > 0 && larger != dockIconSizePx) {
-            // Rendered at the larger icon so the slide only ever scales it down; the boxes take it
-            // on the next frame, and are drawn at the frame's icon from their own size meanwhile.
-            dockIconSizePx = larger;
-            invalidateRenderedIconCaches();
-            scheduleSlotIconResize();
-        }
-        invalidate();
-    }
-
-    /**
-     * One frame of the morph: the slot's icon {@code iconPx} across, the row's slots sharing
-     * {@code usableWidthPx} from {@code edgeInsetPx} in, and the Drawer tile at
-     * {@code drawerTileAlpha}. Fields and one invalidate: no layout, no allocation.
-     */
-    public void dockMorphFrame(int iconPx, int usableWidthPx, int edgeInsetPx,
-                               float drawerTileAlpha) {
-        if (!dockMorphing) return;
-        View tile = drawerTileSlot;
-        float alpha = drawerTileAlpha < 0f ? 0f : drawerTileAlpha > 1f ? 1f : drawerTileAlpha;
-        if (tile != null && tile.getParent() == this && tile.getAlpha() != alpha)
-            tile.setAlpha(alpha);
-        if (iconPx == morphIconPx && usableWidthPx == morphWidthPx && edgeInsetPx == morphInsetPx)
-            return;
-        morphIconPx = iconPx;
-        morphWidthPx = usableWidthPx;
-        morphInsetPx = edgeInsetPx;
-        invalidate();
-    }
-
-    /**
-     * The crossing landed on {@code landed}'s rest, which the last frame already drew: the row
-     * takes it as its layout, once, and draws its slots at that icon until they are resized to it.
-     */
-    public void endDockMorph(@NonNull com.termux.app.dock.DockLayout landed) {
-        if (!dockMorphing) return;
-        dockMorphing = false;
-        View tile = drawerTileSlot;
-        if (tile != null && tile.getAlpha() != 1f) tile.setAlpha(1f);
-        // The landed rest is the last frame's dress: from here until the boxes are that size and
-        // the row is laid out in the dock's answer after the landing, every frame draws exactly
-        // it, by the same mapping the last morph frame drew, so no frame between shows another.
-        morphIconPx = Math.max(0, landed.slotIconPx);
-        morphInsetPx = landed.appsRowEdgeInsetPx;
-        morphWidthPx = landed.appsRowUsableWidthPx;
-        // Its sizes, once; the row's slots still stand in the layout the activity last laid out.
-        com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
-        setDockLayout(landed);
-        dockLaidOutLayout = laidOut;
-        dockMorphSettling = true;
-        dockMorphLandedBase = false;
-        removeCallbacks(dockMorphSettleBackstop);
-        postDelayed(dockMorphSettleBackstop, DOCK_MORPH_SETTLE_BACKSTOP_MS);
-        invalidate();
-    }
-
-    /**
-     * Whether the dock has handed its answer since the landing: the row is laid out in it, so a
-     * slot drawn as laid out is drawn at the landed rest.
-     */
-    private boolean dockMorphLandedBase;
-    /** A settle that never hears the dock again still ends: the row then draws as laid out. */
-    private static final long DOCK_MORPH_SETTLE_BACKSTOP_MS = 500L;
-    private final Runnable dockMorphSettleBackstop = () -> {
-        if (!dockMorphSettling || dockMorphing) return;
-        dockMorphSettling = false;
-        invalidate();
-    };
-
-    /**
-     * The landing's draw lets go once nothing is left between it and the row as laid out: the
-     * boxes resized to the landed icon and the row laid out in the dock's answer after landing.
-     */
-    private void settleDockMorphIfLaidOut() {
-        if (!dockMorphSettling || dockMorphing || slotIconResizePosted || !dockMorphLandedBase)
-            return;
-        dockMorphSettling = false;
-        removeCallbacks(dockMorphSettleBackstop);
-        invalidate();
-    }
-
-    /** Whether a crossing's morph draws the row. Package-visible for the tests. */
-    boolean isDockMorphing() {
-        return dockMorphing;
-    }
-
-    /** Whether the row still draws a landed morph's rest over its layout. For the tests. */
-    boolean isDockMorphSettling() {
-        return dockMorphSettling;
-    }
-
-    /**
-     * How {@code child} is drawn for the morph, into {@link #slotMorphOut}: its shift along the
-     * row, its scale, and the pivot (its icon's centre as laid out). False where it is drawn as
-     * laid out: no morph, not one of the row's slots, or nothing to change.
-     */
-    private boolean slotMorph(@NonNull View child) {
-        if (vertical || (!dockMorphing && !dockMorphSettling)) return false;
-        SlotIcon icon = null;
-        for (int i = 0; i < slotIcons.size(); i++) {
-            if (slotIcons.get(i).slot == child) {
-                icon = slotIcons.get(i);
-                break;
-            }
-        }
-        if (icon == null) return false;
-        View box = icon.box;
-        int boxPx = box.getWidth();
-        if (boxPx <= 0) return false;
-        float cx = box.getWidth() * 0.5f;
-        float cy = box.getHeight() * 0.5f;
-        View at = box;
-        while (at != child) {
-            cx += at.getLeft();
-            cy += at.getTop();
-            ViewParent parent = at.getParent();
-            if (!(parent instanceof View)) return false;
-            at = (View) parent;
-        }
-        cx += child.getLeft();
-        cy += child.getTop();
-        // A morph's frame, or after its landing the landed rest by the same mapping.
-        float scale = com.termux.app.dock.DockMorph.iconScale(morphIconPx, boxPx);
-        float shift = 0f;
-        com.termux.app.dock.DockLayout laidOut = dockLaidOutLayout;
-        if (laidOut != null) {
-            shift = com.termux.app.dock.DockMorph.slotCentreX(cx, laidOut.appsRowEdgeInsetPx,
-                laidOut.appsRowUsableWidthPx, morphInsetPx, morphWidthPx) - cx;
-        }
-        if (scale == 1f && shift == 0f) return false;
-        slotMorphOut[0] = shift;
-        slotMorphOut[1] = scale;
-        slotMorphOut[2] = cx;
-        slotMorphOut[3] = cy;
-        return true;
     }
 
     /**
@@ -2286,8 +2013,6 @@ public final class SuggestionBarView extends GridLayout
         View box = null;
         for (SlotIcon icon : slotIcons) if (icon.slot == child) box = icon.box;
         if (child == null || box == null) return new float[] {Float.NaN, Float.NaN};
-        if (slotMorph(child))
-            return new float[] {slotMorphOut[2] + slotMorphOut[0], box.getWidth() * slotMorphOut[1]};
         float cx = box.getWidth() * 0.5f;
         for (View at = box; at != child; at = (View) at.getParent()) cx += at.getLeft();
         return new float[] {cx + child.getLeft(), box.getWidth()};
@@ -2320,15 +2045,6 @@ public final class SuggestionBarView extends GridLayout
         notificationBadgesEnabled = enabled;
         notificationBadgePackages = enabled ? LauncherNotificationBadgeStore.getActivePackages() : Collections.emptySet();
         invalidateNotificationBadgeViews();
-    }
-
-    public void prepareForWindowReentry() {
-        suppressDrawUntilStableLayout = true;
-        stableLayoutRerenderPosted = false;
-        childLayoutPending = true;
-        stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
-        invalidate();
-        scheduleStableDrawReleaseIfPossible();
     }
 
     public void setInheritedTintColor(int inheritedTintColor) {
@@ -2597,15 +2313,9 @@ public final class SuggestionBarView extends GridLayout
                 pendingCatalogRefreshRender = false;
                 post(() -> reloadWithInput(lastInput, lastTerminalView));
             }
-            // A render dropped while hidden is otherwise re-issued only by a layout pass, and
-            // coming back into view need not lay the row out again.
-            if (renderLostWhileUnstable) post(this::reissueLostRender);
-            scheduleStableDrawReleaseIfPossible();
             return;
         }
         searchGeneration++;
-        pendingDeferredRender = false;
-        stableLayoutRerenderPosted = false;
         removeCallbacks(azResetRunnable);
         removeCallbacks(azPostLaunchClearRunnable);
         clearAzFocusedEntry();
@@ -2949,7 +2659,7 @@ public final class SuggestionBarView extends GridLayout
             captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
         }
         // The matches are the row's content now, so they are what the ticks count.
-        publishPageIndicator();
+        publishPageTicks();
     }
 
     /** The letter whose first page this touch last warmed; null between touches. */
@@ -3557,70 +3267,16 @@ public final class SuggestionBarView extends GridLayout
         if (rowHapticsEnabled && movedBetweenApps) {
             Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
         }
-        if ((now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS) {
-            lastAzFocusBounceUptimeMs = now;
-            animateAzFocusAlpha(target);
-        } else {
-            applyAzFocusRestState(target);
-        }
+        boolean bounce = (now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS;
+        if (bounce) lastAzFocusBounceUptimeMs = now;
+        if (azFocusSink != null) azFocusSink.focus(target, bounce);
     }
 
     public void clearAzFocusedEntry() {
-        if (azFocusAnimator != null) {
-            azFocusAnimator.cancel();
-            azFocusAnimator = null;
-        }
-        if (azFocusedView != null) {
-            azFocusedView.animate().cancel();
-            azFocusedView.setScaleX(1f);
-            azFocusedView.setScaleY(1f);
-            azFocusedView.setTranslationY(0f);
-            azFocusedView.animate()
-                .alpha(1f)
-                .setDuration(96L)
-                .setInterpolator(new DecelerateInterpolator(1.45f))
-                .setListener(null)
-                .start();
-        }
+        if (azFocusedView != null && azFocusSink != null) azFocusSink.clear();
         azFocusedView = null;
         azFocusedEntryKey = null;
         azFocusLastSeenUptimeMs = 0L;
-    }
-
-    private void animateAzFocusAlpha(@NonNull View target) {
-        target.animate().cancel();
-        target.setScaleX(1f);
-        target.setScaleY(1f);
-        target.setTranslationY(0f);
-        AnimatorSet bounce = new AnimatorSet();
-        ObjectAnimator alpha = ObjectAnimator.ofFloat(target, View.ALPHA, target.getAlpha(), AZ_FOCUS_REST_ALPHA);
-        bounce.playTogether(alpha);
-        bounce.setDuration(86L);
-        bounce.setInterpolator(new DecelerateInterpolator(1.55f));
-        bounce.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                if (target == azFocusedView) {
-                    applyAzFocusRestState(target);
-                }
-            }
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
-                if (target == azFocusedView) {
-                    applyAzFocusRestState(target);
-                }
-            }
-        });
-        azFocusAnimator = bounce;
-        bounce.start();
-    }
-
-    private void applyAzFocusRestState(@NonNull View target) {
-        target.setScaleX(1f);
-        target.setScaleY(1f);
-        target.setTranslationY(0f);
-        target.setAlpha(AZ_FOCUS_REST_ALPHA);
     }
 
     public void clearAzPreview() {
@@ -3633,7 +3289,27 @@ public final class SuggestionBarView extends GridLayout
         activeAzCandidates = new ArrayList<>();
         invalidateAzRenderState();
         reloadWithInput(lastInput, lastTerminalView);
-        publishPageIndicator();
+        publishPageTicks();
+    }
+
+    /**
+     * Ends the A-Z preview only if one is showing. The chrome's apply calls this on every pass; a
+     * row with no preview has nothing to give back, and reloading it would rebuild icons that are
+     * already laid out.
+     */
+    public void clearAzPreviewIfShowing() {
+        if (activeAzLetter == null && activeAzCandidates.isEmpty()) {
+            cancelAzResetTimeout();
+            cancelAzPostLaunchClear();
+            clearAzFocusedEntry();
+            return;
+        }
+        clearAzPreview();
+    }
+
+    /** How many renders the row has been asked for; a test reads it to see a call do nothing. */
+    int renderRequestCountForTest() {
+        return searchGeneration;
     }
 
     public void clearAzPreviewWithFade() {
@@ -3713,6 +3389,18 @@ public final class SuggestionBarView extends GridLayout
             // The finger carrying an icon out of the row: its stream is the carry's to the end.
             routeDockLift(lift, event);
             return true;
+        }
+        if (swallowDockLiftStream) {
+            // The carrying finger lifted while another stayed down: what is left of that stream
+            // is nobody's, so the remaining finger starts nothing. A new DOWN is a new stream.
+            int swallowed = event.getActionMasked();
+            if (swallowed != MotionEvent.ACTION_DOWN) {
+                if (swallowed == MotionEvent.ACTION_UP || swallowed == MotionEvent.ACTION_CANCEL) {
+                    swallowDockLiftStream = false;
+                }
+                return true;
+            }
+            swallowDockLiftStream = false;
         }
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
@@ -3924,7 +3612,8 @@ public final class SuggestionBarView extends GridLayout
         }
         // A pickup state or a folder-drag hover left over from the previous gesture means the row is
         // still mid-interaction; the drawer stays out of it.
-        boolean noActivePickup = activeLongPressPickupState == null && folderDragHoverIndex < 0;
+        boolean noActivePickup = activeLongPressPickupState == null && folderDragHoverIndex < 0
+            && !reorderActive;
         return new AppDrawerGestureArbiter.Eligibility(
             listener != null && listener.isAppDrawerEnabled(),
             // The filtered apps row and a lingering A–Z preview used to veto the pull-down, forcing
@@ -4214,49 +3903,6 @@ public final class SuggestionBarView extends GridLayout
      * one.
      */
     private boolean renderButtons(@NonNull List<LauncherAppEntry> entries, boolean azPreview) {
-        if (renderDeferredSinceUptimeMs == 0L && !hasStableRenderBounds()) {
-            renderDeferredSinceUptimeMs = SystemClock.uptimeMillis();
-        }
-        waiveRowHeightHintIfOverdue();
-        if (!hasStableRenderBounds()) {
-            renderLostWhileUnstable = true;
-            // A gate on the home screen is anti-flicker, never a mute switch: a row with nothing in
-            // it yet stays dark until its bounds settle, but a row that is already showing icons
-            // keeps showing them. One frame of icons at the wrong size beats a blank dock.
-            if (getChildCount() == 0) {
-                suppressDrawUntilStableLayout = true;
-                childLayoutPending = true;
-                if (stableLayoutSuppressedSinceUptimeMs == 0L) {
-                    stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
-                }
-            }
-            // Bounded, not clock-bounded: a dock that can never stabilize (hidden, or measured
-            // 1x1 in a test fixture) must stop reposting, or the main queue never drains and
-            // Robolectric's idle() livelocks. The next real reload or size change retries.
-            if (!pendingDeferredRender && deferredRenderAttempts < MAX_DEFERRED_RENDER_ATTEMPTS) {
-                deferredRenderAttempts++;
-                pendingDeferredRender = true;
-                final List<LauncherAppEntry> deferredEntries = new ArrayList<>(entries);
-                final boolean deferredAzPreview = azPreview;
-                post(() -> {
-                    pendingDeferredRender = false;
-                    if (!hostVisible || !isAttachedToWindow()) {
-                        scheduleStableDrawReleaseIfPossible();
-                        return;
-                    }
-                    renderButtons(deferredEntries, deferredAzPreview);
-                });
-            }
-            // Every way out of a deferral ends here. The gate's only way back is its timeout, and
-            // the timeout only runs while something keeps asking — a give-up that asked nobody is
-            // what left the row muted with no layout pass coming to free it.
-            scheduleStableDrawReleaseIfPossible();
-            return false;
-        }
-        pendingDeferredRender = false;
-        renderLostWhileUnstable = false;
-        deferredRenderAttempts = 0;
-        renderDeferredSinceUptimeMs = 0L;
         int buttonCount = Math.max(1, maxButtonCount);
         int renderStartCol = 0;
         List<PinnedItem> pinnedForSlots = new ArrayList<>();
@@ -4345,35 +3991,19 @@ public final class SuggestionBarView extends GridLayout
 
         int surfaceRenderSignature = computeSurfaceRenderSignature(entries, azPreview, pinnedSurface, buttonCount);
         if (surfaceRenderSignature != 0 && surfaceRenderSignature == lastSurfaceRenderSignature && getChildCount() > 0) {
-            pendingDeferredRender = false;
-            if (suppressDrawUntilStableLayout) {
-                scheduleStableDrawReleaseIfPossible();
-            } else {
-                invalidate();
-            }
+            invalidate();
             // No layout pass follows a render that changed nothing, and the ticks may have been
             // told something else since the column was last laid out: they hear what stands.
-            publishPageIndicator();
+            publishPageTicks();
             // The page asked for is the page already on screen, so as far as any caller keeping
             // track of what it rendered is concerned, this rendered it.
             return true;
         }
         railMostUsedSlots = mostUsedSlots;
 
-        boolean keepCurrentFrameVisible = hasStableDisplayLayout() && surfaceRenderSignature != 0 && surfaceRenderSignature != lastSurfaceRenderSignature;
-        if (!keepCurrentFrameVisible) {
-            suppressDrawUntilStableLayout = true;
-            childLayoutPending = true;
-            if (stableLayoutSuppressedSinceUptimeMs == 0L) {
-                stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
-            }
-        } else {
-            suppressDrawUntilStableLayout = false;
-            childLayoutPending = false;
-            stableLayoutSuppressedSinceUptimeMs = 0L;
-        }
         resetTransientVisualState();
         folderDragHoverIndex = -1;
+        reorderDiscard();
         setTranslationX(0f);
         setAlpha(1f);
         removeAllViews();
@@ -4386,6 +4016,7 @@ public final class SuggestionBarView extends GridLayout
         floatTileSlot = null;
         floatTileColumn = -1;
         tileRowAppViews.clear();
+        pageAppViews.clear();
         // The still tiles, on every pinned page lying down: each in its own column, the page's
         // app slots keeping their order around them.
         boolean drawerTileRow = pinnedSurface && drawerTileActive() && drawerTilePlace != null;
@@ -4480,6 +4111,7 @@ public final class SuggestionBarView extends GridLayout
 
             addView(view);
             if (tileRow && !azPreview) tileRowAppViews.add(view);
+            if (!azPreview && col < drawnSlotPositions.size()) pageAppViews.add(view);
             if (renderCol >= 0 && renderCol < usedColumns.length) {
                 usedColumns[renderCol] = true;
             }
@@ -4593,11 +4225,7 @@ public final class SuggestionBarView extends GridLayout
         }
         lastSurfaceRenderSignature = surfaceRenderSignature;
         requestLayout();
-        if (!keepCurrentFrameVisible) {
-            scheduleStableDrawReleaseIfPossible();
-        } else {
-            invalidate();
-        }
+        invalidate();
         return true;
     }
 
@@ -4779,7 +4407,7 @@ public final class SuggestionBarView extends GridLayout
         // The axis, and the row height only while there is a row: the dock keeps pushing its own
         // row height at a bar standing on a side, and that must not read as a new surface.
         signature = (31 * signature) + (vertical ? 1 : 0);
-        signature = (31 * signature) + rowHeightHintPx();
+        signature = (31 * signature) + restHeightPx();
         // The icon the dock handed over, which outranks the hint whenever it is set.
         signature = (31 * signature) + (vertical ? 0 : dockIconSizePx);
         signature = (31 * signature) + Math.max(1, buttonCount);
@@ -5075,8 +4703,6 @@ public final class SuggestionBarView extends GridLayout
     private final Runnable slotIconResizeRunnable = () -> {
         slotIconResizePosted = false;
         resizeSlotIcons();
-        // A morph's landing drew the boxes at the landed icon until now; they are that size.
-        settleDockMorphIfLaidOut();
     };
 
     /**
@@ -5150,7 +4776,7 @@ public final class SuggestionBarView extends GridLayout
 
     /**
      * One rail icon, across the rail, as the dock handed it. Zero while it has handed none, and a
-     * rail with no size draws no icons, as a row does ({@link #hasStableRenderBounds}).
+     * rail with no size draws no icons.
      */
     private int railIconSizePx() {
         return dockRailIconPx;
@@ -5169,13 +4795,16 @@ public final class SuggestionBarView extends GridLayout
         dockRailSlotLengthPx = slot;
         if (!vertical) return;
         invalidateRenderedIconCaches();
-        childLayoutPending = true;
         requestLayout();
         invalidate();
     }
 
-    /** The dock row's height hint, which only the form that lies down is sized by. */
-    private int rowHeightHintPx() {
+    /**
+     * The row's rest height: the band the dock's last answer ({@link #setDockLayout}) gave the row
+     * lying down, in pixels. Zero standing up, or before any answer. The stack's writer reads it
+     * to place the Home side's row host; the row reads no other view's geometry to place itself.
+     */
+    public int restHeightPx() {
         return vertical ? 0 : dockRowHeightHintPx;
     }
 
@@ -6382,12 +6011,12 @@ public final class SuggestionBarView extends GridLayout
             visibleRows * (popupIconSize + dp(8))));
 
         int overlayBase = folder.tintOverrideEnabled ? (folder.tintColor & 0x00FFFFFF) : (inheritedTintColor & 0x00FFFFFF);
-        // The shared controller owns this window's lifecycle (spring transition, dim, dismissal),
+        // The shared controller owns this window's lifecycle (grow-from-icon transition, dismissal),
         // so the module builds it detached and only lends its placement policy.
         folderPopupWindow = detachedMenuSurface.buildDetached(
             MenuSpec.of(shell, overlayBase).build());
         final PopupWindow shownPopup = folderPopupWindow;
-        sharedFolderPopup.show(shownPopup, folder.id,
+        sharedFolderPopup.show(shownPopup, folder.id, anchor,
             () -> detachedMenuSurface.placeAtAnchor(shownPopup, anchor, false), () -> {
             cancelFolderRename();
             if (folderPopupWindow != null && !folderPopupWindow.isShowing()) {
@@ -6531,7 +6160,9 @@ public final class SuggestionBarView extends GridLayout
     public void showDrawerAppContextPopup(@NonNull View anchor, @NonNull LauncherAppEntry entry,
                                           @Nullable Runnable categoryAction) {
         dismissShortcutsPopup();
-        showAppContextPopup(new AppMenuContext(entry, anchor, -1, null, null));
+        AppMenuContext menu = new AppMenuContext(entry, anchor, -1, null, null);
+        menu.fromDrawer = true;
+        showAppContextPopup(menu);
     }
 
     /**
@@ -6599,9 +6230,10 @@ public final class SuggestionBarView extends GridLayout
                 && !drawerPickup.claimContext(pressTarget, drawerPickupEntry)) return true;
             showContextPopup.run();
             Haptics.tick(SuggestionBarView.this, android.view.HapticFeedbackConstants.LONG_PRESS);
-            // The finger now slides onto the menu or picks the icon up; a rail's scrolling host
-            // must not take that slide for a scroll.
-            ViewParent host = getParent();
+            // The finger now slides onto the menu or picks the icon up; no parent of the icon
+            // (a rail's scrolling host, the drawer's list and its pull-to-close) may take that
+            // slide for its own. Asked from the icon's own parent, so the whole chain hears it.
+            ViewParent host = pressTarget.getParent();
             if (host != null) host.requestDisallowInterceptTouchEvent(true);
             LongPressPickupState state = activeLongPressPickupState;
             if (state == null || state.sourceView != pressTarget) {
@@ -6610,8 +6242,6 @@ public final class SuggestionBarView extends GridLayout
                 activeLongPressPickupState = state;
             }
             state.menuShown = true;
-            state.menuShownAtMs = SystemClock.uptimeMillis();
-            state.definitiveYMovement = false;
             state.selectionArmed = false;
             return true;
         });
@@ -6673,24 +6303,19 @@ public final class SuggestionBarView extends GridLayout
                     float absDx = Math.abs(dx);
                     float absDy = Math.abs(dy);
                     int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
-                    float yIntentThreshold = slop * PICKUP_Y_INTENT_SLOP_FACTOR;
-                    float xPickupThreshold = slop * PICKUP_X_AXIS_SLOP_FACTOR;
-                    if (absDy >= yIntentThreshold) {
-                        state.definitiveYMovement = true;
-                    }
                     state.maxTravelPx = Math.max(state.maxTravelPx, Math.max(absDx, absDy));
                     if (!state.selectionArmed && Math.max(absDx, absDy) >= (slop * MENU_SELECTION_ARM_SLOP_FACTOR)) {
                         state.selectionArmed = true;
                     }
 
-                    boolean withinPickupWindow = (SystemClock.uptimeMillis() - state.menuShownAtMs) <= PICKUP_DECISION_WINDOW_MS;
-                    boolean shouldStartPickup = allowDragPickup
-                        && withinPickupWindow
-                        && !state.definitiveYMovement
-                        && absDx >= xPickupThreshold
-                        && (pinnedIndex >= 0 || folderEntryPickup != null);
-                    if (drawerPickup != null) shouldStartPickup = withinPickupWindow
-                        && !state.definitiveYMovement && absDx >= xPickupThreshold;
+                    // Home's rule (Launcher3's): once the hold has opened the menu, a finger that
+                    // travels past the lift distance, in any direction and however long it held,
+                    // closes the menu and carries the icon.
+                    boolean liftable = drawerPickup != null || (allowDragPickup
+                        && (pinnedIndex >= 0 || folderEntryPickup != null));
+                    boolean shouldStartPickup = liftable
+                        && com.termux.app.launcher.widget.HomeIconLift.pastLiftDistance(dx, dy,
+                            com.termux.app.launcher.widget.HomeIconLift.liftDistancePx(slop));
 
                     if (shouldStartPickup) {
                         state.dragStarted = true;
@@ -6706,7 +6331,8 @@ public final class SuggestionBarView extends GridLayout
                             folderEntryPickup.run();
                         } else {
                             dismissFolderPopup();
-                            if (!beginDockLift(pressTarget, pinnedIndex, rawX, rawY)) {
+                            if (!beginDockLift(pressTarget, pinnedIndex, rawX, rawY,
+                                event.getPointerId(0))) {
                                 startPinnedDrag(pressTarget, pinnedIndex);
                             }
                         }
@@ -6884,6 +6510,11 @@ public final class SuggestionBarView extends GridLayout
             && addToHomeListener.canOpenWidgets() && hasWidgetProviders(packageName);
         inputs.canAddToHome = addToHomeListener != null && addToHomeListener.canAddToHome();
         inputs.canMoveToCategory = categoryChoiceHandler != null;
+        inputs.canHide = context.fromDrawer && com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef);
+        inputs.canAddToFolder = categoryChoiceHandler != null && !linuxApp
+            && configRepository != null
+            && com.termux.app.launcher.folder.DrawerFolderChoices.showsAddToFolder(
+                allApps, configRepository.loadSnapshot().drawerFolders(), entry.appRef);
         if (folderSource) {
             inputs.customIcon = folderApp != null
                 && getIconResolver().loadOverride(folderApp.iconOverride) != null;
@@ -7132,6 +6763,10 @@ public final class SuggestionBarView extends GridLayout
             case REMOVE_FROM_FOLDER:
                 return appMenuItem(R.string.app_menu_remove_from_folder,
                     R.drawable.ic_app_menu_remove_from_folder, () -> removeFromContextSource(context));
+            case ADD_TO_FOLDER:
+                return appMenuItem(R.string.app_menu_add_to_folder,
+                    R.drawable.ic_app_menu_add_to_folder,
+                    () -> showAddToFolderPopup(entry, context.anchor));
             case CHANGE_ICON:
                 return appMenuItem(R.string.app_menu_change_icon, R.drawable.ic_app_menu_change_icon, () -> {
                     if (folderSource) {
@@ -7155,10 +6790,13 @@ public final class SuggestionBarView extends GridLayout
                     }
                 });
             case EDIT_DOCK:
-                return appMenuItem(R.string.app_menu_edit_dock, R.drawable.ic_ms_edit, () -> {
+                return appMenuItem(R.string.app_menu_edit_dock, R.drawable.ic_rl_edit, () -> {
                     EditDockListener listener = editDockListener;
                     if (listener != null) listener.onEditDock();
                 });
+            case HIDE:
+                return appMenuItem(R.string.settings_x11_app_drawer_hide, R.drawable.ic_rl_eye_off,
+                    () -> hideLinuxAppWithUndo(entry));
             case UNINSTALL:
             default:
                 return appMenuItem(R.string.app_menu_uninstall, R.drawable.ic_app_menu_uninstall,
@@ -7653,6 +7291,121 @@ public final class SuggestionBarView extends GridLayout
             tintBase, action);
     }
 
+    /** The drawer's folders {@code entry} can still join, from the shared store. */
+    @NonNull
+    private List<PinnedFolderItem> drawerFoldersFor(@NonNull LauncherAppEntry entry) {
+        if (configRepository == null) return java.util.Collections.emptyList();
+        return com.termux.app.launcher.folder.DrawerFolderChoices.offered(
+            configRepository.loadSnapshot().drawerFolders(), entry.appRef);
+    }
+
+    /**
+     * The choice behind the App menu's Add to folder row: the drawer's folders by name, in the
+     * same shell as the category picker. A pick adds the app through the store a drop used to use.
+     */
+    private void showAddToFolderPopup(@NonNull LauncherAppEntry entry, @NonNull View anchor) {
+        List<PinnedFolderItem> folders = drawerFoldersFor(entry);
+        dismissContextPopups();
+        LinearLayout shell = menuRows.newShell();
+
+        TextView header = new TextView(getContext());
+        header.setText(entry.label);
+        header.setTextColor(resolveLauncherTextColor());
+        header.setTextSize(12f);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(8), dp(6), dp(8), dp(7));
+        shell.addView(header, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int tintBase = inheritedTintColor & 0x00FFFFFF;
+        List<MenuRow> rows = new ArrayList<>();
+        for (PinnedFolderItem folder : folders) {
+            String folderId = folder.id;
+            rows.add(new MenuRow(menuRows.addActionRow(shell, folder.title, tintBase, () -> {
+                dismissCategoryPickerPopup();
+                addDrawerAppToFolderFromMenu(folderId, entry);
+            }), () -> {}));
+        }
+
+        if (!newFolderSecondApps(entry).isEmpty()) {
+            rows.add(new MenuRow(menuRows.addActionRow(shell,
+                getContext().getString(R.string.app_menu_new_folder_with), tintBase, () -> {
+                    dismissCategoryPickerPopup();
+                    showSecondAppPopup(entry, anchor);
+                }), () -> {}));
+        }
+
+        int rowWidth = MenuRowWidths.normalize(rows);
+        MenuRowWidths.constrainHeader(header, rowWidth);
+        categoryPickerMenu.show(MenuSpec.of(shell, tintBase).rows(rows).build(), anchor);
+    }
+
+    @NonNull
+    private List<LauncherAppEntry> newFolderSecondApps(@NonNull LauncherAppEntry entry) {
+        if (configRepository == null || allApps == null) return java.util.Collections.emptyList();
+        List<LauncherAppEntry> second = com.termux.app.launcher.folder.DrawerFolderChoices.secondApps(
+            allApps, configRepository.loadSnapshot().drawerFolders(), entry.appRef);
+        List<LauncherAppEntry> android = new ArrayList<>(second.size());
+        for (LauncherAppEntry e : second) {
+            if (!com.termux.app.x11.X11Apps.isLinuxApp(e.appRef)) android.add(e);
+        }
+        return android;
+    }
+
+    /** The second app of a new folder: a plain scrolling list of the drawer's free apps. */
+    private void showSecondAppPopup(@NonNull LauncherAppEntry first, @NonNull View anchor) {
+        List<LauncherAppEntry> candidates = newFolderSecondApps(first);
+        if (candidates.isEmpty()) return;
+        LinearLayout shell = menuRows.newShell();
+
+        TextView header = new TextView(getContext());
+        header.setText(R.string.app_menu_pick_second_app);
+        header.setTextColor(resolveLauncherTextColor());
+        header.setTextSize(12f);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(8), dp(6), dp(8), dp(7));
+        shell.addView(header, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int tintBase = inheritedTintColor & 0x00FFFFFF;
+        LinearLayout list = new LinearLayout(getContext());
+        list.setOrientation(LinearLayout.VERTICAL);
+        List<MenuRow> rows = new ArrayList<>();
+        for (LauncherAppEntry second : candidates) {
+            String stableId = second.appRef.stableId();
+            rows.add(new MenuRow(menuRows.addActionRow(list, second.label, tintBase, () -> {
+                dismissCategoryPickerPopup();
+                createDrawerFolderFromMenu(first, stableId);
+            }), () -> {}));
+        }
+        int rowWidth = MenuRowWidths.normalize(rows);
+        MenuRowWidths.constrainHeader(header, rowWidth);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(getContext());
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(list);
+        shell.addView(scroll, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(Math.min(candidates.size(), 7) * 36)));
+        categoryPickerMenu.show(MenuSpec.of(shell, tintBase).rows(rows).build(), anchor);
+    }
+
+    private void createDrawerFolderFromMenu(@NonNull LauncherAppEntry first,
+                                            @NonNull String secondStableId) {
+        if (configRepository == null) return;
+        createDrawerFolder(configRepository.loadSnapshot().revision, first, secondStableId);
+    }
+
+    private void addDrawerAppToFolderFromMenu(@NonNull String folderId,
+                                              @NonNull LauncherAppEntry entry) {
+        if (configRepository == null) return;
+        LauncherConfigRepository.MutationResult result = addDrawerAppToFolder(
+            configRepository.loadSnapshot().revision, folderId, entry.appRef.stableId());
+        if (result == LauncherConfigRepository.MutationResult.CAPACITY) {
+            AppNotice.show(getContext(), R.string.folder_capacity_reached, false);
+        }
+    }
+
     private void dismissCategoryPickerPopup() {
         categoryPickerMenu.dismiss();
     }
@@ -7938,6 +7691,8 @@ public final class SuggestionBarView extends GridLayout
         @Nullable final Runnable removeFromHome;
         /** The icon was pressed on the dock's row itself, so the card offers Edit dock. */
         boolean onDock;
+        /** The icon was pressed in the drawer (grid, search result or category tile). */
+        boolean fromDrawer;
 
         AppMenuContext(
             @NonNull LauncherAppEntry entry,
@@ -7981,8 +7736,6 @@ public final class SuggestionBarView extends GridLayout
         float maxTravelPx = 0f;
         boolean menuShown = false;
         boolean dragStarted = false;
-        long menuShownAtMs = 0L;
-        boolean definitiveYMovement = false;
         boolean selectionArmed = false;
         boolean leftAnchor = false;
         boolean notificationSwipeStarted = false;
@@ -8257,6 +8010,7 @@ public final class SuggestionBarView extends GridLayout
         activeFolderEntryDragState = null;
         activeLongPressPickupState = null;
         clearFolderDragInsertionPreview();
+        reorderExit();
     }
 
     // ---- Icons carried onto and out of the row ------------------------------------------------
@@ -8276,6 +8030,8 @@ public final class SuggestionBarView extends GridLayout
             return null;
         }
         boolean reducedMotion();
+        /** How the slot a lifted icon left is hidden while it is in the air; the lift's owner's. */
+        @NonNull com.termux.app.dock.LiftSourceSlot.Shade<View> liftSourceShade();
     }
 
     @Nullable private LiftHost liftHost;
@@ -8349,6 +8105,185 @@ public final class SuggestionBarView extends GridLayout
         return slot;
     }
 
+    // ---- Live reorder of the row ----------------------------------------------------------
+
+    private final DockReorderPolicy reorder = new DockReorderPolicy();
+    /** Whether {@link #reorder} has begun for the page in view and this drag. */
+    private boolean reorderActive;
+    /** The page-local slot of the carried pin on the page in view, or -1. */
+    private int reorderSource = -1;
+    /** How many drawn pins the reorder began with. */
+    private int reorderCount;
+    private boolean[] reorderMergeable = new boolean[8];
+    private final Runnable reorderTick = this::tickReorder;
+    /** When the posted {@link #reorderTick} runs, or -1 with none posted. */
+    private long reorderTickDueMs = -1L;
+
+    /**
+     * The finger is at {@code localX} along the row with a pin or app in hand: the icons part
+     * around the slot it rests on and the one it rests on arms to take it as a folder
+     * ({@link DockReorderPolicy}). Begins on the first hover of a drag and again after a page turn.
+     *
+     * @param sourceIndex  the carried pin's index in the stored list, or -1 for one from outside
+     * @param carriedApp   what is carried is an app, which a folder or an icon can take
+     * @param appsTakeIt   an app icon can take it as a folder (a member of a folder does not)
+     * @param ownFolderId  the folder a carried member came from, which does not take it back
+     */
+    private void reorderHover(float localX, int sourceIndex, boolean carriedApp,
+                              boolean appsTakeIt, @Nullable String ownFolderId) {
+        if (vertical) return;
+        DropSlot slot = dropSlotAt(localX);
+        if (!reorderActive) beginReorder(sourceIndex, carriedApp, appsTakeIt, ownFolderId);
+        if (reorder.hover(slot.hoveredSlot, slot.dropXRatio, SystemClock.uptimeMillis())) {
+            applyReorder();
+        }
+        scheduleReorderTick();
+    }
+
+    /** A release at {@code localX}: what the drop does, read from {@link #reorder}. */
+    @NonNull
+    private DockReorderPolicy.Kind settleReorder(float localX, int sourceIndex, boolean carriedApp,
+                                                 boolean appsTakeIt, @Nullable String ownFolderId) {
+        DropSlot slot = dropSlotAt(localX);
+        if (!reorderActive) beginReorder(sourceIndex, carriedApp, appsTakeIt, ownFolderId);
+        reorder.hover(slot.hoveredSlot, slot.dropXRatio, SystemClock.uptimeMillis());
+        return reorder.release();
+    }
+
+    private void beginReorder(int sourceIndex, boolean carriedApp, boolean appsTakeIt,
+                              @Nullable String ownFolderId) {
+        int[] drawn = drawnPinnedIndices;
+        int count = Math.min(drawn == null ? 0 : drawn.length, pageAppViews.size());
+        if (reorderMergeable.length < count) reorderMergeable = new boolean[count];
+        reorderSource = -1;
+        for (int i = 0; i < count; i++) {
+            int pin = drawn[i];
+            if (pin == sourceIndex) reorderSource = i;
+            PinnedItem item = pinnedItems != null && pin >= 0 && pin < pinnedItems.size()
+                ? pinnedItems.get(pin) : null;
+            boolean takes = false;
+            if (carriedApp && pin != sourceIndex) {
+                if (item instanceof PinnedFolderItem) {
+                    PinnedFolderItem folder = (PinnedFolderItem) item;
+                    takes = folder.apps.size() < PinnedFolderItem.MAX_APPS
+                        && !folder.id.equals(ownFolderId);
+                } else {
+                    takes = item instanceof PinnedAppItem && appsTakeIt;
+                }
+            }
+            reorderMergeable[i] = takes;
+        }
+        reorderCount = count;
+        reorder.begin(count, Math.max(1, pinnedItemsPerPage), reorderSource, reorderMergeable);
+        reorderActive = true;
+    }
+
+    private void tickReorder() {
+        reorderTickDueMs = -1L;
+        if (!reorderActive) return;
+        int was = reorder.gap();
+        if (reorder.tick(SystemClock.uptimeMillis())) {
+            applyReorder();
+            if (reorder.gap() != was) {
+                Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
+            }
+        }
+        scheduleReorderTick();
+    }
+
+    /** One pending run, at the moment the policy next has something to commit. */
+    private void scheduleReorderTick() {
+        long due = reorder.nextDueMs();
+        // A finger moving within one slot keeps the run already posted for it.
+        if (due == reorderTickDueMs) return;
+        removeCallbacks(reorderTick);
+        reorderTickDueMs = due;
+        if (due >= 0L) postDelayed(reorderTick, Math.max(0L, due - SystemClock.uptimeMillis()));
+    }
+
+    /** The column app {@code slot} of the page in view stands in. */
+    private int reorderColumn(int slot) {
+        if (drawerTileAppSlots <= 0) return slot;
+        return com.termux.app.dock.PaletteTilePolicy.slotOf(slot, shownDrawerColumn(),
+            shownPaletteColumn(), shownFloatColumn(), drawerTileAppSlots);
+    }
+
+    /**
+     * Eases every drawn app to where {@link #reorder} shows it: a whole column per slot, an icon
+     * pushed off the page faded out, the armed one swollen. The still tiles do not move.
+     */
+    private void applyReorder() {
+        int columns = Math.max(1, getColumnCount());
+        float step = getWidth() / (float) columns
+            * (getLayoutDirection() == LAYOUT_DIRECTION_RTL ? -1f : 1f);
+        boolean instant = liftHost != null && liftHost.reducedMotion();
+        int perPage = Math.max(1, pinnedItemsPerPage);
+        int count = Math.min(reorderCount, pageAppViews.size());
+        for (int i = 0; i < count; i++) {
+            if (i == reorderSource) continue;
+            View view = pageAppViews.get(i);
+            if (view == null) continue;
+            int own = reorderColumn(i);
+            boolean pushed = reorder.pushed(i);
+            int to = pushed ? reorderColumn(perPage - 1) + 1 : reorderColumn(reorder.shownSlot(i));
+            if (own < 0 || to < 0) continue;
+            float tx = (to - own) * step;
+            float alpha = pushed ? 0f : 1f;
+            float scale = reorder.armed() == i
+                ? com.termux.app.launcher.widget.HomeFolderPolicy.MERGE_TARGET_SCALE : 1f;
+            view.animate().cancel();
+            if (instant) {
+                view.setTranslationX(tx);
+                view.setAlpha(alpha);
+                view.setScaleX(scale);
+                view.setScaleY(scale);
+                continue;
+            }
+            boolean slides = view.getTranslationX() != tx || view.getAlpha() != alpha;
+            view.animate().translationX(tx).alpha(alpha).scaleX(scale).scaleY(scale)
+                .setDuration(slides ? DockReorderPolicy.SLIDE_MS : 120L)
+                .setInterpolator(new DecelerateInterpolator()).start();
+        }
+    }
+
+    /** The finger left the row or the drag ended: the icons ease back and the reorder is over. */
+    private void reorderExit() {
+        removeCallbacks(reorderTick);
+        reorderTickDueMs = -1L;
+        if (!reorderActive) return;
+        reorderActive = false;
+        reorder.leave();
+        applyReorder();
+    }
+
+    /** The row is drawn again, or the drop re-lays it: the reorder is over, views left as they are. */
+    private void reorderDiscard() {
+        removeCallbacks(reorderTick);
+        reorderTickDueMs = -1L;
+        reorderActive = false;
+    }
+
+    /** The pin drawn at page-local slot {@code item}, or null. */
+    @Nullable
+    private PinnedItem drawnPinAt(int item) {
+        int[] drawn = drawnPinnedIndices;
+        if (pinnedItems == null || drawn == null || item < 0 || item >= drawn.length) return null;
+        int pin = drawn[item];
+        return pin >= 0 && pin < pinnedItems.size() ? pinnedItems.get(pin) : null;
+    }
+
+    /**
+     * The index in the stored list that an insertion at {@code at} among the page's other pins is:
+     * the index of the pin it goes before, or just past the page's last drawn one.
+     */
+    private int globalInsertion(int at) {
+        int[] drawn = drawnPinnedIndices;
+        int pageOffset = Math.max(0, pinnedPageIndex) * Math.max(1, pinnedItemsPerPage);
+        if (drawn == null || drawn.length == 0) return pageOffset;
+        if (at < reorder.listSize()) return drawn[reorder.itemAt(at)];
+        return drawn[drawn.length - 1] + 1;
+    }
+
     /** Whether a carried icon is over the row now, its gap open. */
     private boolean carryHovering;
     /** Which end of the row the carried icon rests at (-1, +1), or 0; and where along it, in px. */
@@ -8379,12 +8314,17 @@ public final class SuggestionBarView extends GridLayout
         getLocationOnScreen(carryLocation);
         float x = rawX - carryLocation[0];
         float y = rawY - carryLocation[1];
-        if (x < 0f || y < 0f || x >= getWidth() || y >= getHeight()) {
+        // Just above or below the row is still the row until the icon is Home's: the lift's
+        // slab may sink the row under a finger near its top edge.
+        if (getWidth() <= 0 || !DockDropPolicy.carriedOverRow(y, 0f, getHeight(), density())) {
             carryLeave();
             return false;
         }
+        // Beside the row is still the row: its end slot, and the end that turns the page.
+        x = Math.max(0f, Math.min(getWidth() - 1f, x));
         carryHovering = true;
-        updateFolderDragInsertionPreview(dropSlotAt(x).hoveredSlot);
+        DockLift lift = dockLift;
+        reorderHover(x, lift == null ? -1 : liftSourceIndex(lift), true, true, null);
         watchCarryEdge(x);
         return true;
     }
@@ -8392,9 +8332,8 @@ public final class SuggestionBarView extends GridLayout
     /** The carried icon left the row, or was let go: the gap closes and the ends stop turning. */
     private void carryLeave() {
         stopCarryEdge();
-        if (!carryHovering) return;
         carryHovering = false;
-        clearFolderDragInsertionPreview();
+        reorderExit();
     }
 
     /** A carried icon resting in the band at either end of the row turns the page after a pause. */
@@ -8434,14 +8373,16 @@ public final class SuggestionBarView extends GridLayout
     private boolean carryDropApp(@NonNull AppRef app, float rawX, float rawY) {
         if (!takesCarriedIcons() || pinnedItems == null) return false;
         getLocationOnScreen(carryLocation);
-        DropSlot slot = dropSlotAt(rawX - carryLocation[0]);
+        DockReorderPolicy.Kind kind = settleReorder(rawX - carryLocation[0], -1, true, true, null);
+        boolean merge = kind == DockReorderPolicy.Kind.MERGE;
         AppRef ref = resolveForSelectionRef(app);
-        PinnedFolderItem folder = slot.targetItem instanceof PinnedFolderItem
-            ? (PinnedFolderItem) slot.targetItem : null;
+        PinnedItem target = merge ? drawnPinAt(reorder.index()) : null;
+        PinnedFolderItem folder = target instanceof PinnedFolderItem
+            ? (PinnedFolderItem) target : null;
         DockDropPolicy.Outcome outcome = DockDropPolicy.outcome(findPinnedAppIndex(ref) >= 0,
-            slot.targetItem instanceof PinnedAppItem, folder != null,
+            target instanceof PinnedAppItem, folder != null,
             folder != null && folder.containsApp(ref),
-            folder != null && folder.apps.size() < PinnedFolderItem.MAX_APPS, slot.dropXRatio);
+            folder != null && folder.apps.size() < PinnedFolderItem.MAX_APPS, merge);
         switch (outcome) {
             case ALREADY_THERE:
                 AppNotice.show(getContext(), R.string.dock_already_has_app, false);
@@ -8453,18 +8394,18 @@ public final class SuggestionBarView extends GridLayout
                 folder.apps.add(new PinnedAppItem(ref));
                 break;
             case MAKE_FOLDER:
-                pinnedItems.set(slot.targetIndex,
-                    dockFolderOf((PinnedAppItem) slot.targetItem, new PinnedAppItem(ref)));
+                pinnedItems.set(drawnPinnedIndices[reorder.index()],
+                    dockFolderOf((PinnedAppItem) target, new PinnedAppItem(ref)));
                 break;
             case INSERT:
             default:
-                int wanted = computeInsertionIndex(slot.targetIndex, slot.targetItem,
-                    slot.dropXRatio);
+                if (kind == DockReorderPolicy.Kind.NONE) return false;
                 pinnedItems.add(DockDropPolicy.insertIndex(pinnedPageIndex,
-                    Math.max(1, pinnedItemsPerPage), pinnedItems.size(), wanted),
-                    new PinnedAppItem(ref));
+                    Math.max(1, pinnedItemsPerPage), pinnedItems.size(),
+                    globalInsertion(reorder.index())), new PinnedAppItem(ref));
                 break;
         }
+        reorderDiscard();
         persistPinsAndReload();
         return true;
     }
@@ -8516,13 +8457,28 @@ public final class SuggestionBarView extends GridLayout
         final int sourceIndex;
         @NonNull final LauncherAppEntry entry;
         /** The slot it left, hidden while it is in the air, shown again however the lift ends. */
-        @NonNull final com.termux.app.dock.LiftSourceSlot<View> source =
-            new com.termux.app.dock.LiftSourceSlot<>(LIFT_SOURCE_SHADE);
+        @NonNull final com.termux.app.dock.LiftSourceSlot<View> source;
         /** The row's children have been told the stream is no longer theirs. */
         boolean childrenCancelled;
+        /** The pointer that lifted the icon and carries it. */
+        final int carryPointerId;
+        /** Where that pointer was last, on screen. */
+        float carryRawX;
+        float carryRawY;
+        /** A second pointer turning the dock page: its id (-1 none) and where it came down. */
+        int pagingPointerId = -1;
+        float pagingDownRawX;
+        float pagingDownRawY;
+        @Nullable VelocityTracker pagingVelocity;
 
         DockLift(@NonNull com.termux.app.launcher.widget.IconCarry carry,
-                 @NonNull PinnedAppItem pin, int sourceIndex, @NonNull LauncherAppEntry entry) {
+                 @NonNull PinnedAppItem pin, int sourceIndex, @NonNull LauncherAppEntry entry,
+                 int carryPointerId, float rawX, float rawY,
+                 @NonNull com.termux.app.dock.LiftSourceSlot.Shade<View> shade) {
+            this.source = new com.termux.app.dock.LiftSourceSlot<>(shade);
+            this.carryPointerId = carryPointerId;
+            this.carryRawX = rawX;
+            this.carryRawY = rawY;
             this.carry = carry;
             this.pin = pin;
             this.sourceIndex = sourceIndex;
@@ -8530,10 +8486,9 @@ public final class SuggestionBarView extends GridLayout
         }
     }
 
-    private static final com.termux.app.dock.LiftSourceSlot.Shade<View> LIFT_SOURCE_SHADE =
-        (slot, shown) -> slot.setAlpha(shown ? 1f : 0f);
-
     @Nullable private DockLift dockLift;
+    /** The row drops every event up to the end of the stream whose carrying finger has lifted. */
+    private boolean swallowDockLiftStream;
 
     /**
      * Lifts the app at {@code pinnedIndex} out of the row under the finger, which goes on from
@@ -8543,7 +8498,7 @@ public final class SuggestionBarView extends GridLayout
      * drag.
      */
     private boolean beginDockLift(@NonNull View pressTarget, int pinnedIndex, float rawX,
-                                  float rawY) {
+                                  float rawY, int pointerId) {
         LiftHost lifts = liftHost;
         if (lifts == null || vertical || pinnedItems == null || pinnedIndex < 0
             || pinnedIndex >= pinnedItems.size()) return false;
@@ -8627,7 +8582,8 @@ public final class SuggestionBarView extends GridLayout
                 }
                 @Override public boolean reducedMotion() { return lifts.reducedMotion(); }
             });
-        DockLift lift = new DockLift(carry, pin, pinnedIndex, entry);
+        DockLift lift = new DockLift(carry, pin, pinnedIndex, entry, pointerId, rawX, rawY,
+            lifts.liftSourceShade());
         made[0] = lift;
         dockLift = lift;
         lift.source.hide(slot);
@@ -8641,8 +8597,16 @@ public final class SuggestionBarView extends GridLayout
 
     /**
      * The finger that lifted an icon out of the row, from the event after the lift to its release:
-     * the row's children are told once that the stream is no longer theirs, and every move goes to
-     * the carry. The row's own gesture state then stands down as for a cancel.
+     * the row's children are told once that the stream is no longer theirs, and every move of the
+     * carrying pointer goes to the carry. The row's own gesture state then stands down as for a
+     * cancel.
+     *
+     * <p>A second finger that lands while the icon is carried turns the dock page when it lifts, by
+     * the plain swipe's rule ({@link DockDropPolicy#secondFingerTurn}), and the carry goes on over
+     * the new page. It must land on the row (or another view in the row's touch chain): with
+     * motion-event splitting on, a finger elsewhere goes to the view under it and never reaches
+     * here. The carrying finger lifting first ends the carry there, and the rest of the stream is
+     * swallowed.
      */
     private void routeDockLift(@NonNull DockLift lift, @NonNull MotionEvent event) {
         if (!lift.childrenCancelled) {
@@ -8653,18 +8617,92 @@ public final class SuggestionBarView extends GridLayout
             cancel.recycle();
         }
         int action = event.getActionMasked();
+        int carryIndex = event.findPointerIndex(lift.carryPointerId);
+        if (carryIndex >= 0) {
+            lift.carryRawX = rawXOf(event, carryIndex);
+            lift.carryRawY = rawYOf(event, carryIndex);
+        }
+        if (lift.pagingVelocity != null) lift.pagingVelocity.addMovement(event);
         if (action == MotionEvent.ACTION_MOVE) {
-            lift.carry.move(event.getRawX(), event.getRawY());
+            if (carryIndex >= 0) lift.carry.move(lift.carryRawX, lift.carryRawY);
+            return;
+        }
+        if (action == MotionEvent.ACTION_POINTER_DOWN) {
+            int index = event.getActionIndex();
+            if (lift.pagingPointerId < 0 && event.getPointerId(index) != lift.carryPointerId) {
+                lift.pagingPointerId = event.getPointerId(index);
+                lift.pagingDownRawX = rawXOf(event, index);
+                lift.pagingDownRawY = rawYOf(event, index);
+                lift.pagingVelocity = VelocityTracker.obtain();
+                lift.pagingVelocity.addMovement(event);
+            }
+            return;
+        }
+        if (action == MotionEvent.ACTION_POINTER_UP) {
+            int index = event.getActionIndex();
+            int id = event.getPointerId(index);
+            if (id == lift.pagingPointerId) {
+                turnDockPageBySecondFinger(lift, event, index);
+                return;
+            }
+            if (id != lift.carryPointerId) return;
+            endDockLift(lift, event, lift.carryRawX, lift.carryRawY, false);
+            swallowDockLiftStream = true;
             return;
         }
         if (action != MotionEvent.ACTION_UP && action != MotionEvent.ACTION_CANCEL
             && action != MotionEvent.ACTION_DOWN) return;
+        endDockLift(lift, event, event.getRawX(), event.getRawY(),
+            action != MotionEvent.ACTION_UP);
+    }
+
+    /** Ends the carry at ({@code rawX}, {@code rawY}) and stands the row's own gesture down. */
+    private void endDockLift(@NonNull DockLift lift, @NonNull MotionEvent event, float rawX,
+                             float rawY, boolean canceled) {
         dockLift = null;
-        lift.carry.end(event.getRawX(), event.getRawY(), action != MotionEvent.ACTION_UP);
+        releaseDockLiftPaging(lift);
+        lift.carry.end(rawX, rawY, canceled);
         MotionEvent cancel = MotionEvent.obtain(event);
         cancel.setAction(MotionEvent.ACTION_CANCEL);
         dispatchTouchEvent(cancel);
         cancel.recycle();
+    }
+
+    /** The second finger lifted: its travel turns the page, or does not, and it is done either way. */
+    private void turnDockPageBySecondFinger(@NonNull DockLift lift, @NonNull MotionEvent event,
+                                            int index) {
+        VelocityTracker tracker = lift.pagingVelocity;
+        float vx = 0f;
+        if (tracker != null) {
+            tracker.computeCurrentVelocity(1000);
+            vx = tracker.getXVelocity(lift.pagingPointerId);
+        }
+        float dx = rawXOf(event, index) - lift.pagingDownRawX;
+        float dy = rawYOf(event, index) - lift.pagingDownRawY;
+        releaseDockLiftPaging(lift);
+        int delta = DockDropPolicy.secondFingerTurn(dx, dy, vx, resolvePageSwipeCommitDistancePx(),
+            density(), pinnedPageIndex, getPinnedPagesCount());
+        if (delta == 0) return;
+        if (!animatePageSwitch(delta, DockPagingModel.settleVelocityHint(dx, vx))) return;
+        // The next turn at the row's end needs a full hold again.
+        stopCarryEdge();
+    }
+
+    private static void releaseDockLiftPaging(@NonNull DockLift lift) {
+        lift.pagingPointerId = -1;
+        if (lift.pagingVelocity != null) {
+            lift.pagingVelocity.recycle();
+            lift.pagingVelocity = null;
+        }
+    }
+
+    /** The pointer's position on screen: {@code getRawX(int)} is API 29, the row's floor is 26. */
+    private static float rawXOf(@NonNull MotionEvent event, int index) {
+        return event.getX(index) + (event.getRawX() - event.getX());
+    }
+
+    private static float rawYOf(@NonNull MotionEvent event, int index) {
+        return event.getY(index) + (event.getRawY() - event.getY());
     }
 
     /** Ends an icon's lift that the row can no longer finish (it is hidden or torn down). */
@@ -8672,6 +8710,7 @@ public final class SuggestionBarView extends GridLayout
         DockLift lift = dockLift;
         if (lift == null) return;
         dockLift = null;
+        releaseDockLiftPaging(lift);
         lift.carry.end(0f, 0f, true);
     }
 
@@ -8681,16 +8720,27 @@ public final class SuggestionBarView extends GridLayout
      */
     private boolean dropLiftedOnRow(@NonNull DockLift lift, float rawX) {
         if (pinnedItems == null || !takesCarriedIcons()) return false;
-        int source = lift.sourceIndex < pinnedItems.size()
-            && pinnedItems.get(lift.sourceIndex) == lift.pin
-            ? lift.sourceIndex : indexOfSamePin(pinnedItems, lift.pin);
+        int source = liftSourceIndex(lift);
         if (source < 0) return false;
         getLocationOnScreen(carryLocation);
-        DropSlot slot = dropSlotAt(rawX - carryLocation[0]);
-        // Back onto its own slot: nothing moves.
-        if (slot.targetIndex == source) return false;
-        return applyPinnedDrop(new PinnedDragState(source), slot.targetIndex, slot.targetItem,
-            slot.dropXRatio);
+        DockReorderPolicy.Kind kind = settleReorder(rawX - carryLocation[0], source, true, true,
+            null);
+        // Back onto its own slot, or onto nothing: nothing moves.
+        if (kind == DockReorderPolicy.Kind.NONE) return false;
+        boolean merge = kind == DockReorderPolicy.Kind.MERGE;
+        boolean moved = applyPinnedDrop(new PinnedDragState(source),
+            merge ? drawnPinnedIndices[reorder.index()] : -1,
+            merge ? -1 : globalInsertion(reorder.index()));
+        if (moved) reorderDiscard();
+        return moved;
+    }
+
+    /** Where in the stored list the lifted pin is now: its own index, or where its twin went. */
+    private int liftSourceIndex(@NonNull DockLift lift) {
+        if (pinnedItems == null) return -1;
+        return lift.sourceIndex < pinnedItems.size()
+            && pinnedItems.get(lift.sourceIndex) == lift.pin
+            ? lift.sourceIndex : indexOfSamePin(pinnedItems, lift.pin);
     }
 
     /**
@@ -8700,6 +8750,35 @@ public final class SuggestionBarView extends GridLayout
      */
     private void revealLiftSource(@NonNull DockLift lift) {
         lift.source.end();
+    }
+
+    /**
+     * Hides a Linux app from the drawer through the same switch its settings page holds, and offers
+     * it back. Pins and folders keep pointing at it: only discovery is hidden.
+     */
+    private void hideLinuxAppWithUndo(@NonNull LauncherAppEntry entry) {
+        Context context = getContext();
+        String id = com.termux.app.x11.X11Apps.desktopId(entry.appRef);
+        com.termux.app.x11.X11AppSettingsStore store = new com.termux.app.x11.X11AppSettingsStore(context);
+        store.setHiddenInDrawer(id, true);
+        refreshDrawerAfterHiddenChange();
+        AppNotice.undoable(context, context.getString(R.string.app_menu_hidden, entry.label),
+            context.getString(R.string.home_item_removed_undo_hint), () -> {
+                store.setHiddenInDrawer(id, false);
+                refreshDrawerAfterHiddenChange();
+            }, com.termux.app.launcher.widget.HomeItemUndo.HOLD_MS, R.drawable.ic_rl_eye_off);
+    }
+
+    /** The drawer reads the provider's filtered list again, so the icon leaves (or returns) at once. */
+    private void refreshDrawerAfterHiddenChange() {
+        if (appDataProvider != null) allApps = appDataProvider.getAllApps();
+        resolvedRefCache.clear();
+        invalidateAzRankCache();
+        if (hiddenAppsChangedListener != null) hiddenAppsChangedListener.run();
+    }
+
+    public void setHiddenAppsChangedListener(@Nullable Runnable listener) {
+        this.hiddenAppsChangedListener = listener;
     }
 
     /** Takes {@code pin} out of the row as the store holds it now, without an Undo. */
@@ -8714,7 +8793,7 @@ public final class SuggestionBarView extends GridLayout
         Context context = getContext();
         AppNotice.undoable(context, context.getString(R.string.dock_item_removed),
             context.getString(R.string.home_item_removed_undo_hint), () -> restorePin(pin, index),
-            com.termux.app.launcher.widget.HomeItemUndo.HOLD_MS);
+            com.termux.app.launcher.widget.HomeItemUndo.HOLD_MS, R.drawable.ic_rl_delete);
     }
 
     /**
@@ -8752,8 +8831,34 @@ public final class SuggestionBarView extends GridLayout
         persistPinsAndReload();
     }
 
+    private final int[] homeDropAt = new int[2];
+
+    /**
+     * An app carried out of the drawer: the row hears the drag so Home's follower gets every
+     * point over it. Home drives the row through {@code dockDrop()}; nothing is reordered here.
+     */
+    private boolean handleHomeAppDropEvent(@NonNull View targetView,
+            @NonNull com.termux.app.launcher.widget.HomeAppDrop drop, @NonNull DragEvent event) {
+        int action = event.getAction();
+        if (action != DragEvent.ACTION_DRAG_LOCATION && action != DragEvent.ACTION_DROP) return true;
+        com.termux.app.launcher.widget.HomeAppDrop.Follower follower = drop.follower();
+        if (follower == null) return action != DragEvent.ACTION_DROP;
+        targetView.getLocationOnScreen(homeDropAt);
+        float rawX = homeDropAt[0] + event.getX();
+        float rawY = homeDropAt[1] + event.getY();
+        if (action == DragEvent.ACTION_DRAG_LOCATION) {
+            follower.moveTo(rawX, rawY);
+            return true;
+        }
+        return follower.releaseAt(rawX, rawY);
+    }
+
     private boolean handlePinnedBarDragEvent(@NonNull View targetView, @NonNull DragEvent event) {
         Object localState = event.getLocalState();
+        if (localState instanceof com.termux.app.launcher.widget.HomeAppDrop) {
+            return handleHomeAppDropEvent(targetView,
+                (com.termux.app.launcher.widget.HomeAppDrop) localState, event);
+        }
         boolean pinnedDrag = localState instanceof PinnedDragState;
         FolderEntryDragState folderEntry = resolveFolderEntryDrag(event);
         boolean folderEntryDrag = folderEntry != null;
@@ -8764,36 +8869,71 @@ public final class SuggestionBarView extends GridLayout
         int targetIndex = slot.targetIndex;
         PinnedItem targetItem = slot.targetItem;
         float dropXRatio = slot.dropXRatio;
+        // The row lying down opens its gap live; the rail keeps the nudge and the ratio.
+        boolean live = !vertical;
+        int sourceIndex = pinnedDrag ? ((PinnedDragState) localState).sourceIndex : -1;
+        boolean carriedApp = !pinnedDrag || (pinnedItems != null && sourceIndex >= 0
+            && sourceIndex < pinnedItems.size()
+            && pinnedItems.get(sourceIndex) instanceof PinnedAppItem);
+        String ownFolderId = folderEntryDrag ? folderEntry.folderId : null;
 
         switch (event.getAction()) {
             case DragEvent.ACTION_DRAG_STARTED:
-                updateFolderDragInsertionPreview(hoveredSlot);
+                if (live) reorderHover(event.getX(), sourceIndex, carriedApp, pinnedDrag, ownFolderId);
+                else updateFolderDragInsertionPreview(hoveredSlot);
                 return true;
             case DragEvent.ACTION_DRAG_LOCATION:
-                updateFolderDragInsertionPreview(hoveredSlot);
+                if (live) reorderHover(event.getX(), sourceIndex, carriedApp, pinnedDrag, ownFolderId);
+                else updateFolderDragInsertionPreview(hoveredSlot);
                 // A pin held at either end of the row turns its page, as a carried icon does.
-                if (!vertical) watchCarryEdge(event.getX());
+                if (live) watchCarryEdge(event.getX());
                 return true;
             case DragEvent.ACTION_DRAG_ENTERED:
                 targetView.setAlpha(0.92f);
-                updateFolderDragInsertionPreview(hoveredSlot);
+                if (live) reorderHover(event.getX(), sourceIndex, carriedApp, pinnedDrag, ownFolderId);
+                else updateFolderDragInsertionPreview(hoveredSlot);
                 return true;
             case DragEvent.ACTION_DRAG_EXITED:
                 targetView.setAlpha(1f);
                 stopCarryEdge();
+                reorderExit();
                 return true;
-            case DragEvent.ACTION_DROP:
+            case DragEvent.ACTION_DROP: {
                 targetView.setAlpha(1f);
                 stopCarryEdge();
                 clearFolderDragInsertionPreview();
-                if (folderEntryDrag) {
-                    return applyFolderEntryDrop(folderEntry, targetIndex, targetItem, dropXRatio);
+                int mergeIndex = -1;
+                int insertion;
+                if (live) {
+                    DockReorderPolicy.Kind kind = settleReorder(event.getX(), sourceIndex,
+                        carriedApp, pinnedDrag, ownFolderId);
+                    if (kind == DockReorderPolicy.Kind.NONE) {
+                        reorderExit();
+                        return false;
+                    }
+                    boolean merge = kind == DockReorderPolicy.Kind.MERGE;
+                    mergeIndex = merge ? drawnPinnedIndices[reorder.index()] : -1;
+                    insertion = merge ? -1 : globalInsertion(reorder.index());
+                } else {
+                    if (targetItem instanceof PinnedFolderItem
+                        || (targetItem instanceof PinnedAppItem
+                            && DockDropPolicy.onIcon(dropXRatio))) {
+                        mergeIndex = targetIndex;
+                    }
+                    insertion = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
                 }
-                return applyPinnedDrop((PinnedDragState) localState, targetIndex, targetItem, dropXRatio);
+                boolean done = folderEntryDrag
+                    ? applyFolderEntryDrop(folderEntry, mergeIndex, insertion)
+                    : applyPinnedDrop((PinnedDragState) localState, mergeIndex, insertion);
+                if (done) reorderDiscard();
+                else reorderExit();
+                return done;
+            }
             case DragEvent.ACTION_DRAG_ENDED:
                 targetView.setAlpha(1f);
                 stopCarryEdge();
                 clearFolderDragInsertionPreview();
+                reorderExit();
                 // A folder-entry drag left its source popup hidden but alive; finish it now.
                 if (folderEntryDrag) sharedFolderPopup.dismissImmediate();
                 activePinnedDragSourceView = null;
@@ -8818,10 +8958,17 @@ public final class SuggestionBarView extends GridLayout
         return drawn[drawn.length - 1] + 1 + (slot - drawn.length);
     }
 
-    private boolean applyPinnedDrop(@NonNull PinnedDragState dragState, int targetIndex, @Nullable PinnedItem targetItem, float dropXRatio) {
+    /**
+     * Applies the drop of a pin of the row: onto the item at {@code mergeIndex} (a folder it joins,
+     * an app it makes a folder with), or, with none, into the list at {@code insertionIndex}, a
+     * position before the move that takes the pin out.
+     */
+    private boolean applyPinnedDrop(@NonNull PinnedDragState dragState, int mergeIndex,
+                                    int insertionIndex) {
         if (dragState.cancelled) return false;
         if (dragState.sourceIndex < 0 || dragState.sourceIndex >= pinnedItems.size()) return false;
-        if (targetIndex < 0 || targetIndex > pinnedItems.size()) return false;
+        if (mergeIndex >= pinnedItems.size()) return false;
+        PinnedItem targetItem = mergeIndex >= 0 ? pinnedItems.get(mergeIndex) : null;
 
         PinnedItem sourceItem = pinnedItems.get(dragState.sourceIndex);
         boolean sourceIsApp = sourceItem instanceof PinnedAppItem;
@@ -8842,11 +8989,11 @@ public final class SuggestionBarView extends GridLayout
             return true;
         }
 
-        if (sourceIsApp && targetItem instanceof PinnedAppItem && shouldCreateFolderOnDrop(dropXRatio)) {
+        if (sourceIsApp && targetItem instanceof PinnedAppItem) {
             PinnedAppItem targetApp = (PinnedAppItem) targetItem;
             AppRef targetRef = resolveForSelectionRef(targetApp.appRef);
             int source = dragState.sourceIndex;
-            int target = targetIndex;
+            int target = mergeIndex;
             if (source < target) {
                 pinnedItems.remove(source);
                 target = target - 1;
@@ -8859,7 +9006,6 @@ public final class SuggestionBarView extends GridLayout
             return true;
         }
 
-        int insertionIndex = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
         return movePinnedItem(dragState.sourceIndex, insertionIndex);
     }
 
@@ -8869,9 +9015,13 @@ public final class SuggestionBarView extends GridLayout
      * back onto the source folder's own tile cancels. Folder collapse (0/1 members left) rides
      * the repository's normalize pass during {@link #persistPinsAndReload}.
      */
-    private boolean applyFolderEntryDrop(@NonNull FolderEntryDragState dragState, int targetIndex,
-                                         @Nullable PinnedItem targetItem, float dropXRatio) {
+    private boolean applyFolderEntryDrop(@NonNull FolderEntryDragState dragState, int mergeIndex,
+                                         int insertionIndex) {
         if (dragState.cancelled) return false;
+        if (mergeIndex >= 0 && (pinnedItems == null || mergeIndex >= pinnedItems.size())) {
+            return false;
+        }
+        PinnedItem targetItem = mergeIndex >= 0 ? pinnedItems.get(mergeIndex) : null;
         PinnedFolderItem sourceFolder = resolveLatestFolder(dragState.folderId);
         PinnedAppItem member = findFolderApp(sourceFolder, dragState.appRef);
         if (sourceFolder == null || member == null) return false;
@@ -8901,7 +9051,6 @@ public final class SuggestionBarView extends GridLayout
             persistPinsAndReload();
             return true;
         }
-        int insertionIndex = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
         LauncherFolderMutator.AppendResult result = LauncherFolderMutator.moveFolderAppToTopLevel(
             pinnedItems, sourceFolder, member.appRef.stableId(), insertionIndex);
         if (result != LauncherFolderMutator.AppendResult.APPLIED) return false;
@@ -8915,10 +9064,6 @@ public final class SuggestionBarView extends GridLayout
             insertionIndex = targetIndex + 1;
         }
         return clamp(insertionIndex, 0, Math.max(0, pinnedItems.size()));
-    }
-
-    private boolean shouldCreateFolderOnDrop(float dropXRatio) {
-        return DockDropPolicy.onIcon(dropXRatio);
     }
 
     private boolean movePinnedItem(int fromIndex, int insertionIndex) {
@@ -9165,6 +9310,9 @@ public final class SuggestionBarView extends GridLayout
         Runnable updateContent = () -> {
             pinnedPageIndex = targetPage;
             reloadWithInput("", lastTerminalView);
+            // A carried icon's gap goes with the old page: part the new one under the finger.
+            DockLift carried = dockLift;
+            if (carried != null) carried.carry.move(carried.carryRawX, carried.carryRawY);
         };
         if (swipePageDragging && swipePreviewPageIndex == targetPage) {
             logPaging("animatePageSwitch settle to page " + targetPage + " (swipe preview)");
@@ -9679,7 +9827,7 @@ public final class SuggestionBarView extends GridLayout
         setTranslationX(0f);
         setAlpha(1f);
         setRowInteractionActive(false);
-        publishPageIndicator();
+        publishPageTicks();
         invalidate();
     }
 
@@ -9751,73 +9899,65 @@ public final class SuggestionBarView extends GridLayout
         if (overflowInteractionListener != null) {
             overflowInteractionListener.onOverflowPagePositionChanged(swipePagePosition);
         }
-        publishPageIndicator();
+        publishPageTicks();
     }
 
     /**
-     * The one strip of page ticks, handed to the row by whichever host the row is standing in. The
-     * dock used to paint its own set from an FX layer over the glass while a finger owned the row,
-     * which is why a row moved off the dock showed two indicators at once and neither knew about
-     * the other; there is one now, and it travels with the row.
-     *
-     * <p>The strip being put down is reset first, so a band that is on screen but no longer bound
-     * cannot be left holding the last row's pages.
+     * Who is told the row's page ticks: the owner of the one strip, wherever the row is standing.
+     * The dock used to paint its own set from an FX layer over the glass while a finger owned the
+     * row, which is why a row moved off the dock showed two indicators at once and neither knew
+     * about the other; the row only says what the ticks are now, and the owner draws them.
+     * The listener is told the current ticks at once.
      */
-    public void setPageIndicator(@Nullable PageTickStripView indicator) {
-        if (pageIndicator == indicator) return;
-        PageTickStripView previous = pageIndicator;
-        pageIndicator = indicator;
-        if (previous != null) {
-            previous.setPages(1, 0f, -1);
-            previous.setVisibility(INVISIBLE);
-        }
-        publishPageIndicator();
-    }
-
-    /** The strip this bar is currently feeding, or null while it has none. */
-    @Nullable
-    PageTickStripView boundPageIndicator() {
-        return pageIndicator;
+    public void setPageTicksListener(@Nullable PageTicksListener listener) {
+        if (pageTicksListener == listener) return;
+        pageTicksListener = listener;
+        publishPageTicks();
     }
 
     /**
-     * Hands the strip what it draws: how many pages the bar has and where between them it stands.
-     * Cheap and idempotent — the strip invalidates only on a real change — so every path that can
-     * move the bar between pages ends here instead of each of them knowing about the strip.
+     * What the strip draws: how many pages the bar has and where between them it stands.
      *
      * <p>Whichever set of pages the bar is showing is the one the ticks count: the matches for a
      * held letter while the A–Z index has the row, the pinned apps otherwise. That is the same
      * choice the dock's FX ticks made, kept in the one place the page model already lives.
      */
-    void publishPageIndicator() {
-        PageTickStripView indicator = pageIndicator;
-        if (indicator == null) return;
+    @NonNull
+    public PageTicks pageTicks() {
         boolean azPages = hasAzOverflowPages();
         boolean overflow = azPages || hasPinnedOverflowPages();
-        indicator.setVerticalForm(vertical);
-        indicator.setGlassInk(glassBackdrop, glassInk);
-        indicator.setAccentColor(resolvePageIndicatorAccentColor());
+        int accent = resolvePageIndicatorAccentColor();
         if (!azPages && railCarriesMostUsed()) {
             // The rail's two pages are the pins and the most-used apps after them in one column:
-            // the same two ticks a row shows, the second warm, lit by the scroll, not a page turn.
-            indicator.setPages(2, railScrollPagePosition(), 1);
-            indicator.setVisibility(VISIBLE);
-            return;
+            // the same two ticks a row shows, lit by the scroll, not a page turn.
+            return new PageTicks(2, railScrollPagePosition(), true, vertical,
+                tickBackdrop, tickInk, accent);
         }
         int pages = azPages ? getAzVisiblePageCount()
             : (overflow ? getPinnedVisiblePageCount() : 1);
         float position = azPages ? getAzVisualPagePosition()
             : (overflow ? getPinnedVisualPagePosition() : 0f);
-        indicator.setPages(pages, position, azPages ? -1 : getPinnedDynamicPageIndex());
-        // INVISIBLE rather than GONE: the band it holds is the row's own air, and a row that
-        // gained a page would otherwise grow by it and shove the terminal.
-        indicator.setVisibility(overflow ? VISIBLE : INVISIBLE);
+        // Not shown is INVISIBLE rather than GONE (the writer's): the band the ticks hold is the
+        // row's own air, and a row that gained a page would otherwise grow by it.
+        return new PageTicks(pages, position,
+            overflow, vertical, tickBackdrop, tickInk, accent);
+    }
+
+    /**
+     * Hands the listener the ticks. Cheap and idempotent (the strip invalidates only on a real
+     * change), so every path that can move the bar between pages ends here instead of each of them
+     * knowing about the strip.
+     */
+    public void publishPageTicks() {
+        PageTicksListener listener = pageTicksListener;
+        if (listener == null) return;
+        listener.onPageTicks(pageTicks());
     }
 
     /** A rail's scroll moved its column, so the ticks move with it. */
     @Override
     public void onRailScrolled() {
-        if (vertical) publishPageIndicator();
+        if (vertical) publishPageTicks();
     }
 
     /**
@@ -9836,11 +9976,13 @@ public final class SuggestionBarView extends GridLayout
     private float railScrollPagePosition() {
         ViewParent parent = getParent();
         if (!(parent instanceof View)) return 0f;
-        View host = (View) parent;
-        int inside = host.getHeight() - host.getPaddingTop() - host.getPaddingBottom();
+        // The scroller the rail sits in: its scroll is what the ticks follow, a read for the
+        // indicator and not a number the rail places itself by.
+        View scroller = (View) parent;
+        int inside = scroller.getHeight() - scroller.getPaddingTop() - scroller.getPaddingBottom();
         int range = getHeight() - inside;
         if (range <= 0) return 0f;
-        return Math.max(0f, Math.min(1f, host.getScrollY() / (float) range));
+        return Math.max(0f, Math.min(1f, scroller.getScrollY() / (float) range));
     }
 
     /** The ticks' accent: the launcher's own, which is what the dock's ticks were drawn from. */
@@ -9856,15 +9998,14 @@ public final class SuggestionBarView extends GridLayout
      *
      * <p>Pushed in by the activity, which is the only thing that owns a measurer, and read by the
      * two painted things the dock lends colours to rather than draws itself: the page ticks
-     * ({@link PageTickStripView}) and the drawer's A&ndash;Z rope, neither of which is a band of its
+     * (the page ticks) and the drawer's A&ndash;Z rope, neither of which is a band of its
      * own. One value for both, so the rope and the dock's own A&ndash;Z rail cannot disagree.</p>
      */
     public void setGlassInk(int surfaceColor, int inkColor) {
         if (glassBackdrop == surfaceColor && glassInk == inkColor) return;
         glassBackdrop = surfaceColor;
         glassInk = inkColor;
-        PageTickStripView indicator = pageIndicator;
-        if (indicator != null) indicator.setGlassInk(surfaceColor, inkColor);
+        publishPageTicks();
     }
 
     /** The opaque colour measured under this dock; see {@link #setGlassInk}. */
@@ -9884,6 +10025,22 @@ public final class SuggestionBarView extends GridLayout
 
     private int glassBackdrop = android.graphics.Color.TRANSPARENT;
     private int glassInk = android.graphics.Color.TRANSPARENT;
+
+    /**
+     * What the page ticks stand on and the ink chosen there: the dock's surface where they are
+     * drawn on the slab, the wallpaper behind them where they stand over it
+     * ({@link com.termux.app.launcher.paging.PageTickStrip#standsOnWallpaper}). Pushed in by the
+     * activity beside {@link #setGlassInk}, which the drawer's A&ndash;Z rope keeps reading.
+     */
+    public void setTickGround(int surfaceColor, int inkColor) {
+        if (tickBackdrop == surfaceColor && tickInk == inkColor) return;
+        tickBackdrop = surfaceColor;
+        tickInk = inkColor;
+        publishPageTicks();
+    }
+
+    private int tickBackdrop = android.graphics.Color.TRANSPARENT;
+    private int tickInk = android.graphics.Color.TRANSPARENT;
 
     private void setRowInteractionActive(boolean active) {
         if (rowInteractionActive == active) {
@@ -10232,7 +10389,7 @@ public final class SuggestionBarView extends GridLayout
         pageSwitchAnimating = false;
         // The reset moved the row back onto a whole page, so the ticks are told the same way every
         // other path that moves it tells them.
-        publishPageIndicator();
+        publishPageTicks();
         clearAzFocusedEntry();
         List<View> animatedViews = new ArrayList<>(launchTouchAnimators.keySet());
         for (View view : animatedViews) {
@@ -10264,170 +10421,6 @@ public final class SuggestionBarView extends GridLayout
                 pressTarget.setAlpha(1f);
             }
         }
-    }
-
-    /**
-     * Whether the bar has been given bounds worth rendering into. The floors are the axis's: a
-     * rail is one icon wide and the whole edge long, so the lying-down row's 120dp width floor
-     * would refuse every rail there is and defer the render forever.
-     */
-    private boolean hasStableRenderBounds() {
-        if (!isLaidOut()) {
-            return false;
-        }
-        // No size handed over: nothing is drawn rather than icons at a guessed size.
-        if (iconSizePx() <= 0) {
-            return false;
-        }
-        if (vertical) {
-            // A tolerance below one icon, not an exact fit: the host's band is a rounded 58dp
-            // less two rounded 10dp paddings, which can land a pixel or two under the icon.
-            // The rail's own height is wrap_content and, before the first vertical render, still
-            // the one-row height of the previous form; gate the length on the host instead.
-            int minStableWidth = Math.max(1, railIconSizePx() - dp(4));
-            int minStableLength = Math.max(1, railSlotLengthPx());
-            View host = getParent() instanceof View ? (View) getParent() : null;
-            int lengthPx = host != null ? Math.max(host.getHeight(), getHeight()) : getHeight();
-            return getWidth() >= minStableWidth && lengthPx >= minStableLength;
-        }
-        int minStableWidth = Math.max(1, dp(120));
-        // The shortest box the dock ever hands the row, not a figure of the view's own: a floor
-        // above it holds back every render of a row that small, for good (issue #49).
-        int minStableHeight = Math.max(1,
-            com.termux.app.dock.DockLayoutPolicy.minRowContentPx(screenDensity()));
-        if (getWidth() < minStableWidth || getHeight() < minStableHeight) {
-            return false;
-        }
-        // The floors above are the ones that never lapse. The hint is
-        // the dock's idea of the band the row was given — furniture the row is not (the page-tick
-        // strip) sits in that band too, and a hint handed over ahead of the next layout pass
-        // describes a row that does not exist yet — so it only ever holds the first frame back,
-        // and {@link #waiveRowHeightHintIfOverdue} decides when it has held long enough.
-        int hint = rowHeightHintWaived ? 0 : rowHeightHintPx();
-        return hint <= 0 || getHeight() >= Math.max(minStableHeight, hint - dp(4));
-    }
-
-    /**
-     * Lets the dock's height hint go once it has had its say and the row is still not the height it
-     * asked for — either the anti-flicker window has run out or the deferred renders have. The
-     * standing form has no equivalent to waive: a rail is gated on its own icon and slot metrics,
-     * which are constants rather than a figure another view hands it.
-     */
-    private void waiveRowHeightHintIfOverdue() {
-        if (rowHeightHintWaived || vertical || rowHeightHintPx() <= 0) {
-            return;
-        }
-        boolean windowSpent = renderDeferredSinceUptimeMs != 0L
-            && SystemClock.uptimeMillis() - renderDeferredSinceUptimeMs >= STABLE_LAYOUT_MAX_SUPPRESS_MS;
-        if (windowSpent || deferredRenderAttempts >= MAX_DEFERRED_RENDER_ATTEMPTS) {
-            rowHeightHintWaived = true;
-        }
-    }
-
-    /**
-     * Whether the slots have actually been placed apart from one another. Which way "apart" runs
-     * is the axis's too: a rail's slots differ by their top, a row's by their left.
-     */
-    private boolean hasStableChildLayout() {
-        if (!childLayoutPending) {
-            return true;
-        }
-        int meaningfulChildren = 0;
-        int firstPosition = Integer.MIN_VALUE;
-        boolean foundDistinctSlot = false;
-        int minChildWidth;
-        int minChildHeight;
-        if (vertical) {
-            minChildWidth = Math.max(dp(18), Math.min(getWidth(), railIconSizePx() - dp(4)));
-            minChildHeight = Math.max(dp(18), Math.min(railSlotLengthPx(), getHeight()));
-        } else {
-            minChildWidth = Math.max(dp(18), getWidth() / Math.max(2, maxButtonCount * 2));
-            minChildHeight = Math.max(dp(18), Math.min(Math.max(dp(18), rowHeightHintPx() - dp(8)), getHeight()));
-        }
-
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
-            if (child == null || child.getVisibility() != VISIBLE || child.getAlpha() <= 0.01f) {
-                continue;
-            }
-            meaningfulChildren++;
-            if (child.getWidth() < minChildWidth || child.getHeight() < minChildHeight) {
-                return false;
-            }
-            int position = vertical ? child.getTop() : child.getLeft();
-            if (firstPosition == Integer.MIN_VALUE) {
-                firstPosition = position;
-            } else if (Math.abs(position - firstPosition) >= dp(8)) {
-                foundDistinctSlot = true;
-            }
-        }
-
-        return meaningfulChildren <= 1 || foundDistinctSlot;
-    }
-
-    public boolean hasStableDisplayLayout() {
-        return isAttachedToWindow()
-            && hasStableRenderBounds()
-            && hasStableChildLayout()
-            && !suppressDrawUntilStableLayout;
-    }
-
-    private void scheduleStableDrawReleaseIfPossible() {
-        if (!hostVisible || !suppressDrawUntilStableLayout || stableLayoutRerenderPosted) {
-            return;
-        }
-        waiveRowHeightHintIfOverdue();
-        // The timeout must be able to expire even while render bounds never stabilize (e.g. the
-        // bar stuck at a collapsed height after a crash-restart mid-layout) — otherwise draw
-        // suppression holds the bar blank indefinitely.
-        if (hasStableDrawSuppressionExpired()) {
-            releaseStableDrawSuppression();
-            return;
-        }
-        if (!hasStableRenderBounds()) {
-            postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
-            return;
-        }
-        stableLayoutRerenderPosted = true;
-        post(() -> {
-            stableLayoutRerenderPosted = false;
-            if (hasStableDrawSuppressionExpired()) {
-                releaseStableDrawSuppression();
-                return;
-            }
-            if (!hostVisible || !isAttachedToWindow()) {
-                return;
-            }
-            // Bounds that were stable when this was posted and are not now, or slots not placed
-            // apart yet: keep asking. The chain must run until the timeout fires, because the
-            // timeout is the only thing that can free a row whose bounds never settle — a check
-            // that returned here without re-posting left the gate closed for good.
-            if (!hasStableRenderBounds() || !hasStableChildLayout()) {
-                if (suppressDrawUntilStableLayout) {
-                    postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
-                }
-                return;
-            }
-            resetTransientVisualState();
-            suppressDrawUntilStableLayout = false;
-            childLayoutPending = false;
-            stableLayoutSuppressedSinceUptimeMs = 0L;
-            invalidate();
-        });
-    }
-
-    private boolean hasStableDrawSuppressionExpired() {
-        if (!suppressDrawUntilStableLayout || stableLayoutSuppressedSinceUptimeMs == 0L)
-            return false;
-        return SystemClock.uptimeMillis() - stableLayoutSuppressedSinceUptimeMs
-            >= STABLE_LAYOUT_MAX_SUPPRESS_MS;
-    }
-
-    private void releaseStableDrawSuppression() {
-        suppressDrawUntilStableLayout = false;
-        childLayoutPending = false;
-        stableLayoutSuppressedSinceUptimeMs = 0L;
-        invalidate();
     }
 
     private static float lerp(float start, float end, float t) {
@@ -10687,8 +10680,8 @@ public final class SuggestionBarView extends GridLayout
     /**
      * One icon's size in the form the bar is standing in: exactly what the dock handed over
      * ({@link #setDockLayout}), the slot's icon lying down and the rail's standing up. Zero while
-     * it has handed none, and a row with no size draws no icons rather than guess one
-     * ({@link #hasStableRenderBounds}). Package-visible for the tests.
+     * it has handed none, and a row with no size draws no icons rather than guess one.
+     * Package-visible for the tests.
      */
     int iconSizePx() {
         return vertical ? railIconSizePx() : dockIconSizePx;

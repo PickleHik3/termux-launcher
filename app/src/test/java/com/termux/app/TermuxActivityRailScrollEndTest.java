@@ -65,6 +65,7 @@ public class TermuxActivityRailScrollEndTest {
 
     /** The scene a test reads: the rail's scroll, its column and its ticks, laid out. */
     private static final class Scene {
+        TermuxActivity activity;
         DockRailScrollView scroll;
         SuggestionBarView column;
         PageTickStripView ticks;
@@ -127,6 +128,7 @@ public class TermuxActivityRailScrollEndTest {
         plank.addView(bar, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         ReflectionHelpers.setField(activity, "mSuggestionBarView", bar);
+        activity.wirePageTicks();
 
         PlaceLayout layout = railOnTheLeft();
         activity.applyEdgeStacks(layout);
@@ -139,6 +141,7 @@ public class TermuxActivityRailScrollEndTest {
         scene.scroll = activity.findViewById(R.id.place_apps_bar_scroll);
         scene.ticks = activity.findViewById(R.id.place_apps_bar_indicator);
         scene.column = bar;
+        scene.activity = activity;
         scene.slot = dock.railSlotLengthPx;
         View host = activity.findViewById(R.id.place_apps_bar_host);
 
@@ -196,13 +199,12 @@ public class TermuxActivityRailScrollEndTest {
         PageTickStripView ticks = scene.ticks;
         float density = ticks.getResources().getDisplayMetrics().density;
 
-        assertSame(ticks, scene.column.boundPageIndicator());
+        assertSame(ticks, scene.activity.boundPageTickStrip());
         assertEquals(View.VISIBLE, ticks.getVisibility());
         assertEquals("the strip's own band beside the rail", PageTickStrip.bandPx(density),
             ticks.getWidth());
         assertTrue("and the rail's length", ticks.getHeight() > 0);
         assertEquals("the pins and the most-used apps", 2, ticks.getPageCount());
-        assertEquals("the second warm", 1, ticks.getDynamicPageIndex());
         assertEquals(0f, ticks.getPagePosition(), 0.001f);
         assertTrue("the strip paints its ticks at rest", paintedPixels(ticks) > 0);
 

@@ -28,6 +28,9 @@ import com.termux.R;
 import com.termux.app.AnimationSpeed;
 import com.termux.app.launcher.home.HomeGestures;
 import com.termux.app.launcher.home.HomePageIndicator;
+import com.termux.app.wall.pageswitch.PageBarBand;
+import com.termux.app.wall.pageswitch.PageBarModel;
+import com.termux.app.wall.pageswitch.PageBarView;
 import com.termux.app.launcher.home.HomePageTransition;
 import com.termux.app.wall.SettleSpring;
 
@@ -36,10 +39,6 @@ import java.util.List;
 /** The widget grid's own body, a page of the pane wall; it has no authority over the wall or the terminal's geometry. */
 public final class WidgetPaneView extends FrameLayout
         implements com.termux.app.chrome.LiveBackdrop.Container {
-    /** The page dots' band under the grid: their height, their air to the pane's edge, and to the grid. */
-    private static final int DOTS_HEIGHT_DP = 14;
-    private static final int DOTS_BOTTOM_MARGIN_DP = 4;
-    private static final int DOTS_GAP_DP = 4;
     /** How far two fingers must close in before a pinch opens the page overview. */
     private static final float PINCH_COMMIT_DP = 48f;
 
@@ -54,8 +53,8 @@ public final class WidgetPaneView extends FrameLayout
         default void onWidgetAddPage() { }
         /**
          * A vertical swipe on the page's free area let go, up ({@code up}) or down: the palette
-         * gesture ({@link HomeSwipePolicy}). Never sent for a swipe on a widget, a Home float or
-         * the picker.
+         * gesture ({@link HomeSwipePolicy}). Also sent for a swipe that starts on a widget that
+         * does not scroll vertically; never for one that does, a Home float or the picker.
          */
         default void onFreeAreaVerticalSwipe(boolean up) { }
         /**
@@ -196,10 +195,10 @@ public final class WidgetPaneView extends FrameLayout
     private final TextView emptyMessage;
     private final TextView notice;
     private final WidgetPickerSheetView picker;
-    private final PageDotsView dots;
-    /** The empty page's hint and the page dots stand on the wallpaper: their ink follows it. */
+    /** The page bar: the band under the grid ({@link PageBarBand}), the pill in it. */
+    private final PageBarView dots;
+    /** The empty page's hint stands on the wallpaper: its ink follows it. */
     private final HomeLabelInk hintInk = new HomeLabelInk();
-    private final HomeLabelInk dotsInk = new HomeLabelInk();
     private final Runnable hideNotice;
     private final int touchSlop;
     private final int doubleTapSlop;
@@ -307,10 +306,12 @@ public final class WidgetPaneView extends FrameLayout
         grid = new WidgetGridView(context); grid.setId(R.id.widget_grid);
         float cameraDistance = CAMERA_DISTANCE_DP * getResources().getDisplayMetrics().density;
         grid.setCameraDistance(cameraDistance);
-        // The page dots sit in a band below the grid, never over its last row. The band is kept
-        // whether or not the dots show, so adding a page does not shrink every cell.
+        // The page bar sits in a band below the grid, never over its last row. The band is kept
+        // while the indicator is on (a keyboard hides the pill, not the band, and adding a page
+        // does not shrink every cell); with the indicator off the grid takes the band's height.
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
-        gridParams.bottomMargin = gridBottomInsetPx(0, getResources().getDisplayMetrics().density);
+        gridParams.bottomMargin = gridBottomInsetPx(0, indicator.glyphsShown(), 0,
+            getResources().getDisplayMetrics().density);
         addView(grid, gridParams);
 
         empty = new LinearLayout(context); empty.setOrientation(LinearLayout.VERTICAL);
@@ -322,13 +323,13 @@ public final class WidgetPaneView extends FrameLayout
             LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
         addView(empty, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-        dots = new PageDotsView(context); dots.setId(R.id.widget_page_dots);
-        dots.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LayoutParams dotsParams = new LayoutParams(LayoutParams.MATCH_PARENT, dp(DOTS_HEIGHT_DP),
+        dots = new PageBarView(context); dots.setId(R.id.widget_page_dots);
+        LayoutParams dotsParams = new LayoutParams(LayoutParams.MATCH_PARENT,
+            PageBarBand.bandHeightPx(indicator.glyphsShown(), false, dockEdgeGapPx, density()),
             Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        dotsParams.bottomMargin = dp(DOTS_BOTTOM_MARGIN_DP);
+        dotsParams.bottomMargin = 0;
         addView(dots, dotsParams);
-        dots.setVisibility(GONE);
+        dots.setVisibility(INVISIBLE);
 
         notice = new TextView(context); notice.setId(R.id.widget_pane_notice); notice.setGravity(Gravity.CENTER);
         hideNotice = () -> notice.setVisibility(GONE);
@@ -454,13 +455,58 @@ public final class WidgetPaneView extends FrameLayout
     public void setReducedMotion(boolean value) { reducedMotion = value; }
 
     /**
-     * Settings › Home › Page indicator: the dots, or none. The band they stand in stays either
-     * way, so the grid keeps its height.
+     * Settings › Home › Page indicator: the dots, or none. With none the band they stood in goes
+     * to the grid, which resizes once.
      */
     public void setPageIndicator(@NonNull HomePageIndicator value) {
         if (indicator == value) return;
         indicator = value;
+        applyBand();
         setPageState(pageCount, currentPage);
+    }
+
+    /**
+     * Whether a keyboard, the in-app one or the system's, is up on Home. The pill is put away
+     * while it is and comes back with the keyboard down; the band keeps its height, so no keyboard
+     * toggle resizes the grid.
+     */
+    public void setKeyboardUp(boolean up) {
+        if (keyboardUp == up) return;
+        keyboardUp = up;
+        applyBand();
+    }
+
+    /**
+     * The band, from the indicator, the dock's reserve and the keyboard ({@link PageBarBand}): its
+     * height and bottom margin, the grid's bottom margin and the pill's visibility, each compared
+     * before it is set. INVISIBLE, never GONE: the band is the grid's inset whether or not the
+     * pill shows.
+     */
+    private void applyBand() {
+        float density = density();
+        boolean on = indicator.glyphsShown();
+        LayoutParams gridParams = (LayoutParams) grid.getLayoutParams();
+        int gridBottom = gridBottomInsetPx(dockReservePx, on, dockEdgeGapPx, density);
+        if (gridParams.bottomMargin != gridBottom) {
+            gridParams.bottomMargin = gridBottom;
+            grid.setLayoutParams(gridParams);
+        }
+        LayoutParams dotsParams = (LayoutParams) dots.getLayoutParams();
+        int band = PageBarBand.bandHeightPx(on, PageBarBand.dockRowsBelow(dockReservePx),
+            dockEdgeGapPx, density);
+        int bottom = PageBarBand.bottomMarginPx(dockReservePx);
+        if (dotsParams.height != band || dotsParams.bottomMargin != bottom) {
+            dotsParams.height = band;
+            dotsParams.bottomMargin = bottom;
+            dots.setLayoutParams(dotsParams);
+        }
+        boolean shown = PageBarBand.shown(on, keyboardUp);
+        int visibility = shown ? VISIBLE : INVISIBLE;
+        if (dots.getVisibility() != visibility) {
+            // A touch already down on the pill is given back before it goes.
+            if (!shown) dots.release();
+            dots.setVisibility(visibility);
+        }
     }
 
     /** What swipe up on the free area is set to; the drawer follows the finger. */
@@ -507,10 +553,7 @@ public final class WidgetPaneView extends FrameLayout
             hintInk.wallpaperUnder(emptyMessage, source);
             hintInk.apply(emptyMessage, false, getResources().getDisplayMetrics().density);
         }
-        if (dots.getVisibility() == VISIBLE) {
-            int before = dotsInk.wallpaper();
-            if (dotsInk.wallpaperUnder(dots, source) != before) dots.invalidate();
-        }
+        if (dots.getVisibility() == VISIBLE) dots.redress();
     }
 
     /** Every Home icon and folder under {@code parent}; widgets' own trees are not walked. */
@@ -537,38 +580,43 @@ public final class WidgetPaneView extends FrameLayout
 
     /** The band at the pane's bottom the dock takes at rest; see {@link #setDockReservePx}. */
     private int dockReservePx;
+    /** The edge gap the dock keeps above the pane's bottom; see {@link #setDockReservePx}. */
+    private int dockEdgeGapPx;
 
     /**
      * The band at the pane's bottom the dock stands over at rest
-     * ({@code KeyboardOverlayPolicy#homeGridDockReservePx}, #104): the page dots and the grid stand
+     * ({@code KeyboardOverlayPolicy#homeGridDockReservePx}, #104): the page bar and the grid stand
      * above it, so the grid's last row is never behind the dock. The grid's rows are cut from what
-     * is left.
+     * is left. Zero when no dock rows stand at the bottom: the pill then takes the dock's place
+     * where the dock's bottom would stand: {@code edgeGapPx}, the dock's own edge gap, is the air
+     * under it. The two arrive together so the band is cut once.
      */
-    public void setDockReservePx(int px) {
+    public void setDockReservePx(int px, int edgeGapPx) {
         int wanted = Math.max(0, px);
-        if (dockReservePx == wanted) return;
+        int wantedGap = Math.max(0, edgeGapPx);
+        if (dockReservePx == wanted && dockEdgeGapPx == wantedGap) return;
+        boolean reserveMoved = dockReservePx != wanted;
         dockReservePx = wanted;
-        float density = getResources().getDisplayMetrics().density;
-        LayoutParams gridParams = (LayoutParams) grid.getLayoutParams();
-        gridParams.bottomMargin = gridBottomInsetPx(wanted, density);
-        grid.setLayoutParams(gridParams);
-        LayoutParams dotsParams = (LayoutParams) dots.getLayoutParams();
-        dotsParams.bottomMargin = wanted + Math.round(DOTS_BOTTOM_MARGIN_DP * density);
-        dots.setLayoutParams(dotsParams);
-        picker.setDockReservePx(wanted);
+        dockEdgeGapPx = wantedGap;
+        applyBand();
+        if (reserveMoved) picker.setDockReservePx(wanted);
     }
+
+    /** Whether a keyboard is up on Home; see {@link #setKeyboardUp}. */
+    private boolean keyboardUp;
 
     public int dockReservePx() {
         return dockReservePx;
     }
 
     /**
-     * How far above the pane's bottom the grid ends: the dock's band, then the page dots' band
-     * (kept whether or not the dots show, so adding a page does not shrink every cell).
+     * How far above the pane's bottom the grid ends: the dock's band, then the page bar's band
+     * (none with the indicator off; kept while a keyboard hides the pill).
      */
-    static int gridBottomInsetPx(int dockReservePx, float density) {
-        return Math.max(0, dockReservePx)
-            + Math.round((DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP) * density);
+    static int gridBottomInsetPx(int dockReservePx, boolean indicatorOn, int edgeGapPx,
+                                 float density) {
+        return PageBarBand.bottomMarginPx(dockReservePx) + PageBarBand.bandHeightPx(indicatorOn,
+            PageBarBand.dockRowsBelow(dockReservePx), edgeGapPx, density);
     }
 
     /**
@@ -594,7 +642,7 @@ public final class WidgetPaneView extends FrameLayout
             addView(editOverlay, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.MATCH_PARENT));
         } else if (indexOfChild(editOverlay) != getChildCount() - 1) {
-            editOverlay.bringToFront();
+            com.termux.app.window.WindowLayers.raiseWithin(editOverlay);
         }
         return editOverlay;
     }
@@ -641,7 +689,7 @@ public final class WidgetPaneView extends FrameLayout
                 LayoutParams.MATCH_PARENT));
         }
         if (editOverlay != null && indexOfChild(editOverlay) != getChildCount() - 1) {
-            editOverlay.bringToFront();
+            com.termux.app.window.WindowLayers.raiseWithin(editOverlay);
         }
         return dragLayer;
     }
@@ -958,14 +1006,24 @@ public final class WidgetPaneView extends FrameLayout
     }
 
 
+    /** The page bar's pages: what the wall has, in its order, and where the user is. */
+    public void setPageBar(@Nullable PageBarModel model) {
+        dots.setModel(model);
+    }
+
+    /** Where a touch on the page bar goes. */
+    public void setPageBarEntry(@Nullable PageBarView.Entry entry) {
+        dots.setEntry(entry);
+    }
+
+    private float density() { return getResources().getDisplayMetrics().density; }
+
     /** Updates the indicator and, after a committed swipe, slides the new page's content in. */
     public void setPageState(int count, int current) {
         int previousPage = currentPage;
         pageCount = Math.max(1, count);
         currentPage = Math.max(0, Math.min(pageCount - 1, current));
-        int dotsVisibility = indicator.dotsShown(pageCount) ? VISIBLE : GONE;
-        if (dots.getVisibility() != dotsVisibility) dots.setVisibility(dotsVisibility);
-        dots.invalidate();
+        applyBand();
         if (pinnedLayer instanceof PagePinnedLayer)
             ((PagePinnedLayer) pinnedLayer).onHomePageShown(currentPage);
         if (pageCommitPending && currentPage != previousPage) {
@@ -1014,10 +1072,14 @@ public final class WidgetPaneView extends FrameLayout
                 // One page still tracks when the seam is open: its forward swipe is the wall's.
                 pagingTracking = (runPageCount() > 1 || seamOpen() || seamOpenBackward())
                     && free;
-                // A swipe on a widget is the widget's, whichever way it goes, and a vertical one
-                // on a float is its terminal's scroll.
-                verticalCandidate = free && !onFloat && !onWidget(event);
-                freePress = verticalCandidate;
+                // A sideways swipe on a widget pages; a vertical one is Home's too (drawer, shade)
+                // unless the widget under the finger scrolls vertically, and a vertical one on a
+                // float is its terminal's scroll. Only a press on free space is a tap or a warm-up.
+                WidgetCellView pressedCell = free && !onFloat ? widgetUnder(event) : null;
+                boolean onFreeSpace = free && !onFloat && pressedCell == null;
+                verticalCandidate = onFreeSpace
+                    || (pressedCell != null && !ownsVerticalSwipe(pressedCell, event));
+                freePress = onFreeSpace;
                 twoFingerTracking = false;
                 twoFingerDragging = false;
                 pinchTracking = false;
@@ -1029,7 +1091,7 @@ public final class WidgetPaneView extends FrameLayout
                 if (!secondTap) lastTapUpMs = -1;
                 pagingDownX = event.getX(); pagingDownY = event.getY();
                 pagingDownRawX = event.getRawX();
-                if (verticalCandidate
+                if (freePress
                     && swipeUpAction == com.termux.app.launcher.home.HomeGestures.Action.DRAWER
                     && listener != null) {
                     listener.onFreeAreaDrawerPressed();
@@ -1344,13 +1406,36 @@ public final class WidgetPaneView extends FrameLayout
         }
     }
 
-    /** Whether a press lands on a widget on the page in view. */
-    private boolean onWidget(@NonNull MotionEvent event) {
-        if (grid.getVisibility() != VISIBLE) return false;
+    /** The widget a press lands on, on the page in view; null on free space. */
+    @Nullable private WidgetCellView widgetUnder(@NonNull MotionEvent event) {
+        if (grid.getVisibility() != VISIBLE) return null;
         for (int i = grid.getChildCount() - 1; i >= 0; i--) {
             View child = grid.getChildAt(i);
             if (child instanceof WidgetCellView && child.getVisibility() == VISIBLE
-                && insideView(child, event)) return true;
+                && insideView(child, event)) return (WidgetCellView) child;
+        }
+        return null;
+    }
+
+    /**
+     * Whether a vertical swipe starting at the event's point is the widget's own: a view there
+     * scrolls up or down now, or is a collection, scroller, text field or nested scroller that
+     * may (a list too short to scroll today still keeps its swipes). Screen coordinates.
+     */
+    static boolean ownsVerticalSwipe(@NonNull View view, @NonNull MotionEvent event) {
+        if (view.getVisibility() != VISIBLE || !insideView(view, event)) return false;
+        if (view instanceof android.widget.AdapterView
+            || view instanceof android.widget.ScrollView
+            || view instanceof androidx.recyclerview.widget.RecyclerView
+            || view instanceof android.widget.EditText
+            || view instanceof android.webkit.WebView
+            || ViewCompat.isNestedScrollingEnabled(view)
+            || view.canScrollVertically(1) || view.canScrollVertically(-1)) return true;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = group.getChildCount() - 1; i >= 0; i--) {
+                if (ownsVerticalSwipe(group.getChildAt(i), event)) return true;
+            }
         }
         return false;
     }
@@ -1591,7 +1676,23 @@ public final class WidgetPaneView extends FrameLayout
         // slides goes over it, whichever of the two pages that is.
         boolean under = effect == HomePageTransition.STACK ? position < 0f
             : effect == HomePageTransition.DEPTH && position > 0f;
-        layer.setTranslationZ(under ? -1f : 0f);
+        placeNeighbour(layer, under);
+    }
+
+    /**
+     * The neighbour layer's place in the child order: just under the page's grid while it is the
+     * page that sinks, just over it otherwise. Only moves it when the answer changed (a swipe that
+     * turns round), and by detaching and attaching, so nothing leaves the window or lays out.
+     */
+    @androidx.annotation.VisibleForTesting
+    void placeNeighbour(@NonNull WidgetGridView layer, boolean under) {
+        int at = indexOfChild(layer);
+        int gridAt = indexOfChild(grid);
+        if (at < 0 || gridAt < 0 || (under ? at < gridAt : at > gridAt)) return;
+        ViewGroup.LayoutParams params = layer.getLayoutParams();
+        detachViewFromParent(layer);
+        attachViewToParent(layer, under ? indexOfChild(grid) : indexOfChild(grid) + 1, params);
+        invalidate();
     }
 
     private void bindNeighbour(int page) {
@@ -1757,46 +1858,6 @@ public final class WidgetPaneView extends FrameLayout
         if (pagingVelocity != null) { pagingVelocity.recycle(); pagingVelocity = null; }
         if (seamVelocity != null) { seamVelocity.recycle(); seamVelocity = null; }
         super.onDetachedFromWindow();
-    }
-
-    /** Low-emphasis page indicator: small centered dots, only meaningful past one page. */
-    private final class PageDotsView extends View {
-        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-        PageDotsView(@NonNull Context context) { super(context); }
-
-        @Override protected void onDraw(@NonNull Canvas canvas) {
-            if (pageCount <= 1) return;
-            float radius = dp(2.5f);
-            float gap = dp(8);
-            float step = radius * 2f + gap;
-            float total = pageCount * radius * 2f + (pageCount - 1) * gap;
-            float x = (getWidth() - total) / 2f + radius;
-            float y = getHeight() / 2f;
-            for (int page = 0; page < pageCount; page++) {
-                // The dots are chrome over the wall, so they follow the chrome's polarity: white
-                // light on the dark band, shadow on the light one, where white dots are no dots.
-                // On a measured wallpaper they follow it instead (editor-redesign §8): the ink
-                // that reads on the wallpaper behind them, at the same two strengths.
-                int wallpaper = dotsInk.wallpaper();
-                if (android.graphics.Color.alpha(wallpaper) != 0) {
-                    int ink = com.termux.app.chrome.WallpaperInk.bareInk(wallpaper,
-                        HomeLabelInk.DARK_INK, HomeLabelInk.PALE_INK);
-                    paint.setColor((ink & 0x00FFFFFF) | (page == currentPage ? 0xE6000000 : 0x4D000000));
-                } else {
-                    paint.setColor(page == currentPage
-                        ? com.termux.app.chrome.ChromeShade.structural(0xE6FFFFFF,
-                            com.termux.app.chrome.ChromeShade.TARGET_RIM)
-                        : com.termux.app.chrome.ChromeShade.fill(0x4DFFFFFF));
-                }
-                canvas.drawCircle(x, y, radius, paint);
-                x += step;
-            }
-        }
-
-        private float dp(float value) {
-            return value * getResources().getDisplayMetrics().density;
-        }
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }

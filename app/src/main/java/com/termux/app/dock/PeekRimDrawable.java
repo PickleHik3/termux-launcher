@@ -33,6 +33,18 @@ public final class PeekRimDrawable extends InsetDrawable {
             hostWidthPx - Math.round(card.right));
     }
 
+    /**
+     * The rim cut to {@code cut} ({@link com.termux.app.chrome.RoundCut}) in a host
+     * {@code hostWidthPx} wide, its bottom edge open: a card drawn blended with the slab.
+     */
+    @NonNull
+    public static PeekRimDrawable forCut(@NonNull Drawable rim, @NonNull float[] cut,
+                                         int hostWidthPx) {
+        return new PeekRimDrawable(rim, Math.round(cut[com.termux.app.chrome.RoundCut.LEFT]),
+            Math.round(cut[com.termux.app.chrome.RoundCut.TOP]),
+            hostWidthPx - Math.round(cut[com.termux.app.chrome.RoundCut.RIGHT]));
+    }
+
     // No padding and no size: see the class comment.
     @Override
     public boolean getPadding(@NonNull Rect padding) {

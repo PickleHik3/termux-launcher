@@ -1,6 +1,7 @@
 package com.termux.app.launcher.widget.builtin;
 
 import androidx.annotation.NonNull;
+
 import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.widget.builtin.WidgetLayoutPlan.Box;
@@ -8,6 +9,7 @@ import com.termux.app.launcher.widget.builtin.WidgetLayoutPlan.Ink;
 import com.termux.app.launcher.widget.builtin.WidgetLayoutPlan.Measure;
 import com.termux.app.launcher.widget.builtin.WidgetLayoutPlan.Part;
 import com.termux.app.launcher.widget.builtin.WidgetTokens.Role;
+import com.termux.app.statusbar.WeatherIcons;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,8 +27,8 @@ final class WeatherLayoutPlanner {
     /** The kind declares it ({@link BuiltinWidgetKind#maxSpan}); past it the widget only gains room. */
     static final BuiltinWidgetSpan MAX_SPAN = BuiltinWidgetKind.WEATHER.maxSpan;
 
-    /** The cloud the empty card shows. */
-    static final String GLYPH_NO_WEATHER = "";
+    /** The picture the empty card shows. */
+    static final String GLYPH_NO_WEATHER = WeatherIcons.NOT_AVAILABLE.key;
 
     /** The sky beside the hero is as tall as the hero's box; stacked above it, three quarters. */
     private static final float GLYPH_BESIDE_HERO = 1f;

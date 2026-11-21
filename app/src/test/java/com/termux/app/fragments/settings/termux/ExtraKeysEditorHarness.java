@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment;
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.terminal.io.ExtraKeysDraft;
+import com.termux.app.terminal.io.ExtraKeysTarget;
 
 import org.robolectric.Robolectric;
 import org.robolectric.RuntimeEnvironment;
@@ -32,8 +33,14 @@ final class ExtraKeysEditorHarness {
     final ExtraKeysEditorFragment fragment;
 
     ExtraKeysEditorHarness() {
+        this(null);
+    }
+
+    /** Opens the editor on {@code target}'s set; null opens it on Global. */
+    ExtraKeysEditorHarness(ExtraKeysTarget target) {
         Intent intent = SettingsActivity.createFragmentIntent(
-            RuntimeEnvironment.getApplication(), ExtraKeysEditorFragment.class, 0);
+            RuntimeEnvironment.getApplication(), ExtraKeysEditorFragment.class, 0,
+            target == null ? null : target.name(), null);
         controller = Robolectric.buildActivity(SettingsActivity.class, intent)
             .create().start().resume().visible();
         idle();

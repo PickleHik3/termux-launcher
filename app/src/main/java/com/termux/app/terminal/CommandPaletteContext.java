@@ -5,7 +5,7 @@ package com.termux.app.terminal;
  *
  * <p>The host passes it to {@link TerminalCommandPaletteController#show(CommandPaletteContext)};
  * every existing way in (the context menu, the chords, the space-bar swipe) keeps
- * {@link #TERMINAL}, so the Workspace's palette is unchanged until a caller asks for Home.
+ * {@link #TERMINAL}, so the Terminal's palette is unchanged until a caller asks for Home.
  */
 public enum CommandPaletteContext {
     /** Over a terminal window: every action, the shell fallback on ⏎ with no match. */

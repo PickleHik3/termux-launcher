@@ -98,7 +98,7 @@ public class TermuxApplication extends Application {
         com.termux.terminal.TerminalEmulator.setXtVersion(BuildConfig.VERSION_NAME);
         // Before any session: whether a crash keeps the Ghostty core off, and memory pressure for it.
         com.termux.app.terminal.GhosttyFailSafes.install(this);
-        // Fold the old per-surface glass values into Base plus overrides. Must run before anything
+        // Fold the old per-surface glass values into Global plus overrides. Must run before anything
         // reads a surface value, because every one of those reads now resolves through the link.
         TermuxAppSharedPreferences surfacePreferences = TermuxAppSharedPreferences.build(context);
         // Read before the wall migration stores its version: an earlier build ran it already.
@@ -107,6 +107,9 @@ public class TermuxApplication extends Application {
             // Decided once, before any migration below writes a bookkeeping key: a first run holds
             // only the log level, and every later check would otherwise see it as an upgrade.
             final boolean freshInstall = surfacePreferences.isFreshInstall();
+            // An upgrade keeps the drawer type it had; decided on the real freshness, which the
+            // appearance reset below would otherwise turn into "fresh".
+            surfacePreferences.pinDrawerViewType(freshInstall);
             // An install from before the wall rework takes Start in from its usage mode, once.
             android.content.SharedPreferences nudgeStore = surfacePreferences.getSharedPreferences();
             wallMigrationStoredBefore = nudgeStore != null && nudgeStore.contains(
@@ -115,13 +118,13 @@ public class TermuxApplication extends Application {
             WallReworkMigration.migrateIfNeeded(surfacePreferences.getSharedPreferences());
             // The wall's pages are seeded from Start in, the default Home page, Use as and the
             // widget repository's page count, once; the count is read before anything changes it.
-            com.termux.app.wall.WallPagesMigration.migrateIfNeeded(
+            com.termux.app.look.WallPagesMigration.migrateIfNeeded(
                 surfacePreferences.getSharedPreferences(),
                 () -> com.termux.app.launcher.widget.LauncherWidgetRepository.create(context)
                     .pageCount(),
                 com.termux.app.wall.WallPagesStore.open(context));
             // The look's halves became pages (ADR 0015 §6): tell the preferences which page the
-            // Workspace is, then fold the old half keys into wall values and Terminal-page
+            // Terminal is, then fold the old half keys into wall values and Terminal-page
             // overrides, once, before any look migration or activity reads a look.
             com.termux.app.wall.WallPages.Page terminalPage =
                 com.termux.app.wall.WallPagesStore.open(context).current().terminal();
@@ -130,16 +133,21 @@ public class TermuxApplication extends Application {
                 com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID,
                 terminalId).apply();
             TermuxAppSharedPreferences.setTerminalPageId(terminalId);
-            // With no Terminal page the Workspace's differing values have nowhere to go; the
+            // With no Terminal page the Terminal's differing values have nowhere to go; the
             // upgrade still runs and records its version.
             com.termux.app.look.HalfLookUpgrade.run(
                 new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
                 terminalId, -1);
             // The Display page the wall upgrade created starts with the Terminal page's look.
-            com.termux.app.wall.WallPagesMigration.copyLookToUpgradedDisplay(
+            com.termux.app.look.WallPagesMigration.copyLookToUpgradedDisplay(
                 surfacePreferences.getSharedPreferences(),
                 new com.termux.app.look.PrefsLookStore(surfacePreferences.getSharedPreferences()),
                 terminalId);
+            // A build with a higher appearance reset number puts everything the Appearance editor
+            // owns back to a new install's, once; the look steps below then run as on a new
+            // install. After the wall and page steps, which it keeps; never throws.
+            final boolean lookFresh = com.termux.app.surfaces.AppearanceReset.runAtStartUp(
+                context, surfacePreferences, freshInstall) || freshInstall;
             // Every look value moves into the one grid (ADR 0017), once, before the glass
             // controls' start-up work reads and writes looks through it.
             com.termux.app.wall.WallPagesStore wallStore =
@@ -147,30 +155,18 @@ public class TermuxApplication extends Application {
             java.util.List<Integer> lookPageIds = new java.util.ArrayList<>();
             for (com.termux.app.wall.WallPages.Page page : wallStore.current().allPages())
                 lookPageIds.add(page.id);
-            surfacePreferences.migrateLookGrid(lookPageIds, freshInstall);
-            // Every grid reads a page's kind from the wall and a kind's shipped look from the
-            // shipped Looks (ADR 0018 §3); then Home's old cells move to the Home kind, once.
-            com.termux.shared.termux.settings.preferences.LookGrid.install(
-                new com.termux.app.wall.WallLookKinds(wallStore),
-                com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
-            com.termux.shared.termux.settings.preferences.LookGridKindMigration.run(
-                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
-                    surfacePreferences.getSharedPreferences()), freshInstall);
+            surfacePreferences.migrateLookGrid(lookPageIds, lookFresh);
             // The glass controls' storage (the Tint amount, the Glass curve), once, then an install
             // still on a shipped Look whose values have since moved takes them now.
             com.termux.app.surfaces.GlassControlsMigration.runAtStartUp(surfacePreferences,
-                freshInstall);
-            // Last: each kind's shipped look becomes its kind cells, once, on fresh and upgraded
-            // installs alike (ADR 0018 §3); after every freshness check above.
-            com.termux.shared.termux.settings.preferences.LookGridKindSeed.run(
-                new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
-                    surfacePreferences.getSharedPreferences()),
-                com.termux.app.surfaces.SurfacePresets.SHIPPED_BY_KIND);
-            // Margin is one number for every page: the Margin Home wore becomes Base's, once.
+                lookFresh);
+            // Margin is one number for every page: the Margin Home wore becomes Global's, once.
             com.termux.shared.termux.settings.preferences.LookGridMarginMigration.run(
                 new com.termux.shared.termux.settings.preferences.LookGrid.PrefsStore(
                     surfacePreferences.getSharedPreferences()));
         }
+        // Assistant keeps the key row it had built in, as its own row, once; before the load below.
+        com.termux.app.terminal.io.AssistantKeysMigration.runAtStartUp(context, surfacePreferences);
         // Init app wide SharedProperties loaded from termux.properties
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
         // Init app wide shell manager

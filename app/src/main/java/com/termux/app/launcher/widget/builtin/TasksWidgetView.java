@@ -11,7 +11,6 @@ import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,6 +21,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
+import com.termux.app.notice.AppNotice;
+import com.termux.app.notice.AppNoticeItem;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -120,8 +121,9 @@ public class TasksWidgetView extends BuiltinWidgetView implements MarkdownFileSo
     }
 
     private void edit(@NonNull MarkdownFileSource.Edit edit) {
-        Runnable failed = () -> Toast.makeText(services.context(), R.string.bw_files_tasks_save_failed,
-            Toast.LENGTH_SHORT).show();
+        Runnable failed = () -> AppNotice.show(services.context(),
+            AppNoticeItem.Kind.ERROR, R.drawable.ic_rl_check,
+            services.context().getString(R.string.bw_files_tasks_save_failed), null, false);
         if (source != null) source.edit(edit, failed);
         else MarkdownFileSource.editDetached(services, path(), edit, failed);
     }
