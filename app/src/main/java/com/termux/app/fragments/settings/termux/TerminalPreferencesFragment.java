@@ -53,8 +53,8 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
                 com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
                     com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context, false);
                 if (preferences != null) preferences.clearClipboardReadAlways();
-                android.widget.Toast.makeText(context, R.string.msg_clipboard_permissions_reset,
-                    android.widget.Toast.LENGTH_SHORT).show();
+                com.termux.app.notice.AppNotice.confirm(context, R.drawable.ic_rl_clipboard,
+                    context.getString(R.string.msg_clipboard_permissions_reset));
                 return true;
             });
         }

@@ -955,12 +955,10 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         }
     }
 
-    /**
-     * A toast, not an AppNotice: the notice pill draws in the activity's own window, which this
-     * full-screen page covers.
-     */
+    /** The picker sits in the editor layer; the notice layer is above it, so the pill shows. */
     private void showError(int messageRes) {
-        android.widget.Toast.makeText(mContext, messageRes, android.widget.Toast.LENGTH_LONG).show();
+        com.termux.app.notice.AppNotice.show(mContext, com.termux.app.notice.AppNoticeItem.Kind.ERROR,
+            R.drawable.ic_rl_wallpaper, mContext.getString(messageRes), null, true);
     }
 
     /**

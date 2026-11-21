@@ -14,7 +14,6 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -486,7 +485,8 @@ public final class SceneController implements LatencyProbe.CommitListener {
         mMotion = WallpaperMotion.photo();
         mMeta = null;
         removeLayer();
-        Toast.makeText(mActivity, R.string.wallpaper_motion_reverted, Toast.LENGTH_SHORT).show();
+        com.termux.app.notice.AppNotice.show(mActivity, com.termux.app.notice.AppNoticeItem.Kind.WARNING,
+            R.drawable.ic_rl_wallpaper, mActivity.getString(R.string.wallpaper_motion_reverted), null, false);
     }
 
     @Nullable private java.util.List<android.view.ViewGroup.LayoutParams> mInvalTraceParams;

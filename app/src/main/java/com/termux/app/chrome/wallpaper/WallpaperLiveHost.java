@@ -12,7 +12,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.Toast;
 
 import androidx.activity.ComponentActivity;
 import androidx.activity.result.ActivityResultLauncher;
@@ -1151,7 +1150,8 @@ public final class WallpaperLiveHost {
     }
 
     private void toast(@StringRes int res) {
-        Toast.makeText(mContext, res, Toast.LENGTH_LONG).show();
+        com.termux.app.notice.AppNotice.show(mContext, com.termux.app.notice.AppNoticeItem.Kind.ERROR,
+            R.drawable.ic_rl_wallpaper, mContext.getString(res), null, true);
     }
 
     /** The app's preferences store, or null when it cannot be built. */

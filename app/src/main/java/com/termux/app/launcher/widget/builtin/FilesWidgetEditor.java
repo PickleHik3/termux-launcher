@@ -1,10 +1,11 @@
 package com.termux.app.launcher.widget.builtin;
 
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 
 import com.termux.R;
+import com.termux.app.notice.AppNotice;
+import com.termux.app.notice.AppNoticeItem;
 
 import java.io.File;
 import java.util.concurrent.RejectedExecutionException;
@@ -40,8 +41,8 @@ final class FilesWidgetEditor {
             opened = false;
         }
         if (!opened) {
-            Toast.makeText(services.context(), R.string.bw_files_editor_unavailable,
-                Toast.LENGTH_SHORT).show();
+            AppNotice.show(services.context(), AppNoticeItem.Kind.ERROR, R.drawable.ic_rl_file,
+                services.context().getString(R.string.bw_files_editor_unavailable), null, false);
         }
     }
 }
