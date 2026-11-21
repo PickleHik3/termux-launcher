@@ -114,4 +114,21 @@ public class PageBarPopupFrameTest {
             assertTrue(at, l.slabTopPx() >= l.pillTopPx() && l.slabBottomPx() <= l.pillBottomPx());
         }
     }
+
+    @Test public void withNoStoredRadiusTheBarTakesTheCardsResolvedRadiusAndAStoredOneFollows() {
+        // Fresh install: Corners stored as -1 resolve through the one auto rule, as the card's do.
+        float auto = com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            .resolveAutoCornerRadiusDp(null, true) * D;
+        assertTrue(auto > 0f);
+        float cardRadius = CapsuleGlass.radiusPx(auto, BAR);
+        PageBarPopupFrame fresh = new PageBarPopupFrame().set(D, LAYER, true, FLOAT_LEFT,
+            FLOAT_RIGHT, TOP_KEYBOARD_UP, GAP, cardRadius);
+        assertEquals(cardRadius, fresh.radiusPx, EPS);
+        assertEquals(Math.min(auto, BAR / 2f), fresh.radiusPx, EPS);
+        assertTrue(fresh.radiusPx > 0f);
+        // A stored radius is the card's too, and is capped at half the bar.
+        PageBarPopupFrame stored = new PageBarPopupFrame().set(D, LAYER, true, FLOAT_LEFT,
+            FLOAT_RIGHT, TOP_KEYBOARD_UP, GAP, CapsuleGlass.radiusPx(10f * D, BAR));
+        assertEquals(10f * D, stored.radiusPx, EPS);
+    }
 }

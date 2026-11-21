@@ -29992,11 +29992,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         getResources().getDisplayMetrics().density);
                 }
 
-                // The card's own rule (KeysCardDress): Corners capped at half under Floating;
-                // Docked rows are square.
+                // The card's own rule (KeysCardDress dresses it with exactly this call, whatever
+                // the style): the resolved Corners, "follow the style" included, capped at half.
                 @Override public float keysCardRadiusPx(int heightPx) {
-                    return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STACK)
-                        ? mDock.resolveDockCapsuleCornerRadiusPx(heightPx) : 0f;
+                    return mDock.resolveDockCapsuleCornerRadiusPx(heightPx);
                 }
             }, (FrameLayout) findViewById(R.id.page_switch_layer));
         // The dock's capsules dim while the bar slides (the dock strip's slice listens here).
