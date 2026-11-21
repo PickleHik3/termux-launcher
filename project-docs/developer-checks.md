@@ -10,6 +10,14 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Page bar and keyboard settings (2026-11-21, #298)
+- 2026-11-21 · 09ef9a875 · How the page bar looks and feels: filled glyphs, the pill hugged and centred above the dock (at the dock's bottom line when every dock row is hidden), full width from the page switcher key, the stack of windows, the bubble while sliding. Passes when it reads as one piece with the dock and the widgets on pong's wallpapers · pong.
+- 2026-11-21 · 09ef9a875 · Decide: a press on the page switcher key with no slide leaves the bar up for one use and the next touch anywhere, the key included, puts it away. On the emulator that read as every second hold "doing nothing". Keep, or have a second press on the key keep the bar · pong.
+- 2026-11-21 · 733986e1d · Decide: holding Home's grabber over the dock opens the Apps row menu and the bar does not brighten under the finger (it does while the keyboard swipe moves it). Keep, or brighten on touch · pong.
+- 2026-11-21 · a343af9ad · Decide: the pill's light-mode look changed with the night fix: it now wears the widget's card and lift over the glass, and its glyphs take the widget's tinted text colour. Passes when that still reads as glass to you; the Look's frost is not part of the ink's solve (a shared-recipe change if wanted) · pong.
+- 2026-11-21 · 94dcc60ba · Possible product bug behind a test fix: the dock's Drawer tile went missing on page 0 when animations ran at zero duration in tests. Check on a phone with Developer options → Animator duration scale off that the Drawer tile is still in the dock · pong or the emulator.
+- 2026-11-21 · fa42beebe · Layouts page preview and the cycle chips on Keyboard theme: taste, height and whether the default layout's chip name "Launcher layout" is the right short name · pong.
+
 ## Photo shader wallpapers (2026-11-18, #277)
 - 2026-11-18 · feat/photo-shader-picker · The real model's memory and run time: Generate depth on a 12 MP photo on pong (one run seen 11-18: about 6 s, lowest free memory 3.3 GB, but the model process was still alive at about 283 MB afterwards). Passes when peak memory (`dumpsys meminfo` during the run) stays within what the model estimate promised, the run takes about as long as a model load plus one image, and PSS returns to its idle ground afterwards (nothing from the model stays resident) · pong.
 - 2026-11-18 · feat/photo-shader-picker · The lotus round trip with a real AI tool: copy the instructions, give them to an AI tool with the lotus photo, choose the photo, paste the answer with Paste at the bottom, Apply. Passes when the photo moves calmly in place, a compile error pasted back gets a fixed shader, and the page reads as three plain steps in order · pong.
