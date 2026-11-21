@@ -66,6 +66,32 @@ public final class PageBarGlass {
         return luminance > 0.5 ? PALE_INK_CARD : DARK_INK_CARD;
     }
 
+    /**
+     * The ground under the key's pop-up wearing raised glass: its tint (at the raised opacity)
+     * over the wallpaper sampled under it, or over the card {@code ink} reads on while nothing was
+     * sampled. Opaque.
+     */
+    @ColorInt
+    static int raisedGround(@ColorInt int tint, @ColorInt int wallpaper, @ColorInt int ink) {
+        int under = Color.alpha(wallpaper) == 0 ? cardFor(ink) : OnGlass.opaque(wallpaper);
+        return OnGlass.opaque(OnGlass.composite(tint, under));
+    }
+
+    /**
+     * The key's pop-up inks on raised glass, solved on {@code ground}: the neutral the more legible
+     * of the sheets' ink and its opposite pole ({@link #cardFor}), the current page and the others
+     * by the page marks' rule ({@link PageMarkInk}).
+     */
+    static void raisedInk(@ColorInt int ground, @ColorInt int fixedInk, @ColorInt int accent,
+                          @NonNull Ink out) {
+        int ink = OnGlass.mostLegibleInk(ground, fixedInk, cardFor(fixedInk));
+        out.ground = ground;
+        out.veil = Color.TRANSPARENT;
+        out.ink = ink;
+        out.accent = PageMarkInk.current(ground, accent, GlassInk.isPaleSide(ink, ground));
+        out.other = PageMarkInk.other(ground, ink, out.accent);
+    }
+
     @Nullable
     static BuiltinWidgetView.GlassSource sourceFor(@NonNull View view) {
         for (ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {

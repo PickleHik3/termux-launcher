@@ -2185,6 +2185,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
                     || frame == mFrameGutterBackdropBitmap
                     || (mLookGlass != null && mLookGlass.holds(frame))
+                    || (mRaisedGlass != null && mRaisedGlass.holds(frame))
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
 
@@ -2193,6 +2194,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneGlassClearFrame = null;
             mWallBehindFrame = null;
             if (mLookGlass != null) mLookGlass.onCacheCleared();
+            if (mRaisedGlass != null) mRaisedGlass.onCacheCleared();
         }
 
         @Override public boolean isActivityVisible() {
@@ -29896,6 +29898,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The page bar's owner, Home's and the key's popup: answers the bar's questions and claims its touch. */
     @Nullable private com.termux.app.wall.pageswitch.PageBarController mPageBar;
 
+    /**
+     * The raised glass the key's page bar wears (ElevatedGlass over the sheets' glass), worn only
+     * while that bar is shown: it reads the shared blur cache's frame at the raised radius, holds
+     * no pixels of its own and takes no Live glass slot.
+     */
+    @Nullable private com.termux.app.chrome.LookGlassStyle mRaisedGlass;
+
+    @NonNull
+    private com.termux.app.chrome.LookGlassStyle raisedGlassStyle() {
+        if (mRaisedGlass == null) {
+            mRaisedGlass = new com.termux.app.chrome.LookGlassStyle(this, mChrome,
+                new com.termux.app.chrome.LookGlassStyle.Host() {
+                    @Override public TermuxAppSharedPreferences preferences() { return mPreferences; }
+                    @Override public View wallpaperFrame() {
+                        return findViewById(R.id.activity_termux_root_view);
+                    }
+                    @Override public boolean wallpaperBlurs() { return wallpaperSampleable(); }
+                    @Override public int glassBaseColor() { return resolveAccessoryGlassBaseColor(); }
+                    // The plain frost: a transient bar draws no refraction.
+                    @Override public com.termux.app.chrome.GlassRefraction.Look refraction() { return null; }
+                    @Override public com.termux.app.chrome.WallpaperParallax parallax() {
+                        return mWallpaperParallax;
+                    }
+                    @Override public com.termux.app.chrome.LookGlassSpec spec() {
+                        return com.termux.app.chrome.ElevatedGlass.lookSpec(
+                            mPreferences != null && mPreferences.isUseSystemWallpaperEnabled(),
+                            com.termux.app.chrome.ElevatedGlass.of(mPreferences));
+                    }
+                });
+        }
+        return mRaisedGlass;
+    }
+
     private void attachPageBar() {
         if (mPageBar != null) return;
         final com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator nav = pageSwitchNavigator();
@@ -29929,6 +29964,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public int ink() {
                     return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
                         R.color.termux_on_surface);
+                }
+
+                @Override public com.termux.app.chrome.LookGlassStyle raisedGlass() {
+                    return raisedGlassStyle();
+                }
+
+                @Override public boolean keysCardOnScreen(@NonNull android.graphics.Rect out) {
+                    View card = findViewById(R.id.extra_keys_card);
+                    if (card == null || !card.isShown() || card.getWidth() <= 0) return false;
+                    int[] at = new int[2];
+                    card.getLocationOnScreen(at);
+                    out.set(at[0], at[1], at[0] + card.getWidth(), at[1] + card.getHeight());
+                    return true;
+                }
+
+                // The gap the stack keeps between the extra-keys card and the keyboard's card:
+                // Floating's air, Docked's none (ChromePolicy, UnderKeyboardBand).
+                @Override public int stackRowGapPx() {
+                    return com.termux.app.chrome.ChromePolicy.keyboardHostTopMarginPx(
+                        isRoundedStyle(com.termux.app.place.SeamDress.Surface.STACK), false,
+                        getResources().getDisplayMetrics().density);
+                }
+
+                // The card's own rule (KeysCardDress): Corners capped at half under Floating;
+                // Docked rows are square.
+                @Override public float keysCardRadiusPx(int heightPx) {
+                    return isRoundedStyle(com.termux.app.place.SeamDress.Surface.STACK)
+                        ? mDock.resolveDockCapsuleCornerRadiusPx(heightPx) : 0f;
                 }
             }, (FrameLayout) findViewById(R.id.page_switch_layer));
         // The dock's capsules dim while the bar slides (the dock strip's slice listens here).

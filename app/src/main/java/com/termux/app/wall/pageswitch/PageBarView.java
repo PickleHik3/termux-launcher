@@ -146,6 +146,13 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private float mWindowWidth;
     private float mPillLeft = -1f;
     private float mPillWidth = -1f;
+    /** The key's pop-up as one more card of the stack ({@link PageBarPopupFrame}); -1 width: not set. */
+    private float mRaisedLeft;
+    private float mRaisedWidth = -1f;
+    private float mRaisedRadius = -1f;
+    /** The raised glass the key's pop-up wears ({@link com.termux.app.chrome.ElevatedGlass}); null for its solid card. */
+    @Nullable private PaneSurfaceStyle mRaisedLook;
+    private final Rect mNoFrame = new Rect();
 
     public PageBarView(@NonNull Context context) {
         super(context);
@@ -159,7 +166,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline out) {
-                out.setRoundRect(0, 0, view.getWidth(), view.getHeight(), view.getHeight() / 2f);
+                out.setRoundRect(0, 0, view.getWidth(), view.getHeight(), slabRadiusPx());
             }
         });
         com.termux.app.terminal.PaneGlass.followLayout(mGlass);
@@ -199,6 +206,42 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         if (mKeyEntry == keyEntry) return;
         mKeyEntry = keyEntry;
         rebuild();
+    }
+
+    /**
+     * The key's pop-up's drawn bar: its left and width in this view and its corner radius
+     * ({@link PageBarPopupFrame}). Rebuilds only when one differs.
+     */
+    void setRaisedFrame(float leftPx, float widthPx, float radiusPx) {
+        if (leftPx == mRaisedLeft && widthPx == mRaisedWidth && radiusPx == mRaisedRadius) return;
+        mRaisedLeft = leftPx;
+        mRaisedWidth = widthPx;
+        mRaisedRadius = radiusPx;
+        rebuild();
+        mGlass.invalidateOutline();
+    }
+
+    /** The raised glass the key's pop-up wears while shown; null puts it on its solid card. */
+    void setRaisedGlass(@Nullable PaneSurfaceStyle look) {
+        mRaisedLook = look;
+    }
+
+    /**
+     * The key's pop-up was put away: its glass lets the shared blur frame go and hides, so nothing
+     * is held while it is away.
+     */
+    void dropRaisedGlass() {
+        mRaisedLook = null;
+        mGlassShown = false;
+        mGlass.setGlass(null, mNoFrame, Color.TRANSPARENT, null, 0, slabRadiusPx(), null, false);
+        if (mGlass.getVisibility() != GONE) mGlass.setVisibility(GONE);
+    }
+
+    /** The drawn slab's corner radius: the raised frame's for the key's pop-up, else a capsule. */
+    private float slabRadiusPx() {
+        PageBarLayout layout = mLayout;
+        float capsule = layout == null ? 0f : layout.slabHeightPx() / 2f;
+        return mKeyEntry && mRaisedRadius >= 0f ? Math.min(mRaisedRadius, capsule) : capsule;
     }
 
     /**
@@ -242,8 +285,12 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             List<PageBarModel.Entry> entries = model.entries();
             mFold = PageBarFold.fold(entries, PageBarLayout.maxSlots(mDensity, width));
             int slots = mFold.slots.size();
-            mLayout = mKeyEntry ? new PageBarLayout(mDensity, width, slots, true)
-                : new PageBarLayout(mDensity, width, slots, mPaneLeft, mWindowWidth);
+            if (mKeyEntry && mRaisedWidth > 0f) {
+                mLayout = PageBarLayout.raised(mDensity, width, slots, mRaisedLeft, mRaisedWidth);
+            } else {
+                mLayout = mKeyEntry ? new PageBarLayout(mDensity, width, slots, true)
+                    : new PageBarLayout(mDensity, width, slots, mPaneLeft, mWindowWidth);
+            }
             mSlide = new PageBarSlide(mLayout, mFold, entries, mTouchSlop, mKeyEntry);
             mSlotLabels = new String[slots];
             for (int i = 0; i < slots; i++) mSlotLabels[i] = labelOf(mFold.slots.get(i), entries);
@@ -371,6 +418,10 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
      * or mode), never per frame. Compares before it invalidates.
      */
     public void redress() {
+        if (mKeyEntry) {
+            redressRaised(mLayout);
+            return;
+        }
         mSource = PageBarGlass.sourceFor(this);
         mLook = mSource == null ? null : mSource.widgetGlassStyle();
         PageBarLayout layout = mLayout;
@@ -404,6 +455,53 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             mGlass.setEvenOut(null);
         }
         measureLiftInk(layout);
+        invalidate();
+    }
+
+    /**
+     * The key's pop-up dressed in its raised glass where the Look's glass may be worn (the system's
+     * battery saver, outline text and high contrast put it on its solid card, as a widget's), the
+     * glyph inks solved on the glass's ground; else the solid card and its fixed inks. Once per
+     * opening and on a dress pass, never per frame.
+     */
+    private void redressRaised(@Nullable PageBarLayout layout) {
+        PaneSurfaceStyle look = mRaisedLook;
+        boolean shown = layout != null && look != null && PageBarGlass.wants(getContext(), look);
+        if (shown) {
+            float radius = slabRadiusPx();
+            shown = com.termux.app.terminal.PaneGlass.applyAtRadius(look, this, mGlass, radius);
+            if (shown) {
+                // The raised rim is drawn over the glass in dispatchDraw, not the style's own.
+                mGlass.setRim(-1f, look);
+                if (mGlass.getVisibility() != VISIBLE) mGlass.setVisibility(VISIBLE);
+                mGlass.setElevation(getResources().getDimension(
+                    com.google.android.material.R.dimen.m3_comp_menu_container_elevation));
+                mGlass.invalidateOutline();
+            }
+        }
+        if (!shown && mGlass.getVisibility() != GONE) mGlass.setVisibility(GONE);
+        mGlassShown = shown;
+        mGlass.setEvenOut(null);
+        if (shown) {
+            int wallpaper = Color.TRANSPARENT;
+            if (look instanceof com.termux.app.chrome.WidgetInkSource) {
+                com.termux.app.chrome.WidgetInkSource source =
+                    (com.termux.app.chrome.WidgetInkSource) look;
+                mInkRect.set(Math.round(layout.slabLeftPx()), Math.round(layout.slabTopPx()),
+                    Math.round(layout.slabLeftPx() + layout.slabWidthPx()),
+                    Math.round(layout.slabBottomPx()));
+                com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, mOrigin, mRoot);
+                mInkRect.offset(mOrigin[0], mOrigin[1]);
+                wallpaper = source.wallpaperSample(mInkRect);
+                if (Color.alpha(wallpaper) == 0) wallpaper = source.wallpaperFallback();
+            }
+            PageBarGlass.raisedInk(PageBarGlass.raisedGround(look.paneGlassTintColor(), wallpaper,
+                mFixedInkColor), mFixedInkColor, mFixedAccent, mInk);
+        } else {
+            mInk.veil = Color.TRANSPARENT;
+            fixInks();
+        }
+        liftInkIsSlabInk();
         invalidate();
     }
 
@@ -471,10 +569,19 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         float top = layout.slabTopPx();
         float height = layout.slabHeightPx();
         mRect.set(left, top, left + layout.slabWidthPx(), top + height);
-        if (mGlassShown) {
+        float radius = slabRadiusPx();
+        if (mGlassShown && mKeyEntry) {
+            // The raised glass's rim: the over-glass rim made a touch stronger (ElevatedGlass).
+            mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(
+                com.termux.app.chrome.GlassTokens.HIGHLIGHT,
+                com.termux.app.chrome.ElevatedGlass.rimAlpha(
+                    Color.alpha(com.termux.app.chrome.GlassTokens.RIM_OVER_GLASS_START))));
+            mRect.inset(0.5f * mDensity, 0.5f * mDensity);
+            canvas.drawRoundRect(mRect, radius, radius, mStroke);
+        } else if (mGlassShown) {
             if (Color.alpha(mInk.veil) != 0) {
                 mFill.setColor(mInk.veil);
-                canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
+                canvas.drawRoundRect(mRect, radius, radius, mFill);
             }
         } else {
             // No glass: the solid card the ink was measured for, as a widget's slab falls back
@@ -484,13 +591,13 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             int card = mFixedInk ? PageBarGlass.cardFor(mInk.ink) : mInk.veil;
             if (Color.alpha(card) != 0) {
                 mFill.setColor(card);
-                canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
+                canvas.drawRoundRect(mRect, radius, radius, mFill);
             }
             mFill.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_FILL_ALPHA));
-            canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
+            canvas.drawRoundRect(mRect, radius, radius, mFill);
             mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_STROKE_ALPHA));
             mRect.inset(0.5f * mDensity, 0.5f * mDensity);
-            canvas.drawRoundRect(mRect, height / 2f, height / 2f, mStroke);
+            canvas.drawRoundRect(mRect, radius, radius, mStroke);
         }
         // While the overlay holds the lift, the glyphs draw there only, never twice; without a
         // parent to lift into they lift here, clipped to the band.
