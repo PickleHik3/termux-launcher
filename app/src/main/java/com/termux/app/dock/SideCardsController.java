@@ -320,12 +320,17 @@ public final class SideCardsController {
     @NonNull
     public String diagLine() {
         StringBuilder b = new StringBuilder(480); // DIAG(two-cards)
-        b.append(" apart=").append(mApart).append(" refusal=").append(mDiagRefusal); // DIAG(two-cards)
-        diagView(b, "host", mHost.view(R.id.accessory_surface_host),
-            mDiagAnswer == null ? null : mDiagAnswer.laidOut(RestCards.StackView.HOST)); // DIAG(two-cards)
-        diagView(b, "keys", mHost.view(R.id.extra_keys_card),
-            mDiagAnswer == null ? null : mDiagAnswer.laidOut(RestCards.StackView.KEYS_CARD)); // DIAG(two-cards)
         View container = mHost.view(R.id.accessory_stack_container); // DIAG(two-cards)
+        // Frame: the window (the topmost view's laid-out pixels, translations left out). The
+        // answer works in a screen displayMetrics().heightPixels tall, so its rects are moved down
+        // by the window's height less that before they are printed and compared.
+        int frameDy = diagFrameDy(container); // DIAG(two-cards)
+        b.append(" apart=").append(mApart).append(" refusal=").append(mDiagRefusal)
+            .append(" frame=window dy=").append(frameDy); // DIAG(two-cards)
+        diagView(b, "host", mHost.view(R.id.accessory_surface_host),
+            mDiagAnswer == null ? null : mDiagAnswer.laidOut(RestCards.StackView.HOST), frameDy); // DIAG(two-cards)
+        diagView(b, "keys", mHost.view(R.id.extra_keys_card),
+            mDiagAnswer == null ? null : mDiagAnswer.laidOut(RestCards.StackView.KEYS_CARD), frameDy); // DIAG(two-cards)
         if (container != null) { // DIAG(two-cards)
             int[] at = new int[2]; // DIAG(two-cards)
             diagLaidOutOrigin(container, at); // DIAG(two-cards)
@@ -334,6 +339,7 @@ public final class SideCardsController {
                 .append(at[0] + container.getWidth()).append(',').append(at[1] + container.getHeight())
                 .append(" bottomMargin=").append(lp instanceof android.view.ViewGroup.MarginLayoutParams
                     ? ((android.view.ViewGroup.MarginLayoutParams) lp).bottomMargin : -1)
+                .append(" pad=").append(container.getPaddingBottom())
                 .append(" cty=").append(container.getTranslationY()); // DIAG(two-cards)
         } else b.append(" container=null"); // DIAG(two-cards)
         View kb = mHost.view(R.id.inapp_keyboard_view_host); // DIAG(two-cards)
@@ -357,8 +363,16 @@ public final class SideCardsController {
         out[1] = y; // DIAG(two-cards)
     }
 
+    /** DIAG(two-cards): the window's height less the answer's screen height; 0 without a window. */
+    private int diagFrameDy(@Nullable View anyView) {
+        if (anyView == null) return 0; // DIAG(two-cards)
+        View top = anyView; // DIAG(two-cards)
+        while (top.getParent() instanceof View) top = (View) top.getParent(); // DIAG(two-cards)
+        return top.getHeight() - mHost.displayMetrics().heightPixels; // DIAG(two-cards)
+    }
+
     private static void diagView(@NonNull StringBuilder b, @NonNull String name, @Nullable View v,
-                                 @Nullable Box expected) {
+                                 @Nullable Box expected, int frameDy) {
         b.append(' ').append(name).append('='); // DIAG(two-cards)
         if (v == null) { // DIAG(two-cards)
             b.append("null"); // DIAG(two-cards)
@@ -366,14 +380,24 @@ public final class SideCardsController {
         } // DIAG(two-cards)
         int[] at = new int[2]; // DIAG(two-cards)
         diagLaidOutOrigin(v, at); // DIAG(two-cards)
-        b.append(at[0]).append(',').append(at[1]).append(',').append(at[0] + v.getWidth()).append(',')
-            .append(at[1] + v.getHeight()).append(" tx=").append(v.getTranslationX())
+        int right = at[0] + v.getWidth(); // DIAG(two-cards)
+        int bottom = at[1] + v.getHeight(); // DIAG(two-cards)
+        b.append(at[0]).append(',').append(at[1]).append(',').append(right).append(',')
+            .append(bottom).append(" tx=").append(v.getTranslationX())
             .append(" ty=").append(v.getTranslationY()).append(" a=").append(v.getAlpha())
             .append(" vis=").append(v.getVisibility()).append(' ').append(name).append("Expect="); // DIAG(two-cards)
-        if (expected == null) b.append("none"); // DIAG(two-cards)
-        else b.append(Math.round(expected.left)).append(',').append(Math.round(expected.top)) // DIAG(two-cards)
-            .append(',').append(Math.round(expected.right)).append(',') // DIAG(two-cards)
-            .append(Math.round(expected.bottom)); // DIAG(two-cards)
+        if (expected == null) {
+            b.append("none ").append(name).append("Match=none"); // DIAG(two-cards)
+            return; // DIAG(two-cards)
+        }
+        int el = Math.round(expected.left); // DIAG(two-cards)
+        int et = Math.round(expected.top) + frameDy; // DIAG(two-cards)
+        int er = Math.round(expected.right); // DIAG(two-cards)
+        int eb = Math.round(expected.bottom) + frameDy; // DIAG(two-cards)
+        boolean match = Math.abs(el - at[0]) <= 1 && Math.abs(et - at[1]) <= 1
+            && Math.abs(er - right) <= 1 && Math.abs(eb - bottom) <= 1; // DIAG(two-cards)
+        b.append(el).append(',').append(et).append(',').append(er).append(',').append(eb)
+            .append(' ').append(name).append("Match=").append(match); // DIAG(two-cards)
     }
 
     // ---- The rests ---------------------------------------------------------------------------
