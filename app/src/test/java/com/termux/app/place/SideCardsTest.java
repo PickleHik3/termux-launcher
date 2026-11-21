@@ -87,4 +87,11 @@ public class SideCardsTest {
         assertEquals(0, SideCards.homeSideDropPx(16, 16, true));
         assertEquals(0, SideCards.homeSideDropPx(0, 16, false));
     }
+
+    @Test public void theHostIsDressedAsHomeWhileApartWhicheverPageIsInFront() {
+        for (com.termux.app.page.PageKind front : com.termux.app.page.PageKind.values()) {
+            assertEquals(com.termux.app.page.PageKind.HOME, SideCards.hostDressPage(true, front));
+            assertEquals(front, SideCards.hostDressPage(false, front));
+        }
+    }
 }

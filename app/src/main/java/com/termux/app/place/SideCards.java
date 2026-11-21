@@ -3,6 +3,8 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
+
 /**
  * When Home and the Terminal each wear a glass card of their own under Floating (ADR 0032, #302),
  * and the two numbers that follow: the one bottom margin the stack's container keeps at both
@@ -72,5 +74,15 @@ public final class SideCards {
     public static int homeSideDropPx(int homeRestMarginPx, int terminalRestMarginPx,
                                      boolean apart) {
         return apart ? terminalRestMarginPx - homeRestMarginPx : 0;
+    }
+
+    /**
+     * The page whose card the glass host is dressed as: Home's while the cards stand apart, at
+     * every rest and across every crossing (the host is Home's card, parked a screen to the left
+     * at the Terminal's rest), the page whose rows the stack stands otherwise.
+     */
+    @NonNull
+    public static PageKind hostDressPage(boolean apart, @NonNull PageKind stackDressPage) {
+        return apart ? PageKind.HOME : stackDressPage;
     }
 }

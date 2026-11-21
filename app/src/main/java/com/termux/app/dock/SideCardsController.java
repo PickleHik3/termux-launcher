@@ -87,6 +87,12 @@ public final class SideCardsController {
     private int mKeysCardHeightPx;
     private float mKeysCardRadiusPx;
     private boolean mAnswered;
+    /** What the glass host wears at Home's rest while the cards stand apart; null otherwise. */
+    @Nullable private RestCards.HostLook mHostLook;
+    private int mHostLookRevision;
+    /** Where the host is drawn at Home's rest, screen px; the host's even-out is measured under it. */
+    @Nullable private Box mHostRestRect;
+    @Nullable private Box mKeysCardRestRect;
 
     public SideCardsController(@NonNull Host host) {
         mHost = host;
@@ -96,6 +102,37 @@ public final class SideCardsController {
     /** Whether the cards stand apart at the last rest. */
     public boolean apart() {
         return mApart;
+    }
+
+    /**
+     * The glass host's dress while the cards stand apart: Home's rest, worked out from the
+     * answer whichever page is in front, so the host reads no value off the page in front
+     * ({@link com.termux.app.place.SideCards#hostDressPage}). Null when it is dressed from the
+     * front page, as it is whenever the cards stand together.
+     */
+    @Nullable
+    public RestCards.HostLook hostLook() {
+        return mHostLook;
+    }
+
+    /** Moves whenever {@link #hostLook} changes, so the host's glass is built again once. */
+    public int hostLookRevision() {
+        return mHostLookRevision;
+    }
+
+    /**
+     * Where the host is drawn at Home's rest (screen px, as the answer has it), whether or not
+     * it is parked there now; null unless the host is dressed as Home's rest.
+     */
+    @Nullable
+    public Box hostRestRect() {
+        return mHostRestRect;
+    }
+
+    /** Where the Terminal's extra-keys card is drawn at its rest while apart; null otherwise. */
+    @Nullable
+    public Box keysCardRestRect() {
+        return mKeysCardRestRect;
     }
 
     /** Whether the glass host is laid out from the answer: Home's card, while the cards stand apart. */
@@ -181,6 +218,14 @@ public final class SideCardsController {
             height = Math.round(host.height());
             above = Math.round(mHost.displayMetrics().heightPixels - margin - host.bottom);
         }
+        // Dressed as Home's rest only where the host is Home's card (laid out from the answer).
+        RestCards.HostLook look = pinned ? answer.homeHostLook() : null;
+        if (!sameLook(look, mHostLook)) {
+            moved = true;
+            mHostLookRevision++;
+        }
+        mHostLook = look;
+        mHostRestRect = pinned && look != null ? answer.homeHostRect() : null;
         moved |= pinned != mHostPinned || left != mHostLeftPx || right != mHostRightPx
             || height != mHostHeightPx || above != mHostAboveContainerBottomPx;
         mHostPinned = pinned;
@@ -194,6 +239,14 @@ public final class SideCardsController {
         return moved;
     }
 
+    private static boolean sameLook(@Nullable RestCards.HostLook a, @Nullable RestCards.HostLook b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        return a.design == b.design && a.peek == b.peek && a.floats == b.floats
+            && a.foot == b.foot && a.keyboardUp == b.keyboardUp
+            && java.util.Objects.equals(a.peekCut, b.peekCut);
+    }
+
     /** The Terminal's card in its row host: from the answer when the cards stand apart, gone otherwise. */
     private void applyKeysCard(@Nullable RestCards answer) {
         View view = mHost.view(R.id.extra_keys_card);
@@ -205,10 +258,12 @@ public final class SideCardsController {
             : answer.cardOn(RestCards.StackView.KEYS_CARD);
         if (box == null || cardAnswer == null) {
             mKeysCardOn = false;
+            mKeysCardRestRect = null;
             if (card.getVisibility() != View.GONE) card.setVisibility(View.GONE);
             return;
         }
         mKeysCardOn = true;
+        mKeysCardRestRect = cardAnswer.box;
         mKeysCardLeftPx = Math.round(box.left);
         mKeysCardRightPx = Math.round(mHost.displayMetrics().widthPixels - box.right);
         mKeysCardHeightPx = Math.round(box.height());

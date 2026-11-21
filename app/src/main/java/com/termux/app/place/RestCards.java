@@ -167,6 +167,41 @@ public final class RestCards {
         }
     }
 
+    /**
+     * What the glass host wears at Home's rest, worked out from the rest's own numbers: the
+     * values its dress reads from the page in front while the cards stand together, and from
+     * here while they stand apart ({@link SideCards}), so the host is dressed as Home's rest at
+     * every rest and the landing on Home re-dresses nothing.
+     */
+    public static final class HostLook {
+        /** Home's Dock design as its slab wears it (none where Home shows no apps row). */
+        @NonNull public final com.termux.app.dock.DockStyle design;
+        /** The Peek card stands: flush with the screen's edge, cut at the icons' centre line. */
+        public final boolean peek;
+        /** The dock is placed as the Floating card ({@link DockPlacement#floats}). */
+        public final boolean floats;
+        /** The dock's glass owns the foot under the gesture pill ({@link DockSpec#footExists}). */
+        public final boolean foot;
+        /** The keyboard state the rest was answered with. */
+        public final boolean keyboardUp;
+        /** The Peek card cut in the host's coordinates, as the pass cuts it; null off Peek. */
+        @Nullable public final PeekGlassGeometry.Card peekCut;
+        /** Where the host view is drawn at this rest, screen px (its card is cut from it). */
+        @Nullable public final Box drawn;
+
+        HostLook(@NonNull com.termux.app.dock.DockStyle design, boolean peek, boolean floats,
+                 boolean foot, boolean keyboardUp, @Nullable PeekGlassGeometry.Card peekCut,
+                 @Nullable Box drawn) {
+            this.drawn = drawn;
+            this.design = design;
+            this.peek = peek && peekCut != null;
+            this.floats = floats;
+            this.foot = foot;
+            this.keyboardUp = keyboardUp;
+            this.peekCut = this.peek ? peekCut : null;
+        }
+    }
+
     /** One glass shape a rest draws, where it is drawn at rest. */
     public static final class Card {
         @NonNull public final CardId id;
@@ -211,6 +246,8 @@ public final class RestCards {
     private boolean mApart;
     private int mContainerMarginPx;
     private int mHomeDropPx;
+    /** How the host dresses its card at this rest (the Home half's, once adopted); null for the Terminal's. */
+    @Nullable private HostLook mHostLook;
 
     /** The rest's answer. */
     @NonNull
@@ -235,12 +272,30 @@ public final class RestCards {
         final int terminalMargin = frontHome ? theirs : mine;
         final int drop = SideCards.homeSideDropPx(homeMargin, terminalMargin, true);
         RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome);
-        answer.adopt(new RestCards(other, frontHome ? 0 : drop, frontHome), frontHome);
+        RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome);
+        answer.adopt(otherCards, frontHome);
+        if (!frontHome) answer.mHostLook = otherCards.mHostLook;
         answer.mApart = true;
         answer.mContainerMarginPx = SideCards.containerMarginPx(homeMargin, terminalMargin, true,
             frontHome);
         answer.mHomeDropPx = drop;
         return answer;
+    }
+
+    /**
+     * How the glass host is dressed at Home's rest: Home's own answer, whichever page is in
+     * front. Null unless the cards stand apart, when the host is dressed from the page in front.
+     */
+    @Nullable
+    public HostLook homeHostLook() {
+        return mApart ? mHostLook : null;
+    }
+
+    /** Where the host is drawn at Home's rest ({@link #homeHostLook}); null when it is not laid out. */
+    @Nullable
+    public Box homeHostRect() {
+        HostLook look = homeHostLook();
+        return look == null ? null : look.drawn;
     }
 
     /** Whether Home's card and the Terminal's extra-keys card stand apart ({@link SideCards}). */
@@ -440,13 +495,18 @@ public final class RestCards {
         // STATUS: the bar along the top edge.
         if (statusOnTop) addStatus(rest, shape, floating, w, h, density);
         // DOCK or PEEK: the host's glass.
+        PeekGlassGeometry.Card peekCut = null;
+        Box hostDrawn = null;
         if (hostLaidOut) {
+            hostDrawn = new Box(sideMargin, hostTop + shift, w - sideMargin,
+                Math.min(hostBottom + shift, containerBottom));
             float drawnBottom = Math.min(hostBottom + shift, containerBottom);
             boolean hostFoot = kept > 0 && drawnBottom >= h && !peekStands
                 && (insets.dockFootPx > 0 || unified && keyboardFootPx > 0);
             float cardBottom = hostFoot ? footTop : drawnBottom;
             if (peekStands) {
-                addPeek(rest, layout, dock, hostTop, hostBottom, columnTop, w, h, shift, density);
+                peekCut = addPeek(rest, layout, dock, hostTop, hostBottom, columnTop, w, h, shift,
+                    density);
             } else if (floats) {
                 addFloatingDock(hostView, layout, pass, rest, dock, hostTop, cardBottom,
                     sideMargin, w, shift, cornersPx, unified);
@@ -456,6 +516,9 @@ public final class RestCards {
             }
             if (hostFoot) addFoot(hostView, sideMargin, footTop, w - sideMargin, h);
         }
+        if (!keysCard)
+            mHostLook = new HostLook(half.design, peekStands, floats, dockFoot, up, peekCut,
+                hostDrawn);
         // UNDER: the bands under the keyboard wear the dock's sheet unless the Peek card does.
         if (underLaidOut && UnderKeyboardBand.wearsSheet(r.bandsUnderKeyboard, pass.toolbarShown,
                 peekStands)) {
@@ -545,7 +608,8 @@ public final class RestCards {
      * past the screen's bottom (this box ends at it). {@code rowsBottom} is where the rows stand:
      * the keyboard column's top, even while the host runs on over the keyboard.
      */
-    private void addPeek(@NonNull Rest rest, @NonNull PlaceLayout layout, @NonNull DockLayout dock,
+    @Nullable
+    private PeekGlassGeometry.Card addPeek(@NonNull Rest rest, @NonNull PlaceLayout layout, @NonNull DockLayout dock,
                          float hostTop, float hostBottom, float rowsBottom, int w, int h,
                          float shift, float density) {
         // The apps band's top: bands at and below the apps row, up from where the rows stand.
@@ -592,7 +656,7 @@ public final class RestCards {
         PeekGlassGeometry.Card card = PeekGlassGeometry.compute(boxes, slots, 0f, w,
             Math.round(hostBottom - hostTop), w, PeekGlassGeometry.screenBottomInHost(h,
                 hostTop, shift), density);
-        if (card == null) return;
+        if (card == null) return null;
         Box box = new Box(card.left, hostTopDrawn + card.top, card.right, h);
         List<PieceId> pieces = new ArrayList<>(2);
         pieces.add(PieceId.APPS);
@@ -600,6 +664,7 @@ public final class RestCards {
         mCards.add(new Card(CardId.PEEK, StackView.HOST, box,
             new Corners(card.radiusPx, card.radiusPx, 0f, 0f), EdgeKind.RIM, EdgeKind.SCREEN,
             EdgeKind.RIM, EdgeKind.RIM, pieces));
+        return card;
     }
 
     private void addUnder(@NonNull List<Element> under, @NonNull DockLayout dock, float top,
