@@ -30,8 +30,8 @@ public class AppDrawerSharedPreferencesTest {
         preferences = new TermuxAppSharedPreferences(context, raw, null);
     }
 
-    @Test public void viewTypeDefaultsAndCorruptValuesPreserveVertical() {
-        assertEquals("vertical", preferences.getAppLauncherDrawerViewType());
+    @Test public void viewTypeDefaultsToDefaultAndCorruptValuesPreserveVertical() {
+        assertEquals("default", preferences.getAppLauncherDrawerViewType());
         raw.edit().putString(TermuxPreferenceConstants.TERMUX_APP
             .KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE, "corrupt").commit();
         assertEquals("vertical", preferences.getAppLauncherDrawerViewType());
@@ -39,5 +39,42 @@ public class AppDrawerSharedPreferencesTest {
         assertEquals("horizontal", preferences.getAppLauncherDrawerViewType());
         preferences.setAppLauncherDrawerViewType("categories");
         assertEquals("categories", preferences.getAppLauncherDrawerViewType());
+        preferences.setAppLauncherDrawerViewType("default");
+        assertEquals("default", preferences.getAppLauncherDrawerViewType());
+    }
+
+    @Test public void aFreshInstallKeepsDefault() {
+        preferences.migrateLookGrid(java.util.Collections.emptyList(), true);
+        assertEquals("default", preferences.getAppLauncherDrawerViewType());
+    }
+
+    @Test public void anUsedInstallWithNoStoredTypeIsPinnedToVertical() {
+        raw.edit().putInt("some_used_key", 1).commit();
+        preferences.migrateLookGrid(java.util.Collections.emptyList(), false);
+        assertEquals("vertical", preferences.getAppLauncherDrawerViewType());
+    }
+
+    @Test public void anUsedInstallKeepsTheTypeItStored() {
+        raw.edit().putString(TermuxPreferenceConstants.TERMUX_APP
+            .KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE, "categories").commit();
+        preferences.migrateLookGrid(java.util.Collections.emptyList(), false);
+        assertEquals("categories", preferences.getAppLauncherDrawerViewType());
+    }
+
+    @Test public void thePinRunsOnce() {
+        raw.edit().putInt("some_used_key", 1).commit();
+        preferences.pinDrawerViewType(false);
+        preferences.setAppLauncherDrawerViewType("default");
+        preferences.pinDrawerViewType(false);
+        preferences.migrateLookGrid(java.util.Collections.emptyList(), false);
+        assertEquals("default", preferences.getAppLauncherDrawerViewType());
+    }
+
+    @Test public void theSectionDefaultsToAppsAndRoundTrips() {
+        assertEquals("apps", preferences.getAppLauncherDrawerSection());
+        preferences.setAppLauncherDrawerSection("categories");
+        assertEquals("categories", preferences.getAppLauncherDrawerSection());
+        preferences.setAppLauncherDrawerSection("junk");
+        assertEquals("apps", preferences.getAppLauncherDrawerSection());
     }
 }

@@ -514,8 +514,18 @@ public final class TermuxPreferenceConstants {
         public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL = "vertical";
         public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL = "horizontal";
         public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES = "categories";
+        public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_DEFAULT = "default";
         public static final String DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE =
-            APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
+            APP_LAUNCHER_DRAWER_VIEW_TYPE_DEFAULT;
+        /** One-time marker: existing installs without a stored drawer type were pinned to Vertical. */
+        public static final String KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE_PINNED =
+            "app_launcher_drawer_view_type_pinned";
+
+        /** Default drawer type's remembered section: "apps" or "categories". Remembered state, not a setting. */
+        public static final String KEY_APP_LAUNCHER_DRAWER_SECTION = "app_launcher_drawer_section";
+        public static final String APP_LAUNCHER_DRAWER_SECTION_APPS = "apps";
+        public static final String APP_LAUNCHER_DRAWER_SECTION_CATEGORIES = "categories";
+        public static final String DEFAULT_APP_LAUNCHER_DRAWER_SECTION = APP_LAUNCHER_DRAWER_SECTION_APPS;
 
         /**
          * Defines the key for opening the keyboard as soon as the app drawer opens, so the drawer
