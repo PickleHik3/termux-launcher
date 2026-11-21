@@ -1,0 +1,109 @@
+<!doctype html>
+<!--
+  README hero infographic source. Edit the text here, drop phone captures into shots/,
+  then run ./render.sh to rebuild ../hero.webp. Canvas is 1600x1000, dark only.
+  Callout text stays big (>= 30px) because GitHub shows this at ~830px wide.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #0d1017;
+    --bg-glow: #1b2a4a;
+    --ink: #eef2fb;
+    --ink-dim: #9aa6bd;
+    --accent: #8fb4ff;
+    --rim: rgba(255, 255, 255, 0.18);
+    --glass: rgba(37, 42, 51, 0.55);
+    --radius-lg: 24px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1600px; height: 1000px; background: var(--bg); overflow: hidden; }
+  body {
+    font-family: Roboto, "Google Sans", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(900px 600px at 50% 62%, var(--bg-glow), transparent 70%),
+      var(--bg);
+    position: relative;
+  }
+  header { position: absolute; top: 44px; width: 100%; text-align: center; }
+  h1 { font-size: 64px; font-weight: 700; letter-spacing: -0.5px; }
+  header p { margin-top: 8px; font-size: 28px; color: var(--ink-dim); }
+
+  /* Phones: 1080x2412 captures scaled into 300x670 screens */
+  .phone {
+    position: absolute; width: 316px; height: 686px; top: 236px;
+    border-radius: 44px; padding: 8px;
+    background: #05070b; border: 2px solid #2a3140;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  }
+  .phone .screen {
+    width: 100%; height: 100%; border-radius: 36px; overflow: hidden;
+    background: linear-gradient(160deg, #2d4f8f, #142038);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-dim); font-size: 22px; text-align: center;
+  }
+  .phone img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+  .p-home  { left: 396px; transform: rotate(-4deg); top: 256px; }
+  .p-float { left: 642px; z-index: 2; top: 220px; }
+  .p-ai    { left: 888px; transform: rotate(4deg); top: 256px; }
+
+  /* Callouts */
+  .callout {
+    position: absolute; width: 330px;
+    padding: 18px 22px; border-radius: var(--radius-lg);
+    background: var(--glass); border: 1px solid var(--rim);
+    font-size: 30px; font-weight: 600; line-height: 1.2;
+  }
+  .callout .dot {
+    display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); margin-right: 12px; vertical-align: middle;
+  }
+  .left  { left: 40px; }
+  .right { right: 40px; }
+  .r1 { top: 300px; } .r2 { top: 520px; } .r3 { top: 760px; }
+  .r2k { top: 430px; }
+  .callout .inset { display: block; width: 100%; margin-top: 12px; border-radius: 14px; border: 1px solid var(--rim); }
+  svg.lines { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+  svg.lines path { stroke: var(--accent); stroke-width: 2.5; fill: none; opacity: 0.7; }
+  svg.lines circle { fill: var(--accent); }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Termux Launcher</h1>
+    <p>An Android home screen with a real Linux terminal</p>
+  </header>
+
+  <!-- Each screen shows shots/<name>.webp when present, otherwise the label. -->
+  <div class="phone p-home"><div class="screen" data-shot="home">Home</div></div>
+  <div class="phone p-float"><div class="screen" data-shot="float">Floating terminal</div></div>
+  <div class="phone p-ai"><div class="screen" data-shot="assistant">Assistant</div></div>
+
+  <div class="callout left r1"><span class="dot"></span>Android home with widgets</div>
+  <div class="callout left r2"><span class="dot"></span>Floating glass terminals</div>
+  <div class="callout left r3"><span class="dot"></span>Live glass on glass</div>
+  <div class="callout right r1"><span class="dot"></span>AI assistant page</div>
+  <div class="callout right r2k"><span class="dot"></span>Kitty images in the terminal<img class="inset" src="shots/kitty.webp" alt=""></div>
+  <div class="callout right r3"><span class="dot"></span>On-device voice</div>
+
+  <!-- Leader lines: callout edge to a point on a phone. Adjust the end points if shots move. -->
+  <svg class="lines" viewBox="0 0 1600 1000">
+    <path d="M370 338 C 420 338, 440 560, 474 575"/><circle cx="474" cy="575" r="6"/>
+    <path d="M370 558 C 560 558, 620 470, 700 360"/><circle cx="700" cy="360" r="6"/>
+    <path d="M370 798 C 560 778, 640 720, 740 690"/><circle cx="740" cy="690" r="6"/>
+    <path d="M1230 338 C 1190 338, 1160 330, 1130 350"/><circle cx="1130" cy="350" r="6"/>
+    <path d="M1230 818 C 1180 818, 1160 720, 1118 700"/><circle cx="1118" cy="700" r="6"/>
+  </svg>
+
+  <script>
+    for (const el of document.querySelectorAll('[data-shot]')) {
+      const img = new Image();
+      img.onload = () => { el.textContent = ''; el.appendChild(img); };
+      img.src = 'shots/' + el.dataset.shot + '.webp';
+    }
+  </script>
+</body>
+</html>
